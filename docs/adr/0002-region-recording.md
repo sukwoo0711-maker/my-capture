@@ -82,3 +82,27 @@ MyCapture.App/Recording       RecordingControlWindow(이동식 영역·녹화/�
 - 녹화 원본과 편집 결과는 `AppPaths.CapturesRoot` 아래 `recordings/yyyy-MM/`에 MP4로 저장.
 - 편집기의 "완료"는 트림된 MP4를 저장하고, 프레임에서 만든 이미지 편집은 기존 캡처 큐로 흘려보내
   갤러리·영속성·재편집 이점을 그대로 승계한다.
+
+## 0.4.0 통합 및 병합 전략 (검증 세션에서 확정)
+
+- 이 저장소의 0.4.0 작업은 baseline 커밋 `5dd1562`에 전부 포함되어 있고, 0.5.0 브랜치
+  (`feature/0.5.0-region-recording`)는 그 위에 직접 쌓였다. 따라서 **현재 존재하는 0.4.0 개선점은
+  이미 0.5.0에 포함**되어 있다(`git merge-base --is-ancestor main feature` = 0으로 확인).
+- 병합은 fast-forward다. `feature`→`main` 병합 시 0.4.0 baseline 전체 + 0.5.0 추가분이 그대로
+  main으로 전진하므로 "0.4.0 개선점이 반영된 0.5.0"이라는 목표가 정의상 충족된다.
+- 다른 세션에서 0.4.0 작업이 아직 끝나지 않은 경우: 이 워킹 카피에는 별도 브랜치·stash·미커밋
+  변경이 없으므로 지금 조정할 divergent 스트림은 없다. 이후 다른 세션이 `main`에 0.4.0 커밋을
+  추가하면 `main`과 `feature`가 갈라지며, 그때 `main`을 feature로 병합(또는 merge 커밋)해 재조정한다.
+  0.5.0은 항상 0.4.0을 조상으로 포함하도록 유지한다.
+
+## 검증 방법 (비대화형 대안)
+
+인터넷·대화형 사용자 없이 실제 녹화 파이프라인을 검증하기 위해 STA 통합 테스트를 사용한다:
+
+1. `MediaFoundationVideoEncoder`로 합성 프레임 30장을 실제 MP4로 인코딩 → `MediaPlayer`로 재열기해
+   해상도(320×240)와 재생시간(~2s)을 검증. (인코드+디코드 왕복)
+2. `TrimReencoder`로 [1000,2000]ms 구간을 재인코딩 → 더 짧고 재생 가능한 MP4 생성 검증. (트림)
+
+이 과정에서 .NET COM interop이 C++와 달리 상위 인터페이스 vtable 슬롯을 상속하지 않는다는
+사실로 인한 `IMFSample.SetSampleTime` 접근 위반(0xC0000005) 버그를 발견·수정했다
+(IMFSample/IMFMediaType가 IMFAttributes 30개 메서드를 인라인 재선언). 전체 테스트 145개 통과.
