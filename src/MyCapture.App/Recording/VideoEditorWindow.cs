@@ -3,7 +3,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -43,9 +42,7 @@ internal sealed class VideoEditorWindow : Window
     private readonly ILogger<VideoEditorWindow> _log;
 
     private readonly MediaElement _media;
-    private readonly Slider _scrubber;
-    private readonly Slider _inHandle;
-    private readonly Slider _outHandle;
+    private readonly TwoLineTimeline _timeline;
     private readonly TextBlock _positionLabel;
     private readonly TextBlock _statusLabel;
     private readonly TextBlock _loadingLabel;
@@ -54,12 +51,10 @@ internal sealed class VideoEditorWindow : Window
     private DispatcherTimer? _loadProgressTimer;
     private DispatcherTimer? _openTimeoutTimer;
 
-    private TrimSelection _trim = new(0);
     private double _durationMs;
     private bool _mediaReady;
     private bool _mediaFailed;
     private string _mediaFailure = string.Empty;
-    private bool _isScrubbing;
     private bool _committed;
 
     // Test hooks so a headless self-test can confirm the editor actually reaches the ready
@@ -71,6 +66,8 @@ internal sealed class VideoEditorWindow : Window
     internal string MediaFailureForTest => _mediaFailure;
 
     internal double DurationMsForTest => _durationMs;
+
+    internal TwoLineTimeline TimelineForTest => _timeline;
 
     internal VideoEditorWindow(RecordingResult recording, AppPaths paths, ILoggerFactory loggerFactory)
     {
@@ -106,9 +103,9 @@ internal sealed class VideoEditorWindow : Window
         _media.MediaFailed += OnMediaFailed;
         _media.MediaEnded += OnMediaEnded;
 
-        _scrubber = BuildScrubber();
-        _inHandle = BuildTrimHandle("시작 지점(In)");
-        _outHandle = BuildTrimHandle("끝 지점(Out)");
+        _timeline = new TwoLineTimeline();
+        _timeline.PlayheadChanged += (_, ms) => OnTimelinePlayhead(ms);
+        _timeline.TrimChanged += (_, _) => UpdateStatusForMode();
         _positionLabel = BuildMono("00:00.000 / 00:00.000");
         _statusLabel = new TextBlock
         {
@@ -235,8 +232,9 @@ internal sealed class VideoEditorWindow : Window
         Grid.SetRow(preview, 0);
         root.Children.Add(preview);
 
-        Grid.SetRow(BuildTimeline(), 1);
-        root.Children.Add(BuildTimeline());
+        Grid timeline = BuildTimeline();
+        Grid.SetRow(timeline, 1);
+        root.Children.Add(timeline);
 
         Grid controls = BuildControlRow();
         Grid.SetRow(controls, 2);
@@ -262,42 +260,17 @@ internal sealed class VideoEditorWindow : Window
             return _timelineCache;
         }
 
-        var timeline = new Grid { Margin = new Thickness(0, 16, 0, 0) };
-        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var timeline = new Grid { Margin = new Thickness(0, 14, 0, 0) };
+        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // two-line timeline
+        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // position label
 
-        // Main playhead scrubber.
-        Grid.SetRow(_scrubber, 0);
-        timeline.Children.Add(_scrubber);
+        Grid.SetRow(_timeline, 0);
+        timeline.Children.Add(_timeline);
 
-        // Trim handles row.
-        var trimRow = new Grid();
-        trimRow.ColumnDefinitions.Add(new ColumnDefinition());
-        trimRow.ColumnDefinitions.Add(new ColumnDefinition());
-        Grid.SetColumn(_inHandle, 0);
-        Grid.SetColumn(_outHandle, 1);
-        trimRow.Children.Add(_inHandle);
-        trimRow.Children.Add(_outHandle);
-        Grid.SetRow(trimRow, 1);
-        timeline.Children.Add(trimRow);
-
-        var labels = new Grid { Margin = new Thickness(0, 4, 0, 0) };
-        labels.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        labels.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        labels.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var inLabel = MakeCaption("In: 시작");
-        var mid = _positionLabel;
-        mid.HorizontalAlignment = HorizontalAlignment.Center;
-        var outLabel = MakeCaption("Out: 끝");
-        Grid.SetColumn(inLabel, 0);
-        Grid.SetColumn(mid, 1);
-        Grid.SetColumn(outLabel, 2);
-        labels.Children.Add(inLabel);
-        labels.Children.Add(mid);
-        labels.Children.Add(outLabel);
-        Grid.SetRow(labels, 2);
-        timeline.Children.Add(labels);
+        _positionLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        _positionLabel.Margin = new Thickness(0, 6, 0, 0);
+        Grid.SetRow(_positionLabel, 1);
+        timeline.Children.Add(_positionLabel);
 
         _timelineCache = timeline;
         return timeline;
@@ -318,8 +291,13 @@ internal sealed class VideoEditorWindow : Window
         row.Children.Add(MakeButton("끝 ⏭", "끝으로", "Button.Ghost", () => Seek(_durationMs)));
 
         row.Children.Add(new Separator { Width = 10, Opacity = 0 });
-        row.Children.Add(MakeButton("◀ 프레임", "이전 프레임 (Ctrl/Shift+←)", "Button.Ghost", () => StepFrames(-1)));
-        row.Children.Add(MakeButton("프레임 ▶", "다음 프레임 (Ctrl/Shift+→)", "Button.Ghost", () => StepFrames(1)));
+        row.Children.Add(MakeButton("◀ 프레임", "이전 프레임 (Ctrl/Shift+← 또는 ,)", "Button.Ghost", () => StepFrames(-1)));
+        row.Children.Add(MakeButton("프레임 ▶", "다음 프레임 (Ctrl/Shift+→ 또는 .)", "Button.Ghost", () => StepFrames(1)));
+
+        row.Children.Add(new Separator { Width = 10, Opacity = 0 });
+        row.Children.Add(MakeButton("− 축소", "세부 타임라인 축소 (Ctrl+Shift+-)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
+        row.Children.Add(MakeButton("확대 +", "세부 타임라인 확대 (Ctrl+Shift+=)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
+        row.Children.Add(MakeButton("전체 보기", "타임라인 전체 보기 (확대 초기화)", "Button.Ghost", () => _timeline.FitAll()));
 
         row.Children.Add(new Separator { Width = 12, Opacity = 0 });
         row.Children.Add(MakeButton("시작 지점 자르기", "현재 위치를 시작(In)으로", "Button.Ghost", SetInHere));
@@ -347,52 +325,9 @@ internal sealed class VideoEditorWindow : Window
         return g;
     }
 
-    private Slider BuildScrubber()
-    {
-        var slider = new Slider
-        {
-            Minimum = 0,
-            Maximum = 1,
-            IsMoveToPointEnabled = true,
-            SmallChange = 1,
-            LargeChange = 10,
-            Height = 28,
-        };
-        AutomationProperties.SetName(slider, "재생 위치");
-        slider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler((_, _) => _isScrubbing = true));
-        slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler((_, _) =>
-        {
-            _isScrubbing = false;
-            SeekToScrubber();
-        }));
-        slider.ValueChanged += (_, _) =>
-        {
-            if (_isScrubbing)
-            {
-                SeekToScrubber();
-            }
-        };
-        _editControls.Add(slider);
-        return slider;
-    }
-
-    private Slider BuildTrimHandle(string name)
-    {
-        var slider = new Slider
-        {
-            Minimum = 0,
-            Maximum = 1,
-            Height = 24,
-            Margin = new Thickness(0, 4, 0, 0),
-        };
-        AutomationProperties.SetName(slider, name);
-        slider.ValueChanged += (_, _) => OnTrimHandleChanged();
-        _editControls.Add(slider);
-        return slider;
-    }
-
     private void SetEditControlsEnabled(bool enabled)
     {
+        _timeline.IsEnabled = enabled;
         foreach (Control c in _editControls)
         {
             c.IsEnabled = enabled;
@@ -424,14 +359,9 @@ internal sealed class VideoEditorWindow : Window
         StopLoadTimers();
 
         _durationMs = durationMs > 0 ? durationMs : Math.Max(1, _recording.DurationMs);
-        _trim = new TrimSelection(_durationMs);
         _mediaReady = true;
 
-        _scrubber.Maximum = _durationMs;
-        _inHandle.Maximum = _durationMs;
-        _outHandle.Maximum = _durationMs;
-        _inHandle.Value = 0;
-        _outHandle.Value = _durationMs;
+        _timeline.Initialize(_durationMs, _recording.Fps);
 
         try
         {
@@ -502,70 +432,53 @@ internal sealed class VideoEditorWindow : Window
         double clamped = Math.Clamp(positionMs, 0, _durationMs);
         _media.Pause();
         _media.Position = TimeSpan.FromMilliseconds(clamped);
-        _scrubber.Value = clamped;
+        _timeline.SetPlayhead(clamped);
         UpdatePositionLabel(clamped);
     }
 
-    private void SeekToScrubber() => Seek(_scrubber.Value);
-
-    private void StepFrames(int frames)
-    {
-        double next = FrameStepCalculator.StepByFrames(CurrentMs(), frames, _recording.Fps, _durationMs);
-        Seek(next);
-        int index = FrameStepCalculator.FrameIndexAt(next, _recording.Fps, _durationMs);
-        _statusLabel.Text = string.Create(CultureInfo.CurrentCulture, $"프레임 {index} · {FormatMs(next)}");
-    }
-
-    private void StepCoarse(int direction)
-    {
-        double next = FrameStepCalculator.StepCoarse(
-            CurrentMs(),
-            direction,
-            _durationMs,
-            5.0);
-        Seek(next);
-    }
-
-    private double CurrentMs() => _media.Position.TotalMilliseconds;
-
-    // ---- trim ----
-
-    private void OnTrimHandleChanged()
+    /// <summary>Playhead moved by the user dragging/clicking on a timeline strip.</summary>
+    private void OnTimelinePlayhead(double ms)
     {
         if (!_mediaReady)
         {
             return;
         }
 
-        _trim.SetIn(_inHandle.Value);
-        _trim.SetOut(_outHandle.Value);
-
-        // Reflect clamping back into the handles so they cannot cross.
-        if (Math.Abs(_inHandle.Value - _trim.InMs) > 0.5)
-        {
-            _inHandle.Value = _trim.InMs;
-        }
-
-        if (Math.Abs(_outHandle.Value - _trim.OutMs) > 0.5)
-        {
-            _outHandle.Value = _trim.OutMs;
-        }
-
-        UpdateStatusForMode();
+        double clamped = Math.Clamp(ms, 0, _durationMs);
+        _media.Pause();
+        _media.Position = TimeSpan.FromMilliseconds(clamped);
+        UpdatePositionLabel(clamped);
     }
+
+    private void StepFrames(int frames)
+    {
+        double next = FrameStepCalculator.StepByFrames(CurrentMs(), frames, _recording.Fps, _durationMs);
+        Seek(next);
+        int total = TotalFrameCount();
+        int frame = Math.Min(total, FrameStepCalculator.FrameIndexAt(next, _recording.Fps, _durationMs) + 1);
+        _statusLabel.Text = string.Create(CultureInfo.CurrentCulture, $"프레임 {frame}/{total} · {FormatMs(next)}");
+    }
+
+    private void StepCoarse(int direction)
+    {
+        double next = FrameStepCalculator.StepCoarse(CurrentMs(), direction, _durationMs, 5.0);
+        Seek(next);
+    }
+
+    private double CurrentMs() => _timeline.PlayheadMs;
+
+    // ---- trim ----
 
     private void SetInHere()
     {
-        _trim.SetIn(CurrentMs());
-        _inHandle.Value = _trim.InMs;
-        _statusLabel.Text = string.Create(CultureInfo.CurrentCulture, $"시작 지점 설정: {FormatMs(_trim.InMs)}");
+        _timeline.SetIn(CurrentMs());
+        _statusLabel.Text = string.Create(CultureInfo.CurrentCulture, $"시작 지점 설정: {FormatMs(_timeline.InMs)}");
     }
 
     private void SetOutHere()
     {
-        _trim.SetOut(CurrentMs());
-        _outHandle.Value = _trim.OutMs;
-        _statusLabel.Text = string.Create(CultureInfo.CurrentCulture, $"끝 지점 설정: {FormatMs(_trim.OutMs)}");
+        _timeline.SetOut(CurrentMs());
+        _statusLabel.Text = string.Create(CultureInfo.CurrentCulture, $"끝 지점 설정: {FormatMs(_timeline.OutMs)}");
     }
 
     // ---- extract frame -> annotation editor ----
@@ -644,7 +557,7 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
-        if (_trim.IsFullClip)
+        if (_timeline.IsFullClip)
         {
             _statusLabel.Text = "전체 영상을 유지합니다 (트림 없음)";
             _committed = true;
@@ -660,8 +573,8 @@ internal sealed class VideoEditorWindow : Window
             TrimReencoder.Reencode(
                 _recording.OutputPath,
                 trimmedPath,
-                _trim.InMs,
-                _trim.OutMs,
+                _timeline.InMs,
+                _timeline.OutMs,
                 _recording,
                 options => new MediaFoundationVideoEncoder(options, _loggerFactory.CreateLogger<MediaFoundationVideoEncoder>()),
                 _loggerFactory.CreateLogger("TrimReencoder"));
@@ -730,30 +643,57 @@ internal sealed class VideoEditorWindow : Window
                 e.Handled = true;
                 Seek(_durationMs);
                 break;
+            case Key.OemPlus when (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) ==
+                                      (ModifierKeys.Control | ModifierKeys.Shift):
+            case Key.Add when (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) ==
+                                  (ModifierKeys.Control | ModifierKeys.Shift):
+                e.Handled = true;
+                _timeline.ZoomAroundPlayhead(0.8);
+                break;
+            case Key.OemMinus when (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) ==
+                                       (ModifierKeys.Control | ModifierKeys.Shift):
+            case Key.Subtract when (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) ==
+                                   (ModifierKeys.Control | ModifierKeys.Shift):
+                e.Handled = true;
+                _timeline.ZoomAroundPlayhead(1.25);
+                break;
+            case Key.OemComma:   // ',' previous frame (Camtasia/ScreenToGif convention)
+                e.Handled = true;
+                StepFrames(-1);
+                break;
+            case Key.OemPeriod:  // '.' next frame
+                e.Handled = true;
+                StepFrames(1);
+                break;
         }
     }
 
     private void UpdateStatusForMode()
     {
-        string trim = _trim.IsFullClip
+        string trim = _timeline.IsFullClip
             ? "전체 길이"
-            : string.Create(CultureInfo.CurrentCulture, $"선택 {FormatMs(_trim.SelectedDurationMs)}");
+            : string.Create(CultureInfo.CurrentCulture, $"선택 {FormatMs(_timeline.SelectedDurationMs)}");
         _statusLabel.Text = string.Create(
             CultureInfo.CurrentCulture,
-            $"←/→ 크게 이동 · Ctrl 또는 Shift+←/→ 1프레임씩 · {trim}");
+            $"←/→ 크게 · Ctrl/Shift+←/→ 또는 , . 1프레임 · 휠/Ctrl+Shift +/- 확대 · {trim}");
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
     }
 
     private void UpdatePositionLabel(double positionMs)
     {
-        if (!_isScrubbing)
-        {
-            _scrubber.Value = positionMs;
-        }
-
+        int total = TotalFrameCount();
+        int frame = Math.Min(total, FrameStepCalculator.FrameIndexAt(positionMs, _recording.Fps, _durationMs) + 1);
         _positionLabel.Text = string.Create(
             CultureInfo.InvariantCulture,
-            $"{FormatMs(positionMs)} / {FormatMs(_durationMs)}");
+            $"{FormatMs(positionMs)} / {FormatMs(_durationMs)}  ·  프레임 {frame}/{total}");
+    }
+
+    private int TotalFrameCount()
+    {
+        double frameMs = FrameStepCalculator.FrameDurationMs(_recording.Fps);
+        return frameMs > 0
+            ? Math.Max(1, (int)Math.Ceiling(_durationMs / frameMs))
+            : 1;
     }
 
     private static string FormatMs(double ms)
@@ -798,13 +738,6 @@ internal sealed class VideoEditorWindow : Window
         _editControls.Add(button);
         return button;
     }
-
-    private TextBlock MakeCaption(string text) => new()
-    {
-        Text = text,
-        Foreground = TryBrush("Text.Muted", Colors.Gray),
-        FontSize = 12,
-    };
 
     private TextBlock BuildMono(string text) => new()
     {

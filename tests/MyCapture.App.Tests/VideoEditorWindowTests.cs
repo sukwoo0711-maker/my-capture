@@ -94,6 +94,21 @@ public sealed class VideoEditorWindowTests
             Assert.True(editor.IsMediaReadyForTest, "editor did not become ready for the 2s clip");
             Assert.True(editor.DurationMsForTest > 0, "editor reported a non-positive duration");
 
+            TwoLineTimeline timeline = editor.TimelineForTest;
+            Assert.True(timeline.IsEnabled, "two-line timeline stayed disabled after media became ready");
+            Assert.Equal(editor.DurationMsForTest, timeline.DurationMs, precision: 1);
+            Assert.True(timeline.IsFitAll, "timeline did not initialize with the whole clip in view");
+
+            double fullSpan = timeline.VisibleSpanMs;
+            timeline.SetPlayhead(editor.DurationMsForTest / 2.0);
+            timeline.ZoomAroundPlayhead(0.5);
+            Assert.False(timeline.IsFitAll, "detail timeline did not zoom into the overview selection");
+            Assert.True(timeline.VisibleSpanMs < fullSpan, "zoom did not reduce the detail span");
+            Assert.InRange(timeline.PlayheadMs, timeline.ViewStartMs, timeline.ViewEndMs);
+
+            timeline.FitAll();
+            Assert.True(timeline.IsFitAll, "fit-all did not restore the complete overview");
+
             editor.Close();
         }
         finally
