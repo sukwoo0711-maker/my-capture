@@ -38,6 +38,11 @@ internal sealed class RecordingControlWindow : Window
     private const double BorderThicknessPx = 2.0;
     private const double StripHeight = 56.0;
 
+    // The control strip must never be narrower than this, or (for a small capture region) the
+    // record/stop button, status text and elapsed timer overlap. The window widens to this
+    // minimum and the region outline stays centred at its true size.
+    private const double MinStripWidth = 460.0;
+
     private readonly RectD _screenRegion;
     private readonly RecordingSettings _settings;
     private readonly Func<RegionRecorder> _recorderFactory;
@@ -85,28 +90,42 @@ internal sealed class RecordingControlWindow : Window
         double regionDipW = _screenRegion.Width / scale;
         double regionDipH = _screenRegion.Height / scale;
 
-        Width = regionDipW + (BorderThicknessPx * 2);
+        // The control strip needs a minimum width or, for a narrow capture region, the primary
+        // button, status text and timer collide. So the window is at least MinStripWidth wide
+        // regardless of how small the recorded region is; the region frame is drawn at its true
+        // width, centred, and the strip always gets the full (>= MinStripWidth) width.
+        double regionBoxW = regionDipW + (BorderThicknessPx * 2);
+        double windowW = Math.Max(regionBoxW, MinStripWidth);
+
+        Width = windowW;
         Height = regionDipH + (BorderThicknessPx * 2) + StripHeight;
-        Left = (_screenRegion.Left / scale) - BorderThicknessPx;
+        // Centre the window over the region so the (possibly wider) strip is balanced.
+        Left = (_screenRegion.Left / scale) - BorderThicknessPx - ((windowW - regionBoxW) / 2);
         Top = (_screenRegion.Top / scale) - BorderThicknessPx;
 
-        // Keep the whole window on the work area of the region's monitor if the strip
-        // would spill past the bottom edge; nudge upward rather than clip the controls.
+        // Keep the whole window on the work area of the region's monitor.
         Rect work = SystemParameters.WorkArea;
         if (Top + Height > work.Bottom)
         {
             Top = Math.Max(work.Top, work.Bottom - Height);
         }
 
+        Left = Math.Clamp(Left, work.Left, Math.Max(work.Left, work.Right - windowW));
+
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(regionDipH + (BorderThicknessPx * 2)) });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(StripHeight) });
 
         _regionFrame = BuildRegionFrame();
+        // Region frame keeps its true pixel width and is centred; it must NOT stretch to the
+        // (wider) window, or the recorded-bounds outline would misrepresent the capture area.
+        _regionFrame.Width = regionBoxW;
+        _regionFrame.HorizontalAlignment = HorizontalAlignment.Center;
         Grid.SetRow(_regionFrame, 0);
         root.Children.Add(_regionFrame);
 
         Border strip = BuildControlStrip(out _primaryButton, out _statusText, out _timerText);
+        strip.MinWidth = MinStripWidth;
         Grid.SetRow(strip, 1);
         root.Children.Add(strip);
 

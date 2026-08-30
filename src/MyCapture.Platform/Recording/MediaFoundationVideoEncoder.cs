@@ -154,12 +154,17 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             buffer.Lock(out IntPtr dest, out _, out _);
             try
             {
-                // Copy row by row so an incoming stride that differs from the packed
-                // width is handled, and so a top-down BGRA frame stays upright.
+                // Our grabber produces a TOP-DOWN BGRA frame (row 0 = top of the screen).
+                // Media Foundation's uncompressed RGB32 input is interpreted BOTTOM-UP when the
+                // stride is positive: the first row in the buffer is treated as the bottom of
+                // the picture. Copying row-for-row therefore yields an upside-down video. We
+                // flip vertically here — source row y is written to destination row
+                // (Height-1-y) — so the encoded frame is upright. (Left/right is unaffected;
+                // BGRA byte order within a row is unchanged, so there is no horizontal mirror.)
                 for (int y = 0; y < _options.Height; y++)
                 {
                     int srcOffset = y * frame.Stride;
-                    IntPtr rowDest = dest + (y * rowBytes);
+                    IntPtr rowDest = dest + ((_options.Height - 1 - y) * rowBytes);
                     Marshal.Copy(frame.Pixels, srcOffset, rowDest, rowBytes);
                 }
             }
