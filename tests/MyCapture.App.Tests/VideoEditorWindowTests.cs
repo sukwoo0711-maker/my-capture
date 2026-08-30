@@ -77,6 +77,7 @@ public sealed class VideoEditorWindowTests
             using ILoggerFactory lf = LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.Warning));
             var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), lf);
             editor.WindowStartupLocation = WindowStartupLocation.Manual;
+            editor.Width = editor.MinWidth;
             editor.Left = -10000;
             editor.Top = -10000;
             editor.ShowActivated = false;
@@ -97,13 +98,22 @@ public sealed class VideoEditorWindowTests
             TwoLineTimeline timeline = editor.TimelineForTest;
             Assert.True(timeline.IsEnabled, "two-line timeline stayed disabled after media became ready");
             Assert.Equal(editor.DurationMsForTest, timeline.DurationMs, precision: 1);
-            Assert.True(timeline.IsFitAll, "timeline did not initialize with the whole clip in view");
+            Assert.Equal(2, editor.ControlRowCountForTest);
+            Assert.True(
+                editor.WidestControlRowWidthForTest <= editor.ControlAreaWidthForTest + 0.5,
+                $"two-row controls overflowed: desired={editor.WidestControlRowWidthForTest:0.0}, available={editor.ControlAreaWidthForTest:0.0}");
+            Assert.Equal(0, timeline.ViewStartMs, precision: 1);
+            Assert.True(timeline.VisibleSpanMs <= timeline.CoarseIntervalMs + 0.001);
+            Assert.Contains("시작", timeline.DetailRangeText, StringComparison.Ordinal);
+            Assert.Contains("끝", timeline.DetailRangeText, StringComparison.Ordinal);
+            Assert.Contains("프레임", timeline.DetailRangeText, StringComparison.Ordinal);
 
-            double fullSpan = timeline.VisibleSpanMs;
+            double initialSpan = timeline.VisibleSpanMs;
             timeline.SetPlayhead(editor.DurationMsForTest / 2.0);
+            Assert.InRange(timeline.PlayheadMs, timeline.ViewStartMs, timeline.ViewEndMs);
             timeline.ZoomAroundPlayhead(0.5);
             Assert.False(timeline.IsFitAll, "detail timeline did not zoom into the overview selection");
-            Assert.True(timeline.VisibleSpanMs < fullSpan, "zoom did not reduce the detail span");
+            Assert.True(timeline.VisibleSpanMs < initialSpan, "zoom did not reduce the detail span");
             Assert.InRange(timeline.PlayheadMs, timeline.ViewStartMs, timeline.ViewEndMs);
 
             timeline.FitAll();
@@ -115,5 +125,29 @@ public sealed class VideoEditorWindowTests
         {
             try { Directory.Delete(dir, true); } catch (IOException) { }
         }
+    });
+
+    [Fact]
+    public void LongClip_TimelineStartsWithOneCoarseInterval_AndShowsExplicitRange() => RunSta(() =>
+    {
+        var timeline = new TwoLineTimeline();
+        timeline.Initialize(durationMs: 12_000, fps: 15);
+        timeline.Measure(new Size(900, double.PositiveInfinity));
+        timeline.Arrange(new Rect(0, 0, 900, timeline.DesiredSize.Height));
+        timeline.UpdateLayout();
+
+        Assert.False(timeline.IsFitAll);
+        Assert.Equal(0, timeline.ViewStartMs, precision: 1);
+        Assert.Equal(timeline.CoarseIntervalMs, timeline.VisibleSpanMs, precision: 1);
+        Assert.Contains("굵은 눈금", timeline.OverviewRangeText, StringComparison.Ordinal);
+        Assert.Contains("시작 00:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
+        Assert.Contains("끝 00:01.000", timeline.DetailRangeText, StringComparison.Ordinal);
+        Assert.Contains("15프레임", timeline.DetailRangeText, StringComparison.Ordinal);
+        Assert.True(timeline.DesiredSize.Height >= 150, "the stronger two-line guide rendered too small");
+
+        timeline.SeekFromOverview(6_000);
+        Assert.InRange(timeline.PlayheadMs, timeline.ViewStartMs, timeline.ViewEndMs);
+        Assert.InRange(6_000, timeline.ViewStartMs, timeline.ViewEndMs);
+        Assert.DoesNotContain("시작 00:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
     });
 }

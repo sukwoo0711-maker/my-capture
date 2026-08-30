@@ -48,6 +48,7 @@ internal sealed class VideoEditorWindow : Window
     private readonly TextBlock _loadingLabel;
     private readonly Border _loadingOverlay;
     private readonly List<Control> _editControls = [];
+    private Grid _controlRows = null!;
     private DispatcherTimer? _loadProgressTimer;
     private DispatcherTimer? _openTimeoutTimer;
 
@@ -68,6 +69,14 @@ internal sealed class VideoEditorWindow : Window
     internal double DurationMsForTest => _durationMs;
 
     internal TwoLineTimeline TimelineForTest => _timeline;
+
+    internal int ControlRowCountForTest => _controlRows.RowDefinitions.Count;
+
+    internal double ControlAreaWidthForTest => _controlRows.ActualWidth;
+
+    internal double WidestControlRowWidthForTest => _controlRows.Children
+        .OfType<FrameworkElement>()
+        .Max(child => child.DesiredSize.Width);
 
     internal VideoEditorWindow(RecordingResult recording, AppPaths paths, ILoggerFactory loggerFactory)
     {
@@ -278,52 +287,51 @@ internal sealed class VideoEditorWindow : Window
 
     private Grid BuildControlRow()
     {
-        var row = new StackPanel
+        var controls = new Grid { Margin = new Thickness(0, 16, 0, 0) };
+        controls.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        controls.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        AutomationProperties.SetName(controls, "편집 도구 2행");
+
+        var transport = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 16, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Center,
         };
+        transport.Children.Add(MakeButton("⏮ 처음", "처음으로", "Button.Ghost", () => Seek(0)));
+        transport.Children.Add(MakeButton("◀◀ 크게", "뒤로 크게 이동", "Button.Ghost", () => StepCoarse(-1)));
+        transport.Children.Add(MakeButton("재생/일시정지", "재생 또는 일시정지", "Button.Secondary", TogglePlay));
+        transport.Children.Add(MakeButton("크게 ▶▶", "앞으로 크게 이동", "Button.Ghost", () => StepCoarse(1)));
+        transport.Children.Add(MakeButton("끝 ⏭", "끝으로", "Button.Ghost", () => Seek(_durationMs)));
+        transport.Children.Add(Spacer(10));
+        transport.Children.Add(MakeButton("◀ 프레임", "이전 프레임 (Ctrl/Shift+← 또는 ,)", "Button.Ghost", () => StepFrames(-1)));
+        transport.Children.Add(MakeButton("프레임 ▶", "다음 프레임 (Ctrl/Shift+→ 또는 .)", "Button.Ghost", () => StepFrames(1)));
+        Grid.SetRow(transport, 0);
+        controls.Children.Add(transport);
 
-        row.Children.Add(MakeButton("⏮ 처음", "처음으로", "Button.Ghost", () => Seek(0)));
-        row.Children.Add(MakeButton("◀◀ 크게", "뒤로 크게 이동", "Button.Ghost", () => StepCoarse(-1)));
-        row.Children.Add(MakeButton("재생/일시정지", "재생 또는 일시정지", "Button.Secondary", TogglePlay));
-        row.Children.Add(MakeButton("크게 ▶▶", "앞으로 크게 이동", "Button.Ghost", () => StepCoarse(1)));
-        row.Children.Add(MakeButton("끝 ⏭", "끝으로", "Button.Ghost", () => Seek(_durationMs)));
-
-        row.Children.Add(new Separator { Width = 10, Opacity = 0 });
-        row.Children.Add(MakeButton("◀ 프레임", "이전 프레임 (Ctrl/Shift+← 또는 ,)", "Button.Ghost", () => StepFrames(-1)));
-        row.Children.Add(MakeButton("프레임 ▶", "다음 프레임 (Ctrl/Shift+→ 또는 .)", "Button.Ghost", () => StepFrames(1)));
-
-        row.Children.Add(new Separator { Width = 10, Opacity = 0 });
-        row.Children.Add(MakeButton("− 축소", "세부 타임라인 축소 (Ctrl+Shift+-)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
-        row.Children.Add(MakeButton("확대 +", "세부 타임라인 확대 (Ctrl+Shift+=)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
-        row.Children.Add(MakeButton("전체 보기", "타임라인 전체 보기 (확대 초기화)", "Button.Ghost", () => _timeline.FitAll()));
-
-        row.Children.Add(new Separator { Width = 12, Opacity = 0 });
-        row.Children.Add(MakeButton("시작 지점 자르기", "현재 위치를 시작(In)으로", "Button.Ghost", SetInHere));
-        row.Children.Add(MakeButton("끝 지점 자르기", "현재 위치를 끝(Out)으로", "Button.Ghost", SetOutHere));
-
-        row.Children.Add(new Separator { Width = 12, Opacity = 0 });
-        row.Children.Add(MakeButton("이 프레임 편집", "현재 프레임을 이미지로 편집 (E)", "Button.Secondary", EditCurrentFrame));
-
-        row.Children.Add(new Separator { Width = 12, Opacity = 0 });
-        row.Children.Add(MakeButton("완료 · 저장", "트림한 영상 저장", "Button.Primary", CommitTrim));
-
-        return WrapControls(row);
-    }
-
-    private static Grid WrapControls(UIElement content)
-    {
-        var g = new Grid();
-        var scroll = new ScrollViewer
+        var precisionAndEdit = new StackPanel
         {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = content,
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 8, 0, 0),
         };
-        g.Children.Add(scroll);
-        return g;
+        precisionAndEdit.Children.Add(MakeButton("− 축소", "세부 타임라인 축소 (Ctrl+Shift+-)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
+        precisionAndEdit.Children.Add(MakeButton("확대 +", "세부 타임라인 확대 (Ctrl+Shift+=)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
+        precisionAndEdit.Children.Add(MakeButton("전체 보기", "타임라인 전체 보기 (확대 초기화)", "Button.Ghost", () => _timeline.FitAll()));
+        precisionAndEdit.Children.Add(Spacer(10));
+        precisionAndEdit.Children.Add(MakeButton("시작 지점 자르기", "현재 위치를 시작(In)으로", "Button.Ghost", SetInHere));
+        precisionAndEdit.Children.Add(MakeButton("끝 지점 자르기", "현재 위치를 끝(Out)으로", "Button.Ghost", SetOutHere));
+        precisionAndEdit.Children.Add(Spacer(10));
+        precisionAndEdit.Children.Add(MakeButton("이 프레임 편집", "현재 프레임을 이미지로 편집 (E)", "Button.Secondary", EditCurrentFrame));
+        precisionAndEdit.Children.Add(Spacer(10));
+        precisionAndEdit.Children.Add(MakeButton("완료 · 저장", "트림한 영상 저장", "Button.Primary", CommitTrim));
+        Grid.SetRow(precisionAndEdit, 1);
+        controls.Children.Add(precisionAndEdit);
+
+        _controlRows = controls;
+        return controls;
     }
+
+    private static Border Spacer(double width) => new() { Width = width };
 
     private void SetEditControlsEnabled(bool enabled)
     {
