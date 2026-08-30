@@ -116,6 +116,21 @@ public sealed class GalleryController
     public CaptureRecord? Find(Guid id) => _queue.Find(id);
 
     /// <summary>
+    /// How much of the queue is full-text searchable right now (i.e. carries OCR text).
+    /// Drives the "N captures not yet searchable — index now?" affordance.
+    /// </summary>
+    public OcrCoverage MeasureOcrCoverage() => CaptureTextSearch.MeasureCoverage(_queue.Records);
+
+    /// <summary>
+    /// Records still missing OCR text, newest first — the work list for batch OCR indexing.
+    /// </summary>
+    public IReadOnlyList<CaptureRecord> RecordsMissingOcr() =>
+        _queue.Records
+            .Where(r => !r.HasOcrText)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToList();
+
+    /// <summary>
     /// Caches an OCR result on the record and persists it immediately (meta then index), so the
     /// recognised text survives a restart and becomes searchable. Best-effort: a persistence
     /// failure is logged, never thrown, because OCR is a non-fatal convenience.
@@ -162,7 +177,7 @@ public sealed class GalleryController
     }
 
     private static bool Matches(CaptureRecord record, string query) =>
-        record.SearchHaystack.Contains(query, StringComparison.OrdinalIgnoreCase);
+        CaptureTextSearch.IsMatch(record, query);
 }
 
 /// <summary>
