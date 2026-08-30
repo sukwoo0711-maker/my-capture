@@ -7,6 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
 using MyCapture.Core.Primitives;
@@ -45,15 +46,31 @@ internal sealed class VideoEditorWindow : Window
     private readonly Slider _scrubber;
     private readonly Slider _inHandle;
     private readonly Slider _outHandle;
-    private readonly ToggleButton _frameStepToggle;
     private readonly TextBlock _positionLabel;
     private readonly TextBlock _statusLabel;
+    private readonly TextBlock _loadingLabel;
+    private readonly Border _loadingOverlay;
+    private readonly List<Control> _editControls = [];
+    private DispatcherTimer? _loadProgressTimer;
+    private DispatcherTimer? _openTimeoutTimer;
 
     private TrimSelection _trim = new(0);
     private double _durationMs;
     private bool _mediaReady;
+    private bool _mediaFailed;
+    private string _mediaFailure = string.Empty;
     private bool _isScrubbing;
     private bool _committed;
+
+    // Test hooks so a headless self-test can confirm the editor actually reaches the ready
+    // state for a real clip (the field report: a ~2s video failed to load).
+    internal bool IsMediaReadyForTest => _mediaReady;
+
+    internal bool HasMediaFailedForTest => _mediaFailed;
+
+    internal string MediaFailureForTest => _mediaFailure;
+
+    internal double DurationMsForTest => _durationMs;
 
     internal VideoEditorWindow(RecordingResult recording, AppPaths paths, ILoggerFactory loggerFactory)
     {
@@ -84,7 +101,6 @@ internal sealed class VideoEditorWindow : Window
             UnloadedBehavior = MediaState.Manual,
             ScrubbingEnabled = true,
             Stretch = Stretch.Uniform,
-            Source = new Uri(recording.OutputPath, UriKind.Absolute),
         };
         _media.MediaOpened += OnMediaOpened;
         _media.MediaFailed += OnMediaFailed;
@@ -93,7 +109,6 @@ internal sealed class VideoEditorWindow : Window
         _scrubber = BuildScrubber();
         _inHandle = BuildTrimHandle("시작 지점(In)");
         _outHandle = BuildTrimHandle("끝 지점(Out)");
-        _frameStepToggle = BuildFrameStepToggle();
         _positionLabel = BuildMono("00:00.000 / 00:00.000");
         _statusLabel = new TextBlock
         {
@@ -102,11 +117,93 @@ internal sealed class VideoEditorWindow : Window
             FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _loadingLabel = new TextBlock
+        {
+            Text = "동영상을 불러오는 중… 0%",
+            Foreground = TryBrush("Text.Primary", Colors.White),
+            FontSize = 15,
+            FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        AutomationProperties.SetLiveSetting(_loadingLabel, AutomationLiveSetting.Polite);
+        _loadingOverlay = new Border
+        {
+            Background = TryBrush("Surface.Scrim", Color.FromArgb(0xC8, 0x00, 0x00, 0x00)),
+            CornerRadius = new CornerRadius(12),
+            Child = _loadingLabel,
+        };
 
         Content = BuildLayout();
 
+        // Controls start DISABLED until the media is ready; a click during load must do nothing.
+        SetEditControlsEnabled(false);
+
         KeyDown += OnKeyDown;
+        Loaded += OnLoadedInternal;
         Closed += OnClosedInternal;
+    }
+
+    private void OnLoadedInternal(object? sender, RoutedEventArgs e)
+    {
+        // Set the source only after the window (and the MediaElement's visual tree) is loaded.
+        // A MediaElement asked to open before it is connected to a rendered tree can silently
+        // never raise MediaOpened for a short clip — the reported "2s video won't load" case.
+        try
+        {
+            _media.Source = new Uri(_recording.OutputPath, UriKind.Absolute);
+            _media.Play();   // Manual mode: Play kicks decoding so MediaOpened fires reliably…
+            _media.Pause();  // …then immediately pause so we sit on frame 0.
+        }
+        catch (Exception ex)
+        {
+            OnMediaFailed(this, null!);
+            _log.LogError(ex, "Could not set the media source");
+        }
+
+        StartLoadProgress();
+    }
+
+    private void StartLoadProgress()
+    {
+        // Local files have no real download percentage, so animate an indeterminate-but-honest
+        // percentage from MediaElement.DownloadProgress/BufferingProgress, and guarantee the UI
+        // never gets stuck on "loading": if MediaOpened has not fired within a timeout, fall
+        // back to the known recording duration and open anyway.
+        _loadProgressTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(80) };
+        int synthetic = 5;
+        _loadProgressTimer.Tick += (_, _) =>
+        {
+            if (_mediaReady || _mediaFailed)
+            {
+                return;
+            }
+
+            double dl = _media.DownloadProgress;      // 0..1, jumps to 1 for local files
+            double buf = _media.BufferingProgress;     // 0..1
+            int pct = (int)Math.Round(Math.Max(dl, buf) * 100.0);
+            if (pct <= 0)
+            {
+                // No real signal for a local file yet: creep a synthetic value so the user sees motion.
+                synthetic = Math.Min(90, synthetic + 5);
+                pct = synthetic;
+            }
+
+            _loadingLabel.Text = string.Create(CultureInfo.CurrentCulture, $"동영상을 불러오는 중… {pct}%");
+        };
+        _loadProgressTimer.Start();
+
+        _openTimeoutTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromSeconds(5) };
+        _openTimeoutTimer.Tick += (_, _) =>
+        {
+            _openTimeoutTimer?.Stop();
+            if (!_mediaReady && !_mediaFailed)
+            {
+                _log.LogWarning("MediaOpened did not fire within 5s; opening with the recorded duration fallback");
+                CompleteOpen(_recording.DurationMs, fromFallback: true);
+            }
+        };
+        _openTimeoutTimer.Start();
     }
 
     /// <summary>Raised when the user commits a still-image edit taken from a frame.</summary>
@@ -122,6 +219,10 @@ internal sealed class VideoEditorWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // controls
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // status
 
+        var previewStack = new Grid();
+        previewStack.Children.Add(_media);
+        previewStack.Children.Add(_loadingOverlay);
+
         var preview = new Border
         {
             Background = TryBrush("Surface.Canvas", Colors.Black),
@@ -129,7 +230,7 @@ internal sealed class VideoEditorWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             Padding = new Thickness(8),
-            Child = _media,
+            Child = previewStack,
         };
         Grid.SetRow(preview, 0);
         root.Children.Add(preview);
@@ -211,20 +312,21 @@ internal sealed class VideoEditorWindow : Window
         };
 
         row.Children.Add(MakeButton("⏮ 처음", "처음으로", "Button.Ghost", () => Seek(0)));
-        row.Children.Add(MakeButton("◀ 프레임", "이전 프레임", "Button.Ghost", () => StepFrames(-1)));
+        row.Children.Add(MakeButton("◀◀ 크게", "뒤로 크게 이동", "Button.Ghost", () => StepCoarse(-1)));
         row.Children.Add(MakeButton("재생/일시정지", "재생 또는 일시정지", "Button.Secondary", TogglePlay));
-        row.Children.Add(MakeButton("프레임 ▶", "다음 프레임", "Button.Ghost", () => StepFrames(1)));
+        row.Children.Add(MakeButton("크게 ▶▶", "앞으로 크게 이동", "Button.Ghost", () => StepCoarse(1)));
         row.Children.Add(MakeButton("끝 ⏭", "끝으로", "Button.Ghost", () => Seek(_durationMs)));
 
-        row.Children.Add(new Separator { Width = 12, Opacity = 0 });
-        row.Children.Add(_frameStepToggle);
+        row.Children.Add(new Separator { Width = 10, Opacity = 0 });
+        row.Children.Add(MakeButton("◀ 프레임", "이전 프레임 (Ctrl/Shift+←)", "Button.Ghost", () => StepFrames(-1)));
+        row.Children.Add(MakeButton("프레임 ▶", "다음 프레임 (Ctrl/Shift+→)", "Button.Ghost", () => StepFrames(1)));
 
         row.Children.Add(new Separator { Width = 12, Opacity = 0 });
-        row.Children.Add(MakeButton("여기를 In(I)", "현재 위치를 시작 지점으로", "Button.Ghost", SetInHere));
-        row.Children.Add(MakeButton("여기를 Out(O)", "현재 위치를 끝 지점으로", "Button.Ghost", SetOutHere));
+        row.Children.Add(MakeButton("시작 지점 자르기", "현재 위치를 시작(In)으로", "Button.Ghost", SetInHere));
+        row.Children.Add(MakeButton("끝 지점 자르기", "현재 위치를 끝(Out)으로", "Button.Ghost", SetOutHere));
 
         row.Children.Add(new Separator { Width = 12, Opacity = 0 });
-        row.Children.Add(MakeButton("이 프레임 편집(E)", "현재 프레임을 이미지로 편집", "Button.Secondary", EditCurrentFrame));
+        row.Children.Add(MakeButton("이 프레임 편집", "현재 프레임을 이미지로 편집 (E)", "Button.Secondary", EditCurrentFrame));
 
         row.Children.Add(new Separator { Width = 12, Opacity = 0 });
         row.Children.Add(MakeButton("완료 · 저장", "트림한 영상 저장", "Button.Primary", CommitTrim));
@@ -270,6 +372,7 @@ internal sealed class VideoEditorWindow : Window
                 SeekToScrubber();
             }
         };
+        _editControls.Add(slider);
         return slider;
     }
 
@@ -284,33 +387,43 @@ internal sealed class VideoEditorWindow : Window
         };
         AutomationProperties.SetName(slider, name);
         slider.ValueChanged += (_, _) => OnTrimHandleChanged();
+        _editControls.Add(slider);
         return slider;
     }
 
-    private ToggleButton BuildFrameStepToggle()
+    private void SetEditControlsEnabled(bool enabled)
     {
-        var toggle = new ToggleButton
+        foreach (Control c in _editControls)
         {
-            Content = "프레임 이동",
-            MinWidth = 96,
-            VerticalAlignment = VerticalAlignment.Center,
-            Style = TryStyle("ToggleButton.Tool"),
-        };
-        AutomationProperties.SetName(toggle, "프레임 이동 모드 (방향키로 1프레임씩 이동)");
-        AutomationProperties.SetHelpText(toggle, "켜면 좌우 방향키가 1프레임씩, Shift와 함께면 10프레임씩 이동합니다.");
-        toggle.Checked += (_, _) => UpdateStatusForMode();
-        toggle.Unchecked += (_, _) => UpdateStatusForMode();
-        return toggle;
+            c.IsEnabled = enabled;
+        }
     }
 
     // ---- media lifecycle ----
 
     private void OnMediaOpened(object? sender, RoutedEventArgs e)
     {
-        _durationMs = _media.NaturalDuration.HasTimeSpan
+        double dur = _media.NaturalDuration.HasTimeSpan
             ? _media.NaturalDuration.TimeSpan.TotalMilliseconds
             : _recording.DurationMs;
+        CompleteOpen(dur, fromFallback: false);
+    }
 
+    /// <summary>
+    /// Finalises the ready state — from either MediaOpened or the open-timeout fallback — so
+    /// the editor is never stuck on the loading overlay for a clip that decodes slowly or whose
+    /// MediaOpened never arrives (the reported ~2s-clip case).
+    /// </summary>
+    private void CompleteOpen(double durationMs, bool fromFallback)
+    {
+        if (_mediaReady)
+        {
+            return;
+        }
+
+        StopLoadTimers();
+
+        _durationMs = durationMs > 0 ? durationMs : Math.Max(1, _recording.DurationMs);
         _trim = new TrimSelection(_durationMs);
         _mediaReady = true;
 
@@ -320,18 +433,46 @@ internal sealed class VideoEditorWindow : Window
         _inHandle.Value = 0;
         _outHandle.Value = _durationMs;
 
-        _media.Position = TimeSpan.Zero;
-        _media.Pause();
+        try
+        {
+            _media.Position = TimeSpan.Zero;
+            _media.Pause();
+        }
+        catch (InvalidOperationException)
+        {
+            // Position before the element is fully ready can throw; harmless here.
+        }
+
+        _loadingOverlay.Visibility = Visibility.Collapsed;
+        SetEditControlsEnabled(true);
 
         UpdatePositionLabel(0);
         UpdateStatusForMode();
+        if (fromFallback)
+        {
+            _log.LogInformation("Editor opened via duration fallback ({Duration:0}ms)", _durationMs);
+        }
+
         _ = Keyboard.Focus(this);
+    }
+
+    private void StopLoadTimers()
+    {
+        _loadProgressTimer?.Stop();
+        _loadProgressTimer = null;
+        _openTimeoutTimer?.Stop();
+        _openTimeoutTimer = null;
     }
 
     private void OnMediaFailed(object? sender, ExceptionRoutedEventArgs e)
     {
-        _log.LogError(e.ErrorException, "Playback of {Path} failed", _recording.OutputPath);
-        _statusLabel.Text = "동영상을 재생할 수 없습니다: " + (e.ErrorException?.Message ?? "알 수 없는 오류");
+        StopLoadTimers();
+        _mediaFailed = true;
+        _mediaFailure = e?.ErrorException?.Message ?? "알 수 없는 오류";
+        _log.LogError(e?.ErrorException, "Playback of {Path} failed", _recording.OutputPath);
+        _loadingLabel.Text = "동영상을 불러올 수 없습니다";
+        _loadingLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
+        _statusLabel.Text = "동영상을 재생할 수 없습니다: " + _mediaFailure;
         _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
     }
 
@@ -552,32 +693,18 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
-        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        // New mapping (per user request): plain Left/Right jump in LARGE steps; Ctrl or Shift
+        // + Left/Right nudge by a SINGLE frame. This removes the old frame-step toggle.
+        bool fine = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
         switch (e.Key)
         {
             case Key.Left:
                 e.Handled = true;
-                if (_frameStepToggle.IsChecked == true)
-                {
-                    StepFrames(shift ? -10 : -1);
-                }
-                else
-                {
-                    StepCoarse(-1);
-                }
-
+                if (fine) { StepFrames(-1); } else { StepCoarse(-1); }
                 break;
             case Key.Right:
                 e.Handled = true;
-                if (_frameStepToggle.IsChecked == true)
-                {
-                    StepFrames(shift ? 10 : 1);
-                }
-                else
-                {
-                    StepCoarse(1);
-                }
-
+                if (fine) { StepFrames(1); } else { StepCoarse(1); }
                 break;
             case Key.Space:
                 e.Handled = true;
@@ -608,13 +735,12 @@ internal sealed class VideoEditorWindow : Window
 
     private void UpdateStatusForMode()
     {
-        string mode = _frameStepToggle.IsChecked == true
-            ? "프레임 이동: 좌우 방향키로 1프레임(Shift 10프레임)"
-            : "탐색 이동: 좌우 방향키로 구간 이동 · 프레임 이동을 켜면 1프레임씩";
         string trim = _trim.IsFullClip
             ? "전체 길이"
             : string.Create(CultureInfo.CurrentCulture, $"선택 {FormatMs(_trim.SelectedDurationMs)}");
-        _statusLabel.Text = string.Create(CultureInfo.CurrentCulture, $"{mode} · {trim}");
+        _statusLabel.Text = string.Create(
+            CultureInfo.CurrentCulture,
+            $"←/→ 크게 이동 · Ctrl 또는 Shift+←/→ 1프레임씩 · {trim}");
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
     }
 
@@ -638,7 +764,9 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnClosedInternal(object? sender, EventArgs e)
     {
+        StopLoadTimers();
         KeyDown -= OnKeyDown;
+        Loaded -= OnLoadedInternal;
         Closed -= OnClosedInternal;
         _media.MediaOpened -= OnMediaOpened;
         _media.MediaFailed -= OnMediaFailed;
@@ -667,6 +795,7 @@ internal sealed class VideoEditorWindow : Window
         };
         AutomationProperties.SetName(button, automationName);
         button.Click += (_, _) => onClick();
+        _editControls.Add(button);
         return button;
     }
 
