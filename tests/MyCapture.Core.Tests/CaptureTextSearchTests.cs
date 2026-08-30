@@ -133,4 +133,47 @@ public sealed class CaptureTextSearchTests
         Assert.True(hits[0].Record.CreatedAt >= hits[1].Record.CreatedAt);
         Assert.True(hits[1].Record.CreatedAt >= hits[2].Record.CreatedAt);
     }
+
+    [Fact]
+    public void DuplicateTerms_DoNotBreakMatching()
+    {
+        var record = Rec(ocr: "결제 완료");
+
+        // Repeated identical terms must still match (AND of the same term is trivially true).
+        Assert.Single(CaptureTextSearch.Search([record], "결제 결제 결제"));
+    }
+
+    [Fact]
+    public void NullTitleAndWindow_WithOcrOnly_StillSearchable()
+    {
+        // Records default Title/Window to empty; explicitly exercise null OcrText vs present.
+        var record = new CaptureRecord { Title = null!, SourceWindowTitle = null!, OcrText = "invoice total" };
+
+        Assert.Single(CaptureTextSearch.Search([record], "invoice"));
+        Assert.True(CaptureTextSearch.IsMatch(record, "total"));
+        Assert.Empty(CaptureTextSearch.Search([record], "absent"));
+    }
+
+    [Fact]
+    public void MeasureCoverage_AllWithText_IsComplete()
+    {
+        var records = new[] { Rec(ocr: "a"), Rec(ocr: "b"), Rec(ocr: "c") };
+
+        OcrCoverage coverage = CaptureTextSearch.MeasureCoverage(records);
+
+        Assert.Equal(3, coverage.Total);
+        Assert.Equal(3, coverage.WithOcrText);
+        Assert.Equal(0, coverage.Missing);
+        Assert.True(coverage.IsComplete);
+        Assert.Equal(1.0, coverage.Fraction, 3);
+    }
+
+    [Fact]
+    public void WhitespaceOnlyOcr_CountsAsMissing()
+    {
+        // HasOcrText uses IsNullOrWhiteSpace, so a whitespace-only OCR value is "not searchable".
+        var record = Rec(ocr: "\t  \n");
+        Assert.Equal(1, CaptureTextSearch.MeasureCoverage([record]).Missing);
+        Assert.Empty(CaptureTextSearch.Search([record], "anything"));
+    }
 }

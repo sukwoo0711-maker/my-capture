@@ -167,4 +167,123 @@ public sealed class OcrIndexingAndAvailabilityTests
             try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
         }
     }
+
+    [Fact]
+    public void Availability_SingleLanguage_ListsIt()
+    {
+        OcrAvailability a = OcrAvailability.Describe(isAvailable: true, supportedLanguages: ["en-US"]);
+        Assert.True(a.IsAvailable);
+        Assert.Contains("en-US", a.Detail);
+    }
+
+    // ---- Indexer happy path over a REAL persisted capture ----
+
+    private static void RunSta(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try { action(); }
+            catch (Exception ex) { failure = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null)
+        {
+            throw new Xunit.Sdk.XunitException($"STA body threw: {failure}");
+        }
+    }
+
+    private static System.Windows.Media.Imaging.BitmapSource SolidBitmap(int w, int h)
+    {
+        var bmp = new System.Windows.Media.Imaging.WriteableBitmap(
+            w, h, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null);
+        byte[] px = new byte[w * h * 4];
+        Array.Fill(px, (byte)0x80);
+        bmp.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), px, w * 4, 0);
+        bmp.Freeze();
+        return bmp;
+    }
+
+    [Fact]
+    public void Index_PersistedCapture_CachesText_RaisesCoverage_AndBecomesSearchable() => RunSta(() =>
+    {
+        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mc-ocridx-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            paths.EnsureCreated();
+            var queueSettings = new QueueSettings();
+            var queue = new CaptureQueue(paths, queueSettings, NullLogger<CaptureQueue>.Instance);
+            var gallery = new GalleryController(queue, NullLogger<GalleryController>.Instance);
+
+            // Persist a real capture so rendered.png exists on disk for the indexer to read.
+            var persistence = new MyCapture.App.Editing.CapturePersistenceService(
+                queue, paths, () => queueSettings, NullLogger<MyCapture.App.Editing.CapturePersistenceService>.Instance);
+            CaptureRecord record = persistence.PersistOriginal(SolidBitmap(40, 30), 1.0, "메모장", "\\\\.\\DISPLAY1");
+
+            // Before indexing: no OCR text, not searchable by the image's words.
+            Assert.False(record.HasOcrText);
+            Assert.Equal(1, gallery.MeasureOcrCoverage().Missing);
+            Assert.Empty(CaptureTextSearch.Search(queue.Records, "송장번호"));
+
+            var ocr = new FakeOcr(available: true, text: "송장번호 INV-2026-0830");
+            var svc = new OcrIndexingService(
+                gallery, ocr, r => queue.GetDirectory(r), () => new OcrSettings(), NullLogger<OcrIndexingService>.Instance);
+
+            OcrIndexingOutcome outcome = svc.IndexMissingAsync().GetAwaiter().GetResult();
+
+            Assert.Equal(OcrIndexingOutcome.Completed, outcome);
+            Assert.True(ocr.Calls >= 1);
+            // Text was cached on the record and persisted.
+            Assert.True(record.HasOcrText);
+            Assert.Contains("INV-2026-0830", record.OcrText);
+            // Coverage is now complete and the capture is findable by its image's words.
+            Assert.True(gallery.MeasureOcrCoverage().IsComplete);
+            IReadOnlyList<CaptureSearchHit> hits = CaptureTextSearch.Search(queue.Records, "INV-2026-0830");
+            Assert.Single(hits);
+            Assert.True(hits[0].MatchedOcr);
+
+            // Persisted: a reloaded queue still carries the OCR text.
+            var reloaded = new CaptureQueue(paths, queueSettings, NullLogger<CaptureQueue>.Instance);
+            reloaded.Load();
+            Assert.True(reloaded.Records[0].HasOcrText);
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+        }
+    });
+
+    [Fact]
+    public void Index_AlreadyCancelledToken_ReturnsCancelled() => RunSta(() =>
+    {
+        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mc-ocridx-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            paths.EnsureCreated();
+            var queueSettings = new QueueSettings();
+            var queue = new CaptureQueue(paths, queueSettings, NullLogger<CaptureQueue>.Instance);
+            var gallery = new GalleryController(queue, NullLogger<GalleryController>.Instance);
+            var persistence = new MyCapture.App.Editing.CapturePersistenceService(
+                queue, paths, () => queueSettings, NullLogger<MyCapture.App.Editing.CapturePersistenceService>.Instance);
+            _ = persistence.PersistOriginal(SolidBitmap(20, 20), 1.0, "t", "\\\\.\\DISPLAY1");
+
+            var svc = new OcrIndexingService(
+                gallery, new FakeOcr(available: true), r => queue.GetDirectory(r),
+                () => new OcrSettings(), NullLogger<OcrIndexingService>.Instance);
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            OcrIndexingOutcome outcome = svc.IndexMissingAsync(null, cts.Token).GetAwaiter().GetResult();
+
+            Assert.Equal(OcrIndexingOutcome.Cancelled, outcome);
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+        }
+    });
 }
