@@ -1,0 +1,137 @@
+using System;
+using System.Collections.Generic;
+using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.Core.Recording;
+using MyCapture.Core.Settings;
+using MyCapture.Platform.Recording;
+using MyCapture.Platform.Shell;
+using Xunit;
+
+namespace MyCapture.App.Tests;
+
+/// <summary>
+/// Recording feature wiring that must hold regardless of the machine: the Ctrl+Shift+X
+/// default, the settings graph, the derived bitrate, the encoder contract exercised
+/// through a fake, and the recorder's start/stop guards.
+/// </summary>
+public sealed class RecordingFeatureTests
+{
+    [Fact]
+    public void RecordRegionHotkey_DefaultsToCtrlShiftX()
+    {
+        var settings = new HotkeySettings();
+
+        Assert.True(settings.RecordRegion.IsAssigned);
+        Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Shift, settings.RecordRegion.Modifiers);
+        Assert.Equal(Hotkey.VkX, settings.RecordRegion.VirtualKey);
+        Assert.Equal("Ctrl+Shift+X", settings.RecordRegion.ToString());
+    }
+
+    [Fact]
+    public void RecordRegion_IsDistinctFromCaptureRegion()
+    {
+        var settings = new HotkeySettings();
+
+        // Recording must never collide with still capture out of the box.
+        Assert.NotEqual(settings.Capture.VirtualKey, settings.RecordRegion.VirtualKey);
+    }
+
+    [Fact]
+    public void GlobalHotkeyCommand_IncludesRecordRegion()
+    {
+        Assert.Contains(GlobalHotkeyCommand.RecordRegion, Enum.GetValues<GlobalHotkeyCommand>());
+    }
+
+    [Fact]
+    public void AppSettings_ExposesRecordingSection()
+    {
+        var settings = new AppSettings();
+
+        Assert.NotNull(settings.Recording);
+        Assert.Equal(RecordingFrameRate.Fps15, settings.Recording.FrameRate);
+        Assert.Equal(15, settings.Recording.TargetFps);
+        Assert.False(settings.Recording.UseStartDelay);
+        Assert.True(settings.Recording.IncludeCursor);
+    }
+
+    [Theory]
+    [InlineData(1920, 1080, 30)]
+    [InlineData(320, 240, 15)]
+    [InlineData(3840, 2160, 60)]
+    public void DeriveBitrate_StaysInsideClampBand(int w, int h, int fps)
+    {
+        int bitrate = VideoEncoderOptions.DeriveBitrate(w, h, fps);
+
+        Assert.InRange(bitrate, 1_000_000, 24_000_000);
+    }
+
+    [Fact]
+    public void DeriveBitrate_LargerRegionGetsMoreBits()
+    {
+        int small = VideoEncoderOptions.DeriveBitrate(640, 360, 15);
+        int large = VideoEncoderOptions.DeriveBitrate(1920, 1080, 15);
+
+        Assert.True(large >= small);
+    }
+
+    [Fact]
+    public void Recorder_StopWithoutStart_Throws()
+    {
+        var grabber = new RegionFrameGrabber(
+            new MyCapture.Platform.Capture.ScreenCaptureEngine(NullLogger<MyCapture.Platform.Capture.ScreenCaptureEngine>.Instance),
+            includeCursor: false);
+        var recorder = new RegionRecorder(
+            grabber,
+            _ => new RecordingSpyEncoder(),
+            NullLogger.Instance);
+
+        Assert.Throws<InvalidOperationException>(() => recorder.Stop());
+        Assert.False(recorder.IsRecording);
+    }
+
+    [Fact]
+    public void Recorder_DisposeWithoutStart_IsSafe()
+    {
+        var grabber = new RegionFrameGrabber(
+            new MyCapture.Platform.Capture.ScreenCaptureEngine(NullLogger<MyCapture.Platform.Capture.ScreenCaptureEngine>.Instance),
+            includeCursor: false);
+        var recorder = new RegionRecorder(grabber, _ => new RecordingSpyEncoder(), NullLogger.Instance);
+
+        recorder.Dispose(); // must not throw
+    }
+
+    [Fact]
+    public void SpyEncoder_HonoursWriteThenCompleteContract()
+    {
+        var encoder = new RecordingSpyEncoder();
+        var options = new VideoEncoderOptions("out.mp4", 4, 4, 15, 1_000_000);
+        _ = options;
+
+        encoder.WriteFrame(new EncoderFrame(new byte[4 * 4 * 4], 4, 4, 16, 0));
+        encoder.WriteFrame(new EncoderFrame(new byte[4 * 4 * 4], 4, 4, 16, 66.6));
+        encoder.Complete();
+
+        Assert.Equal(2, encoder.Timestamps.Count);
+        Assert.True(encoder.Completed);
+    }
+
+    /// <summary>A fake encoder recording the contract, used to keep recorder tests off Media Foundation.</summary>
+    private sealed class RecordingSpyEncoder : IVideoEncoder
+    {
+        public List<double> Timestamps { get; } = [];
+
+        public bool Completed { get; private set; }
+
+        public int Width => 4;
+
+        public int Height => 4;
+
+        public void WriteFrame(in EncoderFrame frame) => Timestamps.Add(frame.TimestampMs);
+
+        public void Complete() => Completed = true;
+
+        public void Dispose()
+        {
+        }
+    }
+}

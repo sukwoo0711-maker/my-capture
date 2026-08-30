@@ -197,6 +197,7 @@ public sealed class GlobalHotkeyReconfigureTests
                 RepeatLastRegion = Hotkey.None,
                 CaptureWindow = Hotkey.None,
                 CaptureFullScreen = Hotkey.None,
+                RecordRegion = Hotkey.None,
             };
 
             HotkeyReconfigureResult result = service.Reconfigure(next);

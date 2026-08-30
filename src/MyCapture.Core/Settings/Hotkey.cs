@@ -53,6 +53,7 @@ public sealed record Hotkey
 
     // Virtual-key codes used by the defaults and by the parser's friendly names.
     public const uint VkC = 0x43;
+    public const uint VkX = 0x58;
     public const uint VkF1 = 0x70;
     public const uint VkF3 = 0x72;
 

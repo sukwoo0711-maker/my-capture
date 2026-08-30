@@ -16,6 +16,7 @@ public enum GlobalHotkeyCommand
     RepeatLastRegion,
     CaptureWindow,
     CaptureFullScreen,
+    RecordRegion,
 }
 
 /// <summary>
@@ -264,6 +265,7 @@ public sealed class GlobalHotkeyService : IDisposable
         yield return (GlobalHotkeyCommand.RepeatLastRegion, settings.RepeatLastRegion);
         yield return (GlobalHotkeyCommand.CaptureWindow, settings.CaptureWindow);
         yield return (GlobalHotkeyCommand.CaptureFullScreen, settings.CaptureFullScreen);
+        yield return (GlobalHotkeyCommand.RecordRegion, settings.RecordRegion);
     }
 
     private static int IdFor(GlobalHotkeyCommand command) => FirstHotkeyId + (int)command;

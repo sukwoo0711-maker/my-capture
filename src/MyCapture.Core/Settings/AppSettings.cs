@@ -37,6 +37,8 @@ public sealed class AppSettings
 
     public CaptureSettings Capture { get; set; } = new();
 
+    public MyCapture.Core.Recording.RecordingSettings Recording { get; set; } = new();
+
     public PinSettings Pin { get; set; } = new();
 
     public AnnotationDefaults Annotation { get; set; } = new();
@@ -80,6 +82,15 @@ public sealed class HotkeySettings
 
     /// <summary>Captures the entire monitor under the cursor.</summary>
     public Hotkey CaptureFullScreen { get; set; } = Hotkey.None;
+
+    /// <summary>
+    /// Starts (or stops) a region video recording. Ctrl+Shift+X by default.
+    /// </summary>
+    /// <remarks>
+    /// A distinct default chord from region capture (Ctrl+Shift+C) so recording and
+    /// still capture never collide. Pressing it again while recording stops it.
+    /// </remarks>
+    public Hotkey RecordRegion { get; set; } = new(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkX);
 }
 
 public sealed class QueueSettings

@@ -44,6 +44,7 @@ public partial class App : Application
     private GlobalHotkeyService? _hotkeys;
     private AppSettings? _settings;
     private CaptureOverlayCoordinator? _overlay;
+    private MyCapture.App.Recording.RegionRecordingCoordinator? _recorder;
     private LastRegionStore? _lastRegions;
     private AdvancedCaptureService? _advancedCapture;
     private CountdownWindow? _activeCountdown;
@@ -189,6 +190,17 @@ public partial class App : Application
         };
         _overlay.CommitRequested = HandleCommit;
 
+        // Region video recording (Ctrl+Shift+X). Shares the capture engine and, on a
+        // frame-image edit, the same persistence/commit path as still capture so recordings
+        // inherit the gallery, layer-preserving re-edit and offline story unchanged.
+        _recorder = new MyCapture.App.Recording.RegionRecordingCoordinator(
+            _services.GetRequiredService<ScreenCaptureEngine>(),
+            _capturePaths ?? _services.GetRequiredService<AppPaths>(),
+            () => _settings!.Recording,
+            _services.GetRequiredService<ILoggerFactory>());
+        _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
+        _recorder.SessionEnded += (_, _) => RestoreTrayAfterCapture();
+
         // Add the icon first so registration failures have a non-modal place to be
         // reported. A tray utility must not interrupt logon with a message box merely
         // because another program claimed a chord first.
@@ -264,6 +276,10 @@ public partial class App : Application
             case GlobalHotkeyCommand.CaptureFullScreen:
                 _log?.LogInformation("Capture-full-screen hotkey requested");
                 HandleCaptureFullScreen();
+                break;
+            case GlobalHotkeyCommand.RecordRegion:
+                _log?.LogInformation("Region recording hotkey requested");
+                HandleRecordRegion();
                 break;
         }
     }
@@ -700,6 +716,68 @@ public partial class App : Application
         // HandleCommit before the editor closed. Nothing remains except to release the
         // in-flight record.
         _currentRecord = null;
+    }
+
+    /// <summary>
+    /// Region video recording entry point. Toggles: a running recording is stopped, otherwise
+    /// a new region is chosen. Never throws into the message pump.
+    /// </summary>
+    private void HandleRecordRegion()
+    {
+        if (_recorder is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _tray?.SetState(TrayIconState.Capturing);
+            _recorder.Toggle();
+        }
+        catch (Exception ex)
+        {
+            _log?.LogError(ex, "Could not start region recording");
+            _tray?.SetState(TrayIconState.Error);
+            _tray?.ShowBalloon(
+                "녹화를 시작할 수 없습니다",
+                ex.Message,
+                TrayBalloonKind.Error);
+        }
+    }
+
+    /// <summary>
+    /// Persists a still image the user extracted and annotated from a recorded frame, reusing
+    /// the exact capture persistence/commit path so it lands in the gallery as a first-class
+    /// capture with a preserved layer document.
+    /// </summary>
+    private void OnRecordedFrameImageCaptured(
+        object? sender,
+        MyCapture.App.Recording.AnnotationFrameCapturedEventArgs e)
+    {
+        if (_persistence is null || _commit is null)
+        {
+            return;
+        }
+
+        try
+        {
+            CaptureRecord record = _persistence.PersistOriginal(
+                e.Result.SelectedBitmap,
+                e.Result.Frame.DpiScale,
+                sourceWindowTitle: "녹화 프레임",
+                sourceMonitor: e.Result.Frame.Monitor?.DeviceName ?? string.Empty);
+
+            _ = _commit.Commit(record, e.Result);
+            _tray?.SetCaptureCount(_queue?.Count ?? 0);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log?.LogError(ex, "Could not persist an image edited from a recorded frame");
+            _tray?.ShowBalloon(
+                "프레임 이미지를 저장할 수 없습니다",
+                ex.Message,
+                TrayBalloonKind.Error);
+        }
     }
 
     private void InitializeQueue()
