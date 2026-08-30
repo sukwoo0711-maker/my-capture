@@ -30,6 +30,13 @@ internal sealed class RegionRecordingCoordinator
     private RecordingControlWindow? _controls;
     private VideoEditorWindow? _editor;
 
+    // Set the moment a stop is requested and held until the editor has opened (or the
+    // session has fully ended). Without it, a second Ctrl+Shift+X arriving during the
+    // brief stop→finalise→editor transition — when _controls may already be null but the
+    // editor not yet shown — would fall through to StartRegionSelection() and begin a NEW
+    // recording from 0. This flag closes that race deterministically.
+    private bool _finishing;
+
     internal RegionRecordingCoordinator(
         ScreenCaptureEngine captureEngine,
         AppPaths paths,
@@ -52,7 +59,7 @@ internal sealed class RegionRecordingCoordinator
     /// </summary>
     internal event EventHandler<AnnotationFrameCapturedEventArgs>? FrameImageCaptured;
 
-    internal bool IsActive => _selectionOverlay is not null || _controls is not null || _editor is not null;
+    internal bool IsActive => _selectionOverlay is not null || _controls is not null || _editor is not null || _finishing;
 
     /// <summary>
     /// Entry point for the Ctrl+Shift+X command. If a recording is already running,
@@ -62,8 +69,17 @@ internal sealed class RegionRecordingCoordinator
     {
         Application.Current.Dispatcher.VerifyAccess();
 
+        // A stop→finalise→editor transition is in flight: ignore re-triggers so a second
+        // hotkey press can never start a brand-new recording from 0 mid-transition.
+        if (_finishing)
+        {
+            ActivateExisting();
+            return;
+        }
+
         if (_controls is { IsRecording: true } running)
         {
+            _finishing = true;
             running.RequestStop();
             return;
         }
@@ -165,10 +181,13 @@ internal sealed class RegionRecordingCoordinator
         _controls = controls;
         controls.RecordingFinished += OnRecordingFinished;
         controls.Cancelled += OnControlsCancelled;
+        controls.Stopping += OnControlsStopping;
         controls.Closed += OnControlsClosed;
         controls.Show();
         _ = controls.Activate();
     }
+
+    private void OnControlsStopping(object? sender, EventArgs e) => _finishing = true;
 
     private void OnControlsCancelled(object? sender, EventArgs e) =>
         _log.LogInformation("Recording cancelled before or during capture");
@@ -179,12 +198,19 @@ internal sealed class RegionRecordingCoordinator
         {
             controls.RecordingFinished -= OnRecordingFinished;
             controls.Cancelled -= OnControlsCancelled;
+            controls.Stopping -= OnControlsStopping;
             controls.Closed -= OnControlsClosed;
             if (ReferenceEquals(_controls, controls))
             {
                 _controls = null;
             }
         }
+
+        // By now either the editor has opened (OnRecordingFinished cleared _finishing and
+        // anchored the session on _editor) or the stop yielded no clip. Either way the
+        // control window is gone, so the transition is over — clear the guard so a stuck
+        // flag can never block future recordings.
+        _finishing = false;
 
         EndSessionIfIdle();
     }
@@ -199,6 +225,9 @@ internal sealed class RegionRecordingCoordinator
 
         var editor = new VideoEditorWindow(result, _paths, _loggerFactory);
         _editor = editor;
+        // The stop→finalise→editor transition is complete: the editor now anchors the
+        // session, so clear the finishing guard.
+        _finishing = false;
         editor.FrameImageCaptured += OnFrameImageCaptured;
         editor.Closed += OnEditorClosed;
         editor.Show();

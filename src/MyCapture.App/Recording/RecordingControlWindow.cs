@@ -120,6 +120,9 @@ internal sealed class RecordingControlWindow : Window
 
     internal event EventHandler? Cancelled;
 
+    /// <summary>Raised the moment a stop begins, before the deferred finalise runs.</summary>
+    internal event EventHandler? Stopping;
+
     internal bool IsRecording => _recorder is { IsRecording: true };
 
     /// <summary>External stop request (e.g. pressing Ctrl+Shift+X again).</summary>
@@ -355,6 +358,7 @@ internal sealed class RecordingControlWindow : Window
         }
 
         _stopping = true;
+        Stopping?.Invoke(this, EventArgs.Empty);
         _elapsedTimer?.Stop();
         _primaryButton.IsEnabled = false;
         _statusText.Text = "저장 중…";

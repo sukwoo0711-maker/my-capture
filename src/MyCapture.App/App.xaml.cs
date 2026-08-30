@@ -1104,6 +1104,19 @@ public partial class App : Application
                 OcrSelfTest.Run);
         }
 
+        int recordingIndex = FindSwitch(args, RecordingSelfTest.CommandLineSwitch);
+        if (recordingIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(
+                args,
+                recordingIndex,
+                "mycapture-recording-selftest");
+            return RunSelfTest(
+                outputDirectory,
+                "recording-selftest-report.txt",
+                RecordingSelfTest.Run);
+        }
+
         int settingsIndex = FindSwitch(args, SettingsSelfTest.CommandLineSwitch);
         if (settingsIndex >= 0)
         {

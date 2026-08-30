@@ -95,8 +95,11 @@ public sealed class RegionRecorder : IDisposable
             settings.TargetFps,
             bitrate);
 
-        _encoder = _encoderFactory(options);
-
+        // The encoder is created INSIDE the capture thread (see CaptureLoop), not here. The
+        // Media Foundation Sink Writer is an apartment-bound COM object: if it is created on
+        // the caller's STA UI thread and then used from this background thread, the cross-
+        // apartment QueryInterface fails with E_NOINTERFACE the first time a frame is written.
+        // Creating and using it on one dedicated MTA thread keeps every COM call in-apartment.
         var clock = new RecordingClock(settings.TargetFps);
         _thread = new Thread(() => CaptureLoop(clock, options))
         {
@@ -106,6 +109,9 @@ public sealed class RegionRecorder : IDisposable
             // a single-core-constrained machine.
             Priority = ThreadPriority.BelowNormal,
         };
+        // Media Foundation work belongs on an MTA thread; make it explicit rather than
+        // relying on the runtime default for a fresh thread.
+        _thread.SetApartmentState(ApartmentState.MTA);
         _thread.Start();
 
         _log.LogInformation(
@@ -144,6 +150,10 @@ public sealed class RegionRecorder : IDisposable
         var stopwatch = Stopwatch.StartNew();
         try
         {
+            // Create the encoder here, on this MTA capture thread, so the MF Sink Writer's
+            // COM objects live in the same apartment that will write every frame.
+            _encoder = _encoderFactory(options);
+
             while (!_stopRequested)
             {
                 double elapsed = stopwatch.Elapsed.TotalMilliseconds;
@@ -188,6 +198,25 @@ public sealed class RegionRecorder : IDisposable
             _log.LogError(ex, "Recording loop failed");
             TryFinalizeAfterFailure();
         }
+        finally
+        {
+            // Dispose the encoder on THIS capture thread (same apartment it was created and
+            // used in). Disposing MF COM objects from another thread would repeat the
+            // cross-apartment fault. After this the reference is cleared so Dispose()/Stop()
+            // on the caller thread never touch apartment-bound COM.
+            try
+            {
+                _encoder?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Encoder dispose on the capture thread failed");
+            }
+            finally
+            {
+                _encoder = null;
+            }
+        }
     }
 
     private void TryFinalizeAfterFailure()
@@ -204,18 +233,13 @@ public sealed class RegionRecorder : IDisposable
 
     public void Dispose()
     {
-        try
+        // The encoder is created, used, completed AND disposed entirely on the capture
+        // thread (see CaptureLoop's finally), so Dispose only needs to make sure that
+        // thread has finished; touching the MF COM objects from here would cross apartments.
+        if (IsRecording)
         {
-            if (IsRecording)
-            {
-                _stopRequested = true;
-                _thread?.Join(1000);
-            }
-        }
-        finally
-        {
-            _encoder?.Dispose();
-            _encoder = null;
+            _stopRequested = true;
+            _thread?.Join(2000);
         }
     }
 }
