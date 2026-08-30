@@ -305,6 +305,16 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
 }
 
 // ----- Minimal COM interface surface used above -----
+//
+// CRITICAL: .NET COM interop does NOT concatenate base-interface vtable slots the way C++
+// does. A [ComImport] interface's methods are laid out starting immediately after IUnknown,
+// and declaring `interface IMFSample : IMFAttributes` does NOT prepend IMFAttributes' 30
+// slots. So every derived interface here redeclares the full IMFAttributes method list inline,
+// in exact vtable order, before its own methods. Getting this wrong shifts every slot and
+// causes an access violation at the first call into a misplaced method (observed at
+// IMFSample.SetSampleTime). The methods we never call still MUST be declared so the slots we
+// do call land at the right offset; their PROPVARIANT/blob arguments are declared as opaque
+// IntPtr since we never invoke them.
 
 [ComImport]
 [Guid("2cd2d921-c447-44a7-a13c-4adabfc247e3")]
@@ -346,9 +356,46 @@ internal interface IMFAttributes
 [ComImport]
 [Guid("44ae0fa8-ea31-4109-8d2e-4cae4997c555")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IMFMediaType : IMFAttributes
+internal interface IMFMediaType
 {
-    // Additional IMFMediaType methods are not needed; attribute setters suffice.
+    // --- IMFAttributes (30 slots, inlined; only the setters below are called) ---
+    [PreserveSig] int GetItem(ref Guid key, IntPtr value);
+    [PreserveSig] int GetItemType(ref Guid key, out int type);
+    [PreserveSig] int CompareItem(ref Guid key, IntPtr value, out bool result);
+    [PreserveSig] int Compare(IMFAttributes theirs, int matchType, out bool result);
+    [PreserveSig] int GetUINT32(ref Guid key, out uint value);
+    [PreserveSig] int GetUINT64(ref Guid key, out ulong value);
+    [PreserveSig] int GetDouble(ref Guid key, out double value);
+    [PreserveSig] int GetGUID(ref Guid key, out Guid value);
+    [PreserveSig] int GetStringLength(ref Guid key, out uint length);
+    [PreserveSig] int GetString(ref Guid key, IntPtr value, uint size, IntPtr length);
+    [PreserveSig] int GetAllocatedString(ref Guid key, out IntPtr value, out uint length);
+    [PreserveSig] int GetBlobSize(ref Guid key, out uint size);
+    [PreserveSig] int GetBlob(ref Guid key, IntPtr buf, uint size, IntPtr blobSize);
+    [PreserveSig] int GetAllocatedBlob(ref Guid key, out IntPtr buf, out uint size);
+    [PreserveSig] int GetUnknown(ref Guid key, ref Guid riid, out IntPtr ppv);
+    [PreserveSig] int SetItem(ref Guid key, IntPtr value);
+    [PreserveSig] int DeleteItem(ref Guid key);
+    [PreserveSig] int DeleteAllItems();
+    [PreserveSig] int SetUINT32(ref Guid key, uint value);
+    [PreserveSig] int SetUINT64(ref Guid key, ulong value);
+    [PreserveSig] int SetDouble(ref Guid key, double value);
+    [PreserveSig] int SetGUID(ref Guid key, ref Guid value);
+    [PreserveSig] int SetString(ref Guid key, [MarshalAs(UnmanagedType.LPWStr)] string value);
+    [PreserveSig] int SetBlob(ref Guid key, IntPtr buf, uint size);
+    [PreserveSig] int SetUnknown(ref Guid key, IntPtr unknown);
+    [PreserveSig] int LockStore();
+    [PreserveSig] int UnlockStore();
+    [PreserveSig] int GetCount(out uint count);
+    [PreserveSig] int GetItemByIndex(uint index, out Guid key, IntPtr value);
+    [PreserveSig] int CopyAllItems(IMFAttributes dest);
+
+    // --- IMFMediaType-specific (not called, declared to keep vtable honest) ---
+    [PreserveSig] int GetMajorType(out Guid guidMajorType);
+    [PreserveSig] int IsCompressedFormat(out bool compressed);
+    [PreserveSig] int IsEqual(IMFMediaType type, out uint flags);
+    [PreserveSig] int GetRepresentation(Guid representation, out IntPtr representationData);
+    [PreserveSig] int FreeRepresentation(Guid representation, IntPtr representationData);
 }
 
 [ComImport]
@@ -366,8 +413,41 @@ internal interface IMFMediaBuffer
 [ComImport]
 [Guid("c40a00f2-b93a-4d80-ae8c-5a1c634f58e4")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IMFSample : IMFAttributes
+internal interface IMFSample
 {
+    // --- IMFAttributes (30 slots, inlined) ---
+    [PreserveSig] int GetItem(ref Guid key, IntPtr value);
+    [PreserveSig] int GetItemType(ref Guid key, out int type);
+    [PreserveSig] int CompareItem(ref Guid key, IntPtr value, out bool result);
+    [PreserveSig] int Compare(IMFAttributes theirs, int matchType, out bool result);
+    [PreserveSig] int GetUINT32(ref Guid key, out uint value);
+    [PreserveSig] int GetUINT64(ref Guid key, out ulong value);
+    [PreserveSig] int GetDouble(ref Guid key, out double value);
+    [PreserveSig] int GetGUID(ref Guid key, out Guid value);
+    [PreserveSig] int GetStringLength(ref Guid key, out uint length);
+    [PreserveSig] int GetString(ref Guid key, IntPtr value, uint size, IntPtr length);
+    [PreserveSig] int GetAllocatedString(ref Guid key, out IntPtr value, out uint length);
+    [PreserveSig] int GetBlobSize(ref Guid key, out uint size);
+    [PreserveSig] int GetBlob(ref Guid key, IntPtr buf, uint size, IntPtr blobSize);
+    [PreserveSig] int GetAllocatedBlob(ref Guid key, out IntPtr buf, out uint size);
+    [PreserveSig] int GetUnknown(ref Guid key, ref Guid riid, out IntPtr ppv);
+    [PreserveSig] int SetItem(ref Guid key, IntPtr value);
+    [PreserveSig] int DeleteItem(ref Guid key);
+    [PreserveSig] int DeleteAllItems();
+    [PreserveSig] int SetUINT32(ref Guid key, uint value);
+    [PreserveSig] int SetUINT64(ref Guid key, ulong value);
+    [PreserveSig] int SetDouble(ref Guid key, double value);
+    [PreserveSig] int SetGUID(ref Guid key, ref Guid value);
+    [PreserveSig] int SetString(ref Guid key, [MarshalAs(UnmanagedType.LPWStr)] string value);
+    [PreserveSig] int SetBlob(ref Guid key, IntPtr buf, uint size);
+    [PreserveSig] int SetUnknown(ref Guid key, IntPtr unknown);
+    [PreserveSig] int LockStore();
+    [PreserveSig] int UnlockStore();
+    [PreserveSig] int GetCount(out uint count);
+    [PreserveSig] int GetItemByIndex(uint index, out Guid key, IntPtr value);
+    [PreserveSig] int CopyAllItems(IMFAttributes dest);
+
+    // --- IMFSample-specific ---
     [PreserveSig] int GetSampleFlags(out uint flags);
     [PreserveSig] int SetSampleFlags(uint flags);
     [PreserveSig] int GetSampleTime(out long time);
