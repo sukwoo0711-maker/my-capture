@@ -19,9 +19,9 @@
 
     <Company>MyCapture</Company>
     <Product>MyCapture</Product>
-    <Version>0.4.0</Version>
-    <FileVersion>0.4.0.0</FileVersion>
-    <AssemblyVersion>0.4.0.0</AssemblyVersion>
+    <Version>0.6.0</Version>
+    <FileVersion>0.6.0.0</FileVersion>
+    <AssemblyVersion>0.6.0.0</AssemblyVersion>
     <Copyright>Copyright (c) 2026</Copyright>
 
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
