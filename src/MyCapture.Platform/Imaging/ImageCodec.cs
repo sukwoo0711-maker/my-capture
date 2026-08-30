@@ -207,7 +207,10 @@ public static class ImageCodec
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
-            bitmap.UriSource = new Uri(path, UriKind.Absolute);
+            // Normalise to an absolute path: a relative path passes File.Exists (resolved
+            // against the CWD) but throws UriFormatException on an Absolute Uri, which would
+            // escape this method's null-on-failure contract.
+            bitmap.UriSource = new Uri(Path.GetFullPath(path), UriKind.Absolute);
             bitmap.EndInit();
             bitmap.Freeze();
             return bitmap;
@@ -218,6 +221,10 @@ public static class ImageCodec
             return null;
         }
         catch (IOException)
+        {
+            return null;
+        }
+        catch (Exception ex) when (ex is UriFormatException or ArgumentException)
         {
             return null;
         }
@@ -244,7 +251,7 @@ public static class ImageCodec
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.DecodePixelWidth = Math.Max(1, decodePixelWidth);
-            bitmap.UriSource = new Uri(path, UriKind.Absolute);
+            bitmap.UriSource = new Uri(Path.GetFullPath(path), UriKind.Absolute);
             bitmap.EndInit();
             bitmap.Freeze();
             return bitmap;
@@ -254,6 +261,10 @@ public static class ImageCodec
             return null;
         }
         catch (IOException)
+        {
+            return null;
+        }
+        catch (Exception ex) when (ex is UriFormatException or ArgumentException)
         {
             return null;
         }
