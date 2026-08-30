@@ -6,14 +6,11 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Verifies the shipped theme dictionaries (Tokens, Symbols, Controls) load together and expose
-/// every resource key the redesigned surfaces reference at runtime. A missing key surfaces as a
-/// <c>ResourceReferenceKeyNotFoundException</c> only when a screen is shown, so pinning the whole
-/// vocabulary here turns that latent runtime failure into a fast unit failure.
+/// Verifies the shipped theme dictionaries load together and expose every resource used by the
+/// warm-yellow/charcoal UI. Missing resources otherwise fail only when a screen is first shown.
 /// </summary>
 public sealed class ThemeResourceAvailabilityTests
 {
-    // Every Icon.* geometry the editor, gallery, settings, and secondary windows resolve by key.
     private static readonly string[] IconKeys =
     [
         "Icon.Select", "Icon.Rectangle", "Icon.Arrow", "Icon.Pen", "Icon.Text", "Icon.Image",
@@ -23,13 +20,13 @@ public sealed class ThemeResourceAvailabilityTests
         "Icon.ZoomIn", "Icon.ZoomOut",
     ];
 
-    // Token + control style keys the redesigned XAML and editor code reference by name.
     private static readonly string[] BrushKeys =
     [
         "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay", "Surface.Sunken",
-        "Text.Primary", "Text.Secondary", "Text.Muted", "Text.OnAccent",
-        "Accent.Default", "Accent.Cool", "Border.Subtle", "Border.Focus", "Overlay.SelectionBorder",
-        "State.DangerHover",
+        "Surface.Hover", "Text.Primary", "Text.Secondary", "Text.Muted", "Text.OnAccent",
+        "Accent.Default", "Accent.Hover", "Accent.Pressed", "Accent.Subtle", "Accent.Cool",
+        "Border.Subtle", "Border.Focus", "Border.Accent", "Overlay.SelectionBorder",
+        "State.Warning", "State.DangerHover",
     ];
 
     private static readonly string[] StyleKeys =
@@ -74,11 +71,7 @@ public sealed class ThemeResourceAvailabilityTests
         StaTestHost.Run(() =>
         {
             ResourceDictionary theme = LoadMergedTheme();
-
-            // The design direction bans decorative gradients; the compatibility alias must be a
-            // flat solid brush so nothing reintroduces a gradient wash.
-            object? accent = theme["Accent.Gradient"];
-            Assert.IsType<SolidColorBrush>(accent);
+            Assert.IsType<SolidColorBrush>(theme["Accent.Gradient"]);
         });
     }
 
@@ -101,7 +94,7 @@ public sealed class ThemeResourceAvailabilityTests
     }
 
     [Fact]
-    public void DarkPaletteHasOrderedSurfacesAndAccessibleTextAndAccentContrast()
+    public void WarmPaletteHasOrderedSurfacesAndAccessibleTextPairings()
     {
         StaTestHost.Run(() =>
         {
@@ -115,30 +108,59 @@ public sealed class ThemeResourceAvailabilityTests
             Assert.True(canvas < @base && @base < raised && raised < overlay,
                 $"Expected Canvas < Base < Raised < Overlay luminance, got {canvas:F4}, {@base:F4}, {raised:F4}, {overlay:F4}.");
 
-            double mutedContrast = ContrastRatio(
-                BrushFor(theme, "Text.Muted").Color,
-                BrushFor(theme, "Surface.Base").Color);
-            double accentContrast = ContrastRatio(
-                BrushFor(theme, "Text.OnAccent").Color,
-                BrushFor(theme, "Accent.Default").Color);
-
-            Assert.True(mutedContrast >= 4.5, $"Muted text contrast was only {mutedContrast:F2}:1.");
-            Assert.True(accentContrast >= 4.5, $"Accent text contrast was only {accentContrast:F2}:1.");
+            AssertContrastAtLeast(theme, "Text.Primary", "Surface.Base", 7.0);
+            AssertContrastAtLeast(theme, "Text.Secondary", "Surface.Base", 4.5);
+            AssertContrastAtLeast(theme, "Text.Muted", "Surface.Base", 4.5);
+            AssertContrastAtLeast(theme, "Text.Muted", "Surface.Sunken", 4.5);
+            AssertContrastAtLeast(theme, "Text.Muted", "Surface.Raised", 4.5);
         });
     }
 
     [Fact]
-    public void FocusAndSelectionSemanticsUseTheBrightBluePrimitive()
+    public void YellowActionsUseDarkInkWithAaContrastInEveryState()
     {
         StaTestHost.Run(() =>
         {
             ResourceDictionary theme = LoadMergedTheme();
-            Color brightBlue = Assert.IsType<Color>(theme["Primitive.Blue300"]);
+            Color ink = Assert.IsType<Color>(theme["Primitive.Ink"]);
+            Color onAccent = BrushFor(theme, "Text.OnAccent").Color;
 
-            Assert.Equal(brightBlue, BrushFor(theme, "Accent.Cool").Color);
-            Assert.Equal(brightBlue, BrushFor(theme, "Border.Focus").Color);
-            Assert.Equal(brightBlue, BrushFor(theme, "Overlay.SelectionBorder").Color);
+            Assert.Equal(ink, onAccent);
+            Assert.NotEqual(Colors.White, onAccent);
+            AssertContrastAtLeast(theme, "Text.OnAccent", "Accent.Default", 4.5);
+            AssertContrastAtLeast(theme, "Text.OnAccent", "Accent.Hover", 4.5);
+            AssertContrastAtLeast(theme, "Text.OnAccent", "Accent.Pressed", 4.5);
         });
+    }
+
+    [Fact]
+    public void FocusAndSelectionSemanticsUseTheBrightYellowPrimitive()
+    {
+        StaTestHost.Run(() =>
+        {
+            ResourceDictionary theme = LoadMergedTheme();
+            Color brightYellow = Assert.IsType<Color>(theme["Primitive.Yellow300"]);
+
+            Assert.Equal(brightYellow, BrushFor(theme, "Accent.Cool").Color);
+            Assert.Equal(brightYellow, BrushFor(theme, "Border.Focus").Color);
+            Assert.Equal(brightYellow, BrushFor(theme, "Overlay.SelectionBorder").Color);
+            AssertContrastAtLeast(theme, "Border.Focus", "Surface.Base", 3.0);
+            AssertContrastAtLeast(theme, "Border.Focus", "Surface.Raised", 3.0);
+            AssertContrastAtLeast(theme, "Overlay.SelectionBorder", "Surface.Canvas", 3.0);
+        });
+    }
+
+    private static void AssertContrastAtLeast(
+        ResourceDictionary theme,
+        string foregroundKey,
+        string backgroundKey,
+        double minimum)
+    {
+        double ratio = ContrastRatio(
+            BrushFor(theme, foregroundKey).Color,
+            BrushFor(theme, backgroundKey).Color);
+        Assert.True(ratio >= minimum,
+            $"{foregroundKey} on {backgroundKey} contrast was {ratio:F2}:1; expected at least {minimum:F1}:1.");
     }
 
     private static SolidColorBrush BrushFor(ResourceDictionary theme, string key) =>
@@ -183,29 +205,14 @@ public sealed class ThemeResourceAvailabilityTests
         return merged;
     }
 
-    /// <summary>
-    /// Registers the WPF <c>pack://application</c> URI scheme. WPF registers it lazily the first
-    /// time a WPF <see cref="System.Windows.Application"/> or WPF element is created, so when this
-    /// test runs before any other WPF-touching test the scheme is absent and constructing a pack
-    /// URI throws <see cref="UriFormatException"/>. Creating a throwaway WPF element forces
-    /// PresentationFramework's module initializer to run, which performs the registration, making
-    /// the loader independent of test execution order.
-    /// </summary>
     private static void EnsurePackSchemeRegistered()
     {
-        // Registers the base "pack" scheme (WindowsBase).
         _ = System.IO.Packaging.PackUriHelper.UriSchemePack;
-
-        // Instantiating any FrameworkElement initialises PresentationFramework, whose startup
-        // registers the "pack://application" authority. The instance is intentionally discarded.
-        _ = new System.Windows.FrameworkElement();
+        _ = new FrameworkElement();
     }
 }
 
-/// <summary>
-/// Runs a test body on a dedicated STA thread, required for WPF resource dictionaries and visuals.
-/// Shared by the WPF-touching integration tests in this assembly.
-/// </summary>
+/// <summary>Runs WPF resource and visual assertions on a dedicated STA thread.</summary>
 internal static class StaTestHost
 {
     public static void Run(Action action)

@@ -63,7 +63,7 @@ internal sealed class VideoEditorWindow : Window
         _log = loggerFactory.CreateLogger<VideoEditorWindow>();
 
         Title = "MyCapture — 녹화 편집";
-        Background = TryBrush("Surface.Base", Color.FromRgb(0x17, 0x1B, 0x22));
+        Background = TryBrush("Surface.Base", Color.FromRgb(0x1B, 0x17, 0x12));
         Foreground = TryBrush("Text.Primary", Colors.White);
         FontFamily = TryFont("Font.Ui");
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -125,7 +125,7 @@ internal sealed class VideoEditorWindow : Window
         var preview = new Border
         {
             Background = TryBrush("Surface.Canvas", Colors.Black),
-            BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x37, 0x3E, 0x47)),
+            BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x40, 0x38, 0x2C)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             Padding = new Thickness(8),

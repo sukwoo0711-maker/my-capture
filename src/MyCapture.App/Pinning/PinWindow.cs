@@ -101,7 +101,7 @@ internal sealed class PinWindow : Window
             Padding = new Thickness(10, 5, 10, 5),
             Foreground = Application.Current?.TryFindResource("Text.Primary") as Brush ?? Brushes.White,
             Background = Application.Current?.TryFindResource("Surface.Floating") as Brush
-                ?? new SolidColorBrush(Color.FromArgb(0xE8, 0x11, 0x1A, 0x2B)),
+                ?? new SolidColorBrush(Color.FromArgb(0xE8, 0x2A, 0x24, 0x1C)),
             FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             Visibility = Visibility.Collapsed,
@@ -109,13 +109,13 @@ internal sealed class PinWindow : Window
         };
 
         // Image-first chrome: a neutral one-pixel boundary rests quietly and warms to a
-        // restrained system-blue on hover, while rounded clipping keeps scaled pins consistent
+        // restrained warm yellow on hover, while rounded clipping keeps scaled pins consistent
         // with the rest of the desktop surfaces.
         _chrome = new Border
         {
             BorderThickness = new Thickness(1),
             BorderBrush = Application.Current?.TryFindResource("Border.Subtle") as Brush
-                ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0x32, 0x4A)),
+                ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x40, 0x38, 0x2C)),
             CornerRadius = new CornerRadius(8),
             ClipToBounds = true,
             Child = new Grid { Children = { _imageElement, _feedback } },
@@ -256,12 +256,12 @@ internal sealed class PinWindow : Window
 
     private void SetChromeHover(bool hovering)
     {
-        // Neutral at rest, restrained system-blue on hover — a quiet cue that the pin is
+        // Neutral at rest, restrained warm yellow on hover — a quiet cue that the pin is
         // interactive without adding decorative colour to the frozen image.
         string key = hovering ? "Accent.Cool" : "Border.Subtle";
         Brush fallback = hovering
-            ? new SolidColorBrush(Color.FromArgb(0xFF, 0x63, 0xB3, 0xFF))
-            : new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0x32, 0x4A));
+            ? new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xE1, 0x4D))
+            : new SolidColorBrush(Color.FromArgb(0xFF, 0x40, 0x38, 0x2C));
         _chrome.BorderBrush = Application.Current?.TryFindResource(key) as Brush ?? fallback;
         _chrome.BorderThickness = new Thickness(1);
     }

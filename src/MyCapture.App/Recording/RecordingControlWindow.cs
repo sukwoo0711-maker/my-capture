@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -126,21 +127,25 @@ internal sealed class RecordingControlWindow : Window
 
     private Border BuildRegionFrame()
     {
-        var frame = new Border
+        var frame = new AccessibleRegionFrame
         {
-            BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x0F, 0x6C, 0xBD)),
+            BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0xFF, 0xD4, 0x00)),
             BorderThickness = new Thickness(BorderThicknessPx),
             Background = Brushes.Transparent,
             CornerRadius = new CornerRadius(2),
+            Cursor = Cursors.SizeAll,
+            Focusable = true,
         };
 
         // Drag the frame (and thus the recording region) by pressing inside it while not
         // recording. Once recording starts the interior becomes click-through so the
-        // target app is usable.
+        // target app is usable. Keyboard users can focus the frame and nudge it with the
+        // arrow keys; Shift increases the step to ten DIPs.
         frame.MouseLeftButtonDown += (_, e) =>
         {
             if (!IsRecording && e.ButtonState == MouseButtonState.Pressed)
             {
+                _ = frame.Focus();
                 try
                 {
                     DragMove();
@@ -151,8 +156,15 @@ internal sealed class RecordingControlWindow : Window
                 }
             }
         };
+        frame.GotKeyboardFocus += (_, _) =>
+            frame.BorderBrush = TryBrush("Border.Focus", Color.FromRgb(0xFF, 0xE1, 0x4D));
+        frame.LostKeyboardFocus += (_, _) =>
+            frame.BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0xFF, 0xD4, 0x00));
 
         AutomationProperties.SetName(frame, "녹화 영역 테두리 (드래그로 이동)");
+        AutomationProperties.SetHelpText(
+            frame,
+            "Tab으로 선택한 뒤 방향키로 이동합니다. Shift와 함께 누르면 10픽셀씩 이동합니다.");
         return frame;
     }
 
@@ -215,8 +227,8 @@ internal sealed class RecordingControlWindow : Window
 
         return new Border
         {
-            Background = TryBrush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x19, 0x22)),
-            BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x37, 0x3E, 0x47)),
+            Background = TryBrush("Surface.Floating", Color.FromArgb(0xF2, 0x2A, 0x24, 0x1C)),
+            BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x40, 0x38, 0x2C)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
             Effect = Application.Current?.TryFindResource("Shadow.Floating") as System.Windows.Media.Effects.Effect,
@@ -413,7 +425,36 @@ internal sealed class RecordingControlWindow : Window
                 e.Handled = true;
                 OnPrimaryClicked();
                 break;
+            case Key.Left or Key.Right or Key.Up or Key.Down
+                when !IsRecording && _countdownTimer is null && _regionFrame.IsKeyboardFocusWithin:
+                double step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10.0 : 1.0;
+                double deltaX = e.Key switch
+                {
+                    Key.Left => -step,
+                    Key.Right => step,
+                    _ => 0,
+                };
+                double deltaY = e.Key switch
+                {
+                    Key.Up => -step,
+                    Key.Down => step,
+                    _ => 0,
+                };
+                NudgeRegion(deltaX, deltaY);
+                e.Handled = true;
+                break;
         }
+    }
+
+    private void NudgeRegion(double deltaX, double deltaY)
+    {
+        double minLeft = SystemParameters.VirtualScreenLeft;
+        double minTop = SystemParameters.VirtualScreenTop;
+        double maxLeft = Math.Max(minLeft, minLeft + SystemParameters.VirtualScreenWidth - Width);
+        double maxTop = Math.Max(minTop, minTop + SystemParameters.VirtualScreenHeight - Height);
+
+        Left = Math.Clamp(Left + deltaX, minLeft, maxLeft);
+        Top = Math.Clamp(Top + deltaY, minTop, maxTop);
     }
 
     private void SetRegionClickThrough(bool enabled)
@@ -481,6 +522,25 @@ internal sealed class RecordingControlWindow : Window
         }
 
         base.OnClosed(e);
+    }
+
+    private sealed class AccessibleRegionFrame : Border
+    {
+        protected override AutomationPeer OnCreateAutomationPeer() =>
+            new RegionFrameAutomationPeer(this);
+    }
+
+    private sealed class RegionFrameAutomationPeer(AccessibleRegionFrame owner)
+        : FrameworkElementAutomationPeer(owner)
+    {
+        protected override string GetClassNameCore() => "RecordingRegionFrame";
+
+        protected override AutomationControlType GetAutomationControlTypeCore() =>
+            AutomationControlType.Pane;
+
+        protected override bool IsControlElementCore() => true;
+
+        protected override bool IsContentElementCore() => true;
     }
 
     private static Brush TryBrush(string key, Color fallback) =>

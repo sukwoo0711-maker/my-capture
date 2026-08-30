@@ -48,11 +48,11 @@ internal sealed class OcrResultWindow : Window
         // Uniform dark root: one calm surface frames the whole window so the recognised text is
         // the only thing that stands out. The window Style already sets this, but making it
         // explicit keeps the surface consistent even if the default style is ever overridden.
-        Background = ResourceBrush("Surface.Base", Brushes.Black);
+        Background = ResourceBrush("Surface.Base", new SolidColorBrush(Color.FromRgb(0x1B, 0x17, 0x12)));
 
         var root = new Grid
         {
-            Background = ResourceBrush("Surface.Base", Brushes.Black),
+            Background = ResourceBrush("Surface.Base", new SolidColorBrush(Color.FromRgb(0x1B, 0x17, 0x12))),
         };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -85,7 +85,7 @@ internal sealed class OcrResultWindow : Window
         // competes with the recognised text for attention.
         var header = new Border
         {
-            Background = ResourceBrush("Surface.Base", Brushes.Black),
+            Background = ResourceBrush("Surface.Base", new SolidColorBrush(Color.FromRgb(0x1B, 0x17, 0x12))),
             Child = heading,
         };
         Grid.SetRow(header, 0);
@@ -102,7 +102,7 @@ internal sealed class OcrResultWindow : Window
                 ?? new FontFamily("Consolas, Malgun Gothic"),
             FontSize = 14,
             Padding = new Thickness(16),
-            Background = ResourceBrush("Surface.Sunken", Brushes.Black),
+            Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x1B, 0x17, 0x12))),
             BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
         };
         AutomationProperties.SetName(_textBox, "인식된 텍스트");
@@ -113,7 +113,7 @@ internal sealed class OcrResultWindow : Window
         {
             Margin = new Thickness(24, 2, 24, 4),
             Padding = new Thickness(1),
-            Background = ResourceBrush("Surface.Sunken", Brushes.Black),
+            Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x1B, 0x17, 0x12))),
             BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
@@ -146,7 +146,7 @@ internal sealed class OcrResultWindow : Window
         // text-first with the actions quietly anchored bottom-right.
         var footer = new Border
         {
-            Background = ResourceBrush("Surface.Base", Brushes.Black),
+            Background = ResourceBrush("Surface.Base", new SolidColorBrush(Color.FromRgb(0x1B, 0x17, 0x12))),
             Padding = new Thickness(24, 14, 24, 18),
             Child = buttons,
         };

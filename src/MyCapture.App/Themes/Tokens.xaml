@@ -1,133 +1,141 @@
 <!--
   MyCapture design tokens: primitive values -> semantic aliases -> component dimensions.
 
-  Direction (apple-inspired-desktop-ux.md, "Visual system"):
-    * Content-first neutral graphite surfaces so captured pixels dominate.
-    * One system-blue accent for actions and focus; no decorative gradients in normal UI.
-    * WCAG-sensible text contrast on every surface.
-    * Focus is expressed through colour only; component templates never grow BorderThickness
-      on focus, so layout stays stable.
+  Direction (warm-yellow-charcoal-ux.md, "Visual system"):
+    * Captured pixels stay dominant on warm charcoal surfaces with clear depth hierarchy.
+    * A saturated, friendly yellow is reserved for primary actions, selection, and focus.
+    * Yellow fills always use dark ink; white-on-yellow is intentionally prohibited.
+    * Normal UI is flat and token-driven: no decorative gradients and no cool-blue chrome.
 
-  Compatibility: every resource key that existed previously is retained. Keys whose meaning
-  changed (e.g. the former violet accent) are re-pointed at the graphite/blue system and kept
-  as aliases so no consuming window breaks.
+  Compatibility: every previously shipped resource key remains available. Legacy Graphite,
+  Slate, Blue, and Violet keys are aliases into the warm system so consuming windows and any
+  restored XAML continue to resolve without migration.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
     <!-- ============================================================= -->
-    <!-- Primitive colour ramp: neutral graphite (cool-neutral, low chroma) -->
+    <!-- Primitive colour ramp: warm charcoal and cream neutrals       -->
     <!-- ============================================================= -->
-    <!--
-      Fluent/Primer-inspired dark hierarchy. Unlike the previous near-black ramp, adjacent
-      workspace surfaces differ enough to be understood without surrounding every region in a
-      bright card outline. Captured pixels remain the darkest, highest-contrast content.
-    -->
-    <Color x:Key="Primitive.Graphite980">#FF0F1319</Color> <!-- canvas / deepest -->
-    <Color x:Key="Primitive.Graphite950">#FF171B22</Color> <!-- app base -->
-    <Color x:Key="Primitive.Graphite900">#FF1C2128</Color> <!-- raised rail / inspector -->
-    <Color x:Key="Primitive.Graphite850">#FF22272E</Color> <!-- controls / overlay -->
-    <Color x:Key="Primitive.Graphite800">#FF2D333B</Color> <!-- hover / floating -->
-    <Color x:Key="Primitive.Graphite700">#FF343B44</Color> <!-- pressed -->
-    <Color x:Key="Primitive.Graphite600">#FF626C78</Color> <!-- strong boundary -->
-    <Color x:Key="Primitive.Graphite500">#FF373E47</Color> <!-- subtle divider -->
-    <Color x:Key="Primitive.Graphite400">#FF8C99A7</Color> <!-- muted text, 5.9:1 on base -->
-    <Color x:Key="Primitive.Graphite300">#FFC7D0DA</Color> <!-- secondary text -->
-    <Color x:Key="Primitive.Graphite100">#FFF0F3F6</Color> <!-- primary text -->
+    <Color x:Key="Primitive.Warm980">#FF14110C</Color> <!-- canvas / deepest -->
+    <Color x:Key="Primitive.Warm950">#FF1B1712</Color> <!-- app base -->
+    <Color x:Key="Primitive.Warm900">#FF221D17</Color> <!-- raised rail / inspector -->
+    <Color x:Key="Primitive.Warm850">#FF2A241C</Color> <!-- controls / overlay -->
+    <Color x:Key="Primitive.Warm800">#FF342D23</Color> <!-- hover / floating -->
+    <Color x:Key="Primitive.Warm700">#FF3E362A</Color> <!-- pressed -->
+    <Color x:Key="Primitive.Warm600">#FF6B6152</Color> <!-- strong boundary -->
+    <Color x:Key="Primitive.Warm500">#FF40382C</Color> <!-- subtle divider -->
+    <Color x:Key="Primitive.Warm400">#FFA79A86</Color> <!-- muted text -->
+    <Color x:Key="Primitive.Warm300">#FFD8CFC0</Color> <!-- secondary text -->
+    <Color x:Key="Primitive.Warm100">#FFF5F1E8</Color> <!-- primary text -->
     <Color x:Key="Primitive.White">#FFFFFFFF</Color>
 
-    <!-- Fluent blue: filled actions retain >=4.5:1 white-text contrast. -->
-    <Color x:Key="Primitive.Blue300">#FF66B7FF</Color> <!-- focus / selected glyph -->
-    <Color x:Key="Primitive.Blue400">#FF1478C8</Color> <!-- hover -->
-    <Color x:Key="Primitive.Blue500">#FF0F6CBD</Color> <!-- default -->
-    <Color x:Key="Primitive.Blue600">#FF0C5A9E</Color> <!-- pressed -->
-    <Color x:Key="Primitive.Blue900">#FF17324D</Color> <!-- selected wash -->
+    <!-- Friendly yellow brand ramp. Dark ink is the only text colour on these fills. -->
+    <Color x:Key="Primitive.Yellow300">#FFFFE14D</Color> <!-- focus / selected glyph -->
+    <Color x:Key="Primitive.Yellow400">#FFFFD400</Color> <!-- primary / hover emphasis -->
+    <Color x:Key="Primitive.Yellow500">#FFF7C948</Color> <!-- border accent -->
+    <Color x:Key="Primitive.Yellow600">#FFE0AE1F</Color> <!-- pressed -->
+    <Color x:Key="Primitive.Yellow900">#FF3A2E10</Color> <!-- selected wash -->
+    <Color x:Key="Primitive.Ink">#FF191207</Color>
 
-    <!-- Status -->
-    <Color x:Key="Primitive.Amber400">#FFF5B942</Color>
-    <Color x:Key="Primitive.Emerald400">#FF45C98A</Color>
-    <Color x:Key="Primitive.Red500">#FFE5534B</Color>
-    <Color x:Key="Primitive.Red400">#FFFF7B72</Color>
+    <!-- Status colours stay semantically distinct from the brand yellow. -->
+    <Color x:Key="Primitive.Orange400">#FFF09A4A</Color>
+    <Color x:Key="Primitive.Emerald400">#FF5BC58A</Color>
+    <Color x:Key="Primitive.Red500">#FFE45C52</Color>
+    <Color x:Key="Primitive.Red400">#FFFF8178</Color>
 
-    <!-- Legacy primitive aliases (kept so any external reference still resolves). -->
-    <Color x:Key="Primitive.Slate950">#FF0F1319</Color>
-    <Color x:Key="Primitive.Slate900">#FF171B22</Color>
-    <Color x:Key="Primitive.Slate850">#FF1C2128</Color>
-    <Color x:Key="Primitive.Slate800">#FF22272E</Color>
-    <Color x:Key="Primitive.Slate700">#FF373E47</Color>
-    <Color x:Key="Primitive.Slate600">#FF626C78</Color>
-    <Color x:Key="Primitive.Slate400">#FF8C99A7</Color>
-    <Color x:Key="Primitive.Slate300">#FFC7D0DA</Color>
-    <Color x:Key="Primitive.Slate100">#FFF0F3F6</Color>
-    <Color x:Key="Primitive.Violet400">#FF1478C8</Color>
-    <Color x:Key="Primitive.Violet500">#FF0F6CBD</Color>
-    <Color x:Key="Primitive.Violet600">#FF0C5A9E</Color>
-    <Color x:Key="Primitive.Violet900">#FF17324D</Color>
-    <Color x:Key="Primitive.Emerald500">#FF45C98A</Color>
+    <!-- Legacy primitive aliases. Values intentionally map to the warm system. -->
+    <Color x:Key="Primitive.Graphite980">#FF14110C</Color>
+    <Color x:Key="Primitive.Graphite950">#FF1B1712</Color>
+    <Color x:Key="Primitive.Graphite900">#FF221D17</Color>
+    <Color x:Key="Primitive.Graphite850">#FF2A241C</Color>
+    <Color x:Key="Primitive.Graphite800">#FF342D23</Color>
+    <Color x:Key="Primitive.Graphite700">#FF3E362A</Color>
+    <Color x:Key="Primitive.Graphite600">#FF6B6152</Color>
+    <Color x:Key="Primitive.Graphite500">#FF40382C</Color>
+    <Color x:Key="Primitive.Graphite400">#FFA79A86</Color>
+    <Color x:Key="Primitive.Graphite300">#FFD8CFC0</Color>
+    <Color x:Key="Primitive.Graphite100">#FFF5F1E8</Color>
 
-    <!-- ============================================================= -->
-    <!-- Semantic surfaces -->
-    <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Surface.Canvas" Color="{StaticResource Primitive.Graphite980}" />
-    <SolidColorBrush x:Key="Surface.Base" Color="{StaticResource Primitive.Graphite950}" />
-    <SolidColorBrush x:Key="Surface.Raised" Color="{StaticResource Primitive.Graphite900}" />
-    <SolidColorBrush x:Key="Surface.Overlay" Color="{StaticResource Primitive.Graphite850}" />
-    <SolidColorBrush x:Key="Surface.Floating" Color="#F2151922" />
-    <SolidColorBrush x:Key="Surface.Sunken" Color="{StaticResource Primitive.Graphite980}" />
-    <SolidColorBrush x:Key="Surface.Hover" Color="{StaticResource Primitive.Graphite800}" />
-    <SolidColorBrush x:Key="Surface.Pressed" Color="{StaticResource Primitive.Graphite700}" />
-    <SolidColorBrush x:Key="Surface.Scrim" Color="#B8000000" />
+    <Color x:Key="Primitive.Slate950">#FF14110C</Color>
+    <Color x:Key="Primitive.Slate900">#FF1B1712</Color>
+    <Color x:Key="Primitive.Slate850">#FF221D17</Color>
+    <Color x:Key="Primitive.Slate800">#FF2A241C</Color>
+    <Color x:Key="Primitive.Slate700">#FF40382C</Color>
+    <Color x:Key="Primitive.Slate600">#FF6B6152</Color>
+    <Color x:Key="Primitive.Slate400">#FFA79A86</Color>
+    <Color x:Key="Primitive.Slate300">#FFD8CFC0</Color>
+    <Color x:Key="Primitive.Slate100">#FFF5F1E8</Color>
 
-    <!-- ============================================================= -->
-    <!-- Semantic text (all pairings target WCAG AA on their intended surface) -->
-    <!--   Primary  #F4F7FB on #0E1117 ~= 16:1                              -->
-    <!--   Secondary#C7CED8 on #0E1117 ~= 11:1                              -->
-    <!--   Muted    #8D98A8 on #0E1117 ~= 5.4:1  (>=4.5 body)              -->
-    <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Text.Primary" Color="{StaticResource Primitive.Graphite100}" />
-    <SolidColorBrush x:Key="Text.Secondary" Color="{StaticResource Primitive.Graphite300}" />
-    <SolidColorBrush x:Key="Text.Muted" Color="{StaticResource Primitive.Graphite400}" />
-    <SolidColorBrush x:Key="Text.OnAccent" Color="{StaticResource Primitive.White}" />
+    <Color x:Key="Primitive.Blue300">#FFFFE14D</Color>
+    <Color x:Key="Primitive.Blue400">#FFFFD400</Color>
+    <Color x:Key="Primitive.Blue500">#FFFFD400</Color>
+    <Color x:Key="Primitive.Blue600">#FFE0AE1F</Color>
+    <Color x:Key="Primitive.Blue900">#FF3A2E10</Color>
+    <Color x:Key="Primitive.Violet400">#FFFFE14D</Color>
+    <Color x:Key="Primitive.Violet500">#FFFFD400</Color>
+    <Color x:Key="Primitive.Violet600">#FFE0AE1F</Color>
+    <Color x:Key="Primitive.Violet900">#FF3A2E10</Color>
+    <Color x:Key="Primitive.Amber400">#FFF09A4A</Color>
+    <Color x:Key="Primitive.Emerald500">#FF5BC58A</Color>
 
     <!-- ============================================================= -->
-    <!-- Accent and state -->
+    <!-- Semantic surfaces                                             -->
     <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Accent.Default" Color="{StaticResource Primitive.Blue500}" />
-    <SolidColorBrush x:Key="Accent.Hover" Color="{StaticResource Primitive.Blue400}" />
-    <SolidColorBrush x:Key="Accent.Pressed" Color="{StaticResource Primitive.Blue600}" />
-    <SolidColorBrush x:Key="Accent.Subtle" Color="{StaticResource Primitive.Blue900}" />
-    <SolidColorBrush x:Key="Accent.Cool" Color="{StaticResource Primitive.Blue300}" />
+    <SolidColorBrush x:Key="Surface.Canvas" Color="{StaticResource Primitive.Warm980}" />
+    <SolidColorBrush x:Key="Surface.Base" Color="{StaticResource Primitive.Warm950}" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="{StaticResource Primitive.Warm900}" />
+    <SolidColorBrush x:Key="Surface.Overlay" Color="{StaticResource Primitive.Warm850}" />
+    <SolidColorBrush x:Key="Surface.Floating" Color="#F22A241C" />
+    <SolidColorBrush x:Key="Surface.Sunken" Color="{StaticResource Primitive.Warm980}" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="{StaticResource Primitive.Warm800}" />
+    <SolidColorBrush x:Key="Surface.Pressed" Color="{StaticResource Primitive.Warm700}" />
+    <SolidColorBrush x:Key="Surface.Scrim" Color="#B80A0805" />
 
-    <!--
-      Accent.Gradient retained as a compatibility alias only. The design direction removes
-      decorative gradients from normal UI, so this is a flat accent brush (no GradientStops).
-    -->
-    <SolidColorBrush x:Key="Accent.Gradient" Color="{StaticResource Primitive.Blue500}" />
+    <!-- ============================================================= -->
+    <!-- Semantic text: AA body pairings on intended warm surfaces     -->
+    <!-- ============================================================= -->
+    <SolidColorBrush x:Key="Text.Primary" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="{StaticResource Primitive.Warm300}" />
+    <SolidColorBrush x:Key="Text.Muted" Color="{StaticResource Primitive.Warm400}" />
+    <SolidColorBrush x:Key="Text.OnAccent" Color="{StaticResource Primitive.Ink}" />
 
-    <SolidColorBrush x:Key="State.Warning" Color="{StaticResource Primitive.Amber400}" />
+    <!-- ============================================================= -->
+    <!-- Accent and state                                              -->
+    <!-- ============================================================= -->
+    <SolidColorBrush x:Key="Accent.Default" Color="{StaticResource Primitive.Yellow400}" />
+    <SolidColorBrush x:Key="Accent.Hover" Color="{StaticResource Primitive.Yellow300}" />
+    <SolidColorBrush x:Key="Accent.Pressed" Color="{StaticResource Primitive.Yellow600}" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="{StaticResource Primitive.Yellow900}" />
+    <SolidColorBrush x:Key="Accent.Cool" Color="{StaticResource Primitive.Yellow300}" />
+
+    <!-- Compatibility alias: deliberately flat, never a GradientBrush. -->
+    <SolidColorBrush x:Key="Accent.Gradient" Color="{StaticResource Primitive.Yellow400}" />
+
+    <SolidColorBrush x:Key="State.Warning" Color="{StaticResource Primitive.Orange400}" />
     <SolidColorBrush x:Key="State.Success" Color="{StaticResource Primitive.Emerald400}" />
     <SolidColorBrush x:Key="State.Danger" Color="{StaticResource Primitive.Red500}" />
     <SolidColorBrush x:Key="State.DangerHover" Color="{StaticResource Primitive.Red400}" />
 
     <!-- ============================================================= -->
-    <!-- Borders and focus -->
+    <!-- Borders and focus                                             -->
     <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Border.Subtle" Color="{StaticResource Primitive.Graphite500}" />
-    <SolidColorBrush x:Key="Border.Strong" Color="{StaticResource Primitive.Graphite600}" />
-    <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Blue300}" />
-    <SolidColorBrush x:Key="Border.Accent" Color="{StaticResource Primitive.Blue500}" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="{StaticResource Primitive.Warm500}" />
+    <SolidColorBrush x:Key="Border.Strong" Color="{StaticResource Primitive.Warm600}" />
+    <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Yellow300}" />
+    <SolidColorBrush x:Key="Border.Accent" Color="{StaticResource Primitive.Yellow500}" />
 
     <!-- ============================================================= -->
-    <!-- Capture overlay -->
+    <!-- Capture overlay                                               -->
     <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Overlay.Dimmer" Color="#FF000000" Opacity="0.48" />
-    <SolidColorBrush x:Key="Overlay.SelectionBorder" Color="{StaticResource Primitive.Blue300}" />
-    <SolidColorBrush x:Key="Overlay.HandleFill" Color="{StaticResource Primitive.White}" />
-    <SolidColorBrush x:Key="Overlay.HandleStroke" Color="{StaticResource Primitive.Blue600}" />
+    <SolidColorBrush x:Key="Overlay.Dimmer" Color="#FF0A0805" Opacity="0.48" />
+    <SolidColorBrush x:Key="Overlay.SelectionBorder" Color="{StaticResource Primitive.Yellow300}" />
+    <SolidColorBrush x:Key="Overlay.HandleFill" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Overlay.HandleStroke" Color="{StaticResource Primitive.Yellow600}" />
 
     <!-- ============================================================= -->
-    <!-- 4px spacing rhythm (principal steps 8/12/16/24/32) -->
+    <!-- 4px spacing rhythm (principal steps 8/12/16/24/32)            -->
     <!-- ============================================================= -->
     <sys:Double x:Key="Space.Xs">4</sys:Double>
     <sys:Double x:Key="Space.Sm">8</sys:Double>
@@ -143,16 +151,16 @@
     <Thickness x:Key="Padding.Toolbar">10</Thickness>
 
     <!-- ============================================================= -->
-    <!-- Shape: 8 controls, 12 panels, 16 floating only; pill for tags/status -->
+    <!-- Shape: friendly but restrained rounding                       -->
     <!-- ============================================================= -->
-    <CornerRadius x:Key="Radius.Sm">6</CornerRadius>
-    <CornerRadius x:Key="Radius.Md">8</CornerRadius>
-    <CornerRadius x:Key="Radius.Lg">12</CornerRadius>
-    <CornerRadius x:Key="Radius.Xl">16</CornerRadius>
+    <CornerRadius x:Key="Radius.Sm">7</CornerRadius>
+    <CornerRadius x:Key="Radius.Md">10</CornerRadius>
+    <CornerRadius x:Key="Radius.Lg">14</CornerRadius>
+    <CornerRadius x:Key="Radius.Xl">18</CornerRadius>
     <CornerRadius x:Key="Radius.Pill">999</CornerRadius>
 
     <!-- ============================================================= -->
-    <!-- Typography: Segoe UI Variable; mono only for dimensions/timing/shortcuts -->
+    <!-- Typography: local system fonts only (offline-safe)            -->
     <!-- ============================================================= -->
     <FontFamily x:Key="Font.Ui">Segoe UI Variable Text, Segoe UI, Malgun Gothic, sans-serif</FontFamily>
     <FontFamily x:Key="Font.Display">Segoe UI Variable Display, Segoe UI, Malgun Gothic, sans-serif</FontFamily>
@@ -166,13 +174,13 @@
     <sys:Double x:Key="FontSize.Display">28</sys:Double>
 
     <!-- ============================================================= -->
-    <!-- Motion: 90-160ms colour/opacity only -->
+    <!-- Motion: 90-160ms colour/opacity only                          -->
     <!-- ============================================================= -->
     <Duration x:Key="Motion.Fast">0:0:0.09</Duration>
     <Duration x:Key="Motion.Normal">0:0:0.16</Duration>
 
     <!-- ============================================================= -->
-    <!-- Desktop component sizing -->
+    <!-- Desktop component sizing                                     -->
     <!-- ============================================================= -->
     <sys:Double x:Key="Size.HitTarget">36</sys:Double>
     <sys:Double x:Key="Size.HitTarget.Compact">32</sys:Double>
@@ -180,10 +188,10 @@
     <sys:Double x:Key="Size.RailButton">44</sys:Double>
 
     <!-- ============================================================= -->
-    <!-- Elevation (restrained; floating surfaces only) -->
+    <!-- Elevation: warm neutral shadow, floating surfaces only        -->
     <!-- ============================================================= -->
     <DropShadowEffect x:Key="Shadow.Floating"
-                      BlurRadius="28" ShadowDepth="8" Opacity="0.34" Color="#FF000000" />
+                      BlurRadius="28" ShadowDepth="8" Opacity="0.38" Color="#FF0A0805" />
     <DropShadowEffect x:Key="Shadow.Card"
-                      BlurRadius="14" ShadowDepth="3" Opacity="0.22" Color="#FF000000" />
+                      BlurRadius="14" ShadowDepth="3" Opacity="0.24" Color="#FF0A0805" />
 </ResourceDictionary>

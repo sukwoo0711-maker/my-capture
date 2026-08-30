@@ -677,12 +677,15 @@ public sealed class GalleryTests
     [Theory]
     [InlineData(0, 2)]        // before first layout → minimum
     [InlineData(-50, 2)]      // nonsense width → minimum
-    [InlineData(400, 2)]      // one tile track fits, floored to the minimum of 2
-    [InlineData(544, 2)]      // exactly two tracks → 2
-    [InlineData(820, 3)]      // three tracks → 3
-    [InlineData(1088, 4)]     // four tracks → 4
-    [InlineData(4000, 4)]     // very wide → clamped to the maximum of 4
-    public void ColumnCountForWidth_ClampsBetweenTwoAndFour(double width, int expected)
+    [InlineData(400, 2)]      // one track fits, floored to the minimum of 2
+    [InlineData(512, 2)]      // exactly two tracks → 2
+    [InlineData(767, 2)]      // just below the three-track boundary
+    [InlineData(768, 3)]      // exactly three tracks → 3
+    [InlineData(1024, 4)]     // four tracks fill the default content width
+    [InlineData(1280, 5)]     // wide desktop → 5
+    [InlineData(1536, 6)]     // extra-wide desktop → 6
+    [InlineData(4000, 6)]     // clamped to the maximum of 6
+    public void ColumnCountForWidth_ClampsBetweenTwoAndSix(double width, int expected)
     {
         Assert.Equal(expected, GalleryRowBuilder.ColumnCountForWidth(width));
     }

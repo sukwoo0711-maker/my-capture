@@ -1,6 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Controls;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Recording;
+using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Recording;
@@ -113,6 +119,42 @@ public sealed class RecordingFeatureTests
 
         Assert.Equal(2, encoder.Timestamps.Count);
         Assert.True(encoder.Completed);
+    }
+
+    [Fact]
+    public void RecordingRegionFrame_ExposesAutomationPeerAndKeyboardAlternative()
+    {
+        StaTestHost.Run(() =>
+        {
+            var window = new RecordingControlWindow(
+                new RectD(100, 100, 640, 360),
+                new RecordingSettings(),
+                () => throw new InvalidOperationException("Recorder must not start in this test."),
+                () => "unused.mp4",
+                NullLogger<RecordingControlWindow>.Instance);
+            try
+            {
+                FieldInfo frameField = typeof(RecordingControlWindow).GetField(
+                    "_regionFrame",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                Border frame = Assert.IsAssignableFrom<Border>(frameField.GetValue(window));
+
+                Assert.True(frame.Focusable);
+                Assert.Equal(
+                    "녹화 영역 테두리 (드래그로 이동)",
+                    AutomationProperties.GetName(frame));
+                Assert.Contains("방향키", AutomationProperties.GetHelpText(frame), StringComparison.Ordinal);
+
+                AutomationPeer? peer = UIElementAutomationPeer.CreatePeerForElement(frame);
+                Assert.NotNull(peer);
+                Assert.Equal("녹화 영역 테두리 (드래그로 이동)", peer.GetName());
+                Assert.Equal(AutomationControlType.Pane, peer.GetAutomationControlType());
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
     }
 
     /// <summary>A fake encoder recording the contract, used to keep recorder tests off Media Foundation.</summary>

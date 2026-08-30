@@ -101,7 +101,7 @@ function Remove-OwnedShortcuts {
                 }
                 else { Write-CleanupLog 'INFO' "Preserved modified shortcut: $name" }
             }
-            catch { Write-CleanupLog 'WARN' "Could not inspect shortcut $name: $($_.Exception.Message)" }
+            catch { Write-CleanupLog 'WARN' "Could not inspect shortcut ${name}: $($_.Exception.Message)" }
         }
         if (@(Get-ChildItem -LiteralPath $startMenu -Force -ErrorAction SilentlyContinue).Count -eq 0) {
             [IO.Directory]::Delete($startMenu, $false)
@@ -127,7 +127,7 @@ function Remove-OwnedUninstallKey {
 $exitCode = 1
 try {
     $mutex = New-Object Threading.Mutex($false, 'Local\MyCapture.InstallOrUninstall')
-    try { $mutexHeld = $mutex.WaitOne(30000, $false) }
+    try { $mutexHeld = $mutex.WaitOne(300000, $false) }
     catch [Threading.AbandonedMutexException] { $mutexHeld = $true }
     if (-not $mutexHeld) { throw 'Timed out waiting for the installer mutex.' }
 

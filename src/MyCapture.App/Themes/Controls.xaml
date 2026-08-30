@@ -1,13 +1,13 @@
 <!--
   MyCapture shared control styles.
 
-  Direction (apple-inspired-desktop-ux.md):
-    * Calm hierarchy on neutral graphite surfaces with one system-blue accent.
+  Direction (warm-yellow-charcoal-ux.md):
+    * Warm charcoal hierarchy with one friendly yellow action/focus accent.
+    * Yellow fills always pair with Text.OnAccent dark ink, including checks and glyphs.
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
-      shown by (a) recolouring the 1px chrome border to the accent and (b) fading in a
-      dedicated inset focus ring element that has no layout footprint. Layout never shifts.
-    * Every existing style/key is preserved; new reusable icon / rail / inspector / status
-      styles are added at the end.
+      shown by recolouring the fixed chrome border and revealing an inset ring with no layout
+      footprint, so keyboard navigation never shifts neighbouring content.
+    * Every existing style/key is preserved for restored windows and external references.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -521,7 +521,7 @@
 
     <!-- ============================================================= -->
     <!-- Reusable icon glyph styles (consume Symbols.xaml geometries)   -->
-    <!--   Outlined 20x20 family, stroked with a consistent ~1.7px weight.-->
+    <!--   Outlined 20x20 family, stroked with a consistent ~1.6px weight.-->
     <!--   Usage: <Path Style="{StaticResource Icon.Glyph}"             -->
     <!--               Data="{StaticResource Icon.Save}"/>              -->
     <!-- ============================================================= -->
@@ -530,7 +530,7 @@
         <Setter Property="Height" Value="20" />
         <Setter Property="Stretch" Value="Uniform" />
         <Setter Property="Stroke" Value="{StaticResource Text.Secondary}" />
-        <Setter Property="StrokeThickness" Value="1.7" />
+        <Setter Property="StrokeThickness" Value="1.6" />
         <Setter Property="StrokeStartLineCap" Value="Round" />
         <Setter Property="StrokeEndLineCap" Value="Round" />
         <Setter Property="StrokeLineJoin" Value="Round" />

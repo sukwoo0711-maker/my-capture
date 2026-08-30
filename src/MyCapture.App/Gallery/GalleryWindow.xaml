@@ -60,17 +60,17 @@
         </Style>
 
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
-            <!-- Outer track width (258 + 7*2 margin = 272) matches GalleryRowBuilder.TileTrackWidth,
-                 so the responsive column maths in the view model stay valid. Height is taller and
-                 the image row takes all remaining space: the capture is the dominant element. -->
-            <Border Width="258" Height="300" Margin="7"
+            <!-- A 244px tile plus 6px margins occupies a 256px track, matching
+                 GalleryRowBuilder.TileTrackWidth. Four cards now fill the default window
+                 without shrinking the image or reducing the accessible action targets. -->
+            <Border Width="244" Height="292" Margin="6"
                     Background="{StaticResource Surface.Raised}"
                     BorderBrush="{StaticResource Border.Subtle}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource Radius.Lg}"
                     SnapsToDevicePixels="True"
                     ToolTip="폴더나 바탕화면으로 드래그해 PNG 파일로 내보내기">
-                <Grid Margin="10">
+                <Grid Margin="9">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />

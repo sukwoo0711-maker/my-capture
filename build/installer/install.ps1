@@ -330,7 +330,7 @@ function Assert-FreeSpace {
     }
     catch {
         if ($_.Exception.Data['InstallerExitCode']) { throw }
-        Throw-InstallerError $ExitInsufficientDisk "Unable to query free space for $Parent: $($_.Exception.Message)"
+        Throw-InstallerError $ExitInsufficientDisk "Unable to query free space for ${Parent}: $($_.Exception.Message)"
     }
 }
 

@@ -199,6 +199,14 @@ try {
 
     $message = "MyCapture removal is scheduled. Captures and settings are preserved. Log: $($script:LogFile)"
     Write-UninstallLog 'INFO' $message
+    if ($script:MutexHeld -and $script:Mutex) {
+        try {
+            $script:Mutex.ReleaseMutex()
+            $script:MutexHeld = $false
+            Write-UninstallLog 'INFO' 'Installer mutex handed off to the deferred cleanup worker.'
+        }
+        catch { Throw-UninstallError $ExitCleanupLaunch "Unable to hand off the installer mutex: $($_.Exception.Message)" }
+    }
     Show-Result $true $message
 }
 catch {

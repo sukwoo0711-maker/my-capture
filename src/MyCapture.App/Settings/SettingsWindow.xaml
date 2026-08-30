@@ -117,7 +117,7 @@
                                           Width="20" Height="20"
                                           Stretch="Uniform"
                                           Stroke="{StaticResource Text.Secondary}"
-                                          StrokeThickness="1.7"
+                                          StrokeThickness="1.6"
                                           StrokeStartLineCap="Round"
                                           StrokeEndLineCap="Round"
                                           StrokeLineJoin="Round"
@@ -134,7 +134,7 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent.Subtle}" />
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Border.Accent}" />
                                 <Setter TargetName="AccentBar" Property="Visibility" Value="Visible" />
-                                <Setter TargetName="Glyph" Property="Stroke" Value="{StaticResource Text.Primary}" />
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{StaticResource Accent.Cool}" />
                                 <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>

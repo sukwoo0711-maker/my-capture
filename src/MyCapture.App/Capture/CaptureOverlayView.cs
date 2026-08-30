@@ -58,8 +58,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
         RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.NearestNeighbor);
 
         _dimmerBrush = ResourceBrush("Overlay.Dimmer", new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)));
-        _selectionBrush = ResourceBrush("Overlay.SelectionBorder", Brushes.DodgerBlue);
-        _chromeBrush = ResourceBrush("Surface.Floating", new SolidColorBrush(Color.FromArgb(246, 15, 23, 42)));
+        _selectionBrush = ResourceBrush("Overlay.SelectionBorder", new SolidColorBrush(Color.FromRgb(0xFF, 0xD4, 0x00)));
+        _chromeBrush = ResourceBrush("Surface.Floating", new SolidColorBrush(Color.FromArgb(246, 42, 36, 28)));
         _primaryTextBrush = ResourceBrush("Text.Primary", Brushes.White);
         _mutedTextBrush = ResourceBrush("Text.Secondary", Brushes.LightGray);
 
@@ -135,7 +135,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private void DrawSelection(DrawingContext dc, RectD pixelRect)
     {
         Rect rect = ToDipRect(pixelRect);
-        var glowPen = new Pen(new SolidColorBrush(Color.FromArgb(90, 124, 92, 252)), Math.Max(3, 3 * DipPerPixelX));
+        var glowPen = new Pen(new SolidColorBrush(Color.FromArgb(90, 255, 212, 0)), Math.Max(3, 3 * DipPerPixelX));
         glowPen.Freeze();
         var borderPen = new Pen(_selectionBrush, Math.Max(1.25, 1.25 * DipPerPixelX));
         borderPen.Freeze();
