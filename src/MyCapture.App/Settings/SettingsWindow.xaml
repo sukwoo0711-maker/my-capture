@@ -1,0 +1,646 @@
+<Window x:Class="MyCapture.App.Settings.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:ClassModifier="internal"
+        Title="MyCapture — 설정"
+        Width="940" Height="700"
+        MinWidth="780" MinHeight="560"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="{StaticResource Font.Ui}"
+        Background="{StaticResource Surface.Base}"
+        Foreground="{StaticResource Text.Primary}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+    <Window.Resources>
+
+        <!-- Category and command glyphs come from the shared Symbols.xaml resource dictionary
+             (Icon.Settings / Icon.Capture / Icon.Shortcuts / Icon.Storage / Icon.Export /
+             Icon.Pin / Icon.Ocr), referenced by key so the icon vocabulary stays centralised. -->
+
+        <!-- Shared label above a field. -->
+        <Style x:Key="Settings.Label" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,2" />
+        </Style>
+
+        <!-- Secondary description under a label. Muted on sunken surfaces stays AA. -->
+        <Style x:Key="Settings.Description" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Text.Muted}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+
+        <!-- Group heading inside a page. -->
+        <Style x:Key="Settings.GroupHeading" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Subtitle}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,4,0,8" />
+        </Style>
+
+        <!-- One labelled field block. -->
+        <Style x:Key="Settings.Field" TargetType="StackPanel">
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+
+        <!-- Text input built on the shared TextBox style. Only the validation additions
+             (error border colour, tooltip, automation help text) are layered on top; the
+             base look, focus, and hover come from the theme so there is no duplication. -->
+        <Style x:Key="Settings.TextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="Validation.ErrorTemplate">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <AdornedElementPlaceholder />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Validation.HasError" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource State.Danger}" />
+                    <Setter Property="ToolTip"
+                            Value="{Binding RelativeSource={RelativeSource Self},
+                                            Path=(Validation.Errors)[0].ErrorContent}" />
+                    <Setter Property="AutomationProperties.HelpText"
+                            Value="{Binding RelativeSource={RelativeSource Self},
+                                            Path=(Validation.Errors)[0].ErrorContent}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Checkbox built on the shared CheckBox style. -->
+        <Style x:Key="Settings.CheckBox" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+
+        <!-- ===================== Category navigation =====================
+             Icon + label rows. The container border keeps a constant 1px thickness in every
+             state; selection and focus change colour and reveal the accent bar only, so the
+             row never resizes or shifts its neighbours (stable focus). -->
+        <Style x:Key="Settings.TabItem" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
+            <Setter Property="Padding" Value="10,9" />
+            <Setter Property="Margin" Value="0,2" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Md}"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="3" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="AccentBar" Visibility="Hidden"
+                                        Width="3"
+                                        Background="{StaticResource Accent.Default}"
+                                        CornerRadius="2" />
+                                <Viewbox Grid.Column="1" Width="18" Height="18"
+                                         Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <Path x:Name="Glyph"
+                                          Data="{Binding Path=Tag,
+                                                         RelativeSource={RelativeSource TemplatedParent}}"
+                                          Width="20" Height="20"
+                                          Stretch="Uniform"
+                                          Stroke="{StaticResource Text.Secondary}"
+                                          StrokeThickness="1.7"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          Fill="Transparent" />
+                                </Viewbox>
+                                <ContentPresenter Grid.Column="2" ContentSource="Header"
+                                                  Margin="10,0,0,0"
+                                                  HorizontalAlignment="Left"
+                                                  VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent.Subtle}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Border.Accent}" />
+                                <Setter TargetName="AccentBar" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{StaticResource Text.Primary}" />
+                                <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface.Hover}" />
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{StaticResource Text.Primary}" />
+                                <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+                            </Trigger>
+                            <!-- Focus changes only the border colour, never the thickness. -->
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="Settings.TabControl" TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource Card}" Padding="10">
+                                <DockPanel LastChildFill="True">
+                                    <StackPanel DockPanel.Dock="Top" Margin="10,8,10,14">
+                                        <TextBlock Text="환경 설정" Style="{StaticResource Text.Section}" />
+                                        <TextBlock Text="작업 흐름과 저장 방식을 조정합니다"
+                                                   Style="{StaticResource Text.MutedBlock}" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel IsItemsHost="True"
+                                                KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </DockPanel>
+                            </Border>
+                            <Border Grid.Column="1" Margin="16,0,0,0"
+                                    Style="{StaticResource Card}" Padding="0">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                  ContentSource="SelectedContent"
+                                                  Margin="24,18,18,18" />
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A neutral information card: raised surface + subtle border, no accent wash. -->
+        <Style x:Key="Settings.InfoCard" TargetType="Border" BasedOn="{StaticResource Card}">
+            <Setter Property="Padding" Value="14,11" />
+        </Style>
+
+        <!-- Browse button reuses the shared secondary button, just narrower with a gap. -->
+        <Style x:Key="Settings.BrowseButton" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+            <Setter Property="MinWidth" Value="76" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+        </Style>
+
+    </Window.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Title only. The duplicate "Ctrl+S 적용" badge is removed; the Apply button in the
+             command bar already carries and communicates the shortcut. -->
+        <StackPanel Grid.Row="0" Margin="2,0,2,20">
+            <TextBlock Text="MyCapture 설정" Style="{StaticResource Text.Display}" />
+            <TextBlock Text="캡처, 보관, 내보내기와 편집 기본값을 한곳에서 관리합니다."
+                       Style="{StaticResource Text.MutedBlock}" Margin="0,5,0,0" />
+        </StackPanel>
+
+        <!-- ===================== Category navigation via TabControl =====================
+             Each TabItem carries its glyph geometry in AutomationProperties.HelpText, which the
+             template's Path binds to. The visible Header stays the plain Korean label so the
+             accessible name and shown text agree. -->
+        <TabControl x:Name="CategoryTabs"
+                    Grid.Row="1"
+                    Style="{StaticResource Settings.TabControl}"
+                    AutomationProperties.Name="설정 범주">
+            <TabControl.Resources>
+                <Style TargetType="TabItem" BasedOn="{StaticResource Settings.TabItem}" />
+            </TabControl.Resources>
+
+            <!-- General -->
+            <TabItem Header="일반" AutomationProperties.Name="일반 설정"
+                     Tag="{StaticResource Icon.Settings}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="일반" />
+
+                        <CheckBox x:Name="LaunchAtLoginCheck"
+                                  Style="{StaticResource Settings.CheckBox}"
+                                  Content="로그인 시 자동 시작"
+                                  AutomationProperties.Name="로그인 시 자동 시작"
+                                  AutomationProperties.HelpText="Windows에 로그인하면 MyCapture를 자동으로 실행합니다."
+                                  IsChecked="{Binding LaunchAtLogin}" />
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                                   Text="현재 사용자 계정에만 적용됩니다. 관리자 권한이 필요하지 않습니다." />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Capture -->
+            <TabItem Header="캡처" AutomationProperties.Name="캡처 설정"
+                     Tag="{StaticResource Icon.Capture}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="캡처" />
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="마우스 커서 포함"
+                                  AutomationProperties.Name="마우스 커서 포함"
+                                  IsChecked="{Binding IncludeCursor}" />
+
+                        <Border Style="{StaticResource Settings.InfoCard}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="자유 영역 캡처" Style="{StaticResource Text.Section}" />
+                                <TextBlock Margin="0,4,0,0"
+                                           Style="{StaticResource Text.MutedBlock}"
+                                           Text="Ctrl+Shift+C는 창 스냅 없이 드래그한 영역만 캡처하며, 마우스를 놓으면 바로 편집 창이 열립니다." />
+                            </StackPanel>
+                        </Border>
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="선택 중 돋보기 표시"
+                                  AutomationProperties.Name="선택 중 돋보기 표시"
+                                  IsChecked="{Binding ShowMagnifier}" />
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="다른 창으로 전환되면 캡처 취소"
+                                  AutomationProperties.Name="포커스를 잃으면 캡처 취소"
+                                  IsChecked="{Binding AbortOnFocusLoss}" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="지연 캡처 시간(초)" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="허용 범위 0 ~ 60초." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="지연 캡처 시간(초)"
+                                     Text="{Binding DelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="영역 기록 개수" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="다시 캡처에 사용할 이전 선택 영역 개수. 1 ~ 200." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="영역 기록 개수"
+                                     Text="{Binding RegionHistoryLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Hotkeys -->
+            <TabItem Header="단축키" AutomationProperties.Name="단축키 설정"
+                     Tag="{StaticResource Icon.Shortcuts}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="전역 단축키" />
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                                   Text="예: Ctrl+Shift+C, F3, Shift+F3. 비워 두면 해당 명령에 단축키를 지정하지 않습니다. 캡처 단축키는 비워 둘 수 없습니다." />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="영역 캡처" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="영역 캡처 단축키"
+                                     Text="{Binding CaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="화면에 붙이기" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="화면에 붙이기 단축키"
+                                     Text="{Binding PasteToScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="모든 고정 창 숨기기/보이기" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="모든 고정 창 숨기기 단축키"
+                                     Text="{Binding HideAllPinsHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="클릭 통과 전환" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="클릭 통과 전환 단축키"
+                                     Text="{Binding ToggleClickThroughHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="마지막 영역 다시 캡처" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="마지막 영역 다시 캡처 단축키"
+                                     Text="{Binding RepeatLastRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="창 캡처" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="창 캡처 단축키"
+                                     Text="{Binding CaptureWindowHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="전체 화면 캡처" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="전체 화면 캡처 단축키"
+                                     Text="{Binding CaptureFullScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Storage -->
+            <TabItem Header="저장소" AutomationProperties.Name="저장소 설정"
+                     Tag="{StaticResource Icon.Storage}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="저장소" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="최대 보관 개수" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="10 ~ 5000개." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="최대 보관 개수"
+                                     Text="{Binding MaxItems, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="최대 저장 용량(GiB)" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="0.125 ~ 512 GiB." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="최대 저장 용량 기가바이트"
+                                     Text="{Binding MaxGiB, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="썸네일 긴 변(픽셀)" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="96 ~ 1024px." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="썸네일 긴 변 픽셀"
+                                     Text="{Binding ThumbnailLongEdge, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="캡처 저장 폴더" />
+                            <TextBlock Style="{StaticResource Settings.Description}"
+                                       Text="비워 두면 기본 위치를 사용합니다. 폴더를 바꾸면 다시 시작한 후에 적용되며, 기존 파일은 이동하거나 삭제하지 않습니다." />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Style="{StaticResource Settings.TextBox}"
+                                         AutomationProperties.Name="캡처 저장 폴더 경로"
+                                         Text="{Binding CapturesDirectoryOverride, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                <Button Grid.Column="1" Style="{StaticResource Settings.BrowseButton}"
+                                        Content="찾아보기"
+                                        AutomationProperties.Name="캡처 저장 폴더 찾아보기"
+                                        Click="OnBrowseCapturesDirectory" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Export -->
+            <TabItem Header="내보내기" AutomationProperties.Name="내보내기 설정"
+                     Tag="{StaticResource Icon.Export}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="내보내기" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="빠른 저장 폴더" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="비워 두면 기본 위치를 사용합니다." />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Style="{StaticResource Settings.TextBox}"
+                                         AutomationProperties.Name="빠른 저장 폴더 경로"
+                                         Text="{Binding QuickSaveDirectoryOverride, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                <Button Grid.Column="1" Style="{StaticResource Settings.BrowseButton}"
+                                        Content="찾아보기"
+                                        AutomationProperties.Name="빠른 저장 폴더 찾아보기"
+                                        Click="OnBrowseQuickSaveDirectory" />
+                            </Grid>
+                        </StackPanel>
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="빠른 저장 시 클립보드에도 복사"
+                                  AutomationProperties.Name="빠른 저장 시 클립보드에도 복사"
+                                  IsChecked="{Binding CopyToClipboardOnQuickSave}" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="파일명 패턴" />
+                            <TextBlock Style="{StaticResource Settings.Description}"
+                                       Text="중괄호 안에 날짜 형식을 넣습니다. 예: capture_{yyyyMMdd}_{HHmmss}. 확장자는 자동으로 붙습니다." />
+                            <TextBox Style="{StaticResource Settings.TextBox}"
+                                     AutomationProperties.Name="파일명 패턴"
+                                     Text="{Binding FileNamePattern, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Pin -->
+            <TabItem Header="화면 고정" AutomationProperties.Name="화면 고정 설정"
+                     Tag="{StaticResource Icon.Pin}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="화면 고정" />
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="더블클릭으로 고정 창 닫기"
+                                  AutomationProperties.Name="더블클릭으로 고정 창 닫기"
+                                  IsChecked="{Binding CloseOnDoubleClick}" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="초기 불투명도" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="0.2 ~ 1.0 (1은 불투명)." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="초기 불투명도"
+                                     Text="{Binding InitialOpacity, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="확대/축소 단계" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="휠 한 칸당 배율 변화량. 0.02 ~ 0.5." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="확대 축소 단계"
+                                     Text="{Binding ZoomStep, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="Ctrl+클릭 디바운스(ms)" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="복사와 OCR 더블클릭을 구분하기 위한 대기 시간. 120 ~ 800ms." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="Ctrl 클릭 디바운스 밀리초"
+                                     Text="{Binding CtrlClickDebounceMs, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- OCR -->
+            <TabItem Header="OCR" AutomationProperties.Name="OCR 설정"
+                     Tag="{StaticResource Icon.Ocr}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="문자 인식(OCR)" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="선호 언어(BCP-47)" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="쉼표로 구분해 우선순위대로 입력합니다. 예: ko-KR, en-US." />
+                            <TextBox Style="{StaticResource Settings.TextBox}"
+                                     AutomationProperties.Name="선호 OCR 언어"
+                                     Text="{Binding PreferredLanguages, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="인식 전 확대 배율" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="작은 글자 정확도를 높입니다. 1.0 ~ 4.0." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="인식 전 확대 배율"
+                                     Text="{Binding UpscaleFactor, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="인식 결과를 캡처에 저장(캐시)"
+                                  AutomationProperties.Name="인식 결과를 캡처에 저장"
+                                  IsChecked="{Binding CacheResults}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Annotation -->
+            <TabItem Header="주석 기본값" AutomationProperties.Name="주석 기본값 설정"
+                     Tag="{StaticResource Icon.Settings}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="주석 기본값" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="선 두께" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="1 ~ 64." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="선 두께"
+                                     Text="{Binding StrokeThickness, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="글꼴 크기" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="6 ~ 400." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="글꼴 크기"
+                                     Text="{Binding FontSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="글꼴 이름" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="280" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="글꼴 이름"
+                                     Text="{Binding FontFamily, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="모자이크 블록 크기" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="2 ~ 128 (이미지 픽셀)." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="모자이크 블록 크기"
+                                     Text="{Binding MosaicBlockSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="형광펜 투명도(알파)" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="0 ~ 255." />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="형광펜 투명도"
+                                     Text="{Binding HighlighterAlpha, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- ===================== Error summary ===================== -->
+        <Border x:Name="ErrorSummary"
+                Grid.Row="2"
+                Margin="0,8,0,0"
+                Padding="12,8"
+                CornerRadius="6"
+                Background="{StaticResource Surface.Sunken}"
+                BorderBrush="{StaticResource State.Danger}"
+                BorderThickness="1"
+                Visibility="Collapsed"
+                AutomationProperties.LiveSetting="Assertive">
+            <StackPanel>
+                <TextBlock x:Name="ErrorSummaryHeading"
+                           Foreground="{StaticResource State.Danger}"
+                           FontWeight="Bold"
+                           FontSize="{StaticResource FontSize.Body}"
+                           Text="입력을 확인해 주세요"
+                           AutomationProperties.Name="입력 오류 요약" />
+                <ItemsControl x:Name="ErrorList" Margin="0,4,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       Foreground="{StaticResource Text.Primary}"
+                                       FontSize="{StaticResource FontSize.Caption}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,1,0,1" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- ===================== Command bar ===================== -->
+        <Grid Grid.Row="3" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0"
+                    x:Name="DefaultsButton"
+                    Style="{StaticResource Button.Secondary}"
+                    Content="기본값으로 재설정"
+                    MinWidth="120"
+                    AutomationProperties.Name="기본값으로 재설정"
+                    AutomationProperties.HelpText="모든 값을 기본값으로 되돌립니다. 적용을 누르기 전에는 취소로 되돌릴 수 있습니다."
+                    Click="OnResetDefaults" />
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button x:Name="ApplyButton"
+                        Style="{StaticResource Button.Primary}"
+                        Content="적용 (Ctrl+S)"
+                        MinWidth="88"
+                        IsDefault="True"
+                        AutomationProperties.Name="적용"
+                        AutomationProperties.HelpText="변경 사항을 저장합니다. 단축키 Ctrl+S."
+                        Click="OnApply" />
+                <Button x:Name="CancelButton"
+                        Style="{StaticResource Button.Secondary}"
+                        Content="취소 (Esc)"
+                        MinWidth="88"
+                        Margin="6,0,0,0"
+                        IsCancel="True"
+                        AutomationProperties.Name="취소"
+                        Click="OnCancel" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

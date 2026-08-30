@@ -1,0 +1,709 @@
+<!--
+  MyCapture shared control styles.
+
+  Direction (apple-inspired-desktop-ux.md):
+    * Calm hierarchy on neutral graphite surfaces with one system-blue accent.
+    * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
+      shown by (a) recolouring the 1px chrome border to the accent and (b) fading in a
+      dedicated inset focus ring element that has no layout footprint. Layout never shifts.
+    * Every existing style/key is preserved; new reusable icon / rail / inspector / status
+      styles are added at the end.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:themes="clr-namespace:MyCapture.App.Themes">
+
+    <!-- ============================================================= -->
+    <!-- Window -->
+    <!-- ============================================================= -->
+    <Style TargetType="{x:Type Window}">
+        <Setter Property="Background" Value="{StaticResource Surface.Base}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+        <Setter Property="FontFamily" Value="{StaticResource Font.Ui}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="themes:ModernWindowChrome.Enabled" Value="True" />
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- Typography helpers -->
+    <!-- ============================================================= -->
+    <Style x:Key="Text.Display" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource Font.Display}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Display}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+    </Style>
+    <Style x:Key="Text.Title" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource Font.Display}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Title}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+    </Style>
+    <Style x:Key="Text.Section" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Subtitle}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+    </Style>
+    <Style x:Key="Text.Body" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style x:Key="Text.MutedBlock" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Muted}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- Mono caption for dimensions / timing / shortcuts. -->
+    <Style x:Key="Text.Mono" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource Font.Mono}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Muted}" />
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- Cards -->
+    <!-- ============================================================= -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Surface.Raised}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Lg}" />
+        <Setter Property="Padding" Value="{StaticResource Padding.Card}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+    <Style x:Key="Card.Sunken" TargetType="Border" BasedOn="{StaticResource Card}">
+        <Setter Property="Background" Value="{StaticResource Surface.Sunken}" />
+    </Style>
+    <!-- Neutral information card: no heavy accent wash. Subtle accent border only. -->
+    <Style x:Key="Card.Accent" TargetType="Border" BasedOn="{StaticResource Card}">
+        <Setter Property="Background" Value="{StaticResource Surface.Raised}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Accent}" />
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- Button (base) -->
+    <!--   Focus: recolour border to accent + fade in inset focus ring. Thickness fixed. -->
+    <!-- ============================================================= -->
+    <Style TargetType="{x:Type Button}">
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+        <Setter Property="Background" Value="{StaticResource Surface.Overlay}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="{StaticResource Padding.Control}" />
+        <Setter Property="MinHeight" Value="{StaticResource Size.HitTarget}" />
+        <Setter Property="MinWidth" Value="40" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Grid>
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Md}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <!-- Inset focus ring: no layout impact, toggled by opacity. -->
+                        <Border x:Name="FocusRing"
+                                Margin="1"
+                                BorderBrush="{StaticResource Border.Focus}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Sm}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Hover}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Border.Strong}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Pressed}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsDefaulted" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Border.Accent}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.48" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Button.Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{StaticResource Accent.Default}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Accent.Default}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.OnAccent}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Grid>
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Md}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <Border x:Name="FocusRing"
+                                Margin="2"
+                                BorderBrush="{StaticResource Text.OnAccent}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Sm}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Accent.Hover}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent.Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Accent.Pressed}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent.Pressed}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.46" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="Button.Secondary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}" />
+    <Style x:Key="Button.Ghost" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style x:Key="Button.Danger" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+        <Setter Property="Foreground" Value="{StaticResource State.DangerHover}" />
+    </Style>
+    <Style x:Key="Button.Compact" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="MinHeight" Value="{StaticResource Size.HitTarget.Compact}" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+    </Style>
+    <Style x:Key="Button.GhostCompact" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+        <Setter Property="MinHeight" Value="{StaticResource Size.HitTarget.Compact}" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- ToggleButton (base) + Tool variant -->
+    <!--   Selected state uses accent border + subtle wash; focus is colour-only. -->
+    <!-- ============================================================= -->
+    <Style TargetType="{x:Type ToggleButton}">
+        <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="MinHeight" Value="{StaticResource Size.HitTarget.Compact}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ToggleButton}">
+                    <Grid>
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Md}">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <Border x:Name="FocusRing"
+                                Margin="1"
+                                BorderBrush="{StaticResource Border.Focus}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Sm}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Hover}" />
+                            <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Accent.Subtle}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Border.Accent}" />
+                            <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.48" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="ToggleButton.Tool" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}" />
+
+    <!-- ============================================================= -->
+    <!-- TextBox -->
+    <!-- ============================================================= -->
+    <Style TargetType="{x:Type TextBox}">
+        <Setter Property="Background" Value="{StaticResource Surface.Sunken}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+        <Setter Property="CaretBrush" Value="{StaticResource Text.Primary}" />
+        <Setter Property="SelectionBrush" Value="{StaticResource Accent.Default}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="11,8" />
+        <Setter Property="MinHeight" Value="{StaticResource Size.HitTarget}" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TextBox}">
+                    <Grid>
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Md}">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <Border x:Name="FocusRing"
+                                Margin="1"
+                                BorderBrush="{StaticResource Border.Focus}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Sm}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Border.Strong}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                        <Trigger Property="IsReadOnly" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Raised}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- CheckBox -->
+    <!-- ============================================================= -->
+    <Style TargetType="{x:Type CheckBox}">
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type CheckBox}">
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
+                            <Border x:Name="Box"
+                                    Background="{StaticResource Surface.Sunken}"
+                                    BorderBrush="{StaticResource Border.Strong}"
+                                    BorderThickness="1"
+                                    CornerRadius="5">
+                                <Path x:Name="Check" Visibility="Collapsed"
+                                      Data="M 3,8 L 7,12 L 15,4"
+                                      Stroke="{StaticResource Text.OnAccent}"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round" />
+                            </Border>
+                            <!-- Inset focus ring, opacity-toggled (stable thickness). -->
+                            <Border x:Name="FocusRing"
+                                    Margin="-2"
+                                    BorderBrush="{StaticResource Border.Focus}"
+                                    BorderThickness="1"
+                                    CornerRadius="7"
+                                    IsHitTestVisible="False"
+                                    Opacity="0" />
+                        </Grid>
+                        <ContentPresenter Grid.Column="1" VerticalAlignment="Center" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{StaticResource Accent.Default}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent.Default}" />
+                            <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.48" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- Tabs / Lists -->
+    <!-- ============================================================= -->
+    <Style TargetType="{x:Type TabControl}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style TargetType="{x:Type TabItem}">
+        <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
+        <Setter Property="Padding" Value="12,8" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    </Style>
+    <Style TargetType="{x:Type ListBox}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style TargetType="{x:Type ListBoxItem}">
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- Tooltip / Menus / Slider -->
+    <!-- ============================================================= -->
+    <Style TargetType="{x:Type ToolTip}">
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+        <Setter Property="Background" Value="{StaticResource Surface.Floating}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Strong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+    </Style>
+    <Style TargetType="{x:Type ContextMenu}">
+        <Setter Property="Background" Value="{StaticResource Surface.Floating}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Strong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="5" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ContextMenu}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource Radius.Md}"
+                            Padding="{TemplateBinding Padding}"
+                            Effect="{StaticResource Shadow.Card}"
+                            SnapsToDevicePixels="True">
+                        <StackPanel IsItemsHost="True"
+                                    KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="{x:Type MenuItem}">
+        <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="8,7" />
+        <Setter Property="MinHeight" Value="34" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type MenuItem}">
+                    <Border x:Name="Chrome"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{StaticResource Radius.Sm}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter x:Name="IconHost"
+                                              ContentSource="Icon"
+                                              Width="18" Height="18"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                            <ContentPresenter Grid.Column="1"
+                                              Margin="8,0,22,0"
+                                              ContentSource="Header"
+                                              RecognizesAccessKey="True"
+                                              VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2"
+                                       Text="{TemplateBinding InputGestureText}"
+                                       Foreground="{StaticResource Text.Muted}"
+                                       FontFamily="{StaticResource Font.Mono}"
+                                       FontSize="{StaticResource FontSize.Caption}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsSubmenuOpen" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Pressed}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.46" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="{x:Type Separator}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Separator}">
+                    <Border Height="1" Margin="30,5,8,5"
+                            Background="{StaticResource Border.Subtle}"
+                            SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="{x:Type Slider}">
+        <Setter Property="Foreground" Value="{StaticResource Accent.Default}" />
+        <Setter Property="MinHeight" Value="28" />
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- Reusable icon glyph styles (consume Symbols.xaml geometries)   -->
+    <!--   Outlined 20x20 family, stroked with a consistent ~1.7px weight.-->
+    <!--   Usage: <Path Style="{StaticResource Icon.Glyph}"             -->
+    <!--               Data="{StaticResource Icon.Save}"/>              -->
+    <!-- ============================================================= -->
+    <Style x:Key="Icon.Glyph" TargetType="Path">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Stroke" Value="{StaticResource Text.Secondary}" />
+        <Setter Property="StrokeThickness" Value="1.7" />
+        <Setter Property="StrokeStartLineCap" Value="Round" />
+        <Setter Property="StrokeEndLineCap" Value="Round" />
+        <Setter Property="StrokeLineJoin" Value="Round" />
+        <Setter Property="Fill" Value="Transparent" />
+        <Setter Property="SnapsToDevicePixels" Value="False" />
+    </Style>
+    <!-- Emphasis variants: reuse the same geometry, differ only in stroke brush. -->
+    <Style x:Key="Icon.Glyph.Primary" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
+        <Setter Property="Stroke" Value="{StaticResource Text.Primary}" />
+    </Style>
+    <Style x:Key="Icon.Glyph.Muted" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
+        <Setter Property="Stroke" Value="{StaticResource Text.Muted}" />
+    </Style>
+    <Style x:Key="Icon.Glyph.Accent" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
+        <Setter Property="Stroke" Value="{StaticResource Accent.Default}" />
+    </Style>
+    <Style x:Key="Icon.Glyph.OnAccent" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
+        <Setter Property="Stroke" Value="{StaticResource Text.OnAccent}" />
+    </Style>
+    <Style x:Key="Icon.Glyph.Danger" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
+        <Setter Property="Stroke" Value="{StaticResource State.DangerHover}" />
+    </Style>
+    <!-- The 'More' / dot-based glyphs read better filled; a solid variant is provided. -->
+    <Style x:Key="Icon.Glyph.Filled" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
+        <Setter Property="Fill" Value="{StaticResource Text.Secondary}" />
+        <Setter Property="Stroke" Value="{StaticResource Text.Secondary}" />
+        <Setter Property="StrokeThickness" Value="0.6" />
+    </Style>
+
+    <!-- Icon-only button: square hit target, transparent chrome, glyph inherits colour.
+         Consumers set Content to a Path using an Icon.Glyph* style and MUST supply
+         AutomationProperties.Name + ToolTip for accessibility. -->
+    <Style x:Key="Button.Icon" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+        <Setter Property="MinWidth" Value="{StaticResource Size.HitTarget}" />
+        <Setter Property="MinHeight" Value="{StaticResource Size.HitTarget}" />
+        <Setter Property="Padding" Value="6" />
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- Left tool rail: compact desktop activity rail                  -->
+    <!--   Fixed 40px icon targets; meaning is carried by tooltip,      -->
+    <!--   automation name, shortcut and the contextual inspector.      -->
+    <!-- ============================================================= -->
+    <Style x:Key="Rail.Panel" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Surface.Raised}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="0,0,1,0" />
+        <Setter Property="Padding" Value="6,8" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="Rail.ToolButton" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0,2" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Muted}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid>
+                        <Border x:Name="Chrome"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Md}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <Border x:Name="Indicator"
+                                Width="2" Height="18"
+                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Background="{StaticResource Accent.Cool}"
+                                CornerRadius="{StaticResource Radius.Pill}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                        <Border x:Name="FocusRing"
+                                Margin="1"
+                                BorderBrush="{StaticResource Border.Focus}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Sm}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Hover}" />
+                            <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Pressed}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Accent.Subtle}" />
+                            <Setter Property="Foreground" Value="{StaticResource Accent.Cool}" />
+                            <Setter TargetName="Indicator" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.46" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- Right inspector                                                -->
+    <!-- ============================================================= -->
+    <Style x:Key="Inspector.Panel" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Surface.Raised}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="1,0,0,0" />
+        <Setter Property="Padding" Value="{StaticResource Padding.Panel}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+    <!-- Inspector section heading (small, uppercase-free sentence case). -->
+    <Style x:Key="Inspector.SectionLabel" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Muted}" />
+        <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <!-- Inspector guidance sentence: plain-language instruction. -->
+    <Style x:Key="Inspector.Guidance" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="LineHeight" Value="18" />
+    </Style>
+
+    <!-- ============================================================= -->
+    <!-- Status bar + status chip                                       -->
+    <!--   Live instruction / completion feedback surface.              -->
+    <!-- ============================================================= -->
+    <Style x:Key="StatusBar.Panel" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Surface.Overlay}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+    <Style x:Key="StatusBar.Text" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <!-- Compact rounded status chip (neutral by default). -->
+    <Style x:Key="StatusChip" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Surface.Sunken}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Pill}" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+    <Style x:Key="StatusChip.Success" TargetType="Border" BasedOn="{StaticResource StatusChip}">
+        <Setter Property="BorderBrush" Value="{StaticResource State.Success}" />
+    </Style>
+    <Style x:Key="StatusChip.Warning" TargetType="Border" BasedOn="{StaticResource StatusChip}">
+        <Setter Property="BorderBrush" Value="{StaticResource State.Warning}" />
+    </Style>
+    <Style x:Key="StatusChip.Text" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+        <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+</ResourceDictionary>

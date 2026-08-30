@@ -1,0 +1,42 @@
+## Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+
+## Build logs produced by build/build.ps1
+build/logs/
+
+## Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+.vscode/
+
+## NuGet
+*.nupkg
+packages/
+!packages/build/
+
+## Test results
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+coverage*.json
+coverage*.xml
+
+## OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
+
+## Installer output
+build/installer-output/
+
+## Local scratch
+*.local.ps1
+scratch/

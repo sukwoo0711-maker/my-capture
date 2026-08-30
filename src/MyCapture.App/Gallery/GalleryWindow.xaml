@@ -1,0 +1,439 @@
+<Window x:Class="MyCapture.App.Gallery.GalleryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gallery="clr-namespace:MyCapture.App.Gallery"
+        x:ClassModifier="internal"
+        Title="MyCapture — 캡처 라이브러리"
+        Width="1120" Height="760"
+        MinWidth="720" MinHeight="480"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Surface.Base}"
+        Foreground="{StaticResource Text.Primary}">
+
+    <Window.Resources>
+
+        <!-- Tile action glyphs come from the shared Symbols.xaml resource dictionary
+             (Icon.Copy / Icon.Pin / Icon.More / Icon.Ocr / Icon.Delete), referenced by key. -->
+
+        <!-- A square icon-only ghost button for the compact tile actions. Fixed hit target,
+             fixed border thickness (focus changes colour only, never size). -->
+        <Style x:Key="Gallery.IconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Md}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Hover}" />
+                                <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Surface.Pressed}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                                <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.48" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
+            <!-- Outer track width (258 + 7*2 margin = 272) matches GalleryRowBuilder.TileTrackWidth,
+                 so the responsive column maths in the view model stay valid. Height is taller and
+                 the image row takes all remaining space: the capture is the dominant element. -->
+            <Border Width="258" Height="300" Margin="7"
+                    Background="{StaticResource Surface.Raised}"
+                    BorderBrush="{StaticResource Border.Subtle}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource Radius.Lg}"
+                    SnapsToDevicePixels="True"
+                    ToolTip="폴더나 바탕화면으로 드래그해 PNG 파일로 내보내기">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Image-first: the thumbnail fills the whole upper region. -->
+                    <Border Grid.Row="0"
+                            Background="{StaticResource Surface.Sunken}"
+                            BorderBrush="{StaticResource Border.Subtle}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            ClipToBounds="True">
+                        <Grid>
+                            <Image Source="{Binding Thumbnail}"
+                                   Margin="2"
+                                   Stretch="Uniform"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   AutomationProperties.Name="{Binding AccessibleName}" />
+                            <TextBlock Text="이미지를 읽을 수 없음"
+                                       Style="{StaticResource Text.MutedBlock}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding IsBroken, Converter={StaticResource BoolToVisibility}}" />
+
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Left" VerticalAlignment="Top"
+                                        Margin="8">
+                                <Border Padding="8,4" CornerRadius="6"
+                                        Background="{StaticResource Accent.Default}"
+                                        Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="고정됨" FontSize="{StaticResource FontSize.Caption}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource Text.OnAccent}" />
+                                </Border>
+                            </StackPanel>
+                            <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Margin="8" Padding="8,4" CornerRadius="6"
+                                    Background="{StaticResource Surface.Floating}"
+                                    BorderBrush="{StaticResource Border.Subtle}"
+                                    BorderThickness="1"
+                                    Visibility="{Binding HasAnnotations, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="편집됨" FontSize="{StaticResource FontSize.Caption}"
+                                           Foreground="{StaticResource Text.Secondary}" />
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- Caption + time -->
+                    <Grid Grid.Row="1" Margin="3,9,3,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Caption}"
+                                   Visibility="{Binding HasCaption, Converter={StaticResource BoolToVisibility}}"
+                                   Foreground="{StaticResource Text.Primary}"
+                                   FontWeight="SemiBold"
+                                   FontSize="{StaticResource FontSize.Body}"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding TimeCaption}"
+                                   Margin="10,0,0,0"
+                                   Foreground="{StaticResource Text.Muted}"
+                                   FontFamily="{StaticResource Font.Mono}"
+                                   FontSize="{StaticResource FontSize.Caption}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+
+                    <!-- Single action row: one primary Edit, compact icon Copy + Pin, and a
+                         discoverable More overflow holding OCR and Delete. -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Style="{StaticResource Button.Primary}"
+                                Content="편집" MinHeight="34"
+                                ToolTip="다시 편집 (Enter)"
+                                AutomationProperties.Name="다시 편집"
+                                Click="OnEditClick" />
+
+                        <Button Grid.Column="1" Style="{StaticResource Gallery.IconButton}"
+                                ToolTip="렌더링된 이미지 복사 (Ctrl+C)"
+                                AutomationProperties.Name="이미지 복사"
+                                Click="OnCopyClick">
+                            <Path Data="{StaticResource Icon.Copy}" Width="20" Height="20"
+                                  Stretch="None"
+                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round" Fill="Transparent" />
+                        </Button>
+
+                        <Button Grid.Column="2" Style="{StaticResource Gallery.IconButton}"
+                                ToolTip="고정 전환 (Space 또는 P)"
+                                AutomationProperties.Name="고정 전환"
+                                Click="OnPinClick">
+                            <Path Data="{StaticResource Icon.Pin}" Width="20" Height="20"
+                                  Stretch="None"
+                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round" Fill="Transparent" />
+                        </Button>
+
+                        <Button Grid.Column="3"
+                                Style="{StaticResource Gallery.IconButton}"
+                                ToolTip="더 보기 — 텍스트 인식, 삭제"
+                                AutomationProperties.Name="더 보기"
+                                Click="OnMoreClick">
+                            <Path Data="{StaticResource Icon.More}" Width="20" Height="20"
+                                  Stretch="None"
+                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round" />
+                            <Button.ContextMenu>
+                                <!-- The context menu inherits the button's DataContext (the tile
+                                     view model) via PlacementTarget, and each item carries the tile
+                                     as CommandParameter so the handler always resolves the right
+                                     record even though menu items are outside the visual tree. -->
+                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext,
+                                                                   RelativeSource={RelativeSource Self}}">
+                                    <MenuItem Header="텍스트 인식 (OCR)"
+                                              CommandParameter="{Binding}"
+                                              AutomationProperties.Name="텍스트 인식 (OCR)"
+                                              InputGestureText="T"
+                                              Click="OnOcrMenuClick">
+                                        <MenuItem.Icon>
+                                            <Path Data="{StaticResource Icon.Ocr}" Width="18" Height="18"
+                                                  Stretch="Uniform"
+                                                  Stroke="{StaticResource Text.Secondary}"
+                                                  StrokeThickness="1.6"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                  StrokeLineJoin="Round" Fill="Transparent" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator />
+                                    <MenuItem Header="삭제"
+                                              CommandParameter="{Binding}"
+                                              AutomationProperties.Name="삭제"
+                                              InputGestureText="Delete"
+                                              Foreground="{StaticResource State.DangerHover}"
+                                              Click="OnDeleteMenuClick">
+                                        <MenuItem.Icon>
+                                            <Path Data="{StaticResource Icon.Delete}" Width="18" Height="18"
+                                                  Stretch="Uniform"
+                                                  Stroke="{StaticResource State.DangerHover}"
+                                                  StrokeThickness="1.6"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                  StrokeLineJoin="Round" Fill="Transparent" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <Style x:Key="Gallery.TileRowList" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="Contained" />
+            <Setter Property="ItemTemplate" Value="{StaticResource Gallery.TileTemplate}" />
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Margin" Value="0" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Outline"
+                                            Background="Transparent"
+                                            BorderBrush="Transparent"
+                                            BorderThickness="2"
+                                            CornerRadius="16">
+                                        <ContentPresenter />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Outline" Property="Background" Value="{StaticResource Surface.Hover}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Outline" Property="Background" Value="{StaticResource Accent.Subtle}" />
+                                            <Setter TargetName="Outline" Property="BorderBrush" Value="{StaticResource Border.Accent}" />
+                                        </Trigger>
+                                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                            <Setter TargetName="Outline" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="Gallery.HeaderRowTemplate" DataType="{x:Type gallery:GalleryHeaderRow}">
+            <Grid Margin="8,16,8,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Heading}"
+                           Style="{StaticResource Text.Section}"
+                           AutomationProperties.Name="{Binding Heading}" />
+                <Border Grid.Column="1" Height="1" Margin="14,0,0,0"
+                        Background="{StaticResource Border.Subtle}"
+                        VerticalAlignment="Center" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="Gallery.TileRowTemplate" DataType="{x:Type gallery:GalleryTileRow}">
+            <ListBox Style="{StaticResource Gallery.TileRowList}"
+                     ItemsSource="{Binding Tiles}"
+                     SelectionChanged="OnTileSelectionChanged"
+                     KeyDown="OnTileKeyDown"
+                     PreviewMouseLeftButtonDown="OnTileMouseLeftButtonDown"
+                     PreviewMouseMove="OnTileMouseMove"
+                     MouseDoubleClick="OnTileDoubleClick" />
+        </DataTemplate>
+
+        <Style x:Key="Gallery.RowContainer" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ContentTemplate" Value="{StaticResource Gallery.TileRowTemplate}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Converter={StaticResource IsHeaderRow}}" Value="True">
+                    <Setter Property="ContentTemplate" Value="{StaticResource Gallery.HeaderRowTemplate}" />
+                    <Setter Property="IsHitTestVisible" Value="False" />
+                    <Setter Property="KeyboardNavigation.IsTabStop" Value="False" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="Gallery.RowsList" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+            <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling" />
+            <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="Contained" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource Gallery.RowContainer}" />
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel Orientation="Vertical" />
+                    </ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="26,22,22,22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Title only; the English all-caps eyebrow is removed. -->
+        <Grid Grid.Row="0" Margin="2,0,2,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="캡처 라이브러리" Style="{StaticResource Text.Display}" />
+                <TextBlock Text="저장한 이미지를 다시 편집하고, 복사하고, 파일로 꺼낼 수 있습니다. 카드를 폴더나 바탕화면으로 드래그하면 PNG로 내보냅니다."
+                           Style="{StaticResource Text.MutedBlock}" Margin="0,5,0,0" MaxWidth="620"
+                           HorizontalAlignment="Left" />
+            </StackPanel>
+            <Border Grid.Column="1" Style="{StaticResource Card}" Padding="14,8"
+                    VerticalAlignment="Center">
+                <TextBlock x:Name="SummaryLabel"
+                           Text="{Binding SummaryText}"
+                           Foreground="{StaticResource Text.Secondary}"
+                           FontSize="{StaticResource FontSize.Body}"
+                           AutomationProperties.Name="{Binding SummaryText}" />
+            </Border>
+        </Grid>
+
+        <!-- Search -->
+        <Border Grid.Row="1" Style="{StaticResource Card.Sunken}"
+                Padding="4" Margin="0,0,0,10">
+            <Grid>
+                <TextBox x:Name="SearchBox"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Padding="12,9"
+                         AutomationProperties.Name="검색"
+                         TextChanged="OnSearchTextChanged" />
+                <TextBlock IsHitTestVisible="False"
+                           Text="제목, 창 이름, 인식된 텍스트 검색  ·  Ctrl+F"
+                           Foreground="{StaticResource Text.Muted}"
+                           Margin="14,10"
+                           VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <ListBox x:Name="RowsList"
+                     Style="{StaticResource Gallery.RowsList}"
+                     ItemsSource="{Binding Rows}"
+                     SizeChanged="OnRowsListSizeChanged" />
+
+            <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Style="{StaticResource Card}" Padding="42,30"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel MaxWidth="380">
+                    <TextBlock Text="아직 표시할 캡처가 없습니다"
+                               Style="{StaticResource Text.Title}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock x:Name="EmptyStateLabel"
+                               Text="{Binding EmptyStateText}"
+                               Style="{StaticResource Text.MutedBlock}"
+                               Margin="0,8,0,0"
+                               TextAlignment="Center"
+                               AutomationProperties.Name="{Binding EmptyStateText}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

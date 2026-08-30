@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <!--
+    Deliberately minimal.
+
+    Microsoft.Data.Sqlite was evaluated and rejected. It pulls
+    SQLitePCLRaw.lib.e_sqlite3, which at the versions available here carries a
+    high-severity advisory (GHSA-2m69-gcr7-jv3q), and it adds a native binary per
+    architecture to the installer. The capture queue is capped at a few hundred
+    records, so an in-memory index persisted as JSON with atomic replace is both
+    sufficient and strictly simpler: no native dependency, no migration story, no
+    CVE surface. See docs/adr/0001-queue-storage.md.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="9.0.0" />
+    <PackageVersion Include="xunit" Version="2.9.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+  </ItemGroup>
+</Project>

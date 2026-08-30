@@ -1,0 +1,26 @@
+<Application x:Class="MyCapture.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gallery="clr-namespace:MyCapture.App.Gallery"
+             ShutdownMode="OnExplicitShutdown">
+    <!--
+      No StartupUri: this is a tray-resident application. The tray icon is the
+      only always-present surface, and windows are created on demand.
+      ShutdownMode=OnExplicitShutdown keeps the process alive when every window
+      is closed, which is required because closing the gallery must minimise to
+      tray rather than exit.
+    -->
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Tokens.xaml" />
+                <ResourceDictionary Source="Themes/Symbols.xaml" />
+                <ResourceDictionary Source="Themes/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <gallery:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+            <gallery:PinLabelConverter x:Key="PinLabel" />
+            <gallery:IsHeaderRowConverter x:Key="IsHeaderRow" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

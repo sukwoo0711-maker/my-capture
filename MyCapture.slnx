@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MyCapture.App/MyCapture.App.csproj" />
+    <Project Path="src/MyCapture.Core/MyCapture.Core.csproj" />
+    <Project Path="src/MyCapture.Ocr/MyCapture.Ocr.csproj" />
+    <Project Path="src/MyCapture.Platform/MyCapture.Platform.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyCapture.Core.Tests/MyCapture.Core.Tests.csproj" />
+    <Project Path="tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj" />
+  </Folder>
+</Solution>
