@@ -938,6 +938,13 @@ public partial class App : Application
             record => Path.Combine(_queue.GetDirectory(record), CaptureFileNames.Thumbnail),
             _settings.Queue.ThumbnailLongEdge);
 
+        var ocrIndexing = new MyCapture.App.Ocr.OcrIndexingService(
+            _galleryController,
+            _ocrService ?? _services.GetRequiredService<IOcrService>(),
+            record => _queue.GetDirectory(record),
+            () => _settings!.Ocr,
+            _services.GetRequiredService<ILogger<MyCapture.App.Ocr.OcrIndexingService>>());
+
         var window = new GalleryWindow(
             viewModel,
             _galleryController,
@@ -946,6 +953,7 @@ public partial class App : Application
             _queue,
             _ocrPresenter!,
             () => _settings!.Ocr,
+            ocrIndexing,
             _services.GetRequiredService<ILogger<GalleryWindow>>());
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.

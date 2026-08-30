@@ -359,6 +359,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -413,7 +414,41 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="2">
+        <!-- OCR full-text search coverage banner (Row 2). Shown only when part of the
+             library is not yet searchable by the text inside the images, or when no OCR
+             language pack is installed. Collapsed by default; the code-behind sets its
+             state when the gallery opens and after an indexing pass. -->
+        <Border x:Name="OcrCoverageBanner" Grid.Row="2"
+                Style="{StaticResource Card}" Padding="14,10" Margin="0,0,0,10"
+                Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="OcrCoverageHeadline"
+                               Foreground="{StaticResource Text.Primary}"
+                               FontWeight="SemiBold"
+                               FontSize="{StaticResource FontSize.Body}" />
+                    <TextBlock x:Name="OcrCoverageDetail"
+                               Foreground="{StaticResource Text.Secondary}"
+                               FontSize="{StaticResource FontSize.Caption}"
+                               Margin="0,3,0,0"
+                               TextWrapping="Wrap" MaxWidth="760"
+                               HorizontalAlignment="Left" />
+                </StackPanel>
+                <Button x:Name="OcrIndexButton" Grid.Column="1"
+                        Style="{StaticResource Button.Primary}"
+                        Content="지금 색인" MinHeight="34"
+                        VerticalAlignment="Center" Margin="14,0,0,0"
+                        ToolTip="아직 검색되지 않는 캡처의 텍스트를 인식해 전문 검색에 포함합니다"
+                        AutomationProperties.Name="캡처 전문 색인 시작"
+                        Click="OnOcrIndexClick" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="3">
             <ListBox x:Name="RowsList"
                      Style="{StaticResource Gallery.RowsList}"
                      ItemsSource="{Binding Rows}"

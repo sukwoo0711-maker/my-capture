@@ -42,12 +42,15 @@ internal sealed partial class GalleryWindow : Window
     private readonly GalleryDragExportService _dragExport;
     private readonly OcrResultPresenter _ocrPresenter;
     private readonly Func<OcrSettings> _ocrSettings;
+    private readonly MyCapture.App.Ocr.OcrIndexingService _ocrIndexing;
     private readonly ILogger _log;
 
     private bool _allowClose;
     private Point _dragStart;
     private GalleryItemViewModel? _dragTile;
     private bool _dragArmed;
+    private bool _ocrIndexingRunning;
+    private CancellationTokenSource? _ocrIndexingCts;
 
     internal GalleryWindow(
         GalleryViewModel viewModel,
@@ -57,6 +60,7 @@ internal sealed partial class GalleryWindow : Window
         CaptureQueue queue,
         OcrResultPresenter ocrPresenter,
         Func<OcrSettings> ocrSettings,
+        MyCapture.App.Ocr.OcrIndexingService ocrIndexing,
         ILogger log)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
@@ -67,6 +71,7 @@ internal sealed partial class GalleryWindow : Window
         _dragExport = new GalleryDragExportService(_queue);
         _ocrPresenter = ocrPresenter ?? throw new ArgumentNullException(nameof(ocrPresenter));
         _ocrSettings = ocrSettings ?? throw new ArgumentNullException(nameof(ocrSettings));
+        _ocrIndexing = ocrIndexing ?? throw new ArgumentNullException(nameof(ocrIndexing));
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
@@ -88,6 +93,7 @@ internal sealed partial class GalleryWindow : Window
     internal void ShowGallery()
     {
         _viewModel.Refresh();
+        RefreshOcrCoverageBanner();
 
         if (!IsVisible)
         {
@@ -135,6 +141,100 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnSearchTextChanged(object sender, TextChangedEventArgs e) =>
         _viewModel.SearchQuery = SearchBox.Text;
+
+    // ---- OCR full-text search coverage -------------------------------------------------
+
+    /// <summary>
+    /// Updates the coverage banner: hidden when the whole library is already searchable and
+    /// OCR is available; a "no language pack" advisory when the OS engine is missing; otherwise
+    /// an "N captures not yet searchable — index now" prompt. This is what turns full-text
+    /// search from a per-capture manual action into a property of the whole history.
+    /// </summary>
+    private void RefreshOcrCoverageBanner()
+    {
+        if (_ocrIndexingRunning)
+        {
+            return; // The running pass owns the banner text until it finishes.
+        }
+
+        if (!_ocrIndexing.IsAvailable)
+        {
+            // No OS OCR language pack: show explicit guidance instead of a silent no-op,
+            // and hide the index button since indexing cannot run.
+            OcrAvailability unavailable = OcrAvailability.Describe(false, System.Array.Empty<string>());
+            OcrCoverageHeadline.Text = unavailable.Headline;
+            OcrCoverageDetail.Text = unavailable.Detail;
+            OcrIndexButton.Visibility = Visibility.Collapsed;
+            OcrCoverageBanner.Visibility = Visibility.Visible;
+            return;
+        }
+
+        OcrCoverage coverage = _ocrIndexing.Coverage;
+        if (coverage.IsComplete)
+        {
+            OcrCoverageBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        OcrCoverageHeadline.Text = string.Create(
+            System.Globalization.CultureInfo.CurrentCulture,
+            $"검색되지 않는 캡처 {coverage.Missing}개");
+        OcrCoverageDetail.Text = string.Create(
+            System.Globalization.CultureInfo.CurrentCulture,
+            $"이미지 속 글자로 검색하려면 텍스트 인식이 필요합니다. 전체 {coverage.Total}개 중 {coverage.WithOcrText}개가 검색 가능합니다. 모든 인식은 이 PC에서 오프라인으로 수행됩니다.");
+        OcrIndexButton.Visibility = Visibility.Visible;
+        OcrIndexButton.IsEnabled = true;
+        OcrCoverageBanner.Visibility = Visibility.Visible;
+    }
+
+    private async void OnOcrIndexClick(object sender, RoutedEventArgs e)
+    {
+        if (_ocrIndexingRunning)
+        {
+            // Second click cancels an in-progress pass.
+            _ocrIndexingCts?.Cancel();
+            return;
+        }
+
+        _ocrIndexingRunning = true;
+        _ocrIndexingCts = new System.Threading.CancellationTokenSource();
+        OcrIndexButton.Content = "중지";
+        OcrCoverageBanner.Visibility = Visibility.Visible;
+
+        var progress = new System.Progress<MyCapture.App.Ocr.OcrIndexingProgress>(p =>
+        {
+            OcrCoverageHeadline.Text = string.Create(
+                System.Globalization.CultureInfo.CurrentCulture,
+                $"색인 중… {p.Processed}/{p.Total}");
+            OcrCoverageDetail.Text = string.Create(
+                System.Globalization.CultureInfo.CurrentCulture,
+                $"{p.Indexed}개에서 텍스트를 찾아 검색에 추가했습니다.");
+        });
+
+        MyCapture.App.Ocr.OcrIndexingOutcome outcome;
+        try
+        {
+            outcome = await _ocrIndexing.IndexMissingAsync(progress, _ocrIndexingCts.Token);
+        }
+        catch (System.Exception ex)
+        {
+            _log.LogWarning(ex, "OCR indexing pass failed");
+            outcome = MyCapture.App.Ocr.OcrIndexingOutcome.Cancelled;
+        }
+        finally
+        {
+            _ocrIndexingCts.Dispose();
+            _ocrIndexingCts = null;
+            _ocrIndexingRunning = false;
+            OcrIndexButton.Content = "지금 색인";
+        }
+
+        _log.LogInformation("OCR indexing pass ended: {Outcome}", outcome);
+
+        // Newly indexed text is now searchable; refresh the grid and the banner.
+        _viewModel.Refresh();
+        RefreshOcrCoverageBanner();
+    }
 
     // ---- Responsive columns --------------------------------------------------------
 
