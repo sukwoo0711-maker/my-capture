@@ -9,6 +9,9 @@ publish/
 ## Build logs produced by build/build.ps1
 build/logs/
 
+## Stray build/verification logs at repo root (transient tool output)
+/*.log
+
 ## Visual Studio / Rider / VS Code
 .vs/
 .idea/
