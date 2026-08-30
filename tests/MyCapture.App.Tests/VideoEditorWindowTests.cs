@@ -98,6 +98,7 @@ public sealed class VideoEditorWindowTests
             TwoLineTimeline timeline = editor.TimelineForTest;
             Assert.True(timeline.IsEnabled, "two-line timeline stayed disabled after media became ready");
             Assert.Equal(editor.DurationMsForTest, timeline.DurationMs, precision: 1);
+            Assert.Equal(9, timeline.FixedVisualCountForTest);
             Assert.Equal(2, editor.ControlRowCountForTest);
             Assert.True(
                 editor.WidestControlRowWidthForTest <= editor.ControlAreaWidthForTest + 0.5,
@@ -107,6 +108,34 @@ public sealed class VideoEditorWindowTests
             Assert.Contains("시작", timeline.DetailRangeText, StringComparison.Ordinal);
             Assert.Contains("끝", timeline.DetailRangeText, StringComparison.Ordinal);
             Assert.Contains("프레임", timeline.DetailRangeText, StringComparison.Ordinal);
+
+            // Exercise the real timeline -> latest-wins coordinator -> MediaElement adapter path
+            // against the real MP4. The dispatcher is pumped rather than synchronously waiting,
+            // because MediaElement is UI-affine by contract.
+            double previewTarget = editor.DurationMsForTest * 0.35;
+            timeline.SeekFromOverview(previewTarget);
+            PreviewSeekCoordinator coordinator = editor.PreviewSeekCoordinatorForTest;
+            DateTime previewDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+            while (coordinator.PresentedGeneration == 0 && DateTime.UtcNow < previewDeadline)
+            {
+                PumpFor(TimeSpan.FromMilliseconds(10));
+            }
+
+            Assert.True(coordinator.PresentedGeneration > 0, "real MediaElement preview seek did not complete");
+            Assert.Equal(previewTarget, coordinator.IntentPositionMs, precision: 1);
+            Assert.Equal(previewTarget, coordinator.RequestedPreviewPositionMs, precision: 1);
+
+            double exactTarget = editor.DurationMsForTest * 0.65;
+            long exactGeneration = coordinator.RequestExact(exactTarget);
+            DateTime exactDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+            while (coordinator.PresentedGeneration != exactGeneration && DateTime.UtcNow < exactDeadline)
+            {
+                PumpFor(TimeSpan.FromMilliseconds(10));
+            }
+
+            Assert.Equal(exactGeneration, coordinator.PresentedGeneration);
+            Assert.Equal(PreviewSeekMode.Exact, coordinator.PresentedMode);
+            Assert.Equal(exactTarget, coordinator.RequestedPreviewPositionMs, precision: 1);
 
             double initialSpan = timeline.VisibleSpanMs;
             timeline.SetPlayhead(editor.DurationMsForTest / 2.0);

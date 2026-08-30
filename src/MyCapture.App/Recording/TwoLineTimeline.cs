@@ -15,10 +15,11 @@ namespace MyCapture.App.Recording;
 /// </summary>
 /// <remarks>
 /// All time/pixel maths is delegated to <see cref="TimelineViewport"/>,
-/// <see cref="TrimSelection"/> and <see cref="FrameStepCalculator"/>. This control owns only
-/// WPF drawing, hit testing and the visual explanation of the overview-to-detail relationship.
+/// <see cref="TrimSelection"/> and <see cref="FrameStepCalculator"/>. Rendering uses three
+/// fixed DrawingVisual layers per strip; pointer input only mutates state and marks layers
+/// dirty, and loaded controls draw at most once on the next composition frame.
 /// </remarks>
-internal sealed class TwoLineTimeline : ContentControl
+internal sealed class TwoLineTimeline : ContentControl, IDisposable
 {
     private const double OverviewHeight = 58.0;
     private const double DetailHeight = 64.0;
@@ -27,11 +28,34 @@ internal sealed class TwoLineTimeline : ContentControl
     private const double BrushGripWidth = 12.0;
     private const double TrimHandleWidth = 12.0;
 
-    private readonly Canvas _overview = new() { Height = OverviewHeight, ClipToBounds = true };
-    private readonly Canvas _connector = new() { Height = ConnectorHeight, IsHitTestVisible = false };
-    private readonly Canvas _detail = new() { Height = DetailHeight, ClipToBounds = true };
+    private readonly TimelineRenderSurface _overview;
+    private readonly TimelineRenderSurface _connector;
+    private readonly TimelineRenderSurface _detail;
     private readonly TextBlock _overviewCaption;
     private readonly TextBlock _detailCaption;
+    private readonly CompositionFrameScheduler _renderScheduler;
+
+    private readonly Brush _surfaceSunken;
+    private readonly Brush _surfaceBase;
+    private readonly Brush _surfaceScrim;
+    private readonly Brush _textPrimary;
+    private readonly Brush _textSecondary;
+    private readonly Brush _textMuted;
+    private readonly Brush _borderSubtle;
+    private readonly Brush _accent;
+    private readonly Brush _accentSubtle;
+    private readonly Brush _playhead;
+    private readonly Brush _outside;
+    private readonly Pen _majorTickPen;
+    private readonly Pen _minorTickPen;
+    private readonly Pen _detailGroupPen;
+    private readonly Pen _accentOutlinePen;
+    private readonly Pen _connectorPen;
+    private readonly Pen _playheadPen;
+    private readonly Pen _gripMarkPen;
+    private readonly Typeface _regularTypeface;
+    private readonly Typeface _semiBoldTypeface;
+    private readonly StreamGeometry _playheadMarker;
 
     private int _fps = 15;
     private double _durationMs = 1;
@@ -51,6 +75,40 @@ internal sealed class TwoLineTimeline : ContentControl
         Focusable = false;
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
+
+        _surfaceSunken = ResolveBrush("Surface.Sunken", Color.FromRgb(0x1B, 0x17, 0x12));
+        _surfaceBase = ResolveBrush("Surface.Base", Color.FromRgb(0x1B, 0x17, 0x12));
+        _surfaceScrim = ResolveBrush("Surface.Scrim", Color.FromArgb(0xB8, 0x00, 0x00, 0x00));
+        _textPrimary = ResolveBrush("Text.Primary", Colors.White);
+        _textSecondary = ResolveBrush("Text.Secondary", Colors.LightGray);
+        _textMuted = ResolveBrush("Text.Muted", Colors.Gray);
+        _borderSubtle = ResolveBrush("Border.Subtle", Colors.DimGray);
+        _accent = ResolveBrush("Accent.Default", Color.FromRgb(0xE0, 0xA8, 0x20));
+        _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromArgb(0x50, 0xFF, 0xD4, 0x00));
+        _playhead = ResolveBrush("Accent.Cool", Color.FromRgb(0x66, 0xB7, 0xFF));
+        _outside = FrozenBrush(Color.FromArgb(0x86, 0x00, 0x00, 0x00));
+
+        _majorTickPen = CreatePen(_textSecondary, 3.0);
+        _minorTickPen = CreatePen(_borderSubtle, 1.0);
+        _detailGroupPen = CreatePen(_textMuted, 1.6);
+        _accentOutlinePen = CreatePen(_accent, 3.0);
+        _connectorPen = CreatePen(_accent, 2.0);
+        _playheadPen = CreatePen(_playhead, 2.6);
+        _gripMarkPen = CreatePen(_surfaceSunken, 2.0);
+
+        FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
+            ?? new FontFamily("Segoe UI");
+        _regularTypeface = new Typeface(uiFont, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        _semiBoldTypeface = new Typeface(uiFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        _playheadMarker = BuildPlayheadMarker();
+
+        _renderScheduler = new CompositionFrameScheduler(Dispatcher, RenderDirtyLayers);
+        _overview = new TimelineRenderSurface(OverviewHeight, DrawOverviewLayer);
+        _connector = new TimelineRenderSurface(ConnectorHeight, DrawConnectorLayer) { IsHitTestVisible = false };
+        _detail = new TimelineRenderSurface(DetailHeight, DrawDetailLayer);
+        _overview.LayersInvalidated += OnLayersInvalidated;
+        _connector.LayersInvalidated += OnLayersInvalidated;
+        _detail.LayersInvalidated += OnLayersInvalidated;
 
         _overviewCaption = BuildCaption();
         _detailCaption = BuildCaption();
@@ -78,17 +136,19 @@ internal sealed class TwoLineTimeline : ContentControl
         _detail.MouseLeftButtonUp += (_, e) => EndDrag(_detail, e);
         _overview.MouseLeave += (_, _) => { if (_drag == DragMode.None) { _overview.Cursor = Cursors.Hand; } };
         _detail.MouseLeave += (_, _) => { if (_drag == DragMode.None) { _detail.Cursor = Cursors.Cross; } };
-        _overview.LostMouseCapture += (_, _) => _drag = DragMode.None;
-        _detail.LostMouseCapture += (_, _) => _drag = DragMode.None;
+        _overview.LostMouseCapture += OnLostMouseCapture;
+        _detail.LostMouseCapture += OnLostMouseCapture;
         _detail.MouseWheel += OnDetailWheel;
-        _overview.SizeChanged += (_, _) => Redraw();
-        _connector.SizeChanged += (_, _) => Redraw();
-        _detail.SizeChanged += (_, _) => Redraw();
         IsEnabledChanged += (_, _) => Opacity = IsEnabled ? 1.0 : 0.5;
+        Loaded += (_, _) => RequestRenderIfDirty();
+        Unloaded += (_, _) => _renderScheduler.CancelPending();
     }
 
-    /// <summary>Raised when the user moves the playhead (ms). Frame-snapped on detail.</summary>
+    /// <summary>Raised for immediate visual intent while the user moves the playhead.</summary>
     internal event EventHandler<double>? PlayheadChanged;
+
+    /// <summary>Raised once after a pointer playhead interaction finishes; use for exact seek.</summary>
+    internal event EventHandler<double>? PlayheadInteractionCompleted;
 
     /// <summary>Raised when the trim In/Out changes.</summary>
     internal event EventHandler? TrimChanged;
@@ -119,6 +179,20 @@ internal sealed class TwoLineTimeline : ContentControl
 
     internal string DetailRangeText => _detailCaption.Text;
 
+    internal int FixedVisualCountForTest =>
+        _overview.FixedVisualCount + _connector.FixedVisualCount + _detail.FixedVisualCount;
+
+    internal long RenderRequestCountForTest => _renderScheduler.RequestCount;
+
+    internal long CoalescedRenderRequestCountForTest => _renderScheduler.CoalescedRequestCount;
+
+    internal long RenderFrameCountForTest => _renderScheduler.RenderFrameCount;
+
+    internal long TransientDrawCountForTest =>
+        _overview.TransientDrawCount + _connector.TransientDrawCount + _detail.TransientDrawCount;
+
+    internal void FlushRenderForTest() => _renderScheduler.FlushForTest();
+
     internal void Initialize(double durationMs, int fps)
     {
         _durationMs = Math.Max(1, durationMs);
@@ -135,45 +209,55 @@ internal sealed class TwoLineTimeline : ContentControl
             _viewport.SetView(0, initialDetailSpan);
         }
 
-        Redraw();
+        UpdateRangeCaptions();
+        InvalidateAll();
     }
 
     /// <summary>Externally sets the playhead and keeps it inside the detail viewport.</summary>
     internal void SetPlayhead(double ms, bool ensureVisible = true)
     {
         _playheadMs = Math.Clamp(ms, 0, _durationMs);
+        double beforeStart = _viewport.ViewStartMs;
+        double beforeEnd = _viewport.ViewEndMs;
         if (ensureVisible)
         {
             _viewport.EnsureVisible(_playheadMs);
         }
 
-        Redraw();
+        if (ViewportChanged(beforeStart, beforeEnd))
+        {
+            InvalidateViewport();
+        }
+        else
+        {
+            InvalidatePlayhead();
+        }
     }
 
     internal void SetIn(double ms)
     {
         _trim.SetIn(ms);
-        Redraw();
+        InvalidateRange();
         TrimChanged?.Invoke(this, EventArgs.Empty);
     }
 
     internal void SetOut(double ms)
     {
         _trim.SetOut(ms);
-        Redraw();
+        InvalidateRange();
         TrimChanged?.Invoke(this, EventArgs.Empty);
     }
 
     internal void FitAll()
     {
         _viewport.FitAll();
-        Redraw();
+        InvalidateViewport();
     }
 
     internal void ZoomAroundPlayhead(double factor)
     {
         _viewport.Zoom(_playheadMs, factor);
-        Redraw();
+        InvalidateViewport();
     }
 
     internal void SeekFromOverview(double ms) =>
@@ -185,11 +269,11 @@ internal sealed class TwoLineTimeline : ContentControl
     {
         double centre = _viewport.PxToMs(e.GetPosition(_detail).X, _detail.ActualWidth);
         _viewport.Zoom(centre, e.Delta > 0 ? 0.8 : 1.25);
-        Redraw();
+        InvalidateViewport();
         e.Handled = true;
     }
 
-    private void OnStripDown(Canvas strip, MouseButtonEventArgs e, bool isOverview)
+    private void OnStripDown(TimelineRenderSurface strip, MouseButtonEventArgs e, bool isOverview)
     {
         double x = e.GetPosition(strip).X;
         double width = strip.ActualWidth;
@@ -252,7 +336,7 @@ internal sealed class TwoLineTimeline : ContentControl
         e.Handled = true;
     }
 
-    private void OnStripMove(Canvas eventStrip, MouseEventArgs e)
+    private void OnStripMove(TimelineRenderSurface eventStrip, MouseEventArgs e)
     {
         if (_drag == DragMode.None)
         {
@@ -260,7 +344,7 @@ internal sealed class TwoLineTimeline : ContentControl
             return;
         }
 
-        Canvas strip = _drag is DragMode.BrushBody or DragMode.BrushLeft or DragMode.BrushRight
+        TimelineRenderSurface strip = _drag is DragMode.BrushBody or DragMode.BrushLeft or DragMode.BrushRight
             ? _overview
             : _detail;
         if (_drag == DragMode.Playhead)
@@ -298,16 +382,16 @@ internal sealed class TwoLineTimeline : ContentControl
                 {
                     double targetStart = OverviewPxToMs(x, width) - _dragAnchorMs;
                     _viewport.Pan(targetStart - _viewport.ViewStartMs);
-                    Redraw();
+                    InvalidateViewport();
                 }
                 break;
             case DragMode.BrushLeft:
                 _viewport.SetView(OverviewPxToMs(x, width), _viewport.ViewEndMs);
-                Redraw();
+                InvalidateViewport();
                 break;
             case DragMode.BrushRight:
                 _viewport.SetView(_viewport.ViewStartMs, OverviewPxToMs(x, width));
-                Redraw();
+                InvalidateViewport();
                 break;
             case DragMode.TrimIn:
                 SetIn(FrameStepCalculator.SnapToFrame(_viewport.PxToMs(x, width), _fps, _durationMs));
@@ -318,7 +402,7 @@ internal sealed class TwoLineTimeline : ContentControl
         }
     }
 
-    private void EndDrag(Canvas strip, MouseButtonEventArgs e)
+    private void EndDrag(TimelineRenderSurface strip, MouseButtonEventArgs e)
     {
         DragMode completed = _drag;
         bool coarseClick = completed == DragMode.BrushBody && !_dragMoved && ReferenceEquals(strip, _overview);
@@ -336,11 +420,26 @@ internal sealed class TwoLineTimeline : ContentControl
             SeekFromOverview(OverviewPxToMs(x, width));
         }
 
+        if (completed == DragMode.Playhead || coarseClick)
+        {
+            PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
+        }
+
         UpdateCursor(strip, x);
         e.Handled = true;
     }
 
-    private void UpdateCursor(Canvas strip, double x)
+    private void OnLostMouseCapture(object sender, MouseEventArgs e)
+    {
+        bool reconcile = _drag == DragMode.Playhead;
+        _drag = DragMode.None;
+        if (reconcile)
+        {
+            PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
+        }
+    }
+
+    private void UpdateCursor(TimelineRenderSurface strip, double x)
     {
         double width = strip.ActualWidth;
         if (width <= 0)
@@ -382,13 +481,23 @@ internal sealed class TwoLineTimeline : ContentControl
             clamped = FrameStepCalculator.SnapToFrame(clamped, _fps, _durationMs);
         }
 
+        double beforeStart = _viewport.ViewStartMs;
+        double beforeEnd = _viewport.ViewEndMs;
         _playheadMs = clamped;
         if (followDetail && !IsVisibleInDetail(clamped))
         {
             CenterDetailOn(clamped);
         }
 
-        Redraw();
+        if (ViewportChanged(beforeStart, beforeEnd))
+        {
+            InvalidateViewport();
+        }
+        else
+        {
+            InvalidatePlayhead();
+        }
+
         PlayheadChanged?.Invoke(this, _playheadMs);
     }
 
@@ -398,14 +507,67 @@ internal sealed class TwoLineTimeline : ContentControl
         _viewport.Pan(targetStart - _viewport.ViewStartMs);
     }
 
-    // ---- drawing ----
+    // ---- dirty-layer scheduling ----
 
-    private void Redraw()
+    private void InvalidateAll()
+    {
+        _overview.InvalidateLayers(TimelineRenderLayer.All);
+        _connector.InvalidateLayers(TimelineRenderLayer.All);
+        _detail.InvalidateLayers(TimelineRenderLayer.All);
+    }
+
+    private void InvalidateViewport()
     {
         UpdateRangeCaptions();
-        DrawOverview();
-        DrawConnector();
-        DrawDetail();
+        _overview.InvalidateLayers(TimelineRenderLayer.Range);
+        _connector.InvalidateLayers(TimelineRenderLayer.Range);
+        _detail.InvalidateLayers(TimelineRenderLayer.All);
+    }
+
+    private void InvalidateRange()
+    {
+        _overview.InvalidateLayers(TimelineRenderLayer.Range);
+        _detail.InvalidateLayers(TimelineRenderLayer.Range);
+    }
+
+    private void InvalidatePlayhead()
+    {
+        _overview.InvalidateLayers(TimelineRenderLayer.Transient);
+        _detail.InvalidateLayers(TimelineRenderLayer.Transient);
+    }
+
+    private bool ViewportChanged(double beforeStart, double beforeEnd) =>
+        Math.Abs(beforeStart - _viewport.ViewStartMs) > 0.001
+        || Math.Abs(beforeEnd - _viewport.ViewEndMs) > 0.001;
+
+    private void OnLayersInvalidated(object? sender, EventArgs e)
+    {
+        if (IsLoaded)
+        {
+            _renderScheduler.Request();
+        }
+        else
+        {
+            // Headless STA tests and pre-load layout still need deterministic visuals.
+            RenderDirtyLayers();
+        }
+    }
+
+    private void RequestRenderIfDirty()
+    {
+        if (_overview.DirtyLayers != TimelineRenderLayer.None
+            || _connector.DirtyLayers != TimelineRenderLayer.None
+            || _detail.DirtyLayers != TimelineRenderLayer.None)
+        {
+            _renderScheduler.Request();
+        }
+    }
+
+    private void RenderDirtyLayers()
+    {
+        _overview.RenderDirtyLayers();
+        _connector.RenderDirtyLayers();
+        _detail.RenderDirtyLayers();
     }
 
     private void UpdateRangeCaptions()
@@ -425,248 +587,243 @@ internal sealed class TwoLineTimeline : ContentControl
         AutomationProperties.SetName(_detail, _detailCaption.Text);
     }
 
-    private void DrawOverview()
+    // ---- DrawingVisual layers ----
+
+    private void DrawOverviewLayer(DrawingContext dc, TimelineRenderLayer layer, Size size)
     {
-        _overview.Children.Clear();
-        double width = _overview.ActualWidth;
-        double height = _overview.Height;
-        if (width <= 0)
+        double width = size.Width;
+        double height = size.Height;
+        switch (layer)
         {
-            return;
+            case TimelineRenderLayer.Static:
+                dc.DrawRectangle(_surfaceSunken, null, new Rect(size));
+                double majorMs = CoarseIntervalMs;
+                double minorMs = majorMs / 4.0;
+                int minorCount = Math.Max(1, (int)Math.Ceiling(_durationMs / minorMs));
+                for (int index = 0; index <= minorCount; index++)
+                {
+                    double time = Math.Min(_durationMs, index * minorMs);
+                    double x = OverviewMsToPx(time, width);
+                    bool major = index % 4 == 0;
+                    DrawLine(dc, major ? _majorTickPen : _minorTickPen, x,
+                        major ? height * 0.34 : height * 0.70, x, height);
+                    if (major)
+                    {
+                        DrawText(dc, FormatTickLabel(time),
+                            Math.Clamp(x + 4, 3, Math.Max(3, width - 54)), 2,
+                            _textSecondary, 11, semiBold: true, background: null, centered: false);
+                    }
+                }
+
+                DrawLine(dc, _majorTickPen, width - 1.5, height * 0.20, width - 1.5, height);
+                break;
+
+            case TimelineRenderLayer.Range:
+                double trimInX = OverviewMsToPx(_trim.InMs, width);
+                double trimOutX = OverviewMsToPx(_trim.OutMs, width);
+                DrawRect(dc, trimInX, height - 7, trimOutX - trimInX, 7, _accentSubtle, null);
+
+                double brushLeft = OverviewMsToPx(_viewport.ViewStartMs, width);
+                double brushRight = OverviewMsToPx(_viewport.ViewEndMs, width);
+                double brushWidth = Math.Max(3, brushRight - brushLeft);
+                DrawRect(dc, 0, 0, brushLeft, height, _outside, null);
+                DrawRect(dc, brushRight, 0, width - brushRight, height, _outside, null);
+                DrawRect(dc, brushLeft, 0, brushWidth, height, _accentSubtle, _accentOutlinePen);
+
+                double gripWidth = Math.Min(BrushGripWidth, Math.Max(4, brushWidth / 2.0));
+                DrawRect(dc, brushLeft, 0, gripWidth, height, _accent, null);
+                DrawRect(dc, brushRight - gripWidth, 0, gripWidth, height, _accent, null);
+                DrawLine(dc, _gripMarkPen, brushLeft + gripWidth / 2.0, height * 0.32,
+                    brushLeft + gripWidth / 2.0, height * 0.68);
+                DrawLine(dc, _gripMarkPen, brushRight - gripWidth / 2.0, height * 0.32,
+                    brushRight - gripWidth / 2.0, height * 0.68);
+
+                if (brushWidth >= 145)
+                {
+                    DrawText(dc,
+                        $"{FormatMs(_viewport.ViewStartMs)} – {FormatMs(_viewport.ViewEndMs)}",
+                        (brushLeft + brushRight) / 2.0, height * 0.43,
+                        _textPrimary, 12, semiBold: true, _surfaceScrim, centered: true);
+                }
+                break;
+
+            case TimelineRenderLayer.Transient:
+                DrawPlayhead(dc, OverviewMsToPx(_playheadMs, width), height);
+                break;
         }
-
-        _overview.Background = Brush("Surface.Sunken", Color.FromRgb(0x1B, 0x17, 0x12));
-
-        double majorMs = CoarseIntervalMs;
-        double minorMs = majorMs / 4.0;
-        int minorCount = Math.Max(1, (int)Math.Ceiling(_durationMs / minorMs));
-        for (int index = 0; index <= minorCount; index++)
-        {
-            double time = Math.Min(_durationMs, index * minorMs);
-            double x = OverviewMsToPx(time, width);
-            bool major = index % 4 == 0;
-            AddLine(
-                _overview,
-                x,
-                major ? height * 0.34 : height * 0.70,
-                x,
-                height,
-                major ? Brush("Text.Secondary", Colors.LightGray) : Brush("Border.Subtle", Colors.DimGray),
-                major ? 3.0 : 1.0);
-
-            if (major)
-            {
-                AddText(
-                    _overview,
-                    FormatTickLabel(time),
-                    Math.Clamp(x + 4, 3, Math.Max(3, width - 54)),
-                    2,
-                    Brush("Text.Secondary", Colors.LightGray),
-                    11,
-                    FontWeights.SemiBold,
-                    null);
-            }
-        }
-
-        // Always show the clip end as a heavy boundary, even when it is between regular marks.
-        AddLine(_overview, width - 1.5, height * 0.20, width - 1.5, height,
-            Brush("Text.Secondary", Colors.LightGray), 3.0);
-
-        // Trim is a separate bottom band; it must not wash out the overview viewport guide.
-        double trimInX = OverviewMsToPx(_trim.InMs, width);
-        double trimOutX = OverviewMsToPx(_trim.OutMs, width);
-        AddRect(
-            _overview,
-            trimInX,
-            height - 7,
-            Math.Max(0, trimOutX - trimInX),
-            7,
-            Brush("Accent.Subtle", Color.FromArgb(0x50, 0xFF, 0xD4, 0x00)),
-            null,
-            0);
-
-        double brushLeft = OverviewMsToPx(_viewport.ViewStartMs, width);
-        double brushRight = OverviewMsToPx(_viewport.ViewEndMs, width);
-        double brushWidth = Math.Max(3, brushRight - brushLeft);
-
-        // Darken everything not represented by the detail strip. This gives the selected upper
-        // range substantially more visual weight than a thin outline alone.
-        Brush outside = new SolidColorBrush(Color.FromArgb(0x86, 0x00, 0x00, 0x00));
-        AddRect(_overview, 0, 0, Math.Max(0, brushLeft), height, outside, null, 0);
-        AddRect(_overview, brushRight, 0, Math.Max(0, width - brushRight), height, outside, null, 0);
-
-        Brush accent = Brush("Accent.Default", Color.FromRgb(0xE0, 0xA8, 0x20));
-        AddRect(
-            _overview,
-            brushLeft,
-            0,
-            brushWidth,
-            height,
-            Brush("Accent.Subtle", Color.FromArgb(0x38, 0xE0, 0xA8, 0x20)),
-            accent,
-            3.0);
-
-        double gripWidth = Math.Min(BrushGripWidth, Math.Max(4, brushWidth / 2.0));
-        AddRect(_overview, brushLeft, 0, gripWidth, height, accent, null, 0);
-        AddRect(_overview, brushRight - gripWidth, 0, gripWidth, height, accent, null, 0);
-        Brush gripMark = Brush("Surface.Sunken", Color.FromRgb(0x1B, 0x17, 0x12));
-        AddLine(_overview, brushLeft + gripWidth / 2.0, height * 0.32, brushLeft + gripWidth / 2.0, height * 0.68, gripMark, 2);
-        AddLine(_overview, brushRight - gripWidth / 2.0, height * 0.32, brushRight - gripWidth / 2.0, height * 0.68, gripMark, 2);
-
-        if (brushWidth >= 145)
-        {
-            AddCenteredText(
-                _overview,
-                $"{FormatMs(_viewport.ViewStartMs)} – {FormatMs(_viewport.ViewEndMs)}",
-                (brushLeft + brushRight) / 2.0,
-                height * 0.43,
-                Brush("Text.Primary", Colors.White),
-                12,
-                FontWeights.SemiBold,
-                Brush("Surface.Scrim", Color.FromArgb(0xB8, 0x00, 0x00, 0x00)));
-        }
-
-        AddPlayhead(_overview, OverviewMsToPx(_playheadMs, width), height);
     }
 
-    private void DrawConnector()
+    private void DrawConnectorLayer(DrawingContext dc, TimelineRenderLayer layer, Size size)
     {
-        _connector.Children.Clear();
-        double width = _connector.ActualWidth;
-        if (width <= 0)
+        if (layer != TimelineRenderLayer.Range)
         {
             return;
         }
 
+        double width = size.Width;
         double left = OverviewMsToPx(_viewport.ViewStartMs, width);
         double right = OverviewMsToPx(_viewport.ViewEndMs, width);
-        Brush accent = Brush("Accent.Default", Color.FromRgb(0xE0, 0xA8, 0x20));
-        AddLine(_connector, left, 0, 1, ConnectorHeight, accent, 2.0);
-        AddLine(_connector, right, 0, width - 1, ConnectorHeight, accent, 2.0);
+        DrawLine(dc, _connectorPen, left, 0, 1, ConnectorHeight);
+        DrawLine(dc, _connectorPen, right, 0, width - 1, ConnectorHeight);
 
         if (width >= 360)
         {
-            AddCenteredText(
-                _connector,
-                "위 선택 구간을 아래 전체 폭으로 확대",
-                width / 2.0,
-                -1,
-                Brush("Text.Secondary", Colors.LightGray),
-                10.5,
-                FontWeights.SemiBold,
-                Brush("Surface.Base", Color.FromRgb(0x1B, 0x17, 0x12)));
+            DrawText(dc, "위 선택 구간을 아래 전체 폭으로 확대", width / 2.0, 0,
+                _textSecondary, 10.5, semiBold: true, _surfaceBase, centered: true);
         }
     }
 
-    private void DrawDetail()
+    private void DrawDetailLayer(DrawingContext dc, TimelineRenderLayer layer, Size size)
     {
-        _detail.Children.Clear();
-        double width = _detail.ActualWidth;
-        double height = _detail.Height;
-        if (width <= 0)
+        double width = size.Width;
+        double height = size.Height;
+        switch (layer)
+        {
+            case TimelineRenderLayer.Static:
+                dc.DrawRectangle(_surfaceSunken, null, new Rect(size));
+                double frameMs = FrameStepCalculator.FrameDurationMs(_fps);
+                double framePx = _viewport.VisibleSpanMs > 0 ? frameMs / _viewport.VisibleSpanMs * width : 0;
+                if (framePx >= 2.0)
+                {
+                    long firstFrame = (long)Math.Ceiling(_viewport.ViewStartMs / frameMs);
+                    long lastFrame = (long)Math.Floor(_viewport.ViewEndMs / frameMs);
+                    for (long frame = firstFrame; frame <= lastFrame; frame++)
+                    {
+                        double time = frame * frameMs;
+                        double x = _viewport.MsToPx(time, width);
+                        bool group = frame % 5 == 0;
+                        DrawLine(dc, group ? _detailGroupPen : _minorTickPen, x,
+                            group ? height * 0.48 : height * 0.67, x, height);
+                    }
+                }
+                else
+                {
+                    double step = Math.Max(frameMs, _viewport.VisibleSpanMs / 36.0);
+                    for (double time = Math.Ceiling(_viewport.ViewStartMs / step) * step;
+                         time <= _viewport.ViewEndMs;
+                         time += step)
+                    {
+                        double x = _viewport.MsToPx(time, width);
+                        DrawLine(dc, _minorTickPen, x, height * 0.68, x, height);
+                    }
+
+                    DrawText(dc, "확대 + 또는 마우스 휠로 프레임 눈금 표시", width / 2.0,
+                        height * 0.36, _textSecondary, 11, semiBold: true, _surfaceScrim, centered: true);
+                }
+
+                double majorMs = CoarseIntervalMs;
+                double firstMajor = Math.Ceiling(_viewport.ViewStartMs / majorMs) * majorMs;
+                for (double time = firstMajor; time <= _viewport.ViewEndMs + 0.001; time += majorMs)
+                {
+                    double x = _viewport.MsToPx(time, width);
+                    DrawLine(dc, _majorTickPen, x, 0, x, height);
+                    DrawText(dc, FormatTickLabel(time),
+                        Math.Clamp(x + 4, 3, Math.Max(3, width - 54)), 2,
+                        _textSecondary, 11, semiBold: true, _surfaceScrim, centered: false);
+                }
+                break;
+
+            case TimelineRenderLayer.Range:
+                double visibleIn = Math.Max(_trim.InMs, _viewport.ViewStartMs);
+                double visibleOut = Math.Min(_trim.OutMs, _viewport.ViewEndMs);
+                if (visibleOut > visibleIn)
+                {
+                    double shadeX = _viewport.MsToPx(visibleIn, width);
+                    double shadeRight = _viewport.MsToPx(visibleOut, width);
+                    DrawRect(dc, shadeX, height - 7, shadeRight - shadeX, 7, _accentSubtle, null);
+                }
+
+                if (IsVisibleInDetail(_trim.InMs))
+                {
+                    double inX = _viewport.MsToPx(_trim.InMs, width);
+                    DrawRect(dc, inX - TrimHandleWidth / 2.0, 0, TrimHandleWidth, height, _accent, null);
+                }
+
+                if (IsVisibleInDetail(_trim.OutMs))
+                {
+                    double outX = _viewport.MsToPx(_trim.OutMs, width);
+                    DrawRect(dc, outX - TrimHandleWidth / 2.0, 0, TrimHandleWidth, height, _accent, null);
+                }
+                break;
+
+            case TimelineRenderLayer.Transient:
+                if (IsVisibleInDetail(_playheadMs))
+                {
+                    DrawPlayhead(dc, _viewport.MsToPx(_playheadMs, width), height);
+                }
+                break;
+        }
+    }
+
+    private void DrawPlayhead(DrawingContext dc, double x, double height)
+    {
+        DrawLine(dc, _playheadPen, x, 0, x, height);
+        dc.PushTransform(new TranslateTransform(x, 0));
+        dc.DrawGeometry(_playhead, null, _playheadMarker);
+        dc.Pop();
+    }
+
+    private static void DrawLine(
+        DrawingContext dc,
+        Pen pen,
+        double x1,
+        double y1,
+        double x2,
+        double y2) =>
+        dc.DrawLine(pen, new Point(x1, y1), new Point(x2, y2));
+
+    private static void DrawRect(
+        DrawingContext dc,
+        double x,
+        double y,
+        double width,
+        double height,
+        Brush? fill,
+        Pen? pen)
+    {
+        if (width <= 0 || height <= 0)
         {
             return;
         }
 
-        _detail.Background = Brush("Surface.Sunken", Color.FromRgb(0x1B, 0x17, 0x12));
+        dc.DrawRectangle(fill, pen, new Rect(x, y, width, height));
+    }
 
-        double frameMs = FrameStepCalculator.FrameDurationMs(_fps);
-        double framePx = _viewport.VisibleSpanMs > 0 ? frameMs / _viewport.VisibleSpanMs * width : 0;
-        if (framePx >= 2.0)
-        {
-            long firstFrame = (long)Math.Ceiling(_viewport.ViewStartMs / frameMs);
-            long lastFrame = (long)Math.Floor(_viewport.ViewEndMs / frameMs);
-            for (long frame = firstFrame; frame <= lastFrame; frame++)
-            {
-                double time = frame * frameMs;
-                double x = _viewport.MsToPx(time, width);
-                bool group = frame % 5 == 0;
-                AddLine(
-                    _detail,
-                    x,
-                    group ? height * 0.48 : height * 0.67,
-                    x,
-                    height,
-                    group ? Brush("Text.Muted", Colors.Gray) : Brush("Border.Subtle", Colors.DimGray),
-                    group ? 1.6 : 1.0);
-            }
-        }
-        else
-        {
-            double step = Math.Max(frameMs, _viewport.VisibleSpanMs / 36.0);
-            for (double time = Math.Ceiling(_viewport.ViewStartMs / step) * step;
-                 time <= _viewport.ViewEndMs;
-                 time += step)
-            {
-                double x = _viewport.MsToPx(time, width);
-                AddLine(_detail, x, height * 0.68, x, height, Brush("Border.Subtle", Colors.DimGray), 1);
-            }
+    private void DrawText(
+        DrawingContext dc,
+        string text,
+        double x,
+        double y,
+        Brush foreground,
+        double fontSize,
+        bool semiBold,
+        Brush? background,
+        bool centered)
+    {
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var formatted = new FormattedText(
+            text,
+            CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight,
+            semiBold ? _semiBoldTypeface : _regularTypeface,
+            fontSize,
+            foreground,
+            pixelsPerDip);
 
-            AddCenteredText(
-                _detail,
-                "확대 + 또는 마우스 휠로 프레임 눈금 표시",
-                width / 2.0,
-                height * 0.36,
-                Brush("Text.Secondary", Colors.LightGray),
-                11,
-                FontWeights.SemiBold,
-                Brush("Surface.Scrim", Color.FromArgb(0xA8, 0x00, 0x00, 0x00)));
-        }
-
-        // Repeat the exact same heavy coarse boundaries in detail. Thin frame marks between
-        // these lines visually explain that detail edits the frames inside an overview index.
-        double majorMs = CoarseIntervalMs;
-        double firstMajor = Math.Ceiling(_viewport.ViewStartMs / majorMs) * majorMs;
-        for (double time = firstMajor; time <= _viewport.ViewEndMs + 0.001; time += majorMs)
+        double paddingX = background is null ? 0 : 5;
+        double paddingY = background is null ? 0 : 1;
+        double left = centered
+            ? Math.Max(2, x - ((formatted.Width + (paddingX * 2)) / 2.0))
+            : x;
+        if (background is not null)
         {
-            double x = _viewport.MsToPx(time, width);
-            AddLine(_detail, x, 0, x, height,
-                Brush("Text.Secondary", Colors.LightGray), 3.0);
-            AddText(
-                _detail,
-                FormatTickLabel(time),
-                Math.Clamp(x + 4, 3, Math.Max(3, width - 54)),
-                2,
-                Brush("Text.Secondary", Colors.LightGray),
-                11,
-                FontWeights.SemiBold,
-                Brush("Surface.Scrim", Color.FromArgb(0xA8, 0x00, 0x00, 0x00)));
-        }
-
-        double visibleIn = Math.Max(_trim.InMs, _viewport.ViewStartMs);
-        double visibleOut = Math.Min(_trim.OutMs, _viewport.ViewEndMs);
-        if (visibleOut > visibleIn)
-        {
-            double shadeX = _viewport.MsToPx(visibleIn, width);
-            double shadeRight = _viewport.MsToPx(visibleOut, width);
-            AddRect(
-                _detail,
-                shadeX,
-                height - 7,
-                Math.Max(0, shadeRight - shadeX),
-                7,
-                Brush("Accent.Subtle", Color.FromArgb(0x50, 0xFF, 0xD4, 0x00)),
+            dc.DrawRectangle(
+                background,
                 null,
-                0);
+                new Rect(left, y, formatted.Width + (paddingX * 2), formatted.Height + (paddingY * 2)));
         }
 
-        Brush accent = Brush("Accent.Default", Color.FromRgb(0xE0, 0xA8, 0x20));
-        if (IsVisibleInDetail(_trim.InMs))
-        {
-            double inX = _viewport.MsToPx(_trim.InMs, width);
-            AddRect(_detail, inX - TrimHandleWidth / 2.0, 0, TrimHandleWidth, height, accent, null, 0);
-        }
-
-        if (IsVisibleInDetail(_trim.OutMs))
-        {
-            double outX = _viewport.MsToPx(_trim.OutMs, width);
-            AddRect(_detail, outX - TrimHandleWidth / 2.0, 0, TrimHandleWidth, height, accent, null, 0);
-        }
-
-        if (IsVisibleInDetail(_playheadMs))
-        {
-            AddPlayhead(_detail, _viewport.MsToPx(_playheadMs, width), height);
-        }
+        dc.DrawText(formatted, new Point(left + paddingX, y + paddingY));
     }
 
     private double TickStepSeconds()
@@ -685,122 +842,13 @@ internal sealed class TwoLineTimeline : ContentControl
         return 1200;
     }
 
-    private void AddPlayhead(Canvas canvas, double x, double height)
-    {
-        Brush playhead = Brush("Accent.Cool", Color.FromRgb(0x66, 0xB7, 0xFF));
-        AddLine(canvas, x, 0, x, height, playhead, 2.6);
-        var marker = new System.Windows.Shapes.Polygon
-        {
-            Points = [new Point(x - 7, 0), new Point(x + 7, 0), new Point(x, 10)],
-            Fill = playhead,
-        };
-        canvas.Children.Add(marker);
-    }
-
-    private static void AddLine(
-        Canvas canvas,
-        double x1,
-        double y1,
-        double x2,
-        double y2,
-        Brush stroke,
-        double thickness)
-    {
-        canvas.Children.Add(new System.Windows.Shapes.Line
-        {
-            X1 = x1,
-            Y1 = y1,
-            X2 = x2,
-            Y2 = y2,
-            Stroke = stroke,
-            StrokeThickness = thickness,
-            SnapsToDevicePixels = true,
-            IsHitTestVisible = false,
-        });
-    }
-
-    private static void AddRect(
-        Canvas canvas,
-        double x,
-        double y,
-        double width,
-        double height,
-        Brush? fill,
-        Brush? stroke,
-        double thickness)
-    {
-        var rectangle = new System.Windows.Shapes.Rectangle
-        {
-            Width = Math.Max(0, width),
-            Height = height,
-            Fill = fill,
-            Stroke = stroke,
-            StrokeThickness = thickness,
-            IsHitTestVisible = false,
-        };
-        Canvas.SetLeft(rectangle, x);
-        Canvas.SetTop(rectangle, y);
-        canvas.Children.Add(rectangle);
-    }
-
-    private static void AddText(
-        Canvas canvas,
-        string text,
-        double x,
-        double y,
-        Brush foreground,
-        double fontSize,
-        FontWeight weight,
-        Brush? background)
-    {
-        var label = new TextBlock
-        {
-            Text = text,
-            Foreground = foreground,
-            Background = background,
-            FontSize = fontSize,
-            FontWeight = weight,
-            Padding = background is null ? new Thickness(0) : new Thickness(4, 1, 4, 1),
-            IsHitTestVisible = false,
-        };
-        Canvas.SetLeft(label, x);
-        Canvas.SetTop(label, y);
-        canvas.Children.Add(label);
-    }
-
-    private static void AddCenteredText(
-        Canvas canvas,
-        string text,
-        double centreX,
-        double y,
-        Brush foreground,
-        double fontSize,
-        FontWeight weight,
-        Brush? background)
-    {
-        var label = new TextBlock
-        {
-            Text = text,
-            Foreground = foreground,
-            Background = background,
-            FontSize = fontSize,
-            FontWeight = weight,
-            Padding = background is null ? new Thickness(0) : new Thickness(5, 1, 5, 1),
-            IsHitTestVisible = false,
-        };
-        label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Canvas.SetLeft(label, Math.Max(2, centreX - label.DesiredSize.Width / 2.0));
-        Canvas.SetTop(label, y);
-        canvas.Children.Add(label);
-    }
-
-    private StackPanel Labelled(TextBlock caption, Canvas strip, string automationName)
+    private StackPanel Labelled(TextBlock caption, TimelineRenderSurface strip, string automationName)
     {
         var panel = new StackPanel();
         panel.Children.Add(caption);
         var host = new Border
         {
-            BorderBrush = Brush("Border.Subtle", Colors.Gray),
+            BorderBrush = _borderSubtle,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Child = strip,
@@ -812,7 +860,7 @@ internal sealed class TwoLineTimeline : ContentControl
 
     private TextBlock BuildCaption() => new()
     {
-        Foreground = Brush("Text.Primary", Colors.White),
+        Foreground = _textPrimary,
         FontSize = 13,
         FontWeight = FontWeights.SemiBold,
         Margin = new Thickness(2, 0, 0, 5),
@@ -832,6 +880,45 @@ internal sealed class TwoLineTimeline : ContentControl
             : string.Create(CultureInfo.InvariantCulture, $"{value.TotalSeconds:0.0}s");
     }
 
-    private static Brush Brush(string key, Color fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
+    private static Brush ResolveBrush(string key, Color fallback) =>
+        Application.Current?.TryFindResource(key) as Brush ?? FrozenBrush(fallback);
+
+    private static SolidColorBrush FrozenBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private static Pen CreatePen(Brush brush, double thickness)
+    {
+        var pen = new Pen(brush, thickness);
+        if (pen.CanFreeze)
+        {
+            pen.Freeze();
+        }
+
+        return pen;
+    }
+
+    private static StreamGeometry BuildPlayheadMarker()
+    {
+        var geometry = new StreamGeometry();
+        using (StreamGeometryContext context = geometry.Open())
+        {
+            context.BeginFigure(new Point(-7, 0), isFilled: true, isClosed: true);
+            context.LineTo(new Point(7, 0), isStroked: true, isSmoothJoin: false);
+            context.LineTo(new Point(0, 10), isStroked: true, isSmoothJoin: false);
+        }
+
+        geometry.Freeze();
+        return geometry;
+    }
+    public void Dispose()
+    {
+        _overview.LayersInvalidated -= OnLayersInvalidated;
+        _connector.LayersInvalidated -= OnLayersInvalidated;
+        _detail.LayersInvalidated -= OnLayersInvalidated;
+        _renderScheduler.Dispose();
+    }
 }

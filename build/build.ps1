@@ -25,7 +25,7 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $dotnetDir = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
 if (Test-Path (Join-Path $dotnetDir 'dotnet.exe')) {
-    $env:Path = "$env:Path;$dotnetDir"
+    $env:Path = "$dotnetDir;$env:Path"
 }
 
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'

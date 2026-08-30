@@ -1117,6 +1117,19 @@ public partial class App : Application
                 RecordingSelfTest.Run);
         }
 
+        int videoEditorIndex = FindSwitch(args, VideoEditorResponsivenessSelfTest.CommandLineSwitch);
+        if (videoEditorIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(
+                args,
+                videoEditorIndex,
+                "mycapture-video-editor-selftest");
+            return RunSelfTest(
+                outputDirectory,
+                "video-editor-selftest-report.txt",
+                VideoEditorResponsivenessSelfTest.Run);
+        }
+
         int settingsIndex = FindSwitch(args, SettingsSelfTest.CommandLineSwitch);
         if (settingsIndex >= 0)
         {

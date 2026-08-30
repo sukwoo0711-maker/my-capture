@@ -42,6 +42,8 @@ internal sealed class VideoEditorWindow : Window
     private readonly ILogger<VideoEditorWindow> _log;
 
     private readonly MediaElement _media;
+    private readonly MediaElementPreviewEngine _previewEngine;
+    private readonly PreviewSeekCoordinator _previewSeeks;
     private readonly TwoLineTimeline _timeline;
     private readonly TextBlock _positionLabel;
     private readonly TextBlock _statusLabel;
@@ -69,6 +71,8 @@ internal sealed class VideoEditorWindow : Window
     internal double DurationMsForTest => _durationMs;
 
     internal TwoLineTimeline TimelineForTest => _timeline;
+
+    internal PreviewSeekCoordinator PreviewSeekCoordinatorForTest => _previewSeeks;
 
     internal int ControlRowCountForTest => _controlRows.RowDefinitions.Count;
 
@@ -111,9 +115,13 @@ internal sealed class VideoEditorWindow : Window
         _media.MediaOpened += OnMediaOpened;
         _media.MediaFailed += OnMediaFailed;
         _media.MediaEnded += OnMediaEnded;
+        _previewEngine = new MediaElementPreviewEngine(_media);
+        _previewSeeks = new PreviewSeekCoordinator(_previewEngine, recording.Fps);
+        _previewSeeks.SeekFailed += OnPreviewSeekFailed;
 
         _timeline = new TwoLineTimeline();
-        _timeline.PlayheadChanged += (_, ms) => OnTimelinePlayhead(ms);
+        _timeline.PlayheadChanged += OnTimelinePlayhead;
+        _timeline.PlayheadInteractionCompleted += OnTimelinePlayheadInteractionCompleted;
         _timeline.TrimChanged += (_, _) => UpdateStatusForMode();
         _positionLabel = BuildMono("00:00.000 / 00:00.000");
         _statusLabel = new TextBlock
@@ -438,14 +446,13 @@ internal sealed class VideoEditorWindow : Window
         }
 
         double clamped = Math.Clamp(positionMs, 0, _durationMs);
-        _media.Pause();
-        _media.Position = TimeSpan.FromMilliseconds(clamped);
+        _previewSeeks.RequestExact(clamped);
         _timeline.SetPlayhead(clamped);
         UpdatePositionLabel(clamped);
     }
 
-    /// <summary>Playhead moved by the user dragging/clicking on a timeline strip.</summary>
-    private void OnTimelinePlayhead(double ms)
+    /// <summary>Playhead visual intent moved during pointer interaction.</summary>
+    private void OnTimelinePlayhead(object? sender, double ms)
     {
         if (!_mediaReady)
         {
@@ -453,9 +460,35 @@ internal sealed class VideoEditorWindow : Window
         }
 
         double clamped = Math.Clamp(ms, 0, _durationMs);
-        _media.Pause();
-        _media.Position = TimeSpan.FromMilliseconds(clamped);
         UpdatePositionLabel(clamped);
+        _previewSeeks.RequestPreview(clamped);
+    }
+
+    /// <summary>Pointer release requests one priority exact reconciliation seek.</summary>
+    private void OnTimelinePlayheadInteractionCompleted(object? sender, double ms)
+    {
+        if (_mediaReady)
+        {
+            _previewSeeks.RequestExact(Math.Clamp(ms, 0, _durationMs));
+        }
+    }
+
+    private void OnPreviewSeekFailed(Exception exception)
+    {
+        _log.LogWarning(exception, "Preview seek failed");
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(
+                new Action(() => OnPreviewSeekFailed(exception)),
+                DispatcherPriority.Background);
+            return;
+        }
+
+        if (IsLoaded)
+        {
+            _statusLabel.Text = "미리보기 위치 이동에 실패했습니다: " + exception.Message;
+            _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
+        }
     }
 
     private void StepFrames(int frames)
@@ -491,9 +524,31 @@ internal sealed class VideoEditorWindow : Window
 
     // ---- extract frame -> annotation editor ----
 
-    private void EditCurrentFrame()
+    private async void EditCurrentFrame()
     {
         if (!_mediaReady)
+        {
+            return;
+        }
+
+        try
+        {
+            _statusLabel.Text = "정확한 프레임을 준비하는 중…";
+            await _previewSeeks.RequestExactAsync(CurrentMs());
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Exact seek before frame edit failed");
+            _statusLabel.Text = "현재 프레임을 준비할 수 없습니다: " + ex.Message;
+            _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
+            return;
+        }
+
+        if (!IsLoaded)
         {
             return;
         }
@@ -713,6 +768,12 @@ internal sealed class VideoEditorWindow : Window
     private void OnClosedInternal(object? sender, EventArgs e)
     {
         StopLoadTimers();
+        _timeline.PlayheadChanged -= OnTimelinePlayhead;
+        _timeline.PlayheadInteractionCompleted -= OnTimelinePlayheadInteractionCompleted;
+        _previewSeeks.SeekFailed -= OnPreviewSeekFailed;
+        _previewSeeks.Dispose();
+        _previewEngine.Dispose();
+        _timeline.Dispose();
         KeyDown -= OnKeyDown;
         Loaded -= OnLoadedInternal;
         Closed -= OnClosedInternal;

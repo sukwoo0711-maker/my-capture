@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '0.4.0'
+    [string]$Version = '0.9.0'
 )
 
 Set-StrictMode -Version 2.0
@@ -21,7 +21,7 @@ if (-not $artifactRoot.StartsWith($releaseRoot + '\', [StringComparison]::Ordina
 
 $dotnetDir = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
 if (Test-Path -LiteralPath (Join-Path $dotnetDir 'dotnet.exe')) {
-    $env:Path = "$env:Path;$dotnetDir"
+    $env:Path = "$dotnetDir;$env:Path"
 }
 $env:DOTNET_CLI_UI_LANGUAGE = 'en'
 $env:DOTNET_NOLOGO = '1'

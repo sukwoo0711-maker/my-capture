@@ -154,7 +154,12 @@ public sealed class RegionRecorder : IDisposable
             // COM objects live in the same apartment that will write every frame.
             _encoder = _encoderFactory(options);
 
-            while (!_stopRequested)
+            // Always execute one capture iteration after encoder initialisation. H.264 MFT
+            // startup can occasionally take longer than a very short recording; if Stop was
+            // requested during that startup, finalising with zero samples fails with
+            // MF_E_SINK_NO_SAMPLES_PROCESSED (0xC00D4A44). One timestamp-zero frame produces a
+            // valid short clip without blocking the UI thread while the encoder warms up.
+            while (true)
             {
                 double elapsed = stopwatch.Elapsed.TotalMilliseconds;
                 if (clock.TryClaimFrame(elapsed, out double timestampMs))
@@ -166,6 +171,11 @@ public sealed class RegionRecorder : IDisposable
                         _grabber.Height,
                         _grabber.Stride,
                         timestampMs));
+                }
+
+                if (_stopRequested)
+                {
+                    break;
                 }
 
                 double sleep = clock.MillisecondsUntilNextFrame(stopwatch.Elapsed.TotalMilliseconds);

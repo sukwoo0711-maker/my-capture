@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '0.4.0',
+    [string]$Version = '0.9.0',
     [string]$ArtifactRoot = ''
 )
 
@@ -130,7 +130,7 @@ foreach ($required in @($installerScript, $powerShellExe, $payload, $manifestPat
 $initialRunValue = Get-RunValue
 # Build the Korean path segments from code points so Windows PowerShell 5.1 can
 # read this UTF-8 source safely even when the file has no byte-order mark.
-$installSegment = (-join [char[]](0xC124, 0xCE58)) + ' ' + (-join [char[]](0xACBD, 0xB85C)) + ' 0.4.0'
+$installSegment = (-join [char[]](0xC124, 0xCE58)) + ' ' + (-join [char[]](0xACBD, 0xB85C)) + " $Version"
 $userDataSegment = (-join [char[]](0xC0AC, 0xC6A9, 0xC790)) + ' ' + (-join [char[]](0xB370, 0xC774, 0xD130))
 $installRoot = Join-Path $tempRoot $installSegment
 $userDataRoot = Join-Path (Join-Path $tempRoot $userDataSegment) 'captures'

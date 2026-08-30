@@ -49,6 +49,39 @@ public sealed class RecordingScenarioTests
     private static RectD SmallRegion() => new(0, 0, 64, 48);
 
     [Fact]
+    public async Task StopDuringEncoderWarmup_StillWritesTimestampZeroFrame()
+    {
+        var engine = NewEngine();
+        var grabber = new RegionFrameGrabber(engine, includeCursor: false);
+        using var factoryEntered = new ManualResetEventSlim(false);
+        using var allowFactoryToFinish = new ManualResetEventSlim(false);
+        SpyEncoder? spy = null;
+        var recorder = new RegionRecorder(
+            grabber,
+            _ =>
+            {
+                factoryEntered.Set();
+                Assert.True(allowFactoryToFinish.Wait(TimeSpan.FromSeconds(5)));
+                return spy = new SpyEncoder(64, 48);
+            },
+            NullLogger.Instance);
+
+        recorder.Start(SmallRegion(), "warmup-stop.mp4", new RecordingSettings { FrameRate = RecordingFrameRate.Fps15 });
+        Assert.True(factoryEntered.Wait(TimeSpan.FromSeconds(5)), "encoder factory did not start");
+        Task<RecordingResult> stopping = Task.Run(recorder.Stop);
+        await Task.Delay(50);
+        allowFactoryToFinish.Set();
+        RecordingResult result = await stopping.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(spy);
+        Assert.True(spy!.Completed);
+        Assert.Single(spy.Timestamps);
+        Assert.Equal(0, spy.Timestamps[0], precision: 3);
+        Assert.Equal(1, result.EmittedFrames);
+        recorder.Dispose();
+    }
+
+    [Fact]
     public void RealMediaFoundation_StartStop_ProducesPlayableClip()
     {
         // The spy-encoder tests never exercise the real MF encoder inside the recorder loop.
