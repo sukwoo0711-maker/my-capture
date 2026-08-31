@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Shell;
 using Xunit;
@@ -173,6 +174,33 @@ public sealed class GlobalHotkeyReconfigureTests
             Assert.False(result.Applied);
             Assert.NotEmpty(result.Failures);
             // Rolled back to the previous default set, so capture is still present.
+            Assert.Contains(GlobalHotkeyCommand.CaptureRegion, service.RegisteredCommands);
+        });
+    }
+
+    [Fact]
+    public void SettingsDiagnosticProbe_FallsBackAndAssignsOnlyCapture()
+    {
+        RunSta(() =>
+        {
+            HotkeyModifiers modifiers = HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift;
+            var registrar = new FakeRegistrar(blocked:
+            [
+                new Hotkey(modifiers, Hotkey.VkF1 + 23), // F24
+                new Hotkey(modifiers, Hotkey.VkF1 + 22), // F23
+            ]);
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance);
+            service.Initialize(new HotkeySettings());
+
+            HotkeyReconfigureResult result = SettingsSelfTest.TryApplyDiagnosticHotkey(
+                service,
+                out Hotkey appliedHotkey);
+
+            Assert.True(result.Applied);
+            Assert.Equal(modifiers, appliedHotkey.Modifiers);
+            Assert.Equal(Hotkey.VkF1 + 21, appliedHotkey.VirtualKey); // F22
+            Assert.Single(service.RegisteredCommands);
             Assert.Contains(GlobalHotkeyCommand.CaptureRegion, service.RegisteredCommands);
         });
     }

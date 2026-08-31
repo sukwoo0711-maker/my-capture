@@ -78,11 +78,18 @@ internal static class SettingsSelfTest
             hotkeys.Initialize(new HotkeySettings());
             PumpDispatcherOnce();
 
-            var reconfigured = new HotkeySettings
+            HotkeyReconfigureResult result = TryApplyDiagnosticHotkey(hotkeys, out Hotkey appliedHotkey);
+            if (result.Applied)
             {
-                Capture = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, Hotkey.VkC),
-            };
-            HotkeyReconfigureResult result = hotkeys.Reconfigure(reconfigured);
+                report.AppendLine($"INFO: Diagnostic hotkey {appliedHotkey}");
+            }
+            else
+            {
+                foreach (HotkeyRegistrationFailure failure in result.Failures)
+                {
+                    report.AppendLine($"INFO: Diagnostic hotkey rejected: {failure.Hotkey} ({failure.NativeErrorCode}: {failure.NativeMessage})");
+                }
+            }
             Check(report, "Reconfigure applied",
                 result.Applied && hotkeys.RegisteredCommands.Contains(GlobalHotkeyCommand.CaptureRegion));
 
@@ -128,6 +135,41 @@ internal static class SettingsSelfTest
             File.WriteAllText(Path.Combine(outputDirectory, "settings-selftest-report.txt"), report.ToString(), Encoding.UTF8);
             return 2;
         }
+    }
+
+    internal static HotkeyReconfigureResult TryApplyDiagnosticHotkey(
+        GlobalHotkeyService hotkeys,
+        out Hotkey appliedHotkey)
+    {
+        ArgumentNullException.ThrowIfNull(hotkeys);
+
+        HotkeyModifiers modifiers = HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift;
+        HotkeyReconfigureResult? lastResult = null;
+        for (uint virtualKey = Hotkey.VkF1 + 23; virtualKey >= Hotkey.VkF1 + 19; virtualKey--)
+        {
+            var probe = new HotkeySettings
+            {
+                Capture = new Hotkey(modifiers, virtualKey),
+                PasteToScreen = Hotkey.None,
+                HideAllPins = Hotkey.None,
+                ToggleClickThrough = Hotkey.None,
+                RepeatLastRegion = Hotkey.None,
+                CaptureWindow = Hotkey.None,
+                CaptureFullScreen = Hotkey.None,
+                RecordRegion = Hotkey.None,
+            };
+
+            lastResult = hotkeys.Reconfigure(probe);
+            if (lastResult.Applied
+                && hotkeys.RegisteredCommands.Contains(GlobalHotkeyCommand.CaptureRegion))
+            {
+                appliedHotkey = probe.Capture;
+                return lastResult;
+            }
+        }
+
+        appliedHotkey = Hotkey.None;
+        return lastResult ?? HotkeyReconfigureResult.RolledBack([]);
     }
 
     private static void Check(StringBuilder report, string name, bool passed)
