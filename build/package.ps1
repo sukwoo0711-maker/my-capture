@@ -1,16 +1,19 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '0.9.0'
+    [string]$Version = '1.0.0'
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    throw "Version must use numeric SemVer form (for example 0.4.0): $Version"
+$semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
+$versionMatch = [regex]::Match($Version, $semVerPattern)
+if (-not $versionMatch.Success) {
+    throw "Version must use a SemVer core with an optional prerelease (for example 1.0.0 or 1.0.0-rc.1): $Version"
 }
 
-$binaryVersion = "$Version.0"
+$baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
+$binaryVersion = "$baseVersion.0"
 $repo = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot)).TrimEnd('\')
 $releaseRoot = [IO.Path]::GetFullPath((Join-Path $repo 'artifacts\release')).TrimEnd('\')
 $artifactRoot = [IO.Path]::GetFullPath((Join-Path $releaseRoot $Version)).TrimEnd('\')
@@ -144,11 +147,57 @@ if (Test-Path -LiteralPath $artifactRoot) {
 [IO.Directory]::CreateDirectory($publish) | Out-Null
 [IO.Directory]::CreateDirectory($stage) | Out-Null
 
+function Assert-SelfContainedPublish([string]$PublishRoot) {
+    $requiredRuntimeFiles = @(
+        'MyCapture.exe',
+        'MyCapture.dll',
+        'coreclr.dll',
+        'hostfxr.dll',
+        'hostpolicy.dll',
+        'System.Private.CoreLib.dll',
+        'PresentationCore.dll',
+        'PresentationFramework.dll'
+    )
+    foreach ($name in $requiredRuntimeFiles) {
+        $path = Join-Path $PublishRoot $name
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -le 0) {
+            throw "Self-contained publish is missing required runtime file: $name"
+        }
+    }
+
+    $runtimeConfigPath = Join-Path $PublishRoot 'MyCapture.runtimeconfig.json'
+    $depsPath = Join-Path $PublishRoot 'MyCapture.deps.json'
+    if (-not (Test-Path -LiteralPath $runtimeConfigPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $depsPath -PathType Leaf)) {
+        throw 'Self-contained publish is missing runtimeconfig or deps metadata.'
+    }
+
+    $runtimeConfig = Get-Content -LiteralPath $runtimeConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    if ($null -ne $runtimeConfig.runtimeOptions.PSObject.Properties['framework'] -or
+        $null -ne $runtimeConfig.runtimeOptions.PSObject.Properties['frameworks']) {
+        throw 'Published runtimeconfig requests a machine-wide .NET shared framework.'
+    }
+    $includedFrameworks = @($runtimeConfig.runtimeOptions.includedFrameworks)
+    $includedNames = @($includedFrameworks | ForEach-Object { [string]$_.name })
+    foreach ($frameworkName in @('Microsoft.NETCore.App', 'Microsoft.WindowsDesktop.App')) {
+        if ($includedNames -notcontains $frameworkName) {
+            throw "Published runtimeconfig does not embed required framework: $frameworkName"
+        }
+    }
+
+    $deps = Get-Content -LiteralPath $depsPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    if ([string]$deps.runtimeTarget.name -notmatch '/win-x64$') {
+        throw "Published deps runtime target is not win-x64: $($deps.runtimeTarget.name)"
+    }
+}
+
 try {
-    & dotnet publish $project -c Release -r win-x64 --self-contained true -o $publish `
-        -p:Version=$Version -p:FileVersion=$binaryVersion -p:AssemblyVersion=$binaryVersion `
-        -p:DebugType=None -p:DebugSymbols=false -p:PublishReadyToRun=true
+    & dotnet publish $project -c Release -r win-x64 --self-contained true `
+        -p:PublishProfile=win-x64-self-contained -o $publish `
+        -p:Version=$Version -p:FileVersion=$binaryVersion -p:AssemblyVersion=$binaryVersion
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
+
+    Assert-SelfContainedPublish $publish
 
     $exe = Join-Path $publish 'MyCapture.exe'
     $dll = Join-Path $publish 'MyCapture.dll'
@@ -203,7 +252,7 @@ try {
         Version = $Version
         Runtime = 'win-x64'
         Architecture = 'x64'
-        MinimumWindowsBuild = 17763
+        MinimumWindowsBuild = 22000
         SelfContained = $true
         Offline = $true
         Payload = [pscustomobject][ordered]@{
@@ -304,10 +353,10 @@ FILE6=uninstall-cleanup.ps1
         Unsigned = $true
         GeneratedUtc = [DateTime]::UtcNow.ToString('O')
         Compatibility = [pscustomobject][ordered]@{
-            MinimumWindowsBuild = 17763
-            MinimumWindowsRelease = 'Windows 10 version 1809'
+            MinimumWindowsBuild = 22000
+            MinimumWindowsRelease = 'Windows 11 version 21H2'
             NativeArchitecture = 'x64'
-            Arm64Support = 'Windows 11 x64 emulation'
+            Arm64Support = 'Windows 11 ARM64 via x64 emulation'
             RequiresInternet = $false
             RequiresPreinstalledDotNet = $false
             SetupRequires = 'Windows PowerShell 5.1 FullLanguage and IExpress execution permitted by local policy'
@@ -346,7 +395,8 @@ CONTENTS
 OFFLINE / RUNTIME
 - No Internet connection is required.
 - No preinstalled .NET runtime is required; CoreCLR and WPF are included.
-- Supported baseline: Windows 10 version 1809 (build 17763) or later, x64.
+- Supported baseline: Windows 11 version 21H2 (build 22000) or later, x64. Earlier Windows
+  releases are not supported and the installer refuses to run on them.
 - Windows 11 ARM64 can use Windows x64 emulation.
 - Setup needs Windows PowerShell 5.1 FullLanguage and permission to execute IExpress/
   PowerShell scripts. If enterprise AppLocker or WDAC policy blocks that path, use the

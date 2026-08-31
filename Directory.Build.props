@@ -1,9 +1,14 @@
-<Project>
+﻿<Project>
 
   <PropertyGroup>
-    <!-- Windows 10 1809+ SDK surface: required for Windows.Media.Ocr WinRT APIs -->
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
-    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <!--
+      Windows 11 21H2 (build 22000) is the support floor for MyCapture 1.0.0. The TFM selects the
+      Windows SDK projection surface (needed for Windows.Media.Ocr WinRT APIs) and
+      SupportedOSPlatformVersion states the runtime floor; both must match
+      MyCapture.Core WindowsSupportPolicy.MinimumBuild.
+    -->
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
 
@@ -19,9 +24,9 @@
 
     <Company>MyCapture</Company>
     <Product>MyCapture</Product>
-    <Version>0.9.0</Version>
-    <FileVersion>0.9.0.0</FileVersion>
-    <AssemblyVersion>0.9.0.0</AssemblyVersion>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <Copyright>Copyright (c) 2026</Copyright>
 
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

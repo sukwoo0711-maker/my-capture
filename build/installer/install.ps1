@@ -156,7 +156,7 @@ function Assert-SupportedHost {
     $build = Get-WindowsBuildNumber
     $minimumBuild = [int]$Manifest.MinimumWindowsBuild
     if ([Environment]::OSVersion.Version.Major -lt 10 -or $build -lt $minimumBuild) {
-        Throw-InstallerError $ExitUnsupportedOs "Windows 10 build $minimumBuild (1809) or later is required; detected build $build."
+        Throw-InstallerError $ExitUnsupportedOs "Windows 11 version 21H2 (build $minimumBuild) or later is required; detected build $build."
     }
 
     try {
@@ -206,7 +206,8 @@ function Read-And-ValidateManifest {
     if ([int]$manifest.SchemaVersion -ne 1 -or [string]$manifest.Product -ne 'MyCapture') {
         Throw-InstallerError $ExitIntegrity 'Installer manifest schema or product is invalid.'
     }
-    if ([string]$manifest.Version -notmatch '^\d+\.\d+\.\d+$') {
+    $semVerPattern = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
+    if ([string]$manifest.Version -notmatch $semVerPattern) {
         Throw-InstallerError $ExitIntegrity "Installer manifest version is invalid: $($manifest.Version)"
     }
     if ([string]$manifest.Runtime -ne 'win-x64' -or [string]$manifest.Architecture -ne 'x64' -or -not [bool]$manifest.SelfContained -or -not [bool]$manifest.Offline) {

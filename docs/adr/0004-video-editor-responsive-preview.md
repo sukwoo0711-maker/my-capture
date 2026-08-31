@@ -4,6 +4,14 @@
 기준선: MyCapture 0.7.0 (`main@76d402d`)
 검증 릴리스: MyCapture 0.9.0 (2026-08-30 UTC)
 
+> **개정 주석 (1.0.0, 2026-08-31):** MyCapture 1.0.0이 호스트 지원 하한을 Windows 11 21H2(build
+> 22000)로 올렸다. 따라서 이 문서에서 Windows 10 1809 / build 17763 / TFM
+> `net10.0-windows10.0.19041.0`을 언급하는 부분은 **0.9.0 시점의 기록**이며 현재 계약이 아니다.
+> 아래 Flyleaf 승격 조건 2번의 "Windows 10 1809 x64 실장비"와 테스트 행렬의 동일 항목은
+> Windows 11 21H2 실장비로 대체된다. 현재 계약의 단일 출처는
+> `MyCapture.Core.Platform.WindowsSupportPolicy`이고, 실측은
+> `docs/releases/1.0.0-validation.md`에 기록한다.
+
 ## 배경
 
 0.7.0은 다음 사용자 계약을 이미 제공한다.

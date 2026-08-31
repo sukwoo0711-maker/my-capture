@@ -1,12 +1,13 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using MyCapture.Core.Platform;
 
 namespace MyCapture.App.Themes;
 
 /// <summary>
 /// Opt-in attached behavior for native dark captions and Windows 11 rounded corners.
-/// Unsupported DWM attributes fail silently so Windows 10 and non-DWM sessions retain normal
+/// Unsupported DWM attributes fail silently so remote or non-DWM sessions retain normal
 /// WPF chrome.
 /// </summary>
 public static class ModernWindowChrome
@@ -51,7 +52,8 @@ public static class ModernWindowChrome
 
     private static void Apply(Window window)
     {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763))
+        if (!OperatingSystem.IsWindows()
+            || !WindowsSupportPolicy.IsSupportedHost(Environment.OSVersion.Version))
         {
             return;
         }
@@ -63,17 +65,15 @@ public static class ModernWindowChrome
         }
 
         int enabled = 1;
-        // Attribute 20 is current; 19 covers older Windows 10 builds.
+        // Attribute 20 is the documented DWMWA_USE_IMMERSIVE_DARK_MODE value; 19 is the
+        // pre-release value some DWM builds still answer, kept as a silent fallback.
         if (DwmSetWindowAttribute(handle, 20, ref enabled, sizeof(int)) != 0)
         {
             _ = DwmSetWindowAttribute(handle, 19, ref enabled, sizeof(int));
         }
 
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
-        {
-            int rounded = 2; // DWMWCP_ROUND
-            _ = DwmSetWindowAttribute(handle, 33, ref rounded, sizeof(int));
-        }
+        int rounded = 2; // DWMWCP_ROUND: available on every supported (Windows 11) host.
+        _ = DwmSetWindowAttribute(handle, 33, ref rounded, sizeof(int));
     }
 
     [DllImport("dwmapi.dll", PreserveSig = true)]

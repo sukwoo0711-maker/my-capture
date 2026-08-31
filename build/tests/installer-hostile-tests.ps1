@@ -1,11 +1,19 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '0.9.0',
+    [string]$Version = '1.0.0',
     [string]$ArtifactRoot = ''
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+
+$semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
+$versionMatch = [regex]::Match($Version, $semVerPattern)
+if (-not $versionMatch.Success) {
+    throw "Version must use a SemVer core with an optional prerelease (for example 1.0.0 or 1.0.0-rc.1): $Version"
+}
+$baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
+$binaryVersion = "$baseVersion.0"
 
 $repo = [IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot))).TrimEnd('\')
 if ([string]::IsNullOrWhiteSpace($ArtifactRoot)) {
@@ -198,11 +206,11 @@ try {
     $sourceFileVersion = [string]$props.SelectSingleNode('//FileVersion').InnerText
     $appManifestText = Get-Content -LiteralPath (Join-Path $repo 'src\MyCapture.App\app.manifest') -Raw
     $dllVersionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $publish 'MyCapture.dll'))
-    Assert-Equal $Version $sourceVersion 'Directory.Build.props product version mismatch.'
-    Assert-Equal "$Version.0" $sourceFileVersion 'Directory.Build.props file version mismatch.'
-    Assert-True ($appManifestText -match ('assemblyIdentity version="' + [regex]::Escape("$Version.0") + '"')) 'Embedded manifest source version mismatch.'
+    Assert-Equal $baseVersion $sourceVersion 'Directory.Build.props product version mismatch.'
+    Assert-Equal $binaryVersion $sourceFileVersion 'Directory.Build.props file version mismatch.'
+    Assert-True ($appManifestText -match ('assemblyIdentity version="' + [regex]::Escape($binaryVersion) + '"')) 'Embedded manifest source version mismatch.'
     Assert-Equal $Version (($dllVersionInfo.ProductVersion -split '\+')[0]) 'Published ProductVersion mismatch.'
-    Assert-Equal "$Version.0" $dllVersionInfo.FileVersion 'Published FileVersion mismatch.'
+    Assert-Equal $binaryVersion $dllVersionInfo.FileVersion 'Published FileVersion mismatch.'
     Write-Pass 'package-contract' "files=$($actualFiles.Count), bootstrap=5, forward-slash ZIP, version=$Version"
 
     # VerifyOnly must fully hash/extract/validate while leaving no installation root.

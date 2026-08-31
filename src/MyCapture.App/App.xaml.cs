@@ -70,6 +70,17 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Windows 11 is the supported baseline. The installer refuses older hosts, but the
+        // portable ZIP does not run the installer, so the process enforces the floor itself
+        // before any capture or diagnostics code touches Windows 11-era APIs.
+        if (HostRequirementGate.BlockUnsupportedHost(
+            Environment.OSVersion.Version,
+            message => MessageBox.Show(message, "MyCapture", MessageBoxButton.OK, MessageBoxImage.Error),
+            Shutdown))
+        {
+            return;
+        }
+
         // Diagnostics intentionally run before the ownership gate. Capture hardware
         // can be tested beside a normal resident instance; the shell test will report
         // hotkey conflicts if the normal instance already owns them.
