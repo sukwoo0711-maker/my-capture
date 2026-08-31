@@ -4,6 +4,7 @@ using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using MyCapture.App.Themes;
 using MyCapture.Ocr;
 
 namespace MyCapture.App.Ocr;
@@ -36,6 +37,8 @@ internal sealed class OcrResultWindow : Window
 
     internal OcrResultWindow()
     {
+        StandardWindowTheme.Apply(this);
+
         Title = "MyCapture — 텍스트 인식";
         Width = 680;
         Height = 560;

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '1.0.0'
+    [string]$Version = '1.1.0'
 )
 
 Set-StrictMode -Version 2.0
@@ -9,12 +9,26 @@ $ErrorActionPreference = 'Stop'
 $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 $versionMatch = [regex]::Match($Version, $semVerPattern)
 if (-not $versionMatch.Success) {
-    throw "Version must use a SemVer core with an optional prerelease (for example 1.0.0 or 1.0.0-rc.1): $Version"
+    throw "Version must use a SemVer core with an optional prerelease (for example 1.1.0 or 1.1.0-rc.1): $Version"
 }
 
 $baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
 $binaryVersion = "$baseVersion.0"
 $repo = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot)).TrimEnd('\')
+
+[xml]$sourceProps = Get-Content -LiteralPath (Join-Path $repo 'Directory.Build.props') -Raw -Encoding UTF8
+$productVersionNodes = @($sourceProps.SelectNodes('/Project/PropertyGroup/Version'))
+$fileVersionNodes = @($sourceProps.SelectNodes('/Project/PropertyGroup/FileVersion'))
+$assemblyVersionNodes = @($sourceProps.SelectNodes('/Project/PropertyGroup/AssemblyVersion'))
+if ($productVersionNodes.Count -ne 1 -or $fileVersionNodes.Count -ne 1 -or $assemblyVersionNodes.Count -ne 1) {
+    throw 'Directory.Build.props must declare exactly one Version, FileVersion, and AssemblyVersion.'
+}
+if (-not [string]::Equals([string]$productVersionNodes[0].InnerText, $baseVersion, [StringComparison]::Ordinal) -or
+    -not [string]::Equals([string]$fileVersionNodes[0].InnerText, $binaryVersion, [StringComparison]::Ordinal) -or
+    -not [string]::Equals([string]$assemblyVersionNodes[0].InnerText, $binaryVersion, [StringComparison]::Ordinal)) {
+    throw "Requested package version $Version does not match the release version declared in Directory.Build.props."
+}
+
 $releaseRoot = [IO.Path]::GetFullPath((Join-Path $repo 'artifacts\release')).TrimEnd('\')
 $artifactRoot = [IO.Path]::GetFullPath((Join-Path $releaseRoot $Version)).TrimEnd('\')
 if (-not $artifactRoot.StartsWith($releaseRoot + '\', [StringComparison]::OrdinalIgnoreCase) -or
@@ -39,12 +53,44 @@ $installerManifestOutput = Join-Path $artifactRoot 'installer-manifest.json'
 $releaseManifestOutput = Join-Path $artifactRoot 'release-manifest.json'
 $shaSumsOutput = Join-Path $artifactRoot 'SHA256SUMS.txt'
 $readmeOutput = Join-Path $artifactRoot 'README-OFFLINE.txt'
+$projectLicense = Join-Path $repo 'LICENSE'
+$thirdPartyIndex = Join-Path $repo 'THIRD-PARTY-NOTICES.md'
 
 function Get-Sha256([string]$Path) {
     $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     $sha = [Security.Cryptography.SHA256]::Create()
     try { return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '') }
     finally { $sha.Dispose(); $stream.Dispose() }
+}
+
+function Get-GitSourceState {
+    $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -eq $git) {
+        throw 'Git is required to record release source provenance.'
+    }
+
+    $gitPath = [string]$git.Source
+    $commitOutput = & $gitPath -C $repo rev-parse --verify 'HEAD^{commit}' 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to resolve the release source commit: $(@($commitOutput) -join ' ')"
+    }
+
+    $commit = (@($commitOutput) -join '').Trim().ToLowerInvariant()
+    if ($commit -notmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') {
+        throw "Git returned an invalid source commit: $commit"
+    }
+
+    $statusOutput = & $gitPath -C $repo status --porcelain=v1 --untracked-files=all 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to inspect the release source tree: $(@($statusOutput) -join ' ')"
+    }
+
+    $status = (@($statusOutput) -join [Environment]::NewLine).Trim()
+    return [pscustomobject][ordered]@{
+        Commit = $commit
+        WorkingTreeClean = [string]::IsNullOrEmpty($status)
+    }
 }
 
 function Get-StreamSha256([IO.Stream]$Stream) {
@@ -141,6 +187,32 @@ function Assert-ZipMatchesInventory([string]$ZipPath, [object[]]$Inventory) {
 Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
 Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
 
+$sourceState = Get-GitSourceState
+$sourceCommit = [string]$sourceState.Commit
+$sourceTreeClean = [bool]$sourceState.WorkingTreeClean
+if (-not $sourceTreeClean) {
+    throw 'Refusing to package a dirty Git worktree; commit the exact release source first.'
+}
+
+foreach ($requiredLegalFile in @($projectLicense, $thirdPartyIndex)) {
+    if (-not (Test-Path -LiteralPath $requiredLegalFile -PathType Leaf) -or
+        (Get-Item -LiteralPath $requiredLegalFile).Length -le 0) {
+        throw "Required release legal notice is missing or empty: $requiredLegalFile"
+    }
+}
+
+$dotnetCommand = Get-Command dotnet -CommandType Application -ErrorAction Stop |
+    Select-Object -First 1
+$dotnetRoot = Split-Path -Parent ([string]$dotnetCommand.Source)
+$dotnetLicense = Join-Path $dotnetRoot 'LICENSE.txt'
+$dotnetNotices = Join-Path $dotnetRoot 'ThirdPartyNotices.txt'
+foreach ($requiredDotnetNotice in @($dotnetLicense, $dotnetNotices)) {
+    if (-not (Test-Path -LiteralPath $requiredDotnetNotice -PathType Leaf) -or
+        (Get-Item -LiteralPath $requiredDotnetNotice).Length -le 0) {
+        throw "The selected .NET SDK is missing a required distribution notice: $requiredDotnetNotice"
+    }
+}
+
 if (Test-Path -LiteralPath $artifactRoot) {
     Remove-Item -LiteralPath $artifactRoot -Recurse -Force -ErrorAction Stop
 }
@@ -194,7 +266,8 @@ function Assert-SelfContainedPublish([string]$PublishRoot) {
 try {
     & dotnet publish $project -c Release -r win-x64 --self-contained true `
         -p:PublishProfile=win-x64-self-contained -o $publish `
-        -p:Version=$Version -p:FileVersion=$binaryVersion -p:AssemblyVersion=$binaryVersion
+        -p:Version=$Version -p:FileVersion=$binaryVersion -p:AssemblyVersion=$binaryVersion `
+        -p:SourceRevisionId=$sourceCommit
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
 
     Assert-SelfContainedPublish $publish
@@ -204,6 +277,12 @@ try {
     if (-not (Test-Path -LiteralPath $exe) -or -not (Test-Path -LiteralPath $dll)) {
         throw 'Published MyCapture.exe or MyCapture.dll is missing.'
     }
+
+    Copy-Item -LiteralPath $projectLicense -Destination (Join-Path $publish 'LICENSE.txt') -Force
+    Copy-Item -LiteralPath $thirdPartyIndex -Destination (Join-Path $publish 'THIRD-PARTY-NOTICES.md') -Force
+    Copy-Item -LiteralPath $dotnetLicense -Destination (Join-Path $publish 'DOTNET-LICENSE.txt') -Force
+    Copy-Item -LiteralPath $dotnetNotices -Destination (Join-Path $publish 'DOTNET-THIRD-PARTY-NOTICES.txt') -Force
+
     foreach ($asset in @('tray-idle.ico', 'tray-capturing.ico', 'tray-busy.ico')) {
         if (-not (Test-Path -LiteralPath (Join-Path $publish "Assets\$asset"))) {
             throw "Published asset missing: Assets\$asset"
@@ -342,10 +421,20 @@ FILE6=uninstall-cleanup.ps1
         }
     }
 
+    # Packaging can be long-running. Recheck immediately before writing provenance so a source
+    # edit made during publish can never be mislabeled as the commit captured at startup.
+    $finalSourceState = Get-GitSourceState
+    if (-not [bool]$finalSourceState.WorkingTreeClean -or
+        -not [string]::Equals([string]$finalSourceState.Commit, $sourceCommit, [StringComparison]::Ordinal)) {
+        throw 'Release source changed during packaging; refusing to emit an inexact manifest.'
+    }
+
     $releaseManifest = [pscustomobject][ordered]@{
-        SchemaVersion = 2
+        SchemaVersion = 3
         Product = 'MyCapture'
         Version = $Version
+        SourceCommit = $sourceCommit
+        SourceTreeClean = $sourceTreeClean
         Runtime = 'win-x64'
         Architecture = 'x64'
         SelfContained = $true
@@ -378,7 +467,17 @@ FILE6=uninstall-cleanup.ps1
     }
     $releaseManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $releaseManifestOutput -Encoding UTF8
 
-    $sumLines = @($deliverables | ForEach-Object { "$($_.Sha256)  $($_.Path)" })
+    $releaseRoundTrip = Get-Content -LiteralPath $releaseManifestOutput -Raw -Encoding UTF8 |
+        ConvertFrom-Json -ErrorAction Stop
+    if ([int]$releaseRoundTrip.SchemaVersion -ne 3 -or
+        -not [string]::Equals([string]$releaseRoundTrip.SourceCommit, $sourceCommit, [StringComparison]::Ordinal) -or
+        [bool]$releaseRoundTrip.SourceTreeClean -ne $sourceTreeClean) {
+        throw 'Release manifest source provenance failed its serialization round-trip contract.'
+    }
+
+    $releaseManifestRecord = New-FileRecord $releaseManifestOutput (Split-Path -Leaf $releaseManifestOutput)
+    $checksumRecords = @($deliverables) + @($releaseManifestRecord)
+    $sumLines = @($checksumRecords | ForEach-Object { "$($_.Sha256)  $($_.Path)" })
     $sumLines | Set-Content -LiteralPath $shaSumsOutput -Encoding ASCII
 
     @"

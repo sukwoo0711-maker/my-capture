@@ -26,14 +26,15 @@ public sealed record CaptureSearchHit(CaptureRecord Record, CaptureMatchField Fi
 /// How much of the queue is actually full-text searchable right now.
 /// </summary>
 /// <param name="Total">Total retained captures.</param>
-/// <param name="WithOcrText">Captures that carry recognised text.</param>
-public readonly record struct OcrCoverage(int Total, int WithOcrText)
+/// <param name="Indexed">Captures whose current pixel generation has completed OCR.</param>
+/// <param name="WithOcrText">Captures that carry recognised searchable text.</param>
+public readonly record struct OcrCoverage(int Total, int Indexed, int WithOcrText)
 {
-    /// <summary>Captures still missing OCR text (i.e. not yet full-text searchable).</summary>
-    public int Missing => Math.Max(0, Total - WithOcrText);
+    /// <summary>Captures whose current pixel generation has not been OCR-indexed yet.</summary>
+    public int Missing => Math.Max(0, Total - Indexed);
 
-    /// <summary>Fraction 0..1 of the queue that is full-text searchable.</summary>
-    public double Fraction => Total <= 0 ? 1.0 : (double)WithOcrText / Total;
+    /// <summary>Fraction 0..1 of the queue for which OCR has completed.</summary>
+    public double Fraction => Total <= 0 ? 1.0 : (double)Indexed / Total;
 
     public bool IsComplete => Missing == 0;
 }
@@ -111,17 +112,23 @@ public static class CaptureTextSearch
         ArgumentNullException.ThrowIfNull(records);
 
         int total = 0;
+        int indexed = 0;
         int withText = 0;
         foreach (CaptureRecord record in records)
         {
             total++;
+            if (record.HasCurrentOcrIndex)
+            {
+                indexed++;
+            }
+
             if (record.HasOcrText)
             {
                 withText++;
             }
         }
 
-        return new OcrCoverage(total, withText);
+        return new OcrCoverage(total, indexed, withText);
     }
 
     private static string[] SplitTerms(string? query) =>

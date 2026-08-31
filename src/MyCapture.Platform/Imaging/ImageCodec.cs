@@ -70,6 +70,16 @@ public static class ImageCodec
         return bytes.Length;
     }
 
+    /// <summary>
+    /// Writes a user-facing PNG atomically without retaining an internal recovery backup.
+    /// </summary>
+    public static long SavePngExport(BitmapSource bitmap, string path)
+    {
+        byte[] bytes = EncodePng(bitmap);
+        AtomicFile.WriteExportBytes(path, bytes);
+        return bytes.Length;
+    }
+
     public static long SaveJpeg(BitmapSource bitmap, string path, int quality)
     {
         byte[] bytes = EncodeJpeg(bitmap, quality);

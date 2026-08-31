@@ -8,6 +8,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
+using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Display;
@@ -74,6 +75,10 @@ internal sealed class RecordingControlWindow : Window
         _recorderFactory = recorderFactory ?? throw new ArgumentNullException(nameof(recorderFactory));
         _outputPathFactory = outputPathFactory ?? throw new ArgumentNullException(nameof(outputPathFactory));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+
+        // The frame is also the exact recording boundary. Never translate or fade it while
+        // the user is positioning the region; normal task windows use StandardWindowTheme.
+        FluidMotion.SetWindowEntrance(this, false);
 
         Title = "MyCapture — 영역 녹화";
         WindowStyle = WindowStyle.None;

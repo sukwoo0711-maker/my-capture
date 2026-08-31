@@ -43,3 +43,5 @@ build/installer-output/
 ## Local scratch
 *.local.ps1
 scratch/
+.claude/
+.codex/

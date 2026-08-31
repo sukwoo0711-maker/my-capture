@@ -4,10 +4,10 @@ namespace MyCapture.Core.Recording;
 /// Target capture frame rate for a recording.
 /// </summary>
 /// <remarks>
-/// Kept to a small set of sensible values rather than an open integer. 15 is the
-/// default because it is smooth enough for UI walkthroughs while costing the
-/// software H.264 encoder — the path taken on machines without a hardware MFT —
-/// roughly half the work of 30, which is what keeps a weak PC responsive.
+/// Kept to a small set of sensible values rather than an open integer. 30 is the
+/// default because it keeps pointer and window motion visibly fluid; users on a
+/// constrained machine can still choose 10 or 15 fps, while 60 fps is available
+/// for motion-heavy captures when the encoder and machine can sustain it.
 /// </remarks>
 public enum RecordingFrameRate
 {
@@ -15,6 +15,7 @@ public enum RecordingFrameRate
     Fps15 = 15,
     Fps24 = 24,
     Fps30 = 30,
+    Fps60 = 60,
 }
 
 /// <summary>
@@ -24,8 +25,8 @@ public enum RecordingFrameRate
 /// </summary>
 public sealed class RecordingSettings
 {
-    /// <summary>Capture frame rate. 15 fps by default (see <see cref="RecordingFrameRate"/>).</summary>
-    public RecordingFrameRate FrameRate { get; set; } = RecordingFrameRate.Fps15;
+    /// <summary>Capture frame rate. 30 fps by default (see <see cref="RecordingFrameRate"/>).</summary>
+    public RecordingFrameRate FrameRate { get; set; } = RecordingFrameRate.Fps30;
 
     /// <summary>
     /// Whether to count down before the first frame is captured.

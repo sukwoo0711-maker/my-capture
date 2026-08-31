@@ -16,7 +16,12 @@
     <!-- ============================================================= -->
     <!-- Window -->
     <!-- ============================================================= -->
-    <Style TargetType="{x:Type Window}">
+    <!--
+      WPF does not apply an implicit Window style to classes derived from Window. Keep a
+      keyed style so every real application window can opt in explicitly, while retaining
+      the implicit alias for plain Window hosts used by small dialogs and tests.
+    -->
+    <Style x:Key="Window.Standard" TargetType="{x:Type Window}">
         <Setter Property="Background" Value="{StaticResource Surface.Base}" />
         <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
         <Setter Property="FontFamily" Value="{StaticResource Font.Ui}" />
@@ -25,7 +30,9 @@
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
         <Setter Property="themes:ModernWindowChrome.Enabled" Value="True" />
+        <Setter Property="themes:FluidMotion.WindowEntrance" Value="True" />
     </Style>
+    <Style TargetType="{x:Type Window}" BasedOn="{StaticResource Window.Standard}" />
 
     <!-- ============================================================= -->
     <!-- Typography helpers -->
@@ -101,6 +108,7 @@
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="themes:FluidMotion.PressFeedback" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
@@ -231,6 +239,7 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="themes:FluidMotion.PressFeedback" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ToggleButton}">
@@ -336,6 +345,7 @@
         <Setter Property="MinHeight" Value="32" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="themes:FluidMotion.PressFeedback" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type CheckBox}">

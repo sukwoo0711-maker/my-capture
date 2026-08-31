@@ -5,9 +5,11 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using MyCapture.App.Themes;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Display;
@@ -47,6 +49,8 @@ internal sealed class PinWindow : Window
     private readonly Func<PinSettings> _settings;
     private readonly Image _imageElement;
     private readonly Border _chrome;
+    private readonly SolidColorBrush _chromeBrush;
+    private readonly ScaleTransform _pinScale;
     private readonly TextBlock _feedback;
     private readonly DispatcherTimer _feedbackTimer;
     private readonly DispatcherTimer _ctrlClickTimer;
@@ -55,6 +59,7 @@ internal sealed class PinWindow : Window
     private Point _dragAnchor;
     private IntPtr _handle;
     private bool _isClosed;
+    private bool _saveInProgress;
 
     internal PinWindow(
         BitmapSource image,
@@ -78,6 +83,7 @@ internal sealed class PinWindow : Window
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Focusable = true;
+        FluidMotion.SetWindowEntrance(this, false);
 
         Left = initialLeft;
         Top = initialTop;
@@ -111,24 +117,27 @@ internal sealed class PinWindow : Window
         // Image-first chrome: a neutral one-pixel boundary rests quietly and warms to a
         // restrained warm yellow on hover, while rounded clipping keeps scaled pins consistent
         // with the rest of the desktop surfaces.
+        _chromeBrush = new SolidColorBrush(ResolveChromeColor("Border.Subtle", hovering: false));
+        _pinScale = new ScaleTransform(1, 1);
         _chrome = new Border
         {
             BorderThickness = new Thickness(1),
-            BorderBrush = Application.Current?.TryFindResource("Border.Subtle") as Brush
-                ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x40, 0x38, 0x2C)),
+            BorderBrush = _chromeBrush,
             CornerRadius = new CornerRadius(8),
             ClipToBounds = true,
             Child = new Grid { Children = { _imageElement, _feedback } },
+            RenderTransform = _pinScale,
+            RenderTransformOrigin = new Point(0.5, 0.5),
         };
 
         Content = _chrome;
 
         ToolTip =
-            "드래그: 이동 · 휠: 확대/축소 · Ctrl+휠: 투명도 · +/-/0 · 방향키 이동 · Ctrl+C 복사 · Esc/Del 닫기";
+            "우클릭: 저장 · Ctrl+S: 빠른 저장 · Ctrl+Shift+S: 다른 이름으로 저장 · 드래그: 이동 · 휠: 확대/축소 · Ctrl+C: 복사";
         AutomationProperties.SetName(this, "MyCapture 화면 고정 창");
         AutomationProperties.SetHelpText(
             this,
-            "고정된 화면 이미지입니다. 드래그로 이동, 마우스 휠로 확대·축소, Ctrl+휠로 투명도 조절, +/- 키로 확대·축소, 0 키로 100%, 방향키로 이동, Ctrl+C로 복사, Esc 또는 Delete로 닫습니다. 클릭 통과를 켜면 이 창이 마우스를 받지 않습니다. 되돌리려면 Shift+F3을 두 번 눌러 모든 고정 창을 숨겼다가 다시 표시하면 클릭 통과가 해제됩니다.");
+            "고정된 화면 이미지입니다. 마우스 오른쪽 단추 메뉴나 Ctrl+S로 원본 PNG를 저장하고, Ctrl+Shift+S로 위치를 선택합니다. 드래그로 이동, 마우스 휠로 확대·축소, Ctrl+휠로 투명도 조절, Ctrl+C로 복사, Esc 또는 Delete로 닫습니다. 클릭 통과를 켜면 Shift+F3을 두 번 눌러 해제할 수 있습니다.");
 
         BuildContextMenu();
 
@@ -148,6 +157,7 @@ internal sealed class PinWindow : Window
         _ctrlClickTimer.Tick += OnCtrlClickTimerTick;
 
         SourceInitialized += OnSourceInitialized;
+        Loaded += OnPinLoaded;
         MouseEnter += (_, _) => SetChromeHover(true);
         MouseLeave += (_, _) => SetChromeHover(false);
     }
@@ -160,6 +170,9 @@ internal sealed class PinWindow : Window
 
     /// <summary>Raised when the user asks to run OCR on this pin's image.</summary>
     internal event EventHandler<BitmapSource>? OcrRequested;
+
+    /// <summary>Raised when the user asks to save the frozen source image.</summary>
+    internal event EventHandler<PinSaveRequestedEventArgs>? SaveRequested;
 
     /// <summary>The pin's live presentation state.</summary>
     internal PinViewState State => _state;
@@ -180,7 +193,39 @@ internal sealed class PinWindow : Window
     /// Test hook: fires the feedback auto-hide logic immediately, without waiting for the
     /// real timer interval, so tests can prove the overlay hides without brittle sleeps.
     /// </summary>
-    internal void ForceFeedbackTimeoutForTest() => OnFeedbackTimerTick(this, EventArgs.Empty);
+    internal void ForceFeedbackTimeoutForTest()
+    {
+        _feedbackTimer.Stop();
+        HideFeedback(immediate: true);
+    }
+
+    /// <summary>Test hook: requests either quick save or Save As without keyboard input.</summary>
+    internal void SimulateSaveRequestForTest(PinSaveMode mode) => RequestSave(mode);
+
+    /// <summary>Completes the pin-local save progress state after the manager finishes I/O.</summary>
+    internal void ReportSaveResult(PinSaveResult result)
+    {
+        _saveInProgress = false;
+        switch (result.Status)
+        {
+            case PinSaveStatus.Saved:
+                string fileName = string.IsNullOrWhiteSpace(result.Path)
+                    ? "PNG"
+                    : System.IO.Path.GetFileName(result.Path);
+                ShowFeedback($"저장됨 · {fileName}");
+                break;
+            case PinSaveStatus.Cancelled:
+                ShowFeedback("저장 취소됨");
+                break;
+            default:
+                ShowFeedback("저장 실패");
+                break;
+        }
+    }
+
+    /// <summary>Completes pin-local clipboard feedback after the asynchronous copy.</summary>
+    internal void ReportCopyResult(bool copied) =>
+        ShowFeedback(copied ? "복사됨" : "복사 실패");
 
     /// <summary>Test hook: whether the Ctrl+click copy debounce timer is currently armed.</summary>
     internal bool IsCtrlClickTimerRunning => _ctrlClickTimer.IsEnabled;
@@ -232,15 +277,42 @@ internal sealed class PinWindow : Window
     internal void HidePin()
     {
         _state.IsHidden = true;
-        Hide();
+        if (!FluidMotion.AnimationsEnabled || !IsVisible)
+        {
+            Hide();
+            return;
+        }
+
+        var fade = new DoubleAnimation(_chrome.Opacity, 0, FluidMotion.FastDuration)
+        {
+            EasingFunction = FluidMotion.StandardEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        fade.Completed += (_, _) =>
+        {
+            if (_state.IsHidden && !_isClosed)
+            {
+                Hide();
+            }
+        };
+        _chrome.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
     }
 
     /// <summary>Reveals a hidden pin at its retained position and zoom.</summary>
     internal void ShowPin()
     {
         _state.IsHidden = false;
+        _chrome.BeginAnimation(UIElement.OpacityProperty, null);
         Show();
         Topmost = true;
+        AnimatePinReveal();
+    }
+
+    private void OnPinLoaded(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        AnimatePinReveal();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -258,12 +330,41 @@ internal sealed class PinWindow : Window
     {
         // Neutral at rest, restrained warm yellow on hover — a quiet cue that the pin is
         // interactive without adding decorative colour to the frozen image.
-        string key = hovering ? "Accent.Cool" : "Border.Subtle";
-        Brush fallback = hovering
-            ? new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xE1, 0x4D))
-            : new SolidColorBrush(Color.FromArgb(0xFF, 0x40, 0x38, 0x2C));
-        _chrome.BorderBrush = Application.Current?.TryFindResource(key) as Brush ?? fallback;
-        _chrome.BorderThickness = new Thickness(1);
+        Color target = ResolveChromeColor(
+            hovering ? "Accent.Cool" : "Border.Subtle",
+            hovering);
+        // Read the presentation value before replacing an in-flight animation; otherwise a
+        // fast enter/leave reversal visibly jumps back to the previous base colour.
+        Color current = _chromeBrush.Color;
+        _chromeBrush.BeginAnimation(SolidColorBrush.ColorProperty, null);
+        if (!FluidMotion.AnimationsEnabled)
+        {
+            _chromeBrush.Color = target;
+            return;
+        }
+
+        _chromeBrush.Color = target;
+        var animation = new ColorAnimation(current, target, FluidMotion.FastDuration)
+        {
+            EasingFunction = FluidMotion.StandardEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        _chromeBrush.BeginAnimation(
+            SolidColorBrush.ColorProperty,
+            animation,
+            HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private static Color ResolveChromeColor(string key, bool hovering)
+    {
+        if (Application.Current?.TryFindResource(key) is SolidColorBrush brush)
+        {
+            return brush.Color;
+        }
+
+        return hovering
+            ? Color.FromArgb(0xFF, 0xFF, 0xE1, 0x4D)
+            : Color.FromArgb(0xFF, 0x40, 0x38, 0x2C);
     }
 
     // ----- Mouse: drag to move, wheel to zoom, Ctrl+wheel opacity -----
@@ -349,8 +450,7 @@ internal sealed class PinWindow : Window
 
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
-            double opacity = _state.AdjustOpacity(OpacityStep * notches);
-            Opacity = opacity;
+            double opacity = AdjustOpacity(OpacityStep * notches);
             ShowFeedback($"투명도 {opacity * 100:0}%");
         }
         else
@@ -419,6 +519,16 @@ internal sealed class PinWindow : Window
                 CopyImageToClipboard();
                 e.Handled = true;
                 break;
+
+            case Key.S when ctrl && shift:
+                RequestSave(PinSaveMode.SaveAs);
+                e.Handled = true;
+                break;
+
+            case Key.S when ctrl:
+                RequestSave(PinSaveMode.QuickSave);
+                e.Handled = true;
+                break;
         }
     }
 
@@ -453,6 +563,7 @@ internal sealed class PinWindow : Window
         Width = _state.WidthDip;
         Height = _state.HeightDip;
         ApplyPositionKeepingGrabbable(newLeft, newTop);
+        AnimateZoomSettle(oldZoom, newZoom, pointerXDip, pointerYDip);
         ShowFeedback($"{newZoom * 100:0}%");
     }
 
@@ -472,6 +583,7 @@ internal sealed class PinWindow : Window
         Width = _state.WidthDip;
         Height = _state.HeightDip;
         ApplyPositionKeepingGrabbable(newLeft, newTop);
+        AnimateZoomSettle(oldZoom, newZoom, centerX, centerY);
         ShowFeedback("100%");
     }
 
@@ -497,14 +609,123 @@ internal sealed class PinWindow : Window
 
     private void CopyImageToClipboard()
     {
+        ShowFeedback("복사 중…");
         CopyRequested?.Invoke(this, _image);
-        ShowFeedback("복사됨");
     }
 
     private void RequestOcr()
     {
         OcrRequested?.Invoke(this, _image);
         ShowFeedback("텍스트 인식 중…");
+    }
+
+    private void RequestSave(PinSaveMode mode)
+    {
+        if (_saveInProgress)
+        {
+            ShowFeedback("저장 중…");
+            return;
+        }
+
+        EventHandler<PinSaveRequestedEventArgs>? handler = SaveRequested;
+        if (handler is null)
+        {
+            ShowFeedback("저장 기능을 사용할 수 없음");
+            return;
+        }
+
+        _saveInProgress = true;
+        ShowFeedback(mode == PinSaveMode.SaveAs ? "저장 위치 선택 중…" : "저장 중…");
+        handler.Invoke(this, new PinSaveRequestedEventArgs(mode, _image));
+    }
+
+    private double AdjustOpacity(double delta)
+    {
+        double oldOpacity = Opacity;
+        double target = _state.AdjustOpacity(delta);
+        BeginAnimation(Window.OpacityProperty, null);
+        Opacity = target;
+        if (FluidMotion.AnimationsEnabled)
+        {
+            var fade = new DoubleAnimation(oldOpacity, target, FluidMotion.NormalDuration)
+            {
+                EasingFunction = FluidMotion.SoftLandingEasing,
+                FillBehavior = FillBehavior.Stop,
+            };
+            BeginAnimation(Window.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
+        }
+
+        return target;
+    }
+
+    private void AnimatePinReveal()
+    {
+        if (_isClosed)
+        {
+            return;
+        }
+
+        _chrome.BeginAnimation(UIElement.OpacityProperty, null);
+        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        _chrome.Opacity = 1;
+        _pinScale.ScaleX = 1;
+        _pinScale.ScaleY = 1;
+
+        if (!FluidMotion.AnimationsEnabled)
+        {
+            return;
+        }
+
+        var fade = new DoubleAnimation(0, 1, FluidMotion.NormalDuration)
+        {
+            EasingFunction = FluidMotion.SoftLandingEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        var scaleX = new DoubleAnimation(0.97, 1, FluidMotion.NormalDuration)
+        {
+            EasingFunction = FluidMotion.StandardEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        var scaleY = scaleX.Clone();
+        _chrome.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
+        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleX, HandoffBehavior.SnapshotAndReplace);
+        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleY, HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private void AnimateZoomSettle(
+        double oldZoom,
+        double newZoom,
+        double pointerXDip,
+        double pointerYDip)
+    {
+        if (!FluidMotion.AnimationsEnabled || newZoom <= 0 || Width <= 0 || Height <= 0)
+        {
+            return;
+        }
+
+        double ratio = oldZoom / newZoom;
+        double currentScaleX = _pinScale.ScaleX;
+        double currentScaleY = _pinScale.ScaleY;
+        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        _chrome.RenderTransformOrigin = new Point(
+            Math.Clamp((pointerXDip - Left) / Width, 0, 1),
+            Math.Clamp((pointerYDip - Top) / Height, 0, 1));
+        _pinScale.ScaleX = 1;
+        _pinScale.ScaleY = 1;
+        var x = new DoubleAnimation(currentScaleX * ratio, 1, FluidMotion.FastDuration)
+        {
+            EasingFunction = FluidMotion.StandardEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        var y = new DoubleAnimation(currentScaleY * ratio, 1, FluidMotion.FastDuration)
+        {
+            EasingFunction = FluidMotion.StandardEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, x, HandoffBehavior.SnapshotAndReplace);
+        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, y, HandoffBehavior.SnapshotAndReplace);
     }
 
     /// <summary>
@@ -539,6 +760,17 @@ internal sealed class PinWindow : Window
     {
         _feedback.Text = text;
         _feedback.Visibility = Visibility.Visible;
+        _feedback.BeginAnimation(UIElement.OpacityProperty, null);
+        _feedback.Opacity = 1;
+        if (FluidMotion.AnimationsEnabled)
+        {
+            var fade = new DoubleAnimation(0, 1, FluidMotion.FastDuration)
+            {
+                EasingFunction = FluidMotion.SoftLandingEasing,
+                FillBehavior = FillBehavior.Stop,
+            };
+            _feedback.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
+        }
 
         // Restart the countdown on every message so rapid feedback keeps the latest text
         // visible for the full duration rather than expiring mid-sequence.
@@ -549,7 +781,30 @@ internal sealed class PinWindow : Window
     private void OnFeedbackTimerTick(object? sender, EventArgs e)
     {
         _feedbackTimer.Stop();
-        _feedback.Visibility = Visibility.Collapsed;
+        HideFeedback(immediate: false);
+    }
+
+    private void HideFeedback(bool immediate)
+    {
+        _feedback.BeginAnimation(UIElement.OpacityProperty, null);
+        if (immediate || !FluidMotion.AnimationsEnabled || _isClosed)
+        {
+            _feedback.Visibility = Visibility.Collapsed;
+            _feedback.Opacity = 1;
+            return;
+        }
+
+        var fade = new DoubleAnimation(_feedback.Opacity, 0, FluidMotion.FastDuration)
+        {
+            EasingFunction = FluidMotion.StandardEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        fade.Completed += (_, _) =>
+        {
+            _feedback.Visibility = Visibility.Collapsed;
+            _feedback.Opacity = 1;
+        };
+        _feedback.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
     }
 
     // ----- Context menu -----
@@ -558,25 +813,40 @@ internal sealed class PinWindow : Window
     {
         var menu = new ContextMenu();
 
+        menu.Items.Add(MenuItemFor(
+            "다른 이름으로 저장…",
+            (_, _) => RequestSave(PinSaveMode.SaveAs),
+            "원본 해상도의 PNG 파일로 저장 위치를 선택합니다.",
+            "Icon.SaveAs",
+            "Ctrl+Shift+S"));
+        menu.Items.Add(MenuItemFor(
+            "빠른 저장",
+            (_, _) => RequestSave(PinSaveMode.QuickSave),
+            "설정된 빠른 저장 폴더에 원본 해상도의 PNG 파일로 저장합니다.",
+            "Icon.Save",
+            "Ctrl+S"));
+        menu.Items.Add(MenuItemFor(
+            "복사",
+            (_, _) => CopyImageToClipboard(),
+            iconResourceKey: "Icon.Copy",
+            inputGestureText: "Ctrl+C"));
+        menu.Items.Add(MenuItemFor("텍스트 인식 (OCR)", (_, _) => RequestOcr(), iconResourceKey: "Icon.Ocr"));
+        menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("100% (0)", (_, _) => ResetZoomCentered()));
         menu.Items.Add(MenuItemFor("확대 (+)", (_, _) => ZoomCentered(1), iconResourceKey: "Icon.ZoomIn"));
         menu.Items.Add(MenuItemFor("축소 (-)", (_, _) => ZoomCentered(-1), iconResourceKey: "Icon.ZoomOut"));
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("더 투명하게 (Ctrl+휠)", (_, _) =>
         {
-            double opacity = _state.AdjustOpacity(-OpacityStep);
-            Opacity = opacity;
+            double opacity = AdjustOpacity(-OpacityStep);
             ShowFeedback($"투명도 {opacity * 100:0}%");
         }));
         menu.Items.Add(MenuItemFor("더 불투명하게 (Ctrl+휠)", (_, _) =>
         {
-            double opacity = _state.AdjustOpacity(OpacityStep);
-            Opacity = opacity;
+            double opacity = AdjustOpacity(OpacityStep);
             ShowFeedback($"투명도 {opacity * 100:0}%");
         }));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MenuItemFor("복사 (Ctrl+C)", (_, _) => CopyImageToClipboard(), iconResourceKey: "Icon.Copy"));
-        menu.Items.Add(MenuItemFor("텍스트 인식 (OCR)", (_, _) => RequestOcr(), iconResourceKey: "Icon.Ocr"));
         menu.Items.Add(MenuItemFor(
             "클릭 통과 전환",
             (_, _) => ToggleClickThrough(),
@@ -593,9 +863,10 @@ internal sealed class PinWindow : Window
         string header,
         RoutedEventHandler onClick,
         string? helpText = null,
-        string? iconResourceKey = null)
+        string? iconResourceKey = null,
+        string? inputGestureText = null)
     {
-        var item = new MenuItem { Header = header };
+        var item = new MenuItem { Header = header, InputGestureText = inputGestureText };
         AutomationProperties.SetName(item, header);
         if (helpText is not null)
         {
@@ -645,6 +916,7 @@ internal sealed class PinWindow : Window
         _ctrlClickTimer.Stop();
         _ctrlClickTimer.Tick -= OnCtrlClickTimerTick;
         SourceInitialized -= OnSourceInitialized;
+        Loaded -= OnPinLoaded;
         base.OnClosed(e);
     }
 }

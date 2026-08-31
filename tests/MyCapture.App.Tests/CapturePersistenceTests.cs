@@ -132,6 +132,62 @@ public sealed class CapturePersistenceTests
     });
 
     [Fact]
+    public void PersistOriginalAsync_CompletesOnlyAfterDurableFilesAndIndexAreReady() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var settings = new QueueSettings();
+            CaptureQueue queue = NewQueue(paths, settings);
+            CapturePersistenceService persistence = NewPersistence(queue, paths, settings);
+
+            BitmapSource original = SolidBitmap(41, 29, 0x12, 0x56, 0x9A);
+            CaptureRecord record = persistence.PersistOriginalAsync(
+                    original,
+                    1.25,
+                    "async source",
+                    "\\\\.\\DISPLAY2")
+                .GetAwaiter()
+                .GetResult();
+
+            string dir = queue.GetDirectory(record);
+            Assert.True(File.Exists(Path.Combine(dir, CaptureFileNames.Original)), "original.png missing");
+            Assert.True(File.Exists(Path.Combine(dir, CaptureFileNames.Rendered)), "rendered.png missing");
+            Assert.True(File.Exists(Path.Combine(dir, CaptureFileNames.Layers)), "layers.json missing");
+            Assert.True(File.Exists(Path.Combine(dir, CaptureFileNames.Thumbnail)), "thumb.jpg missing");
+            Assert.True(File.Exists(Path.Combine(dir, CaptureFileNames.Meta)), "meta.json missing");
+            Assert.True(File.Exists(paths.IndexFile), "index.json missing");
+            Assert.All(
+                new[]
+                {
+                    CaptureFileNames.Original,
+                    CaptureFileNames.Rendered,
+                    CaptureFileNames.Layers,
+                    CaptureFileNames.Thumbnail,
+                    CaptureFileNames.Meta,
+                },
+                name => Assert.True(new FileInfo(Path.Combine(dir, name)).Length > 0, $"{name} was empty"));
+
+            Assert.Single(queue.Records);
+            Assert.Equal(record.Id, queue.Records[0].Id);
+            Assert.Equal(queue.TotalBytes, record.TotalBytes);
+
+            CaptureQueue reloaded = NewQueue(paths, settings);
+            reloaded.Load();
+            CaptureRecord durable = Assert.Single(reloaded.Records);
+            Assert.Equal(record.Id, durable.Id);
+            Assert.Equal(41, durable.Width);
+            Assert.Equal(29, durable.Height);
+            Assert.Equal(record.TotalBytes, durable.TotalBytes);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
     public void Finalize_FlattensRewritesLayersAndUpdatesByteCount() => RunSta(() =>
     {
         string root = NewRoot();
@@ -322,20 +378,30 @@ public sealed class CaptureCommitServiceTests
     private static AnnotationEditingResult MakeResult(EditorCommitAction action)
     {
         BitmapSource selected = Solid(48, 32);
-        var frame = new MyCapture.Platform.Capture.FrozenFrame(selected, new RectD(0, 0, 48, 32), null, 0);
         var document = AnnotationDocument.CreateFor(48, 32);
+        return MakeResult(action, document, new Dictionary<string, BitmapSource>(), selected);
+    }
+
+    private static AnnotationEditingResult MakeResult(
+        EditorCommitAction action,
+        AnnotationDocument document,
+        IReadOnlyDictionary<string, BitmapSource> imageAssets,
+        BitmapSource? selected = null)
+    {
+        selected ??= Solid(48, 32);
+        var frame = new MyCapture.Platform.Capture.FrozenFrame(selected, new RectD(0, 0, 48, 32), null, 0);
         return new AnnotationEditingResult(
             frame,
             new RectD(0, 0, 48, 32),
             selected,
             document,
             action,
-            new Dictionary<string, BitmapSource>(),
+            imageAssets,
             new Dictionary<string, string>());
     }
 
     private static (CaptureCommitService Commit, CaptureQueue Queue, CaptureRecord Record, AppSettings Settings, AppPaths Paths)
-        Build(string root)
+        Build(string root, Func<BitmapSource, Task<bool>>? copyImageAsync = null)
     {
         AppPaths paths = AppPaths.CreateForRoot(root);
         var settings = new AppSettings();
@@ -343,11 +409,32 @@ public sealed class CaptureCommitServiceTests
         var persistence = new CapturePersistenceService(
             queue, paths, () => settings.Queue, NullLogger<CapturePersistenceService>.Instance);
         var commit = new CaptureCommitService(
-            persistence, () => settings, () => paths, NullLogger<CaptureCommitService>.Instance);
+            persistence,
+            () => settings,
+            () => paths,
+            NullLogger<CaptureCommitService>.Instance,
+            copyImageAsync);
 
         BitmapSource original = Solid(48, 32);
         CaptureRecord record = persistence.PersistOriginal(original, 1.0, string.Empty, string.Empty);
         return (commit, queue, record, settings, paths);
+    }
+
+    private static (CaptureCommitService Commit, CaptureQueue Queue, AppSettings Settings, AppPaths Paths)
+        BuildRecovery(string root, Func<BitmapSource, Task<bool>>? copyImageAsync = null)
+    {
+        AppPaths paths = AppPaths.CreateForRoot(root);
+        var settings = new AppSettings();
+        var queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
+        var persistence = new CapturePersistenceService(
+            queue, paths, () => settings.Queue, NullLogger<CapturePersistenceService>.Instance);
+        var commit = new CaptureCommitService(
+            persistence,
+            () => settings,
+            () => paths,
+            NullLogger<CaptureCommitService>.Instance,
+            copyImageAsync);
+        return (commit, queue, settings, paths);
     }
 
     [Fact]
@@ -357,11 +444,47 @@ public sealed class CaptureCommitServiceTests
         try
         {
             var (commit, _, record, settings, _) = Build(root);
-            bool close = commit.Commit(record, MakeResult(EditorCommitAction.Done));
+            bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.Done)).GetAwaiter().GetResult();
 
             Assert.True(close);
             // No quick-save file was written for a plain Done.
             Assert.False(Directory.Exists(settings.Export.QuickSaveDirectoryOverride is { Length: > 0 } d ? d : Path.Combine(root, "quicksave")));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void Done_ContentCommitInvalidatesCachedOcrInMemoryAndAcrossRestart() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var (commit, queue, record, _, paths) = Build(root);
+            record.OcrText = "text from the previous rendered generation";
+            record.OcrLanguage = "en-US";
+            queue.SaveRecordMetaOrThrow(record);
+            queue.Save();
+
+            bool close = commit.CommitAsync(
+                record,
+                MakeResult(EditorCommitAction.Done)).GetAwaiter().GetResult();
+
+            Assert.True(close);
+            Assert.Null(record.OcrText);
+            Assert.Null(record.OcrLanguage);
+            Assert.Null(record.OcrContentRevision);
+            var reloaded = new CaptureQueue(
+                paths,
+                new QueueSettings(),
+                NullLogger<CaptureQueue>.Instance);
+            reloaded.Load();
+            CaptureRecord durable = Assert.Single(reloaded.Records);
+            Assert.Null(durable.OcrText);
+            Assert.Null(durable.OcrLanguage);
+            Assert.Null(durable.OcrContentRevision);
         }
         finally
         {
@@ -379,12 +502,43 @@ public sealed class CaptureCommitServiceTests
             string quickSaveDir = Path.Combine(root, "exports");
             settings.Export.QuickSaveDirectoryOverride = quickSaveDir;
 
-            bool close = commit.Commit(record, MakeResult(EditorCommitAction.QuickSave));
+            bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.QuickSave)).GetAwaiter().GetResult();
 
             Assert.True(close);
             Assert.True(Directory.Exists(quickSaveDir));
             string[] pngs = Directory.GetFiles(quickSaveDir, "*.png");
             Assert.Single(pngs);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void QuickSave_ExportFailureKeepsEditorOpenAfterDurableQueueFinalize() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var (commit, queue, record, settings, _) = Build(root);
+            long previousRevision = record.ContentRevision;
+            string pathBlockingDirectoryCreation = Path.Combine(root, "not-a-directory");
+            File.WriteAllText(pathBlockingDirectoryCreation, "block directory creation");
+            settings.Export.QuickSaveDirectoryOverride = Path.Combine(
+                pathBlockingDirectoryCreation,
+                "exports");
+            settings.Export.CopyToClipboardOnQuickSave = false;
+
+            bool close = commit.CommitAsync(
+                record,
+                MakeResult(EditorCommitAction.QuickSave)).GetAwaiter().GetResult();
+
+            Assert.False(close);
+            Assert.Equal(previousRevision + 1, record.ContentRevision);
+            Assert.True(File.Exists(Path.Combine(
+                queue.GetDirectory(record),
+                CaptureFileNames.Rendered)));
         }
         finally
         {
@@ -405,7 +559,7 @@ public sealed class CaptureCommitServiceTests
             // Stub the dialog to "cancel".
             commit.SaveAsPrompt = _ => null;
 
-            bool close = commit.Commit(record, MakeResult(EditorCommitAction.SaveAs));
+            bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.SaveAs)).GetAwaiter().GetResult();
 
             Assert.False(close);
             Assert.False(Directory.Exists(quickSaveDir), "Cancelled Save As must not write anything");
@@ -426,10 +580,186 @@ public sealed class CaptureCommitServiceTests
             string chosen = Path.Combine(root, "chosen.png");
             commit.SaveAsPrompt = _ => chosen;
 
-            bool close = commit.Commit(record, MakeResult(EditorCommitAction.SaveAs));
+            bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.SaveAs)).GetAwaiter().GetResult();
 
             Assert.True(close);
             Assert.True(File.Exists(chosen));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void SaveAs_NonPngPathIsRejectedAndKeepsEditorOpen() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var (commit, _, record, _, _) = Build(root);
+            string misleadingPath = Path.Combine(root, "chosen.jpg");
+            commit.SaveAsPrompt = _ => misleadingPath;
+
+            bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.SaveAs)).GetAwaiter().GetResult();
+
+            Assert.False(close);
+            Assert.False(File.Exists(misleadingPath));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void CopyToClipboard_WaitsForCopyBeforeClosing() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var copyStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var copyCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var (commit, _, record, _, _) = Build(root, _ =>
+            {
+                copyStarted.TrySetResult(true);
+                return copyCompletion.Task;
+            });
+
+            Task<bool> pending = commit.CommitAsync(record, MakeResult(EditorCommitAction.CopyToClipboard));
+
+            Assert.True(copyStarted.Task.Wait(TimeSpan.FromSeconds(10)), "copy delegate was never reached");
+            Assert.False(pending.IsCompleted);
+            copyCompletion.SetResult(true);
+            Assert.True(pending.GetAwaiter().GetResult());
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void CopyToClipboard_FailureKeepsEditorOpenForRetry() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var (commit, queue, record, _, _) = Build(root, _ => Task.FromResult(false));
+
+            bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.CopyToClipboard)).GetAwaiter().GetResult();
+
+            Assert.False(close);
+            Assert.True(File.Exists(Path.Combine(queue.GetDirectory(record), CaptureFileNames.Rendered)));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void CopyToClipboard_RetryWithInsertedImageDoesNotMutateLiveDocumentAndPersistsSidecar() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            int copyAttempts = 0;
+            var (commit, queue, record, _, _) = Build(
+                root,
+                _ => Task.FromResult(Interlocked.Increment(ref copyAttempts) >= 2));
+
+            const string sessionAssetName = "inserted-session-image.png";
+            BitmapSource asset = Solid(13, 11);
+            var document = AnnotationDocument.CreateFor(48, 32);
+            var liveImage = new ImageAnnotation
+            {
+                AssetFileName = sessionAssetName,
+                SourceWidth = asset.PixelWidth,
+                SourceHeight = asset.PixelHeight,
+                Rect = new RectD(5, 4, asset.PixelWidth, asset.PixelHeight),
+            };
+            Guid liveId = liveImage.Id;
+            document.Add(liveImage);
+            var assets = new Dictionary<string, BitmapSource>
+            {
+                [sessionAssetName] = asset,
+            };
+            AnnotationEditingResult result = MakeResult(
+                EditorCommitAction.CopyToClipboard,
+                document,
+                assets);
+
+            bool firstClose = commit.CommitAsync(record, result).GetAwaiter().GetResult();
+
+            Assert.False(firstClose);
+            Assert.Equal(sessionAssetName, liveImage.AssetFileName);
+            Assert.Equal(liveId, liveImage.Id);
+
+            bool secondClose = commit.CommitAsync(record, result).GetAwaiter().GetResult();
+
+            Assert.True(secondClose);
+            Assert.Equal(2, copyAttempts);
+            Assert.Equal(sessionAssetName, liveImage.AssetFileName);
+            Assert.Equal(liveId, liveImage.Id);
+
+            string captureDirectory = queue.GetDirectory(record);
+            string canonicalAssetName = $"{CaptureFileNames.AssetPrefix}01.png";
+            string canonicalAssetPath = Path.Combine(captureDirectory, canonicalAssetName);
+            Assert.True(File.Exists(canonicalAssetPath), "canonical image sidecar missing after retry");
+            Assert.True(new FileInfo(canonicalAssetPath).Length > 0, "canonical image sidecar was empty");
+
+            string layersJson = File.ReadAllText(Path.Combine(captureDirectory, CaptureFileNames.Layers));
+            AnnotationDocument persisted = Assert.IsType<AnnotationDocument>(
+                AnnotationDocument.TryFromJson(layersJson));
+            ImageAnnotation persistedImage = Assert.IsType<ImageAnnotation>(Assert.Single(persisted.Items));
+            Assert.Equal(canonicalAssetName, persistedImage.AssetFileName);
+            Assert.Equal(liveId, persistedImage.Id);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void RecoveryWithoutRecord_ExplicitExportsAndCopyRemainUsableWhileDoneStaysOpen() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var copyResults = new Queue<bool>([true, false]);
+            var (commit, queue, settings, _) = BuildRecovery(
+                root,
+                _ => Task.FromResult(copyResults.Dequeue()));
+            Assert.Empty(queue.Records);
+
+            string saveAsPath = Path.Combine(root, "recovered-save-as.png");
+            commit.SaveAsPrompt = _ => saveAsPath;
+            Assert.True(commit.CommitAsync(null, MakeResult(EditorCommitAction.SaveAs)).GetAwaiter().GetResult());
+            Assert.True(File.Exists(saveAsPath));
+
+            string rejectedPath = Path.Combine(root, "rejected-save-as.jpg");
+            commit.SaveAsPrompt = _ => rejectedPath;
+            Assert.False(commit.CommitAsync(null, MakeResult(EditorCommitAction.SaveAs)).GetAwaiter().GetResult());
+            Assert.False(File.Exists(rejectedPath));
+
+            string quickSaveDirectory = Path.Combine(root, "recovered-quick-save");
+            settings.Export.QuickSaveDirectoryOverride = quickSaveDirectory;
+            settings.Export.CopyToClipboardOnQuickSave = false;
+            Assert.True(commit.CommitAsync(null, MakeResult(EditorCommitAction.QuickSave)).GetAwaiter().GetResult());
+            Assert.Single(Directory.GetFiles(quickSaveDirectory, "*.png"));
+
+            string pathBlockingDirectoryCreation = Path.Combine(root, "not-a-directory");
+            File.WriteAllText(pathBlockingDirectoryCreation, "block directory creation");
+            settings.Export.QuickSaveDirectoryOverride = Path.Combine(pathBlockingDirectoryCreation, "exports");
+            Assert.False(commit.CommitAsync(null, MakeResult(EditorCommitAction.QuickSave)).GetAwaiter().GetResult());
+
+            Assert.True(commit.CommitAsync(null, MakeResult(EditorCommitAction.CopyToClipboard)).GetAwaiter().GetResult());
+            Assert.False(commit.CommitAsync(null, MakeResult(EditorCommitAction.CopyToClipboard)).GetAwaiter().GetResult());
+            Assert.False(commit.CommitAsync(null, MakeResult(EditorCommitAction.Done)).GetAwaiter().GetResult());
+            Assert.Empty(copyResults);
+            Assert.Empty(queue.Records);
         }
         finally
         {

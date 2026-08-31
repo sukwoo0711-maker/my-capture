@@ -26,6 +26,12 @@ public sealed class CaptureRecord
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
 
+    /// <summary>
+    /// Monotonic revision of rendered pixels/layers/assets. Metadata-only changes such as pin,
+    /// title, or cached OCR deliberately do not advance it, so they cannot invalidate an editor.
+    /// </summary>
+    public long ContentRevision { get; set; }
+
     /// <summary>Pixel width of the captured image.</summary>
     public int Width { get; set; }
 
@@ -74,6 +80,13 @@ public sealed class CaptureRecord
     public string? OcrLanguage { get; set; }
 
     /// <summary>
+    /// Content generation for which OCR completed, including a successful "no text" result.
+    /// This prevents text-free captures from being reprocessed forever and makes the marker
+    /// invalid automatically when rendered pixels advance to another generation.
+    /// </summary>
+    public long? OcrContentRevision { get; set; }
+
+    /// <summary>
     /// Free-form user label, searchable in the gallery.
     /// </summary>
     public string Title { get; set; } = string.Empty;
@@ -100,6 +113,14 @@ public sealed class CaptureRecord
 
     [JsonIgnore]
     public bool HasOcrText => !string.IsNullOrWhiteSpace(OcrText);
+
+    /// <summary>
+    /// Whether OCR has completed for the current pixels. Legacy records that already carry
+    /// text predate <see cref="OcrContentRevision"/> and are treated as indexed until edited.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasCurrentOcrIndex =>
+        OcrContentRevision == ContentRevision || (OcrContentRevision is null && HasOcrText);
 
     /// <summary>
     /// Text used by gallery search.
@@ -133,6 +154,12 @@ public static class CaptureFileNames
 
     /// <summary>Per-capture metadata copy used to rebuild a lost index.</summary>
     public const string Meta = "meta.json";
+
+    /// <summary>
+    /// Durable provisional record written before original pixels. It lets startup merge a
+    /// capture that reached disk but was interrupted before the main queue index was updated.
+    /// </summary>
+    public const string OriginalPending = ".original-pending.json";
 
     /// <summary>Prefix for image-annotation assets.</summary>
     public const string AssetPrefix = "asset-";

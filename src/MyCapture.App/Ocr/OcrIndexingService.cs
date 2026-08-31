@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Gallery;
 using MyCapture.Core.Queue;
@@ -10,7 +11,7 @@ namespace MyCapture.App.Ocr;
 /// <summary>Progress of a batch OCR indexing pass.</summary>
 /// <param name="Processed">Records attempted so far this pass.</param>
 /// <param name="Total">Records that needed indexing when the pass started.</param>
-/// <param name="Indexed">Records that gained searchable text this pass.</param>
+/// <param name="Indexed">Records whose current image generation was indexed this pass.</param>
 public readonly record struct OcrIndexingProgress(int Processed, int Total, int Indexed)
 {
     public double Fraction => Total <= 0 ? 1.0 : (double)Processed / Total;
@@ -59,19 +60,25 @@ public sealed class OcrIndexingService
     private readonly Func<CaptureRecord, string> _directoryResolver;
     private readonly Func<OcrSettings> _settings;
     private readonly ILogger<OcrIndexingService> _log;
+    private readonly Dispatcher? _mutationDispatcher;
+
+    /// <summary>Test-only observation point executed immediately before the dispatcher-owned cache mutation.</summary>
+    internal Action? BeforeCacheOcrForTest { get; set; }
 
     public OcrIndexingService(
         GalleryController gallery,
         IOcrService ocr,
         Func<CaptureRecord, string> directoryResolver,
         Func<OcrSettings> settings,
-        ILogger<OcrIndexingService> log)
+        ILogger<OcrIndexingService> log,
+        Dispatcher? mutationDispatcher = null)
     {
         _gallery = gallery ?? throw new ArgumentNullException(nameof(gallery));
         _ocr = ocr ?? throw new ArgumentNullException(nameof(ocr));
         _directoryResolver = directoryResolver ?? throw new ArgumentNullException(nameof(directoryResolver));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _mutationDispatcher = mutationDispatcher;
     }
 
     /// <summary>Whether the OS OCR engine can run at all (a language pack is installed).</summary>
@@ -121,6 +128,8 @@ public sealed class OcrIndexingService
             {
                 try
                 {
+                    Guid recordId = record.Id;
+                    long requestedContentRevision = record.ContentRevision;
                     OcrRequest request = OcrRequest.FromFile(
                         imagePath,
                         settings.UpscaleFactor,
@@ -130,16 +139,34 @@ public sealed class OcrIndexingService
 
                     if (result.Status == OcrStatus.Success && result.HasText)
                     {
-                        _gallery.CacheOcr(record.Id, result.Text, result.LanguageTag);
-                        indexed++;
+                        bool cached = await CacheOcrOnOwnerAsync(
+                                recordId,
+                                result.Text,
+                                result.LanguageTag,
+                                requestedContentRevision)
+                            .ConfigureAwait(false);
+                        if (cached)
+                        {
+                            indexed++;
+                        }
                     }
                     else if (result.Status == OcrStatus.NoText)
                     {
-                        // Cache an empty marker so we don't re-OCR a genuinely text-free image
-                        // on every pass. An empty string still sets HasOcrText=false, but the
-                        // UpdatedAt bump plus the NoText outcome is enough for callers that want
-                        // to skip retried blanks; we simply move on.
-                        _log.LogDebug("Capture {Id} contains no recognisable text", record.Id);
+                        // Persist a generation-scoped empty result so a genuinely text-free
+                        // image is not reprocessed on every pass. It is indexed but naturally
+                        // contributes no words to full-text search.
+                        bool cached = await CacheOcrOnOwnerAsync(
+                                recordId,
+                                string.Empty,
+                                result.LanguageTag,
+                                requestedContentRevision)
+                            .ConfigureAwait(false);
+                        if (cached)
+                        {
+                            indexed++;
+                        }
+
+                        _log.LogDebug("Capture {Id} contains no recognisable text", recordId);
                     }
                     else if (result.Status == OcrStatus.Unavailable)
                     {
@@ -147,6 +174,15 @@ public sealed class OcrIndexingService
                         _log.LogWarning("OCR engine became unavailable during indexing");
                         progress?.Report(new OcrIndexingProgress(processed, work.Count, indexed));
                         return OcrIndexingOutcome.Unavailable;
+                    }
+                    else if (result.Status == OcrStatus.Cancelled)
+                    {
+                        progress?.Report(new OcrIndexingProgress(processed, work.Count, indexed));
+                        _log.LogInformation(
+                            "OCR indexing cancelled during recognition after {Processed}/{Total}",
+                            processed,
+                            work.Count);
+                        return OcrIndexingOutcome.Cancelled;
                     }
                 }
                 catch (OperationCanceledException)
@@ -166,8 +202,34 @@ public sealed class OcrIndexingService
             await Task.Yield();
         }
 
-        _log.LogInformation("OCR indexing finished: {Indexed}/{Total} gained searchable text", indexed, work.Count);
+        _log.LogInformation("OCR indexing finished: {Indexed}/{Total} current generations indexed", indexed, work.Count);
         return OcrIndexingOutcome.Completed;
+    }
+
+    private async Task<bool> CacheOcrOnOwnerAsync(
+        Guid id,
+        string text,
+        string? languageTag,
+        long expectedContentRevision)
+    {
+        if (_mutationDispatcher is null || _mutationDispatcher.CheckAccess())
+        {
+            BeforeCacheOcrForTest?.Invoke();
+            return _gallery.CacheOcr(id, text, languageTag, expectedContentRevision);
+        }
+
+        // Recognition deliberately finishes off-thread. Queue records and their observable
+        // collection belong to WPF's dispatcher, so generation-neutral OCR metadata must join
+        // the same serial UI mutation stream as editor finalisation before writing meta/index.
+        return await _mutationDispatcher.InvokeAsync(
+                () =>
+                {
+                    BeforeCacheOcrForTest?.Invoke();
+                    return _gallery.CacheOcr(id, text, languageTag, expectedContentRevision);
+                },
+                DispatcherPriority.Background)
+            .Task
+            .ConfigureAwait(false);
     }
 
     private string? ResolveImagePath(CaptureRecord record)

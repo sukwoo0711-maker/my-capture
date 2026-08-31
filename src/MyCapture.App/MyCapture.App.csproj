@@ -9,6 +9,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <SatelliteResourceLanguages>ko-KR;en</SatelliteResourceLanguages>
+    <!-- Keep the release RID in project.assets.json after an ordinary solution restore so
+         the self-contained package can later be reproduced without another restore. -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

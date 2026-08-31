@@ -1,8 +1,10 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
@@ -27,6 +29,8 @@ internal class AnnotationEditorWindow : Window
     {
         ArgumentNullException.ThrowIfNull(sourceFrame);
         ArgumentNullException.ThrowIfNull(selectedBitmap);
+
+        StandardWindowTheme.Apply(this);
 
         Title = title;
         Background = Application.Current?.TryFindResource("Surface.Base") as Brush
@@ -62,7 +66,7 @@ internal class AnnotationEditorWindow : Window
         ContentRendered += OnContentRendered;
     }
 
-    internal Func<AnnotationEditingResult, bool>? CommitRequested
+    internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested
     {
         get => _editor.CommitRequested;
         set => _editor.CommitRequested = value;
@@ -75,6 +79,17 @@ internal class AnnotationEditorWindow : Window
     internal bool WasCommitted => _committed;
 
     internal AnnotationEditorControl Editor => _editor;
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (_editor.IsCommitInProgress)
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        base.OnClosing(e);
+    }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {

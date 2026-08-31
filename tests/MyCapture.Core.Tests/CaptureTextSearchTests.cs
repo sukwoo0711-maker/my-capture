@@ -176,4 +176,23 @@ public sealed class CaptureTextSearchTests
         Assert.Equal(1, CaptureTextSearch.MeasureCoverage([record]).Missing);
         Assert.Empty(CaptureTextSearch.Search([record], "anything"));
     }
+
+    [Fact]
+    public void NoTextAttemptForCurrentGeneration_CompletesCoverageWithoutSearchableWords()
+    {
+        var record = new CaptureRecord
+        {
+            ContentRevision = 4,
+            OcrContentRevision = 4,
+            OcrText = string.Empty,
+        };
+
+        OcrCoverage coverage = CaptureTextSearch.MeasureCoverage([record]);
+
+        Assert.Equal(1, coverage.Indexed);
+        Assert.Equal(0, coverage.WithOcrText);
+        Assert.Equal(0, coverage.Missing);
+        Assert.True(coverage.IsComplete);
+        Assert.Empty(CaptureTextSearch.Search([record], "anything"));
+    }
 }

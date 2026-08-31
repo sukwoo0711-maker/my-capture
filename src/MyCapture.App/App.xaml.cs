@@ -62,9 +62,11 @@ public partial class App : Application
     private SettingsWindow? _settingsWindow;
     private StartupRegistrationService? _startupService;
     private SettingsApplyService? _settingsApply;
+    private bool _pasteToScreenInFlight;
 
     /// <summary>The record persisted for the capture currently being edited, if any.</summary>
     private CaptureRecord? _currentRecord;
+    private CaptureEditSession? _currentEditSession;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -167,8 +169,13 @@ public partial class App : Application
 
         InitializeQueue();
 
+        var pinSaveService = new PinImageSaveService(
+            () => _settings!,
+            () => _capturePaths ?? _services.GetRequiredService<AppPaths>(),
+            _services.GetRequiredService<ILogger<PinImageSaveService>>());
         _pins = new PinManager(
             () => _settings!.Pin,
+            pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
 
         _ocrService = _services.GetRequiredService<IOcrService>();
@@ -192,14 +199,16 @@ public partial class App : Application
         _tray.SettingsRequested += (_, _) => HandleSettingsRequested();
         _tray.ExitRequested += (_, _) => Shutdown(0);
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
-        _overlay.SelectionCompleted += OnCaptureSelectionCompleted;
+        _overlay.SelectionPersistRequested = OnCaptureSelectionCompletedAsync;
         _overlay.EditingCompleted += OnAnnotationEditingCompleted;
         _overlay.OverlayClosed += (_, _) =>
         {
+            _currentEditSession?.Dispose();
             _currentRecord = null;
+            _currentEditSession = null;
             RestoreTrayAfterCapture();
         };
-        _overlay.CommitRequested = HandleCommit;
+        _overlay.CommitRequested = HandleCommitAsync;
 
         // Region video recording (Ctrl+Shift+X). Shares the capture engine and, on a
         // frame-image edit, the same persistence/commit path as still capture so recordings
@@ -210,6 +219,7 @@ public partial class App : Application
             () => _settings!.Recording,
             _services.GetRequiredService<ILoggerFactory>());
         _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
+        _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         _recorder.SessionEnded += (_, _) => RestoreTrayAfterCapture();
 
         // Add the icon first so registration failures have a non-modal place to be
@@ -300,16 +310,17 @@ public partial class App : Application
     /// no image or the clipboard is momentarily busy. Never throws into the message pump: a
     /// pin failure must not take down the resident process.
     /// </summary>
-    private void HandlePasteToScreen()
+    private async void HandlePasteToScreen()
     {
-        if (_pins is null)
+        if (_pins is null || _pasteToScreenInFlight)
         {
             return;
         }
 
+        _pasteToScreenInFlight = true;
         try
         {
-            PasteResult result = _pins.PasteFromClipboard();
+            PasteResult result = await _pins.PasteFromClipboardAsync();
             switch (result)
             {
                 case PasteResult.NoImage:
@@ -338,6 +349,10 @@ public partial class App : Application
                 ex.Message,
                 TrayBalloonKind.Error,
                 playSound: false);
+        }
+        finally
+        {
+            _pasteToScreenInFlight = false;
         }
     }
 
@@ -617,18 +632,15 @@ public partial class App : Application
         }
     }
 
-    private void OnCaptureSelectionCompleted(
-        object? sender,
-        CaptureSelectionCompletedEventArgs e)
+    private async Task OnCaptureSelectionCompletedAsync(CaptureSelectionCompletedEventArgs e)
     {
         _log?.LogInformation(
             "Capture selection ready for editor: {Width}x{Height}",
             e.SelectedBitmap.PixelWidth,
             e.SelectedBitmap.PixelHeight);
 
-        // Persist the untouched selection synchronously, before editing continues, so the
-        // capture survives a crash or the user abandoning the editor. The same record is
-        // finalised with the flattened annotations when editing commits.
+        // Persist the untouched selection before editing continues so the capture survives a
+        // crash or abandon, while encoding and disk flushes run off the UI dispatcher.
         if (_persistence is null)
         {
             return;
@@ -636,11 +648,12 @@ public partial class App : Application
 
         try
         {
-            _currentRecord = _persistence.PersistOriginal(
+            _currentRecord = await _persistence.PersistOriginalAsync(
                 e.SelectedBitmap,
                 e.Frame.DpiScale,
                 sourceWindowTitle: e.SourceTitle,
                 sourceMonitor: e.Frame.Monitor?.DeviceName ?? string.Empty);
+            _currentEditSession = _commit?.BeginEditSession(_currentRecord);
 
             // Repeat history is intentionally limited to explicit manual region selections.
             // Advanced full/window/scroll captures carry RecordForRepeat=false because their
@@ -664,9 +677,11 @@ public partial class App : Application
 
             _tray?.SetCaptureCount(_queue?.Count ?? 0);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
+            _currentEditSession?.Dispose();
             _currentRecord = null;
+            _currentEditSession = null;
             _log?.LogError(ex, "Could not persist the captured original");
             _tray?.ShowBalloon(
                 "캡처를 저장할 수 없습니다",
@@ -679,18 +694,16 @@ public partial class App : Application
     /// Performs an editor commit: flatten, persist, and any clipboard/export the action
     /// requires. Returns whether the editor should close.
     /// </summary>
-    private bool HandleCommit(AnnotationEditingResult result)
+    private async Task<bool> HandleCommitAsync(AnnotationEditingResult result)
     {
-        if (_commit is null || _currentRecord is null)
+        if (_commit is null)
         {
-            // No persisted record to finalise (persistence failed earlier); close anyway so
-            // the user is not trapped in the editor.
-            return true;
+            return false;
         }
 
         try
         {
-            bool shouldClose = _commit.Commit(_currentRecord, result);
+            bool shouldClose = await _commit.CommitAsync(_currentRecord, result, _currentEditSession);
             if (shouldClose)
             {
                 _tray?.SetCaptureCount(_queue?.Count ?? 0);
@@ -698,7 +711,7 @@ public partial class App : Application
 
             return shouldClose;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
             _log?.LogError(ex, "Could not finalise the annotated capture");
             _tray?.ShowBalloon(
@@ -723,10 +736,11 @@ public partial class App : Application
             e.SelectedBitmap.PixelHeight,
             e.Document.Items.Count);
 
-        // The commit itself (flatten/persist/clipboard/export) already ran synchronously in
-        // HandleCommit before the editor closed. Nothing remains except to release the
-        // in-flight record.
+        // The commit itself (flatten/persist/clipboard/export) completed before the editor
+        // closed. Nothing remains except to release the in-flight record.
+        _currentEditSession?.Dispose();
         _currentRecord = null;
+        _currentEditSession = null;
     }
 
     /// <summary>
@@ -761,34 +775,79 @@ public partial class App : Application
     /// the exact capture persistence/commit path so it lands in the gallery as a first-class
     /// capture with a preserved layer document.
     /// </summary>
+    private MyCapture.App.Recording.FrameImageCommitSession CreateRecordedFrameCommitHandler()
+    {
+        CaptureRecord? record = null;
+        CaptureEditSession? editSession = null;
+
+        async Task<bool> CommitAsync(AnnotationEditingResult result)
+        {
+            if (_persistence is null || _commit is null)
+            {
+                return false;
+            }
+
+            if (record is null)
+            {
+                try
+                {
+                    record = await _persistence.PersistOriginalAsync(
+                        result.SelectedBitmap,
+                        result.Frame.DpiScale,
+                        sourceWindowTitle: "녹화 프레임",
+                        sourceMonitor: result.Frame.Monitor?.DeviceName ?? string.Empty);
+                    editSession = _commit.BeginEditSession(record);
+                }
+                catch (Exception ex)
+                {
+                    _log?.LogError(ex, "Could not persist the original image from a recorded frame");
+                    _tray?.ShowBalloon(
+                        "프레임 원본을 보관할 수 없습니다",
+                        "다른 이름으로 저장 또는 클립보드 복사로 복구할 수 있습니다.",
+                        TrayBalloonKind.Error);
+                }
+            }
+
+            try
+            {
+                bool shouldClose = await _commit.CommitAsync(record, result, editSession);
+                if (shouldClose)
+                {
+                    _tray?.SetCaptureCount(_queue?.Count ?? 0);
+                }
+
+                return shouldClose;
+            }
+            catch (Exception ex)
+            {
+                _log?.LogError(ex, "Could not commit an image edited from a recorded frame");
+                _tray?.ShowBalloon(
+                    "프레임 이미지를 저장할 수 없습니다",
+                    ex.Message,
+                    TrayBalloonKind.Error);
+                return false;
+            }
+        }
+
+        return new MyCapture.App.Recording.FrameImageCommitSession(
+            CommitAsync,
+            () =>
+            {
+                editSession?.Dispose();
+                editSession = null;
+            });
+    }
+
     private void OnRecordedFrameImageCaptured(
         object? sender,
         MyCapture.App.Recording.AnnotationFrameCapturedEventArgs e)
     {
-        if (_persistence is null || _commit is null)
-        {
-            return;
-        }
-
-        try
-        {
-            CaptureRecord record = _persistence.PersistOriginal(
-                e.Result.SelectedBitmap,
-                e.Result.Frame.DpiScale,
-                sourceWindowTitle: "녹화 프레임",
-                sourceMonitor: e.Result.Frame.Monitor?.DeviceName ?? string.Empty);
-
-            _ = _commit.Commit(record, e.Result);
-            _tray?.SetCaptureCount(_queue?.Count ?? 0);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _log?.LogError(ex, "Could not persist an image edited from a recorded frame");
-            _tray?.ShowBalloon(
-                "프레임 이미지를 저장할 수 없습니다",
-                ex.Message,
-                TrayBalloonKind.Error);
-        }
+        _log?.LogInformation(
+            "Recorded-frame image commit completed ({Action}, {Width}x{Height})",
+            e.Result.Action,
+            e.Result.SelectedBitmap.PixelWidth,
+            e.Result.SelectedBitmap.PixelHeight);
+        _tray?.SetCaptureCount(_queue?.Count ?? 0);
     }
 
     private void InitializeQueue()
@@ -810,6 +869,7 @@ public partial class App : Application
             paths,
             _settings.Queue,
             _services.GetRequiredService<ILogger<CaptureQueue>>());
+        using IDisposable startupEviction = queue.SuspendEviction();
 
         // Deleting evicted directories is the shell's job: the queue stays a pure index so a
         // deletion failure can never desynchronise it from the filesystem.
@@ -954,7 +1014,8 @@ public partial class App : Application
             _ocrService ?? _services.GetRequiredService<IOcrService>(),
             record => _queue.GetDirectory(record),
             () => _settings!.Ocr,
-            _services.GetRequiredService<ILogger<MyCapture.App.Ocr.OcrIndexingService>>());
+            _services.GetRequiredService<ILogger<MyCapture.App.Ocr.OcrIndexingService>>(),
+            Dispatcher);
 
         var window = new GalleryWindow(
             viewModel,

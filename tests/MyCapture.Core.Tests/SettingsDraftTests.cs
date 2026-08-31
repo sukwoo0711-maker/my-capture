@@ -1,3 +1,4 @@
+using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using Xunit;
 
@@ -12,6 +13,7 @@ public sealed class AppSettingsCloneTests
         source.Queue.MaxItems = 123;
         source.Ocr.PreferredLanguages = ["ko-KR", "en-US"];
         source.Annotation.RecentColors.Add(Primitives.ColorRgba.FromRgb(1, 2, 3));
+        source.Recording.FrameRate = RecordingFrameRate.Fps60;
 
         AppSettings clone = source.DeepClone();
 
@@ -19,10 +21,12 @@ public sealed class AppSettingsCloneTests
         clone.Queue.MaxItems = 999;
         clone.Ocr.PreferredLanguages.Add("ja-JP");
         clone.Annotation.RecentColors.Clear();
+        clone.Recording.FrameRate = RecordingFrameRate.Fps10;
 
         Assert.Equal(123, source.Queue.MaxItems);
         Assert.Equal(["ko-KR", "en-US"], source.Ocr.PreferredLanguages);
         Assert.Single(source.Annotation.RecentColors);
+        Assert.Equal(RecordingFrameRate.Fps60, source.Recording.FrameRate);
     }
 
     [Fact]
@@ -34,6 +38,13 @@ public sealed class AppSettingsCloneTests
         source.Export.FileNamePattern = "shot_{yyyy}";
         source.Pin.ZoomStep = 0.25;
         source.Hotkeys.Capture = new Hotkey(HotkeyModifiers.Alt, Hotkey.VkF1);
+        source.Hotkeys.RecordRegion = new Hotkey(HotkeyModifiers.Alt, Hotkey.VkF1 + 1);
+        source.Recording.FrameRate = RecordingFrameRate.Fps24;
+        source.Recording.UseStartDelay = true;
+        source.Recording.StartDelaySeconds = 6;
+        source.Recording.IncludeCursor = false;
+        source.Recording.BitrateBitsPerSecond = 8_000_000;
+        source.Recording.CoarseStepSeconds = 2.5;
 
         AppSettings clone = source.DeepClone();
 
@@ -42,6 +53,13 @@ public sealed class AppSettingsCloneTests
         Assert.Equal("shot_{yyyy}", clone.Export.FileNamePattern);
         Assert.Equal(0.25, clone.Pin.ZoomStep);
         Assert.Equal("Alt+F1", clone.Hotkeys.Capture.ToString());
+        Assert.Equal("Alt+F2", clone.Hotkeys.RecordRegion.ToString());
+        Assert.Equal(RecordingFrameRate.Fps24, clone.Recording.FrameRate);
+        Assert.True(clone.Recording.UseStartDelay);
+        Assert.Equal(6, clone.Recording.StartDelaySeconds);
+        Assert.False(clone.Recording.IncludeCursor);
+        Assert.Equal(8_000_000, clone.Recording.BitrateBitsPerSecond);
+        Assert.Equal(2.5, clone.Recording.CoarseStepSeconds);
     }
 }
 
@@ -100,6 +118,62 @@ public sealed class SettingsDraftTests
         SettingsDraft draft = NewDraft();
         draft.InitialOpacity = value;
         Assert.True(draft.HasErrors);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("20")]
+    [InlineData("120")]
+    [InlineData("abc")]
+    public void RecordingFrameRate_RejectsUnsupportedValues(string value)
+    {
+        SettingsDraft draft = NewDraft();
+
+        draft.RecordingFrameRate = value;
+
+        Assert.True(draft.HasErrors);
+        Assert.NotEmpty(draft.GetErrors(nameof(SettingsDraft.RecordingFrameRate)).Cast<string>());
+    }
+
+    [Fact]
+    public void RecordingSettings_RoundTripEditableAndAdvancedValues()
+    {
+        var source = new AppSettings();
+        source.Recording.BitrateBitsPerSecond = 7_500_000;
+        source.Recording.CoarseStepSeconds = 2.25;
+        var draft = new SettingsDraft(source)
+        {
+            RecordingFrameRate = "60",
+            UseRecordingStartDelay = true,
+            RecordingStartDelaySeconds = "7",
+            RecordingIncludeCursor = false,
+            RecordRegionHotkey = "Alt+F8",
+        };
+
+        Assert.False(draft.HasErrors);
+        AppSettings mapped = draft.ToAppSettings();
+
+        Assert.Equal(RecordingFrameRate.Fps60, mapped.Recording.FrameRate);
+        Assert.True(mapped.Recording.UseStartDelay);
+        Assert.Equal(7, mapped.Recording.StartDelaySeconds);
+        Assert.False(mapped.Recording.IncludeCursor);
+        Assert.Equal(7_500_000, mapped.Recording.BitrateBitsPerSecond);
+        Assert.Equal(2.25, mapped.Recording.CoarseStepSeconds);
+        Assert.Equal("Alt+F8", mapped.Hotkeys.RecordRegion.ToString());
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("11")]
+    [InlineData("nope")]
+    public void RecordingStartDelay_RejectsInvalidValues(string value)
+    {
+        SettingsDraft draft = NewDraft();
+
+        draft.RecordingStartDelaySeconds = value;
+
+        Assert.True(draft.HasErrors);
+        Assert.NotEmpty(draft.GetErrors(nameof(SettingsDraft.RecordingStartDelaySeconds)).Cast<string>());
     }
 
     [Fact]

@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using MyCapture.App.Themes;
 
 namespace MyCapture.App.Capture;
 
@@ -36,6 +37,10 @@ internal sealed class CountdownWindow : Window
     internal CountdownWindow(int seconds)
     {
         _remaining = Math.Max(1, seconds);
+
+        // This is a transient pre-capture surface rather than a pixel-accurate selection
+        // overlay, so a short content reveal makes the delay feel intentional and responsive.
+        FluidMotion.SetWindowEntrance(this, true);
 
         Title = "MyCapture 지연 캡처";
         WindowStyle = WindowStyle.None;

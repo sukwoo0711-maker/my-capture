@@ -1,93 +1,108 @@
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Threading;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Threading;
 using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.Editing;
 
 /// <summary>
-/// Places an annotated capture on the Windows clipboard.
+/// Places an image on the Windows clipboard as exact PNG plus a legacy Bitmap fallback.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Two formats are set on one data object. <c>PNG</c> carries the exact bytes with the
-/// alpha channel intact for applications that understand it (chat apps, modern editors),
-/// while a <see cref="System.Windows.Media.Imaging.BitmapSource"/> under the standard
-/// <c>Bitmap</c> format is what legacy consumers such as older Office paste. Setting only
-/// one loses either transparency or half the target applications.
-/// </para>
-/// <para>
-/// The clipboard is a single shared OS resource, so <c>OpenClipboard</c> fails with
-/// <c>CLIPBRD_E_CANT_OPEN</c> (HRESULT 0x800401D0) whenever another process is mid-paste.
-/// This is transient and common; the copy is retried a handful of times with a short
-/// back-off rather than surfaced as a failure the first time it races.
-/// </para>
+/// PNG encoding runs on a worker and the WPF/OLE clipboard operation runs on an isolated STA
+/// worker. Copying a large scrolling capture therefore never blocks every WPF window while
+/// another application briefly holds <c>OpenClipboard</c>.
 /// </remarks>
 internal static class ClipboardImageService
 {
-    /// <summary>HRESULT returned by the shell when the clipboard cannot be opened.</summary>
     private const uint ClipboardCantOpen = 0x800401D0;
+    private static readonly SemaphoreSlim CopyGate = new(1, 1);
 
-    private const int MaxAttempts = 10;
-    private const int RetryDelayMs = 60;
-
-    /// <summary>
-    /// Copies <paramref name="bitmap"/> to the clipboard as PNG and Bitmap.
-    /// </summary>
-    /// <returns><see langword="true"/> when the clipboard was updated.</returns>
-    internal static bool CopyImage(BitmapSource bitmap)
+    /// <summary>Copies <paramref name="bitmap"/> without blocking the caller's dispatcher.</summary>
+    internal static async Task<bool> CopyImageAsync(BitmapSource bitmap)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
 
         BitmapSource frozen = Freeze(bitmap);
-        byte[] pngBytes = ImageCodec.EncodePng(frozen);
+        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen)).ConfigureAwait(false);
+    }
 
-        var data = new DataObject();
-
-        // PNG first: lossless, alpha-preserving, understood by modern consumers.
-        using (var pngStream = new MemoryStream(pngBytes, writable: false))
+    /// <summary>
+    /// Preserves user invocation order across independent encodes and OLE retries, so a slow
+    /// earlier copy can never overwrite a newer clipboard selection after it completes.
+    /// </summary>
+    internal static async Task<bool> RunCopySerializedAsync(Func<Task<bool>> operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        await CopyGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            data.SetData("PNG", pngStream);
-
-            // A DIB/Bitmap fallback for consumers that do not read the PNG format. WPF flattens
-            // the BitmapSource into a device-independent bitmap for this standard format.
-            data.SetImage(frozen);
-
-            return TrySetWithRetry(data);
+            return await operation().ConfigureAwait(false);
+        }
+        finally
+        {
+            CopyGate.Release();
         }
     }
 
-    private static bool TrySetWithRetry(DataObject data)
+    private static async Task<bool> CopyFrozenAsync(BitmapSource frozen)
     {
-        for (int attempt = 1; attempt <= MaxAttempts; attempt++)
+        byte[] pngBytes;
+        try
         {
-            try
-            {
-                // copy: true leaves the data on the clipboard after this process exits, which is
-                // the behaviour a user expects from "copy to clipboard".
-                Clipboard.SetDataObject(data, copy: true);
-                return true;
-            }
-            catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen && attempt < MaxAttempts)
-            {
-                // Another process holds the clipboard open; back off briefly and retry.
-                Thread.Sleep(RetryDelayMs);
-            }
-            catch (COMException)
-            {
-                // A non-transient clipboard failure. Report it as an unsuccessful copy rather
-                // than throwing into the commit path.
-                return false;
-            }
-            catch (ExternalException)
-            {
-                return false;
-            }
+            pngBytes = await Task.Run(() => ImageCodec.EncodePng(frozen)).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException
+                                   or InvalidOperationException
+                                   or NotSupportedException
+                                   or ArgumentException)
+        {
+            return false;
         }
 
-        return false;
+        try
+        {
+            // WPF's ClipboardCore already performs its bounded native OLE retry. That retry
+            // can synchronously sleep, so run the single operation on an isolated STA instead
+            // of stacking another retry loop on the UI dispatcher.
+            return await StaThreadTask.RunAsync(
+                () => TrySetOnce(frozen, pngBytes),
+                "MyCapture clipboard writer").ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is COMException or ExternalException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TrySetOnce(BitmapSource frozen, byte[] pngBytes)
+    {
+        try
+        {
+            var data = new DataObject();
+            using var pngStream = new MemoryStream(pngBytes, writable: false);
+            data.SetData("PNG", pngStream);
+            data.SetImage(frozen);
+
+            // copy:true materialises the delayed formats before this method and the stream
+            // return, so clipboard content remains after MyCapture exits.
+            Clipboard.SetDataObject(data, copy: true);
+            return true;
+        }
+        catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen)
+        {
+            return false;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+        catch (ExternalException)
+        {
+            return false;
+        }
     }
 
     private static BitmapSource Freeze(BitmapSource bitmap)

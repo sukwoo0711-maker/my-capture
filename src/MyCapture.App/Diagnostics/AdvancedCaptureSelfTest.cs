@@ -5,9 +5,13 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
+using MyCapture.App.Pinning;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Settings;
+using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.Diagnostics;
 
@@ -31,7 +35,7 @@ internal static class AdvancedCaptureSelfTest
         {
             try
             {
-                exitCode = RunCore(report);
+                exitCode = RunCore(report, outputDirectory);
             }
             catch (Exception ex)
             {
@@ -55,7 +59,7 @@ internal static class AdvancedCaptureSelfTest
         return exitCode;
     }
 
-    private static int RunCore(StringBuilder report)
+    private static int RunCore(StringBuilder report, string outputDirectory)
     {
         int limit = 3;
         var store = new LastRegionStore(() => limit);
@@ -137,6 +141,25 @@ internal static class AdvancedCaptureSelfTest
         Check(report, "Stitched result is taller than one frame", scrollEnv.LastOpenedHeight > 20);
         Check(report, "Stitched result is not repeat-history eligible",
             scrollEnv.LastSelection is { RecordForRepeat: false });
+
+        // Exercise the exact F3 pin export path in the packaged executable. The source bitmap
+        // is frozen and the save service encodes it on a worker; decoding the resulting PNG
+        // proves the self-contained WPF codec, naming, atomic export, and original dimensions.
+        string pinRoot = Path.Combine(outputDirectory, "pin-save");
+        AppPaths pinPaths = AppPaths.CreateForRoot(pinRoot);
+        var pinSettings = new AppSettings();
+        var pinSave = new PinImageSaveService(
+            () => pinSettings,
+            () => pinPaths,
+            NullLogger<PinImageSaveService>.Instance);
+        BitmapSource pinSource = Solid(23, 17, 0x70);
+        PinSaveResult pinResult = pinSave.QuickSaveAsync(pinSource).GetAwaiter().GetResult();
+        BitmapSource? pinRoundTrip = pinResult.Path is null ? null : ImageCodec.TryLoad(pinResult.Path);
+        Check(report, "F3 pin quick-save writes original PNG dimensions",
+            pinResult.Status == PinSaveStatus.Saved
+            && pinRoundTrip is { PixelWidth: 23, PixelHeight: 17 });
+        Check(report, "F3 pin export leaves no internal recovery backup",
+            pinResult.Path is not null && !File.Exists(pinResult.Path + AtomicFile.BackupSuffix));
 
         report.AppendLine().AppendLine("RESULT: PASS");
         return 0;

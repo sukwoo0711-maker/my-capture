@@ -174,10 +174,14 @@
     <sys:Double x:Key="FontSize.Display">28</sys:Double>
 
     <!-- ============================================================= -->
-    <!-- Motion: 90-160ms colour/opacity only                          -->
+    <!-- Motion: shared Windows-aligned cadence. Render transforms and opacity only;
+         precision capture geometry and semantic state changes never wait on motion. -->
     <!-- ============================================================= -->
-    <Duration x:Key="Motion.Fast">0:0:0.09</Duration>
-    <Duration x:Key="Motion.Normal">0:0:0.16</Duration>
+    <Duration x:Key="Motion.Fast">0:0:0.083</Duration>
+    <Duration x:Key="Motion.Normal">0:0:0.167</Duration>
+    <Duration x:Key="Motion.Deliberate">0:0:0.250</Duration>
+    <CubicEase x:Key="Motion.Ease.Standard" EasingMode="EaseOut" />
+    <QuadraticEase x:Key="Motion.Ease.SoftLanding" EasingMode="EaseOut" />
 
     <!-- ============================================================= -->
     <!-- Desktop component sizing                                     -->

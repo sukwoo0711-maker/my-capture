@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Interop;
+using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
@@ -25,6 +26,10 @@ internal sealed class CaptureOverlayWindow : Window
         _abortOnFocusLoss = abortOnFocusLoss;
         _view = new CaptureOverlayView(frame, showMagnifier);
 
+        // Frozen pixels and selection geometry must appear immediately and exactly; a reveal
+        // transform here would expose the live desktop for a frame and make edge selection feel
+        // imprecise. All normal application windows still use the shared entrance motion.
+        FluidMotion.SetWindowEntrance(this, false);
         ConfigureWindowChrome(frame);
         Content = _view;
 

@@ -34,8 +34,9 @@ public sealed record CaptureEvictedEventArgs(CaptureRecord Record, string Reason
 /// its annotation layer is stored beside it.
 /// </para>
 /// <para>
-/// Ordering is newest-first, which is the order the gallery displays and the order
-/// eviction walks backwards through.
+/// Ordering is newest-created-first for gallery display. Eviction uses least-recent activity
+/// (<see cref="CaptureRecord.UpdatedAt"/>) so a capture the user just re-edited is not the one
+/// that disappears when its larger rendered generation crosses the byte cap.
 /// </para>
 /// <para>
 /// Eviction is enforced on insert against two independent caps. Item count alone is
@@ -59,6 +60,9 @@ public sealed class CaptureQueue
     private readonly ILogger<CaptureQueue> _log;
     private readonly ObservableCollection<CaptureRecord> _records = [];
     private readonly Lock _writeGate = new();
+    private readonly object _evictionLeaseGate = new();
+    private readonly Dictionary<Guid, int> _evictionLeaseCounts = [];
+    private int _evictionSuspensionCount;
 
     private QueueSettings _limits;
     private long _totalBytes;
@@ -82,8 +86,8 @@ public sealed class CaptureQueue
     public long TotalBytes => _totalBytes;
 
     /// <summary>
-    /// True when pinned records alone exceed a configured cap, so eviction can no
-    /// longer bring the queue back within limits.
+    /// True when pinned records plus the protected current capture exceed a configured cap,
+    /// so eviction can no longer bring the queue back within limits without data loss.
     /// </summary>
     public bool IsOverCapacityDueToPins { get; private set; }
 
@@ -96,6 +100,33 @@ public sealed class CaptureQueue
     /// the index and the filesystem disagreeing about what exists.
     /// </remarks>
     public event EventHandler<CaptureEvictedEventArgs>? Evicted;
+
+    /// <summary>
+    /// Temporarily excludes a record from capacity eviction while an editor or persistence
+    /// transaction owns it. Leases are reference-counted so a window-level edit lease and a
+    /// short finalisation lease can safely overlap.
+    /// </summary>
+    public IDisposable AcquireEvictionLease(Guid id)
+    {
+        lock (_evictionLeaseGate)
+        {
+            _evictionLeaseCounts.TryGetValue(id, out int count);
+            _evictionLeaseCounts[id] = checked(count + 1);
+        }
+
+        return new EvictionLease(this, id);
+    }
+
+    /// <summary>
+    /// Defers all capacity eviction until the returned scope is disposed. Startup uses this
+    /// while crash journals are recovered so an over-capacity load cannot delete a record's
+    /// rollback files before persistence has inspected them.
+    /// </summary>
+    public IDisposable SuspendEviction()
+    {
+        _ = Interlocked.Increment(ref _evictionSuspensionCount);
+        return new EvictionSuspension(this);
+    }
 
     public void UpdateLimits(QueueSettings limits)
     {
@@ -120,6 +151,17 @@ public sealed class CaptureQueue
         if (text is not null && TryParseIndex(text, out CaptureIndexFile? index) && index is not null)
         {
             records = index.Records;
+            HashSet<Guid> indexedIds = records.Select(record => record.Id).ToHashSet();
+            foreach (CaptureRecord recovered in RebuildFromDisk(pendingOnly: true))
+            {
+                if (indexedIds.Add(recovered.Id))
+                {
+                    records.Add(recovered);
+                    _log.LogWarning(
+                        "Recovered unindexed capture {Id} from its durable sidecar",
+                        recovered.Id);
+                }
+            }
         }
         else
         {
@@ -175,7 +217,7 @@ public sealed class CaptureQueue
     public bool Remove(Guid id)
     {
         CaptureRecord? record = Find(id);
-        if (record is null)
+        if (record is null || IsEvictionLeased(id))
         {
             return false;
         }
@@ -238,12 +280,13 @@ public sealed class CaptureQueue
     /// </summary>
     public void Save()
     {
-        var index = new CaptureIndexFile { Records = [.. _records] };
-        string json = JsonSerializer.Serialize(index, SerializerOptions);
-
-        // Guards against two debounced saves interleaving their temp-file writes.
+        // Snapshot and serialization belong inside the same gate as the atomic write. If a
+        // background metadata operation serialized an old generation before waiting here, it
+        // could otherwise overwrite a newer editor commit after that commit released the gate.
         lock (_writeGate)
         {
+            var index = new CaptureIndexFile { Records = [.. _records] };
+            string json = JsonSerializer.Serialize(index, SerializerOptions);
             AtomicFile.WriteAllText(_paths.IndexFile, json);
         }
     }
@@ -255,10 +298,9 @@ public sealed class CaptureQueue
     {
         ArgumentNullException.ThrowIfNull(record);
 
-        string path = GetFilePath(record, CaptureFileNames.Meta);
         try
         {
-            AtomicFile.WriteAllText(path, JsonSerializer.Serialize(record, MetaSerializerOptions));
+            SaveRecordMetaOrThrow(record);
         }
         catch (IOException ex)
         {
@@ -269,6 +311,23 @@ public sealed class CaptureQueue
         catch (UnauthorizedAccessException ex)
         {
             _log.LogWarning(ex, "Could not write recovery metadata for {Id}", record.Id);
+        }
+    }
+
+    /// <summary>
+    /// Writes recovery metadata and propagates persistence failures. Crash-recovery protocols
+    /// use this strict form so they never delete a pending marker/journal unless both meta and
+    /// index durably name the same generation.
+    /// </summary>
+    public void SaveRecordMetaOrThrow(CaptureRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        lock (_writeGate)
+        {
+            string path = GetFilePath(record, CaptureFileNames.Meta);
+            string json = JsonSerializer.Serialize(record, MetaSerializerOptions);
+            AtomicFile.WriteAllText(path, json);
         }
     }
 
@@ -288,6 +347,11 @@ public sealed class CaptureQueue
 
     private void EnforceLimits()
     {
+        if (Volatile.Read(ref _evictionSuspensionCount) > 0)
+        {
+            return;
+        }
+
         // Walk from the oldest end, skipping pinned records.
         int guard = 0;
         while (IsOverCapacity() && guard++ < 10_000)
@@ -324,21 +388,147 @@ public sealed class CaptureQueue
     private bool IsOverCapacity() =>
         _records.Count > _limits.MaxItems || _totalBytes > _limits.MaxBytes;
 
-    private void UpdatePinPressureFlag() => IsOverCapacityDueToPins = IsOverCapacity();
+    private void UpdatePinPressureFlag()
+    {
+        int pinnedCount = 0;
+        long pinnedBytes = 0;
+        foreach (CaptureRecord record in _records)
+        {
+            if (!record.IsPinned)
+            {
+                continue;
+            }
+
+            pinnedCount++;
+            pinnedBytes = SaturatingAdd(pinnedBytes, record.TotalBytes);
+        }
+
+        int retainedCount = pinnedCount;
+        long retainedBytes = pinnedBytes;
+        CaptureRecord? current = _records.FirstOrDefault();
+        if (current is not null && !current.IsPinned)
+        {
+            retainedCount++;
+            retainedBytes = SaturatingAdd(retainedBytes, current.TotalBytes);
+        }
+
+        // A short edit/recovery lease can defer eviction too, but it is intentionally absent
+        // from this projection: otherwise a transient operation would show a lasting pin
+        // warning. The newest unpinned item is included because the queue explicitly protects
+        // the capture the user just made from vanishing behind older pins.
+        IsOverCapacityDueToPins = IsOverCapacity()
+                                  && pinnedCount > 0
+                                  && (retainedCount > _limits.MaxItems
+                                      || retainedBytes > _limits.MaxBytes);
+    }
+
+    private static long SaturatingAdd(long left, long right) =>
+        left > long.MaxValue - Math.Max(0, right) ? long.MaxValue : left + Math.Max(0, right);
 
     private CaptureRecord? FindOldestUnpinned()
     {
-        // Records are newest-first, so the oldest unpinned entry is the last one that
-        // is not pinned.
-        for (int i = _records.Count - 1; i >= 0; i--)
+        var candidates = new List<CaptureRecord>();
+        CaptureRecord? soleUnpinned = null;
+        int unpinnedCount = 0;
+        foreach (CaptureRecord record in _records)
         {
-            if (!_records[i].IsPinned)
+            if (record.IsPinned)
             {
-                return _records[i];
+                continue;
+            }
+
+            unpinnedCount++;
+            soleUnpinned = record;
+            if (!IsEvictionLeased(record.Id))
+            {
+                candidates.Add(record);
             }
         }
 
-        return null;
+        // A new capture inserted ahead of older pins is the user's current working result; do
+        // not make it disappear immediately just because those pins consume the cap. The only
+        // unpinned capture can still be evicted when it is an older item explicitly unpinned to
+        // relieve pressure. A queue containing only one oversized capture also stays useful.
+        CaptureRecord? newest = _records.FirstOrDefault();
+        if ((unpinnedCount == 1
+             && soleUnpinned is not null
+             && ReferenceEquals(newest, soleUnpinned))
+            || (candidates.Count == 1 && ReferenceEquals(newest, candidates[0])))
+        {
+            return null;
+        }
+
+        return candidates
+            .OrderBy(record => record.UpdatedAt)
+            .ThenBy(record => record.CreatedAt)
+            .FirstOrDefault();
+    }
+
+    private bool IsEvictionLeased(Guid id)
+    {
+        lock (_evictionLeaseGate)
+        {
+            return _evictionLeaseCounts.ContainsKey(id);
+        }
+    }
+
+    private void ReleaseEvictionLease(Guid id)
+    {
+        lock (_evictionLeaseGate)
+        {
+            if (!_evictionLeaseCounts.TryGetValue(id, out int count))
+            {
+                return;
+            }
+
+            if (count <= 1)
+            {
+                _evictionLeaseCounts.Remove(id);
+            }
+            else
+            {
+                _evictionLeaseCounts[id] = count - 1;
+            }
+        }
+
+        EnforceLimits();
+    }
+
+    private void ReleaseEvictionSuspension()
+    {
+        int remaining = Interlocked.Decrement(ref _evictionSuspensionCount);
+        if (remaining < 0)
+        {
+            _ = Interlocked.Exchange(ref _evictionSuspensionCount, 0);
+            throw new InvalidOperationException("Capture queue eviction suspension was released too many times.");
+        }
+
+        if (remaining == 0)
+        {
+            EnforceLimits();
+        }
+    }
+
+    private sealed class EvictionLease(CaptureQueue owner, Guid id) : IDisposable
+    {
+        private CaptureQueue? _owner = owner;
+
+        public void Dispose()
+        {
+            CaptureQueue? current = Interlocked.Exchange(ref _owner, null);
+            current?.ReleaseEvictionLease(id);
+        }
+    }
+
+    private sealed class EvictionSuspension(CaptureQueue owner) : IDisposable
+    {
+        private CaptureQueue? _owner = owner;
+
+        public void Dispose()
+        {
+            CaptureQueue? current = Interlocked.Exchange(ref _owner, null);
+            current?.ReleaseEvictionSuspension();
+        }
     }
 
     private void RecalculateTotalBytes()
@@ -383,33 +573,40 @@ public sealed class CaptureQueue
     /// This is why each capture carries a metadata copy. Without it, an unreadable
     /// index would mean the user's entire history becomes a folder of anonymous PNGs.
     /// </remarks>
-    private List<CaptureRecord> RebuildFromDisk()
+    private List<CaptureRecord> RebuildFromDisk(bool pendingOnly = false)
     {
-        var recovered = new List<CaptureRecord>();
+        var recovered = new Dictionary<Guid, CaptureRecord>();
 
         if (!Directory.Exists(_paths.CapturesRoot))
         {
-            return recovered;
+            return [];
         }
 
-        IEnumerable<string> metaFiles;
+        var sidecarFiles = new List<string>();
         try
         {
-            metaFiles = Directory.EnumerateFiles(
-                _paths.CapturesRoot, CaptureFileNames.Meta, SearchOption.AllDirectories);
+            // Pending first, committed metadata second: if both exist after a crash just before
+            // marker cleanup, the fully committed meta record wins for the same ID.
+            sidecarFiles.AddRange(Directory.EnumerateFiles(
+                _paths.CapturesRoot, CaptureFileNames.OriginalPending, SearchOption.AllDirectories));
+            if (!pendingOnly)
+            {
+                sidecarFiles.AddRange(Directory.EnumerateFiles(
+                    _paths.CapturesRoot, CaptureFileNames.Meta, SearchOption.AllDirectories));
+            }
         }
         catch (IOException ex)
         {
             _log.LogWarning(ex, "Could not enumerate capture directories during index rebuild");
-            return recovered;
+            return [];
         }
         catch (UnauthorizedAccessException ex)
         {
             _log.LogWarning(ex, "Access denied enumerating capture directories during index rebuild");
-            return recovered;
+            return [];
         }
 
-        foreach (string metaPath in metaFiles)
+        foreach (string metaPath in sidecarFiles)
         {
             try
             {
@@ -428,7 +625,7 @@ public sealed class CaptureQueue
                     record.RelativeDirectory = Path.GetRelativePath(_paths.CapturesRoot, directory);
                 }
 
-                recovered.Add(record);
+                recovered[record.Id] = record;
             }
             catch (JsonException)
             {
@@ -439,7 +636,7 @@ public sealed class CaptureQueue
             }
         }
 
-        _log.LogInformation("Rebuilt capture index with {Count} records", recovered.Count);
-        return recovered;
+        _log.LogInformation("Discovered {Count} capture recovery sidecar record(s)", recovered.Count);
+        return recovered.Values.ToList();
     }
 }

@@ -2,6 +2,8 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+using MyCapture.App.Threading;
+using MyCapture.Core.Annotations;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
@@ -21,9 +23,9 @@ namespace MyCapture.App.Editing;
 /// whether a failure keeps the editor open.
 /// </para>
 /// <para>
-/// Runs on the UI thread, synchronously, because it renders WPF visuals and shows a file
-/// dialog. Every step is bounded — one flatten, one set of file writes, one clipboard
-/// attempt with a short bounded retry — so it never stalls the capture path.
+/// The WPF flatten and optional file dialog run on the UI thread. Clipboard PNG encoding and
+/// transient retry waits are handed to <see cref="ClipboardImageService"/> asynchronously so
+/// another process holding the clipboard cannot stall the editor transition.
 /// </para>
 /// </remarks>
 internal sealed class CaptureCommitService
@@ -32,17 +34,20 @@ internal sealed class CaptureCommitService
     private readonly Func<AppSettings> _settings;
     private readonly Func<AppPaths> _paths;
     private readonly ILogger<CaptureCommitService> _log;
+    private readonly Func<BitmapSource, Task<bool>> _copyImageAsync;
 
     internal CaptureCommitService(
         CapturePersistenceService persistence,
         Func<AppSettings> settings,
         Func<AppPaths> paths,
-        ILogger<CaptureCommitService> log)
+        ILogger<CaptureCommitService> log,
+        Func<BitmapSource, Task<bool>>? copyImageAsync = null)
     {
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _copyImageAsync = copyImageAsync ?? ClipboardImageService.CopyImageAsync;
     }
 
     /// <summary>
@@ -53,94 +58,184 @@ internal sealed class CaptureCommitService
     internal Func<string, string?>? SaveAsPrompt { get; set; }
 
     /// <summary>
+    /// Returns whether the record is inside the staged finalisation window. Gallery callers use
+    /// this to avoid reading, deleting, or re-editing an older generation while its replacement
+    /// is still being encoded and committed.
+    /// </summary>
+    internal bool IsRecordBusy(Guid recordId) => _persistence.IsBusy(recordId);
+
+    internal CaptureEditSession BeginEditSession(CaptureRecord record) =>
+        new(record, _persistence.AcquireEditLease(record.Id));
+
+    /// <summary>
     /// Runs the commit for <paramref name="record"/> against <paramref name="result"/>.
     /// </summary>
     /// <returns>
-    /// <see langword="true"/> when the editor should close. Only a cancelled or failed Save
-    /// As returns <see langword="false"/>; every other action always persists and closes.
+    /// <see langword="true"/> when the editor should close. A cancelled/failed Save As or a
+    /// failed explicit clipboard copy returns <see langword="false"/> so the user can retry.
     /// </returns>
-    internal bool Commit(CaptureRecord record, AnnotationEditingResult result)
+    internal async Task<bool> CommitAsync(
+        CaptureRecord? record,
+        AnnotationEditingResult result,
+        CaptureEditSession? editSession = null)
     {
-        ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(result);
+        if (record is not null && editSession is not null && editSession.RecordId != record.Id)
+        {
+            throw new ArgumentException("The edit session belongs to a different capture.", nameof(editSession));
+        }
+        editSession?.ThrowIfDisposed();
 
-        BitmapSource flattened = Flatten(result);
+        AnnotationDocument snapshot = CreatePersistenceSnapshot(result.Document);
+        BitmapSource flattened = await StaThreadTask.RunAsync(
+            () => Flatten(result.SelectedBitmap, snapshot, result.ImageAssetBitmaps),
+            "MyCapture annotation renderer");
 
         switch (result.Action)
         {
             case EditorCommitAction.SaveAs:
                 // Choose the destination before persisting so a cancel keeps the editor open
                 // with no side effects the user did not ask for.
-                string? chosen = ResolveSaveAsPath();
-                if (chosen is null)
+                bool exported = await ImageExportTransaction.RunAsync(async () =>
                 {
-                    _log.LogInformation("Save As cancelled; keeping editor open");
+                    string? chosen = ResolveSaveAsPath();
+                    if (chosen is null)
+                    {
+                        _log.LogInformation("Save As cancelled; keeping editor open");
+                        return false;
+                    }
+
+                    if (!HasPngExtension(chosen))
+                    {
+                        _log.LogWarning("Rejected Save As path with a non-PNG extension: {Path}", chosen);
+                        return false;
+                    }
+
+                    return await TrySavePngAsync(flattened, chosen);
+                });
+                if (!exported)
+                {
                     return false;
                 }
 
-                if (!TrySavePng(flattened, chosen))
-                {
-                    return false;
-                }
-
-                PersistFinal(record, result, flattened);
+                await PersistFinalIfAvailableAsync(
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
                 return true;
 
             case EditorCommitAction.QuickSave:
-                PersistFinal(record, result, flattened);
-                QuickSave(flattened);
+                await PersistFinalIfAvailableAsync(
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
+                bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened));
                 if (_settings().Export.CopyToClipboardOnQuickSave)
                 {
-                    _ = ClipboardImageService.CopyImage(flattened);
+                    bool copied = await _copyImageAsync(flattened);
+                    if (!copied)
+                    {
+                        // The requested PNG is already safely persisted and exported. A
+                        // secondary clipboard failure is reported but must not discard it.
+                        _log.LogWarning("Quick save completed, but clipboard copy failed");
+                    }
                 }
 
-                return true;
+                // Queue persistence is already durable, but Quick Save is an explicit export
+                // request. Keep the editor open when that request fails so the user sees the
+                // failure and can choose another destination instead of losing the retry path.
+                return quickSaved;
 
             case EditorCommitAction.CopyToClipboard:
-                PersistFinal(record, result, flattened);
-                _ = ClipboardImageService.CopyImage(flattened);
-                return true;
+                await PersistFinalIfAvailableAsync(
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
+                bool clipboardCopied = await _copyImageAsync(flattened);
+                if (!clipboardCopied)
+                {
+                    _log.LogWarning(
+                        record is null
+                            ? "Recovery clipboard copy failed; keeping the editor open"
+                            : "Capture persisted, but explicit clipboard copy failed");
+                }
+
+                return clipboardCopied;
 
             case EditorCommitAction.Done:
             default:
-                PersistFinal(record, result, flattened);
+                if (record is null)
+                {
+                    _log.LogWarning("Cannot finish editing without a queue record; waiting for an explicit export or copy");
+                    return false;
+                }
+
+                await PersistFinalIfAvailableAsync(
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
                 return true;
         }
     }
 
-    private static BitmapSource Flatten(AnnotationEditingResult result)
+    private static BitmapSource Flatten(
+        BitmapSource selectedBitmap,
+        AnnotationDocument document,
+        IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps)
     {
-        AnnotationImageStore store = AnnotationImageStore.FromDecoded(result.ImageAssetBitmaps);
+        AnnotationImageStore store = AnnotationImageStore.FromDecoded(imageAssetBitmaps);
         var renderer = new AnnotationRenderer(store);
-        return AnnotationFlattener.Flatten(result.SelectedBitmap, result.Document, renderer);
+        return AnnotationFlattener.Flatten(selectedBitmap, document, renderer);
     }
 
-    private void PersistFinal(CaptureRecord record, AnnotationEditingResult result, BitmapSource flattened) =>
-        _persistence.Finalize(record, flattened, result.Document, result.ImageAssetBitmaps);
+    private async Task PersistFinalIfAvailableAsync(
+        CaptureRecord? record,
+        EditorCommitAction action,
+        BitmapSource flattened,
+        AnnotationDocument snapshot,
+        IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
+        CaptureEditSession? editSession)
+    {
+        if (record is null)
+        {
+            _log.LogWarning("Queue persistence is unavailable; running {Action} in recovery-export mode", action);
+            return;
+        }
 
-    private void QuickSave(BitmapSource flattened)
+        await _persistence.FinalizeAsync(
+            record,
+            flattened,
+            snapshot,
+            imageAssetBitmaps,
+            editSession?.ExpectedContentRevision);
+        editSession?.AdvanceTo(record.ContentRevision);
+    }
+
+    private async Task<bool> QuickSaveAsync(BitmapSource flattened)
     {
         string directory = ResolveQuickSaveDirectory();
         try
         {
-            Directory.CreateDirectory(directory);
-            string stem = QuickSaveNaming.BuildStem(_settings().Export.FileNamePattern, DateTimeOffset.Now);
-            string path = QuickSaveNaming.ResolvePath(directory, stem, ".png");
-            long bytes = ImageCodec.SavePng(flattened, path);
+            string pattern = _settings().Export.FileNamePattern;
+            (string path, long bytes) = await Task.Run(() =>
+            {
+                Directory.CreateDirectory(directory);
+                string stem = QuickSaveNaming.BuildStem(pattern, DateTimeOffset.Now);
+                byte[] encoded = ImageCodec.EncodePng(flattened);
+                string savedPath = QuickSaveNaming.WriteCollisionFreeExport(directory, stem, ".png", encoded);
+                return (savedPath, encoded.LongLength);
+            });
             _log.LogInformation("Quick-saved {Bytes} bytes to {Path}", bytes, path);
+            return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException
+                                   or UnauthorizedAccessException
+                                   or ArgumentException
+                                   or NotSupportedException)
         {
             // Quick save failure must not fail the persist that already succeeded.
             _log.LogWarning(ex, "Quick save to {Directory} failed", directory);
+            return false;
         }
     }
 
-    private bool TrySavePng(BitmapSource flattened, string path)
+    private async Task<bool> TrySavePngAsync(BitmapSource flattened, string path)
     {
         try
         {
-            long bytes = ImageCodec.SavePng(flattened, path);
+            long bytes = await Task.Run(() => ImageCodec.SavePngExport(flattened, path));
             _log.LogInformation("Saved {Bytes} bytes to {Path}", bytes, path);
             return true;
         }
@@ -149,6 +244,17 @@ internal sealed class CaptureCommitService
             _log.LogWarning(ex, "Save to {Path} failed; keeping editor open", path);
             return false;
         }
+    }
+
+    private static AnnotationDocument CreatePersistenceSnapshot(AnnotationDocument liveDocument)
+    {
+        AnnotationDocument snapshot = liveDocument.Clone();
+        for (int index = 0; index < snapshot.Items.Count; index++)
+        {
+            snapshot.Items[index].Id = liveDocument.Items[index].Id;
+        }
+
+        return snapshot;
     }
 
     private string ResolveQuickSaveDirectory()
@@ -175,10 +281,76 @@ internal sealed class CaptureCommitService
             DefaultExt = ".png",
             AddExtension = true,
             OverwritePrompt = true,
+            ValidateNames = true,
             InitialDirectory = Directory.Exists(directory) ? directory : null,
             FileName = Path.GetFileName(suggested),
         };
 
+        dialog.FileOk += (_, e) =>
+        {
+            if (HasPngExtension(dialog.FileName))
+            {
+                return;
+            }
+
+            e.Cancel = true;
+            _ = System.Windows.MessageBox.Show(
+                "PNG 파일 이름(.png)을 선택해 주세요.",
+                "다른 이름으로 저장",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Information);
+        };
+
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
+
+    private static bool HasPngExtension(string path)
+    {
+        try
+        {
+            return string.Equals(
+                Path.GetExtension(path),
+                ".png",
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+}
+
+/// <summary>
+/// Optimistic generation token owned by one editor window. It advances only after that window's
+/// own successful persistence, allowing a clipboard retry while rejecting another editor's
+/// intervening update.
+/// </summary>
+internal sealed class CaptureEditSession : IDisposable
+{
+    private IDisposable? _evictionLease;
+
+    internal CaptureEditSession(CaptureRecord record, IDisposable evictionLease)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        _evictionLease = evictionLease ?? throw new ArgumentNullException(nameof(evictionLease));
+        RecordId = record.Id;
+        ExpectedContentRevision = record.ContentRevision;
+    }
+
+    internal Guid RecordId { get; }
+
+    internal long ExpectedContentRevision { get; private set; }
+
+    internal void AdvanceTo(long contentRevision)
+    {
+        ThrowIfDisposed();
+        ExpectedContentRevision = contentRevision;
+    }
+
+    internal void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_evictionLease is null, this);
+    }
+
+    public void Dispose() => Interlocked.Exchange(ref _evictionLease, null)?.Dispose();
 }

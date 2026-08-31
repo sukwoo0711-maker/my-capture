@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '1.0.0',
+    [string]$Version = '1.1.0',
     [string]$ArtifactRoot = ''
 )
 
@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 $versionMatch = [regex]::Match($Version, $semVerPattern)
 if (-not $versionMatch.Success) {
-    throw "Version must use a SemVer core with an optional prerelease (for example 1.0.0 or 1.0.0-rc.1): $Version"
+    throw "Version must use a SemVer core with an optional prerelease (for example 1.1.0 or 1.1.0-rc.1): $Version"
 }
 $baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
 $binaryVersion = "$baseVersion.0"
@@ -24,6 +24,7 @@ $installerScript = Join-Path $repo 'build\installer\install.ps1'
 $powerShellExe = Join-Path $PSHOME 'powershell.exe'
 $payload = Join-Path $ArtifactRoot "MyCapture-$Version-win-x64-portable.zip"
 $manifestPath = Join-Path $ArtifactRoot 'installer-manifest.json'
+$releaseManifestPath = Join-Path $ArtifactRoot 'release-manifest.json'
 $publish = Join-Path $ArtifactRoot 'publish-win-x64'
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('MyCapture-installer-tests-' + [guid]::NewGuid().ToString('N'))
 $script:PassCount = 0
@@ -206,12 +207,19 @@ try {
     $sourceFileVersion = [string]$props.SelectSingleNode('//FileVersion').InnerText
     $appManifestText = Get-Content -LiteralPath (Join-Path $repo 'src\MyCapture.App\app.manifest') -Raw
     $dllVersionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $publish 'MyCapture.dll'))
+    Assert-True (Test-Path -LiteralPath $releaseManifestPath -PathType Leaf) 'Release manifest is missing.'
+    $releaseManifest = Get-Content -LiteralPath $releaseManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    $sourceCommit = [string]$releaseManifest.SourceCommit
     Assert-Equal $baseVersion $sourceVersion 'Directory.Build.props product version mismatch.'
     Assert-Equal $binaryVersion $sourceFileVersion 'Directory.Build.props file version mismatch.'
     Assert-True ($appManifestText -match ('assemblyIdentity version="' + [regex]::Escape($binaryVersion) + '"')) 'Embedded manifest source version mismatch.'
     Assert-Equal $Version (($dllVersionInfo.ProductVersion -split '\+')[0]) 'Published ProductVersion mismatch.'
     Assert-Equal $binaryVersion $dllVersionInfo.FileVersion 'Published FileVersion mismatch.'
-    Write-Pass 'package-contract' "files=$($actualFiles.Count), bootstrap=5, forward-slash ZIP, version=$Version"
+    Assert-Equal 3 ([int]$releaseManifest.SchemaVersion) 'Release manifest schema mismatch.'
+    Assert-True ($sourceCommit -cmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') 'Release source commit is not canonical lowercase hex.'
+    Assert-Equal $true ([bool]$releaseManifest.SourceTreeClean) 'Release source tree was not clean.'
+    Assert-Equal "$Version+$sourceCommit" $dllVersionInfo.ProductVersion 'Binary informational version does not match release source commit.'
+    Write-Pass 'package-contract' "files=$($actualFiles.Count), bootstrap=5, forward-slash ZIP, version=$Version, commit=$sourceCommit"
 
     # VerifyOnly must fully hash/extract/validate while leaving no installation root.
     $verifyRoot = Join-Path $tempRoot 'verify-only'

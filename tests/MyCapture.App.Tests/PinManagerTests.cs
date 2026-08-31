@@ -1,12 +1,16 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Pinning;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Storage;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -44,6 +48,39 @@ public sealed class PinManagerTests
         {
             throw new Xunit.Sdk.XunitException($"STA body threw: {failure}");
         }
+    }
+
+    private static Task RunStaAsync(Func<Task> action)
+    {
+        var completion = new TaskCompletionSource<object?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
+            SynchronizationContext.SetSynchronizationContext(
+                new DispatcherSynchronizationContext(dispatcher));
+
+            try
+            {
+                Task work = action();
+                _ = work.ContinueWith(
+                    _ => dispatcher.BeginInvokeShutdown(DispatcherPriority.Send),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+                Dispatcher.Run();
+                work.GetAwaiter().GetResult();
+                completion.TrySetResult(null);
+            }
+            catch (Exception ex)
+            {
+                completion.TrySetException(
+                    new Xunit.Sdk.XunitException($"Async STA body threw: {ex}"));
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return completion.Task;
     }
 
     private static BitmapSource SolidImage(int width = 64, int height = 48)
@@ -300,5 +337,152 @@ public sealed class PinManagerTests
 
             manager.CloseAll();
         });
+    }
+
+    [Fact]
+    public void PinContextMenu_BeginsWithSaveCommandsAndDocumentedGestures()
+    {
+        RunSta(() =>
+        {
+            PinManager manager = NewManager();
+            PinWindow pin = manager.PinImage(SolidImage());
+            ContextMenu menu = Assert.IsType<ContextMenu>(pin.ContextMenu);
+
+            MenuItem saveAs = Assert.IsType<MenuItem>(menu.Items[0]);
+            Assert.Equal("다른 이름으로 저장…", saveAs.Header);
+            Assert.Equal("Ctrl+Shift+S", saveAs.InputGestureText);
+
+            MenuItem quickSave = Assert.IsType<MenuItem>(menu.Items[1]);
+            Assert.Equal("빠른 저장", quickSave.Header);
+            Assert.Equal("Ctrl+S", quickSave.InputGestureText);
+
+            // The shared theme contract separately verifies Icon.SaveAs and Icon.Save are
+            // shipped geometries. These first two commands intentionally consume those
+            // existing vector assets instead of adding bitmap artwork.
+            manager.CloseAll();
+        });
+    }
+
+    [Fact]
+    public void SaveRequest_ForwardsTheOriginalFrozenSourceBitmap()
+    {
+        RunSta(() =>
+        {
+            PinManager manager = NewManager();
+            BitmapSource source = SolidImage(37, 23);
+            PinWindow pin = manager.PinImage(source);
+            PinSaveRequestedEventArgs? request = null;
+            pin.SaveRequested += (_, args) => request = args;
+
+            pin.SimulateSaveRequestForTest(PinSaveMode.SaveAs);
+
+            Assert.NotNull(request);
+            Assert.Equal(PinSaveMode.SaveAs, request!.Mode);
+            Assert.Same(source, request.Image);
+            Assert.True(request.Image.IsFrozen);
+            Assert.Equal(37, request.Image.PixelWidth);
+            Assert.Equal(23, request.Image.PixelHeight);
+
+            manager.CloseAll();
+        });
+    }
+
+    [Fact]
+    public Task PinContextMenu_SaveCommands_RouteThroughManagerToRealSaveService()
+    {
+        return RunStaAsync(async () =>
+        {
+            using var temp = new TempDirectory();
+            var settings = new AppSettings();
+            settings.Export.FileNamePattern = "pin-from-manager";
+            AppPaths paths = AppPaths.CreateForRoot(temp.Path);
+            var saveService = new PinImageSaveService(
+                () => settings,
+                () => paths,
+                NullLogger<PinImageSaveService>.Instance);
+            string saveAsPath = Path.Combine(temp.Path, "chosen-by-context-menu.png");
+            Window? saveAsOwner = null;
+            saveService.SaveAsPrompt = (owner, _) =>
+            {
+                saveAsOwner = owner;
+                return saveAsPath;
+            };
+
+            var manager = new PinManager(
+                () => settings.Pin,
+                saveService,
+                NullLogger.Instance);
+            PinWindow pin = manager.PinImage(SolidImage(37, 23));
+            ContextMenu menu = Assert.IsType<ContextMenu>(pin.ContextMenu);
+
+            MenuItem saveAs = Assert.IsType<MenuItem>(menu.Items[0]);
+            saveAs.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Task<PinSaveResult>? saveAsOperation = manager.LastSaveOperationForTest;
+            Assert.NotNull(saveAsOperation);
+            PinSaveResult saveAsResult = await saveAsOperation;
+
+            Assert.Equal(PinSaveStatus.Saved, saveAsResult.Status);
+            Assert.Equal(saveAsPath, saveAsResult.Path);
+            Assert.Same(pin, saveAsOwner);
+            AssertPngDimensions(saveAsPath, 37, 23);
+
+            MenuItem quickSave = Assert.IsType<MenuItem>(menu.Items[1]);
+            quickSave.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Task<PinSaveResult>? quickSaveOperation = manager.LastSaveOperationForTest;
+            Assert.NotNull(quickSaveOperation);
+            Assert.NotSame(saveAsOperation, quickSaveOperation);
+            PinSaveResult quickSaveResult = await quickSaveOperation;
+
+            Assert.Equal(PinSaveStatus.Saved, quickSaveResult.Status);
+            Assert.NotNull(quickSaveResult.Path);
+            Assert.NotEqual(saveAsPath, quickSaveResult.Path);
+            AssertPngDimensions(quickSaveResult.Path!, 37, 23);
+            Assert.Equal(
+                2,
+                Directory.EnumerateFiles(temp.Path, "*.png", SearchOption.AllDirectories).Count());
+
+            manager.CloseAll();
+        });
+    }
+
+    private static void AssertPngDimensions(string path, int width, int height)
+    {
+        using var stream = File.OpenRead(path);
+        var decoder = new PngBitmapDecoder(
+            stream,
+            BitmapCreateOptions.PreservePixelFormat,
+            BitmapCacheOption.OnLoad);
+        Assert.Equal(width, decoder.Frames[0].PixelWidth);
+        Assert.Equal(height, decoder.Frames[0].PixelHeight);
+    }
+
+    private sealed class TempDirectory : IDisposable
+    {
+        internal TempDirectory()
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "mycapture-pin-manager-tests",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        internal string Path { get; }
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+            catch (IOException)
+            {
+                // Best-effort cleanup; a failing assertion must remain the primary failure.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Best-effort cleanup on scanners briefly retaining a generated PNG.
+            }
+        }
     }
 }

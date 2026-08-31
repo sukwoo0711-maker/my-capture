@@ -2,7 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:gallery="clr-namespace:MyCapture.App.Gallery"
+        xmlns:themes="clr-namespace:MyCapture.App.Themes"
         x:ClassModifier="internal"
+        Style="{StaticResource Window.Standard}"
         Title="MyCapture — 캡처 라이브러리"
         Width="1120" Height="760"
         MinWidth="720" MinHeight="480"
@@ -27,6 +29,7 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="themes:FluidMotion.PressFeedback" Value="True" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">

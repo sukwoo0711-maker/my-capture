@@ -59,6 +59,12 @@ internal sealed class RegionRecordingCoordinator
     /// </summary>
     internal event EventHandler<AnnotationFrameCapturedEventArgs>? FrameImageCaptured;
 
+    /// <summary>
+    /// Creates one commit closure per extracted-frame editor. The closure can cache its queue
+    /// record across failed clipboard/export retries without creating duplicates.
+    /// </summary>
+    internal Func<FrameImageCommitSession>? FrameImageCommitHandlerFactory { get; set; }
+
     internal bool IsActive => _selectionOverlay is not null || _controls is not null || _editor is not null || _finishing;
 
     /// <summary>
@@ -218,12 +224,17 @@ internal sealed class RegionRecordingCoordinator
     private void OnRecordingFinished(object? sender, RecordingResult result)
     {
         _log.LogInformation(
-            "Recording produced {Path} ({Frames} frames, {Duration:0}ms)",
+            "Recording produced {Path} ({Frames}/{ExpectedFrames} frames, {Duration:0}ms, " +
+            "dropped {DroppedFrames}, effective {EffectiveFps:0.0}fps)",
             result.OutputPath,
             result.EmittedFrames,
-            result.DurationMs);
+            result.ExpectedFrames,
+            result.DurationMs,
+            result.DroppedFrames,
+            result.EffectiveFps);
 
         var editor = new VideoEditorWindow(result, _paths, _loggerFactory);
+        editor.FrameImageCommitHandlerFactory = FrameImageCommitHandlerFactory;
         _editor = editor;
         // The stop→finalise→editor transition is complete: the editor now anchors the
         // session, so clear the finishing guard.
@@ -287,4 +298,25 @@ internal sealed class AnnotationFrameCapturedEventArgs : EventArgs
     }
 
     internal AnnotationEditingResult Result { get; }
+}
+
+/// <summary>
+/// Couples one extracted-frame editor's retryable commit closure with its retention lease.
+/// Closing or cancelling the editor disposes the session even when no commit ever succeeds.
+/// </summary>
+internal sealed class FrameImageCommitSession : IDisposable
+{
+    private Action? _release;
+
+    internal FrameImageCommitSession(
+        Func<AnnotationEditingResult, Task<bool>> commitAsync,
+        Action release)
+    {
+        CommitAsync = commitAsync ?? throw new ArgumentNullException(nameof(commitAsync));
+        _release = release ?? throw new ArgumentNullException(nameof(release));
+    }
+
+    internal Func<AnnotationEditingResult, Task<bool>> CommitAsync { get; }
+
+    public void Dispose() => Interlocked.Exchange(ref _release, null)?.Invoke();
 }

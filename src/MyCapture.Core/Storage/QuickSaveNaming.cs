@@ -4,7 +4,8 @@ using System.Text;
 namespace MyCapture.Core.Storage;
 
 /// <summary>
-/// Turns a user filename pattern into a concrete, collision-free path.
+/// Turns a user filename pattern into a concrete path and can atomically claim a
+/// collision-free quick-save destination.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -73,9 +74,9 @@ public static class QuickSaveNaming
     /// </summary>
     /// <param name="extension">Extension including the leading dot, for example <c>.png</c>.</param>
     /// <remarks>
-    /// The returned path does not exist at the moment it is chosen. It is the caller's
-    /// job to write it promptly; the tiny window between choosing and writing is accepted
-    /// because quick save is a single-threaded, user-driven action.
+    /// The returned path does not exist at the moment it is chosen and is intended for a
+    /// Save As suggestion. Quick-save writers must use <see cref="WriteCollisionFreeExport"/>
+    /// so destination selection and creation are atomic across windows and processes.
     /// </remarks>
     public static string ResolvePath(string directory, string stem, string extension)
     {
@@ -112,6 +113,42 @@ public static class QuickSaveNaming
         return Path.Combine(directory, $"{stem}-{Guid.NewGuid():N}{extension}");
     }
 
+    /// <summary>
+    /// Writes an export to the first available suffix using an atomic create, so concurrent
+    /// saves from different windows or processes cannot overwrite one another.
+    /// </summary>
+    public static string WriteCollisionFreeExport(
+        string directory,
+        string stem,
+        string extension,
+        ReadOnlySpan<byte> contents)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(stem);
+        extension = NormalizeExtension(extension);
+
+        for (int suffix = 1; suffix < int.MaxValue; suffix++)
+        {
+            string fileName = suffix == 1
+                ? stem + extension
+                : $"{stem}-{suffix.ToString(CultureInfo.InvariantCulture)}{extension}";
+            string candidate = Path.Combine(directory, fileName);
+            if (AtomicFile.TryWriteNewExportBytes(candidate, contents))
+            {
+                return candidate;
+            }
+        }
+
+        while (true)
+        {
+            string candidate = Path.Combine(directory, $"{stem}-{Guid.NewGuid():N}{extension}");
+            if (AtomicFile.TryWriteNewExportBytes(candidate, contents))
+            {
+                return candidate;
+            }
+        }
+    }
+
     private static string FormatToken(string token, DateTimeOffset timestamp)
     {
         if (string.IsNullOrEmpty(token))
@@ -133,6 +170,16 @@ public static class QuickSaveNaming
             // those are emitted verbatim rather than failing the whole save.
             return token;
         }
+    }
+
+    private static string NormalizeExtension(string extension)
+    {
+        if (string.IsNullOrEmpty(extension))
+        {
+            return ".png";
+        }
+
+        return extension[0] == '.' ? extension : "." + extension;
     }
 
     private static string Sanitize(string text)

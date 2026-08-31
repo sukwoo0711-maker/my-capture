@@ -1,0 +1,12 @@
+title = "MyCapture secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "XAML primitive color resources are ARGB values, not API keys"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)src/MyCapture\.App/Themes/Tokens\.xaml$''']
+regexes = ['''^\s*<Color\s+x:Key="Primitive\.[A-Za-z0-9.]+"\s*>#[0-9A-Fa-f]{8}</Color>(?:\s*<!--[^>]*-->)?\s*$''']

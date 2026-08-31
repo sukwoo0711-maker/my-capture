@@ -41,7 +41,7 @@ public sealed class GalleryController
 
     public long TotalBytes => _queue.TotalBytes;
 
-    /// <summary>True when pinned records alone hold the queue over its capacity.</summary>
+    /// <summary>True when pins plus the protected current capture hold the queue over capacity.</summary>
     public bool IsOverCapacityDueToPins => _queue.IsOverCapacityDueToPins;
 
     /// <summary>
@@ -126,7 +126,7 @@ public sealed class GalleryController
     /// </summary>
     public IReadOnlyList<CaptureRecord> RecordsMissingOcr() =>
         _queue.Records
-            .Where(r => !r.HasOcrText)
+            .Where(r => !r.HasCurrentOcrIndex)
             .OrderByDescending(r => r.CreatedAt)
             .ToList();
 
@@ -135,16 +135,32 @@ public sealed class GalleryController
     /// recognised text survives a restart and becomes searchable. Best-effort: a persistence
     /// failure is logged, never thrown, because OCR is a non-fatal convenience.
     /// </summary>
-    public void CacheOcr(Guid id, string text, string? languageTag)
+    public bool CacheOcr(
+        Guid id,
+        string text,
+        string? languageTag,
+        long? expectedContentRevision = null)
     {
         CaptureRecord? record = _queue.Find(id);
         if (record is null)
         {
-            return;
+            return false;
+        }
+
+        if (expectedContentRevision is { } expected
+            && record.ContentRevision != expected)
+        {
+            _log.LogInformation(
+                "Discarded OCR result for stale capture generation {Id}: expected {Expected}, current {Current}",
+                id,
+                expected,
+                record.ContentRevision);
+            return false;
         }
 
         record.OcrText = text;
         record.OcrLanguage = languageTag;
+        record.OcrContentRevision = record.ContentRevision;
         record.UpdatedAt = DateTimeOffset.Now;
 
         try
@@ -157,6 +173,8 @@ public sealed class GalleryController
         {
             _log.LogWarning(ex, "Could not persist cached OCR for {Id}", id);
         }
+
+        return true;
     }
 
     /// <summary>

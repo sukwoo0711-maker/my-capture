@@ -32,6 +32,17 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
 $env:DOTNET_CLI_UI_LANGUAGE = 'en'
 
+# Fail before restore/build with an actionable message when a machine has only a
+# runtime (or an incompatible SDK). doctor.ps1 keeps the per-user SDK preference
+# above but can also select a compatible dotnet host already present on PATH.
+try {
+    & (Join-Path $PSScriptRoot 'doctor.ps1') -Quiet
+}
+catch {
+    Write-Host "SDK prerequisite check failed:`n$($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+
 function Invoke-Step {
     param([string]$Name, [string[]]$Arguments)
 

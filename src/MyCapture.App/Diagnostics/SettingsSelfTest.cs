@@ -4,6 +4,7 @@ using System.Text;
 using System.Windows.Threading;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
+using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.App.Settings;
 using MyCapture.Platform.Shell;
@@ -51,14 +52,26 @@ internal static class SettingsSelfTest
             draft.PasteToScreenHotkey = "F3";
             Check(report, "Distinct hotkey clears error", !draft.HasErrors);
 
+            draft.RecordingFrameRate = "60";
+            draft.UseRecordingStartDelay = true;
+            draft.RecordingStartDelaySeconds = "5";
+            Check(report, "Recording settings accept supported values", !draft.HasErrors);
+
             AppSettings mapped = draft.ToAppSettings();
             Check(report, "Mapping preserves capture hotkey",
                 mapped.Hotkeys.Capture.ToString() == "Ctrl+Shift+C");
+            Check(report, "Mapping preserves recording settings",
+                mapped.Recording.FrameRate == RecordingFrameRate.Fps60
+                && mapped.Recording.UseStartDelay
+                && mapped.Recording.StartDelaySeconds == 5);
 
             // 2) Deep-clone isolation.
             AppSettings clone = settings.DeepClone();
             clone.Queue.MaxItems = 999;
             Check(report, "Deep clone isolates edits", settings.Queue.MaxItems != 999);
+            clone.Recording.FrameRate = RecordingFrameRate.Fps10;
+            Check(report, "Deep clone isolates recording settings",
+                settings.Recording.FrameRate == RecordingFrameRate.Fps30);
 
             // 3) Launch-at-login against a FAKE store (never the real Run key).
             var fake = new FakeRunKeyStore();

@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:ClassModifier="internal"
+        Style="{StaticResource Window.Standard}"
         Title="MyCapture — 설정"
         Width="940" Height="700"
         MinWidth="780" MinHeight="560"
@@ -297,6 +298,57 @@
                 </ScrollViewer>
             </TabItem>
 
+            <!-- Recording -->
+            <TabItem Header="녹화" AutomationProperties.Name="녹화 설정"
+                     Tag="{StaticResource Icon.Capture}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="화면 녹화" />
+
+                        <Border Style="{StaticResource Settings.InfoCard}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="부드러움과 성능의 균형" Style="{StaticResource Text.Section}" />
+                                <TextBlock Margin="0,4,0,0"
+                                           Style="{StaticResource Text.MutedBlock}"
+                                           Text="30fps를 권장합니다. 저사양 환경은 10/15fps, 빠른 움직임은 60fps를 선택할 수 있으며 인코더가 밀리면 재생 속도를 지키도록 프레임을 조절합니다." />
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="초당 프레임(FPS)" />
+                            <TextBlock Style="{StaticResource Settings.Description}"
+                                       Text="지원 값: 10, 15, 24, 30, 60. 기본값은 30fps입니다." />
+                            <TextBox Style="{StaticResource Settings.TextBox}"
+                                     Width="120"
+                                     HorizontalAlignment="Left"
+                                     AutomationProperties.Name="녹화 초당 프레임"
+                                     Text="{Binding RecordingFrameRate, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="녹화 시작 전 카운트다운"
+                                  AutomationProperties.Name="녹화 시작 전 카운트다운"
+                                  IsChecked="{Binding UseRecordingStartDelay}" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}"
+                                    IsEnabled="{Binding UseRecordingStartDelay}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="카운트다운 시간(초)" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="허용 범위 1 ~ 10초." />
+                            <TextBox Style="{StaticResource Settings.TextBox}"
+                                     Width="120"
+                                     HorizontalAlignment="Left"
+                                     AutomationProperties.Name="녹화 시작 카운트다운 시간(초)"
+                                     Text="{Binding RecordingStartDelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="녹화 영상에 마우스 커서 포함"
+                                  AutomationProperties.Name="녹화 영상에 마우스 커서 포함"
+                                  IsChecked="{Binding RecordingIncludeCursor}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- Hotkeys -->
             <TabItem Header="단축키" AutomationProperties.Name="단축키 설정"
                      Tag="{StaticResource Icon.Shortcuts}">
@@ -353,6 +405,13 @@
                             <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
                                      AutomationProperties.Name="전체 화면 캡처 단축키"
                                      Text="{Binding CaptureFullScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="영역 녹화 시작/중지" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="영역 녹화 시작 중지 단축키"
+                                     Text="{Binding RecordRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

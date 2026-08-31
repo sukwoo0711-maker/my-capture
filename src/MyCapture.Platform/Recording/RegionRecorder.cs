@@ -21,7 +21,26 @@ public sealed record RecordingResult(
     int Fps,
     long EmittedFrames,
     int Width,
-    int Height);
+    int Height)
+{
+    /// <summary>Frames that should have been produced over the elapsed wall-clock time.</summary>
+    public long ExpectedFrames => DurationMs > 0 && Fps > 0
+        ? Math.Max(EmittedFrames, (long)Math.Ceiling(DurationMs * Fps / 1000.0))
+        : Math.Max(0, EmittedFrames);
+
+    /// <summary>Whole frame intervals skipped to keep playback aligned to real time.</summary>
+    public long DroppedFrames => Math.Max(0, ExpectedFrames - EmittedFrames);
+
+    /// <summary>Frames actually encoded per second of wall-clock recording time.</summary>
+    public double EffectiveFps => DurationMs > 0
+        ? EmittedFrames * 1000.0 / DurationMs
+        : 0;
+
+    /// <summary>Ratio of skipped intervals to expected intervals, from 0 to 1.</summary>
+    public double DropRate => ExpectedFrames > 0
+        ? DroppedFrames / (double)ExpectedFrames
+        : 0;
+}
 
 /// <summary>
 /// Drives the grab → pace → encode loop for a region recording on a dedicated
@@ -198,9 +217,14 @@ public sealed class RegionRecorder : IDisposable
                 _grabber.Height);
 
             _log.LogInformation(
-                "Recording finished: {Frames} frame(s) over {Duration:0}ms",
-                clock.EmittedFrames,
-                stopwatch.Elapsed.TotalMilliseconds);
+                "Recording finished: {Frames}/{ExpectedFrames} frame(s) over {Duration:0}ms; " +
+                "dropped {DroppedFrames} ({DropRate:P1}), effective {EffectiveFps:0.0}fps",
+                _result.EmittedFrames,
+                _result.ExpectedFrames,
+                _result.DurationMs,
+                _result.DroppedFrames,
+                _result.DropRate,
+                _result.EffectiveFps);
         }
         catch (Exception ex)
         {

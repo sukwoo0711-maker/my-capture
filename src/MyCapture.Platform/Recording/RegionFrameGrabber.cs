@@ -14,10 +14,11 @@ namespace MyCapture.Platform.Recording;
 /// Reuses <see cref="ScreenCaptureEngine.CaptureRegion"/> — the same GDI
 /// <c>BitBlt + CAPTUREBLT</c> path proven by the still-capture feature, including
 /// layered-window and cursor handling — rather than standing up a second, subtly
-/// different capture path with its own defects. At the recorder's default 15 fps and
-/// the region sizes people record, BitBlt is comfortably fast enough and needs no
-/// D3D device or duplication session, which is what keeps the dependency and failure
-/// surface small on weak machines.
+/// different capture path with its own defects. At the recorder's default 30 fps and
+/// ordinary region sizes, BitBlt avoids a D3D device or duplication session and keeps
+/// the dependency and failure surface small. The optional 60 fps mode depends on the
+/// selected area and machine; adaptive frame drop keeps playback real-time if capture
+/// or encoding cannot sustain the requested rate.
 /// </para>
 /// <para>
 /// The region is captured at a fixed even width/height decided once at

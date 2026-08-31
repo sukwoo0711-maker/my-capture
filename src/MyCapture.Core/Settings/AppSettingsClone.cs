@@ -30,6 +30,7 @@ public static class AppSettingsClone
             Queue = Clone(source.Queue),
             Export = Clone(source.Export),
             Capture = Clone(source.Capture),
+            Recording = Clone(source.Recording),
             Pin = Clone(source.Pin),
             Annotation = Clone(source.Annotation),
             Ocr = Clone(source.Ocr),
@@ -48,6 +49,7 @@ public static class AppSettingsClone
         RepeatLastRegion = s.RepeatLastRegion,
         CaptureWindow = s.CaptureWindow,
         CaptureFullScreen = s.CaptureFullScreen,
+        RecordRegion = s.RecordRegion,
     };
 
     private static QueueSettings Clone(QueueSettings s) => new()
@@ -75,6 +77,16 @@ public static class AppSettingsClone
         DelaySeconds = s.DelaySeconds,
         AbortOnFocusLoss = s.AbortOnFocusLoss,
         RegionHistoryLimit = s.RegionHistoryLimit,
+    };
+
+    private static Recording.RecordingSettings Clone(Recording.RecordingSettings s) => new()
+    {
+        FrameRate = s.FrameRate,
+        UseStartDelay = s.UseStartDelay,
+        StartDelaySeconds = s.StartDelaySeconds,
+        IncludeCursor = s.IncludeCursor,
+        BitrateBitsPerSecond = s.BitrateBitsPerSecond,
+        CoarseStepSeconds = s.CoarseStepSeconds,
     };
 
     private static PinSettings Clone(PinSettings s) => new()

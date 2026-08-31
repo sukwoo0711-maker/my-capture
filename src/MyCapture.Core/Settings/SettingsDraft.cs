@@ -2,6 +2,7 @@ using System.Collections;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using MyCapture.Core.Recording;
 
 namespace MyCapture.Core.Settings;
 
@@ -46,6 +47,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _abortOnFocusLoss;
     private string _regionHistoryLimit = string.Empty;
 
+    // ----- Recording -----
+    private string _recordingFrameRate = string.Empty;
+    private bool _useRecordingStartDelay;
+    private string _recordingStartDelaySeconds = string.Empty;
+    private bool _recordingIncludeCursor;
+
     // ----- Hotkeys -----
     private string _captureHotkey = string.Empty;
     private string _pasteToScreenHotkey = string.Empty;
@@ -54,6 +61,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _repeatLastRegionHotkey = string.Empty;
     private string _captureWindowHotkey = string.Empty;
     private string _captureFullScreenHotkey = string.Empty;
+    private string _recordRegionHotkey = string.Empty;
 
     // ----- Storage -----
     private string _maxItems = string.Empty;
@@ -126,6 +134,38 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _regionHistoryLimit, value)) ValidateInt(value, SettingsRanges.RegionHistoryLimit); }
     }
 
+    // ================= Recording =================
+
+    public string RecordingFrameRate
+    {
+        get => _recordingFrameRate;
+        set { if (Set(ref _recordingFrameRate, value)) ValidateRecordingFrameRate(value); }
+    }
+
+    public bool UseRecordingStartDelay
+    {
+        get => _useRecordingStartDelay;
+        set => Set(ref _useRecordingStartDelay, value);
+    }
+
+    public string RecordingStartDelaySeconds
+    {
+        get => _recordingStartDelaySeconds;
+        set
+        {
+            if (Set(ref _recordingStartDelaySeconds, value))
+            {
+                ValidateInt(value, SettingsRanges.RecordingStartDelaySeconds);
+            }
+        }
+    }
+
+    public bool RecordingIncludeCursor
+    {
+        get => _recordingIncludeCursor;
+        set => Set(ref _recordingIncludeCursor, value);
+    }
+
     // ================= Hotkeys =================
 
     public string CaptureHotkey
@@ -168,6 +208,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _captureFullScreenHotkey;
         set { if (Set(ref _captureFullScreenHotkey, value)) ValidateAllHotkeys(); }
+    }
+
+    public string RecordRegionHotkey
+    {
+        get => _recordRegionHotkey;
+        set { if (Set(ref _recordRegionHotkey, value)) ValidateAllHotkeys(); }
     }
 
     // ================= Storage =================
@@ -309,6 +355,11 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _delaySeconds = Int(s.Capture.DelaySeconds);
         _regionHistoryLimit = Int(s.Capture.RegionHistoryLimit);
 
+        _recordingFrameRate = Int(s.Recording.TargetFps);
+        _useRecordingStartDelay = s.Recording.UseStartDelay;
+        _recordingStartDelaySeconds = Int(s.Recording.StartDelaySeconds);
+        _recordingIncludeCursor = s.Recording.IncludeCursor;
+
         _captureHotkey = s.Hotkeys.Capture.ToString();
         _pasteToScreenHotkey = s.Hotkeys.PasteToScreen.ToString();
         _hideAllPinsHotkey = s.Hotkeys.HideAllPins.ToString();
@@ -316,6 +367,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _repeatLastRegionHotkey = s.Hotkeys.RepeatLastRegion.ToString();
         _captureWindowHotkey = s.Hotkeys.CaptureWindow.ToString();
         _captureFullScreenHotkey = s.Hotkeys.CaptureFullScreen.ToString();
+        _recordRegionHotkey = s.Hotkeys.RecordRegion.ToString();
 
         _maxItems = Int(s.Queue.MaxItems);
         _maxGiB = Gib(s.Queue.MaxBytes);
@@ -351,6 +403,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedPreserveTransparency = s.Export.PreserveTransparency;
         _preservedLanguage = s.General.Language;
         _preservedIsFirstRun = s.General.IsFirstRun;
+        _preservedRecordingBitrateBitsPerSecond = s.Recording.BitrateBitsPerSecond;
+        _preservedRecordingCoarseStepSeconds = s.Recording.CoarseStepSeconds;
 
         RaiseAllChanged();
         ValidateAll();
@@ -395,6 +449,15 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 DelaySeconds = ParseInt(_delaySeconds),
                 RegionHistoryLimit = ParseInt(_regionHistoryLimit),
             },
+            Recording =
+            {
+                FrameRate = (RecordingFrameRate)ParseInt(_recordingFrameRate),
+                UseStartDelay = _useRecordingStartDelay,
+                StartDelaySeconds = ParseInt(_recordingStartDelaySeconds),
+                IncludeCursor = _recordingIncludeCursor,
+                BitrateBitsPerSecond = _preservedRecordingBitrateBitsPerSecond,
+                CoarseStepSeconds = _preservedRecordingCoarseStepSeconds,
+            },
             Hotkeys =
             {
                 Capture = ParseHotkey(_captureHotkey),
@@ -404,6 +467,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 RepeatLastRegion = ParseHotkey(_repeatLastRegionHotkey),
                 CaptureWindow = ParseHotkey(_captureWindowHotkey),
                 CaptureFullScreen = ParseHotkey(_captureFullScreenHotkey),
+                RecordRegion = ParseHotkey(_recordRegionHotkey),
             },
             Queue =
             {
@@ -462,6 +526,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         RepeatLastRegion = ParseHotkey(_repeatLastRegionHotkey),
         CaptureWindow = ParseHotkey(_captureWindowHotkey),
         CaptureFullScreen = ParseHotkey(_captureFullScreenHotkey),
+        RecordRegion = ParseHotkey(_recordRegionHotkey),
     };
 
     // ================= INotifyDataErrorInfo =================
@@ -489,6 +554,11 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         ValidateInt(_delaySeconds, SettingsRanges.DelaySeconds, nameof(DelaySeconds));
         ValidateInt(_regionHistoryLimit, SettingsRanges.RegionHistoryLimit, nameof(RegionHistoryLimit));
+        ValidateRecordingFrameRate(_recordingFrameRate);
+        ValidateInt(
+            _recordingStartDelaySeconds,
+            SettingsRanges.RecordingStartDelaySeconds,
+            nameof(RecordingStartDelaySeconds));
         ValidateInt(_maxItems, SettingsRanges.MaxItems, nameof(MaxItems));
         ValidateMaxGiB(_maxGiB);
         ValidateInt(_thumbnailLongEdge, SettingsRanges.ThumbnailLongEdge, nameof(ThumbnailLongEdge));
@@ -518,6 +588,20 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         }
 
         SetErrorState(property!, range.Contains(parsed), $"허용 범위는 {range.Describe()}입니다.");
+    }
+
+    private void ValidateRecordingFrameRate(string value)
+    {
+        if (!int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
+        {
+            SetError(nameof(RecordingFrameRate), "프레임 속도는 10, 15, 24, 30, 60 중 하나를 입력해 주세요.");
+            return;
+        }
+
+        SetErrorState(
+            nameof(RecordingFrameRate),
+            SettingsRanges.RecordingFrameRates.Contains(parsed),
+            "지원하는 프레임 속도는 10, 15, 24, 30, 60fps입니다.");
     }
 
     private void ValidateDouble(string value, Range<double> range, [CallerMemberName] string? property = null)
@@ -634,6 +718,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             (nameof(RepeatLastRegionHotkey), _repeatLastRegionHotkey),
             (nameof(CaptureWindowHotkey), _captureWindowHotkey),
             (nameof(CaptureFullScreenHotkey), _captureFullScreenHotkey),
+            (nameof(RecordRegionHotkey), _recordRegionHotkey),
         ];
 
         var parsed = new Dictionary<string, Hotkey>(fields.Length);
@@ -792,4 +877,6 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _preservedPreserveTransparency;
     private string _preservedLanguage = string.Empty;
     private bool _preservedIsFirstRun;
+    private int _preservedRecordingBitrateBitsPerSecond;
+    private double _preservedRecordingCoarseStepSeconds;
 }

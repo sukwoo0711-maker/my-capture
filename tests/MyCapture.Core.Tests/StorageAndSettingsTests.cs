@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using Xunit;
@@ -61,6 +62,25 @@ public sealed class AtomicFileTests
 
         Assert.False(File.Exists(path + ".tmp"));
         Assert.Equal("second", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void CleanUpTemp_RemovesLegacyAndGuidTempsButPreservesSimilarUserFiles()
+    {
+        using var workspace = new TempWorkspace();
+        string path = Path.Combine(workspace.Root, "file.json");
+        string legacy = path + ".tmp";
+        string unique = $"{path}.{Guid.NewGuid():N}.tmp";
+        string unrelated = path + ".user-not-a-guid.tmp";
+        File.WriteAllText(legacy, "legacy");
+        File.WriteAllText(unique, "unique");
+        File.WriteAllText(unrelated, "keep");
+
+        AtomicFile.CleanUpTemp(path);
+
+        Assert.False(File.Exists(legacy));
+        Assert.False(File.Exists(unique));
+        Assert.Equal("keep", File.ReadAllText(unrelated));
     }
 
     [Fact]
@@ -187,6 +207,7 @@ public sealed class SettingsStoreTests
         Assert.Equal("Ctrl+Shift+C", settings.Hotkeys.Capture.ToString());
         Assert.Equal("F3", settings.Hotkeys.PasteToScreen.ToString());
         Assert.True(settings.Export.CopyToClipboardOnQuickSave);
+        Assert.Equal(RecordingFrameRate.Fps30, settings.Recording.FrameRate);
     }
 
     [Fact]
@@ -201,6 +222,8 @@ public sealed class SettingsStoreTests
         original.Hotkeys.Capture = new Hotkey(HotkeyModifiers.Alt, Hotkey.VkF1);
         original.Annotation.StrokeThickness = 7;
         original.Ocr.PreferredLanguages = ["en-US"];
+        original.Recording.FrameRate = RecordingFrameRate.Fps60;
+        original.Recording.StartDelaySeconds = 8;
 
         store.Save(original);
         AppSettings reloaded = CreateStore(workspace).Load();
@@ -210,6 +233,8 @@ public sealed class SettingsStoreTests
         Assert.Equal("Alt+F1", reloaded.Hotkeys.Capture.ToString());
         Assert.Equal(7, reloaded.Annotation.StrokeThickness);
         Assert.Equal(["en-US"], reloaded.Ocr.PreferredLanguages);
+        Assert.Equal(RecordingFrameRate.Fps60, reloaded.Recording.FrameRate);
+        Assert.Equal(8, reloaded.Recording.StartDelaySeconds);
         Assert.False(reloaded.General.IsFirstRun);
     }
 
@@ -224,6 +249,8 @@ public sealed class SettingsStoreTests
         settings.Pin.CtrlClickDebounceMs = 5;        // below the floor of 120
         settings.Pin.InitialOpacity = 0.0;           // below the floor of 0.2
         settings.Annotation.FontSize = 5000;         // above the ceiling of 400
+        settings.Recording.FrameRate = (RecordingFrameRate)59;
+        settings.Recording.StartDelaySeconds = 99;
         store.Save(settings);
 
         SettingsStore reloadStore = CreateStore(workspace);
@@ -233,6 +260,8 @@ public sealed class SettingsStoreTests
         Assert.Equal(120, reloaded.Pin.CtrlClickDebounceMs);
         Assert.Equal(0.2, reloaded.Pin.InitialOpacity);
         Assert.Equal(400, reloaded.Annotation.FontSize);
+        Assert.Equal(RecordingFrameRate.Fps30, reloaded.Recording.FrameRate);
+        Assert.Equal(SettingsRanges.RecordingStartDelaySeconds.Max, reloaded.Recording.StartDelaySeconds);
         Assert.NotEmpty(reloadStore.LastLoadWarnings);
     }
 

@@ -21,6 +21,16 @@ public static class SettingsRanges
     public static readonly Range<int> DelaySeconds = new(0, 60);
     public static readonly Range<int> RegionHistoryLimit = new(1, 200);
 
+    /// <summary>Countdown used before a region recording begins.</summary>
+    public static readonly Range<int> RecordingStartDelaySeconds = new(1, 10);
+
+    /// <summary>
+    /// Frame rates offered by the recording settings UI and accepted from
+    /// <c>settings.json</c>. An explicit list prevents unsupported arbitrary values.
+    /// </summary>
+    public static IReadOnlyList<int> RecordingFrameRates { get; } =
+        Array.AsReadOnly([10, 15, 24, 30, 60]);
+
     public static readonly Range<int> CtrlClickDebounceMs = new(120, 800);
     public static readonly Range<double> InitialOpacity = new(0.2, 1.0);
     public static readonly Range<int> ClosedWindowRestoreLimit = new(0, 100);

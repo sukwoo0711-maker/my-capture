@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Editing;
 using MyCapture.App.Gallery;
 using MyCapture.App.Ocr;
+using MyCapture.Core.Annotations;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
@@ -80,6 +83,72 @@ public sealed class OcrIndexingAndAvailabilityTests
 
             return Task.FromResult(OcrResult.Success(_text, "ko-KR", [], TimeSpan.Zero));
         }
+    }
+
+    private sealed class DelayedOcr : IOcrService
+    {
+        private readonly TaskCompletionSource<OcrResult> _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal TaskCompletionSource<bool> Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool IsAvailable => true;
+
+        public IReadOnlyList<string> SupportedLanguages => ["ko-KR"];
+
+        public Task<OcrResult> RecognizeAsync(
+            OcrRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult(true);
+            cancellationToken.Register(() => _completion.TrySetCanceled(cancellationToken));
+            return _completion.Task;
+        }
+
+        internal void Complete(string text) =>
+            _completion.TrySetResult(OcrResult.Success(text, "ko-KR", [], TimeSpan.Zero));
+    }
+
+    private sealed class NoTextOcr : IOcrService
+    {
+        public int Calls { get; private set; }
+
+        public bool IsAvailable => true;
+
+        public IReadOnlyList<string> SupportedLanguages => ["ko-KR"];
+
+        public Task<OcrResult> RecognizeAsync(
+            OcrRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult(OcrResult.NoText("ko-KR", TimeSpan.Zero));
+        }
+    }
+
+    private sealed class DelayedCancelledResultOcr : IOcrService
+    {
+        private readonly TaskCompletionSource<OcrResult> _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal TaskCompletionSource<bool> Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool IsAvailable => true;
+
+        public IReadOnlyList<string> SupportedLanguages => ["ko-KR"];
+
+        public Task<OcrResult> RecognizeAsync(
+            OcrRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult(true);
+            return _completion.Task;
+        }
+
+        internal void CompleteCancelled() =>
+            _completion.TrySetResult(OcrResult.Cancelled());
     }
 
     private static GalleryController NewGallery(out CaptureQueue queue, string root)
@@ -286,4 +355,245 @@ public sealed class OcrIndexingAndAvailabilityTests
             try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
         }
     });
+
+    [Fact]
+    public void Index_NoTextResult_IsGenerationScopedDurableAndNotRetried() => RunSta(() =>
+    {
+        string root = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "mc-ocr-notext-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            paths.EnsureCreated();
+            var queueSettings = new QueueSettings();
+            var queue = new CaptureQueue(paths, queueSettings, NullLogger<CaptureQueue>.Instance);
+            var gallery = new GalleryController(queue, NullLogger<GalleryController>.Instance);
+            var persistence = new CapturePersistenceService(
+                queue,
+                paths,
+                () => queueSettings,
+                NullLogger<CapturePersistenceService>.Instance);
+            CaptureRecord record = persistence.PersistOriginal(
+                SolidBitmap(24, 16),
+                1.0,
+                "no text",
+                "DISPLAY1");
+            var ocr = new NoTextOcr();
+            var firstService = new OcrIndexingService(
+                gallery,
+                ocr,
+                r => queue.GetDirectory(r),
+                () => new OcrSettings(),
+                NullLogger<OcrIndexingService>.Instance);
+
+            Assert.Equal(
+                OcrIndexingOutcome.Completed,
+                firstService.IndexMissingAsync().GetAwaiter().GetResult());
+            Assert.Equal(1, ocr.Calls);
+            Assert.False(record.HasOcrText);
+            Assert.True(record.HasCurrentOcrIndex);
+            Assert.Equal(record.ContentRevision, record.OcrContentRevision);
+            Assert.True(firstService.Coverage.IsComplete);
+            Assert.Equal(0, firstService.Coverage.WithOcrText);
+            Assert.Equal(
+                OcrIndexingOutcome.NothingToDo,
+                firstService.IndexMissingAsync().GetAwaiter().GetResult());
+            Assert.Equal(1, ocr.Calls);
+
+            var reloadedQueue = new CaptureQueue(
+                paths,
+                queueSettings,
+                NullLogger<CaptureQueue>.Instance);
+            reloadedQueue.Load();
+            CaptureRecord durable = Assert.Single(reloadedQueue.Records);
+            Assert.True(durable.HasCurrentOcrIndex);
+            Assert.False(durable.HasOcrText);
+            var reloadedGallery = new GalleryController(
+                reloadedQueue,
+                NullLogger<GalleryController>.Instance);
+            var secondService = new OcrIndexingService(
+                reloadedGallery,
+                ocr,
+                r => reloadedQueue.GetDirectory(r),
+                () => new OcrSettings(),
+                NullLogger<OcrIndexingService>.Instance);
+            Assert.Equal(
+                OcrIndexingOutcome.NothingToDo,
+                secondService.IndexMissingAsync().GetAwaiter().GetResult());
+            Assert.Equal(1, ocr.Calls);
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+        }
+    });
+
+    [Fact]
+    public async Task Index_CancelledResultAfterRecognitionStarts_ReturnsCancelled()
+    {
+        string root = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "mc-ocr-cancel-result-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            paths.EnsureCreated();
+            var queue = new CaptureQueue(
+                paths,
+                new QueueSettings(),
+                NullLogger<CaptureQueue>.Instance);
+            var record = new CaptureRecord
+            {
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                Width = 1,
+                Height = 1,
+                TotalBytes = 1,
+            };
+            record.RelativeDirectory = CaptureQueue.BuildRelativeDirectory(
+                record.Id,
+                record.CreatedAt);
+            string directory = queue.GetDirectory(record);
+            System.IO.Directory.CreateDirectory(directory);
+            await System.IO.File.WriteAllBytesAsync(
+                System.IO.Path.Combine(directory, CaptureFileNames.Rendered),
+                [0x00]);
+            queue.Add(record);
+            var gallery = new GalleryController(queue, NullLogger<GalleryController>.Instance);
+            var ocr = new DelayedCancelledResultOcr();
+            var service = new OcrIndexingService(
+                gallery,
+                ocr,
+                r => queue.GetDirectory(r),
+                () => new OcrSettings(),
+                NullLogger<OcrIndexingService>.Instance);
+            using var cts = new CancellationTokenSource();
+
+            Task<OcrIndexingOutcome> indexing = service.IndexMissingAsync(null, cts.Token);
+            await ocr.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            cts.Cancel();
+            ocr.CompleteCancelled();
+
+            Assert.Equal(
+                OcrIndexingOutcome.Cancelled,
+                await indexing.WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.False(record.HasCurrentOcrIndex);
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+        }
+    }
+
+    [Fact]
+    public async Task Index_ResultHeldAcrossReedit_IsMarshalledAndRejectedAsStale()
+    {
+        string root = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "mc-ocr-generation-" + Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(root);
+
+        Dispatcher? dispatcher = null;
+        CapturePersistenceService? persistence = null;
+        CaptureRecord? record = null;
+        DelayedOcr? delayed = null;
+        OcrIndexingService? service = null;
+        Task<OcrIndexingOutcome>? indexing = null;
+        Exception? threadFailure = null;
+        bool cacheRanOnOwnerDispatcher = false;
+        using var ready = new ManualResetEventSlim(initialState: false);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                dispatcher = Dispatcher.CurrentDispatcher;
+                SynchronizationContext.SetSynchronizationContext(
+                    new DispatcherSynchronizationContext(dispatcher));
+                AppPaths paths = AppPaths.CreateForRoot(root);
+                paths.EnsureCreated();
+                var queueSettings = new QueueSettings();
+                var queue = new CaptureQueue(paths, queueSettings, NullLogger<CaptureQueue>.Instance);
+                var gallery = new GalleryController(queue, NullLogger<GalleryController>.Instance);
+                persistence = new CapturePersistenceService(
+                    queue,
+                    paths,
+                    () => queueSettings,
+                    NullLogger<CapturePersistenceService>.Instance);
+                record = persistence.PersistOriginal(
+                    SolidBitmap(42, 26),
+                    1.0,
+                    "OCR generation",
+                    "DISPLAY1");
+                delayed = new DelayedOcr();
+                service = new OcrIndexingService(
+                    gallery,
+                    delayed,
+                    r => queue.GetDirectory(r),
+                    () => new OcrSettings(),
+                    NullLogger<OcrIndexingService>.Instance,
+                    dispatcher);
+                service.BeforeCacheOcrForTest = () =>
+                    cacheRanOnOwnerDispatcher = dispatcher.CheckAccess();
+                indexing = service.IndexMissingAsync();
+                ready.Set();
+                Dispatcher.Run();
+            }
+            catch (Exception ex)
+            {
+                threadFailure = ex;
+                ready.Set();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        try
+        {
+            Assert.True(ready.Wait(TimeSpan.FromSeconds(10)), "OCR dispatcher setup timed out.");
+            if (threadFailure is not null)
+            {
+                throw threadFailure;
+            }
+
+            Assert.NotNull(dispatcher);
+            Assert.NotNull(persistence);
+            Assert.NotNull(record);
+            Assert.NotNull(delayed);
+            Assert.NotNull(service);
+            Assert.NotNull(indexing);
+            await delayed!.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            dispatcher!.Invoke(() => persistence!.Finalize(
+                record!,
+                SolidBitmap(42, 26),
+                AnnotationDocument.CreateFor(42, 26),
+                new Dictionary<string, System.Windows.Media.Imaging.BitmapSource>()));
+            Assert.Equal(1, record!.ContentRevision);
+
+            delayed.Complete("stale words from revision zero");
+            OcrIndexingOutcome outcome = await indexing!.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal(OcrIndexingOutcome.Completed, outcome);
+            Assert.True(cacheRanOnOwnerDispatcher);
+            Assert.Null(record.OcrText);
+            Assert.Null(record.OcrLanguage);
+            Assert.Equal(1, service!.Coverage.Missing);
+        }
+        finally
+        {
+            if (dispatcher is not null && !dispatcher.HasShutdownStarted)
+            {
+                dispatcher.BeginInvokeShutdown(DispatcherPriority.Send);
+            }
+
+            Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "OCR dispatcher did not shut down.");
+            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+        }
+
+        if (threadFailure is not null)
+        {
+            throw threadFailure;
+        }
+    }
 }

@@ -51,6 +51,7 @@ internal sealed partial class GalleryWindow : Window
     private bool _dragArmed;
     private bool _ocrIndexingRunning;
     private CancellationTokenSource? _ocrIndexingCts;
+    private readonly HashSet<Guid> _openEditors = [];
 
     internal GalleryWindow(
         GalleryViewModel viewModel,
@@ -196,6 +197,12 @@ internal sealed partial class GalleryWindow : Window
             return;
         }
 
+        if (_queue.Records.Any(record => _commitService.IsRecordBusy(record.Id)))
+        {
+            ShowStatus("캡처를 저장하는 중입니다. 완료된 뒤 다시 시도해 주세요.");
+            return;
+        }
+
         _ocrIndexingRunning = true;
         _ocrIndexingCts = new System.Threading.CancellationTokenSource();
         OcrIndexButton.Content = "중지";
@@ -208,7 +215,7 @@ internal sealed partial class GalleryWindow : Window
                 $"색인 중… {p.Processed}/{p.Total}");
             OcrCoverageDetail.Text = string.Create(
                 System.Globalization.CultureInfo.CurrentCulture,
-                $"{p.Indexed}개에서 텍스트를 찾아 검색에 추가했습니다.");
+                $"{p.Indexed}개 이미지의 검색 색인을 최신 상태로 만들었습니다.");
         });
 
         MyCapture.App.Ocr.OcrIndexingOutcome outcome;
@@ -297,7 +304,7 @@ internal sealed partial class GalleryWindow : Window
         GalleryItemViewModel? tile = _dragTile;
         ResetDragGesture();
         CaptureRecord? record = tile is null ? null : _controller.Find(tile.Id);
-        if (record is null)
+        if (record is null || !EnsureRecordReady(record.Id))
         {
             return;
         }
@@ -307,7 +314,7 @@ internal sealed partial class GalleryWindow : Window
             DependencyObject source = sender as DependencyObject ?? this;
             _ = _dragExport.BeginDrag(source, record);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
             _log.LogWarning(ex, "Could not stage capture {Id} for shell drag export", record.Id);
             ShowStatus("이미지 파일을 준비할 수 없습니다. 잠시 후 다시 시도해 주세요.");
@@ -325,7 +332,7 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private void OnTileKeyDown(object sender, KeyEventArgs e)
+    private async void OnTileKeyDown(object sender, KeyEventArgs e)
     {
         if (sender is not ListBox list || list.SelectedItem is not GalleryItemViewModel tile)
         {
@@ -348,8 +355,8 @@ internal sealed partial class GalleryWindow : Window
                 e.Handled = true;
                 break;
             case Key.C when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
-                CopyRendered(tile);
                 e.Handled = true;
+                await CopyRenderedAsync(tile);
                 break;
             case Key.T:
                 RecognizeText(tile);
@@ -376,11 +383,12 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private void OnCopyClick(object sender, RoutedEventArgs e)
+    private async void OnCopyClick(object sender, RoutedEventArgs e)
     {
         if (ResolveTile(sender) is GalleryItemViewModel tile)
         {
-            CopyRendered(tile);
+            e.Handled = true;
+            await CopyRenderedAsync(tile);
         }
     }
 
@@ -418,6 +426,11 @@ internal sealed partial class GalleryWindow : Window
 
     private void TogglePin(GalleryItemViewModel tile)
     {
+        if (!EnsureRecordReady(tile.Id))
+        {
+            return;
+        }
+
         bool? pinned = _controller.TogglePin(tile.Id);
         if (pinned is null)
         {
@@ -431,6 +444,11 @@ internal sealed partial class GalleryWindow : Window
 
     private void ConfirmAndDelete(GalleryItemViewModel tile)
     {
+        if (!EnsureRecordReady(tile.Id))
+        {
+            return;
+        }
+
         MessageBoxResult answer = MessageBox.Show(
             this,
             $"이 캡처를 삭제할까요?\n\n{tile.ContextLabel}\n삭제하면 되돌릴 수 없습니다.",
@@ -444,6 +462,13 @@ internal sealed partial class GalleryWindow : Window
             return;
         }
 
+        // MessageBox runs a nested dispatcher: finalisation can become busy while the prompt is
+        // open, so the pre-dialog readiness check must be repeated immediately before deletion.
+        if (!EnsureRecordReady(tile.Id))
+        {
+            return;
+        }
+
         if (_controller.Delete(tile.Id))
         {
             _viewModel.Refresh();
@@ -451,8 +476,13 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private void CopyRendered(GalleryItemViewModel tile)
+    private async Task CopyRenderedAsync(GalleryItemViewModel tile)
     {
+        if (!EnsureRecordReady(tile.Id))
+        {
+            return;
+        }
+
         CaptureRecord? record = _controller.Find(tile.Id);
         if (record is null)
         {
@@ -469,8 +499,18 @@ internal sealed partial class GalleryWindow : Window
             return;
         }
 
-        if (!ClipboardImageService.CopyImage(rendered))
+        try
         {
+            if (!await ClipboardImageService.CopyImageAsync(rendered))
+            {
+                ShowStatus("클립보드에 복사하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+            }
+        }
+        catch (Exception ex)
+        {
+            // async-void event handlers must never let a dispatcher shutdown or unexpected
+            // clipboard provider failure escape into WPF's message pump.
+            _log.LogWarning(ex, "Could not copy gallery capture {Id} to the clipboard", record.Id);
             ShowStatus("클립보드에 복사하지 못했습니다. 잠시 후 다시 시도해 주세요.");
         }
     }
@@ -483,6 +523,11 @@ internal sealed partial class GalleryWindow : Window
     /// </summary>
     private void RecognizeText(GalleryItemViewModel tile)
     {
+        if (!EnsureRecordReady(tile.Id))
+        {
+            return;
+        }
+
         CaptureRecord? record = _controller.Find(tile.Id);
         if (record is null)
         {
@@ -492,6 +537,7 @@ internal sealed partial class GalleryWindow : Window
         OcrSettings settings = _ocrSettings();
         string renderedPath = _queue.GetFilePath(record, CaptureFileNames.Rendered);
         Guid id = record.Id;
+        long requestedContentRevision = record.ContentRevision;
         string context = tile.ContextLabel;
 
         OcrRequest RequestFactory() => OcrRequest.FromFile(
@@ -502,9 +548,15 @@ internal sealed partial class GalleryWindow : Window
             // Cache and re-filter only when the setting allows and there is text to store.
             if (settings.CacheResults && result.Status == OcrStatus.Success)
             {
-                _controller.CacheOcr(id, result.Text, result.LanguageTag);
-                tile.RaiseMetaChanged();
-                _viewModel.Refresh();
+                if (_controller.CacheOcr(
+                        id,
+                        result.Text,
+                        result.LanguageTag,
+                        requestedContentRevision))
+                {
+                    tile.RaiseMetaChanged();
+                    _viewModel.Refresh();
+                }
             }
         }
 
@@ -525,39 +577,68 @@ internal sealed partial class GalleryWindow : Window
 
     private void OpenReedit(GalleryItemViewModel tile)
     {
+        if (!EnsureRecordReady(tile.Id))
+        {
+            return;
+        }
+
         CaptureRecord? record = _controller.Find(tile.Id);
         if (record is null)
         {
             return;
         }
 
-        GalleryReeditContext? context = _reeditLoader.TryLoad(record, out GalleryReeditLoader.LoadFailure failure);
-        if (context is null)
+        if (!_openEditors.Add(record.Id))
         {
-            ShowStatus(failure switch
-            {
-                GalleryReeditLoader.LoadFailure.MissingOriginal => "원본 이미지를 찾을 수 없어 편집할 수 없습니다.",
-                GalleryReeditLoader.LoadFailure.UndecodableOriginal => "원본 이미지가 손상되어 편집할 수 없습니다.",
-                _ => "이 캡처를 편집할 수 없습니다.",
-            });
+            ShowStatus("이 캡처는 이미 편집 중입니다.");
             return;
         }
 
-        var editor = new GalleryEditorWindow(context) { Owner = this };
-        editor.CommitRequested = result => CommitReedit(record, result);
-        editor.Committed += (_, _) => OnReeditCommitted(tile.Id);
-        _ = editor.ShowDialog();
+        using CaptureEditSession editSession = _commitService.BeginEditSession(record);
+        try
+        {
+
+            GalleryReeditContext? context = _reeditLoader.TryLoad(record, out GalleryReeditLoader.LoadFailure failure);
+            if (context is null)
+            {
+                ShowStatus(failure switch
+                {
+                    GalleryReeditLoader.LoadFailure.MissingOriginal => "원본 이미지를 찾을 수 없어 편집할 수 없습니다.",
+                    GalleryReeditLoader.LoadFailure.UndecodableOriginal => "원본 이미지가 손상되어 편집할 수 없습니다.",
+                    _ => "이 캡처를 편집할 수 없습니다.",
+                });
+                return;
+            }
+
+            var editor = new GalleryEditorWindow(context) { Owner = this };
+            editor.CommitRequested = result => CommitReeditAsync(record, result, editSession);
+            editor.Committed += (_, _) => OnReeditCommitted(tile.Id);
+            _ = editor.ShowDialog();
+        }
+        finally
+        {
+            _openEditors.Remove(record.Id);
+        }
     }
 
-    private bool CommitReedit(CaptureRecord record, AnnotationEditingResult result)
+    private async Task<bool> CommitReeditAsync(
+        CaptureRecord record,
+        AnnotationEditingResult result,
+        CaptureEditSession editSession)
     {
         try
         {
             // Commit against the SAME record: the flattened rendered.png, the layer document
             // and any sidecars are rewritten in place, never a new capture.
-            return _commitService.Commit(record, result);
+            return await _commitService.CommitAsync(record, result, editSession);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (CaptureGenerationConflictException ex)
+        {
+            _log.LogWarning(ex, "Re-edit rejected because capture {Id} changed", record.Id);
+            ShowStatus("다른 편집에서 이 캡처가 변경되었습니다. 현재 편집기를 닫고 다시 열어 주세요.");
+            return false;
+        }
+        catch (Exception ex)
         {
             _log.LogError(ex, "Re-edit commit failed for {Id}", record.Id);
             ShowStatus("저장에 실패했습니다. 다시 시도해 주세요.");
@@ -575,6 +656,17 @@ internal sealed partial class GalleryWindow : Window
     }
 
     // ---- Helpers -------------------------------------------------------------------
+
+    private bool EnsureRecordReady(Guid recordId)
+    {
+        if (!_commitService.IsRecordBusy(recordId))
+        {
+            return true;
+        }
+
+        ShowStatus("이 캡처를 저장하는 중입니다. 완료된 뒤 다시 시도해 주세요.");
+        return false;
+    }
 
     private void ResetDragGesture()
     {

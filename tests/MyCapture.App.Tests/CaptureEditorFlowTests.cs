@@ -71,7 +71,7 @@ public sealed class CaptureEditorFlowTests
             editor.CommitRequested = result =>
             {
                 requested = result;
-                return true;
+                return Task.FromResult(true);
             };
             editor.EditingCompleted += (_, result) => completed = result;
 

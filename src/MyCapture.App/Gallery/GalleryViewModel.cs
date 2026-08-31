@@ -102,7 +102,9 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
         {
             string count = $"캡처 {_controller.Count:N0}개";
             string storage = FormatBytes(_controller.TotalBytes);
-            string pins = _controller.IsOverCapacityDueToPins ? " · 고정 항목이 한도를 초과했습니다" : string.Empty;
+            string pins = _controller.IsOverCapacityDueToPins
+                ? " · 고정 항목 보호로 저장 한도를 일시 초과했습니다"
+                : string.Empty;
             return $"{count} · {storage}{pins}";
         }
     }

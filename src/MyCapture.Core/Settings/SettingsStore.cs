@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using MyCapture.Core.Recording;
 using MyCapture.Core.Serialization;
 using MyCapture.Core.Storage;
 
@@ -152,6 +153,21 @@ public sealed class SettingsStore
 
         s.Capture.RegionHistoryLimit = ClampWithWarning(
             s.Capture.RegionHistoryLimit, 1, 200, nameof(CaptureSettings.RegionHistoryLimit), warnings);
+
+        // --- Recording ---
+        int recordingFps = (int)s.Recording.FrameRate;
+        if (!SettingsRanges.RecordingFrameRates.Contains(recordingFps))
+        {
+            warnings.Add($"FrameRate 값 {recordingFps}은(는) 지원하지 않아 30fps로 조정되었습니다.");
+            s.Recording.FrameRate = RecordingFrameRate.Fps30;
+        }
+
+        s.Recording.StartDelaySeconds = ClampWithWarning(
+            s.Recording.StartDelaySeconds,
+            SettingsRanges.RecordingStartDelaySeconds.Min,
+            SettingsRanges.RecordingStartDelaySeconds.Max,
+            nameof(RecordingSettings.StartDelaySeconds),
+            warnings);
 
         // --- Pin ---
         // The upper bound keeps a mistyped value from making Ctrl+click feel broken.

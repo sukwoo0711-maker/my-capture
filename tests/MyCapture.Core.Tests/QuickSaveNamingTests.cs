@@ -79,4 +79,26 @@ public sealed class QuickSaveNamingTests
         Assert.EndsWith(".png", path);
         Assert.DoesNotContain("..png", path, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task WriteCollisionFreeExport_ConcurrentWritersNeverOverwrite()
+    {
+        using var workspace = new TempWorkspace();
+        byte[] contents = [0x89, 0x50, 0x4E, 0x47];
+
+        Task<string>[] writes = Enumerable.Range(0, 16)
+            .Select(_ => Task.Run(() => QuickSaveNaming.WriteCollisionFreeExport(
+                workspace.Root,
+                "shot",
+                ".png",
+                contents)))
+            .ToArray();
+
+        string[] paths = await Task.WhenAll(writes);
+
+        Assert.Equal(16, paths.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(16, Directory.EnumerateFiles(workspace.Root, "*.png").Count());
+        Assert.All(paths, path => Assert.Equal(contents, File.ReadAllBytes(path)));
+        Assert.Empty(Directory.EnumerateFiles(workspace.Root, "*.tmp"));
+    }
 }

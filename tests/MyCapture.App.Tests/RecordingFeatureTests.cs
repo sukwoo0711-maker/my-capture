@@ -54,10 +54,41 @@ public sealed class RecordingFeatureTests
         var settings = new AppSettings();
 
         Assert.NotNull(settings.Recording);
-        Assert.Equal(RecordingFrameRate.Fps15, settings.Recording.FrameRate);
-        Assert.Equal(15, settings.Recording.TargetFps);
+        Assert.Equal(RecordingFrameRate.Fps30, settings.Recording.FrameRate);
+        Assert.Equal(30, settings.Recording.TargetFps);
         Assert.False(settings.Recording.UseStartDelay);
         Assert.True(settings.Recording.IncludeCursor);
+    }
+
+    [Fact]
+    public void RecordingFrameRate_OffersSixtyFpsForMotionHeavyCapture()
+    {
+        var settings = new RecordingSettings { FrameRate = RecordingFrameRate.Fps60 };
+
+        Assert.Equal(60, settings.TargetFps);
+    }
+
+    [Fact]
+    public void RecordingResult_ReportsAdaptiveFrameDropMetrics()
+    {
+        var result = new RecordingResult("capture.mp4", 2_000, 30, 45, 1280, 720);
+
+        Assert.Equal(60, result.ExpectedFrames);
+        Assert.Equal(15, result.DroppedFrames);
+        Assert.Equal(22.5, result.EffectiveFps, 3);
+        Assert.Equal(0.25, result.DropRate, 3);
+    }
+
+    [Fact]
+    public void RecordingResult_DropMetricsNeverReportNegativeValues()
+    {
+        // A timestamp-zero frame can make a very short recording contain more frames
+        // than a duration-only estimate. It is not a drop and must never look like one.
+        var result = new RecordingResult("capture.mp4", 1, 30, 1, 16, 16);
+
+        Assert.Equal(1, result.ExpectedFrames);
+        Assert.Equal(0, result.DroppedFrames);
+        Assert.Equal(0d, result.DropRate);
     }
 
     [Theory]
@@ -119,6 +150,20 @@ public sealed class RecordingFeatureTests
 
         Assert.Equal(2, encoder.Timestamps.Count);
         Assert.True(encoder.Completed);
+    }
+
+    [Fact]
+    public void FrameImageCommitSession_DisposeReleasesRetentionLeaseExactlyOnce()
+    {
+        int releases = 0;
+        var session = new FrameImageCommitSession(
+            _ => Task.FromResult(true),
+            () => Interlocked.Increment(ref releases));
+
+        session.Dispose();
+        session.Dispose();
+
+        Assert.Equal(1, releases);
     }
 
     [Fact]

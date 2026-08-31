@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
@@ -42,11 +43,36 @@ internal sealed class PinManager
 {
     private readonly List<PinWindow> _pins = [];
     private readonly Func<PinSettings> _settings;
+    private readonly PinImageSaveService? _saveService;
+    private readonly Func<BitmapSource, Task<bool>> _copyImageAsync;
     private readonly ILogger _log;
 
     internal PinManager(Func<PinSettings> settings, ILogger log)
+        : this(
+            settings,
+            saveService: null,
+            static _ => Task.FromResult(true),
+            log)
+    {
+    }
+
+    internal PinManager(
+        Func<PinSettings> settings,
+        PinImageSaveService? saveService,
+        ILogger log)
+        : this(settings, saveService, ClipboardImageService.CopyImageAsync, log)
+    {
+    }
+
+    internal PinManager(
+        Func<PinSettings> settings,
+        PinImageSaveService? saveService,
+        Func<BitmapSource, Task<bool>> copyImageAsync,
+        ILogger log)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _saveService = saveService;
+        _copyImageAsync = copyImageAsync ?? throw new ArgumentNullException(nameof(copyImageAsync));
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
@@ -67,11 +93,19 @@ internal sealed class PinManager
     internal bool AreHidden { get; private set; }
 
     /// <summary>
+    /// The most recent save request routed from a pin. This awaitable internal seam lets the
+    /// WPF boundary remain event-based while integration tests deterministically observe the
+    /// complete PinWindow -> PinManager -> PinImageSaveService transaction.
+    /// </summary>
+    internal Task<PinSaveResult>? LastSaveOperationForTest { get; private set; }
+
+    /// <summary>
     /// Reads the clipboard image and, if present, opens a new independent pin for it.
     /// </summary>
-    internal PasteResult PasteFromClipboard()
+    internal async Task<PasteResult> PasteFromClipboardAsync()
     {
-        (ClipboardImageOutcome outcome, BitmapSource? image) = ClipboardImageReader.Read();
+        (ClipboardImageOutcome outcome, BitmapSource? image) =
+            await ClipboardImageReader.ReadAsync();
 
         switch (outcome.Status)
         {
@@ -131,8 +165,9 @@ internal sealed class PinManager
 
         var pin = new PinWindow(image, state, placement.Left, placement.Top, _settings);
         pin.CloseAllRequested += (_, _) => CloseAll();
-        pin.CopyRequested += (_, source) => CopyToClipboard(source);
+        pin.CopyRequested += OnPinCopyRequested;
         pin.OcrRequested += (_, source) => OcrRequested?.Invoke(this, source);
+        pin.SaveRequested += OnPinSaveRequested;
         pin.Closed += (_, _) => _pins.Remove(pin);
 
         _pins.Add(pin);
@@ -254,9 +289,20 @@ internal sealed class PinManager
         AreHidden = false;
     }
 
-    private void CopyToClipboard(BitmapSource image)
+    private async void OnPinCopyRequested(object? sender, BitmapSource image)
     {
-        if (ClipboardImageService.CopyImage(image))
+        bool copied;
+        try
+        {
+            copied = await _copyImageAsync(image);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Pinned-image clipboard copy failed unexpectedly");
+            copied = false;
+        }
+
+        if (copied)
         {
             _log.LogInformation("Copied a pinned image to the clipboard");
         }
@@ -264,6 +310,69 @@ internal sealed class PinManager
         {
             _log.LogWarning("Could not copy a pinned image to the clipboard");
         }
+
+        if (sender is PinWindow pin && !pin.IsClosed)
+        {
+            pin.ReportCopyResult(copied);
+        }
+    }
+
+    private void OnPinSaveRequested(object? sender, PinSaveRequestedEventArgs e)
+    {
+        LastSaveOperationForTest = SavePinAsync(sender, e);
+    }
+
+    private async Task<PinSaveResult> SavePinAsync(object? sender, PinSaveRequestedEventArgs e)
+    {
+        if (sender is not PinWindow pin || _saveService is null)
+        {
+            var unavailable = new PinSaveResult(
+                PinSaveStatus.Failed,
+                ErrorMessage: "저장 서비스를 사용할 수 없습니다.");
+            if (sender is PinWindow unavailablePin && !unavailablePin.IsClosed)
+            {
+                unavailablePin.ReportSaveResult(unavailable);
+            }
+
+            return unavailable;
+        }
+
+        PinSaveResult result;
+        try
+        {
+            result = e.Mode == PinSaveMode.SaveAs
+                ? await _saveService.SaveAsAsync(e.Image, pin)
+                : await _saveService.QuickSaveAsync(e.Image);
+        }
+        catch (Exception ex)
+        {
+            // Catch every unexpected failure inside the task retained at the WPF event
+            // boundary, so a bad path or encoder failure can never terminate the tray.
+            _log.LogError(ex, "Pinned-image save failed unexpectedly");
+            result = new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: ex.Message);
+        }
+
+        if (pin.IsClosed)
+        {
+            return result;
+        }
+
+        pin.ReportSaveResult(result);
+        if (result.Status != PinSaveStatus.Failed)
+        {
+            return result;
+        }
+
+        string detail = string.IsNullOrWhiteSpace(result.ErrorMessage)
+            ? "파일을 저장할 수 없습니다. 저장 위치와 권한을 확인해 주세요."
+            : result.ErrorMessage;
+        _ = MessageBox.Show(
+            pin,
+            $"고정 이미지를 저장하지 못했습니다.\n\n{detail}",
+            "고정 이미지 저장",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+        return result;
     }
 
     /// <summary>

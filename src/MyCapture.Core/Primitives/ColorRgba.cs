@@ -65,51 +65,51 @@ public readonly record struct ColorRgba(byte A, byte R, byte G, byte B)
         switch (s.Length)
         {
             case 3:
-            {
-                // #RGB -> each nibble duplicated, matching CSS semantics.
-                if (!Hex(s[..1], out byte r3) || !Hex(s[1..2], out byte g3) || !Hex(s[2..3], out byte b3))
                 {
-                    return false;
-                }
+                    // #RGB -> each nibble duplicated, matching CSS semantics.
+                    if (!Hex(s[..1], out byte r3) || !Hex(s[1..2], out byte g3) || !Hex(s[2..3], out byte b3))
+                    {
+                        return false;
+                    }
 
-                color = new ColorRgba(255, (byte)(r3 * 17), (byte)(g3 * 17), (byte)(b3 * 17));
-                return true;
-            }
+                    color = new ColorRgba(255, (byte)(r3 * 17), (byte)(g3 * 17), (byte)(b3 * 17));
+                    return true;
+                }
 
             case 4:
-            {
-                if (!Hex(s[..1], out byte a4) || !Hex(s[1..2], out byte r4) ||
-                    !Hex(s[2..3], out byte g4) || !Hex(s[3..4], out byte b4))
                 {
-                    return false;
-                }
+                    if (!Hex(s[..1], out byte a4) || !Hex(s[1..2], out byte r4) ||
+                        !Hex(s[2..3], out byte g4) || !Hex(s[3..4], out byte b4))
+                    {
+                        return false;
+                    }
 
-                color = new ColorRgba((byte)(a4 * 17), (byte)(r4 * 17), (byte)(g4 * 17), (byte)(b4 * 17));
-                return true;
-            }
+                    color = new ColorRgba((byte)(a4 * 17), (byte)(r4 * 17), (byte)(g4 * 17), (byte)(b4 * 17));
+                    return true;
+                }
 
             case 6:
-            {
-                if (!Hex(s[..2], out byte r6) || !Hex(s[2..4], out byte g6) || !Hex(s[4..6], out byte b6))
                 {
-                    return false;
-                }
+                    if (!Hex(s[..2], out byte r6) || !Hex(s[2..4], out byte g6) || !Hex(s[4..6], out byte b6))
+                    {
+                        return false;
+                    }
 
-                color = new ColorRgba(255, r6, g6, b6);
-                return true;
-            }
+                    color = new ColorRgba(255, r6, g6, b6);
+                    return true;
+                }
 
             case 8:
-            {
-                if (!Hex(s[..2], out byte a8) || !Hex(s[2..4], out byte r8) ||
-                    !Hex(s[4..6], out byte g8) || !Hex(s[6..8], out byte b8))
                 {
-                    return false;
-                }
+                    if (!Hex(s[..2], out byte a8) || !Hex(s[2..4], out byte r8) ||
+                        !Hex(s[4..6], out byte g8) || !Hex(s[6..8], out byte b8))
+                    {
+                        return false;
+                    }
 
-                color = new ColorRgba(a8, r8, g8, b8);
-                return true;
-            }
+                    color = new ColorRgba(a8, r8, g8, b8);
+                    return true;
+                }
 
             default:
                 return false;

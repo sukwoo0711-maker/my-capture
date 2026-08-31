@@ -9,6 +9,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
+using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Storage;
@@ -89,6 +90,8 @@ internal sealed class VideoEditorWindow : Window
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _log = loggerFactory.CreateLogger<VideoEditorWindow>();
 
+        StandardWindowTheme.Apply(this);
+
         Title = "MyCapture — 녹화 편집";
         Background = TryBrush("Surface.Base", Color.FromRgb(0x1B, 0x17, 0x12));
         Foreground = TryBrush("Text.Primary", Colors.White);
@@ -130,6 +133,7 @@ internal sealed class VideoEditorWindow : Window
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
             FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
         };
         _loadingLabel = new TextBlock
         {
@@ -222,6 +226,8 @@ internal sealed class VideoEditorWindow : Window
 
     /// <summary>Raised when the user commits a still-image edit taken from a frame.</summary>
     internal event EventHandler<AnnotationFrameCapturedEventArgs>? FrameImageCaptured;
+
+    internal Func<FrameImageCommitSession>? FrameImageCommitHandlerFactory { get; set; }
 
     // ---- layout ----
 
@@ -571,8 +577,10 @@ internal sealed class VideoEditorWindow : Window
             region,
             frame,
             title: "MyCapture — 프레임 이미지 편집");
-        editor.CommitRequested = _ => true; // Persistence is handled by the app via the event below.
+        FrameImageCommitSession? commitSession = FrameImageCommitHandlerFactory?.Invoke();
+        editor.CommitRequested = commitSession?.CommitAsync ?? (_ => Task.FromResult(false));
         editor.Committed += (_, result) => FrameImageCaptured?.Invoke(this, new AnnotationFrameCapturedEventArgs(result));
+        editor.Closed += (_, _) => commitSession?.Dispose();
         editor.Owner = this;
         editor.Show();
         _ = editor.Activate();
@@ -736,9 +744,14 @@ internal sealed class VideoEditorWindow : Window
         string trim = _timeline.IsFullClip
             ? "전체 길이"
             : string.Create(CultureInfo.CurrentCulture, $"선택 {FormatMs(_timeline.SelectedDurationMs)}");
+        string recordingHealth = _recording.DroppedFrames == 0
+            ? "녹화 드롭 없음"
+            : string.Create(
+                CultureInfo.CurrentCulture,
+                $"녹화 드롭 {_recording.DroppedFrames} ({_recording.DropRate:P1})");
         _statusLabel.Text = string.Create(
             CultureInfo.CurrentCulture,
-            $"←/→ 크게 · Ctrl/Shift+←/→ 또는 , . 1프레임 · 휠/Ctrl+Shift +/- 확대 · {trim}");
+            $"←/→ 크게 · Ctrl/Shift+←/→ 또는 , . 1프레임 · 휠/Ctrl+Shift +/- 확대 · {trim} · {recordingHealth}");
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
     }
 

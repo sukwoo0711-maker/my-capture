@@ -568,6 +568,54 @@ public sealed class CaptureQueueTests
     }
 
     [Fact]
+    public void Eviction_ReportsPinPressureWhenThreePinsLeaveOneUsableUnpinnedCaptureOverTheItemCap()
+    {
+        using var workspace = new TempWorkspace();
+        var limits = new QueueSettings { MaxItems = 3, MaxBytes = long.MaxValue };
+        CaptureQueue queue = CreateQueue(workspace, limits);
+
+        DateTimeOffset t0 = DateTimeOffset.Now.AddHours(-1);
+        CaptureRecord firstPin = AddCapture(queue, workspace, t0, 10, pinned: true);
+        CaptureRecord secondPin = AddCapture(queue, workspace, t0.AddMinutes(1), 10, pinned: true);
+        CaptureRecord thirdPin = AddCapture(queue, workspace, t0.AddMinutes(2), 10, pinned: true);
+        CaptureRecord usable = AddCapture(queue, workspace, t0.AddMinutes(3), 10);
+
+        Assert.Equal(4, queue.Count);
+        Assert.All(new[] { firstPin, secondPin, thirdPin }, pin => Assert.Contains(pin, queue.Records));
+        Assert.Contains(usable, queue.Records);
+        Assert.False(usable.IsPinned);
+        Assert.True(queue.IsOverCapacityDueToPins);
+    }
+
+    [Fact]
+    public void EvictionLease_DefersNewHeadEvictionUntilTheOlderLeaseCanBeReleased()
+    {
+        using var workspace = new TempWorkspace();
+        var limits = new QueueSettings { MaxItems = 1, MaxBytes = long.MaxValue };
+        CaptureQueue queue = CreateQueue(workspace, limits);
+        DateTimeOffset now = DateTimeOffset.Now;
+        CaptureRecord active = AddCapture(queue, workspace, now.AddMinutes(-1), 10);
+        var evicted = new List<Guid>();
+        queue.Evicted += (_, args) => evicted.Add(args.Record.Id);
+        CaptureRecord newest;
+
+        using (queue.AcquireEvictionLease(active.Id))
+        {
+            newest = AddCapture(queue, workspace, now, 10);
+
+            Assert.Equal(2, queue.Count);
+            Assert.Contains(active, queue.Records);
+            Assert.Contains(newest, queue.Records);
+            Assert.Empty(evicted);
+        }
+
+        Assert.Single(queue.Records);
+        Assert.DoesNotContain(active, queue.Records);
+        Assert.Same(newest, queue.Records[0]);
+        Assert.Equal([active.Id], evicted);
+    }
+
+    [Fact]
     public void TogglePin_OnAnOverCapacityQueueAllowsEvictionToResume()
     {
         using var workspace = new TempWorkspace();
@@ -601,6 +649,54 @@ public sealed class CaptureQueueTests
 
         Assert.Equal(450, queue.TotalBytes);
         Assert.Equal(450, record.TotalBytes);
+    }
+
+    [Fact]
+    public void EvictionLease_ProtectsRecordAcrossByteCountEnforcement()
+    {
+        using var workspace = new TempWorkspace();
+        var limits = new QueueSettings { MaxItems = 100, MaxBytes = 250 };
+        CaptureQueue queue = CreateQueue(workspace, limits);
+        DateTimeOffset now = DateTimeOffset.Now;
+        CaptureRecord edited = AddCapture(queue, workspace, now.AddMinutes(-2), 100);
+        CaptureRecord other = AddCapture(queue, workspace, now.AddMinutes(-1), 100);
+        var evicted = new List<Guid>();
+        queue.Evicted += (_, args) => evicted.Add(args.Record.Id);
+
+        using (queue.AcquireEvictionLease(edited.Id))
+        {
+            queue.UpdateByteCount(edited.Id, 300);
+
+            Assert.Contains(edited, queue.Records);
+            Assert.Contains(other, queue.Records);
+            Assert.Equal(2, queue.Count);
+            Assert.Empty(evicted);
+        }
+
+        // Releasing the edit makes both records eligible. The recent edited generation survives,
+        // while the older disposable capture is evicted; an oversized last capture is retained.
+        Assert.Single(queue.Records);
+        Assert.Same(edited, queue.Records[0]);
+        Assert.Equal([other.Id], evicted);
+    }
+
+    [Fact]
+    public void Eviction_UsesRecentEditActivityInsteadOfCreationOrder()
+    {
+        using var workspace = new TempWorkspace();
+        var limits = new QueueSettings { MaxItems = 2, MaxBytes = long.MaxValue };
+        CaptureQueue queue = CreateQueue(workspace, limits);
+        DateTimeOffset now = DateTimeOffset.Now;
+        CaptureRecord createdFirst = AddCapture(queue, workspace, now.AddMinutes(-3), 10);
+        CaptureRecord untouched = AddCapture(queue, workspace, now.AddMinutes(-2), 10);
+
+        // Re-editing the oldest-created record makes it the most recently used capture.
+        createdFirst.UpdatedAt = now;
+        CaptureRecord newest = AddCapture(queue, workspace, now.AddMinutes(-1), 10);
+
+        Assert.Contains(createdFirst, queue.Records);
+        Assert.Contains(newest, queue.Records);
+        Assert.DoesNotContain(untouched, queue.Records);
     }
 
     [Fact]

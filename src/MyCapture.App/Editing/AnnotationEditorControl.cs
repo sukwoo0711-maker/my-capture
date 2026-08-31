@@ -74,6 +74,7 @@ internal sealed class AnnotationEditorControl : Grid
     private TextBox? _activeTextBox;
     private TextAnnotation? _editingText;
     private bool _completed;
+    private bool _commitInProgress;
 
     internal AnnotationEditorControl(FrozenFrame frame, RectD bitmapRegion, BitmapSource selectedBitmap)
         : this(frame, bitmapRegion, selectedBitmap, initialDocument: null, initialAssets: null)
@@ -160,12 +161,12 @@ internal sealed class AnnotationEditorControl : Grid
     internal event EventHandler? EditingCancelled;
 
     /// <summary>
-    /// Invoked synchronously when the user asks to commit, before the editor closes. The
+    /// Invoked when the user asks to commit, before the editor closes. The
     /// handler flattens, persists, and performs any clipboard/export the action requires,
     /// and returns whether the editor should close. Returning <see langword="false"/> (a
     /// cancelled or failed Save As) leaves the editor open.
     /// </summary>
-    internal Func<AnnotationEditingResult, bool>? CommitRequested { get; set; }
+    internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested { get; set; }
 
     internal BitmapSource DisplayedBitmap => _surface.Frame.Bitmap;
 
@@ -179,6 +180,8 @@ internal sealed class AnnotationEditorControl : Grid
     internal UIElement PointerInputElement => _viewport;
 
     internal bool IsPointerCaptured => _viewport.IsMouseCaptured;
+
+    internal bool IsCommitInProgress => _commitInProgress && !_completed;
 
     internal bool CapturePointer() => _viewport.CaptureMouse();
 
@@ -200,6 +203,13 @@ internal sealed class AnnotationEditorControl : Grid
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
+        if (_commitInProgress)
+        {
+            // The snapshot being persisted must remain immutable until the operation either
+            // succeeds or reports that the editor should stay open.
+            return true;
+        }
+
         // While typing in a text box, only Escape/Ctrl+Enter are editor shortcuts.
         if (_activeTextBox is not null)
         {
@@ -1318,9 +1328,9 @@ internal sealed class AnnotationEditorControl : Grid
 
     // ---- Commit / cancel -----------------------------------------------------------
 
-    private void Commit(EditorCommitAction action)
+    private async void Commit(EditorCommitAction action)
     {
-        if (_completed)
+        if (_completed || _commitInProgress)
         {
             return;
         }
@@ -1347,10 +1357,21 @@ internal sealed class AnnotationEditorControl : Grid
             _imageStore.DecodedFor(usedAssets),
             _imageStore.SourcesFor(usedAssets));
 
-        // The consumer performs flatten/persist/clipboard/export and reports whether the
-        // editor should close. A cancelled or failed Save As keeps the editor open so the
-        // user does not silently lose the choice; every other action closes on success.
-        bool shouldClose = CommitRequested?.Invoke(result) ?? true;
+        // Keep the editor alive while background PNG encoding or clipboard contention
+        // resolves. This guarantees Ctrl+C means copy-then-close, never close-then-copy.
+        _commitInProgress = true;
+        IsHitTestVisible = false;
+        SetStatus(action == EditorCommitAction.CopyToClipboard ? "클립보드에 복사 중…" : "저장 중…");
+        bool shouldClose;
+        try
+        {
+            shouldClose = CommitRequested is null || await CommitRequested(result);
+        }
+        catch (Exception)
+        {
+            shouldClose = false;
+        }
+
         if (shouldClose)
         {
             _completed = true;
@@ -1358,13 +1379,17 @@ internal sealed class AnnotationEditorControl : Grid
         }
         else
         {
-            SetStatus("저장이 완료되지 않았습니다");
+            _commitInProgress = false;
+            IsHitTestVisible = true;
+            SetStatus(action == EditorCommitAction.CopyToClipboard
+                ? "클립보드 복사가 완료되지 않았습니다"
+                : "저장이 완료되지 않았습니다");
         }
     }
 
     private void Cancel()
     {
-        if (_completed)
+        if (_completed || _commitInProgress)
         {
             return;
         }

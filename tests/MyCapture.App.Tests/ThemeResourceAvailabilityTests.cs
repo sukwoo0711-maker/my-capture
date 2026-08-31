@@ -1,6 +1,13 @@
+using System.Reflection;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
+using MyCapture.App.Themes;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -150,6 +157,172 @@ public sealed class ThemeResourceAvailabilityTests
         });
     }
 
+    [Fact]
+    public void MotionTokensUseTheSharedCancellableCadenceAndEaseOutCurves()
+    {
+        StaTestHost.Run(() =>
+        {
+            ResourceDictionary theme = LoadMergedTheme();
+
+            Assert.Equal(
+                TimeSpan.FromMilliseconds(83),
+                Assert.IsType<Duration>(theme["Motion.Fast"]).TimeSpan);
+            Assert.Equal(
+                TimeSpan.FromMilliseconds(167),
+                Assert.IsType<Duration>(theme["Motion.Normal"]).TimeSpan);
+            Assert.Equal(
+                TimeSpan.FromMilliseconds(250),
+                Assert.IsType<Duration>(theme["Motion.Deliberate"]).TimeSpan);
+
+            CubicEase standard = Assert.IsType<CubicEase>(theme["Motion.Ease.Standard"]);
+            QuadraticEase softLanding = Assert.IsType<QuadraticEase>(theme["Motion.Ease.SoftLanding"]);
+            Assert.Equal(EasingMode.EaseOut, standard.EasingMode);
+            Assert.Equal(EasingMode.EaseOut, softLanding.EasingMode);
+        });
+    }
+
+    [Fact]
+    public void StandardWindowAndButtonFamilyStylesOptIntoFluidMotion()
+    {
+        StaTestHost.Run(() =>
+        {
+            ResourceDictionary theme = LoadMergedTheme();
+
+            Style standardWindow = Assert.IsType<Style>(theme[StandardWindowTheme.ResourceKey]);
+            Assert.Same(standardWindow, Assert.IsType<Style>(theme[typeof(Window)]).BasedOn);
+            AssertAttachedBooleanSetter(
+                standardWindow,
+                FluidMotion.WindowEntranceProperty);
+            AssertAttachedBooleanSetter(
+                standardWindow,
+                ModernWindowChrome.EnabledProperty);
+            AssertAttachedBooleanSetter(
+                Assert.IsType<Style>(theme[typeof(Button)]),
+                FluidMotion.PressFeedbackProperty);
+            AssertAttachedBooleanSetter(
+                Assert.IsType<Style>(theme[typeof(ToggleButton)]),
+                FluidMotion.PressFeedbackProperty);
+            AssertAttachedBooleanSetter(
+                Assert.IsType<Style>(theme[typeof(CheckBox)]),
+                FluidMotion.PressFeedbackProperty);
+        });
+    }
+
+    [Fact]
+    public void StandardWindowThemeAppliesAtRuntimeToDerivedWindow()
+    {
+        StaTestHost.Run(() =>
+        {
+            ResourceDictionary theme = LoadMergedTheme();
+            var window = new DerivedWindow();
+            window.Resources.MergedDictionaries.Add(theme);
+
+            StandardWindowTheme.Apply(window);
+
+            Assert.Same(theme[StandardWindowTheme.ResourceKey], window.Style);
+            Assert.True(FluidMotion.GetWindowEntrance(window));
+            Assert.True(ModernWindowChrome.GetEnabled(window));
+        });
+    }
+
+    [Fact]
+    public void WindowEntranceReplaysOnEveryShowAndHonorsReducedMotion()
+    {
+        StaTestHost.Run(() =>
+        {
+            bool? previousOverride = FluidMotion.AnimationsEnabledOverrideForTest;
+            Window? animatedWindow = null;
+            Window? reducedMotionWindow = null;
+            try
+            {
+                FluidMotion.AnimationsEnabledOverrideForTest = true;
+                var animatedSurface = new Border { Width = 1, Height = 1 };
+                animatedWindow = CreateOffscreenProbeWindow(animatedSurface);
+                FluidMotion.SetWindowEntrance(animatedWindow, true);
+
+                animatedWindow.Show();
+                DrainRenderQueue(animatedWindow.Dispatcher);
+                var firstReveal = Assert.IsType<TranslateTransform>(
+                    animatedSurface.ReadLocalValue(UIElement.RenderTransformProperty));
+
+                animatedWindow.Hide();
+                animatedWindow.Show();
+                DrainRenderQueue(animatedWindow.Dispatcher);
+                var secondReveal = Assert.IsType<TranslateTransform>(
+                    animatedSurface.ReadLocalValue(UIElement.RenderTransformProperty));
+
+                Assert.NotSame(firstReveal, secondReveal);
+
+                FluidMotion.AnimationsEnabledOverrideForTest = false;
+                var reducedMotionSurface = new Border { Width = 1, Height = 1, Opacity = 0.72 };
+                reducedMotionWindow = CreateOffscreenProbeWindow(reducedMotionSurface);
+                FluidMotion.SetWindowEntrance(reducedMotionWindow, true);
+
+                reducedMotionWindow.Show();
+                DrainRenderQueue(reducedMotionWindow.Dispatcher);
+                reducedMotionWindow.Hide();
+                reducedMotionWindow.Show();
+                DrainRenderQueue(reducedMotionWindow.Dispatcher);
+
+                Assert.Equal(
+                    DependencyProperty.UnsetValue,
+                    reducedMotionSurface.ReadLocalValue(UIElement.RenderTransformProperty));
+                Assert.False(reducedMotionSurface.HasAnimatedProperties);
+                Assert.Equal(0.72, reducedMotionSurface.Opacity, precision: 2);
+            }
+            finally
+            {
+                animatedWindow?.Close();
+                reducedMotionWindow?.Close();
+                FluidMotion.AnimationsEnabledOverrideForTest = previousOverride;
+            }
+        });
+    }
+
+    [Fact]
+    public void KeyboardPressFeedback_ReleasesWhenButtonLosesFocus()
+    {
+        StaTestHost.Run(() =>
+        {
+            var button = new Button();
+            FluidMotion.SetPressFeedback(button, true);
+
+            DependencyProperty pressTransformProperty = Assert.IsType<DependencyProperty>(
+                typeof(FluidMotion)
+                    .GetField("PressTransformProperty", BindingFlags.Static | BindingFlags.NonPublic)!
+                    .GetValue(null));
+            var pressedScale = new ScaleTransform(0.985, 0.985);
+            button.RenderTransform = pressedScale;
+            button.SetValue(pressTransformProperty, pressedScale);
+
+            var lostFocus = new KeyboardFocusChangedEventArgs(
+                Keyboard.PrimaryDevice,
+                Environment.TickCount,
+                button,
+                new Button())
+            {
+                RoutedEvent = Keyboard.LostKeyboardFocusEvent,
+                Source = button,
+            };
+            button.RaiseEvent(lostFocus);
+
+            // Normal motion commits 1.0 synchronously before animating; reduced-motion mode
+            // removes the temporary transform outright. Either outcome proves focus loss cannot
+            // leave the button permanently at the pressed scale after a modal dialog steals KeyUp.
+            Assert.True(
+                !ReferenceEquals(button.RenderTransform, pressedScale)
+                || (pressedScale.ScaleX == 1.0 && pressedScale.ScaleY == 1.0));
+        });
+    }
+
+    private static void AssertAttachedBooleanSetter(Style style, DependencyProperty property)
+    {
+        Setter setter = Assert.Single(
+            style.Setters.OfType<Setter>(),
+            candidate => candidate.Property == property);
+        Assert.True(Assert.IsType<bool>(setter.Value));
+    }
+
     private static void AssertContrastAtLeast(
         ResourceDictionary theme,
         string foregroundKey,
@@ -209,6 +382,26 @@ public sealed class ThemeResourceAvailabilityTests
     {
         _ = System.IO.Packaging.PackUriHelper.UriSchemePack;
         _ = new FrameworkElement();
+    }
+
+    private static DerivedWindow CreateOffscreenProbeWindow(FrameworkElement content) =>
+        new()
+        {
+            Content = content,
+            Width = 1,
+            Height = 1,
+            Left = -32000,
+            Top = -32000,
+            WindowStyle = WindowStyle.None,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+        };
+
+    private static void DrainRenderQueue(Dispatcher dispatcher) =>
+        dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(static () => { }));
+
+    private sealed class DerivedWindow : Window
+    {
     }
 }
 
