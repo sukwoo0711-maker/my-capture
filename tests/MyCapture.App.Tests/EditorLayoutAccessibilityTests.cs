@@ -52,6 +52,24 @@ public sealed class EditorLayoutAccessibilityTests
     }
 
     [Fact]
+    public void PencilIsTheInitiallyCheckedTool()
+    {
+        StaTestHost.Run(() =>
+        {
+            using EditorHost host = EditorHost.Create();
+
+            IReadOnlyList<ToggleButton> tools = FindDescendants<ToggleButton>(host.Editor).ToList();
+            ToggleButton pencil = tools.Single(
+                tool => AutomationProperties.GetName(tool) == "연필 도구 (P)");
+            ToggleButton select = tools.Single(
+                tool => AutomationProperties.GetName(tool) == "선택 도구 (V)");
+
+            Assert.True(pencil.IsChecked);
+            Assert.False(select.IsChecked);
+        });
+    }
+
+    [Fact]
     public void EditorHasNoScrollViewer_SoToolbarNeverScrollsHorizontally()
     {
         StaTestHost.Run(() =>

@@ -24,6 +24,42 @@ public sealed class AnnotationEditorControllerTests
     }
 
     [Fact]
+    public void DefaultTool_IsPenForImmediateDrawing()
+    {
+        AnnotationEditorController c = NewController(out _, out _);
+
+        Assert.Equal(EditorTool.Pen, c.Tool);
+        Assert.Null(c.Selected);
+    }
+
+    [Fact]
+    public void PenTool_StaysActiveAndUnselectedAcrossConsecutiveStrokes()
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out UndoStack undo);
+
+        c.PointerDown(new PointD(10, 10));
+        c.PointerMove(new PointD(30, 20));
+        c.PointerUp(new PointD(50, 25));
+
+        Assert.Equal(EditorTool.Pen, c.Tool);
+        Assert.Null(c.Selected);
+
+        c.PointerDown(new PointD(70, 40));
+        c.PointerMove(new PointD(90, 55));
+        c.PointerUp(new PointD(110, 60));
+
+        Assert.Equal(2, doc.Items.Count);
+        Assert.All(doc.Items, item => Assert.IsType<PenAnnotation>(item));
+        Assert.Equal(EditorTool.Pen, c.Tool);
+        Assert.Null(c.Selected);
+
+        Assert.True(undo.Undo());
+        Assert.Single(doc.Items);
+        Assert.True(undo.Undo());
+        Assert.Empty(doc.Items);
+    }
+
+    [Fact]
     public void RectangleTool_DragCreatesOneUndoableRectangle()
     {
         AnnotationEditorController c = NewController(out AnnotationDocument doc, out UndoStack undo);

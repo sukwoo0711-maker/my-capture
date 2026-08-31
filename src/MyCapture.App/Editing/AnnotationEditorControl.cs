@@ -148,7 +148,7 @@ internal sealed class AnnotationEditorControl : Grid
             Focus();
         };
 
-        SelectTool(EditorTool.Select);
+        SelectTool(EditorTool.Pen);
         RefreshHistoryButtons();
         UpdateInspector();
     }
@@ -354,13 +354,19 @@ internal sealed class AnnotationEditorControl : Grid
         SyncToolButtons();
 
         // A gesture that produced a new object is worth announcing; a bare click that did not
-        // is not. Selection/move/resize feedback is handled via SelectionChanged.
-        if (_controller.Document.Items.Count > itemsBefore && _controller.Selected is not null)
+        // is not. Pencil strokes intentionally stay unselected to avoid an interrupting
+        // selection polygon, so report them from the tool that began the gesture.
+        if (_controller.Document.Items.Count > itemsBefore)
         {
-            SetStatus($"{_controller.Selected.DisplayName}을(를) 추가했습니다 · Ctrl+Z로 취소");
+            if (toolBeforeCommit == EditorTool.Pen)
+            {
+                SetStatus("연필 획을 추가했습니다 · 계속 그릴 수 있습니다 · Ctrl+Z로 취소");
+            }
+            else if (_controller.Selected is { } selected)
+            {
+                SetStatus($"{selected.DisplayName}을(를) 추가했습니다 · Ctrl+Z로 취소");
+            }
         }
-
-        _ = toolBeforeCommit;
     }
 
     private void OnSurfaceRightDown(object sender, MouseButtonEventArgs e)
@@ -694,7 +700,7 @@ internal sealed class AnnotationEditorControl : Grid
         AddToolButton(stack, EditorTool.Select, "선택", "V", "선택 도구 (V) — 주석을 선택·이동·크기 조정", "Icon.Select", FallbackSelect);
         AddToolButton(stack, EditorTool.Rectangle, "사각형", "R", "사각형 (R) — 이미지 위를 드래그", "Icon.Rectangle", FallbackRectangle);
         AddToolButton(stack, EditorTool.Arrow, "화살표", "A", "화살표 (A) — 시작점에서 끝점으로 드래그", "Icon.Arrow", FallbackArrow);
-        AddToolButton(stack, EditorTool.Pen, "펜", "P", "펜 (P) — 자유롭게 그리기", "Icon.Pen", FallbackPen);
+        AddToolButton(stack, EditorTool.Pen, "연필", "P", "연필 (P) — 자유롭게 그리기", "Icon.Pen", FallbackPen);
         AddToolButton(stack, EditorTool.Text, "텍스트", "T", "텍스트 (T) — 클릭해 입력", "Icon.Text", FallbackText);
         AddToolButton(stack, EditorTool.Image, "이미지", "I", "이미지 삽입 (I) — 파일을 선택", "Icon.Image", FallbackImage);
 
@@ -1221,7 +1227,7 @@ internal sealed class AnnotationEditorControl : Grid
         EditorTool.Select => "선택 도구",
         EditorTool.Rectangle => "사각형 도구",
         EditorTool.Arrow => "화살표 도구",
-        EditorTool.Pen => "펜 도구",
+        EditorTool.Pen => "연필 도구",
         EditorTool.Text => "텍스트 도구",
         EditorTool.Image => "이미지 도구",
         _ => "도구",
@@ -1243,7 +1249,7 @@ internal sealed class AnnotationEditorControl : Grid
         EditorTool.Select => "선택 도구 · 주석을 클릭해 선택하세요",
         EditorTool.Rectangle => "사각형 도구 · 이미지 위를 드래그하세요",
         EditorTool.Arrow => "화살표 도구 · 시작점에서 끝점으로 드래그하세요",
-        EditorTool.Pen => "펜 도구 · 자유롭게 그리세요",
+        EditorTool.Pen => "연필 도구 · 자유롭게 그리세요",
         EditorTool.Text => "텍스트 도구 · 이미지를 클릭해 입력하세요",
         EditorTool.Image => "이미지 도구 · 이미지를 클릭해 파일을 선택하세요",
         _ => string.Empty,

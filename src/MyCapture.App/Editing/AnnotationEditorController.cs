@@ -25,7 +25,7 @@ internal sealed class AnnotationEditorController
     private readonly AnnotationDocument _document;
     private readonly UndoStack _undo;
 
-    private EditorTool _tool = EditorTool.Select;
+    private EditorTool _tool = EditorTool.Pen;
     private AnnotationItem? _selected;
 
     // Live-gesture state.
@@ -498,8 +498,11 @@ internal sealed class AnnotationEditorController
 
         pen.SimplifyInPlace();
         _undo.Push(new AlreadyAddedCommand(_document, pen));
-        Tool = EditorTool.Select;
-        SetSelected(pen);
+
+        // Freehand drawing is a continuous mode: keep the pencil active and leave the
+        // completed stroke unselected so a selection polygon/adorner does not interrupt
+        // the next stroke. The user can still press V or right-click to enter selection.
+        SetSelected(null);
     }
 
     private static bool IsDegenerate(AnnotationItem item)
