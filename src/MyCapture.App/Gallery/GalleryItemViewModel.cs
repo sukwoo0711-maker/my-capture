@@ -69,14 +69,17 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     {
         get
         {
-            string time = Record.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+            string time = Record.CreatedAt.DateTime.ToString("yyyy-MM-dd HH:mm");
             string pin = Record.IsPinned ? ", 고정됨" : string.Empty;
             return $"{ContextLabel}, {Record.Width}×{Record.Height}, {time}{pin}";
         }
     }
 
     /// <summary>Secondary caption line: capture time.</summary>
-    public string TimeCaption => Record.CreatedAt.LocalDateTime.ToString("HH:mm");
+    // Keep the wall-clock time captured with the record's stored offset. LocalDateTime
+    // would reinterpret it through the current machine time zone and could change the
+    // label after travel, restore, or execution on a UTC host.
+    public string TimeCaption => Record.CreatedAt.DateTime.ToString("HH:mm");
 
     /// <summary>The decoded thumbnail, or <see langword="null"/> until requested / when broken.</summary>
     public BitmapSource? Thumbnail

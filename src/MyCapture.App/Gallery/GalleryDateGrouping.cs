@@ -26,8 +26,12 @@ public static class GalleryDateGrouping
     /// </summary>
     public static GalleryDateGroup Resolve(DateTimeOffset createdAt, DateTimeOffset now)
     {
-        DateOnly day = DateOnly.FromDateTime(createdAt.LocalDateTime);
-        DateOnly today = DateOnly.FromDateTime(now.LocalDateTime);
+        // CaptureRecord stores DateTimeOffset.Now, so its offset is part of the captured
+        // wall-clock value. Preserve those components instead of converting through the
+        // machine running the gallery (or a UTC CI runner), which can move a capture into
+        // another calendar day.
+        DateOnly day = DateOnly.FromDateTime(createdAt.DateTime);
+        DateOnly today = DateOnly.FromDateTime(now.DateTime);
         DateOnly yesterday = today.AddDays(-1);
 
         string heading;
