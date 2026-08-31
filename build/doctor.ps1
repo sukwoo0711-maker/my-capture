@@ -41,10 +41,10 @@ Get-Command dotnet -CommandType Application -All -ErrorAction SilentlyContinue |
 
 if ($candidatePaths.Count -eq 0) {
     throw @"
-.NET SDK를 찾지 못했습니다.
-MyCapture를 빌드하려면 .NET 10 SDK $requiredText 이상이 필요합니다(런타임만 설치하면 빌드할 수 없습니다).
-SDK 설치: https://dotnet.microsoft.com/download/dotnet/10.0
-설치 후 새 PowerShell을 열고 build\doctor.ps1을 다시 실행하세요.
+No .NET SDK installation was found.
+Building MyCapture requires .NET 10 SDK $requiredText or newer; the runtime alone is not sufficient.
+Install the SDK: https://dotnet.microsoft.com/download/dotnet/10.0
+Then open a new PowerShell window and run build\doctor.ps1 again.
 "@
 }
 
@@ -69,7 +69,7 @@ try {
             Where-Object { $_ -match '^\d+\.\d+\.\d+$' } |
             Select-Object -Last 1)
         if ($stableVersionLine.Count -eq 0) {
-            $diagnostics.Add("$candidatePath -> SDK version을 해석할 수 없음; $versionText")
+            $diagnostics.Add("$candidatePath -> could not parse the SDK version; $versionText")
             continue
         }
 
@@ -85,7 +85,7 @@ try {
             break
         }
 
-        $diagnostics.Add("$candidatePath -> SDK $candidateVersion (필요: $requiredText 이상, .NET $($requiredVersion.Major).$($requiredVersion.Minor))")
+        $diagnostics.Add("$candidatePath -> SDK $candidateVersion (required: $requiredText or newer in .NET $($requiredVersion.Major).$($requiredVersion.Minor))")
     }
 }
 finally {
@@ -94,7 +94,7 @@ finally {
 
 if ($null -eq $selectedPath) {
     $detail = if ($diagnostics.Count -gt 0) {
-        [Environment]::NewLine + '확인한 dotnet 설치:' + [Environment]::NewLine +
+        [Environment]::NewLine + 'Checked dotnet installations:' + [Environment]::NewLine +
             (($diagnostics | ForEach-Object { "  - $_" }) -join [Environment]::NewLine)
     }
     else {
@@ -102,9 +102,9 @@ if ($null -eq $selectedPath) {
     }
 
     throw @"
-호환되는 .NET SDK를 찾지 못했습니다.
-MyCapture는 global.json에 고정된 .NET 10 SDK $requiredText 이상이 필요합니다.
-SDK 설치: https://dotnet.microsoft.com/download/dotnet/10.0$detail
+No compatible .NET SDK installation was found.
+MyCapture requires .NET 10 SDK $requiredText or newer as pinned by global.json.
+Install the SDK: https://dotnet.microsoft.com/download/dotnet/10.0$detail
 "@
 }
 
@@ -122,7 +122,7 @@ if (-not $Quiet) {
     Write-Host "  CPU:     $env:PROCESSOR_ARCHITECTURE (target: win-x64)"
 
     if ($env:OS -eq 'Windows_NT' -and [Environment]::OSVersion.Version.Build -lt 22000) {
-        Write-Warning '빌드는 가능할 수 있지만 MyCapture 실행 지원 하한은 Windows 11 21H2(build 22000)입니다.'
+        Write-Warning 'The build may succeed, but MyCapture requires Windows 11 21H2 (build 22000) or newer at runtime.'
     }
 
     Write-Host 'RESULT: READY' -ForegroundColor Green

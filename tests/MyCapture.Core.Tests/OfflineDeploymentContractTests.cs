@@ -69,4 +69,30 @@ public sealed class OfflineDeploymentContractTests
         Assert.Contains("includedFrameworks", package, StringComparison.Ordinal);
         Assert.Contains("RequiresPreinstalledDotNet = $false", package, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BuildScripts_AreReadableByWindowsPowerShell51OnEveryCodePage()
+    {
+        string buildDirectory = RepositoryPath("build");
+        string[] unsafeScripts = Directory
+            .EnumerateFiles(buildDirectory, "*.ps1", SearchOption.AllDirectories)
+            .Where(path =>
+            {
+                byte[] bytes = File.ReadAllBytes(path);
+                bool hasUtf8Bom = bytes.Length >= 3
+                    && bytes[0] == 0xEF
+                    && bytes[1] == 0xBB
+                    && bytes[2] == 0xBF;
+                return !hasUtf8Bom && bytes.Any(value => value > 0x7F);
+            })
+            .Select(path => Path.GetRelativePath(RepositoryRoot(), path))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(
+            unsafeScripts.Length == 0,
+            "Windows PowerShell 5.1 decodes UTF-8 without a BOM through the host code page. "
+            + "Keep build scripts ASCII-only or add a UTF-8 BOM: "
+            + string.Join(", ", unsafeScripts));
+    }
 }
