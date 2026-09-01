@@ -59,6 +59,9 @@ internal static class AnimatedGifExporter
             throw new ArgumentException("A destination directory is required.", nameof(destinationPath));
         }
 
+        // The local user explicitly selected this destination through SaveFileDialog. Writing to
+        // that exact unprivileged path is the purpose of the export operation.
+        // codeql[cs/path-injection]
         Directory.CreateDirectory(destinationDirectory);
         string temporary = Path.Combine(
             destinationDirectory,
@@ -68,6 +71,9 @@ internal static class AnimatedGifExporter
         {
             int emitted;
             using (var output = new FileStream(
+                       // The temporary name is a new GUID plus Path.GetFileName(destination), and
+                       // therefore remains beside the explicitly selected output file.
+                       // codeql[cs/path-injection]
                        temporary,
                        FileMode.CreateNew,
                        FileAccess.Write,
@@ -114,6 +120,8 @@ internal static class AnimatedGifExporter
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            // The destination is the exact path confirmed by the local SaveFileDialog.
+            // codeql[cs/path-injection]
             if (File.Exists(destination))
             {
                 try
@@ -136,8 +144,11 @@ internal static class AnimatedGifExporter
         {
             try
             {
+                // Only the exporter-created GUID temporary sibling can reach this cleanup path.
+                // codeql[cs/path-injection]
                 if (File.Exists(temporary))
                 {
+                    // codeql[cs/path-injection]
                     File.Delete(temporary);
                 }
             }

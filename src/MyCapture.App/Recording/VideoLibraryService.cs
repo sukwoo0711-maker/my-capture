@@ -592,6 +592,9 @@ internal sealed class VideoLibraryService
     /// </summary>
     private void RecoverAbandonedCaptureWrites()
     {
+        // AppPaths canonicalizes the configured local library root. Enumeration also skips
+        // reparse points, and every recovered child is checked for containment before use.
+        // codeql[cs/path-injection]
         if (!Directory.Exists(_paths.CapturesRoot))
         {
             return;
@@ -608,6 +611,8 @@ internal sealed class VideoLibraryService
         try
         {
             pendingFiles = Directory.EnumerateFiles(
+                    // See the canonical-root and containment contract above.
+                    // codeql[cs/path-injection]
                     _paths.CapturesRoot,
                     CaptureFileNames.VideoPending,
                     options)
@@ -770,6 +775,9 @@ internal sealed class VideoLibraryService
 
     private void RecoverInterruptedCapturePublications()
     {
+        // AppPaths canonicalizes the configured local library root. Enumeration also skips
+        // reparse points, and every recovered child is checked for containment before use.
+        // codeql[cs/path-injection]
         if (!Directory.Exists(_paths.CapturesRoot))
         {
             return;
@@ -785,6 +793,8 @@ internal sealed class VideoLibraryService
         IEnumerable<string> markers;
         try
         {
+            // The root is canonical and PublishReady is a fixed private sidecar name.
+            // codeql[cs/path-injection]
             markers = Directory.EnumerateFiles(_paths.CapturesRoot, PublishReady, options).ToList();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

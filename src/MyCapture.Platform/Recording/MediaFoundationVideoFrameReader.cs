@@ -126,6 +126,9 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         string fullPath = Path.GetFullPath(sourcePath);
+        // This desktop API intentionally opens the exact local file selected by the caller. The
+        // gallery caller supplies a queue-contained path; diagnostic callers supply test media.
+        // codeql[cs/path-injection]
         if (!File.Exists(fullPath))
         {
             throw new FileNotFoundException("The source video is unavailable.", fullPath);

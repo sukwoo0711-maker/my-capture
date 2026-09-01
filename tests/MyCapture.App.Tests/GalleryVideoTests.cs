@@ -65,7 +65,9 @@ public sealed class GalleryVideoTests
 
             Assert.Equal(".mp4", Path.GetExtension(output));
             Assert.Equal(Path.GetFullPath(Path.Combine(directory, CaptureFileNames.VideoRendered)), output);
+            // codeql[cs/path-injection] -- isolated GUID test workspace
             Assert.Equal([9, 8, 7, 6], File.ReadAllBytes(output));
+            // codeql[cs/path-injection] -- isolated GUID test workspace
             Assert.False(Directory.Exists(staging));
         }
         finally
@@ -77,6 +79,7 @@ public sealed class GalleryVideoTests
     private static string NewRoot()
     {
         string root = Path.Combine(Path.GetTempPath(), "mycapture-gallery-video-" + Guid.NewGuid().ToString("N"));
+        // codeql[cs/path-injection] -- isolated GUID test workspace
         Directory.CreateDirectory(root);
         return root;
     }
@@ -85,6 +88,7 @@ public sealed class GalleryVideoTests
     {
         try
         {
+            // codeql[cs/path-injection] -- isolated GUID test workspace
             Directory.Delete(root, recursive: true);
         }
         catch (IOException)

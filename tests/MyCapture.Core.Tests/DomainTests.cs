@@ -777,6 +777,7 @@ public sealed class CaptureQueueTests
         CaptureRecord expected = AddCapture(queue, workspace, DateTimeOffset.Now, 100);
         queue.Save();
 
+        // codeql[cs/path-injection] -- isolated TempWorkspace data root
         string validIndex = File.ReadAllText(workspace.Paths.IndexFile);
         string backup = workspace.Paths.IndexFile + Storage.AtomicFile.BackupSuffix;
         using JsonDocument document = JsonDocument.Parse(validIndex);
@@ -792,7 +793,9 @@ public sealed class CaptureQueueTests
 
         foreach (string invalidPrimary in invalidPrimaryIndexes)
         {
+            // codeql[cs/path-injection] -- isolated TempWorkspace data root
             File.WriteAllText(workspace.Paths.IndexFile, invalidPrimary);
+            // codeql[cs/path-injection] -- sibling backup inside the isolated data root
             File.WriteAllText(backup, validIndex);
 
             CaptureQueue reloaded = CreateQueue(workspace);

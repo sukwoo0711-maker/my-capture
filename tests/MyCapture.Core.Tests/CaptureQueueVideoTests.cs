@@ -19,6 +19,7 @@ public sealed class CaptureQueueVideoTests
         CaptureRecord complete = CreateVideoRecord(now);
         CreateRecordDirectory(workspace, complete);
         File.WriteAllBytes(
+            // codeql[cs/path-injection] -- isolated TempWorkspace capture root
             Path.Combine(workspace.Paths.CapturesRoot, complete.RelativeDirectory, CaptureFileNames.VideoSource),
             [0, 1, 2, 3]);
         queue.Add(complete);
@@ -44,8 +45,10 @@ public sealed class CaptureQueueVideoTests
         using var workspace = new TempWorkspace();
         CaptureRecord pending = CreateVideoRecord(DateTimeOffset.Now);
         string directory = CreateRecordDirectory(workspace, pending);
+        // codeql[cs/path-injection] -- isolated TempWorkspace capture root
         File.WriteAllBytes(Path.Combine(directory, CaptureFileNames.VideoSource), [9, 8, 7]);
         File.WriteAllText(
+            // codeql[cs/path-injection] -- isolated TempWorkspace capture root
             Path.Combine(directory, CaptureFileNames.VideoPending),
             JsonSerializer.Serialize(pending, JsonDefaults.Readable));
 
@@ -112,6 +115,7 @@ public sealed class CaptureQueueVideoTests
     private static string CreateRecordDirectory(TempWorkspace workspace, CaptureRecord record)
     {
         string directory = Path.Combine(workspace.Paths.CapturesRoot, record.RelativeDirectory);
+        // codeql[cs/path-injection] -- isolated TempWorkspace capture root
         Directory.CreateDirectory(directory);
         return directory;
     }

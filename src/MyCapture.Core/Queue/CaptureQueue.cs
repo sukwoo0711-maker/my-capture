@@ -768,8 +768,12 @@ public sealed class CaptureQueue
                 AttributesToSkip = FileAttributes.ReparsePoint,
             };
             sidecarFiles.AddRange(Directory.EnumerateFiles(
+                // AppPaths canonicalizes the local capture root; the filename is a fixed private
+                // sidecar and reparse points are excluded from the recursive walk.
+                // codeql[cs/path-injection]
                 _paths.CapturesRoot, CaptureFileNames.OriginalPending, options));
             sidecarFiles.AddRange(Directory.EnumerateFiles(
+                // codeql[cs/path-injection]
                 _paths.CapturesRoot, CaptureFileNames.VideoPending, options));
             if (!pendingOnly)
             {

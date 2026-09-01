@@ -160,6 +160,7 @@ public sealed class VideoCompositionIntegrationTests
         try
         {
             RecordingResult recording = EncodeBlackClip(source, width, height, fps, frames);
+            // codeql[cs/path-injection] -- isolated GUID test workspace
             byte[] sourceHash = SHA256.HashData(File.ReadAllBytes(source));
             var overlay = new TimedTextOverlay
             {
@@ -181,6 +182,7 @@ public sealed class VideoCompositionIntegrationTests
 
             Assert.Equal(frames, emitted);
             Assert.True(new FileInfo(rendered).Length > 1_024);
+            // codeql[cs/path-injection] -- isolated GUID test workspace
             Assert.Equal(sourceHash, SHA256.HashData(File.ReadAllBytes(source)));
 
             BitmapSource frame = VideoFrameRenderPipeline.RenderSingleFrame(
@@ -478,6 +480,7 @@ public sealed class VideoCompositionIntegrationTests
     private static string NewRoot()
     {
         string root = Path.Combine(Path.GetTempPath(), "mycapture-compositor-" + Guid.NewGuid().ToString("N"));
+        // codeql[cs/path-injection] -- isolated GUID test workspace
         Directory.CreateDirectory(root);
         return root;
     }
@@ -486,6 +489,7 @@ public sealed class VideoCompositionIntegrationTests
     {
         try
         {
+            // codeql[cs/path-injection] -- isolated GUID test workspace
             Directory.Delete(root, recursive: true);
         }
         catch (IOException)

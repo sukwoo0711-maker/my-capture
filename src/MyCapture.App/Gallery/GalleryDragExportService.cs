@@ -127,6 +127,9 @@ internal sealed class GalleryDragExportService
                 return;
             }
 
+            // The root is the application's private drag-export directory (or an internal test
+            // seam); the fixed allow-list pattern below cannot select an arbitrary user path.
+            // codeql[cs/path-injection]
             foreach (string file in Directory.EnumerateFiles(_stagingRoot, "MyCapture_*.*"))
             {
                 try
