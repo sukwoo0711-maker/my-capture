@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
+using MyCapture.App.Ocr;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
@@ -29,6 +30,8 @@ internal sealed class CaptureOverlayCoordinator
     }
 
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
+
+    internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
 
     internal event EventHandler<AnnotationEditingResult>? EditingCompleted;
 
@@ -199,7 +202,8 @@ internal sealed class CaptureOverlayCoordinator
             var editor = new AnnotationEditorWindow(
                 selection.Frame,
                 selection.BitmapRegion,
-                selection.SelectedBitmap);
+                selection.SelectedBitmap,
+                privacyRedactionService: PrivacyRedactionService);
             _activeEditor = editor;
             editor.CommitRequested = CommitRequested;
             editor.Committed += OnEditorCommitted;

@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using MyCapture.App.Editing;
+using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
 using MyCapture.App.Threading;
 using MyCapture.Core.Primitives;
@@ -287,6 +288,8 @@ internal sealed class VideoEditorWindow : Window
     internal event EventHandler<AnnotationFrameCapturedEventArgs>? FrameImageCaptured;
 
     internal Func<FrameImageCommitSession>? FrameImageCommitHandlerFactory { get; set; }
+
+    internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
 
     /// <summary>Allocates a private, same-directory MP4 stage for a queue-backed editor.</summary>
     internal Func<string>? RenderStagingPathFactory { get; set; }
@@ -930,7 +933,8 @@ internal sealed class VideoEditorWindow : Window
             frozen,
             region,
             frame,
-            title: "MyCapture — 프레임 이미지 편집");
+            title: "MyCapture — 프레임 이미지 편집",
+            privacyRedactionService: PrivacyRedactionService);
         FrameImageCommitSession? commitSession = FrameImageCommitHandlerFactory?.Invoke();
         editor.CommitRequested = commitSession?.CommitAsync ?? (_ => Task.FromResult(false));
         editor.Committed += (_, result) => FrameImageCaptured?.Invoke(this, new AnnotationFrameCapturedEventArgs(result));

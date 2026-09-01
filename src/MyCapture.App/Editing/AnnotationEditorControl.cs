@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Microsoft.Win32;
+using MyCapture.App.Ocr;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Undo;
@@ -50,6 +51,7 @@ internal sealed class AnnotationEditorControl : Grid
     private readonly AnnotationImageStore _imageStore = new();
     private readonly AnnotationEditorController _controller;
     private readonly AnnotationEditorSurface _surface;
+    private readonly IPrivacyRedactionService? _privacyRedactionService;
     private readonly Grid _viewport = new();
     private readonly Canvas _overlayCanvas = new();
     private readonly Dictionary<EditorTool, ToggleButton> _toolButtons = new();
@@ -60,6 +62,7 @@ internal sealed class AnnotationEditorControl : Grid
     private Button _undoButton = null!;
     private Button _redoButton = null!;
     private Button _deleteButton = null!;
+    private Button _redactButton = null!;
     private Slider _thicknessSlider = null!;
     private ColumnDefinition _inspectorColumn = null!;
     private Border _inspectorPanel = null!;
@@ -75,9 +78,17 @@ internal sealed class AnnotationEditorControl : Grid
     private TextAnnotation? _editingText;
     private bool _completed;
     private bool _commitInProgress;
+    private bool _redactionInProgress;
+    private CancellationTokenSource? _redactionCts;
 
     internal AnnotationEditorControl(FrozenFrame frame, RectD bitmapRegion, BitmapSource selectedBitmap)
-        : this(frame, bitmapRegion, selectedBitmap, initialDocument: null, initialAssets: null)
+        : this(
+            frame,
+            bitmapRegion,
+            selectedBitmap,
+            initialDocument: null,
+            initialAssets: null,
+            privacyRedactionService: null)
     {
     }
 
@@ -98,11 +109,13 @@ internal sealed class AnnotationEditorControl : Grid
         RectD bitmapRegion,
         BitmapSource selectedBitmap,
         AnnotationDocument? initialDocument,
-        IReadOnlyDictionary<string, BitmapSource>? initialAssets)
+        IReadOnlyDictionary<string, BitmapSource>? initialAssets,
+        IPrivacyRedactionService? privacyRedactionService = null)
     {
         _frame = frame ?? throw new ArgumentNullException(nameof(frame));
         _cropRegion = bitmapRegion.Normalized();
         _selectedBitmap = selectedBitmap ?? throw new ArgumentNullException(nameof(selectedBitmap));
+        _privacyRedactionService = privacyRedactionService;
 
         _canvasWidth = Math.Max(1, selectedBitmap.PixelWidth);
         _canvasHeight = Math.Max(1, selectedBitmap.PixelHeight);
@@ -147,6 +160,12 @@ internal sealed class AnnotationEditorControl : Grid
         {
             UpdateResponsiveLayout();
             Focus();
+        };
+        Unloaded += (_, _) =>
+        {
+            _redactionCts?.Cancel();
+            _redactionCts?.Dispose();
+            _redactionCts = null;
         };
 
         SelectTool(EditorTool.Pen);
@@ -245,6 +264,9 @@ internal sealed class AnnotationEditorControl : Grid
                 return true;
             case Key.S when ctrl:
                 Commit(EditorCommitAction.QuickSave);
+                return true;
+            case Key.R when ctrl && shift:
+                _ = ApplyPrivacyRedactionsAsync();
                 return true;
             case Key.Escape:
                 Cancel();
@@ -573,6 +595,21 @@ internal sealed class AnnotationEditorControl : Grid
         });
         left.Children.Add(_undoButton);
         left.Children.Add(_redoButton);
+        left.Children.Add(Separator());
+
+        _redactButton = TextButton(
+            "빠른 가리기",
+            "OCR로 이메일·전화번호·주민번호·카드·IP·비밀 키를 찾아 가립니다 (Ctrl+Shift+R)",
+            "Button.Secondary",
+            () => _ = ApplyPrivacyRedactionsAsync());
+        _redactButton.MinWidth = 92;
+        _redactButton.IsEnabled = _privacyRedactionService?.IsAvailable == true;
+        AutomationProperties.SetHelpText(
+            _redactButton,
+            _redactButton.IsEnabled
+                ? "로컬 OCR 결과에서 민감정보 후보를 찾아 편집 가능한 검정 사각형으로 추가합니다."
+                : "Windows OCR 언어 팩을 사용할 수 없어 현재 비활성화되어 있습니다.");
+        left.Children.Add(_redactButton);
         Grid.SetColumn(left, 0);
         grid.Children.Add(left);
 
@@ -1284,6 +1321,71 @@ internal sealed class AnnotationEditorControl : Grid
         RaiseStatusAutomationEvent();
     }
 
+    /// <summary>Runs local OCR and adds every high-confidence privacy cover as one undo step.</summary>
+    internal async Task ApplyPrivacyRedactionsAsync()
+    {
+        if (_redactionInProgress || _commitInProgress)
+        {
+            return;
+        }
+
+        if (_privacyRedactionService is null || !_privacyRedactionService.IsAvailable)
+        {
+            SetStatus("Windows OCR 언어 팩을 사용할 수 없어 빠른 가리기를 실행할 수 없습니다");
+            return;
+        }
+
+        CommitActiveText();
+        _redactionInProgress = true;
+        _redactButton.IsEnabled = false;
+        _redactionCts?.Dispose();
+        _redactionCts = new CancellationTokenSource();
+        CancellationTokenSource operation = _redactionCts;
+        SetStatus("민감정보 후보를 찾는 중… 이미지 밖으로 전송하지 않습니다");
+
+        try
+        {
+            PrivacyRedactionResult result = await _privacyRedactionService.FindAsync(
+                _selectedBitmap,
+                operation.Token);
+            if (operation.IsCancellationRequested)
+            {
+                return;
+            }
+
+            switch (result.Status)
+            {
+                case PrivacyRedactionStatus.Success:
+                    int count = _controller.AddPrivacyRedactions(result.Regions);
+                    SetStatus($"민감정보 후보 {count}개를 가렸습니다 · 검토 후 Ctrl+Z로 한 번에 취소할 수 있습니다");
+                    break;
+                case PrivacyRedactionStatus.NoMatches:
+                    SetStatus("고신뢰 민감정보 후보를 찾지 못했습니다");
+                    break;
+                case PrivacyRedactionStatus.Unavailable:
+                    SetStatus("Windows OCR 언어 팩을 사용할 수 없어 빠른 가리기를 실행할 수 없습니다");
+                    break;
+                case PrivacyRedactionStatus.Failed:
+                    SetStatus("민감정보 검색에 실패했습니다 · 이미지는 편집기에 그대로 남아 있습니다");
+                    break;
+                case PrivacyRedactionStatus.Cancelled:
+                    SetStatus("민감정보 검색을 취소했습니다");
+                    break;
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_redactionCts, operation))
+            {
+                _redactionCts.Dispose();
+                _redactionCts = null;
+            }
+
+            _redactionInProgress = false;
+            _redactButton.IsEnabled = _privacyRedactionService.IsAvailable;
+        }
+    }
+
     private void RaiseStatusAutomationEvent()
     {
         if (_statusText is null || !AutomationPeer.ListenerExists(AutomationEvents.LiveRegionChanged))
@@ -1332,6 +1434,12 @@ internal sealed class AnnotationEditorControl : Grid
     {
         if (_completed || _commitInProgress)
         {
+            return;
+        }
+
+        if (_redactionInProgress)
+        {
+            SetStatus("민감정보 검색이 끝난 뒤 저장해 주세요 · 취소하려면 Esc");
             return;
         }
 

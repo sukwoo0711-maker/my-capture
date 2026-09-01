@@ -48,6 +48,7 @@ internal sealed partial class GalleryWindow : Window
     private readonly OcrResultPresenter _ocrPresenter;
     private readonly Func<OcrSettings> _ocrSettings;
     private readonly MyCapture.App.Ocr.OcrIndexingService _ocrIndexing;
+    private readonly IPrivacyRedactionService _privacyRedactionService;
     private readonly ILogger _log;
 
     private bool _allowClose;
@@ -70,6 +71,7 @@ internal sealed partial class GalleryWindow : Window
         OcrResultPresenter ocrPresenter,
         Func<OcrSettings> ocrSettings,
         MyCapture.App.Ocr.OcrIndexingService ocrIndexing,
+        IPrivacyRedactionService privacyRedactionService,
         ILogger log)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
@@ -84,6 +86,8 @@ internal sealed partial class GalleryWindow : Window
         _ocrPresenter = ocrPresenter ?? throw new ArgumentNullException(nameof(ocrPresenter));
         _ocrSettings = ocrSettings ?? throw new ArgumentNullException(nameof(ocrSettings));
         _ocrIndexing = ocrIndexing ?? throw new ArgumentNullException(nameof(ocrIndexing));
+        _privacyRedactionService = privacyRedactionService
+            ?? throw new ArgumentNullException(nameof(privacyRedactionService));
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
@@ -667,7 +671,7 @@ internal sealed partial class GalleryWindow : Window
                 return;
             }
 
-            var editor = new GalleryEditorWindow(context) { Owner = this };
+            var editor = new GalleryEditorWindow(context, _privacyRedactionService) { Owner = this };
             editor.CommitRequested = result => CommitReeditAsync(record, result, editSession);
             editor.Committed += (_, _) => OnReeditCommitted(tile.Id);
             _ = editor.ShowDialog();
@@ -740,6 +744,7 @@ internal sealed partial class GalleryWindow : Window
             var editor = new VideoEditorWindow(item.Recording, _paths, _loggerFactory, item.EditDocument)
             {
                 Owner = this,
+                PrivacyRedactionService = _privacyRedactionService,
                 ExportGifWhenReady = exportGifWhenReady,
                 RenderStagingPathFactory = () => _videoLibrary.CreateRenderStagingPath(record),
                 VideoCommitHandler = (document, stage, cancellationToken) =>

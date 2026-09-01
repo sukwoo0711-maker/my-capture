@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
@@ -481,7 +482,7 @@ internal sealed class RecordingControlWindow : Window
         _timerText.Text = elapsed.ToString(elapsed.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss", CultureInfo.InvariantCulture);
     }
 
-    private void StopRecording()
+    private async void StopRecording()
     {
         if (_stopping || _recorder is null)
         {
@@ -493,45 +494,47 @@ internal sealed class RecordingControlWindow : Window
         Stopping?.Invoke(this, EventArgs.Empty);
         _elapsedTimer?.Stop();
         _primaryButton.IsEnabled = false;
-        _statusText.Text = "저장 중…";
+        _statusText.Text = "파일 확정 중… 창을 닫지 마세요";
         AnnounceStatus();
 
-        // Stop() blocks while the file is finalised; keep it off the very next render but
-        // on the UI thread so the resulting editor opens on the dispatcher.
-        _ = Dispatcher.BeginInvoke(new Action(() =>
+        RegionRecorder recorder = _recorder;
+        RecordingResult? result = null;
+        Exception? stopFailure = null;
+        try
         {
-            RecordingResult? result = null;
-            Exception? stopFailure = null;
-            try
+            // Encoder finalisation can take seconds for a long/high-resolution clip. Run the
+            // blocking join and MP4 finalise away from the dispatcher so the timer/status,
+            // accessibility live region and window chrome remain responsive throughout.
+            result = await Task.Run(recorder.Stop);
+        }
+        catch (Exception ex)
+        {
+            stopFailure = ex;
+            _log.LogError(ex, "Stopping the recording failed");
+        }
+        finally
+        {
+            recorder.Dispose();
+            if (ReferenceEquals(_recorder, recorder))
             {
-                result = _recorder!.Stop();
-            }
-            catch (Exception ex)
-            {
-                stopFailure = ex;
-                _log.LogError(ex, "Stopping the recording failed");
-            }
-            finally
-            {
-                _recorder?.Dispose();
                 _recorder = null;
             }
+        }
 
-            _finished = true;
-            if (result is not null)
-            {
-                RecordingFinished?.Invoke(this, result);
-            }
-            else
-            {
-                Failed?.Invoke(
-                    this,
-                    new RecordingFailedEventArgs(
-                        stopFailure ?? new InvalidOperationException("The recorder returned no completed clip.")));
-            }
+        _finished = true;
+        if (result is not null)
+        {
+            RecordingFinished?.Invoke(this, result);
+        }
+        else
+        {
+            Failed?.Invoke(
+                this,
+                new RecordingFailedEventArgs(
+                    stopFailure ?? new InvalidOperationException("The recorder returned no completed clip.")));
+        }
 
-            Close();
-        }), DispatcherPriority.Background);
+        Close();
     }
 
     private void CancelSession()
@@ -640,6 +643,23 @@ internal sealed class RecordingControlWindow : Window
     {
         MonitorInfo monitor = MonitorEnumerator.GetFromPoint(_screenRegion.Center);
         return monitor.ScaleFactor <= 0 ? 1.0 : monitor.ScaleFactor;
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        // Closing while Media Foundation is writing its MP4 trailer can strand an otherwise
+        // valid recording. Keep this short critical section visible and non-dismissible; the
+        // window closes itself as soon as Stop() has returned and the private capture file is
+        // complete. Application shutdown still reaches OnClosed after that boundary.
+        if (_stopping && !_finished)
+        {
+            e.Cancel = true;
+            _statusText.Text = "파일 확정 중… 완료되면 자동으로 닫힙니다";
+            AnnounceStatus();
+            return;
+        }
+
+        base.OnClosing(e);
     }
 
     protected override void OnClosed(EventArgs e)

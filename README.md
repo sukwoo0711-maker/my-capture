@@ -11,13 +11,14 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 갤러리, 영역 �
 - 클립보드 이미지를 항상 위에 보이는 창으로 고정하고 확대, 투명도, 클릭 통과, 복사, OCR 수행
 - 고정한 원본 이미지를 우클릭 메뉴 또는 `Ctrl+S`로 빠르게 PNG 저장하고, `Ctrl+Shift+S`로 저장 위치 선택
 - Windows 로컬 OCR을 이용한 한국어·영어 혼합 텍스트, 작은 글자와 회전 이미지 인식 및 캡처 갤러리 검색
+- 로컬 OCR로 이메일·한국 전화번호·주민번호 형태·카드번호·IP·주요 비밀 키를 찾아 편집 가능한 가림막을 한 번에 추가하는 **빠른 가리기**
 - 이미지와 MP4를 함께 찾고 재생·편집할 수 있는 통합 갤러리
 - 영역 MP4 녹화, 구간 자르기, 프레임 탐색, 시간 구간별 텍스트 메모 굽기 및 프레임을 이미지 편집기로 보내기
 - 최대 20초 구간을 10fps 애니메이션 GIF로 내보내며 짧은 텍스트 표시 경계도 10ms 단위로 보존
 - 캡처 수와 저장 용량을 함께 제한하는 로컬 큐, 썸네일, 빠른 저장 폴더 설정
 - 시스템 애니메이션 설정을 존중하는 짧고 일관된 전환과 키보드·스크린 리더 접근성
 
-현재 녹화에는 마이크/시스템 오디오가 포함되지 않으며 UI는 한국어 중심입니다. 구현 범위와 검증 기록은 [`docs/`](docs/)에서 확인할 수 있습니다.
+녹화는 화면 설명·편집·GIF 워크플로에 집중하며 마이크/시스템 오디오는 의도적으로 포함하지 않습니다. UI는 한국어 중심입니다. 구현 범위와 검증 기록은 [`docs/`](docs/)에서 확인할 수 있습니다.
 
 ## 기본 단축키
 
@@ -29,6 +30,7 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 갤러리, 영역 �
 | 모든 고정 이미지 숨기기/표시 | `Shift+F3` | 일괄 전환 |
 | 편집기 빠른 저장 | `Ctrl+S` | PNG 저장 후 설정에 따라 클립보드 복사 |
 | 편집기 다른 이름으로 저장 | `Ctrl+Shift+S` | PNG 파일 선택 대화상자 |
+| 편집기 빠른 가리기 | `Ctrl+Shift+R` | 로컬 OCR 민감정보 후보를 편집 가능한 가림막으로 추가 |
 | 고정 이미지 빠른 저장 | `Ctrl+S` | 고정 창에 포커스가 있을 때 원본 PNG 저장 |
 | 고정 이미지 다른 이름으로 저장 | `Ctrl+Shift+S` | 우클릭 메뉴에서도 실행 가능 |
 
@@ -59,6 +61,10 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 갤러리, 영역 �
 - Windows PowerShell 5.1 이상
 
 ```powershell
+# SDK가 없다면 global.json에 고정된 버전을 현재 사용자 전용 폴더에 설치
+# (관리자 권한, 레지스트리, 사용자 PATH 변경 없음)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File build\bootstrap-sdk.ps1
+
 # SDK, dotnet 경로와 호스트 정보를 진단
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File build\doctor.ps1
 
@@ -69,7 +75,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File build\build.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 -Configuration Release -Test
 ```
 
-`build.ps1`은 `%LOCALAPPDATA%\Microsoft\dotnet`의 사용자별 SDK도 자동으로 찾고, 실패 시 `build\logs\`에 UTF-8 진단 로그를 남깁니다.
+`bootstrap-sdk.ps1`은 Microsoft의 공식 `dotnet-install.ps1`을 사용해 정확한 SDK를 `%LOCALAPPDATA%\MyCapture\dotnet-sdk`에 설치합니다. `doctor.ps1`, `build.ps1`, `package.ps1`은 이 격리 SDK와 `%LOCALAPPDATA%\Microsoft\dotnet`의 일반 사용자별 SDK를 자동으로 찾고, 빌드 실패 시 `build\logs\`에 UTF-8 진단 로그를 남깁니다.
 
 직접 실행하려면 다음 명령을 사용합니다.
 
@@ -100,7 +106,7 @@ Start-Process -Wait -FilePath $exe -ArgumentList '--selftest-video-editor', $out
 
 ## 개인정보와 네트워크
 
-MyCapture는 화면 픽셀, 캡처 기록, 설정, OCR 텍스트를 로컬 파일에 저장합니다. OCR은 Windows의 온디바이스 `Windows.Media.Ocr` 엔진을 사용하며, 현재 코드에는 캡처 자동 업로드나 제품 분석 텔레메트리가 없습니다. 민감한 화면을 캡처했다면 빠른 저장 폴더, 캡처 큐, 클립보드와 로그의 보관 정책도 함께 확인하세요.
+MyCapture는 화면 픽셀, 캡처 기록, 설정, OCR 텍스트를 로컬 파일에 저장합니다. OCR은 Windows의 온디바이스 `Windows.Media.Ocr` 엔진을 사용하며, 현재 코드에는 캡처 자동 업로드나 제품 분석 텔레메트리가 없습니다. 빠른 가리기의 탐지 결과에는 인식 문자열을 복제하지 않고 종류·좌표만 유지하며, 추가된 가림막은 저장 전에 이동·삭제·실행 취소할 수 있습니다. 민감한 화면을 캡처했다면 빠른 저장 폴더, 캡처 큐, 클립보드와 로그의 보관 정책도 함께 확인하세요.
 
 보안 문제는 공개 이슈에 재현 자료를 올리지 말고 [`SECURITY.md`](SECURITY.md)의 비공개 신고 절차를 따라 주세요. 개발 참여 방법은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 참고하세요.
 
@@ -110,4 +116,4 @@ MyCapture 자체 코드는 [MIT License](LICENSE)로 공개됩니다. 배포 패
 
 ---
 
-**English summary:** MyCapture is a Windows 11 screenshot, pin, enhanced local OCR, unified image/video gallery, annotation, cross-monitor region-recording, timed-text video editing, and GIF-export app. Release binaries are self-contained and work without a preinstalled .NET runtime; building from source requires the .NET 10 SDK specified in `global.json`. The current UI is Korean-first, recording has no audio, and distributed binaries are not Authenticode-signed.
+**English summary:** MyCapture is a Windows 11 screenshot, pin, enhanced local OCR, OCR-assisted privacy-redaction, unified image/video gallery, annotation, cross-monitor region-recording, timed-text video editing, and GIF-export app. Release binaries are self-contained and work without a preinstalled .NET runtime; the included bootstrap script can install the repository-pinned .NET 10 SDK for source builds without admin rights. The current UI is Korean-first, recording intentionally has no audio, and distributed binaries are not Authenticode-signed.

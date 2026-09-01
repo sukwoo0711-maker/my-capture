@@ -6,7 +6,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Keeps the 1.2.0 GA version and its Windows binary version aligned across MSBuild, packaging
+/// Keeps the 1.3.0 GA version and its Windows binary version aligned across MSBuild, packaging
 /// and installer validation.
 /// </summary>
 public sealed class ReleaseVersionContractTests
@@ -39,14 +39,14 @@ public sealed class ReleaseVersionContractTests
         XDocument props = XDocument.Parse(Read("Directory.Build.props"));
         XDocument manifest = XDocument.Parse(Read("src/MyCapture.App/app.manifest"));
 
-        Assert.Equal("1.2.0", Assert.Single(props.Descendants("Version")).Value);
-        Assert.Equal("1.2.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
-        Assert.Equal("1.2.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
+        Assert.Equal("1.3.0", Assert.Single(props.Descendants("Version")).Value);
+        Assert.Equal("1.3.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
+        Assert.Equal("1.3.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
 
         XElement identity = Assert.Single(
             manifest.Descendants(),
             element => element.Name.LocalName == "assemblyIdentity");
-        Assert.Equal("1.2.0.0", identity.Attribute("version")?.Value);
+        Assert.Equal("1.3.0.0", identity.Attribute("version")?.Value);
     }
 
     [Fact]
@@ -58,10 +58,10 @@ public sealed class ReleaseVersionContractTests
 
         // The shipping default is the GA version. A release candidate must never be the default
         // again, otherwise an operator who forgets -Version publishes a prerelease by accident.
-        Assert.Contains("[string]$Version = '1.2.0'", package, StringComparison.Ordinal);
-        Assert.Contains("[string]$Version = '1.2.0',", hostile, StringComparison.Ordinal);
-        Assert.DoesNotContain("$Version = '1.2.0-rc.1'", package, StringComparison.Ordinal);
-        Assert.DoesNotContain("$Version = '1.2.0-rc.1'", hostile, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '1.3.0'", package, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '1.3.0',", hostile, StringComparison.Ordinal);
+        Assert.DoesNotContain("$Version = '1.3.0-rc.1'", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("$Version = '1.3.0-rc.1'", hostile, StringComparison.Ordinal);
 
         // A prerelease must still parse, so a future RC needs no script edit. The Windows binary
         // version stays numeric because Win32 version resources cannot carry a prerelease label.

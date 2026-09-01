@@ -4,6 +4,7 @@ using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
@@ -25,7 +26,8 @@ internal class AnnotationEditorWindow : Window
         BitmapSource selectedBitmap,
         string title = "MyCapture — 캡처 편집",
         AnnotationDocument? initialDocument = null,
-        IReadOnlyDictionary<string, BitmapSource>? initialAssets = null)
+        IReadOnlyDictionary<string, BitmapSource>? initialAssets = null,
+        IPrivacyRedactionService? privacyRedactionService = null)
     {
         ArgumentNullException.ThrowIfNull(sourceFrame);
         ArgumentNullException.ThrowIfNull(selectedBitmap);
@@ -58,7 +60,8 @@ internal class AnnotationEditorWindow : Window
             sourceRegion,
             selectedBitmap,
             initialDocument,
-            initialAssets);
+            initialAssets,
+            privacyRedactionService);
         _editor.EditingCompleted += OnEditingCompleted;
         _editor.EditingCancelled += OnEditingCancelled;
         Content = _editor;
