@@ -24,6 +24,31 @@ public sealed class AnnotationEditorControllerTests
     }
 
     [Fact]
+    public void PrivacyRedactions_AreOpaqueEditableAndUndoAsOneAction()
+    {
+        AnnotationEditorController controller = NewController(out AnnotationDocument document, out UndoStack undo);
+
+        int added = controller.AddPrivacyRedactions([
+            new RectD(5, 6, 30, 12),
+            new RectD(50, 20, 40, 15),
+        ]);
+
+        Assert.Equal(2, added);
+        Assert.Equal(2, document.Items.Count);
+        Assert.Equal(1, undo.UndoCount);
+        Assert.All(document.Items.Cast<RectangleAnnotation>(), rectangle =>
+        {
+            Assert.True(rectangle.HasFill);
+            Assert.Equal(byte.MaxValue, rectangle.Fill.A);
+        });
+
+        Assert.True(controller.PerformUndo());
+        Assert.Empty(document.Items);
+        Assert.True(controller.PerformRedo());
+        Assert.Equal(2, document.Items.Count);
+    }
+
+    [Fact]
     public void DefaultTool_IsPenForImmediateDrawing()
     {
         AnnotationEditorController c = NewController(out _, out _);

@@ -309,6 +309,47 @@ internal sealed class AnnotationEditorController
         return image;
     }
 
+    /// <summary>
+    /// Adds opaque, editable privacy covers as one reversible user action. The rectangles are
+    /// ordinary annotations: users can move, resize, delete or undo them before committing.
+    /// </summary>
+    internal int AddPrivacyRedactions(IEnumerable<RectD> regions)
+    {
+        ArgumentNullException.ThrowIfNull(regions);
+
+        List<RectD> bounded = regions
+            .Select(region => region.Normalized().ClampTo(new RectD(0, 0, _document.CanvasWidth, _document.CanvasHeight)))
+            .Where(static region => !region.IsEmpty)
+            .Distinct()
+            .ToList();
+        if (bounded.Count == 0)
+        {
+            return 0;
+        }
+
+        RectangleAnnotation? last = null;
+        using (_undo.BeginBatch("민감정보 빠른 가리기"))
+        {
+            foreach (RectD region in bounded)
+            {
+                last = new RectangleAnnotation
+                {
+                    Rect = region,
+                    Stroke = ColorRgba.FromRgb(0x16, 0x16, 0x16),
+                    Fill = ColorRgba.FromRgb(0x16, 0x16, 0x16),
+                    StrokeThickness = 1,
+                    CornerRadius = 2,
+                };
+                _undo.Execute(new AddAnnotationCommand(_document, last));
+            }
+        }
+
+        Tool = EditorTool.Select;
+        SetSelected(last);
+        RaiseVisual();
+        return bounded.Count;
+    }
+
     // ---- Style changes on the current selection -------------------------------------
 
     internal void ApplyStrokeColor(ColorRgba color)

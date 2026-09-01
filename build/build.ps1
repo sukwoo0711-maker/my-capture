@@ -23,9 +23,16 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $logDir = Join-Path $repoRoot 'build\logs'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
-$dotnetDir = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
-if (Test-Path (Join-Path $dotnetDir 'dotnet.exe')) {
-    $env:Path = "$dotnetDir;$env:Path"
+if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    $bootstrapDotnetDir = Join-Path $env:LOCALAPPDATA 'MyCapture\dotnet-sdk'
+    $dotnetDir = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
+    # Prepend the repository bootstrap location last so it wins over a runtime-only or
+    # incompatible conventional per-user installation.
+    foreach ($candidateDir in @($dotnetDir, $bootstrapDotnetDir)) {
+        if (Test-Path (Join-Path $candidateDir 'dotnet.exe')) {
+            $env:Path = "$candidateDir;$env:Path"
+        }
+    }
 }
 
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'

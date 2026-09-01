@@ -3,6 +3,7 @@ using System.Windows;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
+using MyCapture.App.Ocr;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Storage;
@@ -70,6 +71,8 @@ internal sealed class RegionRecordingCoordinator
     /// record across failed clipboard/export retries without creating duplicates.
     /// </summary>
     internal Func<FrameImageCommitSession>? FrameImageCommitHandlerFactory { get; set; }
+
+    internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
 
     internal bool IsActive =>
         _selectionOverlay is not null
@@ -363,6 +366,7 @@ internal sealed class RegionRecordingCoordinator
                         cancellationToken),
             };
             editor.FrameImageCommitHandlerFactory = FrameImageCommitHandlerFactory;
+            editor.PrivacyRedactionService = PrivacyRedactionService;
             _editor = editor;
             // The stop→finalise→editor transition is complete: the editor now anchors the
             // session, so clear the finishing guard.

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '1.2.0'
+    [string]$Version = '1.3.0'
 )
 
 Set-StrictMode -Version 2.0
@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 $versionMatch = [regex]::Match($Version, $semVerPattern)
 if (-not $versionMatch.Success) {
-    throw "Version must use a SemVer core with an optional prerelease (for example 1.2.0 or 1.2.0-rc.1): $Version"
+    throw "Version must use a SemVer core with an optional prerelease (for example 1.3.0 or 1.3.0-rc.1): $Version"
 }
 
 $baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
@@ -36,9 +36,14 @@ if (-not $artifactRoot.StartsWith($releaseRoot + '\', [StringComparison]::Ordina
     throw "Refusing to clean an unsafe artifact path: $artifactRoot"
 }
 
-$dotnetDir = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
-if (Test-Path -LiteralPath (Join-Path $dotnetDir 'dotnet.exe')) {
-    $env:Path = "$dotnetDir;$env:Path"
+if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    $bootstrapDotnetDir = Join-Path $env:LOCALAPPDATA 'MyCapture\dotnet-sdk'
+    $dotnetDir = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
+    foreach ($candidateDir in @($dotnetDir, $bootstrapDotnetDir)) {
+        if (Test-Path -LiteralPath (Join-Path $candidateDir 'dotnet.exe')) {
+            $env:Path = "$candidateDir;$env:Path"
+        }
+    }
 }
 $env:DOTNET_CLI_UI_LANGUAGE = 'en'
 $env:DOTNET_NOLOGO = '1'

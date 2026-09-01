@@ -25,6 +25,11 @@ if (-not [Version]::TryParse($requiredText, [ref]$requiredVersion)) {
 # installation has only a runtime and another contains the required SDK.
 $candidatePaths = New-Object 'System.Collections.Generic.List[string]'
 if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    $bootstrapDotnet = Join-Path $env:LOCALAPPDATA 'MyCapture\dotnet-sdk\dotnet.exe'
+    if (Test-Path -LiteralPath $bootstrapDotnet -PathType Leaf) {
+        $candidatePaths.Add([IO.Path]::GetFullPath($bootstrapDotnet))
+    }
+
     $perUserDotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'
     if (Test-Path -LiteralPath $perUserDotnet -PathType Leaf) {
         $candidatePaths.Add([IO.Path]::GetFullPath($perUserDotnet))
@@ -43,7 +48,7 @@ if ($candidatePaths.Count -eq 0) {
     throw @"
 No .NET SDK installation was found.
 Building MyCapture requires .NET 10 SDK $requiredText or newer; the runtime alone is not sufficient.
-Install the SDK: https://dotnet.microsoft.com/download/dotnet/10.0
+Run build\bootstrap-sdk.ps1, or install the SDK from https://dotnet.microsoft.com/download/dotnet/10.0
 Then open a new PowerShell window and run build\doctor.ps1 again.
 "@
 }
@@ -104,7 +109,7 @@ if ($null -eq $selectedPath) {
     throw @"
 No compatible .NET SDK installation was found.
 MyCapture requires .NET 10 SDK $requiredText or newer as pinned by global.json.
-Install the SDK: https://dotnet.microsoft.com/download/dotnet/10.0$detail
+Run build\bootstrap-sdk.ps1, or install the SDK from https://dotnet.microsoft.com/download/dotnet/10.0$detail
 "@
 }
 

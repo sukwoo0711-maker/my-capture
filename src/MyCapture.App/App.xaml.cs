@@ -14,6 +14,7 @@ using MyCapture.App.Settings;
 using MyCapture.Core.Diagnostics;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Capture;
+using MyCapture.Core.Privacy;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Ocr;
@@ -61,6 +62,7 @@ public partial class App : Application
     private PinManager? _pins;
     private IOcrService? _ocrService;
     private OcrResultPresenter? _ocrPresenter;
+    private IPrivacyRedactionService? _privacyRedactionService;
     private SettingsWindow? _settingsWindow;
     private StartupRegistrationService? _startupService;
     private SettingsApplyService? _settingsApply;
@@ -186,6 +188,11 @@ public partial class App : Application
             Dispatcher,
             SetOcrBusy,
             _services.GetRequiredService<ILogger<OcrResultPresenter>>());
+        _privacyRedactionService = new PrivacyRedactionService(
+            _ocrService,
+            new PrivacyDetector(),
+            () => _settings!.Ocr);
+        _overlay.PrivacyRedactionService = _privacyRedactionService;
 
         // A pin's OCR is transient: recognise the pinned image bytes and show the shared result
         // window, but never cache the text — a pin has no backing capture record.
@@ -223,6 +230,7 @@ public partial class App : Application
             _videoLibrary ?? throw new InvalidOperationException("Video library is unavailable."));
         _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
+        _recorder.PrivacyRedactionService = _privacyRedactionService;
         _recorder.SessionEnded += (_, _) => RestoreTrayAfterCapture();
 
         // Add the icon first so registration failures have a non-modal place to be
@@ -1105,6 +1113,8 @@ public partial class App : Application
             _ocrPresenter!,
             () => _settings!.Ocr,
             ocrIndexing,
+            _privacyRedactionService
+                ?? throw new InvalidOperationException("Privacy redaction is unavailable."),
             _services.GetRequiredService<ILogger<GalleryWindow>>());
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
