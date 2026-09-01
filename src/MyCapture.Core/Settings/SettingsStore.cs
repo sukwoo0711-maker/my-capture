@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using MyCapture.Core.Diagnostics;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Serialization;
 using MyCapture.Core.Storage;
@@ -93,7 +94,7 @@ public sealed class SettingsStore
         string json = JsonSerializer.Serialize(settings, SerializerOptions);
         AtomicFile.WriteAllText(_paths.SettingsFile, json);
 
-        _log.LogDebug("Settings saved to {Path}", _paths.SettingsFile);
+        _log.LogDebug("Settings saved to {Path}", LogText.SingleLine(_paths.SettingsFile));
     }
 
     private static bool TryDeserialize(string text, out AppSettings? settings)

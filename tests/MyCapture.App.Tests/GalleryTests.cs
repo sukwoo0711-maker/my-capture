@@ -505,6 +505,64 @@ public sealed class GalleryTests
         });
     }
 
+    [Fact]
+    public void ReeditLoad_RejectsAssetPathsOutsideCaptureDirectory()
+    {
+        RunSta(() =>
+        {
+            string root = NewRoot();
+            try
+            {
+                AppPaths paths = AppPaths.CreateForRoot(root);
+                var settings = new QueueSettings();
+                CaptureQueue queue = NewQueue(paths, settings);
+                var persistence = new CapturePersistenceService(
+                    queue, paths, () => settings, NullLogger<CapturePersistenceService>.Instance);
+                CaptureRecord record = persistence.PersistOriginal(
+                    Solid(80, 60), 1.0, string.Empty, string.Empty);
+
+                string outsidePath = Path.Combine(root, "outside.png");
+                _ = MyCapture.Platform.Imaging.ImageCodec.SavePng(Solid(8, 8), outsidePath);
+
+                var document = AnnotationDocument.CreateFor(80, 60);
+                document.Add(new ImageAnnotation
+                {
+                    AssetFileName = outsidePath,
+                    SourceWidth = 8,
+                    SourceHeight = 8,
+                    Rect = new RectD(1, 1, 8, 8),
+                });
+                document.Add(new ImageAnnotation
+                {
+                    AssetFileName = Path.Combine("..", "..", "..", "outside.png"),
+                    SourceWidth = 8,
+                    SourceHeight = 8,
+                    Rect = new RectD(10, 1, 8, 8),
+                });
+                File.WriteAllText(
+                    queue.GetFilePath(record, CaptureFileNames.Layers),
+                    document.ToJson());
+
+                var loader = new GalleryReeditLoader(
+                    queue,
+                    NullLogger<GalleryReeditLoader>.Instance);
+                GalleryReeditContext? context = loader.TryLoad(
+                    record,
+                    out GalleryReeditLoader.LoadFailure failure);
+
+                Assert.Equal(GalleryReeditLoader.LoadFailure.None, failure);
+                Assert.NotNull(context);
+                Assert.Empty(context!.Document.Items.OfType<ImageAnnotation>());
+                Assert.Empty(context.AssetBitmaps);
+                Assert.True(File.Exists(outsidePath));
+            }
+            finally
+            {
+                DeleteRoot(root);
+            }
+        });
+    }
+
     // ---- Thumbnail refresh ---------------------------------------------------------
 
     [Fact]

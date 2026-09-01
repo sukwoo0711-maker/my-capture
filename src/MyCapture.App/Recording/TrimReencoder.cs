@@ -3,6 +3,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
+using MyCapture.Core.Diagnostics;
 using MyCapture.Platform.Recording;
 
 namespace MyCapture.App.Recording;
@@ -83,7 +84,12 @@ internal static class TrimReencoder
             }
 
             encoder.Complete();
-            log.LogInformation("Trim re-encoded {Frames} frame(s) [{In:0}..{Out:0}]ms -> {Path}", emitted, inMs, outMs, outputPath);
+            log.LogInformation(
+                "Trim re-encoded {Frames} frame(s) [{In:0}..{Out:0}]ms -> {Path}",
+                emitted,
+                inMs,
+                outMs,
+                LogText.SingleLine(outputPath));
         }
         finally
         {

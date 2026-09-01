@@ -82,15 +82,9 @@ public static class QuickSaveNaming
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ArgumentException.ThrowIfNullOrWhiteSpace(stem);
+        ValidateFileNamePart(stem, nameof(stem));
 
-        if (string.IsNullOrEmpty(extension))
-        {
-            extension = ".png";
-        }
-        else if (extension[0] != '.')
-        {
-            extension = "." + extension;
-        }
+        extension = NormalizeExtension(extension);
 
         string candidate = Path.Combine(directory, stem + extension);
         if (!File.Exists(candidate))
@@ -125,6 +119,7 @@ public static class QuickSaveNaming
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ArgumentException.ThrowIfNullOrWhiteSpace(stem);
+        ValidateFileNamePart(stem, nameof(stem));
         extension = NormalizeExtension(extension);
 
         for (int suffix = 1; suffix < int.MaxValue; suffix++)
@@ -179,7 +174,20 @@ public static class QuickSaveNaming
             return ".png";
         }
 
-        return extension[0] == '.' ? extension : "." + extension;
+        string normalized = extension[0] == '.' ? extension : "." + extension;
+        ValidateFileNamePart(normalized, nameof(extension));
+        return normalized;
+    }
+
+    private static void ValidateFileNamePart(string value, string parameterName)
+    {
+        if (Path.IsPathRooted(value)
+            || !string.Equals(value, Path.GetFileName(value), StringComparison.Ordinal)
+            || value is "." or ".."
+            || value.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException("A file-name component cannot contain a directory.", parameterName);
+        }
     }
 
     private static string Sanitize(string text)

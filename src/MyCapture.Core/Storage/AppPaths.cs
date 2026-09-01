@@ -26,9 +26,9 @@ public sealed class AppPaths
 
     private AppPaths(string dataRoot, string capturesRoot, string quickSaveRoot)
     {
-        DataRoot = dataRoot;
-        CapturesRoot = capturesRoot;
-        QuickSaveRoot = quickSaveRoot;
+        DataRoot = CanonicalizeRoot(dataRoot, nameof(dataRoot));
+        CapturesRoot = CanonicalizeRoot(capturesRoot, nameof(capturesRoot));
+        QuickSaveRoot = CanonicalizeRoot(quickSaveRoot, nameof(quickSaveRoot));
     }
 
     /// <summary>
@@ -127,5 +127,11 @@ public sealed class AppPaths
         Directory.CreateDirectory(DataRoot);
         Directory.CreateDirectory(CapturesRoot);
         Directory.CreateDirectory(LogsRoot);
+    }
+
+    private static string CanonicalizeRoot(string path, string parameterName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path, parameterName);
+        return Path.GetFullPath(path);
     }
 }

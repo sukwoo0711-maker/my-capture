@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
+using MyCapture.Core.Diagnostics;
 using MyCapture.App.Threading;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Queue;
@@ -427,7 +428,7 @@ internal sealed class CapturePersistenceService
                          SearchOption.TopDirectoryOnly))
             {
                 string fileName = Path.GetFileName(existingAsset);
-                if (IsSafeAssetFileName(fileName) && !stagedNames.Contains(fileName))
+                if (CaptureFileNames.IsSafeAssetFileName(fileName) && !stagedNames.Contains(fileName))
                 {
                     journalEntries.Add(new FinalizeJournalEntry
                     {
@@ -507,7 +508,7 @@ internal sealed class CapturePersistenceService
                     commitError,
                     "Capture {Id} files committed, but metadata repair is pending in {StageDirectory}",
                     record.Id,
-                    files.StageDirectory);
+                    LogText.SingleLine(files.StageDirectory));
                 MarkBlocked(record.Id, BlockReason.FinalizeTransaction);
                 return;
             }
@@ -544,7 +545,7 @@ internal sealed class CapturePersistenceService
                 _log.LogCritical(
                     "Capture {Id} finalisation failed and rollback was incomplete; recovery files remain in {StageDirectory}",
                     record.Id,
-                    files.StageDirectory);
+                    LogText.SingleLine(files.StageDirectory));
             }
 
             throw new IOException(
@@ -650,8 +651,8 @@ internal sealed class CapturePersistenceService
                     complete = false;
                     _log.LogError(
                         "Rollback source is missing for {TargetPath}; staged recovery retained at {StageDirectory}",
-                        file.TargetPath,
-                        stageDirectory);
+                        LogText.SingleLine(file.TargetPath),
+                        LogText.SingleLine(stageDirectory));
                     continue;
                 }
 
@@ -666,8 +667,8 @@ internal sealed class CapturePersistenceService
                 _log.LogError(
                     rollbackError,
                     "Could not roll back {TargetPath}; staged recovery retained at {StageDirectory}",
-                    file.TargetPath,
-                    stageDirectory);
+                    LogText.SingleLine(file.TargetPath),
+                    LogText.SingleLine(stageDirectory));
             }
         }
 
@@ -1263,7 +1264,7 @@ internal sealed class CapturePersistenceService
                 || journal.Files.Any(entry => !IsSafeFinalizeFileName(entry.FileName))
                 || journal.Files.Any(entry => entry.DeleteTarget
                                               && (!entry.HadPreviousFile
-                                                  || !IsSafeAssetFileName(entry.FileName)))
+                                                  || !CaptureFileNames.IsSafeAssetFileName(entry.FileName)))
                 || journal.Files.Select(entry => entry.FileName).Distinct(StringComparer.OrdinalIgnoreCase).Count()
                    != journal.Files.Count)
             {
@@ -1311,22 +1312,7 @@ internal sealed class CapturePersistenceService
             return true;
         }
 
-        return IsSafeAssetFileName(fileName);
-    }
-
-    private static bool IsSafeAssetFileName(string fileName)
-    {
-        const string extension = ".png";
-        if (!fileName.StartsWith(CaptureFileNames.AssetPrefix, StringComparison.Ordinal)
-            || !fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        string token = fileName.Substring(
-            CaptureFileNames.AssetPrefix.Length,
-            fileName.Length - CaptureFileNames.AssetPrefix.Length - extension.Length);
-        return token.Length > 0 && token.All(char.IsAsciiDigit);
+        return CaptureFileNames.IsSafeAssetFileName(fileName);
     }
 
     private static bool TryCleanRecoveredOriginalBackups(string directory)

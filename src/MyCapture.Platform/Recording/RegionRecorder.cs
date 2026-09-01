@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Threading;
 using Microsoft.Extensions.Logging;
+using MyCapture.Core.Diagnostics;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 
@@ -139,7 +140,7 @@ public sealed class RegionRecorder : IDisposable
             _grabber.Height,
             settings.TargetFps,
             bitrate,
-            outputPath);
+            LogText.SingleLine(outputPath));
     }
 
     /// <summary>

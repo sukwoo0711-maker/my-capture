@@ -163,4 +163,24 @@ public static class CaptureFileNames
 
     /// <summary>Prefix for image-annotation assets.</summary>
     public const string AssetPrefix = "asset-";
+
+    /// <summary>
+    /// Returns whether a persisted image sidecar is one of MyCapture's canonical
+    /// <c>asset-NN.png</c> names, never a rooted or traversing path.
+    /// </summary>
+    public static bool IsSafeAssetFileName(string? fileName)
+    {
+        const string extension = ".png";
+        if (string.IsNullOrWhiteSpace(fileName)
+            || !fileName.StartsWith(AssetPrefix, StringComparison.Ordinal)
+            || !fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string token = fileName.Substring(
+            AssetPrefix.Length,
+            fileName.Length - AssetPrefix.Length - extension.Length);
+        return token.Length > 0 && token.All(char.IsAsciiDigit);
+    }
 }

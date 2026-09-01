@@ -177,7 +177,18 @@ public sealed class CaptureQueue
         // capture folder by hand, and a phantom entry produces a broken thumbnail
         // that looks like data loss.
         records = records
-            .Where(r => File.Exists(GetFilePath(r, CaptureFileNames.Original)))
+            .Where(record =>
+            {
+                if (!TryResolveDirectory(record, out string directory))
+                {
+                    _log.LogWarning(
+                        "Dropped capture {Id} because its storage path escaped the captures root",
+                        record.Id);
+                    return false;
+                }
+
+                return File.Exists(Path.Combine(directory, CaptureFileNames.Original));
+            })
             .OrderByDescending(r => r.CreatedAt)
             .ToList();
 
@@ -206,6 +217,13 @@ public sealed class CaptureQueue
         if (string.IsNullOrEmpty(record.RelativeDirectory))
         {
             record.RelativeDirectory = BuildRelativeDirectory(record.Id, record.CreatedAt);
+        }
+
+        if (!TryResolveDirectory(record, out _))
+        {
+            throw new ArgumentException(
+                "The capture directory must be a descendant of the configured captures root.",
+                nameof(record));
         }
 
         _records.Insert(0, record);
@@ -334,16 +352,104 @@ public sealed class CaptureQueue
     public string GetDirectory(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
-        return Path.Combine(_paths.CapturesRoot, record.RelativeDirectory);
+        if (!TryResolveDirectory(record, out string directory))
+        {
+            throw new InvalidDataException(
+                $"Capture {record.Id} has a directory outside the configured captures root.");
+        }
+
+        return directory;
     }
 
-    public string GetFilePath(CaptureRecord record, string fileName) =>
-        Path.Combine(GetDirectory(record), fileName);
+    public string GetFilePath(CaptureRecord record, string fileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        if (Path.IsPathRooted(fileName)
+            || !string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal)
+            || fileName is "." or ".."
+            || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException("A capture file name cannot contain a directory.", nameof(fileName));
+        }
+
+        return Path.Combine(GetDirectory(record), fileName);
+    }
 
     public static string BuildRelativeDirectory(Guid id, DateTimeOffset createdAt) =>
         Path.Combine(
             createdAt.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture),
             id.ToString("N", System.Globalization.CultureInfo.InvariantCulture));
+
+    private bool TryResolveDirectory(CaptureRecord record, out string directory)
+    {
+        directory = string.Empty;
+        string relative = record.RelativeDirectory;
+        if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative))
+        {
+            return false;
+        }
+
+        try
+        {
+            string root = Path.GetFullPath(_paths.CapturesRoot);
+            string rootPrefix = Path.EndsInDirectorySeparator(root)
+                ? root
+                : root + Path.DirectorySeparatorChar;
+            string candidate = Path.GetFullPath(Path.Combine(root, relative));
+            // Path.Combine preserves the exact configured root prefix for legitimate relative
+            // paths. An ordinal comparison also keeps a case-sensitive NTFS sibling named only
+            // by different casing from masquerading as the configured root.
+            if (!candidate.StartsWith(rootPrefix, StringComparison.Ordinal)
+                || ContainsReparsePointBelowRoot(root, candidate))
+            {
+                return false;
+            }
+
+            directory = candidate;
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException
+                                   or NotSupportedException
+                                   or IOException
+                                   or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static bool ContainsReparsePointBelowRoot(string root, string candidate)
+    {
+        string relative = Path.GetRelativePath(root, candidate);
+        string current = root;
+        foreach (string segment in relative.Split(
+                     [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+
+            FileAttributes attributes;
+            try
+            {
+                attributes = File.GetAttributes(current);
+            }
+            catch (FileNotFoundException)
+            {
+                // Once a component does not exist, no deeper component can exist either.
+                return false;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return false;
+            }
+
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private void EnforceLimits()
     {
@@ -587,12 +693,18 @@ public sealed class CaptureQueue
         {
             // Pending first, committed metadata second: if both exist after a crash just before
             // marker cleanup, the fully committed meta record wins for the same ID.
+            var options = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+                AttributesToSkip = FileAttributes.ReparsePoint,
+            };
             sidecarFiles.AddRange(Directory.EnumerateFiles(
-                _paths.CapturesRoot, CaptureFileNames.OriginalPending, SearchOption.AllDirectories));
+                _paths.CapturesRoot, CaptureFileNames.OriginalPending, options));
             if (!pendingOnly)
             {
                 sidecarFiles.AddRange(Directory.EnumerateFiles(
-                    _paths.CapturesRoot, CaptureFileNames.Meta, SearchOption.AllDirectories));
+                    _paths.CapturesRoot, CaptureFileNames.Meta, options));
             }
         }
         catch (IOException ex)

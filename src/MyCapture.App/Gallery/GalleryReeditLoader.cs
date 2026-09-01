@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.Core.Annotations;
+using MyCapture.Core.Diagnostics;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
 using MyCapture.Platform.Capture;
@@ -152,7 +153,10 @@ internal sealed class GalleryReeditLoader
         }
         catch (IOException ex)
         {
-            _log.LogWarning(ex, "Could not read layers.json in {Directory}", directory);
+            _log.LogWarning(
+                ex,
+                "Could not read layers.json in {Directory}",
+                LogText.SingleLine(directory));
         }
 
         // A missing or corrupt layer file is treated as "no annotations": the original is
@@ -171,7 +175,16 @@ internal sealed class GalleryReeditLoader
         foreach (ImageAnnotation image in document.Items.OfType<ImageAnnotation>())
         {
             string name = image.AssetFileName;
-            if (string.IsNullOrEmpty(name) || assets.ContainsKey(name))
+            if (!CaptureFileNames.IsSafeAssetFileName(name))
+            {
+                _log.LogWarning(
+                    "Re-edit: rejected unsafe asset name {Asset}; dropping it",
+                    LogText.SingleLine(name));
+                dropped.Add(image);
+                continue;
+            }
+
+            if (assets.ContainsKey(name))
             {
                 continue;
             }
@@ -181,7 +194,10 @@ internal sealed class GalleryReeditLoader
             {
                 // The sidecar is gone or unreadable: drop just this image so the rest of the
                 // capture still opens rather than failing the whole load.
-                _log.LogWarning("Re-edit: asset {Asset} missing in {Directory}; dropping it", name, directory);
+                _log.LogWarning(
+                    "Re-edit: asset {Asset} missing in {Directory}; dropping it",
+                    LogText.SingleLine(name),
+                    LogText.SingleLine(directory));
                 dropped.Add(image);
                 continue;
             }
