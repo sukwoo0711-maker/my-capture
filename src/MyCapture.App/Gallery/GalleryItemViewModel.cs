@@ -53,6 +53,22 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public bool HasAnnotations => Record.HasAnnotations;
 
+    public bool IsVideo => Record.IsVideo;
+
+    public bool IsImage => Record.IsImage;
+
+    public string ActionLabel => IsVideo ? "영상 편집" : "편집";
+
+    public string ExportToolTip => IsVideo
+        ? "폴더나 바탕화면으로 드래그해 MP4 파일로 내보내기"
+        : "폴더나 바탕화면으로 드래그해 PNG 파일로 내보내기";
+
+    public string PreviewUnavailableText => IsVideo
+        ? "동영상 미리보기를 읽을 수 없음"
+        : "이미지를 읽을 수 없음";
+
+    public string DurationCaption => IsVideo ? FormatDuration(Record.DurationMs) : string.Empty;
+
     /// <summary>Primary caption line. Blank captures intentionally have no visible title.</summary>
     public string Caption =>
         !string.IsNullOrWhiteSpace(Record.Title) ? Record.Title
@@ -62,7 +78,9 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
 
     /// <summary>Non-empty label for confirmations, OCR windows and other contextual UI.</summary>
-    public string ContextLabel => HasCaption ? Caption : $"캡처 {TimeCaption}";
+    public string ContextLabel => HasCaption
+        ? Caption
+        : IsVideo ? $"동영상 {TimeCaption}" : $"캡처 {TimeCaption}";
 
     /// <summary>Accessible, human-readable label for the tile without an “untitled” phrase.</summary>
     public string AccessibleName
@@ -71,7 +89,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         {
             string time = Record.CreatedAt.DateTime.ToString("yyyy-MM-dd HH:mm");
             string pin = Record.IsPinned ? ", 고정됨" : string.Empty;
-            return $"{ContextLabel}, {Record.Width}×{Record.Height}, {time}{pin}";
+            string media = IsVideo ? $", 동영상 {DurationCaption}" : ", 이미지";
+            return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}";
         }
     }
 
@@ -113,6 +132,12 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(IsBroken));
         Raise(nameof(IsPinned));
         Raise(nameof(HasAnnotations));
+        Raise(nameof(IsVideo));
+        Raise(nameof(IsImage));
+        Raise(nameof(ActionLabel));
+        Raise(nameof(ExportToolTip));
+        Raise(nameof(PreviewUnavailableText));
+        Raise(nameof(DurationCaption));
         Raise(nameof(Caption));
         Raise(nameof(HasCaption));
         Raise(nameof(ContextLabel));
@@ -167,4 +192,12 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     private void Raise([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    private static string FormatDuration(double durationMs)
+    {
+        TimeSpan duration = TimeSpan.FromMilliseconds(Math.Max(0, durationMs));
+        return duration.TotalHours >= 1
+            ? duration.ToString(@"h\:mm\:ss")
+            : duration.ToString(@"m\:ss");
+    }
 }

@@ -175,7 +175,11 @@ internal sealed class WindowsOcrRecognizer : IOcrRecognizer
         BitmapSource bitmap,
         CancellationToken cancellationToken)
     {
-        byte[] png = EncodePng(bitmap);
+        // PNG encoding is CPU/memory intensive for large captures and this recognizer is normally
+        // entered from the UI. The service supplies frozen bitmaps, which are safe to encode on a
+        // worker without retaining dispatcher affinity.
+        byte[] png = await Task.Run(() => EncodePng(bitmap), cancellationToken)
+            .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
         using var stream = new InMemoryRandomAccessStream();

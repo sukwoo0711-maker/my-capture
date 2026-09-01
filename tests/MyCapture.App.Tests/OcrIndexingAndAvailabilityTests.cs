@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
@@ -151,6 +152,28 @@ public sealed class OcrIndexingAndAvailabilityTests
             _completion.TrySetResult(OcrResult.Cancelled());
     }
 
+    private sealed class CancellationIgnoringOcr : IOcrService
+    {
+        private readonly TaskCompletionSource<OcrResult> _completion = new();
+
+        internal CancellationToken ObservedToken { get; private set; }
+
+        public bool IsAvailable => true;
+
+        public IReadOnlyList<string> SupportedLanguages => ["ko-KR"];
+
+        public Task<OcrResult> RecognizeAsync(
+            OcrRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            ObservedToken = cancellationToken;
+            return _completion.Task;
+        }
+
+        internal void Complete(string text) =>
+            _completion.TrySetResult(OcrResult.Success(text, "ko-KR", [], TimeSpan.Zero));
+    }
+
     private static GalleryController NewGallery(out CaptureQueue queue, string root)
     {
         AppPaths paths = AppPaths.CreateForRoot(root);
@@ -238,12 +261,127 @@ public sealed class OcrIndexingAndAvailabilityTests
     }
 
     [Fact]
+    public async Task CoverageAndIndexing_ExcludeVideoRecords()
+    {
+        string root = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "mc-ocridx-video-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            GalleryController gallery = NewGallery(out CaptureQueue queue, root);
+            queue.Add(new CaptureRecord
+            {
+                MediaKind = CaptureMediaKind.Video,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                Width = 1920,
+                Height = 1080,
+                TotalBytes = 1,
+            });
+            var ocr = new FakeOcr(available: true);
+            var service = new OcrIndexingService(
+                gallery,
+                ocr,
+                _ => throw new InvalidOperationException("Video must not resolve an OCR image."),
+                () => new OcrSettings(),
+                NullLogger<OcrIndexingService>.Instance);
+
+            OcrCoverage coverage = service.Coverage;
+            OcrIndexingOutcome outcome = await service.IndexMissingAsync();
+
+            Assert.Equal(0, coverage.Total);
+            Assert.True(coverage.IsComplete);
+            Assert.Equal(OcrIndexingOutcome.NothingToDo, outcome);
+            Assert.Equal(0, ocr.Calls);
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+        }
+    }
+
+    [Fact]
     public void Availability_SingleLanguage_ListsIt()
     {
         OcrAvailability a = OcrAvailability.Describe(isAvailable: true, supportedLanguages: ["en-US"]);
         Assert.True(a.IsAvailable);
         Assert.Contains("en-US", a.Detail);
     }
+
+    [Fact]
+    public void ResultWindow_UserClose_RaisesDismissedAndRemainsReusable() => RunSta(() =>
+    {
+        var window = new OcrResultWindow();
+        int dismissed = 0;
+        window.Dismissed += (_, _) => dismissed++;
+        try
+        {
+            window.ShowBusy("capture");
+            Assert.True(window.IsVisible);
+
+            window.Close();
+
+            Assert.Equal(1, dismissed);
+            Assert.False(window.IsVisible);
+            window.ShowResult(OcrResult.NoText("en-US", TimeSpan.Zero), "capture");
+            Assert.True(window.IsVisible);
+        }
+        finally
+        {
+            window.CloseForExit();
+        }
+    });
+
+    [Fact]
+    public void Presenter_CachedResultCancelsPriorOwnerAndIgnoresItsLateSuccess() => RunSta(() =>
+    {
+        var service = new CancellationIgnoringOcr();
+        var busy = new List<bool>();
+        int cachedRecordWrites = 0;
+        using var presenter = new OcrResultPresenter(
+            service,
+            Dispatcher.CurrentDispatcher,
+            value => busy.Add(value),
+            NullLogger<OcrResultPresenter>.Instance);
+
+        presenter.ShowRecognized(
+            () => OcrRequest.FromBitmap(SolidBitmap(20, 20)),
+            "A");
+        presenter.ShowCached(
+            OcrResult.Success("cached B", "ko-KR", [], TimeSpan.Zero),
+            "B",
+            () => OcrRequest.FromBitmap(SolidBitmap(20, 20)),
+            _ => cachedRecordWrites++);
+
+        Assert.True(service.ObservedToken.IsCancellationRequested);
+        service.Complete("late A");
+        PumpDispatcherOnce();
+
+        Assert.Equal(0, cachedRecordWrites);
+        Assert.Equal([true, false], busy);
+    });
+
+    [Fact]
+    public void Presenter_RequestFactoryFailureReleasesPriorBusyState() => RunSta(() =>
+    {
+        var service = new CancellationIgnoringOcr();
+        var busy = new List<bool>();
+        using var presenter = new OcrResultPresenter(
+            service,
+            Dispatcher.CurrentDispatcher,
+            value => busy.Add(value),
+            NullLogger<OcrResultPresenter>.Instance);
+
+        presenter.ShowRecognized(
+            () => OcrRequest.FromBitmap(SolidBitmap(20, 20)),
+            "A");
+        presenter.ShowRecognized(
+            () => throw new IOException("synthetic request failure"),
+            "B");
+
+        Assert.True(service.ObservedToken.IsCancellationRequested);
+        Assert.Equal([true, false], busy);
+    });
 
     // ---- Indexer happy path over a REAL persisted capture ----
 
@@ -262,6 +400,15 @@ public sealed class OcrIndexingAndAvailabilityTests
         {
             throw new Xunit.Sdk.XunitException($"STA body threw: {failure}");
         }
+    }
+
+    private static void PumpDispatcherOnce()
+    {
+        var frame = new DispatcherFrame();
+        _ = Dispatcher.CurrentDispatcher.BeginInvoke(
+            DispatcherPriority.ApplicationIdle,
+            new Action(() => frame.Continue = false));
+        Dispatcher.PushFrame(frame);
     }
 
     private static System.Windows.Media.Imaging.BitmapSource SolidBitmap(int w, int h)

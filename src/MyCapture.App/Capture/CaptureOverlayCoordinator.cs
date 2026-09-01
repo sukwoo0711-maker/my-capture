@@ -61,10 +61,9 @@ internal sealed class CaptureOverlayCoordinator
             return;
         }
 
-        // Freeze before showing any UI. Manual region capture intentionally does not enumerate
-        // or expose window candidates; Ctrl+Shift+C is a pure free-drag workflow.
-        MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
-        FrozenFrame frame = _captureEngine.CaptureMonitor(monitor, includeCursor);
+        // Freeze the whole physical-pixel virtual desktop before showing UI. A free drag may
+        // begin on one monitor and end on another, including displays with a negative origin.
+        FrozenFrame frame = _captureEngine.CaptureVirtualDesktop(includeCursor);
 
         var overlay = new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier);
         _activeOverlay = overlay;
@@ -72,11 +71,9 @@ internal sealed class CaptureOverlayCoordinator
         overlay.Closed += OnOverlayClosed;
 
         _log.LogInformation(
-            "Opening free-region selector on {Device} ({Width}x{Height}, {Dpi}dpi)",
-            monitor.DeviceName,
-            monitor.PixelWidth,
-            monitor.PixelHeight,
-            monitor.Dpi);
+            "Opening free-region selector across virtual desktop ({Width}x{Height})",
+            frame.PixelWidth,
+            frame.PixelHeight);
 
         overlay.Show();
         _ = overlay.Activate();
@@ -119,7 +116,8 @@ internal sealed class CaptureOverlayCoordinator
             pixels,
             crop,
             sourceTitle,
-            recordForRepeat);
+            recordForRepeat,
+            copyToClipboardImmediately: false);
 
         _log.LogInformation(
             "Opening standalone editor over region {Region} on a {Width}x{Height} frame",

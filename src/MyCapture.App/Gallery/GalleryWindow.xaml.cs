@@ -8,8 +8,10 @@ using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
+using MyCapture.App.Recording;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Storage;
 using MyCapture.Ocr;
 using MyCapture.Platform.Imaging;
 
@@ -39,6 +41,9 @@ internal sealed partial class GalleryWindow : Window
     private readonly GalleryReeditLoader _reeditLoader;
     private readonly CaptureCommitService _commitService;
     private readonly CaptureQueue _queue;
+    private readonly VideoLibraryService _videoLibrary;
+    private readonly AppPaths _paths;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly GalleryDragExportService _dragExport;
     private readonly OcrResultPresenter _ocrPresenter;
     private readonly Func<OcrSettings> _ocrSettings;
@@ -59,6 +64,9 @@ internal sealed partial class GalleryWindow : Window
         GalleryReeditLoader reeditLoader,
         CaptureCommitService commitService,
         CaptureQueue queue,
+        VideoLibraryService videoLibrary,
+        AppPaths paths,
+        ILoggerFactory loggerFactory,
         OcrResultPresenter ocrPresenter,
         Func<OcrSettings> ocrSettings,
         MyCapture.App.Ocr.OcrIndexingService ocrIndexing,
@@ -69,6 +77,9 @@ internal sealed partial class GalleryWindow : Window
         _reeditLoader = reeditLoader ?? throw new ArgumentNullException(nameof(reeditLoader));
         _commitService = commitService ?? throw new ArgumentNullException(nameof(commitService));
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
+        _videoLibrary = videoLibrary ?? throw new ArgumentNullException(nameof(videoLibrary));
+        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _dragExport = new GalleryDragExportService(_queue);
         _ocrPresenter = ocrPresenter ?? throw new ArgumentNullException(nameof(ocrPresenter));
         _ocrSettings = ocrSettings ?? throw new ArgumentNullException(nameof(ocrSettings));
@@ -110,6 +121,21 @@ internal sealed partial class GalleryWindow : Window
         Topmost = true;
         Topmost = false;
         _ = Focus();
+    }
+
+    /// <summary>Refreshes an already-open gallery without stealing focus from the video editor.</summary>
+    internal void RefreshFromQueue(Guid? changedRecordId = null)
+    {
+        if (changedRecordId is Guid id)
+        {
+            // A recording can open its editor before the user opens the gallery. If the gallery
+            // already exists, its cached tile must discard the old first-frame bitmap when that
+            // external editor commits a new rendered generation.
+            _viewModel.FindTile(id)?.RefreshThumbnail();
+        }
+
+        _viewModel.Refresh();
+        RefreshOcrCoverageBanner();
     }
 
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
@@ -355,11 +381,18 @@ internal sealed partial class GalleryWindow : Window
                 e.Handled = true;
                 break;
             case Key.C when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
-                e.Handled = true;
-                await CopyRenderedAsync(tile);
+                if (tile.IsImage)
+                {
+                    e.Handled = true;
+                    await CopyRenderedAsync(tile);
+                }
                 break;
-            case Key.T:
+            case Key.T when tile.IsImage:
                 RecognizeText(tile);
+                e.Handled = true;
+                break;
+            case Key.G when tile.IsVideo:
+                OpenVideoEditor(tile, exportGifWhenReady: true);
                 e.Handled = true;
                 break;
         }
@@ -411,6 +444,14 @@ internal sealed partial class GalleryWindow : Window
         if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
             RecognizeText(tile);
+        }
+    }
+
+    private void OnGifMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
+        {
+            OpenVideoEditor(tile, exportGifWhenReady: true);
         }
     }
 
@@ -478,6 +519,11 @@ internal sealed partial class GalleryWindow : Window
 
     private async Task CopyRenderedAsync(GalleryItemViewModel tile)
     {
+        if (!tile.IsImage)
+        {
+            return;
+        }
+
         if (!EnsureRecordReady(tile.Id))
         {
             return;
@@ -523,6 +569,11 @@ internal sealed partial class GalleryWindow : Window
     /// </summary>
     private void RecognizeText(GalleryItemViewModel tile)
     {
+        if (!tile.IsImage)
+        {
+            return;
+        }
+
         if (!EnsureRecordReady(tile.Id))
         {
             return;
@@ -585,6 +636,12 @@ internal sealed partial class GalleryWindow : Window
         CaptureRecord? record = _controller.Find(tile.Id);
         if (record is null)
         {
+            return;
+        }
+
+        if (record.IsVideo)
+        {
+            OpenVideoEditor(tile, exportGifWhenReady: false);
             return;
         }
 
@@ -655,11 +712,64 @@ internal sealed partial class GalleryWindow : Window
         RaiseCaptureChanged();
     }
 
+    private void OpenVideoEditor(GalleryItemViewModel tile, bool exportGifWhenReady)
+    {
+        if (!EnsureRecordReady(tile.Id))
+        {
+            return;
+        }
+
+        CaptureRecord? record = _controller.Find(tile.Id);
+        if (record is null || !record.IsVideo)
+        {
+            return;
+        }
+
+        if (!_openEditors.Add(record.Id))
+        {
+            ShowStatus("이 동영상은 이미 편집 중입니다.");
+            return;
+        }
+
+        VideoEditSession? editSession = null;
+        try
+        {
+            VideoEditSession activeSession = _videoLibrary.BeginEdit(record);
+            editSession = activeSession;
+            VideoLibraryItem item = _videoLibrary.Load(record);
+            var editor = new VideoEditorWindow(item.Recording, _paths, _loggerFactory, item.EditDocument)
+            {
+                Owner = this,
+                ExportGifWhenReady = exportGifWhenReady,
+                RenderStagingPathFactory = () => _videoLibrary.CreateRenderStagingPath(record),
+                VideoCommitHandler = (document, stage, cancellationToken) =>
+                    _videoLibrary.CommitEditAsync(
+                        record,
+                        activeSession,
+                        document,
+                        stage,
+                        cancellationToken),
+            };
+            editor.VideoCommitted += (_, _) => OnReeditCommitted(record.Id);
+            _ = editor.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not open video editor for {Id}", record.Id);
+            ShowStatus("동영상을 열 수 없습니다: " + ex.Message);
+        }
+        finally
+        {
+            editSession?.Dispose();
+            _openEditors.Remove(record.Id);
+        }
+    }
+
     // ---- Helpers -------------------------------------------------------------------
 
     private bool EnsureRecordReady(Guid recordId)
     {
-        if (!_commitService.IsRecordBusy(recordId))
+        if (!_commitService.IsRecordBusy(recordId) && !_videoLibrary.IsBusy(recordId))
         {
             return true;
         }

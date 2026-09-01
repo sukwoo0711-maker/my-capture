@@ -84,8 +84,9 @@ public sealed class OcrIndexingService
     /// <summary>Whether the OS OCR engine can run at all (a language pack is installed).</summary>
     public bool IsAvailable => _ocr.IsAvailable;
 
-    /// <summary>Current full-text search coverage of the queue.</summary>
-    public OcrCoverage Coverage => _gallery.MeasureOcrCoverage();
+    /// <summary>Current full-text search coverage of still images in the queue.</summary>
+    public OcrCoverage Coverage =>
+        CaptureTextSearch.MeasureCoverage(_gallery.Records.Where(record => record.IsImage));
 
     /// <summary>
     /// Recognises and caches OCR text for every capture that lacks it.
@@ -102,7 +103,10 @@ public sealed class OcrIndexingService
             return OcrIndexingOutcome.Unavailable;
         }
 
-        IReadOnlyList<CaptureRecord> work = _gallery.RecordsMissingOcr();
+        IReadOnlyList<CaptureRecord> work = _gallery
+            .RecordsMissingOcr()
+            .Where(record => record.IsImage)
+            .ToList();
         if (work.Count == 0)
         {
             return OcrIndexingOutcome.NothingToDo;
@@ -234,6 +238,11 @@ public sealed class OcrIndexingService
 
     private string? ResolveImagePath(CaptureRecord record)
     {
+        if (!record.IsImage)
+        {
+            return null;
+        }
+
         string dir = _directoryResolver(record);
         if (string.IsNullOrEmpty(dir))
         {

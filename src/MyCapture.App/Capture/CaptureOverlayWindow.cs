@@ -16,6 +16,7 @@ internal sealed class CaptureOverlayWindow : Window
     private readonly CaptureOverlayView _view;
     private readonly bool _abortOnFocusLoss;
     private bool _completed;
+    private bool _placingPhysicalBounds;
 
     internal CaptureOverlayWindow(
         FrozenFrame frame,
@@ -37,6 +38,7 @@ internal sealed class CaptureOverlayWindow : Window
         _view.CancelRequested += OnCancelRequested;
         SourceInitialized += OnSourceInitialized;
         ContentRendered += OnContentRendered;
+        DpiChanged += OnDpiChanged;
         Deactivated += OnDeactivated;
     }
 
@@ -50,10 +52,16 @@ internal sealed class CaptureOverlayWindow : Window
         Topmost = true;
         AllowsTransparency = false;
         Background = System.Windows.Media.Brushes.Black;
-        Left = 0;
-        Top = 0;
-        Width = Math.Max(1, frame.PixelWidth / frame.DpiScale);
-        Height = Math.Max(1, frame.PixelHeight / frame.DpiScale);
+        // Anchor HWND creation on the virtual desktop's top-left display. SourceInitialized then
+        // applies the exact physical-pixel rectangle with SetWindowPos; this initial placement
+        // prevents WPF from choosing the primary monitor's DPI for a negative-origin desktop.
+        MonitorInfo anchor = MonitorEnumerator.GetFromPoint(
+            new PointD(frame.ScreenBounds.Left, frame.ScreenBounds.Top));
+        double scale = anchor.ScaleFactor > 0 ? anchor.ScaleFactor : 1.0;
+        Left = frame.ScreenBounds.Left / scale;
+        Top = frame.ScreenBounds.Top / scale;
+        Width = Math.Max(1, frame.PixelWidth / scale);
+        Height = Math.Max(1, frame.PixelHeight / scale);
     }
 
     /// <summary>Raised after a valid drag is cropped and the overlay has been hidden.</summary>
@@ -62,15 +70,45 @@ internal sealed class CaptureOverlayWindow : Window
     internal event EventHandler? SelectionCancelled;
 
     private void OnSourceInitialized(object? sender, EventArgs e)
+        => PlacePhysicalBounds();
+
+    private void PlacePhysicalBounds()
     {
+        if (_placingPhysicalBounds)
+        {
+            return;
+        }
+
+        _placingPhysicalBounds = true;
         IntPtr hwnd = new WindowInteropHelper(this).Handle;
-        PhysicalWindowPositioner.PlaceTopmost(hwnd, _frame.ScreenBounds);
+        try
+        {
+            if (hwnd != IntPtr.Zero)
+            {
+                PhysicalWindowPositioner.PlaceTopmost(hwnd, _frame.ScreenBounds);
+            }
+        }
+        finally
+        {
+            _placingPhysicalBounds = false;
+        }
     }
 
     private void OnContentRendered(object? sender, EventArgs e)
     {
+        // WPF can perform one final DPI/layout adjustment after SourceInitialized. Reassert the
+        // virtual-desktop physical rectangle before accepting input so mixed-DPI edges stay exact.
+        PlacePhysicalBounds();
         _view.Focus();
         _ = Activate();
+    }
+
+    private void OnDpiChanged(object? sender, DpiChangedEventArgs e)
+    {
+        if (!_placingPhysicalBounds)
+        {
+            _ = Dispatcher.BeginInvoke(new Action(PlacePhysicalBounds));
+        }
     }
 
     private void OnSelectionConfirmed(object? sender, RegionSelectionEventArgs e)
@@ -127,6 +165,7 @@ internal sealed class CaptureOverlayWindow : Window
         SourceInitialized -= OnSourceInitialized;
         ContentRendered -= OnContentRendered;
         Deactivated -= OnDeactivated;
+        DpiChanged -= OnDpiChanged;
         base.OnClosed(e);
     }
 }
@@ -138,13 +177,15 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
         RectD bitmapRegion,
         System.Windows.Media.Imaging.BitmapSource selectedBitmap,
         string sourceTitle = "",
-        bool recordForRepeat = true)
+        bool recordForRepeat = true,
+        bool copyToClipboardImmediately = true)
     {
         Frame = frame;
         BitmapRegion = bitmapRegion;
         SelectedBitmap = selectedBitmap;
         SourceTitle = sourceTitle ?? string.Empty;
         RecordForRepeat = recordForRepeat;
+        CopyToClipboardImmediately = copyToClipboardImmediately;
     }
 
     internal FrozenFrame Frame { get; }
@@ -153,6 +194,12 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
 
     /// <summary>True only for an explicitly completed manual-region drag.</summary>
     internal bool RecordForRepeat { get; }
+
+    /// <summary>
+    /// True for the explicit free-region selector. This is intentionally independent of repeat
+    /// history so future history-policy changes cannot silently disable Ctrl+Shift+C copying.
+    /// </summary>
+    internal bool CopyToClipboardImmediately { get; }
 
     internal System.Windows.Media.Imaging.BitmapSource SelectedBitmap { get; }
 

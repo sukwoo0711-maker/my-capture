@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -605,6 +606,88 @@ public sealed class CaptureCommitServiceTests
 
             Assert.False(close);
             Assert.False(File.Exists(misleadingPath));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void CapturedRegionCopy_IgnoresQuickSaveSettingAndLaterDoneAction() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            BitmapSource? copiedBitmap = null;
+            int copyCalls = 0;
+            var (commit, _, record, settings, _) = Build(root, bitmap =>
+            {
+                copyCalls++;
+                copiedBitmap = bitmap;
+                return Task.FromResult(true);
+            });
+            settings.Export.CopyToClipboardOnQuickSave = false;
+            BitmapSource untouchedSelection = Solid(57, 41);
+
+            bool copied = commit.CopyCapturedRegionAsync(untouchedSelection).GetAwaiter().GetResult();
+            bool closed = commit.CommitAsync(record, MakeResult(EditorCommitAction.Done)).GetAwaiter().GetResult();
+
+            Assert.True(copied);
+            Assert.True(closed);
+            Assert.Equal(1, copyCalls);
+            Assert.Same(untouchedSelection, copiedBitmap);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void CapturedRegionCopy_FailureLeavesThePersistedCaptureIntact() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var (commit, queue, record, settings, _) = Build(
+                root,
+                _ => Task.FromResult(false));
+            settings.Export.CopyToClipboardOnQuickSave = false;
+            string directory = queue.GetDirectory(record);
+            byte[] originalBefore = File.ReadAllBytes(Path.Combine(directory, CaptureFileNames.Original));
+            byte[] renderedBefore = File.ReadAllBytes(Path.Combine(directory, CaptureFileNames.Rendered));
+
+            bool copied = commit.CopyCapturedRegionAsync(Solid(48, 32)).GetAwaiter().GetResult();
+
+            Assert.False(copied);
+            Assert.Same(record, queue.Find(record.Id));
+            Assert.Equal(originalBefore, File.ReadAllBytes(Path.Combine(directory, CaptureFileNames.Original)));
+            Assert.Equal(renderedBefore, File.ReadAllBytes(Path.Combine(directory, CaptureFileNames.Rendered)));
+            Assert.Equal(0, record.ContentRevision);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void CapturedRegionCopy_ExpectedClipboardExceptionFailsSoftAfterPersistence() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var (commit, queue, record, _, _) = Build(
+                root,
+                _ => Task.FromException<bool>(new ExternalException("clipboard unavailable")));
+
+            bool copied = commit.CopyCapturedRegionAsync(Solid(48, 32)).GetAwaiter().GetResult();
+
+            Assert.False(copied);
+            Assert.Same(record, queue.Find(record.Id));
+            Assert.True(File.Exists(queue.GetFilePath(record, CaptureFileNames.Original)));
+            Assert.True(File.Exists(queue.GetFilePath(record, CaptureFileNames.Rendered)));
         }
         finally
         {

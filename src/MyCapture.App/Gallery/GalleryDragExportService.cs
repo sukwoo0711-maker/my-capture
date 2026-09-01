@@ -5,8 +5,9 @@ using MyCapture.Core.Queue;
 namespace MyCapture.App.Gallery;
 
 /// <summary>
-/// Stages flattened captures as normal files for shell drag/drop without exposing or moving the
-/// queue's internal <c>rendered.png</c> file.
+/// Stages flattened images as normal PNG files for shell drag/drop. Videos are already normal
+/// MP4 files, so they are exposed read-only under a queue eviction lease instead of being copied
+/// synchronously on the UI thread.
 /// </summary>
 internal sealed class GalleryDragExportService
 {
@@ -32,23 +33,44 @@ internal sealed class GalleryDragExportService
     internal static string BuildBaseFileName(DateTimeOffset timestamp) =>
         $"MyCapture_{timestamp:yyyyMMdd_HHmmss}.png";
 
+    internal static string BuildBaseFileName(DateTimeOffset timestamp, CaptureMediaKind mediaKind) =>
+        $"MyCapture_{timestamp:yyyyMMdd_HHmmss}" +
+        (mediaKind == CaptureMediaKind.Video ? ".mp4" : ".png");
+
     /// <summary>
-    /// Copies the flattened capture to a unique temporary path. Same-second exports are suffixed
-    /// <c>-02</c>, <c>-03</c>, and so on without overwriting another drag.
+    /// Returns a shell-ready media path. Images are copied to a unique temporary PNG; videos use
+    /// their immutable/current MP4 directly so a large recording cannot stall drag initiation.
+    /// Same-second image exports are suffixed <c>-02</c>, <c>-03</c>, and so on.
     /// </summary>
     internal string PrepareExport(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
-        string sourcePath = _queue.GetFilePath(record, CaptureFileNames.Rendered);
+        string sourcePath;
+        if (record.IsVideo)
+        {
+            string rendered = _queue.GetFilePath(record, CaptureFileNames.VideoRendered);
+            sourcePath = File.Exists(rendered)
+                ? rendered
+                : _queue.GetFilePath(record, CaptureFileNames.VideoSource);
+        }
+        else
+        {
+            sourcePath = _queue.GetFilePath(record, CaptureFileNames.Rendered);
+        }
         if (!File.Exists(sourcePath))
         {
-            throw new FileNotFoundException("The rendered capture is unavailable.", sourcePath);
+            throw new FileNotFoundException("The gallery media is unavailable.", sourcePath);
+        }
+
+        if (record.IsVideo)
+        {
+            return Path.GetFullPath(sourcePath);
         }
 
         Directory.CreateDirectory(_stagingRoot);
         CleanupExpiredBestEffort(_clock() - DefaultRetention);
 
-        string baseName = BuildBaseFileName(_clock());
+        string baseName = BuildBaseFileName(_clock(), record.MediaKind);
         string stem = Path.GetFileNameWithoutExtension(baseName);
         string extension = Path.GetExtension(baseName);
 
@@ -90,6 +112,7 @@ internal sealed class GalleryDragExportService
     internal DragDropEffects BeginDrag(DependencyObject dragSource, CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(dragSource);
+        using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
         string stagedPath = PrepareExport(record);
         DataObject data = CreateFileDropData(stagedPath);
         return DragDrop.DoDragDrop(dragSource, data, DragDropEffects.Copy);
@@ -104,10 +127,17 @@ internal sealed class GalleryDragExportService
                 return;
             }
 
-            foreach (string file in Directory.EnumerateFiles(_stagingRoot, "MyCapture_*.png"))
+            foreach (string file in Directory.EnumerateFiles(_stagingRoot, "MyCapture_*.*"))
             {
                 try
                 {
+                    string extension = Path.GetExtension(file);
+                    if (!extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                        && !extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
                     if (File.GetLastWriteTimeUtc(file) < cutoff.UtcDateTime)
                     {
                         File.Delete(file);

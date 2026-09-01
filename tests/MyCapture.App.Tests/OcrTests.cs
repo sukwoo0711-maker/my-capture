@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -57,6 +58,28 @@ public sealed class OcrTests
         Assert.Null(OcrPlanner.SelectLanguage(["en-US"], []));
     }
 
+    [Fact]
+    public void SelectLanguages_ReturnsTwoDistinctPreferredPrimaryLanguages()
+    {
+        IReadOnlyList<string> selected = OcrPlanner.SelectLanguages(
+            ["ko-KR", "en", "en-GB", "ja-JP"],
+            ["en-US", "ko-KR", "en-GB", "ja-JP"],
+            maxLanguages: 2);
+
+        Assert.Equal(["ko-KR", "en-US"], selected);
+    }
+
+    [Fact]
+    public void SelectLanguages_KeepsDistinctScriptEngines()
+    {
+        IReadOnlyList<string> selected = OcrPlanner.SelectLanguages(
+            ["zh-Hans", "zh-Hant"],
+            ["zh-Hans", "zh-Hant"],
+            maxLanguages: 2);
+
+        Assert.Equal(["zh-Hans", "zh-Hant"], selected);
+    }
+
     // ---- OcrPlanner: dimension scaling --------------------------------------------
 
     [Fact]
@@ -91,6 +114,32 @@ public sealed class OcrTests
         Assert.True(8000 * scale <= 4000);
     }
 
+    [Theory]
+    [InlineData(320, 180, 1.0, 4.0)]
+    [InlineData(1000, 500, 1.0, 3.0)]
+    [InlineData(1920, 1080, 2.0, 2.0)]
+    public void ResolveAdaptiveScale_BoostsOnlySmallCrops(
+        int width,
+        int height,
+        double requested,
+        double expected)
+    {
+        double scale = OcrPlanner.ResolveAdaptiveScale(width, height, requested, maxDimension: 8000);
+        Assert.Equal(expected, scale, 6);
+    }
+
+    [Fact]
+    public void ResolveAdaptiveScale_StillHonoursEngineDimensionCap()
+    {
+        double scale = OcrPlanner.ResolveAdaptiveScale(
+            1000,
+            200,
+            requestedFactor: 1.0,
+            maxDimension: 2500);
+
+        Assert.Equal(2.5, scale, 6);
+    }
+
     // ---- OcrPlanner: normalisation ------------------------------------------------
 
     [Fact]
@@ -111,6 +160,15 @@ public sealed class OcrTests
     {
         string block = OcrPlanner.BuildBlockText(["line one", "  ", "line two"]);
         Assert.Equal("line one\nline two", block);
+    }
+
+    [Fact]
+    public void BuildBlockText_NormalizesWhitespaceAndDropsAdjacentDuplicates()
+    {
+        string block = OcrPlanner.BuildBlockText(
+            ["  Hello\tworld ", "Hello   world", " ", "안녕  OCR"]);
+
+        Assert.Equal("Hello world\n안녕 OCR", block);
     }
 
     // ---- OcrRect: coordinate unscale ----------------------------------------------
@@ -141,6 +199,33 @@ public sealed class OcrTests
         Assert.Equal(0, union.Y, 6);
         Assert.Equal(30, union.Right, 6);
         Assert.Equal(35, union.Bottom, 6);
+    }
+
+    [Theory]
+    [InlineData(90, 20, 10, 10, 20)]
+    [InlineData(180, 50, 10, 20, 10)]
+    [InlineData(270, 50, 10, 10, 20)]
+    public void OcrRect_MapFromClockwiseRotation_ReturnsOriginalCoordinates(
+        int rotation,
+        double expectedX,
+        double expectedY,
+        double expectedWidth,
+        double expectedHeight)
+    {
+        OcrRect rotated = rotation switch
+        {
+            90 => new OcrRect(10, 20, 20, 10),
+            180 => new OcrRect(10, 20, 20, 10),
+            270 => new OcrRect(10, 20, 20, 10),
+            _ => throw new InvalidOperationException(),
+        };
+
+        OcrRect original = rotated.MapFromClockwiseRotation(rotation, 80, 40);
+
+        Assert.Equal(expectedX, original.X, 6);
+        Assert.Equal(expectedY, original.Y, 6);
+        Assert.Equal(expectedWidth, original.Width, 6);
+        Assert.Equal(expectedHeight, original.Height, 6);
     }
 
     // ---- WindowsOcrService pipeline via fake recognizer ---------------------------
@@ -194,8 +279,8 @@ public sealed class OcrTests
     [Fact]
     public async Task Recognize_Success_UnscalesBoxesToOriginalPixels()
     {
-        // The service upscales 2x before recognition; the fake returns a box in prepared
-        // (scaled) coordinates, and the service must divide it back to original pixels.
+        // A small crop is adaptively upscaled 4x before recognition; the fake returns a box in
+        // prepared coordinates, and the service must divide it back to original pixels.
         var recognizer = new FakeRecognizer
         {
             Available = true,
@@ -215,17 +300,16 @@ public sealed class OcrTests
         Assert.Equal("Hello", result.Text);
         Assert.Equal("en-US", result.LanguageTag);
 
-        // The recognizer was handed a 2x bitmap, so the reported 20,40,100,30 box maps back to
-        // 10,20,50,15 in original pixels.
+        // The reported 20,40,100,30 box maps back through the effective 4x scale.
         OcrWord word = result.Lines[0].Words[0];
-        Assert.Equal(10, word.Bounds.X, 3);
-        Assert.Equal(20, word.Bounds.Y, 3);
-        Assert.Equal(50, word.Bounds.Width, 3);
-        Assert.Equal(15, word.Bounds.Height, 3);
+        Assert.Equal(5, word.Bounds.X, 3);
+        Assert.Equal(10, word.Bounds.Y, 3);
+        Assert.Equal(25, word.Bounds.Width, 3);
+        Assert.Equal(7.5, word.Bounds.Height, 3);
 
         // The fake records the prepared bitmap dimensions it received.
-        Assert.Equal(200, recognizer.LastWidth);
-        Assert.Equal(120, recognizer.LastHeight);
+        Assert.Equal(400, recognizer.LastWidth);
+        Assert.Equal(240, recognizer.LastHeight);
     }
 
     [Fact]
@@ -249,6 +333,129 @@ public sealed class OcrTests
 
         Assert.Equal(OcrStatus.Success, result.Status);
         Assert.Null(recognizer.LastLanguageTag);
+    }
+
+    [Fact]
+    public async Task Recognize_MergesKoreanAndEnglishPassesOnTheSameVisualLine()
+    {
+        var recognizer = new FakeRecognizer
+        {
+            Available = true,
+            Supported = ["ko-KR", "en-US"],
+            Handler = (_, language, _) => language switch
+            {
+                "ko-KR" => new RecognizedText("ko-KR",
+                [
+                    new RecognizedLine(" 안녕 ",
+                    [
+                        new RecognizedWord("안녕", new OcrRect(0, 0, 160, 80)),
+                    ]),
+                ]),
+                "en-US" => new RecognizedText("en-US",
+                [
+                    new RecognizedLine("Hello",
+                    [
+                        new RecognizedWord("Hello", new OcrRect(200, 0, 200, 80)),
+                    ]),
+                ]),
+                _ => null,
+            },
+        };
+        WindowsOcrService service = NewService(recognizer);
+
+        OcrResult result = await service.RecognizeAsync(
+            OcrRequest.FromBitmap(Solid(100, 60), 2.0, ["ko-KR", "en-US"]));
+
+        Assert.Equal(OcrStatus.Success, result.Status);
+        Assert.Equal("안녕 Hello", result.Text);
+        Assert.Single(result.Lines);
+        Assert.Equal(2, result.Lines[0].Words.Count);
+        Assert.Equal(2, recognizer.CallCount);
+        Assert.Equal(["ko-KR", "en-US"], recognizer.Invocations.Select(call => call.LanguageTag));
+    }
+
+    [Fact]
+    public async Task Recognize_DeduplicatesCollocatedLinesAcrossLanguagePasses()
+    {
+        var recognizer = new FakeRecognizer
+        {
+            Available = true,
+            Supported = ["ko-KR", "en-US"],
+            Handler = (_, language, _) => new RecognizedText(language ?? string.Empty,
+            [
+                new RecognizedLine("  Hello  ",
+                [
+                    new RecognizedWord(" Hello ", new OcrRect(40, 40, 160, 80)),
+                ]),
+            ]),
+        };
+        WindowsOcrService service = NewService(recognizer);
+
+        OcrResult result = await service.RecognizeAsync(
+            OcrRequest.FromBitmap(Solid(), 2.0, ["ko-KR", "en-US"]));
+
+        Assert.Equal("Hello", result.Text);
+        OcrLine line = Assert.Single(result.Lines);
+        _ = Assert.Single(line.Words);
+        Assert.Equal(2, recognizer.CallCount);
+    }
+
+    [Fact]
+    public async Task Recognize_DeduplicatesRepeatedLinesWithinOnePass()
+    {
+        var duplicate = new RecognizedLine("Status",
+        [
+            new RecognizedWord("Status", new OcrRect(40, 40, 160, 80)),
+        ]);
+        var recognizer = new FakeRecognizer
+        {
+            Available = true,
+            Supported = ["en-US"],
+            Result = new RecognizedText("en-US", [duplicate, duplicate]),
+        };
+        WindowsOcrService service = NewService(recognizer);
+
+        OcrResult result = await service.RecognizeAsync(
+            OcrRequest.FromBitmap(Solid(), 2.0, ["en-US"]));
+
+        Assert.Equal("Status", result.Text);
+        _ = Assert.Single(result.Lines);
+        Assert.Equal(1, recognizer.CallCount);
+    }
+
+    [Fact]
+    public async Task Recognize_WeakUprightResult_ProbesRotationAndMapsWinningBoxesBack()
+    {
+        var recognizer = new FakeRecognizer
+        {
+            Available = true,
+            Supported = ["en-US"],
+            Handler = (_, _, call) => call == 2
+                ? new RecognizedText("en-US",
+                [
+                    new RecognizedLine("Hello",
+                    [
+                        new RecognizedWord("Hello", new OcrRect(40, 80, 80, 40)),
+                    ]),
+                ])
+                : new RecognizedText("en-US", []),
+        };
+        WindowsOcrService service = NewService(recognizer);
+
+        OcrResult result = await service.RecognizeAsync(
+            OcrRequest.FromBitmap(Solid(80, 40), 1.0, ["en-US"]));
+
+        Assert.Equal(OcrStatus.Success, result.Status);
+        Assert.Equal("Hello", result.Text);
+        OcrWord word = Assert.Single(Assert.Single(result.Lines).Words);
+        Assert.Equal(20, word.Bounds.X, 3);
+        Assert.Equal(10, word.Bounds.Y, 3);
+        Assert.Equal(10, word.Bounds.Width, 3);
+        Assert.Equal(20, word.Bounds.Height, 3);
+        Assert.Equal(4, recognizer.CallCount);
+        Assert.Equal(
+            [(320, 160), (160, 320), (320, 160), (160, 320)],
+            recognizer.Invocations.Select(call => (call.Width, call.Height)));
     }
 
     [Fact]
@@ -295,6 +502,82 @@ public sealed class OcrTests
         Assert.Equal(OcrStatus.Failed, result.Status);
     }
 
+    [Fact]
+    public async Task Recognize_SlowDecode_ReturnsControlBeforePreparationCompletes()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var recognizer = new FakeRecognizer
+        {
+            Available = true,
+            Supported = ["en-US"],
+            Result = new RecognizedText("en-US", []),
+        };
+        var service = new WindowsOcrService(
+            recognizer,
+            _ =>
+            {
+                entered.Set();
+                Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
+                return Solid();
+            },
+            _ => Solid(),
+            NullLogger.Instance);
+
+        var stopwatch = Stopwatch.StartNew();
+        Task<OcrResult> pending = service.RecognizeAsync(OcrRequest.FromBytes([1]));
+        stopwatch.Stop();
+
+        try
+        {
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromMilliseconds(250),
+                $"RecognizeAsync blocked its caller for {stopwatch.Elapsed.TotalMilliseconds:F1} ms.");
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            Assert.False(pending.IsCompleted);
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        OcrResult result = await pending.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(OcrStatus.NoText, result.Status);
+    }
+
+    [Fact]
+    public async Task Recognize_CancelledDuringDecode_DoesNotInvokeRecognizer()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var recognizer = new FakeRecognizer
+        {
+            Available = true,
+            Supported = ["en-US"],
+            Result = new RecognizedText("en-US", []),
+        };
+        var service = new WindowsOcrService(
+            recognizer,
+            _ =>
+            {
+                entered.Set();
+                Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
+                return Solid();
+            },
+            _ => Solid(),
+            NullLogger.Instance);
+        using var cts = new CancellationTokenSource();
+
+        Task<OcrResult> pending = service.RecognizeAsync(OcrRequest.FromBytes([1]), cts.Token);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        cts.Cancel();
+        release.Set();
+
+        OcrResult result = await pending.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(OcrStatus.Cancelled, result.Status);
+        Assert.Equal(0, recognizer.CallCount);
+    }
+
     /// <summary>A recognizer that records what it was asked and returns a scripted result.</summary>
     private sealed class FakeRecognizer : IOcrRecognizer
     {
@@ -305,6 +588,12 @@ public sealed class OcrTests
         public int MaxDimension { get; set; } = 4000;
 
         public RecognizedText? Result { get; set; }
+
+        public Func<BitmapSource, string?, int, RecognizedText?>? Handler { get; set; }
+
+        public List<Invocation> Invocations { get; } = [];
+
+        public int CallCount => Invocations.Count;
 
         public string? LastLanguageTag { get; private set; }
 
@@ -327,7 +616,11 @@ public sealed class OcrTests
             LastLanguageTag = languageTag;
             LastWidth = preparedBitmap.PixelWidth;
             LastHeight = preparedBitmap.PixelHeight;
-            return Task.FromResult(Result);
+            Invocations.Add(new Invocation(languageTag, LastWidth, LastHeight));
+            RecognizedText? result = Handler?.Invoke(preparedBitmap, languageTag, CallCount) ?? Result;
+            return Task.FromResult(result);
         }
+
+        public sealed record Invocation(string? LanguageTag, int Width, int Height);
     }
 }

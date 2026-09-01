@@ -11,6 +11,7 @@ public enum CaptureMatchField
     Title = 1,
     WindowTitle = 2,
     OcrText = 4,
+    MediaType = 8,
 }
 
 /// <summary>
@@ -116,6 +117,11 @@ public static class CaptureTextSearch
         int withText = 0;
         foreach (CaptureRecord record in records)
         {
+            if (!record.IsImage)
+            {
+                continue;
+            }
+
             total++;
             if (record.HasCurrentOcrIndex)
             {
@@ -143,6 +149,9 @@ public static class CaptureTextSearch
         string title = record.Title ?? string.Empty;
         string window = record.SourceWindowTitle ?? string.Empty;
         string ocr = record.OcrText ?? string.Empty;
+        string media = record.IsVideo
+            ? "동영상 비디오 video recording mp4"
+            : "이미지 사진 스크린샷 image screenshot png";
 
         foreach (string term in terms)
         {
@@ -161,6 +170,11 @@ public static class CaptureTextSearch
             if (Contains(ocr, term))
             {
                 termFields |= CaptureMatchField.OcrText;
+            }
+
+            if (Contains(media, term))
+            {
+                termFields |= CaptureMatchField.MediaType;
             }
 
             // AND semantics: a term found in no field fails the whole record.

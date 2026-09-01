@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -44,7 +45,7 @@ internal sealed class RecordingControlWindow : Window
     // minimum and the region outline stays centred at its true size.
     private const double MinStripWidth = 460.0;
 
-    private readonly RectD _screenRegion;
+    private RectD _screenRegion;
     private readonly RecordingSettings _settings;
     private readonly Func<RegionRecorder> _recorderFactory;
     private readonly Func<string> _outputPathFactory;
@@ -54,6 +55,8 @@ internal sealed class RecordingControlWindow : Window
     private readonly TextBlock _statusText;
     private readonly TextBlock _timerText;
     private readonly Border _regionFrame;
+    private readonly Border _controlStrip;
+    private readonly Canvas _root;
 
     private RegionRecorder? _recorder;
     private DispatcherTimer? _elapsedTimer;
@@ -62,6 +65,9 @@ internal sealed class RecordingControlWindow : Window
     private int _countdownRemaining;
     private bool _stopping;
     private bool _finished;
+    private bool _applyingPhysicalLayout;
+    private bool _captureExclusionApplied;
+    private bool _paletteOverlapsRegion;
 
     internal RecordingControlWindow(
         RectD screenRegion,
@@ -70,7 +76,7 @@ internal sealed class RecordingControlWindow : Window
         Func<string> outputPathFactory,
         ILogger log)
     {
-        _screenRegion = screenRegion.Normalized();
+        _screenRegion = screenRegion.Normalized().ToPixelBounds();
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _recorderFactory = recorderFactory ?? throw new ArgumentNullException(nameof(recorderFactory));
         _outputPathFactory = outputPathFactory ?? throw new ArgumentNullException(nameof(outputPathFactory));
@@ -91,58 +97,28 @@ internal sealed class RecordingControlWindow : Window
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
 
-        double scale = ResolveScale();
-        double regionDipW = _screenRegion.Width / scale;
-        double regionDipH = _screenRegion.Height / scale;
-
-        // The control strip needs a minimum width or, for a narrow capture region, the primary
-        // button, status text and timer collide. So the window is at least MinStripWidth wide
-        // regardless of how small the recorded region is; the region frame is drawn at its true
-        // width, centred, and the strip always gets the full (>= MinStripWidth) width.
-        double regionBoxW = regionDipW + (BorderThicknessPx * 2);
-        double windowW = Math.Max(regionBoxW, MinStripWidth);
-
-        Width = windowW;
-        Height = regionDipH + (BorderThicknessPx * 2) + StripHeight;
-        // Centre the window over the region so the (possibly wider) strip is balanced.
-        Left = (_screenRegion.Left / scale) - BorderThicknessPx - ((windowW - regionBoxW) / 2);
-        Top = (_screenRegion.Top / scale) - BorderThicknessPx;
-
-        // Keep the whole window on the work area of the region's monitor.
-        Rect work = SystemParameters.WorkArea;
-        if (Top + Height > work.Bottom)
-        {
-            Top = Math.Max(work.Top, work.Bottom - Height);
-        }
-
-        Left = Math.Clamp(Left, work.Left, Math.Max(work.Left, work.Right - windowW));
-
-        var root = new Grid();
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(regionDipH + (BorderThicknessPx * 2)) });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(StripHeight) });
-
+        _root = new Canvas { Background = Brushes.Transparent };
         _regionFrame = BuildRegionFrame();
-        // Region frame keeps its true pixel width and is centred; it must NOT stretch to the
-        // (wider) window, or the recorded-bounds outline would misrepresent the capture area.
-        _regionFrame.Width = regionBoxW;
-        _regionFrame.HorizontalAlignment = HorizontalAlignment.Center;
-        Grid.SetRow(_regionFrame, 0);
-        root.Children.Add(_regionFrame);
+        _root.Children.Add(_regionFrame);
 
-        Border strip = BuildControlStrip(out _primaryButton, out _statusText, out _timerText);
-        strip.MinWidth = MinStripWidth;
-        Grid.SetRow(strip, 1);
-        root.Children.Add(strip);
+        _controlStrip = BuildControlStrip(out _primaryButton, out _statusText, out _timerText);
+        _controlStrip.MinWidth = MinStripWidth;
+        _root.Children.Add(_controlStrip);
 
-        Content = root;
+        Content = _root;
+        ApplyPhysicalLayout(positionHwnd: false);
 
         KeyDown += OnKeyDown;
         SourceInitialized += OnSourceInitialized;
+        ContentRendered += OnContentRendered;
+        DpiChanged += OnDpiChanged;
     }
 
     internal event EventHandler<RecordingResult>? RecordingFinished;
 
     internal event EventHandler? Cancelled;
+
+    internal event EventHandler<RecordingFailedEventArgs>? Failed;
 
     /// <summary>Raised the moment a stop begins, before the deferred finalise runs.</summary>
     internal event EventHandler? Stopping;
@@ -176,6 +152,7 @@ internal sealed class RecordingControlWindow : Window
                 try
                 {
                     DragMove();
+                    UpdateRegionFromVisibleFrame();
                 }
                 catch (InvalidOperationException)
                 {
@@ -265,9 +242,128 @@ internal sealed class RecordingControlWindow : Window
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
-        // The countdown-free path can begin immediately if the user has auto-start off;
-        // we simply wait for the explicit button. Nothing to do here beyond letting the
-        // window render; region placement is already set from the constructor.
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        _captureExclusionApplied = hwnd != IntPtr.Zero
+            && SetWindowDisplayAffinity(hwnd, WdaExcludeFromCapture);
+        if (!_captureExclusionApplied)
+        {
+            _log.LogWarning(
+                "Could not exclude recording controls from capture (Win32 {Error})",
+                Marshal.GetLastWin32Error());
+        }
+
+        ApplyPhysicalLayout(positionHwnd: true);
+    }
+
+    private void OnContentRendered(object? sender, EventArgs e) =>
+        ApplyPhysicalLayout(positionHwnd: true);
+
+    private void OnDpiChanged(object? sender, DpiChangedEventArgs e)
+    {
+        if (!_applyingPhysicalLayout)
+        {
+            _ = Dispatcher.BeginInvoke(
+                DispatcherPriority.Loaded,
+                new Action(() => ApplyPhysicalLayout(positionHwnd: true)));
+        }
+    }
+
+    /// <summary>
+    /// Lays the outline and palette out from one physical-pixel source rectangle. The palette may
+    /// clamp or flip, but the outline never moves independently from <see cref="_screenRegion"/>.
+    /// </summary>
+    private void ApplyPhysicalLayout(bool positionHwnd)
+    {
+        if (_applyingPhysicalLayout)
+        {
+            return;
+        }
+
+        _applyingPhysicalLayout = true;
+        try
+        {
+            double scale = ResolveWindowScale();
+            RectD virtualPixels = MonitorEnumerator.GetVirtualDesktopBounds();
+            RecordingControlLayout layout = RecordingControlLayoutPlanner.Plan(
+                _screenRegion,
+                virtualPixels,
+                scale,
+                BorderThicknessPx,
+                StripHeight,
+                MinStripWidth);
+            RectD frameBox = layout.FrameBounds;
+            RectD stripBox = layout.PaletteBounds;
+            RectD windowPixels = layout.WindowBounds;
+            _paletteOverlapsRegion = layout.PaletteOverlapsRegion;
+
+            Width = Math.Max(1, windowPixels.Width / scale);
+            Height = Math.Max(1, windowPixels.Height / scale);
+            _root.Width = Width;
+            _root.Height = Height;
+
+            _regionFrame.Width = frameBox.Width / scale;
+            _regionFrame.Height = frameBox.Height / scale;
+            Canvas.SetLeft(_regionFrame, (frameBox.Left - windowPixels.Left) / scale);
+            Canvas.SetTop(_regionFrame, (frameBox.Top - windowPixels.Top) / scale);
+
+            _controlStrip.Width = stripBox.Width / scale;
+            _controlStrip.Height = StripHeight;
+            Canvas.SetLeft(_controlStrip, (stripBox.Left - windowPixels.Left) / scale);
+            Canvas.SetTop(_controlStrip, (stripBox.Top - windowPixels.Top) / scale);
+
+            // Initial values influence which monitor DPI WPF chooses for HWND creation. Once the
+            // HWND exists, SetWindowPos below is authoritative and works in physical pixels.
+            Left = windowPixels.Left / scale;
+            Top = windowPixels.Top / scale;
+            if (positionHwnd)
+            {
+                IntPtr hwnd = new WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    PhysicalWindowPositioner.PlaceTopmost(hwnd, windowPixels);
+                }
+            }
+        }
+        finally
+        {
+            _applyingPhysicalLayout = false;
+        }
+    }
+
+    private void UpdateRegionFromVisibleFrame()
+    {
+        try
+        {
+            Point topLeft = _regionFrame.PointToScreen(new Point(BorderThicknessPx, BorderThicknessPx));
+            _screenRegion = new RectD(
+                    topLeft.X,
+                    topLeft.Y,
+                    _screenRegion.Width,
+                    _screenRegion.Height)
+                .ClampTo(MonitorEnumerator.GetVirtualDesktopBounds())
+                .ToPixelBounds();
+            _statusText.Text = FormatReadyStatus();
+            ApplyPhysicalLayout(positionHwnd: true);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogWarning(ex, "Could not resolve the moved recording frame in physical pixels");
+            ApplyPhysicalLayout(positionHwnd: true);
+        }
+    }
+
+    private double ResolveWindowScale()
+    {
+        if (PresentationSource.FromVisual(this)?.CompositionTarget is { } target)
+        {
+            double scale = target.TransformToDevice.M11;
+            if (double.IsFinite(scale) && scale > 0)
+            {
+                return scale;
+            }
+        }
+
+        return ResolveScale();
     }
 
     private void OnPrimaryClicked()
@@ -347,6 +443,8 @@ internal sealed class RecordingControlWindow : Window
             AnnounceStatus();
             _recorder?.Dispose();
             _recorder = null;
+            _regionFrame.Visibility = Visibility.Visible;
+            Opacity = 1;
             return;
         }
 
@@ -359,6 +457,15 @@ internal sealed class RecordingControlWindow : Window
 
         // Make the region interior click-through so the recorded app stays usable.
         SetRegionClickThrough(true);
+        _regionFrame.Visibility = Visibility.Collapsed;
+        if (!_captureExclusionApplied && _paletteOverlapsRegion)
+        {
+            // Supported Windows 11 builds exclude the palette through display affinity. If that
+            // OS contract unexpectedly fails and no outside placement exists, hide the palette
+            // during capture rather than burn controls into the user's video. Ctrl+Shift+X still
+            // stops the recording.
+            Opacity = 0;
+        }
 
         _elapsedTimer = new DispatcherTimer(DispatcherPriority.Normal)
         {
@@ -382,6 +489,7 @@ internal sealed class RecordingControlWindow : Window
         }
 
         _stopping = true;
+        Opacity = 1;
         Stopping?.Invoke(this, EventArgs.Empty);
         _elapsedTimer?.Stop();
         _primaryButton.IsEnabled = false;
@@ -393,12 +501,14 @@ internal sealed class RecordingControlWindow : Window
         _ = Dispatcher.BeginInvoke(new Action(() =>
         {
             RecordingResult? result = null;
+            Exception? stopFailure = null;
             try
             {
                 result = _recorder!.Stop();
             }
             catch (Exception ex)
             {
+                stopFailure = ex;
                 _log.LogError(ex, "Stopping the recording failed");
             }
             finally
@@ -411,6 +521,13 @@ internal sealed class RecordingControlWindow : Window
             if (result is not null)
             {
                 RecordingFinished?.Invoke(this, result);
+            }
+            else
+            {
+                Failed?.Invoke(
+                    this,
+                    new RecordingFailedEventArgs(
+                        stopFailure ?? new InvalidOperationException("The recorder returned no completed clip.")));
             }
 
             Close();
@@ -476,13 +593,16 @@ internal sealed class RecordingControlWindow : Window
 
     private void NudgeRegion(double deltaX, double deltaY)
     {
-        double minLeft = SystemParameters.VirtualScreenLeft;
-        double minTop = SystemParameters.VirtualScreenTop;
-        double maxLeft = Math.Max(minLeft, minLeft + SystemParameters.VirtualScreenWidth - Width);
-        double maxTop = Math.Max(minTop, minTop + SystemParameters.VirtualScreenHeight - Height);
-
-        Left = Math.Clamp(Left + deltaX, minLeft, maxLeft);
-        Top = Math.Clamp(Top + deltaY, minTop, maxTop);
+        RectD virtualPixels = MonitorEnumerator.GetVirtualDesktopBounds();
+        _screenRegion = new RectD(
+                _screenRegion.Left + deltaX,
+                _screenRegion.Top + deltaY,
+                _screenRegion.Width,
+                _screenRegion.Height)
+            .ClampTo(virtualPixels)
+            .ToPixelBounds();
+        _statusText.Text = FormatReadyStatus();
+        ApplyPhysicalLayout(positionHwnd: true);
     }
 
     private void SetRegionClickThrough(bool enabled)
@@ -526,6 +646,8 @@ internal sealed class RecordingControlWindow : Window
     {
         KeyDown -= OnKeyDown;
         SourceInitialized -= OnSourceInitialized;
+        ContentRendered -= OnContentRendered;
+        DpiChanged -= OnDpiChanged;
         _countdownTimer?.Stop();
         _elapsedTimer?.Stop();
 
@@ -579,4 +701,83 @@ internal sealed class RecordingControlWindow : Window
 
     private static Style? TryStyle(string key) =>
         Application.Current?.TryFindResource(key) as Style;
+
+    private const uint WdaExcludeFromCapture = 0x00000011;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+}
+
+internal sealed class RecordingFailedEventArgs(Exception exception) : EventArgs
+{
+    internal Exception Exception { get; } = exception ?? throw new ArgumentNullException(nameof(exception));
+}
+
+internal readonly record struct RecordingControlLayout(
+    RectD WindowBounds,
+    RectD FrameBounds,
+    RectD PaletteBounds,
+    bool PaletteOverlapsRegion);
+
+/// <summary>
+/// Pure physical-pixel layout used by the recording controls. Keeping it independent from WPF
+/// makes negative origins, mixed-DPI scale factors and monitor-edge flipping deterministic tests.
+/// </summary>
+internal static class RecordingControlLayoutPlanner
+{
+    internal static RecordingControlLayout Plan(
+        RectD screenRegion,
+        RectD virtualDesktop,
+        double dpiScale,
+        double borderDip,
+        double stripHeightDip,
+        double minimumStripWidthDip)
+    {
+        RectD region = screenRegion.Normalized().ToPixelBounds();
+        RectD desktop = virtualDesktop.Normalized().ToPixelBounds();
+        double scale = double.IsFinite(dpiScale) && dpiScale > 0 ? dpiScale : 1.0;
+        double borderPx = Math.Max(0, borderDip) * scale;
+        double stripHeightPx = Math.Max(1, stripHeightDip * scale);
+        RectD frame = region.Inflate(borderPx);
+
+        double stripWidthPx = Math.Min(
+            desktop.Width,
+            Math.Max(frame.Width, Math.Max(1, minimumStripWidthDip * scale)));
+        double stripLeft = Math.Clamp(
+            region.Center.X - (stripWidthPx / 2),
+            desktop.Left,
+            Math.Max(desktop.Left, desktop.Right - stripWidthPx));
+
+        double below = frame.Bottom;
+        double above = frame.Top - stripHeightPx;
+        double stripTop = below + stripHeightPx <= desktop.Bottom
+            ? below
+            : above >= desktop.Top
+                ? above
+                : Math.Clamp(
+                    frame.Top,
+                    desktop.Top,
+                    Math.Max(desktop.Top, desktop.Bottom - stripHeightPx));
+
+        var palette = new RectD(stripLeft, stripTop, stripWidthPx, stripHeightPx);
+        RectD window = Union(frame, palette);
+        return new RecordingControlLayout(
+            window,
+            frame,
+            palette,
+            RectanglesOverlap(palette, region));
+    }
+
+    private static RectD Union(RectD left, RectD right) => new(
+        Math.Min(left.Left, right.Left),
+        Math.Min(left.Top, right.Top),
+        Math.Max(left.Right, right.Right) - Math.Min(left.Left, right.Left),
+        Math.Max(left.Bottom, right.Bottom) - Math.Min(left.Top, right.Top));
+
+    private static bool RectanglesOverlap(RectD left, RectD right) =>
+        left.Left < right.Right
+        && left.Right > right.Left
+        && left.Top < right.Bottom
+        && left.Bottom > right.Top;
 }

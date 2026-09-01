@@ -13,7 +13,7 @@ namespace MyCapture.Core.Queue;
 /// </summary>
 internal sealed class CaptureIndexFile
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     public List<CaptureRecord> Records { get; set; } = [];
 }
@@ -152,7 +152,11 @@ public sealed class CaptureQueue
         {
             records = index.Records;
             HashSet<Guid> indexedIds = records.Select(record => record.Id).ToHashSet();
-            foreach (CaptureRecord recovered in RebuildFromDisk(pendingOnly: true))
+            // A v1 build did not understand video records and could rewrite index.json without
+            // them. On the first v2 load, merge every durable meta sidecar once; later v2 loads
+            // keep the fast pending-only startup path.
+            bool legacyIndex = index.SchemaVersion == 1;
+            foreach (CaptureRecord recovered in RebuildFromDisk(pendingOnly: !legacyIndex))
             {
                 if (indexedIds.Add(recovered.Id))
                 {
@@ -187,7 +191,10 @@ public sealed class CaptureQueue
                     return false;
                 }
 
-                return File.Exists(Path.Combine(directory, CaptureFileNames.Original));
+                string primaryFile = record.IsVideo
+                    ? CaptureFileNames.VideoSource
+                    : CaptureFileNames.Original;
+                return File.Exists(Path.Combine(directory, primaryFile));
             })
             .OrderByDescending(r => r.CreatedAt)
             .ToList();
@@ -660,7 +667,25 @@ public sealed class CaptureQueue
         try
         {
             index = JsonSerializer.Deserialize<CaptureIndexFile>(text, SerializerOptions);
-            return index is not null;
+            if (index is null
+                || index.SchemaVersion is not (1 or 2)
+                || index.Records is null)
+            {
+                index = null;
+                return false;
+            }
+
+            var ids = new HashSet<Guid>();
+            foreach (CaptureRecord? record in index.Records)
+            {
+                if (record is null || !IsValidIndexedRecord(record) || !ids.Add(record.Id))
+                {
+                    index = null;
+                    return false;
+                }
+            }
+
+            return true;
         }
         catch (JsonException)
         {
@@ -670,6 +695,49 @@ public sealed class CaptureQueue
         {
             return false;
         }
+    }
+
+    private static bool IsValidIndexedRecord(CaptureRecord record)
+    {
+        bool videoValuesValid = record.IsVideo
+            ? double.IsFinite(record.DurationMs)
+              && record.DurationMs > 0
+              && record.FrameRate is >= 1 and <= 120
+              && record.FrameCount > 0
+            : double.IsFinite(record.DurationMs)
+              && record.DurationMs >= 0
+              && record.FrameRate >= 0
+              && record.FrameCount >= 0;
+        return record.Id != Guid.Empty
+            && Enum.IsDefined(record.MediaKind)
+            && record.ContentRevision >= 0
+            && record.Width is >= 1 and <= 65_535
+            && record.Height is >= 1 and <= 65_535
+            && videoValuesValid
+            && double.IsFinite(record.DpiScale)
+            && record.DpiScale is > 0 and <= 16
+            && record.TotalBytes >= 0
+            && (record.OcrContentRevision is null || record.OcrContentRevision >= 0)
+            && record.SourceMonitor is not null
+            && record.SourceWindowTitle is not null
+            && record.Title is not null
+            && IsSafeRelativeDirectory(record.RelativeDirectory);
+    }
+
+    private static bool IsSafeRelativeDirectory(string? relativeDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(relativeDirectory)
+            || Path.IsPathRooted(relativeDirectory)
+            || relativeDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+        {
+            return false;
+        }
+
+        string[] segments = relativeDirectory.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length > 0
+            && segments.All(segment => segment is not "." and not "..");
     }
 
     /// <summary>
@@ -701,6 +769,8 @@ public sealed class CaptureQueue
             };
             sidecarFiles.AddRange(Directory.EnumerateFiles(
                 _paths.CapturesRoot, CaptureFileNames.OriginalPending, options));
+            sidecarFiles.AddRange(Directory.EnumerateFiles(
+                _paths.CapturesRoot, CaptureFileNames.VideoPending, options));
             if (!pendingOnly)
             {
                 sidecarFiles.AddRange(Directory.EnumerateFiles(

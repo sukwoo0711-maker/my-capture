@@ -72,7 +72,7 @@
                     BorderThickness="1"
                     CornerRadius="{StaticResource Radius.Lg}"
                     SnapsToDevicePixels="True"
-                    ToolTip="폴더나 바탕화면으로 드래그해 PNG 파일로 내보내기">
+                    ToolTip="{Binding ExportToolTip}">
                 <Grid Margin="9">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
@@ -93,11 +93,35 @@
                                    Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality"
                                    AutomationProperties.Name="{Binding AccessibleName}" />
-                            <TextBlock Text="이미지를 읽을 수 없음"
+                            <TextBlock Text="{Binding PreviewUnavailableText}"
                                        Style="{StaticResource Text.MutedBlock}"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
                                        Visibility="{Binding IsBroken, Converter={StaticResource BoolToVisibility}}" />
+
+                            <!-- Video records remain image-light in the grid: a generated first-frame
+                                 preview plus an unmistakable play affordance and exact duration. -->
+                            <Border Width="52" Height="52" CornerRadius="26"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Background="#B8000000"
+                                    BorderBrush="#88FFFFFF" BorderThickness="1"
+                                    IsHitTestVisible="False"
+                                    Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                <Path Data="M 20,14 L 20,38 L 39,26 Z"
+                                      Width="24" Height="24" Stretch="Uniform"
+                                      Fill="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+
+                            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                    Margin="8" Padding="7,3" CornerRadius="5"
+                                    Background="#D9000000"
+                                    IsHitTestVisible="False"
+                                    Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding DurationCaption}"
+                                           Foreground="White"
+                                           FontFamily="{StaticResource Font.Mono}"
+                                           FontSize="{StaticResource FontSize.Caption}" />
+                            </Border>
 
                             <StackPanel Orientation="Horizontal"
                                         HorizontalAlignment="Left" VerticalAlignment="Top"
@@ -154,7 +178,7 @@
                         </Grid.ColumnDefinitions>
 
                         <Button Grid.Column="0" Style="{StaticResource Button.Primary}"
-                                Content="편집" MinHeight="34"
+                                Content="{Binding ActionLabel}" MinHeight="34"
                                 ToolTip="다시 편집 (Enter)"
                                 AutomationProperties.Name="다시 편집"
                                 Click="OnEditClick" />
@@ -162,7 +186,8 @@
                         <Button Grid.Column="1" Style="{StaticResource Gallery.IconButton}"
                                 ToolTip="렌더링된 이미지 복사 (Ctrl+C)"
                                 AutomationProperties.Name="이미지 복사"
-                                Click="OnCopyClick">
+                                Click="OnCopyClick"
+                                Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
                             <Path Data="{StaticResource Icon.Copy}" Width="20" Height="20"
                                   Stretch="None"
                                   Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -185,7 +210,7 @@
 
                         <Button Grid.Column="3"
                                 Style="{StaticResource Gallery.IconButton}"
-                                ToolTip="더 보기 — 텍스트 인식, 삭제"
+                                ToolTip="더 보기 — 내보내기, 텍스트 인식, 삭제"
                                 AutomationProperties.Name="더 보기"
                                 Click="OnMoreClick">
                             <Path Data="{StaticResource Icon.More}" Width="20" Height="20"
@@ -206,6 +231,7 @@
                                               CommandParameter="{Binding}"
                                               AutomationProperties.Name="텍스트 인식 (OCR)"
                                               InputGestureText="T"
+                                              Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
                                               Click="OnOcrMenuClick">
                                         <MenuItem.Icon>
                                             <Path Data="{StaticResource Icon.Ocr}" Width="18" Height="18"
@@ -216,6 +242,12 @@
                                                   StrokeLineJoin="Round" Fill="Transparent" />
                                         </MenuItem.Icon>
                                     </MenuItem>
+                                    <MenuItem Header="GIF로 내보내기"
+                                              CommandParameter="{Binding}"
+                                              AutomationProperties.Name="GIF로 내보내기"
+                                              InputGestureText="G"
+                                              Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
+                                              Click="OnGifMenuClick" />
                                     <Separator />
                                     <MenuItem Header="삭제"
                                               CommandParameter="{Binding}"

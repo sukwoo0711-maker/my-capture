@@ -69,6 +69,44 @@ public readonly record struct OcrRect(double X, double Y, double Width, double H
         return new OcrRect(X / scale, Y / scale, Width / scale, Height / scale);
     }
 
+    /// <summary>
+    /// Maps a rectangle reported against an image rotated clockwise back into the original
+    /// image's coordinate system. The result is clamped to the original image bounds.
+    /// </summary>
+    public OcrRect MapFromClockwiseRotation(
+        int clockwiseDegrees,
+        int originalWidth,
+        int originalHeight)
+    {
+        if (originalWidth <= 0 || originalHeight <= 0)
+        {
+            return this;
+        }
+
+        int normalizedDegrees = ((clockwiseDegrees % 360) + 360) % 360;
+        OcrRect mapped = normalizedDegrees switch
+        {
+            0 => this,
+            90 => new OcrRect(Y, originalHeight - Right, Height, Width),
+            180 => new OcrRect(
+                originalWidth - Right,
+                originalHeight - Bottom,
+                Width,
+                Height),
+            270 => new OcrRect(originalWidth - Bottom, X, Height, Width),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(clockwiseDegrees),
+                clockwiseDegrees,
+                "Only right-angle rotations are supported."),
+        };
+
+        double left = Math.Clamp(mapped.X, 0, originalWidth);
+        double top = Math.Clamp(mapped.Y, 0, originalHeight);
+        double right = Math.Clamp(mapped.Right, 0, originalWidth);
+        double bottom = Math.Clamp(mapped.Bottom, 0, originalHeight);
+        return new OcrRect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+    }
+
     /// <summary>The smallest rectangle containing both operands; empty ignores the other.</summary>
     public static OcrRect Union(OcrRect a, OcrRect b)
     {
