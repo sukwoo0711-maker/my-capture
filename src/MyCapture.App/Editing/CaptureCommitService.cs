@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
@@ -66,6 +67,40 @@ internal sealed class CaptureCommitService
 
     internal CaptureEditSession BeginEditSession(CaptureRecord record) =>
         new(record, _persistence.AcquireEditLease(record.Id));
+
+    /// <summary>
+    /// Copies the untouched pixels produced by the explicit free-region capture command.
+    /// This path is deliberately independent of quick-save preferences and editor actions:
+    /// once the user releases the capture drag, the image is offered to the shared exact-PNG
+    /// clipboard writer even if the editor is later cancelled or committed with Done.
+    /// </summary>
+    internal async Task<bool> CopyCapturedRegionAsync(BitmapSource capturedBitmap)
+    {
+        ArgumentNullException.ThrowIfNull(capturedBitmap);
+
+        try
+        {
+            bool copied = await _copyImageAsync(capturedBitmap);
+            if (!copied)
+            {
+                _log.LogWarning("Automatic captured-region clipboard copy failed");
+            }
+
+            return copied;
+        }
+        catch (Exception ex) when (ex is IOException
+                                   or COMException
+                                   or ExternalException
+                                   or InvalidOperationException
+                                   or NotSupportedException
+                                   or ArgumentException)
+        {
+            // Persistence and clipboard integration are deliberately separate at the caller.
+            // A clipboard fault must never turn a successful capture into a failed or missing one.
+            _log.LogWarning(ex, "Automatic captured-region clipboard copy threw");
+            return false;
+        }
+    }
 
     /// <summary>
     /// Runs the commit for <paramref name="record"/> against <paramref name="result"/>.

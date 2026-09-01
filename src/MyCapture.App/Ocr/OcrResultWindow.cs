@@ -166,6 +166,9 @@ internal sealed class OcrResultWindow : Window
     /// <summary>Raised when the user asks to run recognition again.</summary>
     internal event EventHandler? RerunRequested;
 
+    /// <summary>Raised when the user dismisses the reusable window with Esc or the close button.</summary>
+    internal event EventHandler? Dismissed;
+
     /// <summary>Populates the window from a result and shows/activates it.</summary>
     internal void ShowResult(OcrResult result, string contextLabel)
     {
@@ -287,6 +290,7 @@ internal sealed class OcrResultWindow : Window
         {
             e.Cancel = true;
             Hide();
+            Dismissed?.Invoke(this, EventArgs.Empty);
             return;
         }
 

@@ -85,7 +85,9 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
         try
         {
             Guid hwKey = MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS;
-            attributes.SetUINT32(ref hwKey, 1);
+            Check(
+                attributes.SetUINT32(ref hwKey, 1),
+                "IMFAttributes.SetUINT32(hardware transforms)");
 
             Check(
                 MFCreateSinkWriterFromURL(_options.OutputPath, IntPtr.Zero, attributes, out _writer),
@@ -151,7 +153,7 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
         Check(MFCreateMemoryBuffer((uint)bufferBytes, out IMFMediaBuffer buffer), nameof(MFCreateMemoryBuffer));
         try
         {
-            buffer.Lock(out IntPtr dest, out _, out _);
+            Check(buffer.Lock(out IntPtr dest, out _, out _), nameof(IMFMediaBuffer.Lock));
             try
             {
                 // Our grabber produces a TOP-DOWN BGRA frame (row 0 = top of the screen).
@@ -170,19 +172,19 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             }
             finally
             {
-                buffer.Unlock();
+                Check(buffer.Unlock(), nameof(IMFMediaBuffer.Unlock));
             }
 
-            buffer.SetCurrentLength((uint)bufferBytes);
+            Check(buffer.SetCurrentLength((uint)bufferBytes), nameof(IMFMediaBuffer.SetCurrentLength));
 
             Check(MFCreateSample(out IMFSample sample), nameof(MFCreateSample));
             try
             {
-                sample.AddBuffer(buffer);
+                Check(sample.AddBuffer(buffer), nameof(IMFSample.AddBuffer));
 
                 long timeTicks = (long)(frame.TimestampMs * 10_000.0);
-                sample.SetSampleTime(timeTicks);
-                sample.SetSampleDuration(_sampleDurationTicks);
+                Check(sample.SetSampleTime(timeTicks), nameof(IMFSample.SetSampleTime));
+                Check(sample.SetSampleDuration(_sampleDurationTicks), nameof(IMFSample.SetSampleDuration));
 
                 Check(_writer.WriteSample(_streamIndex, sample), nameof(IMFSinkWriter.WriteSample));
             }
@@ -212,27 +214,27 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     {
         Guid k = key;
         Guid v = value;
-        type.SetGUID(ref k, ref v);
+        Check(type.SetGUID(ref k, ref v), "IMFMediaType.SetGUID");
     }
 
     private static void SetU32(IMFMediaType type, Guid key, uint value)
     {
         Guid k = key;
-        type.SetUINT32(ref k, value);
+        Check(type.SetUINT32(ref k, value), "IMFMediaType.SetUINT32");
     }
 
     private static void SetFrameSize(IMFMediaType type, uint width, uint height)
     {
         Guid k = MF_MT_FRAME_SIZE;
         ulong packed = ((ulong)width << 32) | height;
-        type.SetUINT64(ref k, packed);
+        Check(type.SetUINT64(ref k, packed), "IMFMediaType.SetUINT64(frame size)");
     }
 
     private static void SetRatio(IMFMediaType type, Guid key, uint numerator, uint denominator)
     {
         Guid k = key;
         ulong packed = ((ulong)numerator << 32) | denominator;
-        type.SetUINT64(ref k, packed);
+        Check(type.SetUINT64(ref k, packed), "IMFMediaType.SetUINT64(ratio)");
     }
 
     private void SafeShutdown()

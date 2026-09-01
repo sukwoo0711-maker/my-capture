@@ -53,6 +53,7 @@ public partial class App : Application
     private CaptureQueue? _queue;
     private CapturePersistenceService? _persistence;
     private CaptureCommitService? _commit;
+    private MyCapture.App.Recording.VideoLibraryService? _videoLibrary;
     private AppPaths? _capturePaths;
     private GalleryController? _galleryController;
     private GalleryReeditLoader? _reeditLoader;
@@ -218,7 +219,8 @@ public partial class App : Application
             _services.GetRequiredService<ScreenCaptureEngine>(),
             _capturePaths ?? _services.GetRequiredService<AppPaths>(),
             () => _settings!.Recording,
-            _services.GetRequiredService<ILoggerFactory>());
+            _services.GetRequiredService<ILoggerFactory>(),
+            _videoLibrary ?? throw new InvalidOperationException("Video library is unavailable."));
         _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         _recorder.SessionEnded += (_, _) => RestoreTrayAfterCapture();
@@ -647,6 +649,13 @@ public partial class App : Application
             return;
         }
 
+        // Start the exact-PNG clipboard work as soon as the explicit region is frozen. It is
+        // safe to run beside persistence because SelectedBitmap is frozen, and awaiting both
+        // below keeps transition latency near the slower operation instead of their sum.
+        Task<bool>? automaticClipboardCopy = e.CopyToClipboardImmediately && _commit is not null
+            ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap)
+            : null;
+
         try
         {
             _currentRecord = await _persistence.PersistOriginalAsync(
@@ -667,13 +676,19 @@ public partial class App : Application
                     e.BitmapRegion.Width,
                     e.BitmapRegion.Height)
                     .ToPixelBounds();
-                MonitorInfo monitor = e.Frame.Monitor
-                    ?? MonitorEnumerator.GetFromPoint(screenRegion.Center);
-                _lastRegions.Record(new RegionHistoryEntry(
-                    screenRegion,
-                    monitor.DeviceName,
-                    monitor.Bounds,
-                    monitor.Dpi));
+                MonitorInfo? monitor = e.Frame.Monitor
+                    ?? MonitorEnumerator.GetAll().FirstOrDefault(candidate =>
+                        screenRegion.Left >= candidate.Bounds.Left
+                        && screenRegion.Top >= candidate.Bounds.Top
+                        && screenRegion.Right <= candidate.Bounds.Right
+                        && screenRegion.Bottom <= candidate.Bounds.Bottom);
+                _lastRegions.Record(monitor is null
+                    ? RegionHistoryEntry.Legacy(screenRegion)
+                    : new RegionHistoryEntry(
+                        screenRegion,
+                        monitor.DeviceName,
+                        monitor.Bounds,
+                        monitor.Dpi));
             }
 
             _tray?.SetCaptureCount(_queue?.Count ?? 0);
@@ -688,6 +703,47 @@ public partial class App : Application
                 "캡처를 저장할 수 없습니다",
                 ex.Message,
                 TrayBalloonKind.Error);
+        }
+
+        // Copy the untouched explicit-region selection now, before the editor can be cancelled
+        // or committed with any action, and do not consult the quick-save clipboard preference.
+        // Advanced capture modes opt out when they synthesize their editor selection.
+        if (e.CopyToClipboardImmediately)
+        {
+            bool copied = false;
+            try
+            {
+                copied = automaticClipboardCopy is not null
+                         && await automaticClipboardCopy;
+            }
+            catch (Exception ex)
+            {
+                // The shared clipboard service normally converts OLE/encoding failures to a
+                // false result. Keep this final boundary so an unexpected integration failure
+                // still cannot unwind the already durable capture or suppress the editor.
+                _log?.LogWarning(ex, "Automatic region-capture clipboard copy failed unexpectedly");
+            }
+
+            if (!copied)
+            {
+                string message = _currentRecord is null
+                    ? "영역 캡처는 완료했지만 클립보드에 복사하지 못했습니다. 편집기에서 Ctrl+C로 다시 시도해 주세요."
+                    : "캡처는 기록에 저장했지만 클립보드에 복사하지 못했습니다. 편집기에서 Ctrl+C로 다시 시도해 주세요.";
+                try
+                {
+                    _tray?.ShowBalloon(
+                        "클립보드 복사 실패",
+                        message,
+                        TrayBalloonKind.Warning,
+                        playSound: false);
+                }
+                catch (Exception ex)
+                {
+                    // A shell-notification failure must not suppress the editor after the
+                    // durable capture and clipboard attempt have already completed.
+                    _log?.LogWarning(ex, "Could not show automatic clipboard failure notification");
+                }
+            }
         }
     }
 
@@ -889,6 +945,19 @@ public partial class App : Application
             () => _settings!,
             () => paths,
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
+        _videoLibrary = new MyCapture.App.Recording.VideoLibraryService(
+            queue,
+            paths,
+            _services.GetRequiredService<ILogger<MyCapture.App.Recording.VideoLibraryService>>());
+        _videoLibrary.VideoAdded += (_, _) =>
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                _tray?.SetCaptureCount(_queue?.Count ?? 0);
+                _galleryWindow?.RefreshFromQueue();
+            }));
+        _videoLibrary.VideoUpdated += (_, record) =>
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                _galleryWindow?.RefreshFromQueue(record.Id)));
 
         _galleryController = new GalleryController(
             queue,
@@ -1003,6 +1072,7 @@ public partial class App : Application
             || _galleryController is null
             || _reeditLoader is null
             || _commit is null
+            || _videoLibrary is null
             || _ocrPresenter is null
             || _settings is null)
         {
@@ -1029,6 +1099,9 @@ public partial class App : Application
             _reeditLoader,
             _commit,
             _queue,
+            _videoLibrary,
+            paths,
+            _services.GetRequiredService<ILoggerFactory>(),
             _ocrPresenter!,
             () => _settings!.Ocr,
             ocrIndexing,

@@ -6,12 +6,14 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 갤러리, 영역 �
 
 ## 주요 기능
 
-- 자유 영역, 창, 전체 화면, 지연 및 스크롤 캡처
+- 모니터 경계를 하나의 가상 데스크톱처럼 넘나드는 자유 영역 캡처·녹화와 창, 전체 화면, 지연 및 스크롤 캡처
 - 사각형, 화살표, 연필, 텍스트, 이미지 삽입과 실행 취소/다시 실행을 제공하는 비파괴 주석 편집
 - 클립보드 이미지를 항상 위에 보이는 창으로 고정하고 확대, 투명도, 클릭 통과, 복사, OCR 수행
 - 고정한 원본 이미지를 우클릭 메뉴 또는 `Ctrl+S`로 빠르게 PNG 저장하고, `Ctrl+Shift+S`로 저장 위치 선택
-- Windows 로컬 OCR을 이용한 한국어·영어 텍스트 인식과 캡처 갤러리 검색
-- 영역 MP4 녹화, 구간 자르기, 프레임 탐색 및 프레임을 이미지 편집기로 보내기
+- Windows 로컬 OCR을 이용한 한국어·영어 혼합 텍스트, 작은 글자와 회전 이미지 인식 및 캡처 갤러리 검색
+- 이미지와 MP4를 함께 찾고 재생·편집할 수 있는 통합 갤러리
+- 영역 MP4 녹화, 구간 자르기, 프레임 탐색, 시간 구간별 텍스트 메모 굽기 및 프레임을 이미지 편집기로 보내기
+- 최대 20초 구간을 10fps 애니메이션 GIF로 내보내며 짧은 텍스트 표시 경계도 10ms 단위로 보존
 - 캡처 수와 저장 용량을 함께 제한하는 로컬 큐, 썸네일, 빠른 저장 폴더 설정
 - 시스템 애니메이션 설정을 존중하는 짧고 일관된 전환과 키보드·스크린 리더 접근성
 
@@ -21,7 +23,7 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 갤러리, 영역 �
 
 | 동작 | 기본값 | 비고 |
 |---|---:|---|
-| 영역 캡처 | `Ctrl+Shift+C` | 놓으면 편집기로 이동 |
+| 영역 캡처 | `Ctrl+Shift+C` | 놓는 즉시 PNG를 클립보드에 복사하고 편집기로 이동 |
 | 영역 녹화 시작/중지 | `Ctrl+Shift+X` | 같은 키로 녹화 종료 |
 | 클립보드 이미지를 화면에 고정 | `F3` | PNG를 우선 읽어 투명도 보존 |
 | 모든 고정 이미지 숨기기/표시 | `Shift+F3` | 일괄 전환 |
@@ -108,4 +110,4 @@ MyCapture 자체 코드는 [MIT License](LICENSE)로 공개됩니다. 배포 패
 
 ---
 
-**English summary:** MyCapture is a Windows 11 screenshot, pin, local OCR, gallery, annotation, and region-recording app. Release binaries are self-contained and work without a preinstalled .NET runtime; building from source requires the .NET 10 SDK specified in `global.json`. The current UI is Korean-first, recording has no audio, and distributed binaries are not Authenticode-signed.
+**English summary:** MyCapture is a Windows 11 screenshot, pin, enhanced local OCR, unified image/video gallery, annotation, cross-monitor region-recording, timed-text video editing, and GIF-export app. Release binaries are self-contained and work without a preinstalled .NET runtime; building from source requires the .NET 10 SDK specified in `global.json`. The current UI is Korean-first, recording has no audio, and distributed binaries are not Authenticode-signed.

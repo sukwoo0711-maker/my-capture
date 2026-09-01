@@ -4,6 +4,7 @@ using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Undo;
+using System.Text.Json;
 using Xunit;
 
 namespace MyCapture.Core.Tests;
@@ -766,6 +767,43 @@ public sealed class CaptureQueueTests
 
         Assert.Equal(3, reloaded.Count);
         Assert.Equal(300, reloaded.TotalBytes);
+    }
+
+    [Fact]
+    public void Load_RejectsStructurallyInvalidPrimaryIndexAndUsesValidBackup()
+    {
+        using var workspace = new TempWorkspace();
+        CaptureQueue queue = CreateQueue(workspace);
+        CaptureRecord expected = AddCapture(queue, workspace, DateTimeOffset.Now, 100);
+        queue.Save();
+
+        // codeql[cs/path-injection] -- isolated TempWorkspace data root
+        string validIndex = File.ReadAllText(workspace.Paths.IndexFile);
+        string backup = workspace.Paths.IndexFile + Storage.AtomicFile.BackupSuffix;
+        using JsonDocument document = JsonDocument.Parse(validIndex);
+        string recordJson = document.RootElement
+            .GetProperty("records")[0]
+            .GetRawText();
+        string[] invalidPrimaryIndexes =
+        [
+            "{\"schemaVersion\":2,\"records\":null}",
+            "{\"schemaVersion\":2,\"records\":[null]}",
+            $"{{\"schemaVersion\":2,\"records\":[{recordJson},{recordJson}]}}",
+        ];
+
+        foreach (string invalidPrimary in invalidPrimaryIndexes)
+        {
+            // codeql[cs/path-injection] -- isolated TempWorkspace data root
+            File.WriteAllText(workspace.Paths.IndexFile, invalidPrimary);
+            // codeql[cs/path-injection] -- sibling backup inside the isolated data root
+            File.WriteAllText(backup, validIndex);
+
+            CaptureQueue reloaded = CreateQueue(workspace);
+            reloaded.Load();
+
+            CaptureRecord recovered = Assert.Single(reloaded.Records);
+            Assert.Equal(expected.Id, recovered.Id);
+        }
     }
 
     [Fact]

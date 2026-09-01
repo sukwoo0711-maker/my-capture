@@ -2,6 +2,16 @@ using System.Text.Json.Serialization;
 
 namespace MyCapture.Core.Queue;
 
+/// <summary>The durable media carried by a gallery record.</summary>
+public enum CaptureMediaKind
+{
+    /// <summary>A still image with an editable annotation document.</summary>
+    Image = 0,
+
+    /// <summary>An MP4 screen recording with an optional generated preview image.</summary>
+    Video = 1,
+}
+
 /// <summary>
 /// Metadata for one retained capture.
 /// </summary>
@@ -27,6 +37,12 @@ public sealed class CaptureRecord
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
 
     /// <summary>
+    /// Media stored by this record. The zero value deliberately remains <see cref="CaptureMediaKind.Image"/>
+    /// so indexes written before video-gallery support deserialize without migration.
+    /// </summary>
+    public CaptureMediaKind MediaKind { get; set; } = CaptureMediaKind.Image;
+
+    /// <summary>
     /// Monotonic revision of rendered pixels/layers/assets. Metadata-only changes such as pin,
     /// title, or cached OCR deliberately do not advance it, so they cannot invalidate an editor.
     /// </summary>
@@ -37,6 +53,15 @@ public sealed class CaptureRecord
 
     /// <summary>Pixel height of the captured image.</summary>
     public int Height { get; set; }
+
+    /// <summary>Duration of a video record in milliseconds; zero for still images.</summary>
+    public double DurationMs { get; set; }
+
+    /// <summary>Encoded video frame rate; zero for still images.</summary>
+    public int FrameRate { get; set; }
+
+    /// <summary>Number of video frames written; zero for still images.</summary>
+    public long FrameCount { get; set; }
 
     /// <summary>
     /// DPI scale of the monitor the capture came from, for example 1.5 at 150%.
@@ -112,6 +137,12 @@ public sealed class CaptureRecord
     public double AspectRatio => Height > 0 ? (double)Width / Height : 1.0;
 
     [JsonIgnore]
+    public bool IsVideo => MediaKind == CaptureMediaKind.Video;
+
+    [JsonIgnore]
+    public bool IsImage => MediaKind == CaptureMediaKind.Image;
+
+    [JsonIgnore]
     public bool HasOcrText => !string.IsNullOrWhiteSpace(OcrText);
 
     /// <summary>
@@ -127,7 +158,12 @@ public sealed class CaptureRecord
     /// </summary>
     [JsonIgnore]
     public string SearchHaystack =>
-        string.Join(' ', Title, SourceWindowTitle, OcrText ?? string.Empty);
+        string.Join(
+            ' ',
+            Title,
+            SourceWindowTitle,
+            OcrText ?? string.Empty,
+            IsVideo ? "동영상 비디오 video recording" : "이미지 스크린샷 image screenshot");
 }
 
 /// <summary>
@@ -154,6 +190,21 @@ public static class CaptureFileNames
 
     /// <summary>Per-capture metadata copy used to rebuild a lost index.</summary>
     public const string Meta = "meta.json";
+
+    /// <summary>Immutable original MP4 payload for a video gallery record.</summary>
+    public const string VideoSource = "source.mp4";
+
+    /// <summary>Current trim/text render. Falls back to <see cref="VideoSource"/> when absent.</summary>
+    public const string VideoRendered = "rendered.mp4";
+
+    /// <summary>Non-destructive trim and timed-text document.</summary>
+    public const string VideoEdits = "video-edits.json";
+
+    /// <summary>Durable marker written before a recording begins.</summary>
+    public const string VideoPending = ".video-pending.json";
+
+    /// <summary>Encoder output kept private until the MP4 is complete.</summary>
+    public const string VideoWriting = ".source-writing.mp4";
 
     /// <summary>
     /// Durable provisional record written before original pixels. It lets startup merge a

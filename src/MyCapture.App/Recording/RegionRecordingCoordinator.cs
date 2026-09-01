@@ -25,10 +25,13 @@ internal sealed class RegionRecordingCoordinator
     private readonly Func<RecordingSettings> _settings;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<RegionRecordingCoordinator> _log;
+    private readonly VideoLibraryService _videoLibrary;
 
     private CaptureOverlayWindow? _selectionOverlay;
     private RecordingControlWindow? _controls;
     private VideoEditorWindow? _editor;
+    private VideoCaptureWriteSession? _writeSession;
+    private VideoEditSession? _videoEditSession;
 
     // Set the moment a stop is requested and held until the editor has opened (or the
     // session has fully ended). Without it, a second Ctrl+Shift+X arriving during the
@@ -36,17 +39,20 @@ internal sealed class RegionRecordingCoordinator
     // editor not yet shown — would fall through to StartRegionSelection() and begin a NEW
     // recording from 0. This flag closes that race deterministically.
     private bool _finishing;
+    private bool _completionInProgress;
 
     internal RegionRecordingCoordinator(
         ScreenCaptureEngine captureEngine,
         AppPaths paths,
         Func<RecordingSettings> settings,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        VideoLibraryService videoLibrary)
     {
         _captureEngine = captureEngine ?? throw new ArgumentNullException(nameof(captureEngine));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _videoLibrary = videoLibrary ?? throw new ArgumentNullException(nameof(videoLibrary));
         _log = loggerFactory.CreateLogger<RegionRecordingCoordinator>();
     }
 
@@ -65,7 +71,12 @@ internal sealed class RegionRecordingCoordinator
     /// </summary>
     internal Func<FrameImageCommitSession>? FrameImageCommitHandlerFactory { get; set; }
 
-    internal bool IsActive => _selectionOverlay is not null || _controls is not null || _editor is not null || _finishing;
+    internal bool IsActive =>
+        _selectionOverlay is not null
+        || _controls is not null
+        || _editor is not null
+        || _writeSession is not null
+        || _finishing;
 
     /// <summary>
     /// Entry point for the Ctrl+Shift+X command. If a recording is already running,
@@ -117,8 +128,7 @@ internal sealed class RegionRecordingCoordinator
 
     private void StartRegionSelection()
     {
-        MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
-        FrozenFrame frame = _captureEngine.CaptureMonitor(monitor, includeCursor: false);
+        FrozenFrame frame = _captureEngine.CaptureVirtualDesktop(includeCursor: false);
 
         // Reuse the exact capture region selector. Recording selects an area the same
         // way capture does, so muscle memory transfers.
@@ -128,7 +138,10 @@ internal sealed class RegionRecordingCoordinator
         overlay.SelectionCancelled += OnSelectionCancelled;
         overlay.Closed += OnSelectionClosed;
 
-        _log.LogInformation("Recording region selector opened on {Device}", monitor.DeviceName);
+        _log.LogInformation(
+            "Recording region selector opened across virtual desktop ({Width}x{Height})",
+            frame.PixelWidth,
+            frame.PixelHeight);
         overlay.Show();
         _ = overlay.Activate();
     }
@@ -154,7 +167,7 @@ internal sealed class RegionRecordingCoordinator
 
     private void OnRegionChosen(object? sender, CaptureSelectionCompletedEventArgs e)
     {
-        // The overlay reports the region in bitmap space of the monitor frame; convert
+        // The overlay reports the region in bitmap space of the virtual-desktop frame; convert
         // back to virtual-desktop screen pixels the recorder captures from.
         RectD screenRegion = new(
             e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
@@ -167,36 +180,92 @@ internal sealed class RegionRecordingCoordinator
 
     private void OpenControls(RectD screenRegion)
     {
-        RecordingSettings settings = _settings();
-
-        RegionRecorder BuildRecorder()
+        RecordingControlWindow? controls = null;
+        try
         {
-            var grabber = new RegionFrameGrabber(_captureEngine, settings.IncludeCursor);
-            return new RegionRecorder(
-                grabber,
-                options => new MediaFoundationVideoEncoder(options, _loggerFactory.CreateLogger<MediaFoundationVideoEncoder>()),
-                _loggerFactory.CreateLogger<RegionRecorder>());
-        }
+            RecordingSettings settings = _settings();
+            _writeSession?.Dispose();
+            _writeSession = _videoLibrary.BeginCapture(settings.TargetFps);
 
-        var controls = new RecordingControlWindow(
-            screenRegion,
-            settings,
-            BuildRecorder,
-            () => NextOutputPath(),
-            _loggerFactory.CreateLogger<RecordingControlWindow>());
-        _controls = controls;
-        controls.RecordingFinished += OnRecordingFinished;
-        controls.Cancelled += OnControlsCancelled;
-        controls.Stopping += OnControlsStopping;
-        controls.Closed += OnControlsClosed;
-        controls.Show();
-        _ = controls.Activate();
+            RegionRecorder BuildRecorder()
+            {
+                var grabber = new RegionFrameGrabber(_captureEngine, settings.IncludeCursor);
+                return new RegionRecorder(
+                    grabber,
+                    options => new MediaFoundationVideoEncoder(
+                        options,
+                        _loggerFactory.CreateLogger<MediaFoundationVideoEncoder>()),
+                    _loggerFactory.CreateLogger<RegionRecorder>());
+            }
+
+            controls = new RecordingControlWindow(
+                screenRegion,
+                settings,
+                BuildRecorder,
+                () => _writeSession?.StagingOutputPath
+                      ?? throw new InvalidOperationException("The pending recording path is unavailable."),
+                _loggerFactory.CreateLogger<RecordingControlWindow>());
+            _controls = controls;
+            controls.RecordingFinished += OnRecordingFinished;
+            controls.Cancelled += OnControlsCancelled;
+            controls.Failed += OnControlsFailed;
+            controls.Stopping += OnControlsStopping;
+            controls.Closed += OnControlsClosed;
+            controls.Show();
+            _ = controls.Activate();
+        }
+        catch (Exception ex)
+        {
+            if (controls is not null)
+            {
+                controls.RecordingFinished -= OnRecordingFinished;
+                controls.Cancelled -= OnControlsCancelled;
+                controls.Failed -= OnControlsFailed;
+                controls.Stopping -= OnControlsStopping;
+                controls.Closed -= OnControlsClosed;
+                if (ReferenceEquals(_controls, controls))
+                {
+                    _controls = null;
+                }
+            }
+
+            _writeSession?.Dispose();
+            _writeSession = null;
+            _finishing = false;
+            _log.LogError(ex, "Could not open recording controls or allocate the pending video");
+            MessageBox.Show(
+                "녹화를 시작할 준비를 마치지 못했습니다. 저장 공간과 화면 녹화 설정을 확인해 주세요.\n\n" + ex.Message,
+                "MyCapture — 녹화 시작 실패",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            EndSessionIfIdle();
+        }
     }
 
     private void OnControlsStopping(object? sender, EventArgs e) => _finishing = true;
 
-    private void OnControlsCancelled(object? sender, EventArgs e) =>
+    private void OnControlsCancelled(object? sender, EventArgs e)
+    {
         _log.LogInformation("Recording cancelled before or during capture");
+        _writeSession?.Dispose();
+        _writeSession = null;
+        _completionInProgress = false;
+    }
+
+    private void OnControlsFailed(object? sender, RecordingFailedEventArgs e)
+    {
+        _log.LogError(e.Exception, "Recording stopped without a completed video");
+        _writeSession?.Dispose();
+        _writeSession = null;
+        _completionInProgress = false;
+        _finishing = false;
+        MessageBox.Show(
+            "녹화를 정상적으로 마무리하지 못했습니다. 완성되지 않은 임시 파일은 갤러리에 " +
+            "잘못 등록되지 않도록 정리했습니다.\n\n" + e.Exception.Message,
+            "MyCapture — 녹화 실패",
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
+    }
 
     private void OnControlsClosed(object? sender, EventArgs e)
     {
@@ -204,6 +273,7 @@ internal sealed class RegionRecordingCoordinator
         {
             controls.RecordingFinished -= OnRecordingFinished;
             controls.Cancelled -= OnControlsCancelled;
+            controls.Failed -= OnControlsFailed;
             controls.Stopping -= OnControlsStopping;
             controls.Closed -= OnControlsClosed;
             if (ReferenceEquals(_controls, controls))
@@ -212,16 +282,23 @@ internal sealed class RegionRecordingCoordinator
             }
         }
 
-        // By now either the editor has opened (OnRecordingFinished cleared _finishing and
-        // anchored the session on _editor) or the stop yielded no clip. Either way the
-        // control window is gone, so the transition is over — clear the guard so a stuck
-        // flag can never block future recordings.
-        _finishing = false;
+        if (_writeSession is not null && !_completionInProgress)
+        {
+            _writeSession.Dispose();
+            _writeSession = null;
+        }
+
+        // By now either async completion owns the pending session, the editor has opened, or the
+        // control ended without a clip and the session was aborted above.
+        if (_writeSession is null)
+        {
+            _finishing = false;
+        }
 
         EndSessionIfIdle();
     }
 
-    private void OnRecordingFinished(object? sender, RecordingResult result)
+    private async void OnRecordingFinished(object? sender, RecordingResult result)
     {
         _log.LogInformation(
             "Recording produced {Path} ({Frames}/{ExpectedFrames} frames, {Duration:0}ms, " +
@@ -233,16 +310,83 @@ internal sealed class RegionRecordingCoordinator
             result.DroppedFrames,
             result.EffectiveFps);
 
-        var editor = new VideoEditorWindow(result, _paths, _loggerFactory);
-        editor.FrameImageCommitHandlerFactory = FrameImageCommitHandlerFactory;
-        _editor = editor;
-        // The stop→finalise→editor transition is complete: the editor now anchors the
-        // session, so clear the finishing guard.
-        _finishing = false;
-        editor.FrameImageCaptured += OnFrameImageCaptured;
-        editor.Closed += OnEditorClosed;
-        editor.Show();
-        _ = editor.Activate();
+        VideoCaptureWriteSession? writeSession = _writeSession;
+        if (writeSession is null)
+        {
+            _log.LogError("Recording completed without a pending video-library session");
+            _completionInProgress = false;
+            _finishing = false;
+            EndSessionIfIdle();
+            return;
+        }
+
+        _finishing = true;
+        _completionInProgress = true;
+        VideoLibraryItem item;
+        try
+        {
+            item = await _videoLibrary.CompleteCaptureAsync(writeSession, result);
+            writeSession.Dispose();
+            _writeSession = null;
+            _completionInProgress = false;
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not persist completed recording in the gallery");
+            writeSession.Dispose();
+            _writeSession = null;
+            _completionInProgress = false;
+            _finishing = false;
+            MessageBox.Show(
+                "녹화 파일은 복구 표식과 함께 보존했지만 갤러리 등록을 완료하지 못했습니다. " +
+                "MyCapture를 다시 시작하면 복구를 시도합니다.\n\n" + ex.Message,
+                "MyCapture — 녹화 저장 실패",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            EndSessionIfIdle();
+            return;
+        }
+
+        try
+        {
+            VideoEditSession editSession = _videoLibrary.BeginEdit(item.Record);
+            _videoEditSession = editSession;
+            var editor = new VideoEditorWindow(item.Recording, _paths, _loggerFactory, item.EditDocument)
+            {
+                RenderStagingPathFactory = () => _videoLibrary.CreateRenderStagingPath(item.Record),
+                VideoCommitHandler = (document, stage, cancellationToken) =>
+                    _videoLibrary.CommitEditAsync(
+                        item.Record,
+                        editSession,
+                        document,
+                        stage,
+                        cancellationToken),
+            };
+            editor.FrameImageCommitHandlerFactory = FrameImageCommitHandlerFactory;
+            _editor = editor;
+            // The stop→finalise→editor transition is complete: the editor now anchors the
+            // session, so clear the finishing guard.
+            _finishing = false;
+            editor.FrameImageCaptured += OnFrameImageCaptured;
+            editor.Closed += OnEditorClosed;
+            editor.Show();
+            _ = editor.Activate();
+        }
+        catch (Exception ex)
+        {
+            _videoEditSession?.Dispose();
+            _videoEditSession = null;
+            _editor = null;
+            _finishing = false;
+            _log.LogError(ex, "The recording was saved, but its editor could not be opened");
+            MessageBox.Show(
+                "녹화는 갤러리에 안전하게 저장했지만 편집 창을 열지 못했습니다. " +
+                "갤러리에서 영상을 다시 열어 주세요.\n\n" + ex.Message,
+                "MyCapture — 편집기 열기 실패",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            EndSessionIfIdle();
+        }
     }
 
     private void OnFrameImageCaptured(object? sender, AnnotationFrameCapturedEventArgs e) =>
@@ -260,21 +404,10 @@ internal sealed class RegionRecordingCoordinator
             }
         }
 
+        _videoEditSession?.Dispose();
+        _videoEditSession = null;
+
         EndSessionIfIdle();
-    }
-
-    private string NextOutputPath()
-    {
-        string dir = Path.Combine(
-            _paths.CapturesRoot,
-            "recordings",
-            DateTimeOffset.Now.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture));
-        Directory.CreateDirectory(dir);
-
-        string name = "recording_" +
-            DateTimeOffset.Now.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture) +
-            ".mp4";
-        return Path.Combine(dir, name);
     }
 
     private void EndSessionIfIdle()

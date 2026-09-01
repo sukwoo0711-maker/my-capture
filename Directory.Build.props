@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!--
-      Windows 11 21H2 (build 22000) is the support floor for MyCapture 1.1.0. The TFM selects the
+      Windows 11 21H2 (build 22000) is the support floor for MyCapture 1.2.0. The TFM selects the
       Windows SDK projection surface (needed for Windows.Media.Ocr WinRT APIs) and
       SupportedOSPlatformVersion states the runtime floor; both must match
       MyCapture.Core WindowsSupportPolicy.MinimumBuild.
@@ -31,9 +31,9 @@
     <!-- The application and its implementation libraries are shipped together as the
          verified desktop bundle; none is an independently supported NuGet package. -->
     <IsPackable>false</IsPackable>
-    <Version>1.1.0</Version>
-    <FileVersion>1.1.0.0</FileVersion>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <Version>1.2.0</Version>
+    <FileVersion>1.2.0.0</FileVersion>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <Copyright>Copyright (c) 2026 MyCapture contributors</Copyright>
 
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

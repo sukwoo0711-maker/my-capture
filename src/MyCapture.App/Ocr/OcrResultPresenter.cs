@@ -48,6 +48,14 @@ internal sealed class OcrResultPresenter : IDisposable
 
         _window = new OcrResultWindow();
         _window.RerunRequested += (_, _) => Rerun();
+        _window.Dismissed += (_, _) =>
+        {
+            // Dismissing a busy reusable window is a real user cancellation, not merely a visual
+            // hide. Clearing ownership before signalling cancellation also prevents a late result
+            // from showing and activating the window again.
+            CancelInFlight();
+            _setBusy(false);
+        };
     }
 
     /// <summary>
@@ -63,6 +71,11 @@ internal sealed class OcrResultPresenter : IDisposable
         Func<OcrRequest> requestFactory,
         Action<OcrResult>? onFreshResult = null)
     {
+        // A cached result replaces the current request just as decisively as a new recognition.
+        // Clear ownership before changing callbacks so a late result from A can never be rendered
+        // under B's label or persisted through B's callback.
+        CancelInFlight();
+        _setBusy(false);
         _currentRequestFactory = requestFactory ?? throw new ArgumentNullException(nameof(requestFactory));
         _currentContext = contextLabel ?? string.Empty;
         _onFreshResult = onFreshResult;
@@ -111,6 +124,9 @@ internal sealed class OcrResultPresenter : IDisposable
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Could not build the OCR request");
+            // Run() may just have cancelled a previous owner. Its late completion is intentionally
+            // ignored, so this boundary must release the tray busy state itself.
+            _setBusy(false);
             _window.ShowResult(OcrResult.Failed("이미지를 준비할 수 없습니다."), _currentContext);
             return;
         }

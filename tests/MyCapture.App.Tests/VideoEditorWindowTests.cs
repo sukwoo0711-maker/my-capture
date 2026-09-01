@@ -101,8 +101,8 @@ public sealed class VideoEditorWindowTests
             Assert.Equal(9, timeline.FixedVisualCountForTest);
             Assert.Equal(2, editor.ControlRowCountForTest);
             Assert.True(
-                editor.WidestControlRowWidthForTest <= editor.ControlAreaWidthForTest + 0.5,
-                $"two-row controls overflowed: desired={editor.WidestControlRowWidthForTest:0.0}, available={editor.ControlAreaWidthForTest:0.0}");
+                editor.WidestControlRowContentWidthForTest <= editor.ControlAreaWidthForTest + 0.5,
+                $"two-row controls overflowed: content={editor.WidestControlRowContentWidthForTest:0.0}, available={editor.ControlAreaWidthForTest:0.0}");
             Assert.Equal(0, timeline.ViewStartMs, precision: 1);
             Assert.True(timeline.VisibleSpanMs <= timeline.CoarseIntervalMs + 0.001);
             Assert.Contains("시작", timeline.DetailRangeText, StringComparison.Ordinal);

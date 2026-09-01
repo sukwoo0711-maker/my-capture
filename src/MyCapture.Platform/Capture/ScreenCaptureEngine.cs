@@ -137,9 +137,9 @@ public sealed class ScreenCaptureEngine
     /// Captures every display as one bitmap.
     /// </summary>
     /// <remarks>
-    /// Used by the pin and scrolling features. Region selection uses per-monitor
-    /// frames instead, because a single virtual-desktop bitmap cannot represent two
-    /// monitors at different scale factors without resampling one of them.
+    /// Used by free-region selection, recording, pin and scrolling features. The bitmap is a
+    /// physical-pixel plane, so mixed-DPI monitors remain unscaled and a selection can cross
+    /// their boundary without being split or clipped.
     /// </remarks>
     public FrozenFrame CaptureVirtualDesktop(bool includeCursor)
     {
