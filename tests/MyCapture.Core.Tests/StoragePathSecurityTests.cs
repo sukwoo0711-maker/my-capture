@@ -102,15 +102,24 @@ public sealed class StoragePathSecurityTests
         {
             // Unprivileged symbolic links are commonly disabled on managed Windows machines;
             // directory junctions exercise the same reparse-point boundary without elevation.
-            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            var startInfo = new System.Diagnostics.ProcessStartInfo
             {
-                FileName = "cmd.exe",
-                Arguments = $"/d /c mklink /J \"{link}\" \"{outside}\"",
+                FileName = "powershell.exe",
                 CreateNoWindow = true,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-            });
+            };
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-NonInteractive");
+            startInfo.ArgumentList.Add("-Command");
+            startInfo.ArgumentList.Add(
+                "New-Item -ItemType Junction -Path $env:MYCAPTURE_TEST_LINK_PATH " +
+                "-Target $env:MYCAPTURE_TEST_TARGET_PATH | Out-Null");
+            startInfo.Environment["MYCAPTURE_TEST_LINK_PATH"] = link;
+            startInfo.Environment["MYCAPTURE_TEST_TARGET_PATH"] = outside;
+
+            using var process = System.Diagnostics.Process.Start(startInfo);
             Assert.NotNull(process);
             string standardOutput = process!.StandardOutput.ReadToEnd();
             string standardError = process.StandardError.ReadToEnd();

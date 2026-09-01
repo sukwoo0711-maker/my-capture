@@ -11,6 +11,7 @@ using MyCapture.App.Gallery;
 using MyCapture.App.Ocr;
 using MyCapture.App.Pinning;
 using MyCapture.App.Settings;
+using MyCapture.Core.Diagnostics;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Settings;
@@ -911,7 +912,9 @@ public partial class App : Application
             {
                 Directory.Delete(directory, recursive: true);
                 _log?.LogInformation(
-                    "Deleted evicted capture directory {Directory} ({Reason})", directory, e.Reason);
+                    "Deleted evicted capture directory {Directory} ({Reason})",
+                    LogText.SingleLine(directory),
+                    e.Reason);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -919,7 +922,10 @@ public partial class App : Application
             // Losing the index entry is what enforces the cap; reclaiming the bytes can wait.
             // The orphaned directory is harmless — it is not re-indexed on a normal load — and
             // can be cleaned up by a later maintenance pass.
-            _log?.LogWarning(ex, "Could not delete evicted capture directory {Directory}", directory);
+            _log?.LogWarning(
+                ex,
+                "Could not delete evicted capture directory {Directory}",
+                LogText.SingleLine(directory));
         }
     }
 
