@@ -107,7 +107,7 @@ internal sealed class PinWindow : Window
             Padding = new Thickness(10, 5, 10, 5),
             Foreground = Application.Current?.TryFindResource("Text.Primary") as Brush ?? Brushes.White,
             Background = Application.Current?.TryFindResource("Surface.Floating") as Brush
-                ?? new SolidColorBrush(Color.FromArgb(0xE8, 0x2A, 0x24, 0x1C)),
+                ?? new SolidColorBrush(Color.FromArgb(0xE8, 0x15, 0x1E, 0x2B)),
             FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             Visibility = Visibility.Collapsed,
@@ -363,8 +363,8 @@ internal sealed class PinWindow : Window
         }
 
         return hovering
-            ? Color.FromArgb(0xFF, 0xFF, 0xE1, 0x4D)
-            : Color.FromArgb(0xFF, 0x40, 0x38, 0x2C);
+            ? Color.FromArgb(0xFF, 0x7D, 0xD7, 0xF8)
+            : Color.FromArgb(0xFF, 0x2B, 0x3A, 0x50);
     }
 
     // ----- Mouse: drag to move, wheel to zoom, Ctrl+wheel opacity -----

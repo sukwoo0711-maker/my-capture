@@ -126,18 +126,18 @@ public sealed class SettingsStore
     /// </summary>
     private static void Sanitize(AppSettings s, List<string> warnings)
     {
-        if (s.SchemaVersion < 2)
+        if (s.SchemaVersion < 3)
         {
-            var legacyRecordingHotkey = new Hotkey(
-                HotkeyModifiers.Control | HotkeyModifiers.Shift,
-                Hotkey.VkX);
-            if (s.Hotkeys.RecordRegion == legacyRecordingHotkey)
+            var previousRecordingHotkey = new Hotkey(HotkeyModifiers.Control, Hotkey.VkX);
+            if (s.Hotkeys.RecordRegion == previousRecordingHotkey)
             {
-                s.Hotkeys.RecordRegion = new Hotkey(HotkeyModifiers.Control, Hotkey.VkX);
-                warnings.Add("녹화 단축키 기본값을 Ctrl+X로 변경했습니다.");
+                s.Hotkeys.RecordRegion = new Hotkey(
+                    HotkeyModifiers.Control | HotkeyModifiers.Shift,
+                    Hotkey.VkX);
+                warnings.Add("녹화 단축키 기본값을 Ctrl+Shift+X로 변경했습니다.");
             }
 
-            s.SchemaVersion = 2;
+            s.SchemaVersion = 3;
         }
 
         // --- Queue ---

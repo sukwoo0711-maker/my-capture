@@ -16,21 +16,23 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Recording feature wiring that must hold regardless of the machine: the Ctrl+X
+/// Recording feature wiring that must hold regardless of the machine: the Ctrl+Shift+X
 /// default, the settings graph, the derived bitrate, the encoder contract exercised
 /// through a fake, and the recorder's start/stop guards.
 /// </summary>
 public sealed class RecordingFeatureTests
 {
     [Fact]
-    public void RecordRegionHotkey_DefaultsToCtrlX()
+    public void RecordRegionHotkey_DefaultsToCtrlShiftX()
     {
         var settings = new HotkeySettings();
 
         Assert.True(settings.RecordRegion.IsAssigned);
-        Assert.Equal(HotkeyModifiers.Control, settings.RecordRegion.Modifiers);
+        Assert.Equal(
+            HotkeyModifiers.Control | HotkeyModifiers.Shift,
+            settings.RecordRegion.Modifiers);
         Assert.Equal(Hotkey.VkX, settings.RecordRegion.VirtualKey);
-        Assert.Equal("Ctrl+X", settings.RecordRegion.ToString());
+        Assert.Equal("Ctrl+Shift+X", settings.RecordRegion.ToString());
     }
 
     [Fact]
@@ -44,6 +46,25 @@ public sealed class RecordingFeatureTests
         Assert.Equal(Hotkey.VkZ, settings.OpenLibrary.VirtualKey);
         Assert.Equal("Ctrl+Shift+Z", settings.OpenLibrary.ToString());
         Assert.Contains(GlobalHotkeyCommand.OpenLibrary, Enum.GetValues<GlobalHotkeyCommand>());
+    }
+
+    [Fact]
+    public void PrimaryWorkflowHotkeys_ShareCtrlShiftModifierFamily()
+    {
+        var settings = new HotkeySettings();
+        const HotkeyModifiers primaryModifiers =
+            HotkeyModifiers.Control | HotkeyModifiers.Shift;
+
+        Assert.Equal(primaryModifiers, settings.Capture.Modifiers);
+        Assert.Equal(primaryModifiers, settings.RecordRegion.Modifiers);
+        Assert.Equal(primaryModifiers, settings.OpenLibrary.Modifiers);
+        Assert.Equal([Hotkey.VkC, Hotkey.VkX, Hotkey.VkZ],
+            new[]
+            {
+                settings.Capture.VirtualKey,
+                settings.RecordRegion.VirtualKey,
+                settings.OpenLibrary.VirtualKey,
+            });
     }
 
     [Fact]

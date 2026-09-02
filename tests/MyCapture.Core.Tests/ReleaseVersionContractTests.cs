@@ -6,7 +6,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Keeps the 1.4.0 GA version and its Windows binary version aligned across MSBuild, packaging
+/// Keeps the 1.5.0 GA version and its Windows binary version aligned across MSBuild, packaging
 /// and installer validation.
 /// </summary>
 public sealed class ReleaseVersionContractTests
@@ -34,19 +34,19 @@ public sealed class ReleaseVersionContractTests
         Path.Combine(RepositoryRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));
 
     [Fact]
-    public void BuildDefaults_AreTheStableOnePointFourBinaryVersion()
+    public void BuildDefaults_AreTheStableOnePointFiveBinaryVersion()
     {
         XDocument props = XDocument.Parse(Read("Directory.Build.props"));
         XDocument manifest = XDocument.Parse(Read("src/MyCapture.App/app.manifest"));
 
-        Assert.Equal("1.4.0", Assert.Single(props.Descendants("Version")).Value);
-        Assert.Equal("1.4.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
-        Assert.Equal("1.4.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
+        Assert.Equal("1.5.0", Assert.Single(props.Descendants("Version")).Value);
+        Assert.Equal("1.5.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
+        Assert.Equal("1.5.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
 
         XElement identity = Assert.Single(
             manifest.Descendants(),
             element => element.Name.LocalName == "assemblyIdentity");
-        Assert.Equal("1.4.0.0", identity.Attribute("version")?.Value);
+        Assert.Equal("1.5.0.0", identity.Attribute("version")?.Value);
     }
 
     [Fact]
@@ -58,10 +58,10 @@ public sealed class ReleaseVersionContractTests
 
         // The shipping default is the GA version. A release candidate must never be the default
         // again, otherwise an operator who forgets -Version publishes a prerelease by accident.
-        Assert.Contains("[string]$Version = '1.4.0'", package, StringComparison.Ordinal);
-        Assert.Contains("[string]$Version = '1.4.0',", hostile, StringComparison.Ordinal);
-        Assert.DoesNotContain("$Version = '1.4.0-rc.1'", package, StringComparison.Ordinal);
-        Assert.DoesNotContain("$Version = '1.4.0-rc.1'", hostile, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '1.5.0'", package, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '1.5.0',", hostile, StringComparison.Ordinal);
+        Assert.DoesNotContain("$Version = '1.5.0-rc.1'", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("$Version = '1.5.0-rc.1'", hostile, StringComparison.Ordinal);
 
         // A prerelease must still parse, so a future RC needs no script edit. The Windows binary
         // version stays numeric because Win32 version resources cannot carry a prerelease label.
@@ -110,6 +110,52 @@ public sealed class ReleaseVersionContractTests
         Assert.Contains("Microsoft.Extensions.DependencyInjection 10.0.11", notices, StringComparison.Ordinal);
         Assert.Contains("xUnit.net 2.9.3", notices, StringComparison.Ordinal);
         Assert.Contains("does not bundle FFmpeg", notices, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BrandIcons_ShipEveryWindowsAndTrayResolution()
+    {
+        int[] expectedSizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
+        string assets = Path.Combine(RepositoryRoot(), "src", "MyCapture.App", "Assets");
+
+        foreach (string fileName in new[]
+                 {
+                     "app.ico",
+                     "tray-idle.ico",
+                     "tray-capturing.ico",
+                     "tray-busy.ico",
+                     "tray-error.ico",
+                 })
+        {
+            byte[] bytes = File.ReadAllBytes(Path.Combine(assets, fileName));
+            Assert.True(bytes.Length > 6, $"{fileName} is not a complete ICO file.");
+            Assert.Equal((ushort)0, BitConverter.ToUInt16(bytes, 0));
+            Assert.Equal((ushort)1, BitConverter.ToUInt16(bytes, 2));
+            int count = BitConverter.ToUInt16(bytes, 4);
+            Assert.Equal(expectedSizes.Length, count);
+
+            int[] actualSizes = Enumerable.Range(0, count)
+                .Select(index => bytes[6 + (index * 16)] is 0
+                    ? 256
+                    : bytes[6 + (index * 16)])
+                .ToArray();
+            Assert.Equal(expectedSizes, actualSizes);
+
+            for (int index = 0; index < count; index++)
+            {
+                int entry = 6 + (index * 16);
+                uint length = BitConverter.ToUInt32(bytes, entry + 8);
+                uint offset = BitConverter.ToUInt32(bytes, entry + 12);
+                Assert.True(length > 0, $"{fileName} has an empty {actualSizes[index]} px entry.");
+                Assert.True(offset + length <= bytes.Length,
+                    $"{fileName} has an out-of-range {actualSizes[index]} px entry.");
+            }
+        }
+
+        string package = Read("build/package.ps1");
+        string installer = Read("build/installer/install.ps1");
+        Assert.Contains("'tray-error.ico'", package, StringComparison.Ordinal);
+        Assert.Contains("'tray-error.ico'", installer, StringComparison.Ordinal);
     }
 
     [Fact]

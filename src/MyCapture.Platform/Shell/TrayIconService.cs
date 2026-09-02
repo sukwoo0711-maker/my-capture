@@ -21,8 +21,8 @@ public enum TrayBalloonKind
     Error,
 }
 
-/// <summary>Absolute paths to the three small, taskbar-safe ICO assets.</summary>
-public sealed record TrayIconAssets(string Idle, string Capturing, string Busy);
+/// <summary>Absolute paths to the four small, taskbar-safe state ICO assets.</summary>
+public sealed record TrayIconAssets(string Idle, string Capturing, string Busy, string Error);
 
 /// <summary>
 /// Owns the notification-area icon through Shell_NotifyIcon, including icon state,
@@ -91,9 +91,9 @@ public sealed class TrayIconService : IDisposable
         {
             IntPtr idle = LoadIcon(_assets.Idle);
             _icons.Add(TrayIconState.Idle, idle);
-            _icons.Add(TrayIconState.Error, idle);
             _icons.Add(TrayIconState.Capturing, LoadIcon(_assets.Capturing));
             _icons.Add(TrayIconState.Busy, LoadIcon(_assets.Busy));
+            _icons.Add(TrayIconState.Error, LoadIcon(_assets.Error));
             AddIcon();
             _initialized = true;
         }
@@ -406,15 +406,17 @@ public sealed class TrayIconService : IDisposable
         return Truncate($"MyCapture — {status} · 캡처 {_captureCount:N0}개", 127);
     }
 
-    private static IntPtr LoadIcon(string path)
+    private IntPtr LoadIcon(string path)
     {
         if (!File.Exists(path))
         {
             throw new FileNotFoundException("Tray icon asset was not found.", path);
         }
 
-        int width = Math.Max(16, NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSMICON));
-        int height = Math.Max(16, NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSMICON));
+        uint dpi = NativeMethods.GetDpiForWindow(_window.Handle);
+        dpi = dpi == 0 ? 96u : dpi;
+        int width = Math.Max(16, NativeMethods.GetSystemMetricsForDpi(NativeMethods.SM_CXSMICON, dpi));
+        int height = Math.Max(16, NativeMethods.GetSystemMetricsForDpi(NativeMethods.SM_CYSMICON, dpi));
         IntPtr icon = NativeMethods.LoadImage(
             IntPtr.Zero,
             path,

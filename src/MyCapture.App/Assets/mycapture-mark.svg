@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title desc">
+  <title id="title">MyCapture Focus Portal</title>
+  <desc id="desc">Two offset rounded panes representing a captured region becoming a floating object.</desc>
+  <rect x="1" y="1" width="22" height="22" rx="5" fill="#0B0F17"/>
+  <rect x="9" y="8" width="11" height="11" rx="2.25" fill="none" stroke="#58C7F3" stroke-width="2.25"/>
+  <rect x="4" y="4" width="11" height="11" rx="2.25" fill="none" stroke="#F6F8FC" stroke-width="2.25"/>
+</svg>

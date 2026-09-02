@@ -22,6 +22,7 @@
       the implicit alias for plain Window hosts used by small dialogs and tests.
     -->
     <Style x:Key="Window.Standard" TargetType="{x:Type Window}">
+        <Setter Property="Icon" Value="/MyCapture;component/Assets/app.ico" />
         <Setter Property="Background" Value="{StaticResource Surface.Base}" />
         <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
         <Setter Property="FontFamily" Value="{StaticResource Font.Ui}" />
@@ -570,6 +571,17 @@
         <Setter Property="StrokeThickness" Value="0.6" />
     </Style>
 
+    <!-- The embedded multi-resolution ICO is used consistently in window chrome and
+         top-level product headers. It remains decorative beside the visible product name. -->
+    <Style x:Key="Brand.AppIcon" TargetType="Image">
+        <Setter Property="Source" Value="/MyCapture;component/Assets/app.ico" />
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
     <!-- Icon-only button: square hit target, transparent chrome, glyph inherits colour.
          Consumers set Content to a Path using an Icon.Glyph* style and MUST supply
          AutomationProperties.Name + ToolTip for accessibility. -->
@@ -577,6 +589,13 @@
         <Setter Property="MinWidth" Value="{StaticResource Size.HitTarget}" />
         <Setter Property="MinHeight" Value="{StaticResource Size.HitTarget}" />
         <Setter Property="Padding" Value="6" />
+    </Style>
+    <Style x:Key="Button.Icon.Compact" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
+        <Setter Property="MinWidth" Value="34" />
+        <Setter Property="MinHeight" Value="34" />
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="Padding" Value="5" />
     </Style>
 
     <!-- ============================================================= -->

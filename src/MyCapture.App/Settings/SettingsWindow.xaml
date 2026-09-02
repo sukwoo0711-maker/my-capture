@@ -209,17 +209,21 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Title only. The duplicate "Ctrl+S 적용" badge is removed; the Apply button in the
-             command bar already carries and communicates the shortcut. -->
-        <StackPanel Grid.Row="0" Margin="2,0,2,20">
-            <TextBlock Text="MyCapture 설정" Style="{StaticResource Text.Display}" />
-            <TextBlock Text="캡처, 보관, 내보내기와 편집 기본값을 한곳에서 관리합니다."
-                       Style="{StaticResource Text.MutedBlock}" Margin="0,5,0,0" />
+        <!-- Product header. The duplicate "Ctrl+S 적용" badge is omitted; the Apply button in
+             the command bar already carries and communicates the shortcut. -->
+        <StackPanel Grid.Row="0" Margin="2,0,2,20" Orientation="Horizontal">
+            <Image Style="{StaticResource Brand.AppIcon}" Margin="0,1,12,0"
+                   AutomationProperties.Name="MyCapture" />
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="설정" Style="{StaticResource Text.Display}" />
+                <TextBlock Text="캡처, 보관, 내보내기와 편집 기본값을 한곳에서 관리합니다."
+                           Style="{StaticResource Text.MutedBlock}" Margin="0,5,0,0" />
+            </StackPanel>
         </StackPanel>
 
         <!-- ===================== Category navigation via TabControl =====================
-             Each TabItem carries its glyph geometry in AutomationProperties.HelpText, which the
-             template's Path binds to. The visible Header stays the plain Korean label so the
+             Each TabItem carries its glyph geometry in Tag, which the template's Path binds to.
+             The visible Header stays the plain Korean label so the
              accessible name and shown text agree. -->
         <TabControl x:Name="CategoryTabs"
                     Grid.Row="1"
@@ -244,6 +248,41 @@
                                   IsChecked="{Binding LaunchAtLogin}" />
                         <TextBlock Style="{StaticResource Settings.Description}"
                                    Text="현재 사용자 계정에만 적용됩니다. 관리자 권한이 필요하지 않습니다." />
+
+                        <Border Style="{StaticResource Settings.InfoCard}" Margin="0,14,0,0">
+                            <StackPanel>
+                                <TextBlock Text="빠른 작업 흐름" Style="{StaticResource Text.Section}" />
+                                <TextBlock Text="어디서든 같은 단축키로 캡처하고, 결과는 로컬 라이브러리에서 이어서 편집합니다."
+                                           Style="{StaticResource Text.MutedBlock}" Margin="0,4,0,12" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="122" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Ctrl+Shift+C" FontFamily="{StaticResource Font.Mono}"
+                                               Foreground="{StaticResource Accent.Cool}" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="영역 캡처 · 클립보드 복사 · 플로팅" Foreground="{StaticResource Text.Secondary}" />
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="122" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Ctrl+Shift+X" FontFamily="{StaticResource Font.Mono}"
+                                               Foreground="{StaticResource Accent.Cool}" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="화면 영역 녹화 시작·중지" Foreground="{StaticResource Text.Secondary}" />
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="122" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Ctrl+Shift+Z" FontFamily="{StaticResource Font.Mono}"
+                                               Foreground="{StaticResource Accent.Cool}" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="라이브러리 열기" Foreground="{StaticResource Text.Secondary}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

@@ -40,7 +40,8 @@ internal static class ShellSelfTest
             var assets = new TrayIconAssets(
                 Path.Combine(assetsRoot, "tray-idle.ico"),
                 Path.Combine(assetsRoot, "tray-capturing.ico"),
-                Path.Combine(assetsRoot, "tray-busy.ico"));
+                Path.Combine(assetsRoot, "tray-busy.ico"),
+                Path.Combine(assetsRoot, "tray-error.ico"));
 
             using var tray = new TrayIconService(
                 window,
@@ -50,6 +51,7 @@ internal static class ShellSelfTest
             tray.SetCaptureCount(42);
             tray.SetState(TrayIconState.Capturing);
             tray.SetState(TrayIconState.Busy);
+            tray.SetState(TrayIconState.Error);
             tray.SetState(TrayIconState.Idle);
             report.AppendLine("Tray add/modify/state/delete path: PASS");
             report.AppendLine($"Tray tooltip count: {tray.CaptureCount}");

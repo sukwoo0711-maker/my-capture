@@ -95,7 +95,7 @@ internal sealed class CountdownWindow : Window
         Content = new Border
         {
             Background = Application.Current?.TryFindResource("Surface.Floating") as Brush
-                ?? new SolidColorBrush(Color.FromArgb(0xEE, 0x2A, 0x24, 0x1C)),
+                ?? new SolidColorBrush(Color.FromArgb(0xEE, 0x15, 0x1E, 0x2B)),
             BorderBrush = Application.Current?.TryFindResource("Border.Subtle") as Brush ?? Brushes.DimGray,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(18),

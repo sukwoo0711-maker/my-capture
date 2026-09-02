@@ -36,7 +36,7 @@ internal class AnnotationEditorWindow : Window
 
         Title = title;
         Background = Application.Current?.TryFindResource("Surface.Base") as Brush
-            ?? new SolidColorBrush(Color.FromRgb(0x1B, 0x17, 0x12));
+            ?? new SolidColorBrush(Color.FromRgb(0x0B, 0x0F, 0x17));
         Foreground = Application.Current?.TryFindResource("Text.Primary") as Brush ?? Brushes.White;
         FontFamily = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");

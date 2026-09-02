@@ -409,7 +409,7 @@ function Assert-StagedApplication {
     if ((Get-PeMachine $exe) -ne 0x8664) { Throw-InstallerError $ExitIntegrity 'MyCapture.exe is not an x64 PE image.' }
     $productVersion = ([Diagnostics.FileVersionInfo]::GetVersionInfo($dll).ProductVersion -split '\+')[0]
     if ($productVersion -ne [string]$Manifest.Version) { Throw-InstallerError $ExitIntegrity "Payload product version $productVersion does not match manifest version $($Manifest.Version)." }
-    foreach ($asset in @('tray-idle.ico', 'tray-capturing.ico', 'tray-busy.ico')) {
+    foreach ($asset in @('tray-idle.ico', 'tray-capturing.ico', 'tray-busy.ico', 'tray-error.ico')) {
         if (-not [IO.File]::Exists((Join-Path $Root "Assets\$asset"))) { Throw-InstallerError $ExitIntegrity "Required tray asset is missing: $asset" }
     }
 }
@@ -504,6 +504,7 @@ function Install-ShellIntegration {
         $shortcut.Save()
         $remove = $shell.CreateShortcut((Join-Path $startMenu 'Uninstall MyCapture.lnk'))
         $remove.TargetPath = $uninstallCmd
+        $remove.IconLocation = "$exe,0"
         $remove.WorkingDirectory = $Root
         $remove.Description = 'Uninstall MyCapture'
         $remove.Save()

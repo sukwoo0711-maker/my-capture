@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '1.4.0',
+    [string]$Version = '1.5.0',
     [string]$ArtifactRoot = ''
 )
 
@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 $versionMatch = [regex]::Match($Version, $semVerPattern)
 if (-not $versionMatch.Success) {
-    throw "Version must use a SemVer core with an optional prerelease (for example 1.4.0 or 1.4.0-rc.1): $Version"
+    throw "Version must use a SemVer core with an optional prerelease (for example 1.5.0 or 1.5.0-rc.1): $Version"
 }
 $baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
 $binaryVersion = "$baseVersion.0"

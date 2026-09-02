@@ -6,7 +6,7 @@ namespace MyCapture.Core.Platform;
 /// The single source of truth for the host operating system MyCapture supports.
 /// </summary>
 /// <remarks>
-/// MyCapture 1.4.0 ships for Windows 11 only. Older Windows releases are out of support, so the
+/// MyCapture 1.5.0 ships for Windows 11 only. Older Windows releases are out of support, so the
 /// gate is expressed as a build-number floor: build 22000 is the first Windows 11 release, and
 /// every earlier build is rejected regardless of its marketing name. The floor is duplicated in
 /// three places that cannot reference this assembly - the MSBuild
