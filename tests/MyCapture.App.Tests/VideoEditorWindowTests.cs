@@ -179,4 +179,27 @@ public sealed class VideoEditorWindowTests
         Assert.InRange(6_000, timeline.ViewStartMs, timeline.ViewEndMs);
         Assert.DoesNotContain("시작 00:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
     });
+
+    [Fact]
+    public void TrimMode_UsesDeletionHandlesAndKeepsPlayheadInsideRetainedRange() => RunSta(() =>
+    {
+        using var timeline = new TwoLineTimeline();
+        timeline.Initialize(durationMs: 10_000, fps: 20);
+
+        Assert.False(timeline.TrimModeEnabled);
+        timeline.SetTrimMode(true);
+        timeline.SetPlayhead(1_000);
+        timeline.SetIn(2_500);
+        Assert.True(timeline.TrimModeEnabled);
+        Assert.Equal(2_500, timeline.PlayheadMs, precision: 1);
+
+        timeline.SetPlayhead(9_000);
+        timeline.SetOut(7_500);
+        Assert.Equal(7_500, timeline.PlayheadMs, precision: 1);
+
+        timeline.SetPlayhead(0);
+        Assert.Equal(2_500, timeline.PlayheadMs, precision: 1);
+        timeline.SetPlayhead(10_000);
+        Assert.Equal(7_500, timeline.PlayheadMs, precision: 1);
+    });
 }

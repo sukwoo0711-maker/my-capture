@@ -26,7 +26,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private const double ConnectorHeight = 15.0;
     private const double EdgeGrab = 14.0;
     private const double BrushGripWidth = 12.0;
-    private const double TrimHandleWidth = 12.0;
+    private const double TrimHandleWidth = 18.0;
 
     private readonly TimelineRenderSurface _overview;
     private readonly TimelineRenderSurface _connector;
@@ -46,6 +46,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private readonly Brush _accentSubtle;
     private readonly Brush _playhead;
     private readonly Brush _outside;
+    private readonly Brush _deleteFill;
+    private readonly Brush _deleteHandle;
     private readonly Pen _majorTickPen;
     private readonly Pen _minorTickPen;
     private readonly Pen _detailGroupPen;
@@ -53,6 +55,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private readonly Pen _connectorPen;
     private readonly Pen _playheadPen;
     private readonly Pen _gripMarkPen;
+    private readonly Pen _deleteOutlinePen;
+    private readonly Pen _deleteHatchPen;
     private readonly Typeface _regularTypeface;
     private readonly Typeface _semiBoldTypeface;
     private readonly StreamGeometry _playheadMarker;
@@ -62,6 +66,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private double _playheadMs;
     private TimelineViewport _viewport = new(1, 15);
     private TrimSelection _trim = new(1);
+    private bool _trimModeEnabled;
+    private TrimHandle _activeTrimHandle = TrimHandle.In;
 
     private DragMode _drag = DragMode.None;
     private double _dragAnchorMs;
@@ -70,9 +76,11 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     private enum DragMode { None, Playhead, BrushBody, BrushLeft, BrushRight, TrimIn, TrimOut }
 
+    private enum TrimHandle { In, Out }
+
     internal TwoLineTimeline()
     {
-        Focusable = false;
+        Focusable = true;
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
 
@@ -87,6 +95,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromArgb(0x50, 0xFF, 0xD4, 0x00));
         _playhead = ResolveBrush("Accent.Cool", Color.FromRgb(0x66, 0xB7, 0xFF));
         _outside = FrozenBrush(Color.FromArgb(0x86, 0x00, 0x00, 0x00));
+        _deleteFill = FrozenBrush(Color.FromArgb(0x66, 0xD8, 0x3B, 0x77));
+        _deleteHandle = FrozenBrush(Color.FromRgb(0xE4, 0x4C, 0x83));
 
         _majorTickPen = CreatePen(_textSecondary, 3.0);
         _minorTickPen = CreatePen(_borderSubtle, 1.0);
@@ -95,6 +105,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _connectorPen = CreatePen(_accent, 2.0);
         _playheadPen = CreatePen(_playhead, 2.6);
         _gripMarkPen = CreatePen(_surfaceSunken, 2.0);
+        _deleteOutlinePen = CreatePen(_deleteHandle, 2.0);
+        _deleteHatchPen = CreatePen(FrozenBrush(Color.FromArgb(0xB0, 0xFF, 0xCD, 0xDE)), 1.2);
 
         FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");
@@ -139,6 +151,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _overview.LostMouseCapture += OnLostMouseCapture;
         _detail.LostMouseCapture += OnLostMouseCapture;
         _detail.MouseWheel += OnDetailWheel;
+        PreviewKeyDown += OnPreviewKeyDown;
         IsEnabledChanged += (_, _) => Opacity = IsEnabled ? 1.0 : 0.5;
         Loaded += (_, _) => RequestRenderIfDirty();
         Unloaded += (_, _) => _renderScheduler.CancelPending();
@@ -162,6 +175,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     internal double OutMs => _trim.OutMs;
 
     internal bool IsFullClip => _trim.IsFullClip;
+
+    internal bool TrimModeEnabled => _trimModeEnabled;
 
     internal double SelectedDurationMs => _trim.SelectedDurationMs;
 
@@ -200,6 +215,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _viewport = new TimelineViewport(_durationMs, _fps);
         _trim = new TrimSelection(_durationMs);
         _playheadMs = 0;
+        _trimModeEnabled = false;
+        _activeTrimHandle = TrimHandle.In;
 
         // The two strips must look different immediately. Select one coarse overview interval
         // by default so the bottom line visibly expands the frames between two heavy marks.
@@ -216,7 +233,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// <summary>Externally sets the playhead and keeps it inside the detail viewport.</summary>
     internal void SetPlayhead(double ms, bool ensureVisible = true)
     {
-        _playheadMs = Math.Clamp(ms, 0, _durationMs);
+        _playheadMs = _trim.ClampToSelection(Math.Clamp(ms, 0, _durationMs));
         double beforeStart = _viewport.ViewStartMs;
         double beforeEnd = _viewport.ViewEndMs;
         if (ensureVisible)
@@ -236,16 +253,42 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     internal void SetIn(double ms)
     {
+        _activeTrimHandle = TrimHandle.In;
         _trim.SetIn(ms);
+        ClampPlayheadAfterTrim();
         InvalidateRange();
         TrimChanged?.Invoke(this, EventArgs.Empty);
     }
 
     internal void SetOut(double ms)
     {
+        _activeTrimHandle = TrimHandle.Out;
         _trim.SetOut(ms);
+        ClampPlayheadAfterTrim();
         InvalidateRange();
         TrimChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal void SetTrimMode(bool enabled)
+    {
+        if (_trimModeEnabled == enabled)
+        {
+            return;
+        }
+
+        _trimModeEnabled = enabled;
+        if (enabled)
+        {
+            _activeTrimHandle = TrimHandle.In;
+            _ = Focus();
+        }
+
+        AutomationProperties.SetHelpText(
+            this,
+            enabled
+                ? "자르기 모드입니다. 자홍색 시작/끝 삭제 핸들을 드래그하거나 방향키로 조정합니다. Tab은 조정할 핸들을 바꿉니다."
+                : "자르기 버튼을 누르면 영상 양끝의 삭제 범위를 조정할 수 있습니다.");
+        InvalidateRange();
     }
 
     internal void FitAll()
@@ -284,12 +327,28 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         _dragStartX = x;
         _dragMoved = false;
+        if (_trimModeEnabled)
+        {
+            _ = Focus();
+        }
 
         if (isOverview)
         {
+            double trimInPx = OverviewMsToPx(_trim.InMs, width);
+            double trimOutPx = OverviewMsToPx(_trim.OutMs, width);
             double leftPx = OverviewMsToPx(_viewport.ViewStartMs, width);
             double rightPx = OverviewMsToPx(_viewport.ViewEndMs, width);
-            if (Math.Abs(x - leftPx) <= EdgeGrab)
+            if (_trimModeEnabled && Math.Abs(x - trimInPx) <= EdgeGrab + TrimHandleWidth / 2)
+            {
+                _activeTrimHandle = TrimHandle.In;
+                _drag = DragMode.TrimIn;
+            }
+            else if (_trimModeEnabled && Math.Abs(x - trimOutPx) <= EdgeGrab + TrimHandleWidth / 2)
+            {
+                _activeTrimHandle = TrimHandle.Out;
+                _drag = DragMode.TrimOut;
+            }
+            else if (Math.Abs(x - leftPx) <= EdgeGrab)
             {
                 _drag = DragMode.BrushLeft;
             }
@@ -316,12 +375,14 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             bool outVisible = IsVisibleInDetail(_trim.OutMs);
             double inPx = _viewport.MsToPx(_trim.InMs, width);
             double outPx = _viewport.MsToPx(_trim.OutMs, width);
-            if (inVisible && Math.Abs(x - inPx) <= EdgeGrab + TrimHandleWidth / 2)
+            if (_trimModeEnabled && inVisible && Math.Abs(x - inPx) <= EdgeGrab + TrimHandleWidth / 2)
             {
+                _activeTrimHandle = TrimHandle.In;
                 _drag = DragMode.TrimIn;
             }
-            else if (outVisible && Math.Abs(x - outPx) <= EdgeGrab + TrimHandleWidth / 2)
+            else if (_trimModeEnabled && outVisible && Math.Abs(x - outPx) <= EdgeGrab + TrimHandleWidth / 2)
             {
+                _activeTrimHandle = TrimHandle.Out;
                 _drag = DragMode.TrimOut;
             }
             else
@@ -347,6 +408,10 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         TimelineRenderSurface strip = _drag is DragMode.BrushBody or DragMode.BrushLeft or DragMode.BrushRight
             ? _overview
             : _detail;
+        if (_drag is DragMode.TrimIn or DragMode.TrimOut)
+        {
+            strip = _overview.IsMouseCaptured ? _overview : _detail;
+        }
         if (_drag == DragMode.Playhead)
         {
             strip = _detail.IsMouseCaptured ? _detail : _overview;
@@ -394,10 +459,20 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 InvalidateViewport();
                 break;
             case DragMode.TrimIn:
-                SetIn(FrameStepCalculator.SnapToFrame(_viewport.PxToMs(x, width), _fps, _durationMs));
+                SetIn(FrameStepCalculator.SnapToFrame(
+                    ReferenceEquals(strip, _overview)
+                        ? OverviewPxToMs(x, width)
+                        : _viewport.PxToMs(x, width),
+                    _fps,
+                    _durationMs));
                 break;
             case DragMode.TrimOut:
-                SetOut(FrameStepCalculator.SnapToFrame(_viewport.PxToMs(x, width), _fps, _durationMs));
+                SetOut(FrameStepCalculator.SnapToFrame(
+                    ReferenceEquals(strip, _overview)
+                        ? OverviewPxToMs(x, width)
+                        : _viewport.PxToMs(x, width),
+                    _fps,
+                    _durationMs));
                 break;
         }
     }
@@ -420,7 +495,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             SeekFromOverview(OverviewPxToMs(x, width));
         }
 
-        if (completed == DragMode.Playhead || coarseClick)
+        if (completed is DragMode.Playhead or DragMode.TrimIn or DragMode.TrimOut || coarseClick)
         {
             PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
         }
@@ -431,7 +506,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     private void OnLostMouseCapture(object sender, MouseEventArgs e)
     {
-        bool reconcile = _drag == DragMode.Playhead;
+        bool reconcile = _drag is DragMode.Playhead or DragMode.TrimIn or DragMode.TrimOut;
         _drag = DragMode.None;
         if (reconcile)
         {
@@ -449,6 +524,18 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         if (ReferenceEquals(strip, _overview))
         {
+            if (_trimModeEnabled)
+            {
+                double trimIn = OverviewMsToPx(_trim.InMs, width);
+                double trimOut = OverviewMsToPx(_trim.OutMs, width);
+                if (Math.Abs(x - trimIn) <= EdgeGrab + TrimHandleWidth / 2
+                    || Math.Abs(x - trimOut) <= EdgeGrab + TrimHandleWidth / 2)
+                {
+                    strip.Cursor = Cursors.SizeWE;
+                    return;
+                }
+            }
+
             double left = OverviewMsToPx(_viewport.ViewStartMs, width);
             double right = OverviewMsToPx(_viewport.ViewEndMs, width);
             strip.Cursor = Math.Abs(x - left) <= EdgeGrab || Math.Abs(x - right) <= EdgeGrab
@@ -459,8 +546,11 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             return;
         }
 
-        bool onTrim = (IsVisibleInDetail(_trim.InMs) && Math.Abs(x - _viewport.MsToPx(_trim.InMs, width)) <= EdgeGrab)
-            || (IsVisibleInDetail(_trim.OutMs) && Math.Abs(x - _viewport.MsToPx(_trim.OutMs, width)) <= EdgeGrab);
+        bool onTrim = _trimModeEnabled
+            && ((IsVisibleInDetail(_trim.InMs)
+                 && Math.Abs(x - _viewport.MsToPx(_trim.InMs, width)) <= EdgeGrab)
+                || (IsVisibleInDetail(_trim.OutMs)
+                    && Math.Abs(x - _viewport.MsToPx(_trim.OutMs, width)) <= EdgeGrab));
         strip.Cursor = onTrim ? Cursors.SizeWE : Cursors.Cross;
     }
 
@@ -483,10 +573,10 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         double beforeStart = _viewport.ViewStartMs;
         double beforeEnd = _viewport.ViewEndMs;
-        _playheadMs = clamped;
-        if (followDetail && !IsVisibleInDetail(clamped))
+        _playheadMs = _trim.ClampToSelection(clamped);
+        if (followDetail && !IsVisibleInDetail(_playheadMs))
         {
-            CenterDetailOn(clamped);
+            CenterDetailOn(_playheadMs);
         }
 
         if (ViewportChanged(beforeStart, beforeEnd))
@@ -499,6 +589,68 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         }
 
         PlayheadChanged?.Invoke(this, _playheadMs);
+    }
+
+    private void ClampPlayheadAfterTrim()
+    {
+        double clamped = _trim.ClampToSelection(_playheadMs);
+        if (Math.Abs(clamped - _playheadMs) <= 0.001)
+        {
+            return;
+        }
+
+        _playheadMs = clamped;
+        _viewport.EnsureVisible(_playheadMs);
+        InvalidatePlayhead();
+        PlayheadChanged?.Invoke(this, _playheadMs);
+    }
+
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_trimModeEnabled || !IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Tab)
+        {
+            _activeTrimHandle = _activeTrimHandle == TrimHandle.In ? TrimHandle.Out : TrimHandle.In;
+            InvalidateRange();
+            e.Handled = true;
+            return;
+        }
+
+        double frameMs = FrameStepCalculator.FrameDurationMs(_fps);
+        double step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? frameMs * 10 : frameMs;
+        double current = _activeTrimHandle == TrimHandle.In ? _trim.InMs : _trim.OutMs;
+        double target = e.Key switch
+        {
+            Key.Left => current - step,
+            Key.Right => current + step,
+            Key.Home => 0,
+            Key.End => _durationMs,
+            _ => double.NaN,
+        };
+        if (!double.IsFinite(target))
+        {
+            return;
+        }
+
+        target = FrameStepCalculator.SnapToFrame(target, _fps, _durationMs);
+        if (_activeTrimHandle == TrimHandle.In)
+        {
+            SetIn(target);
+            SetPlayhead(_trim.InMs);
+        }
+        else
+        {
+            SetOut(target);
+            SetPlayhead(_trim.OutMs);
+        }
+
+        PlayheadChanged?.Invoke(this, _playheadMs);
+        PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
+        e.Handled = true;
     }
 
     private void CenterDetailOn(double ms)
@@ -645,6 +797,14 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                         (brushLeft + brushRight) / 2.0, height * 0.43,
                         _textPrimary, 12, semiBold: true, _surfaceScrim, centered: true);
                 }
+
+                if (_trimModeEnabled)
+                {
+                    DrawDeletionRange(dc, 0, trimInX, height);
+                    DrawDeletionRange(dc, trimOutX, width, height);
+                    DrawTrimHandle(dc, trimInX, height, TrimHandle.In);
+                    DrawTrimHandle(dc, trimOutX, height, TrimHandle.Out);
+                }
                 break;
 
             case TimelineRenderLayer.Transient:
@@ -733,16 +893,41 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                     DrawRect(dc, shadeX, height - 7, shadeRight - shadeX, 7, _accentSubtle, null);
                 }
 
-                if (IsVisibleInDetail(_trim.InMs))
+                if (_trimModeEnabled)
                 {
-                    double inX = _viewport.MsToPx(_trim.InMs, width);
-                    DrawRect(dc, inX - TrimHandleWidth / 2.0, 0, TrimHandleWidth, height, _accent, null);
-                }
+                    if (_trim.InMs > _viewport.ViewStartMs)
+                    {
+                        double deleteRight = _viewport.MsToPx(
+                            Math.Min(_trim.InMs, _viewport.ViewEndMs),
+                            width);
+                        DrawDeletionRange(dc, 0, deleteRight, height);
+                    }
 
-                if (IsVisibleInDetail(_trim.OutMs))
-                {
-                    double outX = _viewport.MsToPx(_trim.OutMs, width);
-                    DrawRect(dc, outX - TrimHandleWidth / 2.0, 0, TrimHandleWidth, height, _accent, null);
+                    if (_trim.OutMs < _viewport.ViewEndMs)
+                    {
+                        double deleteLeft = _viewport.MsToPx(
+                            Math.Max(_trim.OutMs, _viewport.ViewStartMs),
+                            width);
+                        DrawDeletionRange(dc, deleteLeft, width, height);
+                    }
+
+                    if (IsVisibleInDetail(_trim.InMs))
+                    {
+                        DrawTrimHandle(
+                            dc,
+                            _viewport.MsToPx(_trim.InMs, width),
+                            height,
+                            TrimHandle.In);
+                    }
+
+                    if (IsVisibleInDetail(_trim.OutMs))
+                    {
+                        DrawTrimHandle(
+                            dc,
+                            _viewport.MsToPx(_trim.OutMs, width),
+                            height,
+                            TrimHandle.Out);
+                    }
                 }
                 break;
 
@@ -761,6 +946,59 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         dc.PushTransform(new TranslateTransform(x, 0));
         dc.DrawGeometry(_playhead, null, _playheadMarker);
         dc.Pop();
+    }
+
+    private void DrawDeletionRange(DrawingContext dc, double left, double right, double height)
+    {
+        double width = right - left;
+        if (width <= 0.5)
+        {
+            return;
+        }
+
+        DrawRect(dc, left, 0, width, height, _deleteFill, _deleteOutlinePen);
+        const double hatchStep = 12;
+        for (double x = left - height; x < right; x += hatchStep)
+        {
+            double startX = Math.Max(left, x);
+            double startY = Math.Max(0, left - x);
+            double endX = Math.Min(right, x + height);
+            double endY = Math.Min(height, right - x);
+            if (endX > startX)
+            {
+                DrawLine(dc, _deleteHatchPen, startX, startY, endX, endY);
+            }
+        }
+
+        if (width >= 48)
+        {
+            DrawText(
+                dc,
+                "삭제",
+                left + (width / 2),
+                Math.Max(2, (height - 20) / 2),
+                _textPrimary,
+                11,
+                semiBold: true,
+                _surfaceScrim,
+                centered: true);
+        }
+    }
+
+    private void DrawTrimHandle(DrawingContext dc, double x, double height, TrimHandle handle)
+    {
+        DrawRect(
+            dc,
+            x - (TrimHandleWidth / 2),
+            0,
+            TrimHandleWidth,
+            height,
+            _deleteHandle,
+            _deleteOutlinePen);
+        if (_activeTrimHandle == handle)
+        {
+            DrawRect(dc, x - 4, 3, 8, Math.Max(1, height - 6), _textPrimary, null);
+        }
     }
 
     private static void DrawLine(
@@ -919,6 +1157,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _overview.LayersInvalidated -= OnLayersInvalidated;
         _connector.LayersInvalidated -= OnLayersInvalidated;
         _detail.LayersInvalidated -= OnLayersInvalidated;
+        PreviewKeyDown -= OnPreviewKeyDown;
         _renderScheduler.Dispose();
     }
 }

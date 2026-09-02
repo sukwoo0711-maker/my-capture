@@ -8,6 +8,9 @@ namespace MyCapture.App.Recording;
 internal sealed class TimedTextPreviewView : FrameworkElement
 {
     private IReadOnlyList<TimedTextOverlay> _overlays = [];
+    private IReadOnlyList<FrameEditLayer> _frameLayers = [];
+    private IReadOnlyDictionary<Guid, System.Windows.Media.Imaging.BitmapSource> _frameLayerBitmaps =
+        new Dictionary<Guid, System.Windows.Media.Imaging.BitmapSource>();
     private double _sourceTimeMs;
     private int _canvasWidth = 1;
     private int _canvasHeight = 1;
@@ -38,6 +41,13 @@ internal sealed class TimedTextPreviewView : FrameworkElement
         InvalidateVisual();
     }
 
+    internal void SetFrameLayers(IReadOnlyList<FrameEditLayer> layers)
+    {
+        _frameLayers = layers ?? [];
+        _frameLayerBitmaps = FrameEditLayerRenderer.Decode(_frameLayers);
+        InvalidateVisual();
+    }
+
     internal void SetSourceTime(double sourceTimeMs)
     {
         double next = double.IsFinite(sourceTimeMs) ? Math.Max(0, sourceTimeMs) : 0;
@@ -61,6 +71,19 @@ internal sealed class TimedTextPreviewView : FrameworkElement
             }
         }
 
+        if (!activeSetChanged)
+        {
+            for (int index = 0; index < _frameLayers.Count; index++)
+            {
+                FrameEditLayer layer = _frameLayers[index];
+                if (layer.IsActiveAt(_sourceTimeMs) != layer.IsActiveAt(next))
+                {
+                    activeSetChanged = true;
+                    break;
+                }
+            }
+        }
+
         _sourceTimeMs = next;
         if (activeSetChanged)
         {
@@ -71,7 +94,9 @@ internal sealed class TimedTextPreviewView : FrameworkElement
     protected override void OnRender(DrawingContext drawingContext)
     {
         base.OnRender(drawingContext);
-        if (ActualWidth <= 0 || ActualHeight <= 0 || _overlays.Count == 0)
+        if (ActualWidth <= 0
+            || ActualHeight <= 0
+            || (_overlays.Count == 0 && _frameLayers.Count == 0))
         {
             return;
         }
@@ -88,6 +113,13 @@ internal sealed class TimedTextPreviewView : FrameworkElement
         transforms.Children.Add(new TranslateTransform(left, top));
         drawingContext.PushClip(new RectangleGeometry(content));
         drawingContext.PushTransform(transforms);
+        FrameEditLayerRenderer.Draw(
+            drawingContext,
+            _frameLayers,
+            _frameLayerBitmaps,
+            _sourceTimeMs,
+            _canvasWidth,
+            _canvasHeight);
         TimedTextOverlayRenderer.Draw(
             drawingContext,
             _overlays,

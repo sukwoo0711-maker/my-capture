@@ -219,6 +219,7 @@ public sealed class GlobalHotkeyReconfigureTests
             {
                 Capture = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC),
                 // Explicitly clear the class defaults so only Capture is assigned.
+                OpenLibrary = Hotkey.None,
                 PasteToScreen = Hotkey.None,
                 HideAllPins = Hotkey.None,
                 ToggleClickThrough = Hotkey.None,

@@ -219,7 +219,7 @@ public partial class App : Application
         };
         _overlay.CommitRequested = HandleCommitAsync;
 
-        // Region video recording (Ctrl+Shift+X). Shares the capture engine and, on a
+        // Region video recording (Ctrl+X). Shares the capture engine and, on a
         // frame-image edit, the same persistence/commit path as still capture so recordings
         // inherit the gallery, layer-preserving re-edit and offline story unchanged.
         _recorder = new MyCapture.App.Recording.RegionRecordingCoordinator(
@@ -284,6 +284,10 @@ public partial class App : Application
         {
             case GlobalHotkeyCommand.CaptureRegion:
                 HandleCaptureRequested();
+                break;
+            case GlobalHotkeyCommand.OpenLibrary:
+                _log?.LogInformation("Library hotkey requested");
+                HandleGalleryRequested();
                 break;
             case GlobalHotkeyCommand.PasteToScreen:
                 _log?.LogInformation("Paste-to-screen hotkey requested");
@@ -751,6 +755,23 @@ public partial class App : Application
                     // durable capture and clipboard attempt have already completed.
                     _log?.LogWarning(ex, "Could not show automatic clipboard failure notification");
                 }
+            }
+
+            // Ctrl+Shift+C is also the capture-to-floating gesture. Pin the already-frozen
+            // bitmap directly instead of reading it back from the clipboard, so a transient
+            // clipboard lock cannot suppress the floating result or change its pixels.
+            try
+            {
+                _pins?.PinImage(e.SelectedBitmap);
+            }
+            catch (Exception ex)
+            {
+                _log?.LogWarning(ex, "Automatic floating window creation failed after region capture");
+                _tray?.ShowBalloon(
+                    "화면 고정 실패",
+                    "캡처와 클립보드 복사는 유지되었습니다. F3으로 다시 고정해 주세요.",
+                    TrayBalloonKind.Warning,
+                    playSound: false);
             }
         }
     }

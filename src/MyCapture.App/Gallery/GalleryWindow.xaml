@@ -5,9 +5,9 @@
         xmlns:themes="clr-namespace:MyCapture.App.Themes"
         x:ClassModifier="internal"
         Style="{StaticResource Window.Standard}"
-        Title="MyCapture — 캡처 라이브러리"
+        Title="MyCapture — 라이브러리"
         Width="1120" Height="760"
-        MinWidth="720" MinHeight="480"
+        MinWidth="980" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource Surface.Base}"
         Foreground="{StaticResource Text.Primary}">
@@ -121,6 +121,25 @@
                                            Foreground="White"
                                            FontFamily="{StaticResource Font.Mono}"
                                            FontSize="{StaticResource FontSize.Caption}" />
+                            </Border>
+
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                    Margin="8" Padding="7,3" CornerRadius="5"
+                                    Background="#D9000000"
+                                    IsHitTestVisible="False"
+                                    Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="동영상" Foreground="White"
+                                           FontSize="{StaticResource FontSize.Caption}"
+                                           FontWeight="SemiBold" />
+                            </Border>
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                    Margin="8" Padding="7,3" CornerRadius="5"
+                                    Background="#D9000000"
+                                    IsHitTestVisible="False"
+                                    Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="이미지" Foreground="White"
+                                           FontSize="{StaticResource FontSize.Caption}"
+                                           FontWeight="SemiBold" />
                             </Border>
 
                             <StackPanel Orientation="Horizontal"
@@ -405,8 +424,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel>
-                <TextBlock Text="캡처 라이브러리" Style="{StaticResource Text.Display}" />
-                <TextBlock Text="저장한 이미지를 다시 편집하고, 복사하고, 파일로 꺼낼 수 있습니다. 카드를 폴더나 바탕화면으로 드래그하면 PNG로 내보냅니다."
+                <TextBlock Text="라이브러리" Style="{StaticResource Text.Display}" />
+                <TextBlock Text="이미지와 동영상을 한곳에서 찾고 편집합니다. 동영상은 선택하거나 두 번 클릭하면 이 창 안에서 바로 재생됩니다."
                            Style="{StaticResource Text.MutedBlock}" Margin="0,5,0,0" MaxWidth="620"
                            HorizontalAlignment="Left" />
             </StackPanel>
@@ -484,16 +503,21 @@
         </Border>
 
         <Grid Grid.Row="3">
-            <ListBox x:Name="RowsList"
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ListBox x:Name="RowsList" Grid.Column="0"
                      Style="{StaticResource Gallery.RowsList}"
                      ItemsSource="{Binding Rows}"
                      SizeChanged="OnRowsListSizeChanged" />
 
-            <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+            <Border Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center"
                     Style="{StaticResource Card}" Padding="42,30"
                     Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel MaxWidth="380">
-                    <TextBlock Text="아직 표시할 캡처가 없습니다"
+                    <TextBlock Text="아직 표시할 항목이 없습니다"
                                Style="{StaticResource Text.Title}"
                                HorizontalAlignment="Center" />
                     <TextBlock x:Name="EmptyStateLabel"
@@ -502,6 +526,68 @@
                                Margin="0,8,0,0"
                                TextAlignment="Center"
                                AutomationProperties.Name="{Binding EmptyStateText}" />
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="InlineVideoPanel" Grid.Column="1"
+                    Width="372" Margin="16,0,0,0"
+                    Style="{StaticResource Card}" Padding="14"
+                    VerticalAlignment="Top" Visibility="Collapsed">
+                <StackPanel>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="라이브러리 재생" Style="{StaticResource Text.Section}" />
+                            <TextBlock x:Name="InlineVideoTitle" Text="동영상"
+                                       Style="{StaticResource Text.MutedBlock}"
+                                       Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="닫기"
+                                Style="{StaticResource Button.Ghost}"
+                                Click="OnInlineCloseClick"
+                                AutomationProperties.Name="라이브러리 재생 패널 닫기" />
+                    </Grid>
+
+                    <Border Height="202" Background="Black" CornerRadius="8"
+                            ClipToBounds="True">
+                        <MediaElement x:Name="InlineVideo"
+                                      LoadedBehavior="Manual"
+                                      UnloadedBehavior="Manual"
+                                      Stretch="Uniform"
+                                      ScrubbingEnabled="True"
+                                      IsMuted="True" Volume="0"
+                                      MediaOpened="OnInlineMediaOpened"
+                                      MediaEnded="OnInlineMediaEnded"
+                                      MediaFailed="OnInlineMediaFailed" />
+                    </Border>
+
+                    <Slider x:Name="InlineSeekSlider" Margin="0,10,0,0"
+                            Minimum="0" Maximum="1" Value="0"
+                            IsMoveToPointEnabled="True"
+                            ValueChanged="OnInlineSeekChanged"
+                            AutomationProperties.Name="동영상 재생 위치" />
+                    <Grid Margin="0,7,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="InlinePlayButton" Content="재생"
+                                Style="{StaticResource Button.Primary}"
+                                MinWidth="76" Click="OnInlinePlayClick" />
+                        <TextBlock x:Name="InlinePlaybackStatus" Grid.Column="1"
+                                   Text="재생 준비"
+                                   Style="{StaticResource Text.MutedBlock}"
+                                   VerticalAlignment="Center" Margin="10,0" />
+                        <TextBlock x:Name="InlineTimeLabel" Grid.Column="2"
+                                   Text="00:00 / 00:00"
+                                   FontFamily="{StaticResource Font.Mono}"
+                                   Foreground="{StaticResource Text.Secondary}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
                 </StackPanel>
             </Border>
         </Grid>

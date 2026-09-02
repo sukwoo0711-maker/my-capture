@@ -5,7 +5,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// The supported-host contract. MyCapture 1.3.0 targets Windows 11 only; every Windows 10
+/// The supported-host contract. MyCapture 1.4.0 targets Windows 11 only; every Windows 10
 /// build is out of support, so the policy must reject them by build number rather than by
 /// marketing name. These tests are the single behavioural definition of that floor.
 /// </summary>

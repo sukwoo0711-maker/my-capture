@@ -38,7 +38,9 @@ namespace MyCapture.App.Recording;
 /// </remarks>
 internal sealed class RecordingControlWindow : Window
 {
-    private const double BorderThicknessPx = 2.0;
+    // Six DIPs stay visible on dense/high-DPI displays and provide a forgiving visual target
+    // while the transparent interior remains draggable before recording starts.
+    private const double BorderThicknessPx = 6.0;
     private const double StripHeight = 56.0;
 
     // The control strip must never be narrower than this, or (for a small capture region) the
@@ -126,7 +128,7 @@ internal sealed class RecordingControlWindow : Window
 
     internal bool IsRecording => _recorder is { IsRecording: true };
 
-    /// <summary>External stop request (e.g. pressing Ctrl+Shift+X again).</summary>
+    /// <summary>External stop request (e.g. pressing Ctrl+X again).</summary>
     internal void RequestStop() => StopRecording();
 
     private Border BuildRegionFrame()
@@ -463,7 +465,7 @@ internal sealed class RecordingControlWindow : Window
         {
             // Supported Windows 11 builds exclude the palette through display affinity. If that
             // OS contract unexpectedly fails and no outside placement exists, hide the palette
-            // during capture rather than burn controls into the user's video. Ctrl+Shift+X still
+            // during capture rather than burn controls into the user's video. Ctrl+X still
             // stops the recording.
             Opacity = 0;
         }
@@ -631,7 +633,7 @@ internal sealed class RecordingControlWindow : Window
         int h = (int)Math.Round(_screenRegion.Height);
         return string.Create(
             CultureInfo.CurrentCulture,
-            $"{w}×{h} · {_settings.TargetFps}fps · 테두리를 드래그해 위치 조정");
+            $"{w}×{h} · {_settings.TargetFps}fps");
     }
 
     private void AnnounceStatus()

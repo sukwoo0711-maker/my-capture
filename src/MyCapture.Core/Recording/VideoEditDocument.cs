@@ -40,14 +40,48 @@ public sealed class TimedTextOverlay
 }
 
 /// <summary>
+/// A transparent PNG annotation layer shown over a source-time interval. The encoded bitmap
+/// contains only the user's drawing/edit marks; the immutable source video remains untouched.
+/// </summary>
+public sealed class FrameEditLayer
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public double StartMs { get; set; }
+
+    public double EndMs { get; set; }
+
+    public string Name { get; set; } = "프레임 편집";
+
+    public string OverlayPngBase64 { get; set; } = string.Empty;
+
+    public bool IsActiveAt(double sourceTimeMs) =>
+        double.IsFinite(sourceTimeMs)
+        && sourceTimeMs >= StartMs
+        && sourceTimeMs < EndMs;
+
+    public FrameEditLayer Clone() => new()
+    {
+        Id = Id,
+        StartMs = StartMs,
+        EndMs = EndMs,
+        Name = Name,
+        OverlayPngBase64 = OverlayPngBase64,
+    };
+}
+
+/// <summary>
 /// Non-destructive editing instructions for an immutable source recording.
 /// Times are always expressed on the source timeline so changing the trim does not move notes.
 /// </summary>
 public sealed class VideoEditDocument
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
     public const int MaximumOverlayCount = 100;
+    public const int MaximumFrameLayerCount = 100;
     public const int MaximumTextLength = 500;
+    public const int MaximumFrameLayerNameLength = 80;
+    public const int MaximumFrameLayerEncodedLength = 32 * 1024 * 1024;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -63,10 +97,13 @@ public sealed class VideoEditDocument
 
     public List<TimedTextOverlay> TextOverlays { get; set; } = [];
 
+    public List<FrameEditLayer> FrameEditLayers { get; set; } = [];
+
     public bool HasEdits =>
         TrimInMs > 0.5
         || TrimOutMs < SourceDurationMs - 0.5
-        || TextOverlays.Count > 0;
+        || TextOverlays.Count > 0
+        || FrameEditLayers.Count > 0;
 
     public static VideoEditDocument CreateFor(
         int width,
@@ -86,7 +123,7 @@ public sealed class VideoEditDocument
     /// </summary>
     public VideoEditDocument NormalizeFor(int width, int height, double sourceDurationMs)
     {
-        if (SchemaVersion != CurrentSchemaVersion)
+        if (SchemaVersion is < 1 or > CurrentSchemaVersion)
         {
             throw new NotSupportedException($"Unsupported video edit schema {SchemaVersion}.");
         }
@@ -150,6 +187,48 @@ public sealed class VideoEditDocument
             });
         }
 
+        var frameLayerIds = new HashSet<Guid>();
+        foreach (FrameEditLayer layer in FrameEditLayers ?? [])
+        {
+            if (normalized.FrameEditLayers.Count >= MaximumFrameLayerCount
+                || layer is null
+                || !double.IsFinite(layer.StartMs)
+                || !double.IsFinite(layer.EndMs)
+                || string.IsNullOrWhiteSpace(layer.OverlayPngBase64)
+                || layer.OverlayPngBase64.Length > MaximumFrameLayerEncodedLength)
+            {
+                continue;
+            }
+
+            double start = Math.Clamp(layer.StartMs, 0, duration);
+            double end = Math.Clamp(layer.EndMs, 0, duration);
+            if (end <= start)
+            {
+                continue;
+            }
+
+            Guid id = layer.Id == Guid.Empty || !frameLayerIds.Add(layer.Id)
+                ? Guid.NewGuid()
+                : layer.Id;
+            _ = frameLayerIds.Add(id);
+            string name = string.IsNullOrWhiteSpace(layer.Name)
+                ? "프레임 편집"
+                : layer.Name.Trim();
+            if (name.Length > MaximumFrameLayerNameLength)
+            {
+                name = name[..MaximumFrameLayerNameLength];
+            }
+
+            normalized.FrameEditLayers.Add(new FrameEditLayer
+            {
+                Id = id,
+                StartMs = start,
+                EndMs = end,
+                Name = name,
+                OverlayPngBase64 = layer.OverlayPngBase64,
+            });
+        }
+
         return normalized;
     }
 
@@ -162,5 +241,6 @@ public sealed class VideoEditDocument
         TrimInMs = TrimInMs,
         TrimOutMs = TrimOutMs,
         TextOverlays = TextOverlays.Select(overlay => overlay.Clone()).ToList(),
+        FrameEditLayers = FrameEditLayers.Select(layer => layer.Clone()).ToList(),
     };
 }
