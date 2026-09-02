@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -129,7 +130,7 @@ internal sealed class VideoEditorWindow : Window
         StandardWindowTheme.Apply(this);
 
         Title = "MyCapture — 녹화 편집";
-        Background = TryBrush("Surface.Base", Color.FromRgb(0x1B, 0x17, 0x12));
+        Background = TryBrush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
         Foreground = TryBrush("Text.Primary", Colors.White);
         FontFamily = TryFont("Font.Ui");
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -190,7 +191,7 @@ internal sealed class VideoEditorWindow : Window
         AutomationProperties.SetLiveSetting(_loadingLabel, AutomationLiveSetting.Polite);
         _loadingOverlay = new Border
         {
-            Background = TryBrush("Surface.Scrim", Color.FromArgb(0xC8, 0x00, 0x00, 0x00)),
+            Background = TryBrush("Surface.Scrim", Color.FromArgb(0xC8, 0x08, 0x0C, 0x12)),
             CornerRadius = new CornerRadius(12),
             Child = _loadingLabel,
         };
@@ -326,7 +327,7 @@ internal sealed class VideoEditorWindow : Window
         var preview = new Border
         {
             Background = TryBrush("Surface.Canvas", Colors.Black),
-            BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x40, 0x38, 0x2C)),
+            BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x2B, 0x3A, 0x50)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             Padding = new Thickness(8),
@@ -417,9 +418,9 @@ internal sealed class VideoEditorWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(10, 0, 0, 0),
         };
-        _addTextButton = MakeButton("+ 텍스트", "현재 위치에 시간 텍스트 추가 (Ctrl+T)", "Button.Secondary", AddTextOverlay);
-        _editTextButton = MakeButton("편집", "선택한 시간 텍스트 편집 (F2)", "Button.Ghost", EditSelectedOverlay);
-        _deleteTextButton = MakeButton("삭제", "선택한 시간 텍스트 삭제 (Delete)", "Button.Ghost", DeleteSelectedOverlay);
+        _addTextButton = MakeIconButton("Icon.Text", "텍스트", "현재 위치에 시간 텍스트 추가 (Ctrl+T)", "Button.Secondary", AddTextOverlay);
+        _editTextButton = MakeIconButton("Icon.Edit", "편집", "선택한 시간 텍스트 편집 (F2)", "Button.Ghost", EditSelectedOverlay);
+        _deleteTextButton = MakeIconButton("Icon.Delete", "삭제", "선택한 시간 텍스트 삭제 (Delete)", "Button.Ghost", DeleteSelectedOverlay);
         actions.Children.Add(_addTextButton);
         actions.Children.Add(_editTextButton);
         actions.Children.Add(_deleteTextButton);
@@ -435,7 +436,7 @@ internal sealed class VideoEditorWindow : Window
             Width = 72,
             MinHeight = 32,
             SelectedValuePath = nameof(ComboBoxItem.Tag),
-            Margin = new Thickness(0, 0, 8, 0),
+            Margin = new Thickness(0, 0, 6, 0),
         };
         foreach (double speed in new[] { 0.5, 1.0, 1.5, 2.0, 3.0, 4.0 })
         {
@@ -450,7 +451,7 @@ internal sealed class VideoEditorWindow : Window
         AutomationProperties.SetName(_gifSpeedComboBox, "GIF 재생 배속");
         AutomationProperties.SetHelpText(_gifSpeedComboBox, "0.5배속부터 4배속 사이에서 GIF 재생 속도를 선택합니다.");
         actions.Children.Add(_gifSpeedComboBox);
-        actions.Children.Add(MakeButton("GIF", "선택 구간을 GIF로 내보내기 (G)", "Button.Ghost", ExportGif));
+        actions.Children.Add(MakeIconButton("Icon.Export", "GIF", "선택 구간을 GIF로 내보내기 (G)", "Button.Ghost", ExportGif));
         Grid.SetColumn(actions, 2);
         lane.Children.Add(actions);
 
@@ -470,14 +471,14 @@ internal sealed class VideoEditorWindow : Window
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        transport.Children.Add(MakeButton("⏮ 처음", "유지할 영상의 시작으로", "Button.Ghost", () => Seek(_timeline.InMs)));
-        transport.Children.Add(MakeButton("◀◀ 크게", "뒤로 크게 이동", "Button.Ghost", () => StepCoarse(-1)));
-        transport.Children.Add(MakeButton("재생/일시정지", "재생 또는 일시정지", "Button.Secondary", TogglePlay));
-        transport.Children.Add(MakeButton("크게 ▶▶", "앞으로 크게 이동", "Button.Ghost", () => StepCoarse(1)));
-        transport.Children.Add(MakeButton("끝 ⏭", "유지할 영상의 끝으로", "Button.Ghost", () => Seek(_timeline.OutMs)));
+        transport.Children.Add(MakeIconButton("Icon.First", "처음", "유지할 영상의 시작으로", "Button.Ghost", () => Seek(_timeline.InMs)));
+        transport.Children.Add(MakeIconButton("Icon.Rewind", "크게", "뒤로 크게 이동", "Button.Ghost", () => StepCoarse(-1)));
+        transport.Children.Add(MakeIconButton("Icon.Play", "재생/일시정지", "재생 또는 일시정지", "Button.Secondary", TogglePlay));
+        transport.Children.Add(MakeIconButton("Icon.FastForward", "크게", "앞으로 크게 이동", "Button.Ghost", () => StepCoarse(1)));
+        transport.Children.Add(MakeIconButton("Icon.Last", "끝", "유지할 영상의 끝으로", "Button.Ghost", () => Seek(_timeline.OutMs)));
         transport.Children.Add(Spacer(10));
-        transport.Children.Add(MakeButton("◀ 프레임", "이전 프레임 (Ctrl/Shift+← 또는 ,)", "Button.Ghost", () => StepFrames(-1)));
-        transport.Children.Add(MakeButton("프레임 ▶", "다음 프레임 (Ctrl/Shift+→ 또는 .)", "Button.Ghost", () => StepFrames(1)));
+        transport.Children.Add(MakeIconButton("Icon.StepBack", "프레임", "이전 프레임 (Ctrl/Shift+← 또는 ,)", "Button.Ghost", () => StepFrames(-1)));
+        transport.Children.Add(MakeIconButton("Icon.StepForward", "프레임", "다음 프레임 (Ctrl/Shift+→ 또는 .)", "Button.Ghost", () => StepFrames(1)));
         Grid.SetRow(transport, 0);
         controls.Children.Add(transport);
 
@@ -487,9 +488,9 @@ internal sealed class VideoEditorWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 8, 0, 0),
         };
-        precisionAndEdit.Children.Add(MakeCompactButton("축소 −", "세부 타임라인 축소 (Ctrl+Shift+-)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
-        precisionAndEdit.Children.Add(MakeCompactButton("확대 +", "세부 타임라인 확대 (Ctrl+Shift+=)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
-        precisionAndEdit.Children.Add(MakeCompactButton("전체", "타임라인 전체 보기 (확대 초기화)", "Button.Ghost", () => _timeline.FitAll()));
+        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.ZoomOut", "축소", "세부 타임라인 축소 (Ctrl+Shift+-)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
+        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.ZoomIn", "확대", "세부 타임라인 확대 (Ctrl+Shift+=)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
+        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.FitAll", "전체", "타임라인 전체 보기 (확대 초기화)", "Button.Ghost", () => _timeline.FitAll()));
         precisionAndEdit.Children.Add(Spacer(6));
         _trimButton = MakeCompactButton(
             "자르기",
@@ -498,9 +499,9 @@ internal sealed class VideoEditorWindow : Window
             ToggleTrimMode);
         precisionAndEdit.Children.Add(_trimButton);
         precisionAndEdit.Children.Add(Spacer(6));
-        precisionAndEdit.Children.Add(MakeCompactButton("프레임 편집", "현재 프레임을 이미지로 편집 (E)", "Button.Secondary", EditCurrentFrame));
+        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.Image", "프레임 편집", "현재 프레임을 이미지로 편집 (E)", "Button.Secondary", EditCurrentFrame));
         precisionAndEdit.Children.Add(Spacer(6));
-        precisionAndEdit.Children.Add(MakeCompactButton("저장", "트림한 영상 저장", "Button.Primary", CommitTrim));
+        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.Save", "저장", "트림한 영상 저장", "Button.Primary", CommitTrim));
         _cancelOperationButton = new Button
         {
             Content = "작업 취소",
@@ -1631,7 +1632,7 @@ internal sealed class VideoEditorWindow : Window
 
     // ---- small view helpers (kept local so the editor matches the 0.4.0 token system) ----
 
-    private Button MakeButton(string content, string automationName, string styleKey, Action onClick)
+    private Button MakeButton(object content, string automationName, string styleKey, Action onClick)
     {
         var button = new Button
         {
@@ -1656,6 +1657,60 @@ internal sealed class VideoEditorWindow : Window
         return button;
     }
 
+    private Button MakeIconButton(
+        string iconKey,
+        string label,
+        string automationName,
+        string styleKey,
+        Action onClick) =>
+        MakeButton(BuildIconLabel(iconKey, label), automationName, styleKey, onClick);
+
+    private Button MakeCompactIconButton(
+        string iconKey,
+        string label,
+        string automationName,
+        string styleKey,
+        Action onClick)
+    {
+        Button button = MakeIconButton(iconKey, label, automationName, styleKey, onClick);
+        button.Margin = new Thickness(0, 0, 4, 0);
+        button.MinWidth = 52;
+        return button;
+    }
+
+    private static StackPanel BuildIconLabel(string iconKey, string label)
+    {
+        var glyph = new System.Windows.Shapes.Path
+        {
+            Data = TryGeometry(iconKey),
+            Width = 18,
+            Height = 18,
+            Stretch = Stretch.Uniform,
+            StrokeThickness = 1.6,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round,
+            Fill = Brushes.Transparent,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        glyph.SetBinding(
+            System.Windows.Shapes.Shape.StrokeProperty,
+            new Binding(nameof(Control.Foreground))
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(Button), 1),
+            });
+
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        content.Children.Add(glyph);
+        content.Children.Add(new TextBlock
+        {
+            Text = label,
+            Margin = new Thickness(4, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return content;
+    }
+
     private TextBlock BuildMono(string text) => new()
     {
         Text = text,
@@ -1669,6 +1724,9 @@ internal sealed class VideoEditorWindow : Window
 
     private static FontFamily TryFont(string key) =>
         Application.Current?.TryFindResource(key) as FontFamily ?? new FontFamily("Segoe UI");
+
+    private static Geometry TryGeometry(string key) =>
+        Application.Current?.TryFindResource(key) as Geometry ?? Geometry.Empty;
 
     private static Style? TryStyle(string key) =>
         Application.Current?.TryFindResource(key) as Style;

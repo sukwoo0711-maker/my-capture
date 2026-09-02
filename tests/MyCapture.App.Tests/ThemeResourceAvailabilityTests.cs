@@ -14,7 +14,7 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// Verifies the shipped theme dictionaries load together and expose every resource used by the
-/// warm-yellow/charcoal UI. Missing resources otherwise fail only when a screen is first shown.
+/// Focus Blue/graphite UI. Missing resources otherwise fail only when a screen is first shown.
 /// </summary>
 public sealed class ThemeResourceAvailabilityTests
 {
@@ -24,22 +24,26 @@ public sealed class ThemeResourceAvailabilityTests
         "Icon.Undo", "Icon.Redo", "Icon.Delete", "Icon.Copy", "Icon.Check", "Icon.Close",
         "Icon.Save", "Icon.SaveAs", "Icon.ChevronDown", "Icon.More", "Icon.Settings", "Icon.Capture",
         "Icon.Shortcuts", "Icon.Storage", "Icon.Export", "Icon.Pin", "Icon.Edit", "Icon.Ocr", "Icon.Search",
-        "Icon.ZoomIn", "Icon.ZoomOut",
+        "Icon.ZoomIn", "Icon.ZoomOut", "Icon.Play", "Icon.Pause", "Icon.First", "Icon.Last",
+        "Icon.Rewind", "Icon.FastForward", "Icon.StepBack", "Icon.StepForward", "Icon.FitAll", "Icon.Trim",
     ];
 
     private static readonly string[] BrushKeys =
     [
         "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay", "Surface.Sunken",
-        "Surface.Hover", "Text.Primary", "Text.Secondary", "Text.Muted", "Text.OnAccent",
+        "Surface.Hover", "Surface.Badge", "Surface.BadgeStrong",
+        "Text.Primary", "Text.Secondary", "Text.Muted", "Text.OnAccent", "Text.Badge",
         "Accent.Default", "Accent.Hover", "Accent.Pressed", "Accent.Subtle", "Accent.Cool",
-        "Border.Subtle", "Border.Focus", "Border.Accent", "Overlay.SelectionBorder",
-        "State.Warning", "State.DangerHover",
+        "Border.Subtle", "Border.Focus", "Border.Accent", "Border.Badge", "Overlay.SelectionBorder",
+        "State.Warning", "State.DangerHover", "Timeline.Background", "Timeline.Track",
+        "Timeline.TextLayer", "Timeline.FrameLayer", "Timeline.Grid", "Timeline.Playhead",
+        "Timeline.TrimDeleteFill", "Timeline.TrimDeleteHandle", "Timeline.TrimDeleteHatch",
     ];
 
     private static readonly string[] StyleKeys =
     [
         "Button.Primary", "Button.Secondary", "Button.Ghost", "Button.Danger", "Button.GhostCompact",
-        "ToggleButton.Tool", "Rail.ToolButton",
+        "ToggleButton.Tool", "Rail.ToolButton", "Button.Icon", "Button.Icon.Compact", "Brand.AppIcon",
     ];
 
     [Fact]
@@ -101,7 +105,7 @@ public sealed class ThemeResourceAvailabilityTests
     }
 
     [Fact]
-    public void WarmPaletteHasOrderedSurfacesAndAccessibleTextPairings()
+    public void GraphitePaletteHasOrderedSurfacesAndAccessibleTextPairings()
     {
         StaTestHost.Run(() =>
         {
@@ -124,7 +128,7 @@ public sealed class ThemeResourceAvailabilityTests
     }
 
     [Fact]
-    public void YellowActionsUseDarkInkWithAaContrastInEveryState()
+    public void FocusBlueActionsUseDarkInkWithAaContrastInEveryState()
     {
         StaTestHost.Run(() =>
         {
@@ -141,16 +145,17 @@ public sealed class ThemeResourceAvailabilityTests
     }
 
     [Fact]
-    public void FocusAndSelectionSemanticsUseTheBrightYellowPrimitive()
+    public void FocusAndSelectionSemanticsUseTheBrightFocusPrimitive()
     {
         StaTestHost.Run(() =>
         {
             ResourceDictionary theme = LoadMergedTheme();
-            Color brightYellow = Assert.IsType<Color>(theme["Primitive.Yellow300"]);
+            Color brightFocus = Assert.IsType<Color>(theme["Primitive.Yellow300"]);
 
-            Assert.Equal(brightYellow, BrushFor(theme, "Accent.Cool").Color);
-            Assert.Equal(brightYellow, BrushFor(theme, "Border.Focus").Color);
-            Assert.Equal(brightYellow, BrushFor(theme, "Overlay.SelectionBorder").Color);
+            Assert.Equal(brightFocus, BrushFor(theme, "Accent.Cool").Color);
+            Assert.Equal(brightFocus, BrushFor(theme, "Border.Focus").Color);
+            Assert.Equal(brightFocus, BrushFor(theme, "Overlay.SelectionBorder").Color);
+            Assert.Equal(brightFocus, BrushFor(theme, "Timeline.Playhead").Color);
             AssertContrastAtLeast(theme, "Border.Focus", "Surface.Base", 3.0);
             AssertContrastAtLeast(theme, "Border.Focus", "Surface.Raised", 3.0);
             AssertContrastAtLeast(theme, "Overlay.SelectionBorder", "Surface.Canvas", 3.0);
@@ -190,6 +195,10 @@ public sealed class ThemeResourceAvailabilityTests
 
             Style standardWindow = Assert.IsType<Style>(theme[StandardWindowTheme.ResourceKey]);
             Assert.Same(standardWindow, Assert.IsType<Style>(theme[typeof(Window)]).BasedOn);
+            Setter icon = Assert.Single(
+                standardWindow.Setters.OfType<Setter>(),
+                setter => setter.Property == Window.IconProperty);
+            Assert.NotNull(icon.Value);
             AssertAttachedBooleanSetter(
                 standardWindow,
                 FluidMotion.WindowEntranceProperty);

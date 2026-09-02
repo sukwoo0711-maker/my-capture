@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '1.4.0'
+    [string]$Version = '1.5.0'
 )
 
 Set-StrictMode -Version 2.0
@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 $versionMatch = [regex]::Match($Version, $semVerPattern)
 if (-not $versionMatch.Success) {
-    throw "Version must use a SemVer core with an optional prerelease (for example 1.4.0 or 1.4.0-rc.1): $Version"
+    throw "Version must use a SemVer core with an optional prerelease (for example 1.5.0 or 1.5.0-rc.1): $Version"
 }
 
 $baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
@@ -288,7 +288,7 @@ try {
     Copy-Item -LiteralPath $dotnetLicense -Destination (Join-Path $publish 'DOTNET-LICENSE.txt') -Force
     Copy-Item -LiteralPath $dotnetNotices -Destination (Join-Path $publish 'DOTNET-THIRD-PARTY-NOTICES.txt') -Force
 
-    foreach ($asset in @('tray-idle.ico', 'tray-capturing.ico', 'tray-busy.ico')) {
+    foreach ($asset in @('tray-idle.ico', 'tray-capturing.ico', 'tray-busy.ico', 'tray-error.ico')) {
         if (-not (Test-Path -LiteralPath (Join-Path $publish "Assets\$asset"))) {
             throw "Published asset missing: Assets\$asset"
         }

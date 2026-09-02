@@ -140,7 +140,7 @@ internal sealed class AnnotationEditorControl : Grid
             frame.ElapsedMilliseconds);
         _surface = new AnnotationEditorSurface(visualFrame, visualRegion, _controller, renderer);
 
-        Background = Brush("Surface.Base", Color.FromRgb(0x1B, 0x17, 0x12));
+        Background = Brush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
         Focusable = true;
         FocusVisualStyle = null;
 
@@ -444,8 +444,8 @@ internal sealed class AnnotationEditorControl : Grid
             MinHeight = Math.Max(28, box.Height),
             FontSize = Math.Max(12, annotation.FontSize * _surface.DipPerPixel),
             Foreground = annotation.Foreground.ToBrush(),
-            Background = new SolidColorBrush(Color.FromArgb(230, 42, 36, 28)),
-            BorderBrush = Brush("Accent.Default", Color.FromRgb(0xFF, 0xD4, 0x00)),
+            Background = Brush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
+            BorderBrush = Brush("Accent.Default", Color.FromRgb(0x58, 0xC7, 0xF3)),
             BorderThickness = new Thickness(1),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
@@ -643,7 +643,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         return new Border
         {
-            Background = Brush("Surface.Raised", Color.FromRgb(0x22, 0x1D, 0x17)),
+            Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
             BorderBrush = Brush("Border.Subtle", Colors.Gray),
             BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(12, 8, 12, 8),
@@ -715,7 +715,7 @@ internal sealed class AnnotationEditorControl : Grid
     {
         var grid = new Grid
         {
-            Background = Brush("Surface.Base", Color.FromRgb(0x1B, 0x17, 0x12)),
+            Background = Brush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17)),
         };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ToolRailWidth) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -813,7 +813,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         return new Border
         {
-            Background = Brush("Surface.Raised", Color.FromRgb(0x22, 0x1D, 0x17)),
+            Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
             BorderBrush = Brush("Border.Subtle", Colors.Gray),
             BorderThickness = new Thickness(1, 0, 0, 0),
             Padding = new Thickness(18),
@@ -934,7 +934,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         return new Border
         {
-            Background = Brush("Surface.Raised", Color.FromRgb(0x22, 0x1D, 0x17)),
+            Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
             BorderBrush = Brush("Border.Subtle", Colors.Gray),
             BorderThickness = new Thickness(0, 1, 0, 0),
             Padding = new Thickness(12, 6, 12, 7),

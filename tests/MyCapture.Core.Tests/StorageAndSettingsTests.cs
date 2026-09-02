@@ -206,29 +206,42 @@ public sealed class SettingsStoreTests
         Assert.Equal(2L * 1024 * 1024 * 1024, settings.Queue.MaxBytes);
         Assert.Equal("Ctrl+Shift+C", settings.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+Z", settings.Hotkeys.OpenLibrary.ToString());
-        Assert.Equal("Ctrl+X", settings.Hotkeys.RecordRegion.ToString());
+        Assert.Equal("Ctrl+Shift+X", settings.Hotkeys.RecordRegion.ToString());
         Assert.Equal("F3", settings.Hotkeys.PasteToScreen.ToString());
         Assert.True(settings.Export.CopyToClipboardOnQuickSave);
         Assert.Equal(RecordingFrameRate.Fps30, settings.Recording.FrameRate);
     }
 
     [Fact]
-    public void Load_LegacyRecordingDefaultMigratesAndPreservesLibraryHotkey()
+    public void Load_PreviousRecordingDefaultMigratesAndPreservesLibraryHotkey()
     {
         using var workspace = new TempWorkspace();
         SettingsStore store = CreateStore(workspace);
-        var legacySettings = new AppSettings { SchemaVersion = 1 };
-        legacySettings.Hotkeys.RecordRegion = new Hotkey(
-            HotkeyModifiers.Control | HotkeyModifiers.Shift,
-            Hotkey.VkX);
-        store.Save(legacySettings);
+        var previousSettings = new AppSettings { SchemaVersion = 2 };
+        previousSettings.Hotkeys.RecordRegion = new Hotkey(HotkeyModifiers.Control, Hotkey.VkX);
+        store.Save(previousSettings);
 
         AppSettings settings = store.Load();
 
-        Assert.Equal(2, settings.SchemaVersion);
-        Assert.Equal("Ctrl+X", settings.Hotkeys.RecordRegion.ToString());
+        Assert.Equal(3, settings.SchemaVersion);
+        Assert.Equal("Ctrl+Shift+X", settings.Hotkeys.RecordRegion.ToString());
         Assert.Equal("Ctrl+Shift+Z", settings.Hotkeys.OpenLibrary.ToString());
-        Assert.Contains(store.LastLoadWarnings, warning => warning.Contains("Ctrl+X", StringComparison.Ordinal));
+        Assert.Contains(store.LastLoadWarnings, warning => warning.Contains("Ctrl+Shift+X", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Load_CustomRecordingHotkeySurvivesSchemaUpgrade()
+    {
+        using var workspace = new TempWorkspace();
+        SettingsStore store = CreateStore(workspace);
+        var previousSettings = new AppSettings { SchemaVersion = 2 };
+        previousSettings.Hotkeys.RecordRegion = new Hotkey(HotkeyModifiers.Alt, Hotkey.VkF1 + 7);
+        store.Save(previousSettings);
+
+        AppSettings settings = store.Load();
+
+        Assert.Equal(3, settings.SchemaVersion);
+        Assert.Equal("Alt+F8", settings.Hotkeys.RecordRegion.ToString());
     }
 
     [Fact]

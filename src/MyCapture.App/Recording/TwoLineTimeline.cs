@@ -84,19 +84,19 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
 
-        _surfaceSunken = ResolveBrush("Surface.Sunken", Color.FromRgb(0x1B, 0x17, 0x12));
-        _surfaceBase = ResolveBrush("Surface.Base", Color.FromRgb(0x1B, 0x17, 0x12));
-        _surfaceScrim = ResolveBrush("Surface.Scrim", Color.FromArgb(0xB8, 0x00, 0x00, 0x00));
+        _surfaceSunken = ResolveBrush("Surface.Sunken", Color.FromRgb(0x08, 0x0C, 0x12));
+        _surfaceBase = ResolveBrush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
+        _surfaceScrim = ResolveBrush("Surface.Scrim", Color.FromArgb(0xC2, 0x08, 0x0C, 0x12));
         _textPrimary = ResolveBrush("Text.Primary", Colors.White);
         _textSecondary = ResolveBrush("Text.Secondary", Colors.LightGray);
         _textMuted = ResolveBrush("Text.Muted", Colors.Gray);
         _borderSubtle = ResolveBrush("Border.Subtle", Colors.DimGray);
-        _accent = ResolveBrush("Accent.Default", Color.FromRgb(0xE0, 0xA8, 0x20));
-        _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromArgb(0x50, 0xFF, 0xD4, 0x00));
-        _playhead = ResolveBrush("Accent.Cool", Color.FromRgb(0x66, 0xB7, 0xFF));
-        _outside = FrozenBrush(Color.FromArgb(0x86, 0x00, 0x00, 0x00));
-        _deleteFill = FrozenBrush(Color.FromArgb(0x66, 0xD8, 0x3B, 0x77));
-        _deleteHandle = FrozenBrush(Color.FromRgb(0xE4, 0x4C, 0x83));
+        _accent = ResolveBrush("Accent.Default", Color.FromRgb(0x58, 0xC7, 0xF3));
+        _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromRgb(0x15, 0x2F, 0x3E));
+        _playhead = ResolveBrush("Timeline.Playhead", Color.FromRgb(0x7D, 0xD7, 0xF8));
+        _outside = ResolveBrush("Surface.Scrim", Color.FromArgb(0x86, 0x08, 0x0C, 0x12));
+        _deleteFill = ResolveBrush("Timeline.TrimDeleteFill", Color.FromArgb(0x55, 0xFF, 0x6B, 0x74));
+        _deleteHandle = ResolveBrush("Timeline.TrimDeleteHandle", Color.FromRgb(0xFF, 0x8A, 0x91));
 
         _majorTickPen = CreatePen(_textSecondary, 3.0);
         _minorTickPen = CreatePen(_borderSubtle, 1.0);
@@ -106,7 +106,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _playheadPen = CreatePen(_playhead, 2.6);
         _gripMarkPen = CreatePen(_surfaceSunken, 2.0);
         _deleteOutlinePen = CreatePen(_deleteHandle, 2.0);
-        _deleteHatchPen = CreatePen(FrozenBrush(Color.FromArgb(0xB0, 0xFF, 0xCD, 0xDE)), 1.2);
+        _deleteHatchPen = CreatePen(
+            ResolveBrush("Timeline.TrimDeleteHatch", Color.FromArgb(0xCC, 0xFF, 0xB0, 0xB6)),
+            1.2);
 
         FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");

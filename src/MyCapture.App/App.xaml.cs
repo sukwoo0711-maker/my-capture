@@ -219,7 +219,7 @@ public partial class App : Application
         };
         _overlay.CommitRequested = HandleCommitAsync;
 
-        // Region video recording (Ctrl+X). Shares the capture engine and, on a
+        // Region video recording (Ctrl+Shift+X). Shares the capture engine and, on a
         // frame-image edit, the same persistence/commit path as still capture so recordings
         // inherit the gallery, layer-preserving re-edit and offline story unchanged.
         _recorder = new MyCapture.App.Recording.RegionRecordingCoordinator(
@@ -1411,7 +1411,8 @@ public partial class App : Application
         services.AddSingleton(new TrayIconAssets(
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-idle.ico"),
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-capturing.ico"),
-            Path.Combine(AppContext.BaseDirectory, "Assets", "tray-busy.ico")));
+            Path.Combine(AppContext.BaseDirectory, "Assets", "tray-busy.ico"),
+            Path.Combine(AppContext.BaseDirectory, "Assets", "tray-error.ico")));
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<GlobalHotkeyService>();
         services.AddSingleton<IOcrService, WindowsOcrService>();

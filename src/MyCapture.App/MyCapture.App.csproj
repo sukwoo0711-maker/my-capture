@@ -31,9 +31,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="Assets\app.ico" />
+    <Resource Include="Assets\app.ico" />
     <None Update="Assets\tray-idle.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\tray-capturing.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\tray-busy.ico" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\tray-error.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

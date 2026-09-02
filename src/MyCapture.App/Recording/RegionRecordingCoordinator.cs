@@ -35,7 +35,7 @@ internal sealed class RegionRecordingCoordinator
     private VideoEditSession? _videoEditSession;
 
     // Set the moment a stop is requested and held until the editor has opened (or the
-    // session has fully ended). Without it, a second Ctrl+X arriving during the
+    // session has fully ended). Without it, a second Ctrl+Shift+X arriving during the
     // brief stop→finalise→editor transition — when _controls may already be null but the
     // editor not yet shown — would fall through to StartRegionSelection() and begin a NEW
     // recording from 0. This flag closes that race deterministically.
@@ -82,7 +82,7 @@ internal sealed class RegionRecordingCoordinator
         || _finishing;
 
     /// <summary>
-    /// Entry point for the Ctrl+X command. If a recording is already running,
+    /// Entry point for the Ctrl+Shift+X command. If a recording is already running,
     /// the control window stops it (toggle behaviour); otherwise a new region is chosen.
     /// </summary>
     internal void Toggle()

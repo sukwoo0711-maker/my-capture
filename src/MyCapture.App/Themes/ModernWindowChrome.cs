@@ -12,6 +12,18 @@ namespace MyCapture.App.Themes;
 /// </summary>
 public static class ModernWindowChrome
 {
+    private const int DwmwaUseImmersiveDarkMode = 20;
+    private const int DwmwaLegacyUseImmersiveDarkMode = 19;
+    private const int DwmwaBorderColor = 34;
+    private const int DwmwaCaptionColor = 35;
+    private const int DwmwaTextColor = 36;
+    private const int DwmwaWindowCornerPreference = 33;
+
+    // COLORREF uses 0x00BBGGRR, not the usual RGB byte order.
+    private const int GraphiteBorderColorRef = 0x00503A2B; // #2B3A50
+    private const int GraphiteCaptionColorRef = 0x00170F0B; // #0B0F17
+    private const int PrimaryTextColorRef = 0x00FCF8F6; // #F6F8FC
+
     public static readonly DependencyProperty EnabledProperty = DependencyProperty.RegisterAttached(
         "Enabled",
         typeof(bool),
@@ -67,13 +79,25 @@ public static class ModernWindowChrome
         int enabled = 1;
         // Attribute 20 is the documented DWMWA_USE_IMMERSIVE_DARK_MODE value; 19 is the
         // pre-release value some DWM builds still answer, kept as a silent fallback.
-        if (DwmSetWindowAttribute(handle, 20, ref enabled, sizeof(int)) != 0)
+        if (DwmSetWindowAttribute(handle, DwmwaUseImmersiveDarkMode, ref enabled, sizeof(int)) != 0)
         {
-            _ = DwmSetWindowAttribute(handle, 19, ref enabled, sizeof(int));
+            _ = DwmSetWindowAttribute(handle, DwmwaLegacyUseImmersiveDarkMode, ref enabled, sizeof(int));
+        }
+
+        // Keep native chrome continuous with the WPF surface. High Contrast owns its
+        // caption palette, so never replace the user's accessibility colours there.
+        if (!SystemParameters.HighContrast)
+        {
+            int border = GraphiteBorderColorRef;
+            int caption = GraphiteCaptionColorRef;
+            int text = PrimaryTextColorRef;
+            _ = DwmSetWindowAttribute(handle, DwmwaBorderColor, ref border, sizeof(int));
+            _ = DwmSetWindowAttribute(handle, DwmwaCaptionColor, ref caption, sizeof(int));
+            _ = DwmSetWindowAttribute(handle, DwmwaTextColor, ref text, sizeof(int));
         }
 
         int rounded = 2; // DWMWCP_ROUND: available on every supported (Windows 11) host.
-        _ = DwmSetWindowAttribute(handle, 33, ref rounded, sizeof(int));
+        _ = DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref rounded, sizeof(int));
     }
 
     [DllImport("dwmapi.dll", PreserveSig = true)]

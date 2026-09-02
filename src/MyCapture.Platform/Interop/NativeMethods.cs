@@ -319,7 +319,10 @@ internal static partial class NativeMethods
         IntPtr hInst, string name, uint type, int cx, int cy, uint fuLoad);
 
     [LibraryImport("user32.dll")]
-    internal static partial int GetSystemMetrics(int nIndex);
+    internal static partial int GetSystemMetricsForDpi(int nIndex, uint dpi);
+
+    [LibraryImport("user32.dll")]
+    internal static partial uint GetDpiForWindow(IntPtr hwnd);
 
     // ----- Native tray context menu -----
 

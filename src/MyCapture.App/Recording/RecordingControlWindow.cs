@@ -128,14 +128,14 @@ internal sealed class RecordingControlWindow : Window
 
     internal bool IsRecording => _recorder is { IsRecording: true };
 
-    /// <summary>External stop request (e.g. pressing Ctrl+X again).</summary>
+    /// <summary>External stop request (e.g. pressing Ctrl+Shift+X again).</summary>
     internal void RequestStop() => StopRecording();
 
     private Border BuildRegionFrame()
     {
         var frame = new AccessibleRegionFrame
         {
-            BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0xFF, 0xD4, 0x00)),
+            BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x58, 0xC7, 0xF3)),
             BorderThickness = new Thickness(BorderThicknessPx),
             Background = Brushes.Transparent,
             CornerRadius = new CornerRadius(2),
@@ -164,9 +164,9 @@ internal sealed class RecordingControlWindow : Window
             }
         };
         frame.GotKeyboardFocus += (_, _) =>
-            frame.BorderBrush = TryBrush("Border.Focus", Color.FromRgb(0xFF, 0xE1, 0x4D));
+            frame.BorderBrush = TryBrush("Border.Focus", Color.FromRgb(0x7D, 0xD7, 0xF8));
         frame.LostKeyboardFocus += (_, _) =>
-            frame.BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0xFF, 0xD4, 0x00));
+            frame.BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x58, 0xC7, 0xF3));
 
         AutomationProperties.SetName(frame, "녹화 영역 테두리 (드래그로 이동)");
         AutomationProperties.SetHelpText(
@@ -234,8 +234,8 @@ internal sealed class RecordingControlWindow : Window
 
         return new Border
         {
-            Background = TryBrush("Surface.Floating", Color.FromArgb(0xF2, 0x2A, 0x24, 0x1C)),
-            BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x40, 0x38, 0x2C)),
+            Background = TryBrush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
+            BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x2B, 0x3A, 0x50)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
             Effect = Application.Current?.TryFindResource("Shadow.Floating") as System.Windows.Media.Effects.Effect,
@@ -465,7 +465,7 @@ internal sealed class RecordingControlWindow : Window
         {
             // Supported Windows 11 builds exclude the palette through display affinity. If that
             // OS contract unexpectedly fails and no outside placement exists, hide the palette
-            // during capture rather than burn controls into the user's video. Ctrl+X still
+            // during capture rather than burn controls into the user's video. Ctrl+Shift+X still
             // stops the recording.
             Opacity = 0;
         }

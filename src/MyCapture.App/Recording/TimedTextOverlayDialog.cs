@@ -36,7 +36,7 @@ internal sealed class TimedTextOverlayDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
-        Background = ResourceBrush("Surface.Base", Color.FromRgb(0x1B, 0x17, 0x12));
+        Background = ResourceBrush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
         Foreground = ResourceBrush("Text.Primary", Colors.White);
         FontFamily = Application.Current?.TryFindResource("Font.Ui") as FontFamily ?? new FontFamily("Segoe UI");
 

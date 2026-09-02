@@ -12,14 +12,15 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     private const double LabelWidth = 78;
     private const double TrackHeight = 34;
     private const double Gap = 4;
-    private readonly Brush _background = Frozen(Color.FromRgb(0x17, 0x15, 0x12));
-    private readonly Brush _track = Frozen(Color.FromRgb(0x28, 0x24, 0x1E));
-    private readonly Brush _textLayer = Frozen(Color.FromRgb(0x4B, 0x8E, 0xE8));
-    private readonly Brush _frameLayer = Frozen(Color.FromRgb(0xA7, 0x55, 0xD8));
-    private readonly Brush _foreground = Frozen(Colors.White);
-    private readonly Brush _muted = Frozen(Color.FromRgb(0xB7, 0xB0, 0xA5));
-    private readonly Pen _gridPen = FrozenPen(Color.FromRgb(0x45, 0x3F, 0x35), 1);
-    private readonly Pen _playheadPen = FrozenPen(Color.FromRgb(0x66, 0xB7, 0xFF), 2);
+    private readonly Brush _background;
+    private readonly Brush _track;
+    private readonly Brush _textLayer;
+    private readonly Brush _frameLayer;
+    private readonly Brush _foreground;
+    private readonly Brush _muted;
+    private readonly Pen _gridPen;
+    private readonly Pen _playheadPen;
+    private readonly Typeface _typeface;
     private IReadOnlyList<TimedTextOverlay> _textLayers = [];
     private IReadOnlyList<FrameEditLayer> _frameLayers = [];
     private double _durationMs = 1;
@@ -27,6 +28,18 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
     internal VideoLayerTimeline()
     {
+        _background = ResolveBrush("Timeline.Background", Color.FromRgb(0x0B, 0x0F, 0x17));
+        _track = ResolveBrush("Timeline.Track", Color.FromRgb(0x15, 0x1E, 0x2B));
+        _textLayer = ResolveBrush("Timeline.TextLayer", Color.FromRgb(0x3B, 0x82, 0xF6));
+        _frameLayer = ResolveBrush("Timeline.FrameLayer", Color.FromRgb(0x9B, 0x7E, 0xDE));
+        _foreground = ResolveBrush("Text.Badge", Colors.White);
+        _muted = ResolveBrush("Text.Muted", Color.FromRgb(0x8E, 0x9C, 0xAF));
+        _gridPen = FrozenPen(ResolveBrush("Timeline.Grid", Color.FromRgb(0x2B, 0x3A, 0x50)), 1);
+        _playheadPen = FrozenPen(ResolveBrush("Timeline.Playhead", Color.FromRgb(0x7D, 0xD7, 0xF8)), 2);
+        FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
+            ?? new FontFamily("Segoe UI");
+        _typeface = new Typeface(uiFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+
         Height = (TrackHeight * 2) + Gap;
         MinWidth = 240;
         SnapsToDevicePixels = true;
@@ -139,7 +152,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             text,
             CultureInfo.CurrentUICulture,
             FlowDirection.LeftToRight,
-            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
+            _typeface,
             size,
             brush,
             VisualTreeHelper.GetDpi(this).PixelsPerDip)
@@ -161,10 +174,17 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         return brush;
     }
 
-    private static Pen FrozenPen(Color color, double thickness)
+    private static Brush ResolveBrush(string key, Color fallback) =>
+        Application.Current?.TryFindResource(key) as Brush ?? Frozen(fallback);
+
+    private static Pen FrozenPen(Brush brush, double thickness)
     {
-        var pen = new Pen(Frozen(color), thickness);
-        pen.Freeze();
+        var pen = new Pen(brush, thickness);
+        if (pen.CanFreeze)
+        {
+            pen.Freeze();
+        }
+
         return pen;
     }
 

@@ -22,11 +22,14 @@ New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $dibSizes = @(16, 20, 24, 32, 40, 48, 64)
 $pngSizes = @(128, 256)
 
-# Accent palette. Tray state colours are deliberately far apart in hue so the
-# state is readable at 16px without relying on shape differences.
-$AccentBlue    = [System.Drawing.Color]::FromArgb(255, 96, 165, 250)
-$AccentAmber   = [System.Drawing.Color]::FromArgb(255, 251, 191, 36)
-$AccentEmerald = [System.Drawing.Color]::FromArgb(255, 52, 211, 153)
+# Focus Portal palette. Tray state colours are deliberately far apart in hue;
+# the tooltip/status text still carries the state so colour is never the only cue.
+$AccentFocus   = [System.Drawing.Color]::FromArgb(255, 88, 199, 243)
+$AccentAmber   = [System.Drawing.Color]::FromArgb(255, 245, 185, 66)
+$AccentEmerald = [System.Drawing.Color]::FromArgb(255, 69, 214, 162)
+$AccentCoral   = [System.Drawing.Color]::FromArgb(255, 255, 107, 116)
+$GraphitePlate = [System.Drawing.Color]::FromArgb(255, 11, 15, 23)
+$PortalWhite   = [System.Drawing.Color]::FromArgb(255, 246, 248, 252)
 
 function New-RoundedPath {
     param([float]$X, [float]$Y, [float]$W, [float]$H, [float]$R)
@@ -49,11 +52,11 @@ function Draw-Icon {
         [int]$Size,
         [System.Drawing.Color]$Accent,
 
-        # 'Plate' draws the accent frame on a dark rounded square. Used for the
+        # 'Plate' draws the two-pane brand mark on a dark rounded square. Used for the
         # application icon, where the host surface (Explorer, installer, Alt-Tab)
         # is unpredictable but always reasonably large.
         #
-        # 'Glyph' draws the frame alone over a dark halo. Used for tray icons: at
+        # 'Glyph' draws the two panes over a dark halo. Used for tray icons: at
         # 16px a dark plate collapses into an indistinct blob on a dark taskbar,
         # whereas a haloed glyph stays readable on both light and dark themes.
         [ValidateSet('Plate', 'Glyph')]
@@ -71,97 +74,54 @@ function Draw-Icon {
         $pad = [Math]::Max(0.5, $s * 0.03)
         $plateSize = $s - ($pad * 2)
         $plate = New-RoundedPath -X $pad -Y $pad -W $plateSize -H $plateSize -R ($s * 0.21)
-        $bg = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-            (New-Object System.Drawing.PointF(0, 0)),
-            (New-Object System.Drawing.PointF($s, $s)),
-            [System.Drawing.Color]::FromArgb(255, 44, 55, 72),
-            [System.Drawing.Color]::FromArgb(255, 20, 26, 36))
+        $bg = New-Object System.Drawing.SolidBrush($GraphitePlate)
         $g.FillPath($bg, $plate)
         $bg.Dispose()
         $plate.Dispose()
 
-        $margin = [Math]::Round($s * 0.20)
-        $thickness = [Math]::Max(2.0, [Math]::Round($s * 0.075))
+        $margin = [Math]::Round($s * 0.17)
+        $thickness = [Math]::Max(1.5, [Math]::Round($s * 0.072))
     }
     else {
-        # No plate to sit inside, so the frame can use nearly the whole canvas and
+        # No plate to sit inside, so the portal can use nearly the whole canvas and
         # a heavier stroke compensates for the missing backdrop.
-        $margin = [Math]::Max(1.0, [Math]::Round($s * 0.10))
-        $thickness = [Math]::Max(2.0, [Math]::Round($s * 0.105))
+        $margin = [Math]::Max(1.0, [Math]::Round($s * 0.08))
+        $thickness = [Math]::Max(2.0, [Math]::Round($s * 0.10))
     }
 
-    # Capture frame: four corner brackets.
-    #
-    # Arm length is derived as 35% of the frame span rather than hand-tuned, which
-    # leaves a 30% gap in the middle of each edge at every size. Longer arms make
-    # the brackets merge into a closed ring and the icon stops reading as a crop
-    # marquee.
+    # Focus Portal: a captured source pane moves forward into a floating pane.
+    # Both rectangles are kept complete at small sizes; that silhouette survives
+    # Windows tray resampling much better than four disconnected crop corners.
     $span = $s - ($margin * 2)
-    $arm = [Math]::Max(2.0, [Math]::Round($span * 0.35))
-
-    $l = [float]$margin
-    $r = [float]($s - $margin)
-    $t = [float]$margin
-    $b = [float]($s - $margin)
-
-    $corners = @(
-        @{ Cx = $l; Cy = $t; Dx = 1;  Dy = 1 },
-        @{ Cx = $r; Cy = $t; Dx = -1; Dy = 1 },
-        @{ Cx = $l; Cy = $b; Dx = 1;  Dy = -1 },
-        @{ Cx = $r; Cy = $b; Dx = -1; Dy = -1 }
-    )
-
-    $paths = @()
-    foreach ($corner in $corners) {
-        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $path.AddLine(($corner.Cx + ($arm * $corner.Dx)), $corner.Cy, $corner.Cx, $corner.Cy)
-        $path.AddLine($corner.Cx, $corner.Cy, $corner.Cx, ($corner.Cy + ($arm * $corner.Dy)))
-        $paths += , $path
-    }
-
-    $dotR = $s * 0.10
-    $c = $s / 2.0
-
-    # In plate mode the dot is skipped below 24px: the frame gap is only a few
-    # pixels there and a dot would visually close it up. Glyph mode uses a larger
-    # frame so the dot always fits.
-    $drawDot = ($Size -ge 24) -or ($Mode -eq 'Glyph')
+    $paneSize = $span * 0.64
+    $offset = $span * 0.26
+    $radius = [Math]::Max(1.0, $s * 0.085)
+    $frontPath = New-RoundedPath -X $margin -Y $margin -W $paneSize -H $paneSize -R $radius
+    $rearPath = New-RoundedPath -X ($margin + $offset) -Y ($margin + $offset) -W $paneSize -H $paneSize -R $radius
 
     if ($Mode -eq 'Glyph') {
         $haloWidth = $thickness + [Math]::Max(1.5, $s * 0.055)
-        $haloColor = [System.Drawing.Color]::FromArgb(160, 12, 16, 22)
+        $haloColor = [System.Drawing.Color]::FromArgb(190, 8, 12, 18)
 
         $halo = New-Object System.Drawing.Pen($haloColor, $haloWidth)
-        $halo.StartCap = [System.Drawing.Drawing2D.LineCap]::Flat
-        $halo.EndCap = [System.Drawing.Drawing2D.LineCap]::Flat
         $halo.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-        foreach ($p in $paths) { $g.DrawPath($halo, $p) }
+        $g.DrawPath($halo, $rearPath)
+        $g.DrawPath($halo, $frontPath)
         $halo.Dispose()
-
-        if ($drawDot) {
-            $haloBrush = New-Object System.Drawing.SolidBrush($haloColor)
-            $hr = $dotR + (($haloWidth - $thickness) / 2.0)
-            $g.FillEllipse($haloBrush, ($c - $hr), ($c - $hr), ($hr * 2), ($hr * 2))
-            $haloBrush.Dispose()
-        }
     }
 
-    # Flat caps keep the arm ends exactly at the computed coordinates so the gap
-    # stays predictable; a round join still softens the corner itself.
-    $pen = New-Object System.Drawing.Pen($Accent, $thickness)
-    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Flat
-    $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Flat
-    $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-    foreach ($p in $paths) { $g.DrawPath($pen, $p) }
-    $pen.Dispose()
+    $rearPen = New-Object System.Drawing.Pen($Accent, $thickness)
+    $rearPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+    $g.DrawPath($rearPen, $rearPath)
+    $rearPen.Dispose()
 
-    foreach ($p in $paths) { $p.Dispose() }
-
-    if ($drawDot) {
-        $dotBrush = New-Object System.Drawing.SolidBrush($Accent)
-        $g.FillEllipse($dotBrush, ($c - $dotR), ($c - $dotR), ($dotR * 2), ($dotR * 2))
-        $dotBrush.Dispose()
-    }
+    $frontColor = if ($Mode -eq 'Plate') { $PortalWhite } else { $Accent }
+    $frontPen = New-Object System.Drawing.Pen($frontColor, $thickness)
+    $frontPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+    $g.DrawPath($frontPen, $frontPath)
+    $frontPen.Dispose()
+    $rearPath.Dispose()
+    $frontPath.Dispose()
 
     $g.Dispose()
     return $bmp
@@ -292,9 +252,10 @@ function Save-Ico {
 
 Write-Host "Generating icons into $OutDir"
 
-Save-Ico -Path (Join-Path $OutDir 'app.ico')            -Accent $AccentBlue    -Mode Plate
-Save-Ico -Path (Join-Path $OutDir 'tray-idle.ico')      -Accent $AccentBlue    -Mode Glyph
+Save-Ico -Path (Join-Path $OutDir 'app.ico')            -Accent $AccentFocus   -Mode Plate
+Save-Ico -Path (Join-Path $OutDir 'tray-idle.ico')      -Accent $AccentFocus   -Mode Glyph
 Save-Ico -Path (Join-Path $OutDir 'tray-capturing.ico') -Accent $AccentAmber   -Mode Glyph
 Save-Ico -Path (Join-Path $OutDir 'tray-busy.ico')      -Accent $AccentEmerald -Mode Glyph
+Save-Ico -Path (Join-Path $OutDir 'tray-error.ico')     -Accent $AccentCoral   -Mode Glyph
 
 Write-Host "Done."

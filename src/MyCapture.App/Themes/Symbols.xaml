@@ -23,6 +23,22 @@
     <PathGeometry x:Key="Icon.Image"
                   Figures="M4,3.75 L16,3.75 A1.25,1.25 0 0 1 17.25,5 L17.25,15 A1.25,1.25 0 0 1 16,16.25 L4,16.25 A1.25,1.25 0 0 1 2.75,15 L2.75,5 A1.25,1.25 0 0 1 4,3.75 Z M3,13.5 L7.4,9.25 L10.4,12.1 L12.6,10.1 L17,14 M13.6,7.2 A1.15,1.15 0 1 0 13.59,7.2" />
 
+    <!-- Media transport and timeline controls. These replace font-dependent Unicode
+         symbols so every Windows locale and fallback font renders the same silhouette. -->
+    <PathGeometry x:Key="Icon.Play" Figures="M6.5,4.25 L15.5,10 L6.5,15.75 Z" />
+    <GeometryGroup x:Key="Icon.Pause">
+        <RectangleGeometry Rect="5.25,4.25 3.25,11.5" RadiusX="0.75" RadiusY="0.75" />
+        <RectangleGeometry Rect="11.5,4.25 3.25,11.5" RadiusX="0.75" RadiusY="0.75" />
+    </GeometryGroup>
+    <PathGeometry x:Key="Icon.First" Figures="M4.5,4 L4.5,16 M15.5,4.75 L7.5,10 L15.5,15.25 Z" />
+    <PathGeometry x:Key="Icon.Last" Figures="M15.5,4 L15.5,16 M4.5,4.75 L12.5,10 L4.5,15.25 Z" />
+    <PathGeometry x:Key="Icon.Rewind" Figures="M9.5,5 L4.5,10 L9.5,15 M15.5,5 L10.5,10 L15.5,15" />
+    <PathGeometry x:Key="Icon.FastForward" Figures="M4.5,5 L9.5,10 L4.5,15 M10.5,5 L15.5,10 L10.5,15" />
+    <PathGeometry x:Key="Icon.StepBack" Figures="M7,4 L7,16 M14.5,5 L8.5,10 L14.5,15" />
+    <PathGeometry x:Key="Icon.StepForward" Figures="M13,4 L13,16 M5.5,5 L11.5,10 L5.5,15" />
+    <PathGeometry x:Key="Icon.FitAll" Figures="M3.5,7 L3.5,3.5 L7,3.5 M13,3.5 L16.5,3.5 L16.5,7 M16.5,13 L16.5,16.5 L13,16.5 M7,16.5 L3.5,16.5 L3.5,13 M6.75,10 L13.25,10" />
+    <PathGeometry x:Key="Icon.Trim" Figures="M5,4 L15,14 M15,6 L5,16 M4.75,4 A1.75,1.75 0 1 1 4.74,4 M4.75,16 A1.75,1.75 0 1 1 4.74,16" />
+
     <!-- History and document actions -->
     <PathGeometry x:Key="Icon.Undo"
                   Figures="M7.25,5.25 L3.5,9 L7.25,12.75 M3.75,9 L11.25,9 A5,5 0 0 1 14.75,17" />
