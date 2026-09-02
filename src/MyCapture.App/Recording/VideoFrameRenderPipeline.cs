@@ -20,7 +20,8 @@ internal sealed record VideoFrameRenderRequest(
     int Height,
     int CanvasWidth,
     int CanvasHeight,
-    IReadOnlyList<TimedTextOverlay> TextOverlays);
+    IReadOnlyList<TimedTextOverlay> TextOverlays,
+    IReadOnlyList<FrameEditLayer> FrameEditLayers);
 
 internal sealed record VideoFrameRenderProgress(int CompletedFrames, int TotalFrames, double SourceTimeMs);
 
@@ -110,6 +111,8 @@ internal static class VideoFrameRenderPipeline
             throw new InvalidDataException("The source video reported invalid dimensions.");
         }
 
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps =
+            FrameEditLayerRenderer.Decode(request.FrameEditLayers);
         for (int index = 0; index < sourceTimes.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -133,6 +136,8 @@ internal static class VideoFrameRenderPipeline
                 request.CanvasWidth,
                 request.CanvasHeight,
                 request.TextOverlays,
+                request.FrameEditLayers,
+                frameLayerBitmaps,
                 sourceTime);
             acceptFrame(frame, index);
             progress?.Report(new VideoFrameRenderProgress(index + 1, sourceTimes.Count, sourceTime));
@@ -147,6 +152,7 @@ internal static class VideoFrameRenderPipeline
         int width,
         int height,
         IReadOnlyList<TimedTextOverlay>? overlays = null,
+        IReadOnlyList<FrameEditLayer>? frameEditLayers = null,
         CancellationToken cancellationToken = default)
     {
         BitmapSource? result = null;
@@ -159,7 +165,8 @@ internal static class VideoFrameRenderPipeline
             height,
             width,
             height,
-            overlays ?? []);
+            overlays ?? [],
+            frameEditLayers ?? []);
         _ = Render(request, (frame, _) => result = frame, cancellationToken: cancellationToken);
         return result ?? throw new InvalidOperationException("No video frame was rendered.");
     }
@@ -253,6 +260,8 @@ internal static class VideoFrameRenderPipeline
         int canvasWidth,
         int canvasHeight,
         IReadOnlyList<TimedTextOverlay> overlays,
+        IReadOnlyList<FrameEditLayer> frameEditLayers,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
         double sourceTimeMs)
     {
         var visual = new DrawingVisual();
@@ -263,6 +272,13 @@ internal static class VideoFrameRenderPipeline
             double scaleX = (double)width / canvasWidth;
             double scaleY = (double)height / canvasHeight;
             dc.PushTransform(new ScaleTransform(scaleX, scaleY));
+            FrameEditLayerRenderer.Draw(
+                dc,
+                frameEditLayers,
+                frameLayerBitmaps,
+                sourceTimeMs,
+                canvasWidth,
+                canvasHeight);
             TimedTextOverlayRenderer.Draw(
                 dc,
                 overlays,
@@ -354,6 +370,70 @@ internal static class VideoFrameRenderPipeline
         }
     }
 
+}
+
+/// <summary>Shared transparent frame-layer compositor used by preview, MP4 and GIF export.</summary>
+internal static class FrameEditLayerRenderer
+{
+    internal static IReadOnlyDictionary<Guid, BitmapSource> Decode(
+        IReadOnlyList<FrameEditLayer> layers)
+    {
+        ArgumentNullException.ThrowIfNull(layers);
+        var decoded = new Dictionary<Guid, BitmapSource>();
+        foreach (FrameEditLayer layer in layers)
+        {
+            if (decoded.ContainsKey(layer.Id)
+                || string.IsNullOrWhiteSpace(layer.OverlayPngBase64)
+                || layer.OverlayPngBase64.Length > VideoEditDocument.MaximumFrameLayerEncodedLength)
+            {
+                continue;
+            }
+
+            try
+            {
+                byte[] bytes = Convert.FromBase64String(layer.OverlayPngBase64);
+                using var stream = new MemoryStream(bytes, writable: false);
+                var decoder = new PngBitmapDecoder(
+                    stream,
+                    BitmapCreateOptions.PreservePixelFormat,
+                    BitmapCacheOption.OnLoad);
+                BitmapSource bitmap = decoder.Frames[0];
+                bitmap.Freeze();
+                decoded[layer.Id] = bitmap;
+            }
+            catch (Exception ex) when (ex is FormatException
+                                       or NotSupportedException
+                                       or InvalidOperationException
+                                       or FileFormatException
+                                       or ArgumentException
+                                       or IOException
+                                       or OverflowException)
+            {
+                // Persisted edit metadata is untrusted. A damaged optional layer is ignored so
+                // the source video remains playable and editable.
+            }
+        }
+
+        return decoded;
+    }
+
+    internal static void Draw(
+        DrawingContext dc,
+        IReadOnlyList<FrameEditLayer> layers,
+        IReadOnlyDictionary<Guid, BitmapSource> bitmaps,
+        double sourceTimeMs,
+        double width,
+        double height)
+    {
+        ArgumentNullException.ThrowIfNull(dc);
+        foreach (FrameEditLayer layer in layers)
+        {
+            if (layer.IsActiveAt(sourceTimeMs) && bitmaps.TryGetValue(layer.Id, out BitmapSource? bitmap))
+            {
+                dc.DrawImage(bitmap, new Rect(0, 0, width, height));
+            }
+        }
+    }
 }
 
 /// <summary>Shared WYSIWYG text compositor used by preview, MP4 render and GIF export.</summary>

@@ -14,7 +14,8 @@ internal sealed class GifExportLimitException : InvalidOperationException
 internal sealed record GifFrameSchedule(
     IReadOnlyList<double> SourceTimesMs,
     IReadOnlyList<int> FrameDelaysCentiseconds,
-    IReadOnlyList<TimedTextOverlay> QuantizedTextOverlays);
+    IReadOnlyList<TimedTextOverlay> QuantizedTextOverlays,
+    IReadOnlyList<FrameEditLayer> QuantizedFrameEditLayers);
 
 /// <summary>
 /// Streams a trimmed, text-composited recording to animated GIF using only Windows/WPF codecs.
@@ -32,7 +33,8 @@ internal static class AnimatedGifExporter
         VideoEditDocument editDocument,
         string destinationPath,
         IProgress<VideoFrameRenderProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        double playbackSpeed = 1.0)
     {
         ArgumentNullException.ThrowIfNull(recording);
         ArgumentNullException.ThrowIfNull(editDocument);
@@ -49,7 +51,7 @@ internal static class AnimatedGifExporter
                 "GIF는 최대 20초까지 내보낼 수 있습니다. 타임라인의 시작/끝 지점을 줄여 주세요.");
         }
 
-        GifFrameSchedule schedule = BuildFrameSchedule(document);
+        GifFrameSchedule schedule = BuildFrameSchedule(document, playbackSpeed);
 
         (int width, int height) = FitWithin(recording.Width, recording.Height, MaximumLongEdge);
         string destination = Path.GetFullPath(destinationPath);
@@ -100,7 +102,8 @@ internal static class AnimatedGifExporter
                             height,
                             recording.Width,
                             recording.Height,
-                            schedule.QuantizedTextOverlays),
+                            schedule.QuantizedTextOverlays,
+                            schedule.QuantizedFrameEditLayers),
                         schedule.SourceTimesMs,
                         (frame, index) => writer.AddFrame(
                             frame,
@@ -182,9 +185,18 @@ internal static class AnimatedGifExporter
     /// centiseconds, so text starts/ends within 5ms of the requested source time instead of being
     /// shifted to the next 100ms video sample.
     /// </summary>
-    internal static GifFrameSchedule BuildFrameSchedule(VideoEditDocument document)
+    internal static GifFrameSchedule BuildFrameSchedule(
+        VideoEditDocument document,
+        double playbackSpeed = 1.0)
     {
         ArgumentNullException.ThrowIfNull(document);
+        if (!double.IsFinite(playbackSpeed) || playbackSpeed is < 0.25 or > 4.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(playbackSpeed),
+                "GIF playback speed must be between 0.25x and 4x.");
+        }
+
         double durationMs = document.TrimOutMs - document.TrimInMs;
         int totalCentiseconds = Math.Max(
             1,
@@ -236,27 +248,70 @@ internal static class AnimatedGifExporter
             quantizedOverlays.Add(adjusted);
         }
 
+        var quantizedFrameLayers = new List<FrameEditLayer>();
+        foreach (FrameEditLayer layer in document.FrameEditLayers)
+        {
+            double start = Math.Max(document.TrimInMs, layer.StartMs);
+            double end = Math.Min(document.TrimOutMs, layer.EndMs);
+            if (end <= start)
+            {
+                continue;
+            }
+
+            int startCs = Math.Clamp(
+                checked((int)Math.Round(
+                    (start - document.TrimInMs) / 10.0,
+                    MidpointRounding.AwayFromZero)),
+                0,
+                totalCentiseconds);
+            int endCs = Math.Clamp(
+                checked((int)Math.Round(
+                    (end - document.TrimInMs) / 10.0,
+                    MidpointRounding.AwayFromZero)),
+                0,
+                totalCentiseconds);
+            if (endCs <= startCs)
+            {
+                throw new GifExportLimitException(
+                    "GIF 시간 해상도는 0.01초입니다. 프레임 레이어 표시 구간을 0.01초 이상으로 늘려 주세요.");
+            }
+
+            _ = boundaries.Add(startCs);
+            _ = boundaries.Add(endCs);
+            FrameEditLayer adjusted = layer.Clone();
+            adjusted.StartMs = document.TrimInMs + (startCs * 10.0);
+            adjusted.EndMs = document.TrimInMs + (endCs * 10.0);
+            quantizedFrameLayers.Add(adjusted);
+        }
+
         int frameCount = boundaries.Count - 1;
         if (frameCount > MaximumFrames)
         {
             throw new GifExportLimitException(
-                $"텍스트 시간 경계를 포함한 GIF 프레임 수가 최대 {MaximumFrames}개를 초과합니다. " +
-                "구간을 줄이거나 텍스트 시작/끝 시간을 0.1초 눈금에 가깝게 조정해 주세요.");
+                $"레이어 시간 경계를 포함한 GIF 프레임 수가 최대 {MaximumFrames}개를 초과합니다. " +
+                "구간을 줄이거나 레이어 시작/끝 시간을 0.1초 눈금에 가깝게 조정해 주세요.");
         }
 
         int[] ordered = boundaries.ToArray();
         var sourceTimes = new double[frameCount];
         var delays = new int[frameCount];
+        int previousOutputBoundary = 0;
         for (int index = 0; index < frameCount; index++)
         {
             sourceTimes[index] = document.TrimInMs + (ordered[index] * 10.0);
-            delays[index] = ordered[index + 1] - ordered[index];
+            int outputBoundary = Math.Max(
+                previousOutputBoundary + 1,
+                checked((int)Math.Round(
+                    ordered[index + 1] / playbackSpeed,
+                    MidpointRounding.AwayFromZero)));
+            delays[index] = outputBoundary - previousOutputBoundary;
+            previousOutputBoundary = outputBoundary;
             if (delays[index] <= 0)
             {
                 throw new InvalidOperationException("GIF frame schedule contains a non-positive delay.");
             }
         }
 
-        return new GifFrameSchedule(sourceTimes, delays, quantizedOverlays);
+        return new GifFrameSchedule(sourceTimes, delays, quantizedOverlays, quantizedFrameLayers);
     }
 }

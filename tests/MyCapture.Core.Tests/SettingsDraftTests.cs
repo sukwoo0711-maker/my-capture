@@ -38,7 +38,8 @@ public sealed class AppSettingsCloneTests
         source.Export.FileNamePattern = "shot_{yyyy}";
         source.Pin.ZoomStep = 0.25;
         source.Hotkeys.Capture = new Hotkey(HotkeyModifiers.Alt, Hotkey.VkF1);
-        source.Hotkeys.RecordRegion = new Hotkey(HotkeyModifiers.Alt, Hotkey.VkF1 + 1);
+        source.Hotkeys.OpenLibrary = new Hotkey(HotkeyModifiers.Alt, Hotkey.VkF1 + 1);
+        source.Hotkeys.RecordRegion = new Hotkey(HotkeyModifiers.Alt, Hotkey.VkF1 + 2);
         source.Recording.FrameRate = RecordingFrameRate.Fps24;
         source.Recording.UseStartDelay = true;
         source.Recording.StartDelaySeconds = 6;
@@ -53,7 +54,8 @@ public sealed class AppSettingsCloneTests
         Assert.Equal("shot_{yyyy}", clone.Export.FileNamePattern);
         Assert.Equal(0.25, clone.Pin.ZoomStep);
         Assert.Equal("Alt+F1", clone.Hotkeys.Capture.ToString());
-        Assert.Equal("Alt+F2", clone.Hotkeys.RecordRegion.ToString());
+        Assert.Equal("Alt+F2", clone.Hotkeys.OpenLibrary.ToString());
+        Assert.Equal("Alt+F3", clone.Hotkeys.RecordRegion.ToString());
         Assert.Equal(RecordingFrameRate.Fps24, clone.Recording.FrameRate);
         Assert.True(clone.Recording.UseStartDelay);
         Assert.Equal(6, clone.Recording.StartDelaySeconds);
@@ -147,6 +149,7 @@ public sealed class SettingsDraftTests
             UseRecordingStartDelay = true,
             RecordingStartDelaySeconds = "7",
             RecordingIncludeCursor = false,
+            OpenLibraryHotkey = "Ctrl+Alt+F7",
             RecordRegionHotkey = "Alt+F8",
         };
 
@@ -159,6 +162,7 @@ public sealed class SettingsDraftTests
         Assert.False(mapped.Recording.IncludeCursor);
         Assert.Equal(7_500_000, mapped.Recording.BitrateBitsPerSecond);
         Assert.Equal(2.25, mapped.Recording.CoarseStepSeconds);
+        Assert.Equal("Ctrl+Alt+F7", mapped.Hotkeys.OpenLibrary.ToString());
         Assert.Equal("Alt+F8", mapped.Hotkeys.RecordRegion.ToString());
     }
 

@@ -366,6 +366,13 @@
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="라이브러리 열기" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="라이브러리 열기 단축키"
+                                     Text="{Binding OpenLibraryHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="화면에 붙이기" />
                             <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
                                      AutomationProperties.Name="화면에 붙이기 단축키"
@@ -494,11 +501,6 @@
                                         Click="OnBrowseQuickSaveDirectory" />
                             </Grid>
                         </StackPanel>
-
-                        <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="빠른 저장 시 클립보드에도 복사"
-                                  AutomationProperties.Name="빠른 저장 시 클립보드에도 복사"
-                                  IsChecked="{Binding CopyToClipboardOnQuickSave}" />
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="파일명 패턴" />

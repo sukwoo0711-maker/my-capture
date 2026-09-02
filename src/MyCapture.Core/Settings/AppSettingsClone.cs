@@ -43,6 +43,7 @@ public static class AppSettingsClone
     private static HotkeySettings Clone(HotkeySettings s) => new()
     {
         Capture = s.Capture,
+        OpenLibrary = s.OpenLibrary,
         PasteToScreen = s.PasteToScreen,
         HideAllPins = s.HideAllPins,
         ToggleClickThrough = s.ToggleClickThrough,

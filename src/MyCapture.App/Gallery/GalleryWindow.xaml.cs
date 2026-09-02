@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
@@ -58,6 +59,13 @@ internal sealed partial class GalleryWindow : Window
     private bool _ocrIndexingRunning;
     private CancellationTokenSource? _ocrIndexingCts;
     private readonly HashSet<Guid> _openEditors = [];
+    private readonly DispatcherTimer _inlinePlaybackTimer;
+    private Guid? _inlineVideoId;
+    private string? _inlineVideoPath;
+    private bool _inlineMediaReady;
+    private bool _inlinePlaying;
+    private bool _inlineSeekUpdating;
+    private bool _inlineAutoPlayPending;
 
     internal GalleryWindow(
         GalleryViewModel viewModel,
@@ -92,6 +100,11 @@ internal sealed partial class GalleryWindow : Window
 
         InitializeComponent();
         DataContext = _viewModel;
+        _inlinePlaybackTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(200),
+        };
+        _inlinePlaybackTimer.Tick += OnInlinePlaybackTick;
 
         // Ctrl+F focuses the search box from anywhere in the window.
         InputBindings.Add(new KeyBinding(
@@ -155,9 +168,13 @@ internal sealed partial class GalleryWindow : Window
         if (!_allowClose)
         {
             e.Cancel = true;
+            CloseInlinePlayer();
             Hide();
             return;
         }
+
+        CloseInlinePlayer();
+        _inlinePlaybackTimer.Tick -= OnInlinePlaybackTick;
 
         base.OnClosing(e);
     }
@@ -293,8 +310,19 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnTileSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // Selection is used only for keyboard focus/target resolution; nothing to do here,
-        // but keeping the handler lets the container light up its selected visual.
+        if (e.AddedItems.OfType<GalleryItemViewModel>().FirstOrDefault() is not { } tile)
+        {
+            return;
+        }
+
+        if (tile.IsVideo)
+        {
+            PrepareInlineVideo(tile, autoPlay: false);
+        }
+        else
+        {
+            CloseInlinePlayer();
+        }
     }
 
     private void OnTileMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -357,7 +385,14 @@ internal sealed partial class GalleryWindow : Window
     {
         if (ResolveTile(e.OriginalSource) is GalleryItemViewModel tile)
         {
-            OpenReedit(tile);
+            if (tile.IsVideo)
+            {
+                PrepareInlineVideo(tile, autoPlay: true);
+            }
+            else
+            {
+                OpenReedit(tile);
+            }
             e.Handled = true;
         }
     }
@@ -372,7 +407,14 @@ internal sealed partial class GalleryWindow : Window
         switch (e.Key)
         {
             case Key.Enter:
-                OpenReedit(tile);
+                if (tile.IsVideo)
+                {
+                    PrepareInlineVideo(tile, autoPlay: true);
+                }
+                else
+                {
+                    OpenReedit(tile);
+                }
                 e.Handled = true;
                 break;
             case Key.Delete:
@@ -400,6 +442,229 @@ internal sealed partial class GalleryWindow : Window
                 e.Handled = true;
                 break;
         }
+    }
+
+    // ---- In-library video playback ------------------------------------------------
+
+    private void PrepareInlineVideo(GalleryItemViewModel tile, bool autoPlay)
+    {
+        CaptureRecord? record = _controller.Find(tile.Id);
+        if (record is null || !record.IsVideo || !EnsureRecordReady(record.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            string path = Path.GetFullPath(_videoLibrary.CurrentVideoPath(record));
+            if (!File.Exists(path))
+            {
+                ShowStatus("동영상 파일을 찾을 수 없습니다.");
+                return;
+            }
+
+            InlineVideoPanel.Visibility = Visibility.Visible;
+            InlineVideoTitle.Text = tile.ContextLabel;
+            if (_inlineVideoId == tile.Id
+                && string.Equals(_inlineVideoPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                _inlineAutoPlayPending |= autoPlay;
+                if (autoPlay && _inlineMediaReady)
+                {
+                    SetInlinePlayback(playing: true);
+                }
+
+                return;
+            }
+
+            _inlineAutoPlayPending = autoPlay;
+            InlineVideo.Stop();
+            InlineVideo.Source = new Uri(path, UriKind.Absolute);
+            _inlineVideoId = tile.Id;
+            _inlineVideoPath = path;
+            _inlineMediaReady = false;
+            _inlinePlaying = false;
+            InlinePlayButton.Content = "재생";
+            InlinePlaybackStatus.Text = "동영상 여는 중…";
+            InlineSeekSlider.Maximum = Math.Max(1, record.DurationMs);
+            SetInlineSliderValue(0);
+            InlineTimeLabel.Text = $"00:00 / {FormatPlaybackTime(record.DurationMs)}";
+
+            // Manual MediaElement playback needs one Play call to begin opening on every
+            // Windows media stack. MediaOpened decides whether to remain playing or pause.
+            InlineVideo.Play();
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not open inline video {Id}", record.Id);
+            InlinePlaybackStatus.Text = "재생 준비 실패";
+            ShowStatus("라이브러리 안에서 동영상을 열 수 없습니다: " + ex.Message);
+        }
+    }
+
+    private void OnInlineMediaOpened(object sender, RoutedEventArgs e)
+    {
+        _inlineMediaReady = true;
+        double durationMs = InlineVideo.NaturalDuration.HasTimeSpan
+            ? InlineVideo.NaturalDuration.TimeSpan.TotalMilliseconds
+            : Math.Max(1, InlineSeekSlider.Maximum);
+        InlineSeekSlider.Maximum = Math.Max(1, durationMs);
+        InlinePlaybackStatus.Text = "재생 준비";
+        if (_inlineAutoPlayPending)
+        {
+            SetInlinePlayback(playing: true);
+        }
+        else
+        {
+            InlineVideo.Pause();
+            InlineVideo.Position = TimeSpan.Zero;
+            SetInlineSliderValue(0);
+            UpdateInlineTimeLabel();
+        }
+
+        _inlineAutoPlayPending = false;
+    }
+
+    private void OnInlineMediaEnded(object sender, RoutedEventArgs e)
+    {
+        InlineVideo.Pause();
+        InlineVideo.Position = TimeSpan.Zero;
+        _inlinePlaying = false;
+        _inlinePlaybackTimer.Stop();
+        InlinePlayButton.Content = "재생";
+        InlinePlaybackStatus.Text = "재생 완료";
+        SetInlineSliderValue(0);
+        UpdateInlineTimeLabel();
+    }
+
+    private void OnInlineMediaFailed(object sender, ExceptionRoutedEventArgs e)
+    {
+        _inlineMediaReady = false;
+        _inlinePlaying = false;
+        _inlineAutoPlayPending = false;
+        _inlinePlaybackTimer.Stop();
+        InlinePlayButton.Content = "재생";
+        InlinePlaybackStatus.Text = "재생할 수 없음";
+        _log.LogWarning(e.ErrorException, "Inline gallery playback failed for {Path}", _inlineVideoPath);
+    }
+
+    private void OnInlinePlayClick(object sender, RoutedEventArgs e)
+    {
+        if (_inlineMediaReady)
+        {
+            SetInlinePlayback(!_inlinePlaying);
+        }
+    }
+
+    private void SetInlinePlayback(bool playing)
+    {
+        if (!_inlineMediaReady)
+        {
+            return;
+        }
+
+        if (playing)
+        {
+            if (InlineVideo.Position.TotalMilliseconds >= InlineSeekSlider.Maximum - 1)
+            {
+                InlineVideo.Position = TimeSpan.Zero;
+            }
+
+            InlineVideo.Play();
+            _inlinePlaying = true;
+            _inlinePlaybackTimer.Start();
+            InlinePlayButton.Content = "일시정지";
+            InlinePlaybackStatus.Text = "라이브러리에서 재생 중";
+        }
+        else
+        {
+            InlineVideo.Pause();
+            _inlinePlaying = false;
+            _inlinePlaybackTimer.Stop();
+            InlinePlayButton.Content = "재생";
+            InlinePlaybackStatus.Text = "일시정지";
+            UpdateInlinePlaybackPosition();
+        }
+    }
+
+    private void OnInlinePlaybackTick(object? sender, EventArgs e) =>
+        UpdateInlinePlaybackPosition();
+
+    private void UpdateInlinePlaybackPosition()
+    {
+        if (!_inlineMediaReady)
+        {
+            return;
+        }
+
+        SetInlineSliderValue(Math.Clamp(
+            InlineVideo.Position.TotalMilliseconds,
+            0,
+            InlineSeekSlider.Maximum));
+        UpdateInlineTimeLabel();
+    }
+
+    private void OnInlineSeekChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_inlineSeekUpdating || !_inlineMediaReady)
+        {
+            return;
+        }
+
+        InlineVideo.Position = TimeSpan.FromMilliseconds(Math.Clamp(
+            e.NewValue,
+            0,
+            InlineSeekSlider.Maximum));
+        UpdateInlineTimeLabel();
+    }
+
+    private void SetInlineSliderValue(double value)
+    {
+        _inlineSeekUpdating = true;
+        try
+        {
+            InlineSeekSlider.Value = value;
+        }
+        finally
+        {
+            _inlineSeekUpdating = false;
+        }
+    }
+
+    private void UpdateInlineTimeLabel() =>
+        InlineTimeLabel.Text = $"{FormatPlaybackTime(InlineVideo.Position.TotalMilliseconds)} / {FormatPlaybackTime(InlineSeekSlider.Maximum)}";
+
+    private static string FormatPlaybackTime(double milliseconds)
+    {
+        TimeSpan value = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+        return value.TotalHours >= 1
+            ? value.ToString(@"hh\:mm\:ss", System.Globalization.CultureInfo.InvariantCulture)
+            : value.ToString(@"mm\:ss", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private void OnInlineCloseClick(object sender, RoutedEventArgs e) => CloseInlinePlayer();
+
+    private void CloseInlinePlayer()
+    {
+        _inlinePlaybackTimer.Stop();
+        _inlinePlaying = false;
+        _inlineMediaReady = false;
+        _inlineAutoPlayPending = false;
+        _inlineVideoId = null;
+        _inlineVideoPath = null;
+        try
+        {
+            InlineVideo.Close();
+            InlineVideo.Source = null;
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        InlineVideoPanel.Visibility = Visibility.Collapsed;
+        InlinePlayButton.Content = "재생";
+        InlinePlaybackStatus.Text = "재생 준비";
+        SetInlineSliderValue(0);
     }
 
     // ---- Per-card buttons ----------------------------------------------------------
@@ -728,6 +993,8 @@ internal sealed partial class GalleryWindow : Window
         {
             return;
         }
+
+        CloseInlinePlayer();
 
         if (!_openEditors.Add(record.Id))
         {

@@ -124,12 +124,23 @@ public sealed class VideoEditDocumentTests
                     Placement = VideoTextPlacement.Top,
                 },
             ],
+            FrameEditLayers =
+            [
+                new FrameEditLayer
+                {
+                    StartMs = 1_500,
+                    EndMs = 1_600,
+                    Name = "marker",
+                    OverlayPngBase64 = Convert.ToBase64String([1, 2, 3]),
+                },
+            ],
         };
 
         VideoEditDocument clone = original.Clone();
 
         Assert.NotSame(original, clone);
         Assert.NotSame(original.TextOverlays, clone.TextOverlays);
+        Assert.NotSame(original.FrameEditLayers, clone.FrameEditLayers);
         TimedTextOverlay clonedOverlay = Assert.Single(clone.TextOverlays);
         Assert.NotSame(original.TextOverlays[0], clonedOverlay);
         Assert.Equal(overlayId, clonedOverlay.Id);
@@ -139,6 +150,43 @@ public sealed class VideoEditDocumentTests
         clone.TextOverlays.Add(new TimedTextOverlay());
         Assert.Equal("original", original.TextOverlays[0].Text);
         Assert.Single(original.TextOverlays);
+        FrameEditLayer clonedFrameLayer = Assert.Single(clone.FrameEditLayers);
+        Assert.NotSame(original.FrameEditLayers[0], clonedFrameLayer);
+        clonedFrameLayer.Name = "changed";
+        Assert.Equal("marker", original.FrameEditLayers[0].Name);
+    }
+
+    [Fact]
+    public void NormalizeFor_AcceptsLegacySchemaAndValidatesFrameLayers()
+    {
+        Guid retainedId = Guid.NewGuid();
+        var document = new VideoEditDocument
+        {
+            SchemaVersion = 1,
+            FrameEditLayers =
+            [
+                new FrameEditLayer
+                {
+                    Id = retainedId,
+                    StartMs = -50,
+                    EndMs = 1_500,
+                    Name = "  frame mark  ",
+                    OverlayPngBase64 = Convert.ToBase64String([1, 2, 3]),
+                },
+                new FrameEditLayer { StartMs = 50, EndMs = 50, OverlayPngBase64 = "AA==" },
+                new FrameEditLayer { StartMs = 10, EndMs = 20, OverlayPngBase64 = "" },
+            ],
+        };
+
+        VideoEditDocument normalized = document.NormalizeFor(640, 360, 1_000);
+
+        Assert.Equal(VideoEditDocument.CurrentSchemaVersion, normalized.SchemaVersion);
+        FrameEditLayer layer = Assert.Single(normalized.FrameEditLayers);
+        Assert.Equal(retainedId, layer.Id);
+        Assert.Equal(0, layer.StartMs);
+        Assert.Equal(1_000, layer.EndMs);
+        Assert.Equal("frame mark", layer.Name);
+        Assert.True(normalized.HasEdits);
     }
 
     [Fact]

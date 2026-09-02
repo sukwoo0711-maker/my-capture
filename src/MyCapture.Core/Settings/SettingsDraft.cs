@@ -55,6 +55,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     // ----- Hotkeys -----
     private string _captureHotkey = string.Empty;
+    private string _openLibraryHotkey = string.Empty;
     private string _pasteToScreenHotkey = string.Empty;
     private string _hideAllPinsHotkey = string.Empty;
     private string _toggleClickThroughHotkey = string.Empty;
@@ -172,6 +173,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _captureHotkey;
         set { if (Set(ref _captureHotkey, value)) ValidateAllHotkeys(); }
+    }
+
+    public string OpenLibraryHotkey
+    {
+        get => _openLibraryHotkey;
+        set { if (Set(ref _openLibraryHotkey, value)) ValidateAllHotkeys(); }
     }
 
     public string PasteToScreenHotkey
@@ -361,6 +368,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _recordingIncludeCursor = s.Recording.IncludeCursor;
 
         _captureHotkey = s.Hotkeys.Capture.ToString();
+        _openLibraryHotkey = s.Hotkeys.OpenLibrary.ToString();
         _pasteToScreenHotkey = s.Hotkeys.PasteToScreen.ToString();
         _hideAllPinsHotkey = s.Hotkeys.HideAllPins.ToString();
         _toggleClickThroughHotkey = s.Hotkeys.ToggleClickThrough.ToString();
@@ -461,6 +469,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             Hotkeys =
             {
                 Capture = ParseHotkey(_captureHotkey),
+                OpenLibrary = ParseHotkey(_openLibraryHotkey),
                 PasteToScreen = ParseHotkey(_pasteToScreenHotkey),
                 HideAllPins = ParseHotkey(_hideAllPinsHotkey),
                 ToggleClickThrough = ParseHotkey(_toggleClickThroughHotkey),
@@ -712,6 +721,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         (string Property, string Raw)[] fields =
         [
             (nameof(CaptureHotkey), _captureHotkey),
+            (nameof(OpenLibraryHotkey), _openLibraryHotkey),
             (nameof(PasteToScreenHotkey), _pasteToScreenHotkey),
             (nameof(HideAllPinsHotkey), _hideAllPinsHotkey),
             (nameof(ToggleClickThroughHotkey), _toggleClickThroughHotkey),

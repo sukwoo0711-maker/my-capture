@@ -10,6 +10,7 @@ namespace MyCapture.Platform.Shell;
 public enum GlobalHotkeyCommand
 {
     CaptureRegion,
+    OpenLibrary,
     PasteToScreen,
     HideAllPins,
     ToggleClickThrough,
@@ -259,6 +260,7 @@ public sealed class GlobalHotkeyService : IDisposable
     private static IEnumerable<(GlobalHotkeyCommand Command, Hotkey Hotkey)> Enumerate(HotkeySettings settings)
     {
         yield return (GlobalHotkeyCommand.CaptureRegion, settings.Capture);
+        yield return (GlobalHotkeyCommand.OpenLibrary, settings.OpenLibrary);
         yield return (GlobalHotkeyCommand.PasteToScreen, settings.PasteToScreen);
         yield return (GlobalHotkeyCommand.HideAllPins, settings.HideAllPins);
         yield return (GlobalHotkeyCommand.ToggleClickThrough, settings.ToggleClickThrough);

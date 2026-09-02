@@ -205,9 +205,37 @@ public sealed class SettingsStoreTests
         Assert.Equal(300, settings.Queue.MaxItems);
         Assert.Equal(2L * 1024 * 1024 * 1024, settings.Queue.MaxBytes);
         Assert.Equal("Ctrl+Shift+C", settings.Hotkeys.Capture.ToString());
+        Assert.Equal("Ctrl+Shift+Z", settings.Hotkeys.OpenLibrary.ToString());
+        Assert.Equal("Ctrl+X", settings.Hotkeys.RecordRegion.ToString());
         Assert.Equal("F3", settings.Hotkeys.PasteToScreen.ToString());
         Assert.True(settings.Export.CopyToClipboardOnQuickSave);
         Assert.Equal(RecordingFrameRate.Fps30, settings.Recording.FrameRate);
+    }
+
+    [Fact]
+    public void Load_LegacyRecordingDefaultMigratesAndAddsLibraryHotkey()
+    {
+        using var workspace = new TempWorkspace();
+        Directory.CreateDirectory(Path.GetDirectoryName(workspace.Paths.SettingsFile)!);
+        File.WriteAllText(
+            workspace.Paths.SettingsFile,
+            """
+            {
+              "schemaVersion": 1,
+              "hotkeys": {
+                "capture": "Ctrl+Shift+C",
+                "recordRegion": "Ctrl+Shift+X"
+              }
+            }
+            """);
+
+        SettingsStore store = CreateStore(workspace);
+        AppSettings settings = store.Load();
+
+        Assert.Equal(2, settings.SchemaVersion);
+        Assert.Equal("Ctrl+X", settings.Hotkeys.RecordRegion.ToString());
+        Assert.Equal("Ctrl+Shift+Z", settings.Hotkeys.OpenLibrary.ToString());
+        Assert.Contains(store.LastLoadWarnings, warning => warning.Contains("Ctrl+X", StringComparison.Ordinal));
     }
 
     [Fact]

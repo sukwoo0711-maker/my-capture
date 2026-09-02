@@ -27,7 +27,7 @@ public sealed class AppSettings
     /// <summary>
     /// Incremented only for changes that cannot be handled by defaulting.
     /// </summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     public HotkeySettings Hotkeys { get; set; } = new();
 
@@ -54,6 +54,11 @@ public sealed class HotkeySettings
     /// Starts a region capture. Registered globally for as long as the app runs.
     /// </summary>
     public Hotkey Capture { get; set; } = new(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
+
+    /// <summary>Opens the unified image/video library.</summary>
+    public Hotkey OpenLibrary { get; set; } = new(
+        HotkeyModifiers.Control | HotkeyModifiers.Shift,
+        Hotkey.VkZ);
 
     /// <summary>
     /// Pins the clipboard contents to the screen as a floating window.
@@ -84,13 +89,13 @@ public sealed class HotkeySettings
     public Hotkey CaptureFullScreen { get; set; } = Hotkey.None;
 
     /// <summary>
-    /// Starts (or stops) a region video recording. Ctrl+Shift+X by default.
+    /// Starts (or stops) a region video recording. Ctrl+X by default.
     /// </summary>
     /// <remarks>
     /// A distinct default chord from region capture (Ctrl+Shift+C) so recording and
     /// still capture never collide. Pressing it again while recording stops it.
     /// </remarks>
-    public Hotkey RecordRegion { get; set; } = new(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkX);
+    public Hotkey RecordRegion { get; set; } = new(HotkeyModifiers.Control, Hotkey.VkX);
 }
 
 public sealed class QueueSettings
@@ -129,13 +134,9 @@ public sealed class ExportSettings
     public string QuickSaveDirectoryOverride { get; set; } = string.Empty;
 
     /// <summary>
-    /// <c>Ctrl+S</c> writes a PNG and also places the image on the clipboard.
+    /// Legacy persisted preference retained for settings-file compatibility. Edited images are
+    /// now always copied to the clipboard after a successful commit.
     /// </summary>
-    /// <remarks>
-    /// The user asked for save and clipboard-copy to be the same gesture. Doing
-    /// both is a superset of either behaviour, and this switch exists so the
-    /// clipboard half can be turned off by anyone who finds it surprising.
-    /// </remarks>
     public bool CopyToClipboardOnQuickSave { get; set; } = true;
 
     /// <summary>

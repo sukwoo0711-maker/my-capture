@@ -126,6 +126,20 @@ public sealed class SettingsStore
     /// </summary>
     private static void Sanitize(AppSettings s, List<string> warnings)
     {
+        if (s.SchemaVersion < 2)
+        {
+            var legacyRecordingHotkey = new Hotkey(
+                HotkeyModifiers.Control | HotkeyModifiers.Shift,
+                Hotkey.VkX);
+            if (s.Hotkeys.RecordRegion == legacyRecordingHotkey)
+            {
+                s.Hotkeys.RecordRegion = new Hotkey(HotkeyModifiers.Control, Hotkey.VkX);
+                warnings.Add("녹화 단축키 기본값을 Ctrl+X로 변경했습니다.");
+            }
+
+            s.SchemaVersion = 2;
+        }
+
         // --- Queue ---
         // The floor of 10 is not arbitrary: below that, capturing a handful of
         // screenshots in a row would start evicting work the user is still using.

@@ -16,21 +16,34 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Recording feature wiring that must hold regardless of the machine: the Ctrl+Shift+X
+/// Recording feature wiring that must hold regardless of the machine: the Ctrl+X
 /// default, the settings graph, the derived bitrate, the encoder contract exercised
 /// through a fake, and the recorder's start/stop guards.
 /// </summary>
 public sealed class RecordingFeatureTests
 {
     [Fact]
-    public void RecordRegionHotkey_DefaultsToCtrlShiftX()
+    public void RecordRegionHotkey_DefaultsToCtrlX()
     {
         var settings = new HotkeySettings();
 
         Assert.True(settings.RecordRegion.IsAssigned);
-        Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Shift, settings.RecordRegion.Modifiers);
+        Assert.Equal(HotkeyModifiers.Control, settings.RecordRegion.Modifiers);
         Assert.Equal(Hotkey.VkX, settings.RecordRegion.VirtualKey);
-        Assert.Equal("Ctrl+Shift+X", settings.RecordRegion.ToString());
+        Assert.Equal("Ctrl+X", settings.RecordRegion.ToString());
+    }
+
+    [Fact]
+    public void OpenLibraryHotkey_DefaultsToCtrlShiftZ()
+    {
+        var settings = new HotkeySettings();
+
+        Assert.Equal(
+            HotkeyModifiers.Control | HotkeyModifiers.Shift,
+            settings.OpenLibrary.Modifiers);
+        Assert.Equal(Hotkey.VkZ, settings.OpenLibrary.VirtualKey);
+        Assert.Equal("Ctrl+Shift+Z", settings.OpenLibrary.ToString());
+        Assert.Contains(GlobalHotkeyCommand.OpenLibrary, Enum.GetValues<GlobalHotkeyCommand>());
     }
 
     [Fact]

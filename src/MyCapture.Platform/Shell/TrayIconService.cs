@@ -288,7 +288,7 @@ public sealed class TrayIconService : IDisposable
             AppendMenu(menu, NativeMethods.MF_STRING, MenuRepeatLastRegion, "이전 영역 반복(&L)");
             AppendMenu(menu, NativeMethods.MF_STRING, MenuDelayedCapture, "지연 캡처(&D)");
             AppendMenu(menu, NativeMethods.MF_SEPARATOR, 0, null);
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuGallery, "캡처 갤러리(&G)");
+            AppendMenu(menu, NativeMethods.MF_STRING, MenuGallery, "라이브러리(&G)\tCtrl+Shift+Z");
             AppendMenu(menu, NativeMethods.MF_SEPARATOR, 0, null);
             AppendMenu(menu, NativeMethods.MF_STRING, MenuSettings, "설정(&O)");
             AppendMenu(menu, NativeMethods.MF_SEPARATOR, 0, null);

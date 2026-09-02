@@ -20,6 +20,7 @@ internal static class TrimReencoder
         Func<VideoEncoderOptions, IVideoEncoder> encoderFactory,
         ILogger log,
         IReadOnlyList<TimedTextOverlay>? textOverlays = null,
+        IReadOnlyList<FrameEditLayer>? frameEditLayers = null,
         IProgress<VideoFrameRenderProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -46,7 +47,8 @@ internal static class TrimReencoder
                 height,
                 recording.Width,
                 recording.Height,
-                textOverlays ?? []),
+                textOverlays ?? [],
+                frameEditLayers ?? []),
             (frame, outputTimestamp) =>
             {
                 cancellationToken.ThrowIfCancellationRequested();

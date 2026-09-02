@@ -18,6 +18,7 @@ using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Imaging;
 using MyCapture.Platform.Recording;
 
 namespace MyCapture.App.Recording;
@@ -53,11 +54,14 @@ internal sealed class VideoEditorWindow : Window
     private readonly MediaElementPreviewEngine _previewEngine;
     private readonly PreviewSeekCoordinator _previewSeeks;
     private readonly TwoLineTimeline _timeline;
+    private readonly VideoLayerTimeline _layerTimeline;
     private readonly TextBlock _positionLabel;
     private readonly TextBlock _statusLabel;
     private readonly TextBlock _loadingLabel;
     private readonly Border _loadingOverlay;
     private readonly ListBox _overlayList;
+    private ComboBox _gifSpeedComboBox = null!;
+    private Button _trimButton = null!;
     private Button _addTextButton = null!;
     private Button _editTextButton = null!;
     private Button _deleteTextButton = null!;
@@ -153,12 +157,14 @@ internal sealed class VideoEditorWindow : Window
         _overlayPreview = new TimedTextPreviewView();
         _overlayPreview.SetCanvas(recording.Width, recording.Height);
         _overlayPreview.SetOverlays(_editDocument.TextOverlays);
+        _overlayPreview.SetFrameLayers(_editDocument.FrameEditLayers);
         _previewEngine = new MediaElementPreviewEngine(_media);
         _previewSeeks = new PreviewSeekCoordinator(_previewEngine, recording.Fps);
         _previewSeeks.PreviewPresented += OnPreviewPresented;
         _previewSeeks.SeekFailed += OnPreviewSeekFailed;
 
         _timeline = new TwoLineTimeline();
+        _layerTimeline = new VideoLayerTimeline();
         _timeline.PlayheadChanged += OnTimelinePlayhead;
         _timeline.PlayheadInteractionCompleted += OnTimelinePlayheadInteractionCompleted;
         _timeline.TrimChanged += (_, _) => UpdateStatusForMode();
@@ -203,7 +209,7 @@ internal sealed class VideoEditorWindow : Window
         ScrollViewer.SetVerticalScrollBarVisibility(_overlayList, ScrollBarVisibility.Auto);
         _overlayList.SelectionChanged += OnOverlaySelectionChanged;
         _overlayList.MouseDoubleClick += (_, _) => EditSelectedOverlay();
-        AutomationProperties.SetName(_overlayList, "시간 텍스트 목록");
+        AutomationProperties.SetName(_overlayList, "영상 편집 레이어 목록");
 
         _playbackTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
@@ -360,7 +366,8 @@ internal sealed class VideoEditorWindow : Window
         var timeline = new Grid { Margin = new Thickness(0, 14, 0, 0) };
         timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // two-line timeline
         timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // position label
-        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // timed text lane
+        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // layer tracks
+        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // layer tools
 
         Grid.SetRow(_timeline, 0);
         timeline.Children.Add(_timeline);
@@ -370,8 +377,12 @@ internal sealed class VideoEditorWindow : Window
         Grid.SetRow(_positionLabel, 1);
         timeline.Children.Add(_positionLabel);
 
+        _layerTimeline.Margin = new Thickness(0, 8, 0, 0);
+        Grid.SetRow(_layerTimeline, 2);
+        timeline.Children.Add(_layerTimeline);
+
         FrameworkElement overlayLane = BuildOverlayLane();
-        Grid.SetRow(overlayLane, 2);
+        Grid.SetRow(overlayLane, 3);
         timeline.Children.Add(overlayLane);
         RefreshOverlayList();
 
@@ -388,7 +399,7 @@ internal sealed class VideoEditorWindow : Window
 
         var label = new TextBlock
         {
-            Text = "시간 텍스트",
+            Text = "레이어",
             FontWeight = FontWeights.SemiBold,
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
             VerticalAlignment = VerticalAlignment.Center,
@@ -412,11 +423,38 @@ internal sealed class VideoEditorWindow : Window
         actions.Children.Add(_addTextButton);
         actions.Children.Add(_editTextButton);
         actions.Children.Add(_deleteTextButton);
+        actions.Children.Add(new TextBlock
+        {
+            Text = "GIF 배속",
+            Foreground = TryBrush("Text.Secondary", Colors.LightGray),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 6, 0),
+        });
+        _gifSpeedComboBox = new ComboBox
+        {
+            Width = 72,
+            MinHeight = 32,
+            SelectedValuePath = nameof(ComboBoxItem.Tag),
+            Margin = new Thickness(0, 0, 8, 0),
+        };
+        foreach (double speed in new[] { 0.5, 1.0, 1.5, 2.0, 3.0, 4.0 })
+        {
+            _gifSpeedComboBox.Items.Add(new ComboBoxItem
+            {
+                Content = string.Create(CultureInfo.InvariantCulture, $"{speed:0.#}×"),
+                Tag = speed,
+            });
+        }
+
+        _gifSpeedComboBox.SelectedIndex = 1;
+        AutomationProperties.SetName(_gifSpeedComboBox, "GIF 재생 배속");
+        AutomationProperties.SetHelpText(_gifSpeedComboBox, "0.5배속부터 4배속 사이에서 GIF 재생 속도를 선택합니다.");
+        actions.Children.Add(_gifSpeedComboBox);
         actions.Children.Add(MakeButton("GIF", "선택 구간을 GIF로 내보내기 (G)", "Button.Ghost", ExportGif));
         Grid.SetColumn(actions, 2);
         lane.Children.Add(actions);
 
-        AutomationProperties.SetName(lane, "시간 텍스트 및 GIF 도구");
+        AutomationProperties.SetName(lane, "영상 레이어 및 GIF 도구");
         return lane;
     }
 
@@ -432,11 +470,11 @@ internal sealed class VideoEditorWindow : Window
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        transport.Children.Add(MakeButton("⏮ 처음", "처음으로", "Button.Ghost", () => Seek(0)));
+        transport.Children.Add(MakeButton("⏮ 처음", "유지할 영상의 시작으로", "Button.Ghost", () => Seek(_timeline.InMs)));
         transport.Children.Add(MakeButton("◀◀ 크게", "뒤로 크게 이동", "Button.Ghost", () => StepCoarse(-1)));
         transport.Children.Add(MakeButton("재생/일시정지", "재생 또는 일시정지", "Button.Secondary", TogglePlay));
         transport.Children.Add(MakeButton("크게 ▶▶", "앞으로 크게 이동", "Button.Ghost", () => StepCoarse(1)));
-        transport.Children.Add(MakeButton("끝 ⏭", "끝으로", "Button.Ghost", () => Seek(_durationMs)));
+        transport.Children.Add(MakeButton("끝 ⏭", "유지할 영상의 끝으로", "Button.Ghost", () => Seek(_timeline.OutMs)));
         transport.Children.Add(Spacer(10));
         transport.Children.Add(MakeButton("◀ 프레임", "이전 프레임 (Ctrl/Shift+← 또는 ,)", "Button.Ghost", () => StepFrames(-1)));
         transport.Children.Add(MakeButton("프레임 ▶", "다음 프레임 (Ctrl/Shift+→ 또는 .)", "Button.Ghost", () => StepFrames(1)));
@@ -453,8 +491,12 @@ internal sealed class VideoEditorWindow : Window
         precisionAndEdit.Children.Add(MakeCompactButton("확대 +", "세부 타임라인 확대 (Ctrl+Shift+=)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
         precisionAndEdit.Children.Add(MakeCompactButton("전체", "타임라인 전체 보기 (확대 초기화)", "Button.Ghost", () => _timeline.FitAll()));
         precisionAndEdit.Children.Add(Spacer(6));
-        precisionAndEdit.Children.Add(MakeCompactButton("시작 자르기", "현재 위치를 시작(In)으로", "Button.Ghost", SetInHere));
-        precisionAndEdit.Children.Add(MakeCompactButton("끝 자르기", "현재 위치를 끝(Out)으로", "Button.Ghost", SetOutHere));
+        _trimButton = MakeCompactButton(
+            "자르기",
+            "영상 양끝에 삭제 핸들을 표시하거나 자르기 모드를 끝냅니다",
+            "Button.Ghost",
+            ToggleTrimMode);
+        precisionAndEdit.Children.Add(_trimButton);
         precisionAndEdit.Children.Add(Spacer(6));
         precisionAndEdit.Children.Add(MakeCompactButton("프레임 편집", "현재 프레임을 이미지로 편집 (E)", "Button.Secondary", EditCurrentFrame));
         precisionAndEdit.Children.Add(Spacer(6));
@@ -520,6 +562,7 @@ internal sealed class VideoEditorWindow : Window
         _mediaReady = true;
 
         _timeline.Initialize(_durationMs, _recording.Fps);
+        _layerTimeline.Initialize(_durationMs);
         _editDocument = _editDocument.NormalizeFor(
             _recording.Width,
             _recording.Height,
@@ -528,7 +571,10 @@ internal sealed class VideoEditorWindow : Window
         _timeline.SetIn(_editDocument.TrimInMs);
         _timeline.SetOut(_editDocument.TrimOutMs);
         _timeline.SetPlayhead(_editDocument.TrimInMs);
+        _timeline.SetTrimMode(false);
+        _trimButton.Content = "자르기";
         _overlayPreview.SetOverlays(_editDocument.TextOverlays);
+        _overlayPreview.SetFrameLayers(_editDocument.FrameEditLayers);
         _overlayPreview.SetSourceTime(_editDocument.TrimInMs);
         RefreshOverlayList();
 
@@ -624,9 +670,10 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
-        double clamped = Math.Clamp(positionMs, 0, _durationMs);
+        double clamped = Math.Clamp(positionMs, _timeline.InMs, _timeline.OutMs);
         _previewSeeks.RequestExact(clamped);
         _timeline.SetPlayhead(clamped);
+        _layerTimeline.SetPlayhead(clamped);
         UpdatePositionLabel(clamped);
     }
 
@@ -638,8 +685,9 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
-        double clamped = Math.Clamp(ms, 0, _durationMs);
+        double clamped = Math.Clamp(ms, _timeline.InMs, _timeline.OutMs);
         UpdatePositionLabel(clamped);
+        _layerTimeline.SetPlayhead(clamped);
         _previewSeeks.RequestPreview(clamped);
     }
 
@@ -648,7 +696,7 @@ internal sealed class VideoEditorWindow : Window
     {
         if (_mediaReady)
         {
-            _previewSeeks.RequestExact(Math.Clamp(ms, 0, _durationMs));
+            _previewSeeks.RequestExact(Math.Clamp(ms, _timeline.InMs, _timeline.OutMs));
         }
     }
 
@@ -682,7 +730,12 @@ internal sealed class VideoEditorWindow : Window
 
         if (IsLoaded)
         {
-            _overlayPreview.SetSourceTime(Math.Clamp(frame.PresentedPositionMs, 0, _durationMs));
+            double presented = Math.Clamp(
+                frame.PresentedPositionMs,
+                _timeline.InMs,
+                _timeline.OutMs);
+            _overlayPreview.SetSourceTime(presented);
+            _layerTimeline.SetPlayhead(presented);
         }
     }
 
@@ -720,22 +773,44 @@ internal sealed class VideoEditorWindow : Window
             UpdateStatusForMode();
         }
 
-        double clamped = Math.Clamp(position, 0, _durationMs);
+        double clamped = Math.Clamp(position, _timeline.InMs, _timeline.OutMs);
         _timeline.SetPlayhead(clamped, ensureVisible: false);
         _overlayPreview.SetSourceTime(clamped);
+        _layerTimeline.SetPlayhead(clamped);
         UpdatePositionLabel(clamped);
     }
 
     // ---- trim ----
 
+    private void ToggleTrimMode()
+    {
+        bool enabled = !_timeline.TrimModeEnabled;
+        _timeline.SetTrimMode(enabled);
+        _trimButton.Content = enabled ? "자르기 완료" : "자르기";
+        _statusLabel.Text = enabled
+            ? "자르기 모드 · 자홍색 삭제 핸들을 드래그하세요 · Tab/←/→로 키보드 조정"
+            : $"자르기 범위 적용 · 유지 {FormatMs(_timeline.SelectedDurationMs)}";
+        _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
+    }
+
     private void SetInHere()
     {
+        if (!_timeline.TrimModeEnabled)
+        {
+            ToggleTrimMode();
+        }
+
         _timeline.SetIn(CurrentMs());
         _statusLabel.Text = string.Create(CultureInfo.CurrentCulture, $"시작 지점 설정: {FormatMs(_timeline.InMs)}");
     }
 
     private void SetOutHere()
     {
+        if (!_timeline.TrimModeEnabled)
+        {
+            ToggleTrimMode();
+        }
+
         _timeline.SetOut(CurrentMs());
         _statusLabel.Text = string.Create(CultureInfo.CurrentCulture, $"끝 지점 설정: {FormatMs(_timeline.OutMs)}");
     }
@@ -797,32 +872,60 @@ internal sealed class VideoEditorWindow : Window
 
     private void DeleteSelectedOverlay()
     {
-        if (_operationRunning || SelectedOverlay() is not { } selected)
+        if (_operationRunning)
         {
             return;
         }
 
-        _editDocument.TextOverlays.RemoveAll(item => item.Id == selected.Id);
+        if (SelectedOverlay() is { } selected)
+        {
+            _editDocument.TextOverlays.RemoveAll(item => item.Id == selected.Id);
+            _statusLabel.Text = "선택한 텍스트 레이어를 삭제했습니다";
+        }
+        else if (SelectedFrameLayer() is { } frameLayer)
+        {
+            _editDocument.FrameEditLayers.RemoveAll(item => item.Id == frameLayer.Id);
+            _statusLabel.Text = "선택한 프레임 레이어를 삭제했습니다";
+        }
+        else
+        {
+            return;
+        }
+
         RefreshOverlayList();
         RefreshTextPreview();
-        _statusLabel.Text = "선택한 시간 텍스트를 삭제했습니다";
     }
 
     private TimedTextOverlay? SelectedOverlay() =>
         (_overlayList.SelectedItem as ListBoxItem)?.Tag as TimedTextOverlay;
 
+    private FrameEditLayer? SelectedFrameLayer() =>
+        (_overlayList.SelectedItem as ListBoxItem)?.Tag as FrameEditLayer;
+
+    private Guid? SelectedLayerId() =>
+        SelectedOverlay()?.Id ?? SelectedFrameLayer()?.Id;
+
     private void OnOverlaySelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateOverlayActionStates();
-        if (_mediaReady && SelectedOverlay() is { } selected)
+        if (!_mediaReady)
+        {
+            return;
+        }
+
+        if (SelectedOverlay() is { } selected)
         {
             Seek(selected.StartMs);
+        }
+        else if (SelectedFrameLayer() is { } frameLayer)
+        {
+            Seek(frameLayer.StartMs);
         }
     }
 
     private void RefreshOverlayList(Guid? selectedId = null)
     {
-        Guid? keep = selectedId ?? SelectedOverlay()?.Id;
+        Guid? keep = selectedId ?? SelectedLayerId();
         _overlayList.Items.Clear();
         foreach (TimedTextOverlay overlay in _editDocument.TextOverlays.OrderBy(item => item.StartMs))
         {
@@ -834,7 +937,7 @@ internal sealed class VideoEditorWindow : Window
 
             var item = new ListBoxItem
             {
-                Content = $"{FormatMs(overlay.StartMs)}–{FormatMs(overlay.EndMs)}  {oneLine}",
+                Content = $"[텍스트]  {FormatMs(overlay.StartMs)}–{FormatMs(overlay.EndMs)}  {oneLine}",
                 Tag = overlay,
                 ToolTip = overlay.Text,
                 Padding = new Thickness(8, 4, 8, 4),
@@ -847,9 +950,29 @@ internal sealed class VideoEditorWindow : Window
             }
         }
 
+        foreach (FrameEditLayer layer in _editDocument.FrameEditLayers.OrderBy(item => item.StartMs))
+        {
+            var item = new ListBoxItem
+            {
+                Content = $"[프레임]  {FormatMs(layer.StartMs)}–{FormatMs(layer.EndMs)}  {layer.Name}",
+                Tag = layer,
+                ToolTip = "원본 영상 위에 합성되는 투명 프레임 편집 레이어",
+                Padding = new Thickness(8, 4, 8, 4),
+            };
+            AutomationProperties.SetName(
+                item,
+                $"프레임 레이어, {FormatMs(layer.StartMs)}부터 {FormatMs(layer.EndMs)}까지, {layer.Name}");
+            _overlayList.Items.Add(item);
+            if (keep == layer.Id)
+            {
+                _overlayList.SelectedItem = item;
+            }
+        }
+
         AutomationProperties.SetHelpText(
             _overlayList,
-            $"시간 텍스트 {_editDocument.TextOverlays.Count}개, 최대 {VideoEditDocument.MaximumOverlayCount}개");
+            $"텍스트 레이어 {_editDocument.TextOverlays.Count}개, 프레임 레이어 {_editDocument.FrameEditLayers.Count}개");
+        _layerTimeline.SetLayers(_editDocument.TextOverlays, _editDocument.FrameEditLayers);
         UpdateOverlayActionStates();
     }
 
@@ -863,15 +986,18 @@ internal sealed class VideoEditorWindow : Window
         bool interactive = _mediaReady && !_operationRunning;
         _addTextButton.IsEnabled = interactive
             && _editDocument.TextOverlays.Count < VideoEditDocument.MaximumOverlayCount;
-        bool selected = SelectedOverlay() is not null;
-        _editTextButton.IsEnabled = interactive && selected;
-        _deleteTextButton.IsEnabled = interactive && selected;
+        bool textSelected = SelectedOverlay() is not null;
+        bool anySelected = textSelected || SelectedFrameLayer() is not null;
+        _editTextButton.IsEnabled = interactive && textSelected;
+        _deleteTextButton.IsEnabled = interactive && anySelected;
     }
 
     private void RefreshTextPreview()
     {
         _overlayPreview.SetOverlays(_editDocument.TextOverlays);
+        _overlayPreview.SetFrameLayers(_editDocument.FrameEditLayers);
         _overlayPreview.SetSourceTime(CurrentMs());
+        _layerTimeline.SetLayers(_editDocument.TextOverlays, _editDocument.FrameEditLayers);
     }
 
     private VideoEditDocument BuildCurrentDocument()
@@ -893,6 +1019,15 @@ internal sealed class VideoEditorWindow : Window
         {
             return;
         }
+
+        if (_editDocument.FrameEditLayers.Count >= VideoEditDocument.MaximumFrameLayerCount)
+        {
+            _statusLabel.Text = $"프레임 레이어는 최대 {VideoEditDocument.MaximumFrameLayerCount}개까지 추가할 수 있습니다.";
+            _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
+            return;
+        }
+
+        double layerTimeMs = CurrentMs();
 
         try
         {
@@ -937,11 +1072,78 @@ internal sealed class VideoEditorWindow : Window
             privacyRedactionService: PrivacyRedactionService);
         FrameImageCommitSession? commitSession = FrameImageCommitHandlerFactory?.Invoke();
         editor.CommitRequested = commitSession?.CommitAsync ?? (_ => Task.FromResult(false));
-        editor.Committed += (_, result) => FrameImageCaptured?.Invoke(this, new AnnotationFrameCapturedEventArgs(result));
+        editor.Committed += (_, result) =>
+        {
+            FrameImageCaptured?.Invoke(this, new AnnotationFrameCapturedEventArgs(result));
+            AddFrameEditLayer(result, layerTimeMs);
+        };
         editor.Closed += (_, _) => commitSession?.Dispose();
         editor.Owner = this;
         editor.Show();
         _ = editor.Activate();
+    }
+
+    private void AddFrameEditLayer(AnnotationEditingResult result, double sourceTimeMs)
+    {
+        try
+        {
+            if (result.Document.Items.Count == 0)
+            {
+                _statusLabel.Text = "편집 표시가 없어 프레임 레이어를 추가하지 않았습니다";
+                return;
+            }
+
+            int width = _recording.Width;
+            int height = _recording.Height;
+            var visual = new DrawingVisual();
+            var renderer = new AnnotationRenderer(
+                AnnotationImageStore.FromDecoded(result.ImageAssetBitmaps));
+            using (DrawingContext dc = visual.RenderOpen())
+            {
+                renderer.Render(dc, result.Document, pixelsPerDip: 1.0);
+            }
+
+            var transparent = new RenderTargetBitmap(
+                width,
+                height,
+                96,
+                96,
+                PixelFormats.Pbgra32);
+            transparent.Render(visual);
+            transparent.Freeze();
+            string encoded = Convert.ToBase64String(ImageCodec.EncodePng(transparent));
+
+            double frameMs = FrameStepCalculator.FrameDurationMs(_recording.Fps);
+            double start = FrameStepCalculator.SnapToFrame(
+                Math.Clamp(sourceTimeMs, 0, Math.Max(0, _durationMs - frameMs)),
+                _recording.Fps,
+                _durationMs);
+            double end = Math.Min(_durationMs, start + frameMs);
+            if (end <= start)
+            {
+                end = Math.Min(_durationMs, start + 1);
+            }
+
+            var layer = new FrameEditLayer
+            {
+                StartMs = start,
+                EndMs = end,
+                Name = $"프레임 편집 · {FormatMs(start)}",
+                OverlayPngBase64 = encoded,
+            };
+            _editDocument.FrameEditLayers.Add(layer);
+            RefreshOverlayList(layer.Id);
+            RefreshTextPreview();
+            Seek(start);
+            _statusLabel.Text = $"프레임 편집을 별도 레이어로 추가했습니다 · {FormatMs(start)}";
+            _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Creating a non-destructive frame layer failed");
+            _statusLabel.Text = "프레임 레이어를 만들 수 없습니다: " + ex.Message;
+            _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
+        }
     }
 
     private BitmapSource? TryRenderCurrentFrame()
@@ -963,6 +1165,13 @@ internal sealed class VideoEditorWindow : Window
                 // is the frame we paint into the render target.
                 var brush = new VisualBrush(_media) { Stretch = Stretch.Fill };
                 dc.DrawRectangle(brush, null, new Rect(0, 0, w, h));
+                FrameEditLayerRenderer.Draw(
+                    dc,
+                    _editDocument.FrameEditLayers,
+                    FrameEditLayerRenderer.Decode(_editDocument.FrameEditLayers),
+                    CurrentMs(),
+                    w,
+                    h);
                 TimedTextOverlayRenderer.Draw(
                     dc,
                     _editDocument.TextOverlays,
@@ -1028,6 +1237,7 @@ internal sealed class VideoEditorWindow : Window
                         _loggerFactory.CreateLogger<MediaFoundationVideoEncoder>()),
                     _loggerFactory.CreateLogger("TrimReencoder"),
                     document.TextOverlays,
+                    document.FrameEditLayers,
                     progress,
                     cancellationToken),
                 "MyCapture video compositor");
@@ -1087,6 +1297,7 @@ internal sealed class VideoEditorWindow : Window
         }
 
         VideoEditDocument document = BuildCurrentDocument();
+        double playbackSpeed = SelectedGifSpeed();
         if (document.TrimOutMs - document.TrimInMs > AnimatedGifExporter.MaximumDurationMs + 0.5)
         {
             _statusLabel.Text = "GIF는 최대 20초입니다. 시작/끝 지점을 줄여 주세요.";
@@ -1127,9 +1338,12 @@ internal sealed class VideoEditorWindow : Window
                     document,
                     dialog.FileName,
                     progress,
-                    cancellationToken),
+                    cancellationToken,
+                    playbackSpeed),
                 "MyCapture GIF exporter");
-            _statusLabel.Text = $"GIF 저장 완료 · {frames}프레임 · {Path.GetFileName(dialog.FileName)}";
+            _statusLabel.Text = string.Create(
+                CultureInfo.CurrentCulture,
+                $"GIF 저장 완료 · {playbackSpeed:0.#}× · {frames}프레임 · {Path.GetFileName(dialog.FileName)}");
             _statusLabel.Foreground = TryBrush("State.Success", Colors.LightGreen);
         }
         catch (OperationCanceledException)
@@ -1164,16 +1378,23 @@ internal sealed class VideoEditorWindow : Window
         _operationRunning = running;
         SetEditControlsEnabled(!running && _mediaReady);
         _overlayList.IsEnabled = !running && _mediaReady;
+        _gifSpeedComboBox.IsEnabled = !running && _mediaReady;
         _cancelOperationButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         _cancelOperationButton.IsEnabled = running;
     }
+
+    private double SelectedGifSpeed() =>
+        _gifSpeedComboBox.SelectedItem is ComboBoxItem { Tag: double speed }
+            ? speed
+            : 1.0;
 
     internal static bool DocumentsEquivalent(VideoEditDocument left, VideoEditDocument right)
     {
         const double tolerance = 0.001;
         if (Math.Abs(left.TrimInMs - right.TrimInMs) > tolerance
             || Math.Abs(left.TrimOutMs - right.TrimOutMs) > tolerance
-            || left.TextOverlays.Count != right.TextOverlays.Count)
+            || left.TextOverlays.Count != right.TextOverlays.Count
+            || left.FrameEditLayers.Count != right.FrameEditLayers.Count)
         {
             return false;
         }
@@ -1187,6 +1408,20 @@ internal sealed class VideoEditorWindow : Window
                 || Math.Abs(a.StartMs - b.StartMs) > tolerance
                 || Math.Abs(a.EndMs - b.EndMs) > tolerance
                 || a.Placement != b.Placement)
+            {
+                return false;
+            }
+        }
+
+        for (int index = 0; index < left.FrameEditLayers.Count; index++)
+        {
+            FrameEditLayer a = left.FrameEditLayers[index];
+            FrameEditLayer b = right.FrameEditLayers[index];
+            if (a.Id != b.Id
+                || !string.Equals(a.Name, b.Name, StringComparison.Ordinal)
+                || !string.Equals(a.OverlayPngBase64, b.OverlayPngBase64, StringComparison.Ordinal)
+                || Math.Abs(a.StartMs - b.StartMs) > tolerance
+                || Math.Abs(a.EndMs - b.EndMs) > tolerance)
             {
                 return false;
             }
@@ -1277,11 +1512,11 @@ internal sealed class VideoEditorWindow : Window
                 break;
             case Key.Home:
                 e.Handled = true;
-                Seek(0);
+                Seek(_timeline.InMs);
                 break;
             case Key.End:
                 e.Handled = true;
-                Seek(_durationMs);
+                Seek(_timeline.OutMs);
                 break;
             case Key.OemPlus when (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) ==
                                       (ModifierKeys.Control | ModifierKeys.Shift):
@@ -1318,12 +1553,11 @@ internal sealed class VideoEditorWindow : Window
             : string.Create(
                 CultureInfo.CurrentCulture,
                 $"녹화 드롭 {_recording.DroppedFrames} ({_recording.DropRate:P1})");
-        string notes = _editDocument.TextOverlays.Count == 0
-            ? "텍스트 없음"
-            : $"시간 텍스트 {_editDocument.TextOverlays.Count}개";
+        string layers = $"텍스트 {_editDocument.TextOverlays.Count} · 프레임 {_editDocument.FrameEditLayers.Count}";
+        string trimMode = _timeline.TrimModeEnabled ? "삭제 핸들 조정 중" : "자르기 대기";
         _statusLabel.Text = string.Create(
             CultureInfo.CurrentCulture,
-            $"←/→ 크게 · Ctrl/Shift+←/→ 1프레임 · Ctrl+T 텍스트 · G GIF · {trim} · {notes} · {recordingHealth}");
+            $"←/→ 크게 · Ctrl/Shift+←/→ 1프레임 · Ctrl+T 텍스트 · G GIF · {trimMode} · {trim} · 레이어 {layers} · {recordingHealth}");
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
     }
 

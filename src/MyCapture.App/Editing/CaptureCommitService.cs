@@ -155,27 +155,23 @@ internal sealed class CaptureCommitService
 
                 await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
-                return true;
+                return await CopyEditedImageAsync(flattened, "Save As");
 
             case EditorCommitAction.QuickSave:
                 await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
                 bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened));
-                if (_settings().Export.CopyToClipboardOnQuickSave)
+                if (!quickSaved)
                 {
-                    bool copied = await _copyImageAsync(flattened);
-                    if (!copied)
-                    {
-                        // The requested PNG is already safely persisted and exported. A
-                        // secondary clipboard failure is reported but must not discard it.
-                        _log.LogWarning("Quick save completed, but clipboard copy failed");
-                    }
+                    return false;
                 }
+
+                bool quickSaveCopied = await CopyEditedImageAsync(flattened, "Quick save");
 
                 // Queue persistence is already durable, but Quick Save is an explicit export
                 // request. Keep the editor open when that request fails so the user sees the
                 // failure and can choose another destination instead of losing the retry path.
-                return quickSaved;
+                return quickSaveCopied;
 
             case EditorCommitAction.CopyToClipboard:
                 await PersistFinalIfAvailableAsync(
@@ -201,8 +197,21 @@ internal sealed class CaptureCommitService
 
                 await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
-                return true;
+                return await CopyEditedImageAsync(flattened, "Done");
         }
+    }
+
+    private async Task<bool> CopyEditedImageAsync(BitmapSource flattened, string operation)
+    {
+        bool copied = await _copyImageAsync(flattened);
+        if (!copied)
+        {
+            _log.LogWarning(
+                "{Operation} persisted the edited image, but the clipboard copy failed; keeping the editor open",
+                operation);
+        }
+
+        return copied;
     }
 
     private static BitmapSource Flatten(

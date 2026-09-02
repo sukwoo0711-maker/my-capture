@@ -619,12 +619,12 @@ public sealed class CaptureCommitServiceTests
         string root = NewRoot();
         try
         {
-            BitmapSource? copiedBitmap = null;
+            var copiedBitmaps = new List<BitmapSource>();
             int copyCalls = 0;
             var (commit, _, record, settings, _) = Build(root, bitmap =>
             {
                 copyCalls++;
-                copiedBitmap = bitmap;
+                copiedBitmaps.Add(bitmap);
                 return Task.FromResult(true);
             });
             settings.Export.CopyToClipboardOnQuickSave = false;
@@ -635,8 +635,11 @@ public sealed class CaptureCommitServiceTests
 
             Assert.True(copied);
             Assert.True(closed);
-            Assert.Equal(1, copyCalls);
-            Assert.Same(untouchedSelection, copiedBitmap);
+            Assert.Equal(2, copyCalls);
+            Assert.Same(untouchedSelection, copiedBitmaps[0]);
+            Assert.NotSame(untouchedSelection, copiedBitmaps[1]);
+            Assert.Equal(48, copiedBitmaps[1].PixelWidth);
+            Assert.Equal(32, copiedBitmaps[1].PixelHeight);
         }
         finally
         {
@@ -811,7 +814,7 @@ public sealed class CaptureCommitServiceTests
         string root = NewRoot();
         try
         {
-            var copyResults = new Queue<bool>([true, false]);
+            var copyResults = new Queue<bool>([true, true, true, false]);
             var (commit, queue, settings, _) = BuildRecovery(
                 root,
                 _ => Task.FromResult(copyResults.Dequeue()));

@@ -297,6 +297,66 @@ public sealed class VideoCompositionIntegrationTests
         }
     });
 
+    [Fact]
+    public void AnimatedGifSchedule_ScalesDelaysWithoutChangingSourceFrameTimes()
+    {
+        VideoEditDocument document = VideoEditDocument.CreateFor(160, 90, 1_000);
+        document.FrameEditLayers.Add(new FrameEditLayer
+        {
+            StartMs = 55,
+            EndMs = 85,
+            OverlayPngBase64 = "AA==",
+        });
+
+        GifFrameSchedule normal = AnimatedGifExporter.BuildFrameSchedule(document, 1.0);
+        GifFrameSchedule doubleSpeed = AnimatedGifExporter.BuildFrameSchedule(document, 2.0);
+        GifFrameSchedule halfSpeed = AnimatedGifExporter.BuildFrameSchedule(document, 0.5);
+
+        Assert.Equal(normal.SourceTimesMs, doubleSpeed.SourceTimesMs);
+        Assert.Equal(normal.SourceTimesMs, halfSpeed.SourceTimesMs);
+        Assert.Contains(60, normal.SourceTimesMs);
+        Assert.Contains(90, normal.SourceTimesMs);
+        FrameEditLayer quantized = Assert.Single(normal.QuantizedFrameEditLayers);
+        Assert.Equal(60, quantized.StartMs);
+        Assert.Equal(90, quantized.EndMs);
+        Assert.Equal(normal.FrameDelaysCentiseconds.Sum() / 2, doubleSpeed.FrameDelaysCentiseconds.Sum());
+        Assert.Equal(normal.FrameDelaysCentiseconds.Sum() * 2, halfSpeed.FrameDelaysCentiseconds.Sum());
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => AnimatedGifExporter.BuildFrameSchedule(document, 4.1));
+    }
+
+    [Fact]
+    public void FrameEditLayer_IsCompositedAtItsSourceInterval() => RunSta(() =>
+    {
+        const int width = 80;
+        const int height = 50;
+        string root = NewRoot();
+        string source = Path.Combine(root, "source.mp4");
+        try
+        {
+            _ = EncodeBlackClip(source, width, height, fps: 10, frames: 10);
+            string overlayPng = CreateRedOverlayPng(width, height);
+            var layer = new FrameEditLayer
+            {
+                StartMs = 100,
+                EndMs = 200,
+                OverlayPngBase64 = overlayPng,
+            };
+
+            BitmapSource before = VideoFrameRenderPipeline.RenderSingleFrame(
+                source, 50, width, height, [], [layer]);
+            BitmapSource active = VideoFrameRenderPipeline.RenderSingleFrame(
+                source, 150, width, height, [], [layer]);
+
+            Assert.Equal(0, CountRedPixels(before));
+            Assert.True(CountRedPixels(active) >= 350, "active frame edit layer was not composited");
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
     private static RecordingResult EncodeBlackClip(
         string path,
         int width,
@@ -406,6 +466,56 @@ public sealed class VideoCompositionIntegrationTests
         for (int index = 0; index < pixels.Length; index += 4)
         {
             if (pixels[index] >= 230 && pixels[index + 1] >= 230 && pixels[index + 2] >= 230)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static string CreateRedOverlayPng(int width, int height)
+    {
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        for (int y = 10; y < 30; y++)
+        {
+            for (int x = 10; x < 30; x++)
+            {
+                int offset = (y * stride) + (x * 4);
+                pixels[offset + 2] = 255;
+                pixels[offset + 3] = 255;
+            }
+        }
+
+        var bitmap = BitmapSource.Create(
+            width,
+            height,
+            96,
+            96,
+            PixelFormats.Bgra32,
+            null,
+            pixels,
+            stride);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return Convert.ToBase64String(stream.ToArray());
+    }
+
+    private static int CountRedPixels(BitmapSource source)
+    {
+        BitmapSource bgra = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        int stride = bgra.PixelWidth * 4;
+        byte[] pixels = new byte[stride * bgra.PixelHeight];
+        bgra.CopyPixels(pixels, stride, 0);
+        int count = 0;
+        for (int index = 0; index < pixels.Length; index += 4)
+        {
+            if (pixels[index + 2] >= 220 && pixels[index + 1] <= 50 && pixels[index] <= 50)
             {
                 count++;
             }

@@ -163,6 +163,7 @@ internal static class SettingsSelfTest
             var probe = new HotkeySettings
             {
                 Capture = new Hotkey(modifiers, virtualKey),
+                OpenLibrary = Hotkey.None,
                 PasteToScreen = Hotkey.None,
                 HideAllPins = Hotkey.None,
                 ToggleClickThrough = Hotkey.None,
