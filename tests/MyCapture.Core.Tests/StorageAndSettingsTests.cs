@@ -213,23 +213,16 @@ public sealed class SettingsStoreTests
     }
 
     [Fact]
-    public void Load_LegacyRecordingDefaultMigratesAndAddsLibraryHotkey()
+    public void Load_LegacyRecordingDefaultMigratesAndPreservesLibraryHotkey()
     {
         using var workspace = new TempWorkspace();
-        Directory.CreateDirectory(Path.GetDirectoryName(workspace.Paths.SettingsFile)!);
-        File.WriteAllText(
-            workspace.Paths.SettingsFile,
-            """
-            {
-              "schemaVersion": 1,
-              "hotkeys": {
-                "capture": "Ctrl+Shift+C",
-                "recordRegion": "Ctrl+Shift+X"
-              }
-            }
-            """);
-
         SettingsStore store = CreateStore(workspace);
+        var legacySettings = new AppSettings { SchemaVersion = 1 };
+        legacySettings.Hotkeys.RecordRegion = new Hotkey(
+            HotkeyModifiers.Control | HotkeyModifiers.Shift,
+            Hotkey.VkX);
+        store.Save(legacySettings);
+
         AppSettings settings = store.Load();
 
         Assert.Equal(2, settings.SchemaVersion);
