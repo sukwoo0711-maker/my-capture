@@ -322,6 +322,60 @@ public sealed class PinManagerTests
     }
 
     [Fact]
+    public Task RenderedTableCtrlDoubleClick_CopiesExactSourceInsteadOfImageOrOcr()
+    {
+        return RunStaAsync(async () =>
+        {
+            const string source = "제품\t수량\r\n연필\t3\r\n";
+            bool imageCopied = false;
+            bool ocrRequested = false;
+            string? copiedText = null;
+            var manager = new PinManager(
+                () => new PinSettings(),
+                null,
+                _ =>
+                {
+                    imageCopied = true;
+                    return Task.FromResult(true);
+                },
+                text =>
+                {
+                    copiedText = text;
+                    return Task.FromResult(true);
+                },
+                NullLogger.Instance);
+            manager.OcrRequested += (_, _) => ocrRequested = true;
+            PinWindow pin = manager.PinRenderedText(SolidImage(), source, isTable: true);
+
+            pin.SimulateCtrlSingleClickForTest();
+            Assert.True(pin.IsCtrlClickTimerRunning);
+            pin.SimulateCtrlDoubleClickForTest();
+
+            Task<bool>? operation = manager.LastTextCopyOperationForTest;
+            Assert.NotNull(operation);
+            Assert.True(await operation!);
+            Assert.False(pin.IsCtrlClickTimerRunning);
+            Assert.False(imageCopied);
+            Assert.False(ocrRequested);
+            Assert.Equal(source, copiedText);
+            Assert.Equal(source, pin.OriginalText);
+            Assert.Equal(PinContentKind.Table, pin.ContentKind);
+            Assert.Equal(64, pin.State.WidthDip, 3);
+            Assert.Equal(48, pin.State.HeightDip, 3);
+
+            ContextMenu menu = Assert.IsType<ContextMenu>(pin.ContextMenu);
+            List<string> headers = menu.Items
+                .OfType<MenuItem>()
+                .Select(item => item.Header?.ToString() ?? string.Empty)
+                .ToList();
+            Assert.Contains("원문 텍스트 복사", headers);
+            Assert.DoesNotContain("텍스트 인식 (OCR)", headers);
+
+            manager.CloseAll();
+        });
+    }
+
+    [Fact]
     public void PinManager_ForwardsOcrRequestedFromPin()
     {
         RunSta(() =>

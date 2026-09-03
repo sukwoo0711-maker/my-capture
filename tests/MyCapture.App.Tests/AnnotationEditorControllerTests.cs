@@ -49,11 +49,11 @@ public sealed class AnnotationEditorControllerTests
     }
 
     [Fact]
-    public void DefaultTool_IsPenForImmediateDrawing()
+    public void DefaultTool_IsRectangleForImmediateCallouts()
     {
         AnnotationEditorController c = NewController(out _, out _);
 
-        Assert.Equal(EditorTool.Pen, c.Tool);
+        Assert.Equal(EditorTool.Rectangle, c.Tool);
         Assert.Null(c.Selected);
     }
 
@@ -61,6 +61,7 @@ public sealed class AnnotationEditorControllerTests
     public void PenTool_StaysActiveAndUnselectedAcrossConsecutiveStrokes()
     {
         AnnotationEditorController c = NewController(out AnnotationDocument doc, out UndoStack undo);
+        c.Tool = EditorTool.Pen;
 
         c.PointerDown(new PointD(10, 10));
         c.PointerMove(new PointD(30, 20));
@@ -309,7 +310,7 @@ public sealed class AnnotationEditorControllerTests
         c.SetSelected(rect);
         Assert.NotNull(c.Selected);
 
-        c.Tool = EditorTool.Rectangle;
+        c.Tool = EditorTool.Arrow;
         Assert.Null(c.Selected);
     }
 }

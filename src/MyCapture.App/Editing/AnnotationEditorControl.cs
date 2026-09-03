@@ -168,7 +168,7 @@ internal sealed class AnnotationEditorControl : Grid
             _redactionCts = null;
         };
 
-        SelectTool(EditorTool.Pen);
+        SelectTool(EditorTool.Rectangle);
         RefreshHistoryButtons();
         UpdateInspector();
     }
