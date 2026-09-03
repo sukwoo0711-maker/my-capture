@@ -45,6 +45,8 @@ internal sealed class PinWindow : Window
     private static readonly TimeSpan FeedbackDuration = TimeSpan.FromMilliseconds(1000);
 
     private readonly BitmapSource _image;
+    private readonly PinContentKind _contentKind;
+    private readonly string? _originalText;
     private readonly PinViewState _state;
     private readonly Func<PinSettings> _settings;
     private readonly Image _imageElement;
@@ -62,13 +64,16 @@ internal sealed class PinWindow : Window
     private bool _saveInProgress;
 
     internal PinWindow(
-        BitmapSource image,
+        PinContent content,
         PinViewState state,
         double initialLeft,
         double initialTop,
         Func<PinSettings>? settings = null)
     {
-        _image = image ?? throw new ArgumentNullException(nameof(image));
+        ArgumentNullException.ThrowIfNull(content);
+        _image = content.Image;
+        _contentKind = content.Kind;
+        _originalText = content.OriginalText;
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _settings = settings ?? (static () => new PinSettings());
 
@@ -132,12 +137,15 @@ internal sealed class PinWindow : Window
 
         Content = _chrome;
 
-        ToolTip =
-            "우클릭: 저장 · Ctrl+S: 빠른 저장 · Ctrl+Shift+S: 다른 이름으로 저장 · 드래그: 이동 · 휠: 확대/축소 · Ctrl+C: 복사";
+        ToolTip = _originalText is null
+            ? "우클릭: 저장 · Ctrl+S: 빠른 저장 · Ctrl+Shift+S: 다른 이름으로 저장 · 드래그: 이동 · 휠: 확대/축소 · Ctrl+C: 복사"
+            : "우클릭: 저장/원문 복사 · Ctrl+더블클릭: 원문 텍스트 복사 · Ctrl+C: 보이는 이미지 복사 · 드래그: 이동 · 휠: 확대/축소";
         AutomationProperties.SetName(this, "MyCapture 화면 고정 창");
         AutomationProperties.SetHelpText(
             this,
-            "고정된 화면 이미지입니다. 마우스 오른쪽 단추 메뉴나 Ctrl+S로 원본 PNG를 저장하고, Ctrl+Shift+S로 위치를 선택합니다. 드래그로 이동, 마우스 휠로 확대·축소, Ctrl+휠로 투명도 조절, Ctrl+C로 복사, Esc 또는 Delete로 닫습니다. 클릭 통과를 켜면 Shift+F3을 두 번 눌러 해제할 수 있습니다.");
+            _originalText is null
+                ? "고정된 화면 이미지입니다. 마우스 오른쪽 단추 메뉴나 Ctrl+S로 원본 PNG를 저장하고, Ctrl+Shift+S로 위치를 선택합니다. 드래그로 이동, 마우스 휠로 확대·축소, Ctrl+휠로 투명도 조절, Ctrl+C로 복사, Esc 또는 Delete로 닫습니다. 클릭 통과를 켜면 Shift+F3을 두 번 눌러 해제할 수 있습니다."
+                : "텍스트를 이미지로 렌더링한 화면 고정 창입니다. Ctrl+C는 보이는 이미지를 복사하고, Ctrl+더블클릭은 플로팅 생성 시 보존한 원문 텍스트를 복사합니다. 마우스 오른쪽 단추 메뉴에서도 원문 복사를 실행할 수 있습니다.");
 
         BuildContextMenu();
 
@@ -150,9 +158,9 @@ internal sealed class PinWindow : Window
         };
         _feedbackTimer.Tick += OnFeedbackTimerTick;
 
-        // Debounces a plain Ctrl+click copy so a following click can turn it into a
-        // Ctrl+double-click OCR request instead. The interval is read from settings when the
-        // click arrives; the timer is created once here.
+        // Debounces a plain Ctrl+click copy so a following click can turn it into the pin's
+        // content-specific Ctrl+double-click action instead (OCR or original-text copy). The
+        // interval is read from settings when the click arrives; the timer is created once here.
         _ctrlClickTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher);
         _ctrlClickTimer.Tick += OnCtrlClickTimerTick;
 
@@ -168,6 +176,9 @@ internal sealed class PinWindow : Window
     /// <summary>Raised when the user copies this pin's image.</summary>
     internal event EventHandler<BitmapSource>? CopyRequested;
 
+    /// <summary>Raised when a rendered text/table pin requests its retained source text.</summary>
+    internal event EventHandler<string>? OriginalTextCopyRequested;
+
     /// <summary>Raised when the user asks to run OCR on this pin's image.</summary>
     internal event EventHandler<BitmapSource>? OcrRequested;
 
@@ -176,6 +187,12 @@ internal sealed class PinWindow : Window
 
     /// <summary>The pin's live presentation state.</summary>
     internal PinViewState State => _state;
+
+    /// <summary>Whether this pin represents an image, plain text, or a table.</summary>
+    internal PinContentKind ContentKind => _contentKind;
+
+    /// <summary>The exact retained source string, exposed internally for verification.</summary>
+    internal string? OriginalText => _originalText;
 
     /// <summary>The native handle, valid after the window is shown.</summary>
     internal IntPtr Handle => _handle;
@@ -227,24 +244,24 @@ internal sealed class PinWindow : Window
     internal void ReportCopyResult(bool copied) =>
         ShowFeedback(copied ? "복사됨" : "복사 실패");
 
+    /// <summary>Completes feedback for copying a rendered pin's retained source text.</summary>
+    internal void ReportOriginalTextCopyResult(bool copied) =>
+        ShowFeedback(copied ? "원문 텍스트 복사됨" : "원문 텍스트 복사 실패");
+
     /// <summary>Test hook: whether the Ctrl+click copy debounce timer is currently armed.</summary>
     internal bool IsCtrlClickTimerRunning => _ctrlClickTimer.IsEnabled;
 
     /// <summary>
     /// Test hook: simulates a Ctrl+single-click, arming the copy debounce exactly as the mouse
-    /// handler does, so the copy-vs-OCR race behaviour is testable without a live pointer.
+    /// handler does, so the single-vs-double-click race is testable without a live pointer.
     /// </summary>
     internal void SimulateCtrlSingleClickForTest() => StartCtrlClickCopyDebounce();
 
     /// <summary>
-    /// Test hook: simulates a Ctrl+double-click, which cancels any pending copy and requests
-    /// OCR — proving the second click wins the race and the clipboard is never touched.
+    /// Test hook: simulates a Ctrl+double-click. Image pins request OCR; rendered text/table
+    /// pins copy their retained source string. Both cancel the pending single-click copy.
     /// </summary>
-    internal void SimulateCtrlDoubleClickForTest()
-    {
-        _ctrlClickTimer.Stop();
-        RequestOcr();
-    }
+    internal void SimulateCtrlDoubleClickForTest() => HandleCtrlDoubleClick();
 
     /// <summary>Test hook: fires the copy debounce immediately as the real timer tick would.</summary>
     internal void ForceCtrlClickTimeoutForTest() => OnCtrlClickTimerTick(this, EventArgs.Empty);
@@ -377,14 +394,13 @@ internal sealed class PinWindow : Window
 
         if (ctrl)
         {
-            // Ctrl gestures never drag. A double-click runs OCR; a single-click copies, but
-            // only after a debounce so a second click can promote it to the OCR gesture and it
-            // never races the OCR request onto the clipboard.
+            // Ctrl gestures never drag. A single-click copies the rendered image, but only
+            // after a debounce so a second click can promote it to the pin's semantic action:
+            // OCR for an image, or exact source-text copy for a rendered text/table pin.
             if (e.ClickCount >= 2)
             {
-                _ctrlClickTimer.Stop();
                 Focus();
-                RequestOcr();
+                HandleCtrlDoubleClick();
             }
             else
             {
@@ -619,6 +635,29 @@ internal sealed class PinWindow : Window
         ShowFeedback("텍스트 인식 중…");
     }
 
+    private void HandleCtrlDoubleClick()
+    {
+        _ctrlClickTimer.Stop();
+        if (_originalText is not null)
+        {
+            RequestOriginalTextCopy();
+            return;
+        }
+
+        RequestOcr();
+    }
+
+    private void RequestOriginalTextCopy()
+    {
+        if (_originalText is null)
+        {
+            return;
+        }
+
+        ShowFeedback("원문 텍스트 복사 중…");
+        OriginalTextCopyRequested?.Invoke(this, _originalText);
+    }
+
     private void RequestSave(PinSaveMode mode)
     {
         if (_saveInProgress)
@@ -731,7 +770,7 @@ internal sealed class PinWindow : Window
     /// <summary>
     /// Arms the copy debounce. If no second click arrives within the configured window the
     /// timer fires and the copy happens; a second click (Ctrl+double-click) stops it first and
-    /// runs OCR instead, so the two gestures never race the clipboard.
+    /// runs the content-specific secondary action, so the two gestures never race the clipboard.
     /// </summary>
     private void StartCtrlClickCopyDebounce()
     {
@@ -830,7 +869,19 @@ internal sealed class PinWindow : Window
             (_, _) => CopyImageToClipboard(),
             iconResourceKey: "Icon.Copy",
             inputGestureText: "Ctrl+C"));
-        menu.Items.Add(MenuItemFor("텍스트 인식 (OCR)", (_, _) => RequestOcr(), iconResourceKey: "Icon.Ocr"));
+        if (_originalText is not null)
+        {
+            menu.Items.Add(MenuItemFor(
+                "원문 텍스트 복사",
+                (_, _) => RequestOriginalTextCopy(),
+                "플로팅 이미지를 만들 때 보존한 원문 텍스트를 복사합니다.",
+                "Icon.Copy",
+                "Ctrl+더블클릭"));
+        }
+        else
+        {
+            menu.Items.Add(MenuItemFor("텍스트 인식 (OCR)", (_, _) => RequestOcr(), iconResourceKey: "Icon.Ocr"));
+        }
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("100% (0)", (_, _) => ResetZoomCentered()));
         menu.Items.Add(MenuItemFor("확대 (+)", (_, _) => ZoomCentered(1), iconResourceKey: "Icon.ZoomIn"));

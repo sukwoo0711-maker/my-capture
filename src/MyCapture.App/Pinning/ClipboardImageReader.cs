@@ -44,6 +44,28 @@ internal static class ClipboardImageReader
     }
 
     /// <summary>
+    /// A clipboard item ready to become a pin. Text and tables carry both their rendered
+    /// bitmap and the exact Unicode source payload.
+    /// </summary>
+    internal readonly record struct PinReadAttempt(
+        ClipboardImageOutcome Outcome,
+        PinContent? Content)
+    {
+        internal static PinReadAttempt Busy() =>
+            new(ClipboardImageOutcome.Busy(), null);
+
+        internal static PinReadAttempt NoContent() =>
+            new(ClipboardImageOutcome.NoImage(), null);
+
+        internal static PinReadAttempt Success(PinContent content) =>
+            new(
+                ClipboardImageOutcome.Success(
+                    content.Image.PixelWidth,
+                    content.Image.PixelHeight),
+                content);
+    }
+
+    /// <summary>
     /// Immutable clipboard data captured on the WPF dispatcher. Only detached PNG bytes and a
     /// frozen legacy image are allowed to cross the dispatcher boundary.
     /// </summary>
@@ -52,27 +74,54 @@ internal static class ClipboardImageReader
         byte[]? PngBytes,
         BitmapSource? FallbackImage,
         bool ShouldRetry,
-        uint ClipboardSequence)
+        uint ClipboardSequence,
+        string? OriginalText,
+        bool IsTabularText)
     {
         internal static CapturedAttempt Retry() =>
-            new(ClipboardImageOutcome.Busy(), null, null, ShouldRetry: true, ClipboardSequence: 0);
+            new(
+                ClipboardImageOutcome.Busy(),
+                null,
+                null,
+                ShouldRetry: true,
+                ClipboardSequence: 0,
+                OriginalText: null,
+                IsTabularText: false);
 
         internal static CapturedAttempt Busy() =>
-            new(ClipboardImageOutcome.Busy(), null, null, ShouldRetry: false, ClipboardSequence: 0);
+            new(
+                ClipboardImageOutcome.Busy(),
+                null,
+                null,
+                ShouldRetry: false,
+                ClipboardSequence: 0,
+                OriginalText: null,
+                IsTabularText: false);
 
         internal static CapturedAttempt NoImage() =>
-            new(ClipboardImageOutcome.NoImage(), null, null, ShouldRetry: false, ClipboardSequence: 0);
+            new(
+                ClipboardImageOutcome.NoImage(),
+                null,
+                null,
+                ShouldRetry: false,
+                ClipboardSequence: 0,
+                OriginalText: null,
+                IsTabularText: false);
 
         internal static CapturedAttempt Content(
             byte[]? pngBytes,
             BitmapSource? fallbackImage,
-            uint clipboardSequence = 0) =>
+            uint clipboardSequence = 0,
+            string? originalText = null,
+            bool isTabularText = false) =>
             new(
                 ClipboardImageOutcome.NoImage(),
                 pngBytes,
                 fallbackImage,
                 ShouldRetry: false,
-                clipboardSequence);
+                clipboardSequence,
+                originalText,
+                isTabularText);
     }
 
     /// <summary>
@@ -95,6 +144,76 @@ internal static class ClipboardImageReader
         return (completed.Outcome, completed.Image);
     }
 
+    /// <summary>
+    /// Reads the richest clipboard representation supported by screen pins. Spreadsheet-like
+    /// text wins over an advertised bitmap so Excel ranges keep their editable cell payload;
+    /// ordinary text is used when there is no decodable image.
+    /// </summary>
+    internal static async Task<PinReadAttempt> ReadPinAsync()
+    {
+        CapturedAttempt captured = await StaThreadTask.RunAsync(
+            CaptureOnce,
+            "MyCapture clipboard reader").ConfigureAwait(false);
+
+        return await CompletePinAttemptAsync(
+            captured,
+            TryDecodePngBytes,
+            (text, isTabular) => StaThreadTask.RunAsync(
+                () => ClipboardTextRenderer.Render(text, isTabular),
+                "MyCapture clipboard text renderer"),
+            sequence => StaThreadTask.RunAsync(
+                () => CaptureFallbackOnce(sequence),
+                "MyCapture clipboard fallback reader")).ConfigureAwait(false);
+    }
+
+    internal static async Task<PinReadAttempt> CompletePinAttemptAsync(
+        CapturedAttempt captured,
+        Func<byte[], BitmapSource?> decodePng,
+        Func<string, bool, Task<BitmapSource>> renderText,
+        Func<uint, Task<CapturedAttempt>> captureSameGenerationFallback)
+    {
+        ArgumentNullException.ThrowIfNull(decodePng);
+        ArgumentNullException.ThrowIfNull(renderText);
+        ArgumentNullException.ThrowIfNull(captureSameGenerationFallback);
+
+        if (captured.ShouldRetry || captured.Outcome.Status == ClipboardImageStatus.Busy)
+        {
+            return PinReadAttempt.Busy();
+        }
+
+        if (captured.IsTabularText && HasSourceText(captured))
+        {
+            PinContent? table = await TryRenderTextAsync(captured, renderText).ConfigureAwait(false);
+            if (table is not null)
+            {
+                return PinReadAttempt.Success(table);
+            }
+        }
+
+        ReadAttempt image = await CompleteCapturedAttemptWithFallbackAsync(
+            captured,
+            decodePng,
+            captureSameGenerationFallback).ConfigureAwait(false);
+
+        if (image.Image is not null)
+        {
+            return PinReadAttempt.Success(PinContent.FromImage(image.Image));
+        }
+
+        if (HasSourceText(captured))
+        {
+            PinContent? text = await TryRenderTextAsync(captured, renderText).ConfigureAwait(false);
+            if (text is not null)
+            {
+                return PinReadAttempt.Success(text);
+            }
+        }
+
+        return image.Outcome.Status == ClipboardImageStatus.Busy
+            ? PinReadAttempt.Busy()
+            : PinReadAttempt.NoContent();
+    }
+
     private static CapturedAttempt CaptureOnce()
     {
         try
@@ -105,6 +224,8 @@ internal static class ClipboardImageReader
             {
                 return CapturedAttempt.NoImage();
             }
+
+            (string? originalText, bool isTabularText) = CaptureText(data);
 
             byte[]? pngBytes = null;
             if (data.GetDataPresent("PNG", autoConvert: false))
@@ -124,8 +245,17 @@ internal static class ClipboardImageReader
             }
 
             return pngBytes is not null
-                ? CapturedAttempt.Content(pngBytes, fallbackImage: null, clipboardSequence)
-                : CaptureFallback(data);
+                ? CapturedAttempt.Content(
+                    pngBytes,
+                    fallbackImage: null,
+                    clipboardSequence: clipboardSequence,
+                    originalText: originalText,
+                    isTabularText: isTabularText)
+                : CaptureFallback(
+                    data,
+                    originalText,
+                    isTabularText,
+                    clipboardSequence);
         }
         catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen)
         {
@@ -151,7 +281,11 @@ internal static class ClipboardImageReader
                 return CapturedAttempt.NoImage();
             }
 
-            CapturedAttempt captured = CaptureFallback(Clipboard.GetDataObject());
+            CapturedAttempt captured = CaptureFallback(
+                Clipboard.GetDataObject(),
+                originalText: null,
+                isTabularText: false,
+                clipboardSequence: expectedClipboardSequence);
             return GetClipboardSequenceNumber() == expectedClipboardSequence
                 ? captured with { ClipboardSequence = expectedClipboardSequence }
                 : CapturedAttempt.NoImage();
@@ -170,7 +304,11 @@ internal static class ClipboardImageReader
         }
     }
 
-    private static CapturedAttempt CaptureFallback(IDataObject? data)
+    private static CapturedAttempt CaptureFallback(
+        IDataObject? data,
+        string? originalText,
+        bool isTabularText,
+        uint clipboardSequence)
     {
         if (data is null)
         {
@@ -195,9 +333,102 @@ internal static class ClipboardImageReader
         }
 
         return fallbackImage is null
-            ? CapturedAttempt.NoImage()
-            : CapturedAttempt.Content(pngBytes: null, fallbackImage);
+            ? originalText is null
+                ? CapturedAttempt.NoImage()
+                : CapturedAttempt.Content(
+                    pngBytes: null,
+                    fallbackImage: null,
+                    clipboardSequence,
+                    originalText,
+                    isTabularText)
+            : CapturedAttempt.Content(
+                pngBytes: null,
+                fallbackImage,
+                clipboardSequence: clipboardSequence,
+                originalText: originalText,
+                isTabularText: isTabularText);
     }
+
+    private static bool HasSourceText(CapturedAttempt captured) =>
+        !string.IsNullOrWhiteSpace(captured.OriginalText);
+
+    private static async Task<PinContent?> TryRenderTextAsync(
+        CapturedAttempt captured,
+        Func<string, bool, Task<BitmapSource>> renderText)
+    {
+        string? originalText = captured.OriginalText;
+        if (string.IsNullOrWhiteSpace(originalText))
+        {
+            return null;
+        }
+
+        try
+        {
+            BitmapSource rendered = await renderText(originalText, captured.IsTabularText)
+                .ConfigureAwait(false);
+            return PinContent.FromText(rendered, originalText, captured.IsTabularText);
+        }
+        catch (Exception ex) when (ex is ArgumentException
+                                   or FormatException
+                                   or InvalidOperationException
+                                   or NotSupportedException)
+        {
+            // A malformed rich clipboard representation must not hide a valid bitmap from the
+            // same logical item. The caller falls through to image decoding or NoContent.
+            return null;
+        }
+    }
+
+    internal static (string? Text, bool IsTabular) CaptureText(IDataObject data)
+    {
+        string? text = TryGetClipboardString(data, DataFormats.UnicodeText, autoConvert: true)
+                       ?? TryGetClipboardString(data, DataFormats.Text, autoConvert: true);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return (null, false);
+        }
+
+        bool isTabular = IsTabularClipboardText(
+            text,
+            TryGetClipboardString(data, DataFormats.Html, autoConvert: false));
+        return (text, isTabular);
+    }
+
+    internal static bool IsTabularClipboardText(
+        string text,
+        string? clipboardHtml = null)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return text.Contains('\t')
+               || (ContainsLineBreak(text)
+                   && clipboardHtml?.Contains("<table", StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private static bool ContainsLineBreak(string text) =>
+        text.Contains('\r') || text.Contains('\n');
+
+    private static string? TryGetClipboardString(
+        IDataObject data,
+        string format,
+        bool autoConvert)
+    {
+        try
+        {
+            return data.GetDataPresent(format, autoConvert)
+                ? data.GetData(format, autoConvert) as string
+                : null;
+        }
+        catch (Exception ex) when (IsRecoverableTextFormatException(ex))
+        {
+            return null;
+        }
+    }
+
+    private static bool IsRecoverableTextFormatException(Exception ex) =>
+        ex is ArgumentException
+            or FormatException
+            or InvalidOperationException
+            or NotSupportedException;
 
     /// <summary>
     /// Completes a dispatcher-captured attempt. PNG decoding is intentionally scheduled on the

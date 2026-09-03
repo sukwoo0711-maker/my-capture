@@ -25,7 +25,7 @@ internal sealed class AnnotationEditorController
     private readonly AnnotationDocument _document;
     private readonly UndoStack _undo;
 
-    private EditorTool _tool = EditorTool.Pen;
+    private EditorTool _tool = EditorTool.Rectangle;
     private AnnotationItem? _selected;
 
     // Live-gesture state.

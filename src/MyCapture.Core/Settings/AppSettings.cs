@@ -191,10 +191,11 @@ public sealed class PinSettings
     /// Delay before a plain <c>Ctrl</c>+click copies, in milliseconds.
     /// </summary>
     /// <remarks>
-    /// <c>Ctrl</c>+click copies the image and <c>Ctrl</c>+double-click runs OCR, so
-    /// the single-click action must wait long enough to know a second click is not
-    /// coming. Below the OS double-click time the copy fires first and OCR then
-    /// overwrites the clipboard, which looks like a bug.
+    /// <c>Ctrl</c>+click copies the rendered image. <c>Ctrl</c>+double-click runs OCR for an
+    /// image pin or copies the retained original text for a text/table pin, so the single-click
+    /// action must wait long enough to know a second click is not coming. Below the OS
+    /// double-click time the image copy fires first and the semantic action then overwrites the
+    /// clipboard, which looks like a bug.
     /// </remarks>
     public int CtrlClickDebounceMs { get; set; } = 250;
 

@@ -321,9 +321,10 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Pins the clipboard image to the screen, or shows a concise tray balloon when there is
-    /// no image or the clipboard is momentarily busy. Never throws into the message pump: a
-    /// pin failure must not take down the resident process.
+    /// Pins a clipboard image, text selection, or spreadsheet range to the screen, or shows a
+    /// concise tray balloon when there is no supported content or the clipboard is momentarily
+    /// busy. Never throws into the message pump: a pin failure must not take down the resident
+    /// process.
     /// </summary>
     private async void HandlePasteToScreen()
     {
@@ -338,10 +339,10 @@ public partial class App : Application
             PasteResult result = await _pins.PasteFromClipboardAsync();
             switch (result)
             {
-                case PasteResult.NoImage:
+                case PasteResult.NoSupportedContent:
                     _tray?.ShowBalloon(
                         "화면에 고정할 수 없습니다",
-                        "클립보드에 이미지가 없습니다.",
+                        "클립보드에 이미지, 텍스트 또는 표가 없습니다.",
                         TrayBalloonKind.Information,
                         playSound: false);
                     break;
@@ -757,22 +758,9 @@ public partial class App : Application
                 }
             }
 
-            // Ctrl+Shift+C is also the capture-to-floating gesture. Pin the already-frozen
-            // bitmap directly instead of reading it back from the clipboard, so a transient
-            // clipboard lock cannot suppress the floating result or change its pixels.
-            try
-            {
-                _pins?.PinImage(e.SelectedBitmap);
-            }
-            catch (Exception ex)
-            {
-                _log?.LogWarning(ex, "Automatic floating window creation failed after region capture");
-                _tray?.ShowBalloon(
-                    "화면 고정 실패",
-                    "캡처와 클립보드 복사는 유지되었습니다. F3으로 다시 고정해 주세요.",
-                    TrayBalloonKind.Warning,
-                    playSound: false);
-            }
+            // Capturing opens the editor and copies the untouched selection, but does not also
+            // create a persistent floating window. F3 remains the explicit paste-to-screen
+            // action when the user actually wants a pin.
         }
     }
 

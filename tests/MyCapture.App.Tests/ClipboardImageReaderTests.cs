@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Pinning;
@@ -12,6 +13,34 @@ namespace MyCapture.App.Tests;
 
 public sealed class ClipboardImageReaderTests
 {
+    [Theory]
+    [InlineData("plain text", null, false)]
+    [InlineData("A\tB\r\n1\t2", null, true)]
+    [InlineData("row one\r\nrow two", "Version:1.0<!--StartFragment--><TABLE><TR><TD>x</TD></TR></TABLE>", true)]
+    [InlineData("single cell", "<table><tr><td>x</td></tr></table>", false)]
+    public void IsTabularClipboardText_RecognizesTsvAndMultirowHtmlTables(
+        string text,
+        string? html,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            ClipboardImageReader.IsTabularClipboardText(text, html));
+    }
+
+    [Fact]
+    public void CaptureText_DetachesExactUnicodeAndRecognizesExcelStyleTsv()
+    {
+        const string source = "열 A\t열 B\r\n한글 😀\t42\r\n";
+        var data = new DataObject();
+        data.SetText(source, TextDataFormat.UnicodeText);
+
+        (string? text, bool isTabular) = ClipboardImageReader.CaptureText(data);
+
+        Assert.Equal(source, text);
+        Assert.True(isTabular);
+    }
+
     [Fact]
     public void TryDecodePngPayload_PreservesDimensionsAlphaAndFreezesTheImage()
     {
@@ -155,6 +184,107 @@ public sealed class ClipboardImageReaderTests
 
         Assert.Same(expected, completed.Image);
         Assert.False(fallbackInvoked);
+    }
+
+    [Fact]
+    public async Task CompletePinAttemptAsync_TableTextWinsOverAdvertisedImageAndKeepsExactSource()
+    {
+        const string source = "이름\t값\r\n첫째\t42\r\n";
+        BitmapSource rendered = AlphaImage();
+        bool imageDecoded = false;
+        bool fallbackInvoked = false;
+        var captured = ClipboardImageReader.CapturedAttempt.Content(
+            [0x89, 0x50, 0x4E, 0x47],
+            fallbackImage: null,
+            clipboardSequence: 101,
+            originalText: source,
+            isTabularText: true);
+
+        ClipboardImageReader.PinReadAttempt completed =
+            await ClipboardImageReader.CompletePinAttemptAsync(
+                captured,
+                _ =>
+                {
+                    imageDecoded = true;
+                    return AlphaImage();
+                },
+                (text, isTable) =>
+                {
+                    Assert.Equal(source, text);
+                    Assert.True(isTable);
+                    return Task.FromResult(rendered);
+                },
+                _ =>
+                {
+                    fallbackInvoked = true;
+                    return Task.FromResult(ClipboardImageReader.CapturedAttempt.NoImage());
+                });
+
+        Assert.False(imageDecoded);
+        Assert.False(fallbackInvoked);
+        Assert.NotNull(completed.Content);
+        Assert.Same(rendered, completed.Content!.Image);
+        Assert.Equal(PinContentKind.Table, completed.Content.Kind);
+        Assert.Equal(source, completed.Content.OriginalText);
+        Assert.Equal(ClipboardImageStatus.Success, completed.Outcome.Status);
+    }
+
+    [Fact]
+    public async Task CompletePinAttemptAsync_PlainTextRendersWhenNoImageExists()
+    {
+        const string source = "first line\r\n둘째 줄 😀";
+        BitmapSource rendered = AlphaImage();
+        var captured = ClipboardImageReader.CapturedAttempt.Content(
+            pngBytes: null,
+            fallbackImage: null,
+            originalText: source);
+
+        ClipboardImageReader.PinReadAttempt completed =
+            await ClipboardImageReader.CompletePinAttemptAsync(
+                captured,
+                _ => null,
+                (text, isTable) =>
+                {
+                    Assert.Equal(source, text);
+                    Assert.False(isTable);
+                    return Task.FromResult(rendered);
+                },
+                _ => Task.FromResult(ClipboardImageReader.CapturedAttempt.NoImage()));
+
+        Assert.NotNull(completed.Content);
+        Assert.Equal(PinContentKind.Text, completed.Content!.Kind);
+        Assert.Equal(source, completed.Content.OriginalText);
+        Assert.Same(rendered, completed.Content.Image);
+    }
+
+    [Fact]
+    public async Task CompletePinAttemptAsync_OrdinaryMixedClipboardPrefersDecodableImage()
+    {
+        BitmapSource decoded = AlphaImage();
+        bool textRendered = false;
+        var captured = ClipboardImageReader.CapturedAttempt.Content(
+            [0x89, 0x50, 0x4E, 0x47],
+            fallbackImage: null,
+            clipboardSequence: 7,
+            originalText: "image description",
+            isTabularText: false);
+
+        ClipboardImageReader.PinReadAttempt completed =
+            await ClipboardImageReader.CompletePinAttemptAsync(
+                captured,
+                _ => decoded,
+                (_, _) =>
+                {
+                    textRendered = true;
+                    return Task.FromResult(AlphaImage());
+                },
+                _ => Task.FromResult(ClipboardImageReader.CapturedAttempt.NoImage()));
+
+        Assert.False(textRendered);
+        Assert.NotNull(completed.Content);
+        Assert.Equal(PinContentKind.Image, completed.Content!.Kind);
+        Assert.Null(completed.Content.OriginalText);
+        Assert.Same(decoded, completed.Content.Image);
     }
 
     [Fact]

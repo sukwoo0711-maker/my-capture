@@ -16,7 +16,7 @@ namespace MyCapture.App.Pinning;
 internal enum PasteResult
 {
     Pinned,
-    NoImage,
+    NoSupportedContent,
     ClipboardBusy,
 }
 
@@ -45,12 +45,14 @@ internal sealed class PinManager
     private readonly Func<PinSettings> _settings;
     private readonly PinImageSaveService? _saveService;
     private readonly Func<BitmapSource, Task<bool>> _copyImageAsync;
+    private readonly Func<string, Task<bool>> _copyTextAsync;
     private readonly ILogger _log;
 
     internal PinManager(Func<PinSettings> settings, ILogger log)
         : this(
             settings,
             saveService: null,
+            static _ => Task.FromResult(true),
             static _ => Task.FromResult(true),
             log)
     {
@@ -60,7 +62,12 @@ internal sealed class PinManager
         Func<PinSettings> settings,
         PinImageSaveService? saveService,
         ILogger log)
-        : this(settings, saveService, ClipboardImageService.CopyImageAsync, log)
+        : this(
+            settings,
+            saveService,
+            ClipboardImageService.CopyImageAsync,
+            ClipboardImageService.CopyTextAsync,
+            log)
     {
     }
 
@@ -69,10 +76,26 @@ internal sealed class PinManager
         PinImageSaveService? saveService,
         Func<BitmapSource, Task<bool>> copyImageAsync,
         ILogger log)
+        : this(
+            settings,
+            saveService,
+            copyImageAsync,
+            ClipboardImageService.CopyTextAsync,
+            log)
+    {
+    }
+
+    internal PinManager(
+        Func<PinSettings> settings,
+        PinImageSaveService? saveService,
+        Func<BitmapSource, Task<bool>> copyImageAsync,
+        Func<string, Task<bool>> copyTextAsync,
+        ILogger log)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _saveService = saveService;
         _copyImageAsync = copyImageAsync ?? throw new ArgumentNullException(nameof(copyImageAsync));
+        _copyTextAsync = copyTextAsync ?? throw new ArgumentNullException(nameof(copyTextAsync));
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
@@ -99,18 +122,20 @@ internal sealed class PinManager
     /// </summary>
     internal Task<PinSaveResult>? LastSaveOperationForTest { get; private set; }
 
+    /// <summary>Most recent original-text copy, exposed for deterministic integration tests.</summary>
+    internal Task<bool>? LastTextCopyOperationForTest { get; private set; }
+
     /// <summary>
-    /// Reads the clipboard image and, if present, opens a new independent pin for it.
+    /// Reads supported clipboard content and, if present, opens a new independent pin for it.
     /// </summary>
     internal async Task<PasteResult> PasteFromClipboardAsync()
     {
-        (ClipboardImageOutcome outcome, BitmapSource? image) =
-            await ClipboardImageReader.ReadAsync();
+        ClipboardImageReader.PinReadAttempt read = await ClipboardImageReader.ReadPinAsync();
 
-        switch (outcome.Status)
+        switch (read.Outcome.Status)
         {
-            case ClipboardImageStatus.Success when image is not null:
-                PinImage(image);
+            case ClipboardImageStatus.Success when read.Content is not null:
+                OpenPin(read.Content);
                 return PasteResult.Pinned;
 
             case ClipboardImageStatus.Busy:
@@ -118,8 +143,8 @@ internal sealed class PinManager
                 return PasteResult.ClipboardBusy;
 
             default:
-                _log.LogInformation("Paste-to-screen: no image on the clipboard");
-                return PasteResult.NoImage;
+                _log.LogInformation("Paste-to-screen: no supported clipboard content");
+                return PasteResult.NoSupportedContent;
         }
     }
 
@@ -127,14 +152,29 @@ internal sealed class PinManager
     internal PinWindow PinImage(BitmapSource image)
     {
         ArgumentNullException.ThrowIfNull(image);
+        return OpenPin(PinContent.FromImage(image));
+    }
+
+    /// <summary>
+    /// Opens an already-rendered text or table pin while retaining its exact Unicode source.
+    /// </summary>
+    internal PinWindow PinRenderedText(BitmapSource image, string originalText, bool isTable) =>
+        OpenPin(PinContent.FromText(image, originalText, isTable));
+
+    private PinWindow OpenPin(PinContent content)
+    {
+        BitmapSource image = content.Image;
 
         PinSettings settings = _settings();
         MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
         double scale = monitor.ScaleFactor <= 0 ? 1.0 : monitor.ScaleFactor;
+        double sourcePixelsPerDip = content.UsesDeviceIndependentPixels ? 1.0 : scale;
 
-        // Physical pixels -> DIP for both the image and the monitor working area.
-        double imageWidthDip = image.PixelWidth / scale;
-        double imageHeightDip = image.PixelHeight / scale;
+        // Captured images contain physical screen pixels. Text/table previews are deliberately
+        // rendered at 96 DPI, so keeping them at one pixel per DIP prevents tiny cards on a
+        // 150% or 200% monitor.
+        double imageWidthDip = image.PixelWidth / sourcePixelsPerDip;
+        double imageHeightDip = image.PixelHeight / sourcePixelsPerDip;
 
         RectD work = monitor.WorkArea;
         double workLeftDip = work.Left / scale;
@@ -163,9 +203,10 @@ internal sealed class PinManager
             settings.InitialOpacity,
             settings.ZoomStep);
 
-        var pin = new PinWindow(image, state, placement.Left, placement.Top, _settings);
+        var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings);
         pin.CloseAllRequested += (_, _) => CloseAll();
         pin.CopyRequested += OnPinCopyRequested;
+        pin.OriginalTextCopyRequested += OnPinOriginalTextCopyRequested;
         pin.OcrRequested += (_, source) => OcrRequested?.Invoke(this, source);
         pin.SaveRequested += OnPinSaveRequested;
         pin.Closed += (_, _) => _pins.Remove(pin);
@@ -175,9 +216,10 @@ internal sealed class PinManager
         pin.Activate();
 
         _log.LogInformation(
-            "Pinned {Width}x{Height} image at zoom {Zoom:0.##} ({Count} pin(s) open)",
+            "Pinned {Width}x{Height} {Kind} at zoom {Zoom:0.##} ({Count} pin(s) open)",
             image.PixelWidth,
             image.PixelHeight,
+            content.Kind,
             placement.Zoom,
             _pins.Count);
 
@@ -315,6 +357,41 @@ internal sealed class PinManager
         {
             pin.ReportCopyResult(copied);
         }
+    }
+
+    private void OnPinOriginalTextCopyRequested(object? sender, string originalText)
+    {
+        LastTextCopyOperationForTest = CopyOriginalTextAsync(sender, originalText);
+    }
+
+    private async Task<bool> CopyOriginalTextAsync(object? sender, string originalText)
+    {
+        bool copied;
+        try
+        {
+            copied = await _copyTextAsync(originalText);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Pinned original-text clipboard copy failed unexpectedly");
+            copied = false;
+        }
+
+        if (copied)
+        {
+            _log.LogInformation("Copied a pinned item's original text to the clipboard");
+        }
+        else
+        {
+            _log.LogWarning("Could not copy a pinned item's original text to the clipboard");
+        }
+
+        if (sender is PinWindow pin && !pin.IsClosed)
+        {
+            pin.ReportOriginalTextCopyResult(copied);
+        }
+
+        return copied;
     }
 
     private void OnPinSaveRequested(object? sender, PinSaveRequestedEventArgs e)

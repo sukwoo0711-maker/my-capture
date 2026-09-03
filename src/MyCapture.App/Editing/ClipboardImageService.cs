@@ -30,6 +30,15 @@ internal static class ClipboardImageService
     }
 
     /// <summary>
+    /// Copies an exact Unicode source string retained by a rendered text or table pin.
+    /// </summary>
+    internal static async Task<bool> CopyTextAsync(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return await RunCopySerializedAsync(() => CopyTextCoreAsync(text)).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Preserves user invocation order across independent encodes and OLE retries, so a slow
     /// earlier copy can never overwrite a newer clipboard selection after it completes.
     /// </summary>
@@ -77,6 +86,20 @@ internal static class ClipboardImageService
         }
     }
 
+    private static async Task<bool> CopyTextCoreAsync(string text)
+    {
+        try
+        {
+            return await StaThreadTask.RunAsync(
+                () => TrySetTextOnce(text),
+                "MyCapture clipboard text writer").ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is COMException or ExternalException)
+        {
+            return false;
+        }
+    }
+
     private static bool TrySetOnce(BitmapSource frozen, byte[] pngBytes)
     {
         try
@@ -88,6 +111,29 @@ internal static class ClipboardImageService
 
             // copy:true materialises the delayed formats before this method and the stream
             // return, so clipboard content remains after MyCapture exits.
+            Clipboard.SetDataObject(data, copy: true);
+            return true;
+        }
+        catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen)
+        {
+            return false;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+        catch (ExternalException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TrySetTextOnce(string text)
+    {
+        try
+        {
+            var data = new DataObject();
+            data.SetText(text, TextDataFormat.UnicodeText);
             Clipboard.SetDataObject(data, copy: true);
             return true;
         }

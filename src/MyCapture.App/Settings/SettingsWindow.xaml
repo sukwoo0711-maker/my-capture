@@ -261,7 +261,7 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Ctrl+Shift+C" FontFamily="{StaticResource Font.Mono}"
                                                Foreground="{StaticResource Accent.Cool}" FontWeight="SemiBold" />
-                                    <TextBlock Grid.Column="1" Text="영역 캡처 · 클립보드 복사 · 플로팅" Foreground="{StaticResource Text.Secondary}" />
+                                    <TextBlock Grid.Column="1" Text="영역 캡처 · 클립보드 복사 · 편집" Foreground="{StaticResource Text.Secondary}" />
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <Grid.ColumnDefinitions>
@@ -583,7 +583,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="Ctrl+클릭 디바운스(ms)" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="복사와 OCR 더블클릭을 구분하기 위한 대기 시간. 120 ~ 800ms." />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="이미지 복사와 OCR/원문 복사 더블클릭을 구분하기 위한 대기 시간. 120 ~ 800ms." />
                             <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
                                      AutomationProperties.Name="Ctrl 클릭 디바운스 밀리초"
                                      Text="{Binding CtrlClickDebounceMs, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
