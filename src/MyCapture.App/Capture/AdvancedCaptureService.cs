@@ -33,6 +33,9 @@ internal interface IAdvancedCaptureEnvironment
     /// <summary>Resolves a stored region against the current display topology.</summary>
     RectD? ResolveRepeatRegion(RegionHistoryEntry entry);
 
+    /// <summary>False when an overlay or editor is already occupying the capture session.</summary>
+    bool CanOpenEditor { get; }
+
     bool OpenEditor(AdvancedSelection selection);
 }
 
@@ -67,6 +70,11 @@ internal sealed class AdvancedCaptureService
 
     public CaptureOutcome CaptureFullScreen()
     {
+        if (BusyOutcome() is { } busy)
+        {
+            return busy;
+        }
+
         try
         {
             FrozenFrame frame = _environment.CaptureMonitorUnderCursor();
@@ -87,6 +95,11 @@ internal sealed class AdvancedCaptureService
     /// </summary>
     public CaptureOutcome CaptureWindow()
     {
+        if (BusyOutcome() is { } busy)
+        {
+            return busy;
+        }
+
         try
         {
             WindowUnderCursor? window = _environment.WindowAt(_environment.CursorPosition);
@@ -112,6 +125,11 @@ internal sealed class AdvancedCaptureService
         if (width < 1 || height < 1)
         {
             return CaptureOutcome.NothingToCapture("고정 크기 캡처의 크기가 올바르지 않습니다.");
+        }
+
+        if (BusyOutcome() is { } busy)
+        {
+            return busy;
         }
 
         try
@@ -143,6 +161,11 @@ internal sealed class AdvancedCaptureService
         if (entry is null)
         {
             return CaptureOutcome.NothingToCapture("반복할 이전 영역이 없습니다.");
+        }
+
+        if (BusyOutcome() is { } busy)
+        {
+            return busy;
         }
 
         try
@@ -190,6 +213,11 @@ internal sealed class AdvancedCaptureService
         if (maxFrames < 2)
         {
             return CaptureOutcome.NothingToCapture("스크롤 캡처에는 두 프레임 이상이 필요합니다.");
+        }
+
+        if (BusyOutcome() is { } busy)
+        {
+            return busy;
         }
 
         try
@@ -338,5 +366,10 @@ internal sealed class AdvancedCaptureService
     private CaptureOutcome Open(AdvancedSelection selection) =>
         _environment.OpenEditor(selection)
             ? CaptureOutcome.Completed()
+            : CaptureOutcome.Cancelled("이미 캡처가 진행 중입니다.");
+
+    private CaptureOutcome? BusyOutcome() =>
+        _environment.CanOpenEditor
+            ? null
             : CaptureOutcome.Cancelled("이미 캡처가 진행 중입니다.");
 }

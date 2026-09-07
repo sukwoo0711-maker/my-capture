@@ -60,6 +60,10 @@ internal sealed class PinWindow : Window
 
     private bool _dragging;
     private Point _dragAnchor;
+    private RectD? _dragDesktop;
+    private double _dragGrabMarginPx;
+    private int _lastDragCursorX = int.MinValue;
+    private int _lastDragCursorY = int.MinValue;
     private IntPtr _handle;
     private bool _isClosed;
     private bool _saveInProgress;
@@ -428,6 +432,10 @@ internal sealed class PinWindow : Window
         Point anchor = e.GetPosition(this);
         DpiScale dpi = VisualTreeHelper.GetDpi(this);
         _dragAnchor = new Point(anchor.X * dpi.DpiScaleX, anchor.Y * dpi.DpiScaleY);
+        _dragDesktop = MonitorEnumerator.GetVirtualDesktopBounds();
+        _dragGrabMarginPx = GrabMarginDip * dpi.DpiScaleX;
+        _lastDragCursorX = int.MinValue;
+        _lastDragCursorY = int.MinValue;
         _ = CaptureMouse();
         Focus();
         e.Handled = true;
@@ -442,6 +450,13 @@ internal sealed class PinWindow : Window
         }
 
         (int cursorX, int cursorY) = WindowStyleFacade.GetCursorPosition();
+        if (cursorX == _lastDragCursorX && cursorY == _lastDragCursorY)
+        {
+            return;
+        }
+
+        _lastDragCursorX = cursorX;
+        _lastDragCursorY = cursorY;
         MovePhysical(cursorX - _dragAnchor.X, cursorY - _dragAnchor.Y);
     }
 
@@ -451,6 +466,7 @@ internal sealed class PinWindow : Window
         if (_dragging)
         {
             _dragging = false;
+            _dragDesktop = null;
             ReleaseMouseCapture();
             e.Handled = true;
         }
@@ -570,11 +586,22 @@ internal sealed class PinWindow : Window
         double width = right - currentLeft;
         double height = bottom - currentTop;
         if (width <= 0 || height <= 0) return;
-        RectD desktop = MonitorEnumerator.GetVirtualDesktopBounds();
+        RectD desktop = _dragDesktop ?? MonitorEnumerator.GetVirtualDesktopBounds();
+        double grabMarginPx = _dragging
+            ? _dragGrabMarginPx
+            : GrabMarginDip * VisualTreeHelper.GetDpi(this).DpiScaleX;
         (left, top) = PinGeometry.KeepGrabbable(left, top, width, height,
             desktop.Left, desktop.Top, desktop.Width, desktop.Height,
-            GrabMarginDip * VisualTreeHelper.GetDpi(this).DpiScaleX);
-        PhysicalWindowPositioner.PlaceTopmost(_handle, new RectD(left, top, width, height));
+            grabMarginPx);
+        var target = new RectD(left, top, width, height);
+        if (_dragging)
+        {
+            PhysicalWindowPositioner.Move(_handle, target);
+        }
+        else
+        {
+            PhysicalWindowPositioner.PlaceTopmost(_handle, target);
+        }
     }
 
     internal void MovePhysicalForTest(double left, double top) => MovePhysical(left, top);

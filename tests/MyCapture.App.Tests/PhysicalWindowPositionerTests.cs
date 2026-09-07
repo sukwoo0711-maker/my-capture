@@ -114,6 +114,40 @@ public sealed class PhysicalWindowPositionerTests
     }
 
     [Fact]
+    public void Move_SkipsNativeCallWhenWindowIsAlreadyAtTarget()
+    {
+        var native = new FakePhysicalWindowNativeApi();
+        native.Readbacks.Enqueue(new PhysicalWindowBounds(-1920, 100, 200, 300));
+
+        PhysicalWindowPositioner.Move(
+            new IntPtr(42),
+            new RectD(-1920, 100, 200, 300),
+            native);
+
+        Assert.Empty(native.Placements);
+        Assert.Equal(1, native.ReadCount);
+    }
+
+    [Fact]
+    public void Move_UsesNoSizeNoActivateNoZOrderFlags()
+    {
+        var native = new FakePhysicalWindowNativeApi();
+        native.Readbacks.Enqueue(new PhysicalWindowBounds(0, 0, 200, 300));
+        native.Readbacks.Enqueue(new PhysicalWindowBounds(-1920, 100, 200, 300));
+
+        PhysicalWindowPositioner.Move(
+            new IntPtr(42),
+            new RectD(-1920, 100, 200, 300),
+            native);
+
+        PlacementCall call = Assert.Single(native.Placements);
+        Assert.Equal(PhysicalWindowPositioner.DragMoveFlags, call.Flags);
+        Assert.Equal(-1920, call.X);
+        Assert.Equal(100, call.Y);
+        Assert.Equal(2, native.ReadCount);
+    }
+
+    [Fact]
     public void PlaceTopmost_RejectsMissingWindowHandleBeforeNativeCalls()
     {
         var native = new FakePhysicalWindowNativeApi();

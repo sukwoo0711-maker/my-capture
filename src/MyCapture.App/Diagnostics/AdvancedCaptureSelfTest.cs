@@ -255,6 +255,8 @@ internal static class AdvancedCaptureSelfTest
         public WindowUnderCursor? WindowAt(PointD screenPoint) => Window;
         public RectD? ResolveRepeatRegion(RegionHistoryEntry history) => history.ScreenRegion;
 
+        public bool CanOpenEditor => true;
+
         public bool OpenEditor(AdvancedSelection selection)
         {
             OpenCount++;
@@ -304,6 +306,8 @@ internal static class AdvancedCaptureSelfTest
         public WindowUnderCursor? WindowAt(PointD point) =>
             new(new IntPtr(1), new RectD(0, 0, _width, _regionHeight), "scroll");
         public RectD? ResolveRepeatRegion(RegionHistoryEntry history) => history.ScreenRegion;
+
+        public bool CanOpenEditor => true;
 
         public bool OpenEditor(AdvancedSelection selection)
         {

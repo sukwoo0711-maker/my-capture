@@ -193,7 +193,16 @@ internal sealed class CapturePersistenceService
             : SafeFileLength(originalPath);
 
         // rendered.png — identical to the original until annotations are flattened.
-        bytes += ImageCodec.SavePng(original, Path.Combine(directory, CaptureFileNames.Rendered));
+        string renderedPath = Path.Combine(directory, CaptureFileNames.Rendered);
+        if (rewriteOriginal)
+        {
+            File.Copy(originalPath, renderedPath, overwrite: true);
+            bytes += SafeFileLength(renderedPath);
+        }
+        else
+        {
+            bytes += ImageCodec.SavePng(original, renderedPath);
+        }
 
         // layers.json — an empty document so the capture is immediately re-editable.
         AnnotationDocument emptyDocument = AnnotationDocument.CreateFor(record.Width, record.Height);

@@ -163,11 +163,20 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
                 // flip vertically here — source row y is written to destination row
                 // (Height-1-y) — so the encoded frame is upright. (Left/right is unaffected;
                 // BGRA byte order within a row is unchanged, so there is no horizontal mirror.)
-                for (int y = 0; y < _options.Height; y++)
+                unsafe
                 {
-                    int srcOffset = y * frame.Stride;
-                    IntPtr rowDest = dest + ((_options.Height - 1 - y) * rowBytes);
-                    Marshal.Copy(frame.Pixels, srcOffset, rowDest, rowBytes);
+                    fixed (byte* source = frame.Pixels)
+                    {
+                        byte* destination = (byte*)dest;
+                        for (int y = 0; y < _options.Height; y++)
+                        {
+                            Buffer.MemoryCopy(
+                                source + (y * frame.Stride),
+                                destination + ((_options.Height - 1 - y) * rowBytes),
+                                rowBytes,
+                                rowBytes);
+                        }
+                    }
                 }
             }
             finally
