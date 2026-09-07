@@ -10,15 +10,58 @@ public static class PhysicalWindowPositioner
 {
     internal const int PlacementAttemptLimit = 3;
 
+    internal const uint DragMoveFlags =
+        NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE;
+
     public static void PlaceTopmost(IntPtr hwnd, RectD screenBounds)
     {
         PlaceTopmost(hwnd, screenBounds, Win32PhysicalWindowNativeApi.Instance);
+    }
+
+    /// <summary>
+    /// Moves an already-shown topmost window. Skips the native call when the pixel position
+    /// is unchanged, and does not restack, resize, or force a show on every pointer sample.
+    /// </summary>
+    public static void Move(IntPtr hwnd, RectD screenBounds)
+    {
+        Move(hwnd, screenBounds, Win32PhysicalWindowNativeApi.Instance);
     }
 
     internal static void PlaceTopmost(
         IntPtr hwnd,
         RectD screenBounds,
         IPhysicalWindowNativeApi nativeApi)
+    {
+        Place(
+            hwnd,
+            screenBounds,
+            nativeApi,
+            NativeMethods.SWP_SHOWWINDOW,
+            compareSize: true,
+            skipIfUnchanged: false);
+    }
+
+    internal static void Move(
+        IntPtr hwnd,
+        RectD screenBounds,
+        IPhysicalWindowNativeApi nativeApi)
+    {
+        Place(
+            hwnd,
+            screenBounds,
+            nativeApi,
+            DragMoveFlags,
+            compareSize: false,
+            skipIfUnchanged: true);
+    }
+
+    private static void Place(
+        IntPtr hwnd,
+        RectD screenBounds,
+        IPhysicalWindowNativeApi nativeApi,
+        uint flags,
+        bool compareSize,
+        bool skipIfUnchanged)
     {
         if (hwnd == IntPtr.Zero)
         {
@@ -27,14 +70,25 @@ public static class PhysicalWindowPositioner
 
         ArgumentNullException.ThrowIfNull(nativeApi);
 
-        RectD bounds = screenBounds.ToPixelBounds();
-        var expected = new PhysicalWindowBounds(
-            checked((int)bounds.Left),
-            checked((int)bounds.Top),
-            Math.Max(1, checked((int)bounds.Width)),
-            Math.Max(1, checked((int)bounds.Height)));
-
+        PhysicalWindowBounds expected = ToExpectedBounds(screenBounds);
         PhysicalWindowBounds actual = default;
+
+        if (skipIfUnchanged)
+        {
+            if (!nativeApi.GetWindowRect(hwnd, out actual))
+            {
+                int error = nativeApi.GetLastError();
+                throw new Win32Exception(
+                    error,
+                    "Could not verify the capture overlay's physical-pixel bounds.");
+            }
+
+            if (Matches(actual, expected, compareSize))
+            {
+                return;
+            }
+        }
+
         for (int attempt = 1; attempt <= PlacementAttemptLimit; attempt++)
         {
             if (!nativeApi.SetWindowPos(
@@ -44,7 +98,7 @@ public static class PhysicalWindowPositioner
                     expected.Top,
                     expected.Width,
                     expected.Height,
-                    NativeMethods.SWP_SHOWWINDOW))
+                    flags))
             {
                 int error = nativeApi.GetLastError();
                 throw new Win32Exception(
@@ -60,7 +114,7 @@ public static class PhysicalWindowPositioner
                     "Could not verify the capture overlay's physical-pixel bounds.");
             }
 
-            if (actual.ExactlyMatches(expected))
+            if (Matches(actual, expected, compareSize))
             {
                 return;
             }
@@ -70,6 +124,21 @@ public static class PhysicalWindowPositioner
             $"The capture overlay did not reach its requested physical-pixel bounds after " +
             $"{PlacementAttemptLimit} attempts. Expected {expected}; actual {actual}.");
     }
+
+    private static PhysicalWindowBounds ToExpectedBounds(RectD screenBounds)
+    {
+        RectD bounds = screenBounds.ToPixelBounds();
+        return new PhysicalWindowBounds(
+            checked((int)bounds.Left),
+            checked((int)bounds.Top),
+            Math.Max(1, checked((int)bounds.Width)),
+            Math.Max(1, checked((int)bounds.Height)));
+    }
+
+    private static bool Matches(PhysicalWindowBounds actual, PhysicalWindowBounds expected, bool compareSize) =>
+        actual.Left == expected.Left
+        && actual.Top == expected.Top
+        && (!compareSize || (actual.Width == expected.Width && actual.Height == expected.Height));
 }
 
 internal readonly record struct PhysicalWindowBounds(int Left, int Top, int Width, int Height)

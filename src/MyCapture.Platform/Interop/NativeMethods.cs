@@ -406,6 +406,7 @@ internal static partial class NativeMethods
     /// <summary>SWP flags used when re-applying styles without moving/resizing.</summary>
     internal const uint SWP_NOMOVE = 0x0002;
     internal const uint SWP_NOSIZE = 0x0001;
+    internal const uint SWP_NOZORDER = 0x0004;
     internal const uint SWP_NOACTIVATE = 0x0010;
     internal const uint SWP_FRAMECHANGED = 0x0020;
 

@@ -156,6 +156,46 @@ public sealed class ScreenCaptureEngine
     /// </summary>
     public BitmapSource CaptureRegion(RectD screenBounds, bool includeCursor)
     {
+        return CaptureRegionCore(screenBounds, includeCursor, ToBitmapSource);
+    }
+
+    /// <summary>
+    /// Captures a region into a reusable BGRA32 buffer. Recording uses this to avoid a
+    /// <see cref="WriteableBitmap"/> allocation on every frame.
+    /// </summary>
+    public void CaptureRegionInto(
+        RectD screenBounds,
+        bool includeCursor,
+        byte[] destination,
+        int destinationStride)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+
+        RectD pixels = screenBounds.ToPixelBounds();
+        int width = Math.Max(1, (int)pixels.Width);
+        int height = Math.Max(1, (int)pixels.Height);
+        if (destinationStride < width * 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(destinationStride));
+        }
+
+        if (destination.Length < checked(destinationStride * height))
+        {
+            throw new ArgumentException("The destination buffer is too small.", nameof(destination));
+        }
+
+        _ = CaptureRegionCore(screenBounds, includeCursor, (memoryDc, bitmapHandle, capturedWidth, capturedHeight) =>
+        {
+            CopyTopDownBgra(memoryDc, bitmapHandle, capturedWidth, capturedHeight, destination, destinationStride);
+            return 0;
+        });
+    }
+
+    private T CaptureRegionCore<T>(
+        RectD screenBounds,
+        bool includeCursor,
+        Func<IntPtr, IntPtr, int, int, T> consume)
+    {
         RectD pixels = screenBounds.ToPixelBounds();
 
         int width = Math.Max(1, (int)pixels.Width);
@@ -208,7 +248,7 @@ public sealed class ScreenCaptureEngine
                 DrawCursor(memoryDc, originX, originY, width, height);
             }
 
-            return ToBitmapSource(memoryDc, bitmapHandle, width, height);
+            return consume(memoryDc, bitmapHandle, width, height);
         }
         finally
         {
@@ -376,5 +416,79 @@ public sealed class ScreenCaptureEngine
         bitmap.Freeze();
 
         return bitmap;
+    }
+
+    private static void CopyTopDownBgra(
+        IntPtr memoryDc,
+        IntPtr bitmapHandle,
+        int width,
+        int height,
+        byte[] destination,
+        int destinationStride)
+    {
+        int packedStride = width * 4;
+        var info = new NativeMethods.BITMAPINFO
+        {
+            bmiHeader = new NativeMethods.BITMAPINFOHEADER
+            {
+                biSize = (uint)Marshal.SizeOf<NativeMethods.BITMAPINFOHEADER>(),
+                biWidth = width,
+                biHeight = -height,
+                biPlanes = 1,
+                biBitCount = 32,
+                biCompression = 0,
+            },
+        };
+
+        if (destinationStride == packedStride)
+        {
+            unsafe
+            {
+                fixed (byte* pinned = destination)
+                {
+                    int scanLines = NativeMethods.GetDIBits(
+                        memoryDc, bitmapHandle, 0, (uint)height, (IntPtr)pinned, ref info,
+                        NativeMethods.DIB_RGB_COLORS);
+                    if (scanLines == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"GetDIBits returned no scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
+                    }
+                }
+            }
+        }
+        else
+        {
+            byte[] packed = new byte[checked(packedStride * height)];
+            unsafe
+            {
+                fixed (byte* pinned = packed)
+                {
+                    int scanLines = NativeMethods.GetDIBits(
+                        memoryDc, bitmapHandle, 0, (uint)height, (IntPtr)pinned, ref info,
+                        NativeMethods.DIB_RGB_COLORS);
+                    if (scanLines == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"GetDIBits returned no scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
+                    }
+                }
+            }
+
+            for (int y = 0; y < height; y++)
+            {
+                Buffer.BlockCopy(packed, y * packedStride, destination, y * destinationStride, packedStride);
+            }
+        }
+
+        // BitBlt leaves alpha undefined. Opaque pixels match the still-capture Bgr32 conversion.
+        for (int y = 0; y < height; y++)
+        {
+            int row = y * destinationStride;
+            for (int x = 3; x < packedStride; x += 4)
+            {
+                destination[row + x] = 255;
+            }
+        }
     }
 }

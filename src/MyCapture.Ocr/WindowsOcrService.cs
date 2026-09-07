@@ -138,7 +138,7 @@ public sealed class WindowsOcrService : IOcrService
             }
 
             OrientationResult best = upright;
-            if (IsWeak(upright.Lines))
+            if (request.SearchRotatedOrientations && IsWeak(upright.Lines))
             {
                 foreach (int rotation in AlternativeRotations)
                 {

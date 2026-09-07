@@ -459,6 +459,24 @@ public sealed class OcrTests
     }
 
     [Fact]
+    public async Task Recognize_BackgroundIndexing_SkipsRotationSearchOnEmptyUprightResult()
+    {
+        var recognizer = new FakeRecognizer
+        {
+            Available = true,
+            Supported = ["en-US"],
+            Result = new RecognizedText("en-US", []),
+        };
+        WindowsOcrService service = NewService(recognizer);
+
+        OcrResult result = await service.RecognizeAsync(
+            OcrRequest.FromBitmap(Solid(80, 40), 1.0, ["en-US"], searchRotatedOrientations: false));
+
+        Assert.Equal(OcrStatus.NoText, result.Status);
+        Assert.Equal(1, recognizer.CallCount);
+    }
+
+    [Fact]
     public async Task Recognize_Cancelled_ReturnsCancelled()
     {
         var recognizer = new FakeRecognizer { Available = true, Supported = ["en-US"] };

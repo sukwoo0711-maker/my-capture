@@ -76,6 +76,8 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
             : entry.ResolveForMonitor(current.Bounds, current.Dpi);
     }
 
+    public bool CanOpenEditor => !_coordinator.IsActive;
+
     public bool OpenEditor(AdvancedSelection selection) =>
         _coordinator.StartWithSelection(
             selection.Frame,

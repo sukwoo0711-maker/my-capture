@@ -1269,8 +1269,9 @@ internal sealed class VideoEditorWindow : Window
         }
 
         string outputPath = RenderStagingPathFactory?.Invoke() ?? BuildTrimmedPath();
-        _operationCts = new CancellationTokenSource();
-        CancellationToken cancellationToken = _operationCts.Token;
+        var operation = new CancellationTokenSource();
+        _operationCts = operation;
+        CancellationToken cancellationToken = operation.Token;
         SetOperationRunning(true);
         var progress = new Progress<VideoFrameRenderProgress>(value =>
         {
@@ -1325,8 +1326,7 @@ internal sealed class VideoEditorWindow : Window
         finally
         {
             bool closeAfterCancellation = _closeRequested;
-            _operationCts?.Dispose();
-            _operationCts = null;
+            ReleaseOperationCts(operation);
             if (IsLoaded && !_committed)
             {
                 SetOperationRunning(false);
@@ -1378,8 +1378,9 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
-        _operationCts = new CancellationTokenSource();
-        CancellationToken cancellationToken = _operationCts.Token;
+        var operation = new CancellationTokenSource();
+        _operationCts = operation;
+        CancellationToken cancellationToken = operation.Token;
         SetOperationRunning(true);
         _statusLabel.Text = $"GIF 변환 준비 중… {quality.Label}";
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
@@ -1421,8 +1422,7 @@ internal sealed class VideoEditorWindow : Window
         finally
         {
             bool closeAfterCancellation = _closeRequested;
-            _operationCts?.Dispose();
-            _operationCts = null;
+            ReleaseOperationCts(operation);
             if (IsLoaded)
             {
                 SetOperationRunning(false);
@@ -1532,7 +1532,14 @@ internal sealed class VideoEditorWindow : Window
         {
             case Key.Escape when _operationRunning:
                 e.Handled = true;
-                _operationCts?.Cancel();
+                try
+                {
+                    _operationCts?.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+
                 break;
             case Key.T when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
                 e.Handled = true;
@@ -1657,14 +1664,39 @@ internal sealed class VideoEditorWindow : Window
 
         e.Cancel = true;
         _closeRequested = true;
-        _operationCts?.Cancel();
+        try
+        {
+            _operationCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
         _statusLabel.Text = "작업을 취소하고 임시 파일을 정리하는 중…";
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
     }
 
+    private void ReleaseOperationCts(CancellationTokenSource owned)
+    {
+        CancellationTokenSource? current = Interlocked.CompareExchange(ref _operationCts, null, owned);
+        if (ReferenceEquals(current, owned))
+        {
+            owned.Dispose();
+        }
+    }
+
     private void OnClosedInternal(object? sender, EventArgs e)
     {
-        _operationCts?.Cancel();
+        CancellationTokenSource? operation = Interlocked.Exchange(ref _operationCts, null);
+        try
+        {
+            operation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        operation?.Dispose();
         _playbackTimer.Stop();
         _playbackTimer.Tick -= OnPlaybackTick;
         _overlayList.SelectionChanged -= OnOverlaySelectionChanged;

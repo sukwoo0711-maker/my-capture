@@ -1,5 +1,3 @@
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 
@@ -74,22 +72,7 @@ public sealed class RegionFrameGrabber
     /// </remarks>
     public byte[] GrabInto()
     {
-        BitmapSource frame = _engine.CaptureRegion(_region, _includeCursor);
-
-        // Normalise to BGRA32 so the encoder always sees a known layout. Bgr32 from the
-        // engine has the same byte width; converting is a cheap no-op when already 32bpp.
-        BitmapSource bgra = frame.Format == PixelFormats.Bgra32
-            ? frame
-            : new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
-
-        int copyWidth = Math.Min(Width, bgra.PixelWidth);
-        int copyHeight = Math.Min(Height, bgra.PixelHeight);
-        bgra.CopyPixels(
-            new System.Windows.Int32Rect(0, 0, copyWidth, copyHeight),
-            _buffer,
-            Stride,
-            0);
-
+        _engine.CaptureRegionInto(_region, _includeCursor, _buffer, Stride);
         return _buffer;
     }
 }

@@ -160,7 +160,8 @@ public sealed class OcrIndexingService
                     OcrRequest request = OcrRequest.FromFile(
                         imagePath,
                         settings.UpscaleFactor,
-                        settings.PreferredLanguages);
+                        settings.PreferredLanguages,
+                        searchRotatedOrientations: false);
 
                     OcrResult result = await _ocr.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
 

@@ -75,6 +75,7 @@ public sealed class AdvancedCaptureServiceTests
         public RectD LastScreenCaptureBounds { get; private set; }
         public WindowUnderCursor? Window { get; set; }
         public bool RejectEditor { get; set; }
+        public bool CanOpenEditor { get; set; } = true;
         public bool ResolveMissing { get; set; }
         public RectD? ResolvedRegion { get; set; }
         public PointD Cursor { get; set; } = new(150, 120);
@@ -204,6 +205,23 @@ public sealed class AdvancedCaptureServiceTests
         CaptureOutcome result = NewService(env, store).CaptureFullScreen();
         Assert.Equal(CaptureOutcomeKind.Cancelled, result.Kind);
         Assert.Equal(0, store.Count);
+    });
+
+    [Fact]
+    public void Repeat_WhenEditorBusy_DoesNotCapture() => RunSta(() =>
+    {
+        var store = new LastRegionStore(() => 10);
+        store.Record(new RegionHistoryEntry(
+            new RectD(10, 20, 100, 80), "DISPLAY-A", new RectD(0, 0, 300, 200), 96));
+        var env = new FakeEnvironment
+        {
+            CanOpenEditor = false,
+            ResolvedRegion = new RectD(520, 40, 200, 160),
+        };
+        CaptureOutcome result = NewService(env, store).RepeatLastRegion();
+        Assert.Equal(CaptureOutcomeKind.Cancelled, result.Kind);
+        Assert.Equal(0, env.ScreenCaptureCount);
+        Assert.Equal(0, env.OpenCount);
     });
 
     [Fact]
@@ -371,6 +389,7 @@ public sealed class AdvancedCaptureServiceTests
         }
         public WindowUnderCursor? WindowAt(PointD point) => null;
         public RectD? ResolveRepeatRegion(RegionHistoryEntry entry) => entry.ScreenRegion;
+        public bool CanOpenEditor => true;
         public bool OpenEditor(AdvancedSelection selection)
         {
             OpenCount++;
@@ -411,6 +430,7 @@ public sealed class AdvancedCaptureServiceTests
         public WindowUnderCursor? WindowAt(PointD point) =>
             new(new IntPtr(1), new RectD(0, 0, _width, _regionHeight), "scroll");
         public RectD? ResolveRepeatRegion(RegionHistoryEntry entry) => entry.ScreenRegion;
+        public bool CanOpenEditor => true;
         public bool OpenEditor(AdvancedSelection selection)
         {
             LastSelection = selection;

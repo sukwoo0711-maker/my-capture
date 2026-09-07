@@ -397,7 +397,7 @@ public partial class App : Application
     private void HandleCaptureRequested()
     {
         _log?.LogInformation("Region capture requested");
-        if (_overlay is null || _settings is null)
+        if (_overlay is null || _settings is null || !GuardStillCapture("영역 캡처"))
         {
             return;
         }
@@ -427,7 +427,7 @@ public partial class App : Application
     /// </summary>
     private void HandleCaptureFullScreen()
     {
-        if (_advancedCapture is null)
+        if (_advancedCapture is null || !GuardStillCapture("전체 화면 캡처"))
         {
             return;
         }
@@ -442,7 +442,7 @@ public partial class App : Application
     /// </summary>
     private void HandleCaptureWindow()
     {
-        if (_advancedCapture is null)
+        if (_advancedCapture is null || !GuardStillCapture("창 캡처"))
         {
             return;
         }
@@ -457,7 +457,7 @@ public partial class App : Application
     /// </summary>
     private void HandleRepeatLastRegion()
     {
-        if (_advancedCapture is null)
+        if (_advancedCapture is null || !GuardStillCapture("이전 영역 반복 캡처"))
         {
             return;
         }
@@ -479,7 +479,7 @@ public partial class App : Application
     /// </remarks>
     private void HandleDelayedCapture()
     {
-        if (_settings is null)
+        if (_settings is null || !GuardStillCapture("지연 캡처"))
         {
             return;
         }
@@ -559,12 +559,23 @@ public partial class App : Application
         // dispatcher instead of waiting behind a synchronous capture loop.
         if (_scrollCancellation is not null)
         {
-            _scrollCancellation.Cancel();
+            try
+            {
+                _scrollCancellation.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
             _tray?.ShowBalloon(
                 "스크롤 캡처 취소 중",
                 "현재 프레임 처리가 끝나면 중단합니다.",
                 TrayBalloonKind.Information,
                 playSound: false);
+            return;
+        }
+
+        if (!GuardStillCapture("스크롤 캡처"))
+        {
             return;
         }
 
@@ -580,7 +591,7 @@ public partial class App : Application
             return;
         }
 
-        using var cancellation = new CancellationTokenSource();
+        var cancellation = new CancellationTokenSource();
         _scrollCancellation = cancellation;
         _tray?.SetScrollingCaptureActive(true);
         _tray?.SetState(TrayIconState.Busy);
@@ -607,15 +618,31 @@ public partial class App : Application
         }
         finally
         {
-            if (ReferenceEquals(_scrollCancellation, cancellation))
+            CancellationTokenSource? current = Interlocked.CompareExchange(ref _scrollCancellation, null, cancellation);
+            if (ReferenceEquals(current, cancellation))
             {
-                _scrollCancellation = null;
+                cancellation.Dispose();
             }
 
             _tray?.SetScrollingCaptureActive(false);
         }
 
         ReportOutcome(outcome, "스크롤 캡처");
+    }
+
+    private bool GuardStillCapture(string mode)
+    {
+        if (_recorder?.IsActive != true)
+        {
+            return true;
+        }
+
+        _tray?.ShowBalloon(
+            mode,
+            "녹화 중에는 스크린샷을 시작할 수 없습니다.",
+            TrayBalloonKind.Information,
+            playSound: false);
+        return false;
     }
 
     /// <summary>
@@ -1091,6 +1118,10 @@ public partial class App : Application
         if (_hotkeys?.Failures.Count > 0)
         {
             _tray?.SetState(TrayIconState.Error);
+        }
+        else if (_recorder?.IsActive == true)
+        {
+            _tray?.SetState(TrayIconState.Capturing);
         }
         else
         {
@@ -1614,10 +1645,16 @@ public partial class App : Application
         _activationCancellation?.Dispose();
         _activationSignal?.Dispose();
 
-        // Cancel and release any in-flight scrolling capture so a shutdown mid-scroll does not
-        // leak the token source.
-        _scrollCancellation?.Cancel();
-        _scrollCancellation?.Dispose();
+        // Cancel any in-flight scrolling capture. The handler disposes the token source.
+        CancellationTokenSource? scrolling = Interlocked.Exchange(ref _scrollCancellation, null);
+        try
+        {
+            scrolling?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The capture handler already finished and disposed the source.
+        }
 
         _services?.Dispose();
 

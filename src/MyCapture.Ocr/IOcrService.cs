@@ -30,6 +30,12 @@ public sealed class OcrRequest
     public BitmapSource? Bitmap { get; }
 
     /// <summary>
+    /// When true, a weak upright result also probes 90/180/270° orientations. Automatic
+    /// background indexing turns this off so text-free captures do not pay eight OCR passes.
+    /// </summary>
+    public bool SearchRotatedOrientations { get; init; } = true;
+
+    /// <summary>
     /// Requested upscale factor applied to small UI text before recognition, 1–4×.
     /// </summary>
     /// <remarks>
@@ -46,39 +52,45 @@ public sealed class OcrRequest
     public static OcrRequest FromBytes(
         byte[] encodedImage,
         double upscaleFactor = 1.0,
-        IReadOnlyList<string>? preferredLanguages = null)
+        IReadOnlyList<string>? preferredLanguages = null,
+        bool searchRotatedOrientations = true)
     {
         ArgumentNullException.ThrowIfNull(encodedImage);
         return new OcrRequest(encodedImage, filePath: null, bitmap: null)
         {
             UpscaleFactor = upscaleFactor,
             PreferredLanguages = preferredLanguages ?? [],
+            SearchRotatedOrientations = searchRotatedOrientations,
         };
     }
 
     public static OcrRequest FromFile(
         string filePath,
         double upscaleFactor = 1.0,
-        IReadOnlyList<string>? preferredLanguages = null)
+        IReadOnlyList<string>? preferredLanguages = null,
+        bool searchRotatedOrientations = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         return new OcrRequest(encodedImage: null, filePath, bitmap: null)
         {
             UpscaleFactor = upscaleFactor,
             PreferredLanguages = preferredLanguages ?? [],
+            SearchRotatedOrientations = searchRotatedOrientations,
         };
     }
 
     public static OcrRequest FromBitmap(
         BitmapSource bitmap,
         double upscaleFactor = 1.0,
-        IReadOnlyList<string>? preferredLanguages = null)
+        IReadOnlyList<string>? preferredLanguages = null,
+        bool searchRotatedOrientations = true)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
         return new OcrRequest(encodedImage: null, filePath: null, bitmap)
         {
             UpscaleFactor = upscaleFactor,
             PreferredLanguages = preferredLanguages ?? [],
+            SearchRotatedOrientations = searchRotatedOrientations,
         };
     }
 }
