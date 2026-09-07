@@ -43,7 +43,7 @@ internal sealed class AnnotationEditorControl : Grid
 
     // Below this width the inspector collapses before it can squeeze the image workspace.
     // Normal editor startup now targets a comfortable width above this threshold.
-    private const double InspectorCollapseWidth = 860;
+    private const double InspectorCompactWidth = 860;
 
     private readonly FrozenFrame _frame;
     private readonly RectD _cropRegion;
@@ -64,6 +64,11 @@ internal sealed class AnnotationEditorControl : Grid
     private Button _deleteButton = null!;
     private Button _redactButton = null!;
     private Slider _thicknessSlider = null!;
+    private ComboBox _strokeStyleComboBox = null!;
+    private Slider _fillTransparencySlider = null!;
+    private TextBlock _fillTransparencyLabel = null!;
+    private FrameworkElement _shapeStyleSection = null!;
+    private bool _syncingInspector;
     private ColumnDefinition _inspectorColumn = null!;
     private Border _inspectorPanel = null!;
     private WrapPanel _swatchPanel = null!;
@@ -72,7 +77,7 @@ internal sealed class AnnotationEditorControl : Grid
     private TextBlock _inspectorTitle = null!;
     private TextBlock _inspectorInstruction = null!;
     private TextBlock _statusText = null!;
-    private bool _inspectorCollapsed;
+    private bool _inspectorCompact;
 
     private TextBox? _activeTextBox;
     private TextAnnotation? _editingText;
@@ -804,6 +809,8 @@ internal sealed class AnnotationEditorControl : Grid
 
         _thicknessSection = BuildThicknessSection();
         stack.Children.Add(_thicknessSection);
+        _shapeStyleSection = BuildShapeStyleSection();
+        stack.Children.Add(_shapeStyleSection);
 
         _deleteButton = TextButton("주석 삭제", "선택한 주석 삭제 (Delete)", "Button.Danger", DeleteSelected);
         _deleteButton.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -817,7 +824,13 @@ internal sealed class AnnotationEditorControl : Grid
             BorderBrush = Brush("Border.Subtle", Colors.Gray),
             BorderThickness = new Thickness(1, 0, 0, 0),
             Padding = new Thickness(18),
-            Child = stack,
+            Child = new ScrollViewer
+            {
+                Name = "AnnotationInspectorScroll",
+                Content = stack,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            },
             SnapsToDevicePixels = true,
         };
     }
@@ -830,8 +843,8 @@ internal sealed class AnnotationEditorControl : Grid
         _swatchPanel = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
-            Width = 192,
-            HorizontalAlignment = HorizontalAlignment.Left,
+            MaxWidth = 192,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
         };
 
         ColorRgba[] palette =
@@ -890,6 +903,11 @@ internal sealed class AnnotationEditorControl : Grid
         AutomationName(_thicknessSlider, "선 두께");
         _thicknessSlider.ValueChanged += (_, args) =>
         {
+            if (_syncingInspector)
+            {
+                return;
+            }
+
             _controller.ApplyStrokeThickness(args.NewValue);
             if (_controller.Selected is not null)
             {
@@ -897,6 +915,69 @@ internal sealed class AnnotationEditorControl : Grid
             }
         };
         panel.Children.Add(_thicknessSlider);
+        return panel;
+    }
+
+    private FrameworkElement BuildShapeStyleSection()
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        panel.Children.Add(SectionLabel("선 종류"));
+        _strokeStyleComboBox = new ComboBox { MinHeight = 32, Margin = new Thickness(0, 4, 0, 0) };
+        foreach ((AnnotationStrokeStyle style, string label) in new[]
+        {
+            (AnnotationStrokeStyle.Solid, "실선"),
+            (AnnotationStrokeStyle.Dashed, "점선"),
+            (AnnotationStrokeStyle.Dotted, "둥근 점선"),
+            (AnnotationStrokeStyle.ThickDashed, "굵은 점선 · 최소 6px"),
+        })
+        {
+            _strokeStyleComboBox.Items.Add(new ComboBoxItem { Content = label, Tag = style });
+        }
+
+        _strokeStyleComboBox.SelectedIndex = 0;
+        AutomationName(_strokeStyleComboBox, "도형 선 종류");
+        _strokeStyleComboBox.SelectionChanged += (_, _) =>
+        {
+            if (!_syncingInspector && _strokeStyleComboBox.SelectedItem is ComboBoxItem { Tag: AnnotationStrokeStyle style })
+            {
+                _controller.ApplyStrokeStyle(style);
+                UpdateInspector();
+            }
+        };
+        panel.Children.Add(_strokeStyleComboBox);
+        _fillTransparencyLabel = SectionLabel("내부 투명도 · 100%");
+        _fillTransparencyLabel.Margin = new Thickness(0, 16, 0, 4);
+        panel.Children.Add(_fillTransparencyLabel);
+        _fillTransparencySlider = new Slider
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Value = 100,
+            SmallChange = 1,
+            LargeChange = 10,
+            TickFrequency = 1,
+            IsSnapToTickEnabled = true,
+            ToolTip = "100%: 외곽선만 표시 · 0%: 선과 같은 색으로 완전히 채우기",
+        };
+        AutomationName(_fillTransparencySlider, "도형 내부 투명도 (퍼센트)");
+        AutomationProperties.SetHelpText(_fillTransparencySlider, (string)_fillTransparencySlider.ToolTip);
+        _fillTransparencySlider.ValueChanged += (_, args) =>
+        {
+            _fillTransparencyLabel.Text = $"내부 투명도 · {args.NewValue:0}%";
+            if (!_syncingInspector)
+            {
+                _controller.ApplyFillTransparency(args.NewValue);
+            }
+        };
+        panel.Children.Add(_fillTransparencySlider);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "값을 낮추면 선 색으로 내부를 채웁니다.",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Brush("Text.Secondary", Colors.LightGray),
+            FontSize = 12,
+            Margin = new Thickness(0, 6, 0, 0),
+        });
         return panel;
     }
 
@@ -1222,13 +1303,33 @@ internal sealed class AnnotationEditorControl : Grid
 
         bool colorApplies = ColorApplies(selected, _controller.Tool);
         bool thicknessApplies = ThicknessApplies(selected, _controller.Tool);
+        bool shapeApplies = selected is ShapeAnnotation || (selected is null && _controller.Tool == EditorTool.Rectangle);
 
         _colorSection.Visibility = colorApplies ? Visibility.Visible : Visibility.Collapsed;
         _thicknessSection.Visibility = thicknessApplies ? Visibility.Visible : Visibility.Collapsed;
+        _shapeStyleSection.Visibility = shapeApplies ? Visibility.Visible : Visibility.Collapsed;
 
-        if (thicknessApplies)
+        _syncingInspector = true;
+        try
         {
-            SyncThicknessFromSelection(selected);
+            if (thicknessApplies)
+            {
+                AnnotationStrokeStyle style = (selected as ShapeAnnotation)?.StrokeStyle ?? _controller.StrokeStyle;
+                _thicknessSlider.Minimum = (selected is ShapeAnnotation || (selected is null && _controller.Tool == EditorTool.Rectangle))
+                    && style == AnnotationStrokeStyle.ThickDashed ? 6 : 1;
+                SyncThicknessFromSelection(selected);
+            }
+
+            if (shapeApplies)
+            {
+                ShapeAnnotation? shape = selected as ShapeAnnotation;
+                _strokeStyleComboBox.SelectedIndex = (int)(shape?.StrokeStyle ?? _controller.StrokeStyle);
+                _fillTransparencySlider.Value = shape?.FillTransparency ?? _controller.FillTransparency;
+            }
+        }
+        finally
+        {
+            _syncingInspector = false;
         }
     }
 
@@ -1283,7 +1384,7 @@ internal sealed class AnnotationEditorControl : Grid
     private static string ToolInstruction(EditorTool tool) => tool switch
     {
         EditorTool.Select => "주석을 클릭해 선택한 뒤 이동하거나 크기를 조정하세요.",
-        EditorTool.Rectangle => "이미지 위를 드래그해 사각형을 그리세요.",
+        EditorTool.Rectangle => "드래그해서 사각형을 그립니다.",
         EditorTool.Arrow => "시작점에서 끝점까지 드래그해 화살표를 그리세요.",
         EditorTool.Pen => "이미지 위에서 자유롭게 그리세요.",
         EditorTool.Text => "이미지를 클릭한 뒤 텍스트를 입력하세요.",
@@ -1407,25 +1508,17 @@ internal sealed class AnnotationEditorControl : Grid
             return;
         }
 
-        // Collapse the inspector below a practical width so the tool rail and viewport keep
-        // their space; the primary tools are never hidden.
-        bool shouldCollapse = ActualWidth > 0 && ActualWidth < InspectorCollapseWidth;
-        if (shouldCollapse == _inspectorCollapsed)
+        // Keep styling reachable in compact windows; vertical scrolling handles short heights.
+        bool compact = ActualWidth > 0 && ActualWidth < InspectorCompactWidth;
+        if (compact == _inspectorCompact)
         {
             return;
         }
 
-        _inspectorCollapsed = shouldCollapse;
-        if (shouldCollapse)
-        {
-            _inspectorColumn.Width = new GridLength(0);
-            _inspectorPanel.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            _inspectorColumn.Width = new GridLength(InspectorWidth);
-            _inspectorPanel.Visibility = Visibility.Visible;
-        }
+        _inspectorCompact = compact;
+        _inspectorColumn.Width = new GridLength(compact ? 200 : InspectorWidth);
+        _inspectorPanel.Padding = new Thickness(compact ? 12 : 18);
+        _inspectorPanel.Visibility = Visibility.Visible;
     }
 
     // ---- Commit / cancel -----------------------------------------------------------

@@ -15,6 +15,11 @@ public sealed class ClipboardImageReaderTests
 {
     [Theory]
     [InlineData("plain text", null, false)]
+    [InlineData("if (ready)\r\n\tRun();", null, false)]
+    [InlineData("\tfirst();\r\n\tsecond();", null, false)]
+    [InlineData("a\tb\nc\td", "<div style=\"white-space: pre;\">code</div>", false)]
+    [InlineData("\tvalue\r\n\tother", "<table><tr><td></td><td>value</td></tr></table>", true)]
+    [InlineData("A\tB\r\n1\t2", "<table><tr><td style=\"white-space: pre;\">A</td></tr></table>", true)]
     [InlineData("A\tB\r\n1\t2", null, true)]
     [InlineData("row one\r\nrow two", "Version:1.0<!--StartFragment--><TABLE><TR><TD>x</TD></TR></TABLE>", true)]
     [InlineData("single cell", "<table><tr><td>x</td></tr></table>", false)]

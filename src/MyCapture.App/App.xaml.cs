@@ -52,6 +52,11 @@ public partial class App : Application
     private CountdownWindow? _activeCountdown;
     private CancellationTokenSource? _scrollCancellation;
     private CaptureQueue? _queue;
+    private DispatcherTimer? _historyMaintenance;
+    private OcrIndexingService? _automaticIndexer;
+    private readonly CancellationTokenSource _indexingCancellation = new();
+    private bool _indexingRunning;
+    private bool _indexingRequested;
     private CapturePersistenceService? _persistence;
     private CaptureCommitService? _commit;
     private MyCapture.App.Recording.VideoLibraryService? _videoLibrary;
@@ -183,6 +188,23 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<PinManager>>());
 
         _ocrService = _services.GetRequiredService<IOcrService>();
+        _automaticIndexer = new OcrIndexingService(
+            _galleryController!, _ocrService, record => _queue!.GetDirectory(record),
+            () => _settings!.Ocr, _services.GetRequiredService<ILogger<OcrIndexingService>>(), Dispatcher);
+        _persistence!.ImagePersisted += (_, _) =>
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                MaintainHistory();
+                RunAutomaticIndexing();
+            }));
+        _historyMaintenance = new DispatcherTimer(DispatcherPriority.ApplicationIdle, Dispatcher)
+        {
+            Interval = TimeSpan.FromHours(1),
+        };
+        _historyMaintenance.Tick += (_, _) => MaintainHistory();
+        _historyMaintenance.Start();
+        MaintainHistory();
+        RequestAutomaticIndexing();
         _ocrPresenter = new OcrResultPresenter(
             _ocrService,
             Dispatcher,
@@ -1015,6 +1037,55 @@ public partial class App : Application
         }
     }
 
+    private void MaintainHistory()
+    {
+        try
+        {
+            if (_queue?.ExpireHistory(DateTimeOffset.UtcNow) > 0)
+            {
+                _galleryWindow?.RefreshFromQueue();
+                _tray?.SetCaptureCount(_queue.Count);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log?.LogWarning(ex, "Could not finish managed history retention");
+        }
+    }
+
+    private void RequestAutomaticIndexing()
+    {
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(RunAutomaticIndexing));
+    }
+
+    private async void RunAutomaticIndexing()
+    {
+        _indexingRequested = true;
+        if (_indexingRunning || _automaticIndexer is null || _indexingCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        _indexingRunning = true;
+        try
+        {
+            while (_indexingRequested && !_indexingCancellation.IsCancellationRequested)
+            {
+                _indexingRequested = false;
+                await _automaticIndexer.IndexMissingAsync(cancellationToken: _indexingCancellation.Token);
+                _galleryWindow?.RefreshFromQueue();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Automatic indexing must never interrupt capture or open an OCR dialog.
+            _log?.LogWarning(ex, "Automatic capture indexing did not complete");
+        }
+        finally
+        {
+            _indexingRunning = false;
+        }
+    }
+
     private void RestoreTrayAfterCapture()
     {
         if (_hotkeys?.Failures.Count > 0)
@@ -1027,23 +1098,27 @@ public partial class App : Application
         }
     }
 
-    /// <summary>
-    /// Runs OCR on a pinned image and shows the shared result window. Transient: the recognised
-    /// text is never cached because a pin has no backing capture record. Non-fatal.
-    /// </summary>
-    private void OnPinOcrRequested(object? sender, System.Windows.Media.Imaging.BitmapSource image)
+    /// <summary>Copies pin text directly without opening the OCR result window.</summary>
+    private async void OnPinOcrRequested(object? sender, System.Windows.Media.Imaging.BitmapSource image)
     {
-        if (_ocrPresenter is null || image is null)
+        bool copied = false;
+        try
         {
-            return;
+            if (_ocrService is not null)
+            {
+                copied = await PinTextCopyService.CopyAsync(image, _ocrService,
+                    ClipboardImageService.CopyTextAsync, _settings?.Ocr.UpscaleFactor ?? 2.0,
+                    _settings?.Ocr.PreferredLanguages ?? []);
+            }
         }
-
-        double upscale = _settings?.Ocr.UpscaleFactor ?? 2.0;
-        IReadOnlyList<string> languages = _settings?.Ocr.PreferredLanguages ?? [];
-
-        _ocrPresenter.ShowRecognized(
-            () => OcrRequest.FromBitmap(image, upscale, languages),
-            "화면 고정 이미지");
+        catch (Exception ex)
+        {
+            _log?.LogWarning(ex, "Could not copy text from pinned image");
+        }
+        finally
+        {
+            if (sender is PinWindow pin) pin.ReportOriginalTextCopyResult(copied);
+        }
     }
 
     /// <summary>Flips the tray to Busy during recognition and restores the prior state after.</summary>
@@ -1102,13 +1177,8 @@ public partial class App : Application
             record => Path.Combine(_queue.GetDirectory(record), CaptureFileNames.Thumbnail),
             _settings.Queue.ThumbnailLongEdge);
 
-        var ocrIndexing = new MyCapture.App.Ocr.OcrIndexingService(
-            _galleryController,
-            _ocrService ?? _services.GetRequiredService<IOcrService>(),
-            record => _queue.GetDirectory(record),
-            () => _settings!.Ocr,
-            _services.GetRequiredService<ILogger<MyCapture.App.Ocr.OcrIndexingService>>(),
-            Dispatcher);
+        OcrIndexingService ocrIndexing = _automaticIndexer
+            ?? throw new InvalidOperationException("Capture indexing is unavailable.");
 
         var window = new GalleryWindow(
             viewModel,
@@ -1235,6 +1305,23 @@ public partial class App : Application
 
     private bool TryRunSelfTest(string[] args)
     {
+        int uxIndex = FindSwitch(args, UxReviewSelfTest.CommandLineSwitch);
+        if (uxIndex >= 0)
+        {
+            int exitCode;
+            try
+            {
+                exitCode = UxReviewSelfTest.Run();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceError("UX review failed: {0}", ex);
+                exitCode = 2;
+            }
+            Shutdown(exitCode);
+            return true;
+        }
+
         int captureIndex = FindSwitch(args, CaptureSelfTest.CommandLineSwitch);
         if (captureIndex >= 0)
         {
@@ -1465,6 +1552,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _historyMaintenance?.Stop();
+        _indexingCancellation.Cancel();
         _log?.LogInformation(
             "MyCapture shutting down with code {ExitCode}",
             e.ApplicationExitCode);

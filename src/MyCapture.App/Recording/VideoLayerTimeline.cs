@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Input;
 using System.Windows.Media;
 using MyCapture.Core.Recording;
 
@@ -25,6 +27,21 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     private IReadOnlyList<FrameEditLayer> _frameLayers = [];
     private double _durationMs = 1;
     private double _playheadMs;
+    private Guid? _selectedId;
+    private bool _dragging;
+    private bool _startHandle;
+    private double _dragStartMs;
+    private double _dragEndMs;
+
+    internal event EventHandler? TextTimingChanged;
+    internal event EventHandler? TextLayerSelected;
+    internal Guid? SelectedTextId => _selectedId;
+
+    internal void SelectText(Guid? id)
+    {
+        _selectedId = id;
+        InvalidateVisual();
+    }
 
     internal VideoLayerTimeline()
     {
@@ -43,8 +60,11 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         Height = (TrackHeight * 2) + Gap;
         MinWidth = 240;
         SnapsToDevicePixels = true;
-        IsHitTestVisible = false;
+        Focusable = true;
+        Cursor = Cursors.Hand;
+        ToolTip = "텍스트 막대의 양 끝을 드래그해 표시 시간을 조절합니다. 위/아래: 레이어 선택 · 좌/우: 시작 시간 · Shift+좌/우: 끝 시간 · Ctrl: 0.01초 단위";
         AutomationProperties.SetName(this, "영상 레이어 타임라인");
+        AutomationProperties.SetHelpText(this, (string)ToolTip);
     }
 
     internal void Initialize(double durationMs)
@@ -62,7 +82,11 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         _frameLayers = frameLayers ?? [];
         AutomationProperties.SetHelpText(
             this,
-            $"텍스트 레이어 {_textLayers.Count}개, 프레임 레이어 {_frameLayers.Count}개");
+            $"텍스트 레이어 {_textLayers.Count}개, 프레임 레이어 {_frameLayers.Count}개. {(string)ToolTip}");
+        if (!_textLayers.Any(layer => layer.Id == _selectedId))
+        {
+            _selectedId = _textLayers.FirstOrDefault()?.Id;
+        }
         InvalidateVisual();
     }
 
@@ -91,6 +115,10 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         }
 
         dc.DrawRoundedRectangle(_background, _gridPen, new Rect(0, 0, width, height), 6, 6);
+        if (IsKeyboardFocused)
+        {
+            dc.DrawRoundedRectangle(null, _playheadPen, new Rect(1, 1, width - 2, height - 2), 6, 6);
+        }
         DrawTrack(dc, 0, "T  텍스트", _textLayers.Select(layer =>
             new LayerSpan(layer.StartMs, layer.EndMs, OneLine(layer.Text))).ToList(), _textLayer, hatch: false);
         DrawTrack(dc, TrackHeight + Gap, "F  프레임", _frameLayers.Select(layer =>
@@ -99,6 +127,154 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         double timelineWidth = width - LabelWidth;
         double playheadX = LabelWidth + ((_playheadMs / _durationMs) * timelineWidth);
         dc.DrawLine(_playheadPen, new Point(playheadX, 0), new Point(playheadX, height));
+        for (int index = 0; index < _textLayers.Count; index++)
+        {
+            Rect bar = TextBar(index);
+            bool selected = _textLayers[index].Id == _selectedId;
+            var pen = selected ? _playheadPen : _gridPen;
+            dc.DrawRoundedRectangle(null, pen, bar, 3, 3);
+            dc.DrawRectangle(_foreground, null, new Rect(bar.Left, bar.Top + 3, Math.Min(4, bar.Width / 2), bar.Height - 6));
+            dc.DrawRectangle(_foreground, null, new Rect(bar.Right - Math.Min(4, bar.Width / 2), bar.Top + 3, Math.Min(4, bar.Width / 2), bar.Height - 6));
+        }
+    }
+
+    private Rect TextBar(int index)
+    {
+        TimedTextOverlay layer = _textLayers[index];
+        double width = Math.Max(1, ActualWidth - LabelWidth);
+        double left = LabelWidth + Math.Clamp(layer.StartMs / _durationMs, 0, 1) * width;
+        double right = LabelWidth + Math.Clamp(layer.EndMs / _durationMs, 0, 1) * width;
+        return new Rect(left, 5 + ((index % 2) * 4), Math.Max(3, right - left), 20);
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new TimelineAutomationPeer(this);
+
+    protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        base.OnGotKeyboardFocus(e);
+        InvalidateVisual();
+    }
+
+    protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        base.OnLostKeyboardFocus(e);
+        InvalidateVisual();
+    }
+
+    private sealed class TimelineAutomationPeer(VideoLayerTimeline owner) : FrameworkElementAutomationPeer(owner)
+    {
+        protected override string GetClassNameCore() => "VideoLayerTimeline";
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Pane;
+        protected override bool IsControlElementCore() => true;
+    }
+
+    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+    {
+        base.OnMouseLeftButtonDown(e);
+        Point point = e.GetPosition(this);
+        for (int index = _textLayers.Count - 1; index >= 0; index--)
+        {
+            Rect bar = TextBar(index);
+            Rect hit = bar;
+            hit.Inflate(8, 3);
+            if (!hit.Contains(point))
+            {
+                continue;
+            }
+
+            _ = Focus();
+            TimedTextOverlay layer = _textLayers[index];
+            _selectedId = layer.Id;
+            TextLayerSelected?.Invoke(this, EventArgs.Empty);
+            _startHandle = Math.Abs(point.X - bar.Left) <= Math.Abs(point.X - bar.Right);
+            if (Math.Min(Math.Abs(point.X - bar.Left), Math.Abs(point.X - bar.Right)) <= 12)
+            {
+                _dragStartMs = layer.StartMs;
+                _dragEndMs = layer.EndMs;
+                _dragging = CaptureMouse();
+                Cursor = Cursors.SizeWE;
+            }
+
+            InvalidateVisual();
+            e.Handled = true;
+            break;
+        }
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (_dragging)
+        {
+            double target = (e.GetPosition(this).X - LabelWidth) / Math.Max(1, ActualWidth - LabelWidth) * _durationMs;
+            ResizeSelected(target);
+            e.Handled = true;
+        }
+    }
+
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseLeftButtonUp(e);
+        if (_dragging)
+        {
+            _dragging = false;
+            ReleaseMouseCapture();
+            Cursor = Cursors.Hand;
+            e.Handled = true;
+        }
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        _dragging = false;
+        Cursor = Cursors.Hand;
+        base.OnLostMouseCapture(e);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        TimedTextOverlay? selected = _textLayers.FirstOrDefault(layer => layer.Id == _selectedId);
+        if (e.Key == Key.Escape && _dragging && selected is not null)
+        {
+            selected.StartMs = _dragStartMs;
+            selected.EndMs = _dragEndMs;
+            ReleaseMouseCapture();
+            TextTimingChanged?.Invoke(this, EventArgs.Empty);
+            InvalidateVisual();
+            e.Handled = true;
+        }
+        else if (e.Key is Key.Up or Key.Down && _textLayers.Count > 0)
+        {
+            int index = Math.Max(0, _textLayers.ToList().FindIndex(layer => layer.Id == _selectedId));
+            index = (index + (e.Key == Key.Up ? _textLayers.Count - 1 : 1)) % _textLayers.Count;
+            _selectedId = _textLayers[index].Id;
+            TextLayerSelected?.Invoke(this, EventArgs.Empty);
+            InvalidateVisual();
+            e.Handled = true;
+        }
+        else if (e.Key is Key.Left or Key.Right && selected is not null)
+        {
+            _startHandle = !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+            double step = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? 10 : 100;
+            ResizeSelected((_startHandle ? selected.StartMs : selected.EndMs) + (e.Key == Key.Left ? -step : step));
+            e.Handled = true;
+        }
+    }
+
+    private void ResizeSelected(double target)
+    {
+        TimedTextOverlay? selected = _textLayers.FirstOrDefault(layer => layer.Id == _selectedId);
+        if (selected is null)
+        {
+            return;
+        }
+
+        (selected.StartMs, selected.EndMs) = TextLayerTiming.Resize(
+            selected.StartMs, selected.EndMs, _durationMs, _startHandle, target);
+        TextTimingChanged?.Invoke(this, EventArgs.Empty);
+        AutomationProperties.SetName(this, $"텍스트 표시 시간: {selected.StartMs / 1000:0.00}초부터 {selected.EndMs / 1000:0.00}초까지");
+        InvalidateVisual();
     }
 
     private void DrawTrack(

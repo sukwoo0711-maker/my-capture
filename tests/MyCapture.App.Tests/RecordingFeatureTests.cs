@@ -1,9 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Threading;
+using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
 using MyCapture.Core.Primitives;
@@ -236,18 +241,129 @@ public sealed class RecordingFeatureTests
         });
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void FinalizingRecording_RejectsPrimaryAndKeyboardRestart(bool stopping, bool completionPending)
+    {
+        StaTestHost.Run(() =>
+        {
+            int starts = 0;
+            var window = new RecordingControlWindow(
+                new RectD(100, 100, 640, 360),
+                new RecordingSettings { UseStartDelay = false },
+                () => { starts++; throw new InvalidOperationException("Must not restart while finalizing."); },
+                () => "unused.mp4",
+                NullLogger<RecordingControlWindow>.Instance);
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            typeof(RecordingControlWindow).GetField("_stopping", flags)!.SetValue(window, stopping);
+            typeof(RecordingControlWindow).GetField("_completionPending", flags)!.SetValue(window, completionPending);
+            typeof(RecordingControlWindow).GetField("_finished", flags)!.SetValue(window, true);
+            using var source = new HwndSource(new HwndSourceParameters("Recording stop guard test")
+            {
+                Width = 1, Height = 1, PositionX = -4000, PositionY = -4000, WindowStyle = 0,
+            });
+            try
+            {
+                typeof(RecordingControlWindow).GetMethod("OnPrimaryClicked", flags)!.Invoke(window, null);
+                foreach (Key key in new[] { Key.Enter, Key.Space })
+                {
+                    var args = new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = Keyboard.KeyDownEvent };
+                    typeof(RecordingControlWindow).GetMethod("OnKeyDown", flags)!.Invoke(window, [window, args]);
+                    Assert.True(args.Handled);
+                }
+                Assert.Equal(0, starts);
+            }
+            finally
+            {
+                window.CompleteAndClose();
+            }
+        });
+    }
+
+    [Fact]
+    public void RecordingFrame_RemainsVisibleDuringCaptureAndCompletionClosesCleanly()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var firstFrame = new ManualResetEventSlim();
+            var encoder = new RecordingSpyEncoder { FrameWritten = () => firstFrame.Set() };
+            var grabber = new RegionFrameGrabber(
+                new MyCapture.Platform.Capture.ScreenCaptureEngine(NullLogger<MyCapture.Platform.Capture.ScreenCaptureEngine>.Instance),
+                includeCursor: false);
+            using var recorder = new RegionRecorder(grabber, _ => encoder, NullLogger.Instance);
+            var window = new RecordingControlWindow(
+                new RectD(100, 100, 16, 16),
+                new RecordingSettings { UseStartDelay = false },
+                () => recorder,
+                () => "unused.mp4",
+                NullLogger<RecordingControlWindow>.Instance) { ShowActivated = false };
+            bool closed = false;
+            bool finished = false;
+            Exception? failure = null;
+            window.Closed += (_, _) => closed = true;
+            window.RecordingFinished += (_, _) => finished = true;
+            window.Failed += (_, args) => failure = args.Exception;
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+                typeof(RecordingControlWindow).GetMethod("OnPrimaryClicked", flags)!.Invoke(window, null);
+                Assert.True(firstFrame.Wait(TimeSpan.FromSeconds(3)), "recording did not emit a real captured frame");
+                Assert.True(window.IsRecording);
+                Border frame = (Border)typeof(RecordingControlWindow).GetField("_regionFrame", flags)!.GetValue(window)!;
+                Assert.Equal(Visibility.Visible, frame.Visibility);
+                Assert.True(frame.IsVisible);
+                Assert.False(frame.IsHitTestVisible);
+                Assert.Null(frame.Background);
+
+                window.RequestStop();
+                var dispatcherFrame = new DispatcherFrame();
+                DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+                var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(10) };
+                timer.Tick += (_, _) =>
+                {
+                    if (finished || failure is not null || DateTime.UtcNow >= deadline)
+                    {
+                        timer.Stop();
+                        dispatcherFrame.Continue = false;
+                    }
+                };
+                timer.Start();
+                Dispatcher.PushFrame(dispatcherFrame);
+                Assert.Null(failure);
+                Assert.True(finished, "recording completion timed out");
+                Assert.True(encoder.Completed);
+                Assert.False(window.IsRecording);
+                Assert.False(closed, "saving status must remain visible until the coordinator completes");
+                window.CompleteAndClose();
+                Assert.True(closed);
+            }
+            finally
+            {
+                window.CompleteAndClose();
+            }
+        });
+    }
+
     /// <summary>A fake encoder recording the contract, used to keep recorder tests off Media Foundation.</summary>
     private sealed class RecordingSpyEncoder : IVideoEncoder
     {
         public List<double> Timestamps { get; } = [];
 
         public bool Completed { get; private set; }
+        internal Action? FrameWritten { get; init; }
 
         public int Width => 4;
 
         public int Height => 4;
 
-        public void WriteFrame(in EncoderFrame frame) => Timestamps.Add(frame.TimestampMs);
+        public void WriteFrame(in EncoderFrame frame)
+        {
+            Timestamps.Add(frame.TimestampMs);
+            FrameWritten?.Invoke();
+        }
 
         public void Complete() => Completed = true;
 

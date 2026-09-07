@@ -3,6 +3,14 @@ using MyCapture.Core.Primitives;
 
 namespace MyCapture.Core.Annotations;
 
+public enum AnnotationStrokeStyle
+{
+    Solid = 0,
+    Dashed = 1,
+    Dotted = 2,
+    ThickDashed = 3,
+}
+
 /// <summary>
 /// Common state for annotations defined by a bounding box with a stroke and fill.
 /// </summary>
@@ -12,6 +20,8 @@ public abstract class ShapeAnnotation : AnnotationItem
     private ColorRgba _stroke = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
     private ColorRgba _fill = ColorRgba.Transparent;
     private double _strokeThickness = 3;
+    private AnnotationStrokeStyle _strokeStyle;
+    private bool _fillMatchesStroke;
 
     public RectD Rect
     {
@@ -41,6 +51,35 @@ public abstract class ShapeAnnotation : AnnotationItem
         set => SetProperty(ref _strokeThickness, Math.Clamp(value, 0, 256));
     }
 
+    public AnnotationStrokeStyle StrokeStyle
+    {
+        get => _strokeStyle;
+        set => SetProperty(ref _strokeStyle, Enum.IsDefined(value) ? value : AnnotationStrokeStyle.Solid);
+    }
+
+    /// <summary>
+    /// New user-created fills follow the outline color. Legacy and privacy-redaction fills
+    /// remain independent unless the user explicitly changes their transparency.
+    /// </summary>
+    public bool FillMatchesStroke
+    {
+        get => _fillMatchesStroke;
+        set => SetProperty(ref _fillMatchesStroke, value);
+    }
+
+    [JsonIgnore]
+    public double FillTransparency => Math.Round(100 - Fill.A * 100.0 / 255);
+
+    [JsonIgnore]
+    public double EffectiveStrokeThickness => StrokeStyle == AnnotationStrokeStyle.ThickDashed
+        ? Math.Max(6, StrokeThickness) : StrokeThickness;
+
+    public static ColorRgba FillForTransparency(ColorRgba stroke, double transparency)
+    {
+        double safe = double.IsFinite(transparency) ? Math.Clamp(transparency, 0, 100) : 100;
+        return stroke.WithAlpha((byte)Math.Round(255 * (100 - safe) / 100, MidpointRounding.AwayFromZero));
+    }
+
     [JsonIgnore]
     public override RectD Bounds => _rect;
 
@@ -60,6 +99,8 @@ public abstract class ShapeAnnotation : AnnotationItem
         target.Stroke = Stroke;
         target.Fill = Fill;
         target.StrokeThickness = StrokeThickness;
+        target.StrokeStyle = StrokeStyle;
+        target.FillMatchesStroke = FillMatchesStroke;
     }
 
     /// <summary>
@@ -70,7 +111,7 @@ public abstract class ShapeAnnotation : AnnotationItem
     /// Without the floor, a 1px stroke would require pixel-perfect aiming to
     /// select, which reads as the annotation being unselectable.
     /// </remarks>
-    protected double PickBand => Math.Max(StrokeThickness / 2.0, 3.0);
+    protected double PickBand => Math.Max(EffectiveStrokeThickness / 2.0, 3.0);
 }
 
 /// <summary>

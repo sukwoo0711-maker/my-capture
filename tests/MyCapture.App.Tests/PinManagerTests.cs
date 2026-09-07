@@ -273,7 +273,7 @@ public sealed class PinManagerTests
     }
 
     [Fact]
-    public void CtrlSingleClick_ArmsCopyDebounce_ThenFiresCopy()
+    public void CtrlSingleClick_DoesNotOverwriteClipboard()
     {
         RunSta(() =>
         {
@@ -286,10 +286,10 @@ public sealed class PinManagerTests
             Assert.True(pin.IsCtrlClickTimerRunning);
             Assert.Null(copied);
 
-            // When no second click arrives, the debounce elapses and the copy fires.
+            // Single-click never overwrites the clipboard when the double-click interval expires.
             pin.ForceCtrlClickTimeoutForTest();
             Assert.False(pin.IsCtrlClickTimerRunning);
-            Assert.NotNull(copied);
+            Assert.Null(copied);
 
             manager.CloseAll();
         });

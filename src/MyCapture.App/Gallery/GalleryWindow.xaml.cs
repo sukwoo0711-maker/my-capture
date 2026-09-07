@@ -229,7 +229,7 @@ internal sealed partial class GalleryWindow : Window
             $"검색되지 않는 캡처 {coverage.Missing}개");
         OcrCoverageDetail.Text = string.Create(
             System.Globalization.CultureInfo.CurrentCulture,
-            $"이미지 속 글자로 검색하려면 텍스트 인식이 필요합니다. 전체 {coverage.Total}개 중 {coverage.WithOcrText}개가 검색 가능합니다. 모든 인식은 이 PC에서 오프라인으로 수행됩니다.");
+            $"새 캡처는 이 PC에서 자동으로 색인합니다. 전체 {coverage.Total}개 중 {coverage.WithOcrText}개가 검색 가능합니다. 필요하면 지금 다시 색인할 수 있습니다.");
         OcrIndexButton.Visibility = Visibility.Visible;
         OcrIndexButton.IsEnabled = true;
         OcrCoverageBanner.Visibility = Visibility.Visible;
@@ -729,6 +729,23 @@ internal sealed partial class GalleryWindow : Window
         if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
             ConfirmAndDelete(tile);
+        }
+    }
+
+    private void OnDeleteClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (ResolveTile(sender) is GalleryItemViewModel tile)
+        {
+            ConfirmAndDelete(tile);
+        }
+    }
+
+    private void OnPinMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
+        {
+            TogglePin(tile);
         }
     }
 

@@ -87,6 +87,38 @@ public sealed class ThemeResourceAvailabilityTests
     }
 
     [Fact]
+    public void ScrollBarsKeepNativeTrackAndOrientationCommandsWithThemedChrome()
+    {
+        StaTestHost.Run(() =>
+        {
+            ResourceDictionary theme = LoadMergedTheme();
+            foreach (Orientation orientation in new[] { Orientation.Vertical, Orientation.Horizontal })
+            {
+                var bar = new ScrollBar
+                {
+                    Resources = theme,
+                    Style = Assert.IsType<Style>(theme[typeof(ScrollBar)]),
+                    Orientation = orientation,
+                    Minimum = 0, Maximum = 100, Value = 25, ViewportSize = 20,
+                };
+                bar.ApplyTemplate();
+                bar.Measure(new Size(200, 200));
+                bar.Arrange(new Rect(0, 0, orientation == Orientation.Vertical ? 16 : 200,
+                    orientation == Orientation.Vertical ? 200 : 16));
+                Track track = Assert.IsType<Track>(bar.Template.FindName("PART_Track", bar));
+                Assert.Equal(orientation, track.Orientation);
+                Assert.Equal(orientation == Orientation.Vertical, track.IsDirectionReversed);
+                Assert.NotNull(track.Thumb);
+                Assert.Same(orientation == Orientation.Vertical ? ScrollBar.PageUpCommand : ScrollBar.PageLeftCommand,
+                    track.DecreaseRepeatButton.Command);
+                Assert.Same(orientation == Orientation.Vertical ? ScrollBar.PageDownCommand : ScrollBar.PageRightCommand,
+                    track.IncreaseRepeatButton.Command);
+                Assert.Same(theme["Surface.Base"], bar.Background);
+            }
+        });
+    }
+
+    [Fact]
     public void RailToolStyleUsesStableFortyPixelTargets()
     {
         StaTestHost.Run(() =>
@@ -101,6 +133,36 @@ public sealed class ThemeResourceAvailabilityTests
 
             Assert.Equal(40d, Assert.IsType<double>(width.Value));
             Assert.Equal(40d, Assert.IsType<double>(height.Value));
+        });
+    }
+
+    [Fact]
+    public void ComboBoxThemePreservesSelectionPopupAndEditableParts()
+    {
+        StaTestHost.Run(() =>
+        {
+            ResourceDictionary theme = LoadMergedTheme();
+            var combo = new ComboBox
+            {
+                Resources = theme,
+                Style = Assert.IsType<Style>(theme[typeof(ComboBox)]),
+                Width = 210,
+            };
+            combo.Items.Add("표준 · 960px / 10fps");
+            combo.Items.Add("최소 용량 · 480px / 5fps");
+            combo.SelectedIndex = 1;
+            combo.ApplyTemplate();
+            Assert.Same(theme["Surface.Overlay"], combo.Background);
+            Assert.IsType<Popup>(combo.Template.FindName("PART_Popup", combo));
+            ToggleButton toggle = Assert.IsType<ToggleButton>(combo.Template.FindName("DropDownToggle", combo));
+            Assert.False(toggle.Focusable);
+            TextBox editable = Assert.IsType<TextBox>(combo.Template.FindName("PART_EditableTextBox", combo));
+            Assert.Equal(Visibility.Collapsed, editable.Visibility);
+            Assert.Equal(1, combo.SelectedIndex);
+            combo.IsEditable = true;
+            Assert.Equal(Visibility.Visible, editable.Visibility);
+            combo.Text = "custom";
+            Assert.Equal("custom", combo.Text);
         });
     }
 

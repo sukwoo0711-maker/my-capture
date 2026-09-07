@@ -133,6 +133,39 @@ public sealed class CapturePersistenceTests
     });
 
     [Fact]
+    public void SuccessfulOriginalAndEachCommitNotifyAutomaticIndexing() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var settings = new QueueSettings();
+            CaptureQueue queue = NewQueue(paths, settings);
+            CapturePersistenceService persistence = NewPersistence(queue, paths, settings);
+            var revisions = new List<long>();
+            persistence.ImagePersisted += (_, record) =>
+            {
+                Assert.True(File.Exists(queue.GetFilePath(record, CaptureFileNames.Rendered)));
+                Assert.True(File.Exists(paths.IndexFile));
+                revisions.Add(record.ContentRevision);
+            };
+            BitmapSource image = SolidBitmap(24, 24, 20, 40, 80);
+            CaptureRecord record = persistence.PersistOriginal(image, 1, "test", "display");
+            Assert.Single(revisions);
+            long originalRevision = record.ContentRevision;
+            var document = new AnnotationDocument();
+            persistence.Finalize(record, image, document, new Dictionary<string, BitmapSource>());
+            Assert.Equal(new[] { originalRevision, originalRevision + 1 }, revisions);
+            persistence.Finalize(record, image, document, new Dictionary<string, BitmapSource>());
+            Assert.Equal(originalRevision + 2, revisions[2]);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
     public void PersistOriginalAsync_CompletesOnlyAfterDurableFilesAndIndexAreReady() => RunSta(() =>
     {
         string root = NewRoot();

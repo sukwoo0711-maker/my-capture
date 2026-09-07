@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -7,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using MyCapture.App.Editing;
+using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using Xunit;
@@ -70,14 +72,21 @@ public sealed class EditorLayoutAccessibilityTests
     }
 
     [Fact]
-    public void EditorHasNoScrollViewer_SoToolbarNeverScrollsHorizontally()
+    public void OnlyInspectorScrollsVertically_SoToolbarNeverScrollsHorizontally()
     {
         StaTestHost.Run(() =>
         {
             using EditorHost host = EditorHost.Create();
 
             List<ScrollViewer> scrollViewers = FindDescendants<ScrollViewer>(host.Editor).ToList();
-            Assert.Empty(scrollViewers);
+            ScrollViewer inspector = Assert.Single(scrollViewers, viewer => viewer.Name == "AnnotationInspectorScroll");
+            Assert.Equal(ScrollBarVisibility.Disabled, inspector.HorizontalScrollBarVisibility);
+            Assert.Equal(ScrollBarVisibility.Auto, inspector.VerticalScrollBarVisibility);
+            // Native ComboBox templates can own their own dropdown ScrollViewer. All such
+            // viewers must remain inside the inspector, never in the command bar or canvas.
+            List<ScrollViewer> inspectorChildren = FindDescendants<ScrollViewer>(inspector).ToList();
+            Assert.All(scrollViewers.Where(viewer => !ReferenceEquals(viewer, inspector)),
+                viewer => Assert.Contains(viewer, inspectorChildren));
         });
     }
 
@@ -90,7 +99,8 @@ public sealed class EditorLayoutAccessibilityTests
 
             // Tool-rail toggle buttons (Select/Rectangle/Arrow/Pen/Text/Image) and every command
             // bar button carry a name; icon-bearing controls also carry a tooltip.
-            IReadOnlyList<ToggleButton> tools = FindDescendants<ToggleButton>(host.Editor).ToList();
+            IReadOnlyList<ToggleButton> tools = FindDescendants<ToggleButton>(host.Editor)
+                .Where(button => button.Content is Viewbox).ToList();
             Assert.Equal(6, tools.Count);
             foreach (ToggleButton tool in tools)
             {
@@ -173,6 +183,72 @@ public sealed class EditorLayoutAccessibilityTests
             Assert.True(liveStatus is not null, "No polite live-region status TextBlock was found.");
             Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(liveStatus)),
                 "The live status region has no automation name.");
+        });
+    }
+
+    [Fact]
+    public void SelectingRestoredShape_SynchronizesStyleWithoutMutatingOrAddingUndo()
+    {
+        StaTestHost.Run(() =>
+        {
+            using EditorHost host = EditorHost.Create();
+            var controller = (AnnotationEditorController)typeof(AnnotationEditorControl)
+                .GetField("_controller", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(host.Editor)!;
+            var rectangle = new RectangleAnnotation
+            {
+                Rect = new RectD(20, 20, 100, 50),
+                StrokeStyle = AnnotationStrokeStyle.Dotted,
+                StrokeThickness = 0,
+                Fill = new ColorRgba(128, 12, 34, 56),
+            };
+            controller.Document.Add(rectangle);
+            string before = controller.Document.ToJson();
+            controller.SetSelected(rectangle);
+
+            ComboBox style = FindDescendants<ComboBox>(host.Editor)
+                .Single(combo => AutomationProperties.GetName(combo) == "도형 선 종류");
+            Slider fill = FindDescendants<Slider>(host.Editor)
+                .Single(slider => AutomationProperties.GetName(slider) == "도형 내부 투명도 (퍼센트)");
+            Assert.Equal(2, style.SelectedIndex);
+            Assert.Equal(50, fill.Value);
+            Assert.False(controller.CanUndo);
+            Assert.Equal(before, controller.Document.ToJson());
+        });
+    }
+
+    [Fact]
+    public void CompactEditor_KeepsShapeInspectorAvailableWithVerticalScrolling()
+    {
+        StaTestHost.Run(() =>
+        {
+            using EditorHost host = EditorHost.Create();
+            Window window = Window.GetWindow(host.Editor);
+            window.Width = 780;
+            window.Height = 560;
+            window.UpdateLayout();
+            ScrollViewer inspector = FindDescendants<ScrollViewer>(host.Editor)
+                .Single(viewer => viewer.Name == "AnnotationInspectorScroll");
+            ComboBox style = FindDescendants<ComboBox>(inspector)
+                .Single(combo => AutomationProperties.GetName(combo) == "도형 선 종류");
+            Slider fill = FindDescendants<Slider>(inspector)
+                .Single(slider => AutomationProperties.GetName(slider) == "도형 내부 투명도 (퍼센트)");
+            Assert.True(inspector.IsVisible);
+            Assert.True(style.IsVisible);
+            Assert.True(fill.IsVisible);
+            Assert.True(inspector.ActualWidth >= 170);
+            Assert.Equal(ScrollBarVisibility.Disabled, inspector.HorizontalScrollBarVisibility);
+            IReadOnlyList<Button> swatches = FindDescendants<Button>(inspector)
+                .Where(button => AutomationProperties.GetName(button).StartsWith("색상 #", StringComparison.Ordinal)).ToList();
+            Assert.Equal(6, swatches.Count);
+            foreach (Button swatch in swatches)
+            {
+                Point origin = swatch.TranslatePoint(new Point(0, 0), inspector);
+                Assert.True(origin.X >= -0.5 && origin.X + swatch.ActualWidth <= inspector.ViewportWidth + 1,
+                    "A color swatch extends beyond the actual inspector viewport.");
+            }
+            fill.BringIntoView();
+            window.UpdateLayout();
+            Assert.True(inspector.VerticalOffset > 0 || inspector.ScrollableHeight == 0);
         });
     }
 

@@ -78,6 +78,8 @@ internal static class ClipboardImageReader
         string? OriginalText,
         bool IsTabularText)
     {
+        internal BitmapSource? CodePreview { get; init; }
+
         internal static CapturedAttempt Retry() =>
             new(
                 ClipboardImageOutcome.Busy(),
@@ -181,6 +183,11 @@ internal static class ClipboardImageReader
             return PinReadAttempt.Busy();
         }
 
+        if (captured.CodePreview is not null && captured.OriginalText is not null)
+        {
+            return PinReadAttempt.Success(PinContent.FromText(captured.CodePreview, captured.OriginalText, false));
+        }
+
         if (captured.IsTabularText && HasSourceText(captured))
         {
             PinContent? table = await TryRenderTextAsync(captured, renderText).ConfigureAwait(false);
@@ -244,7 +251,7 @@ internal static class ClipboardImageReader
                 }
             }
 
-            return pngBytes is not null
+            CapturedAttempt result = pngBytes is not null
                 ? CapturedAttempt.Content(
                     pngBytes,
                     fallbackImage: null,
@@ -256,6 +263,12 @@ internal static class ClipboardImageReader
                     originalText,
                     isTabularText,
                     clipboardSequence);
+            return result with
+            {
+                CodePreview = originalText is not null && !isTabularText
+                    ? ClipboardCodeRenderer.TryRender(originalText, TryGetClipboardString(data, DataFormats.Html, false))
+                    : null,
+            };
         }
         catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen)
         {
@@ -399,9 +412,21 @@ internal static class ClipboardImageReader
         string? clipboardHtml = null)
     {
         ArgumentNullException.ThrowIfNull(text);
-        return text.Contains('\t')
-               || (ContainsLineBreak(text)
-                   && clipboardHtml?.Contains("<table", StringComparison.OrdinalIgnoreCase) == true);
+        if (ClipboardCodeRenderer.IsCodeHtml(clipboardHtml))
+        {
+            return false;
+        }
+        if (ContainsLineBreak(text)
+            && clipboardHtml?.Contains("<table", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return true;
+        }
+        // Tabs are also code indentation. Plain TSV must have consistent columns.
+        string[] rows = text.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .TrimEnd('\r', '\n').Split('\n');
+        int columns = rows[0].Count(static character => character == '\t');
+        return columns > 0 && rows.All(row => !row.StartsWith('\t')
+            && row.Count(static character => character == '\t') == columns);
     }
 
     private static bool ContainsLineBreak(string text) =>

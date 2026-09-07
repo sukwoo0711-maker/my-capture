@@ -148,8 +148,7 @@
                                    VerticalAlignment="Center" />
                     </Grid>
 
-                    <!-- Single action row: one primary Edit, compact icon Copy + Pin, and a
-                         discoverable More overflow holding OCR and Delete. -->
+                    <!-- Primary editor followed by Copy, Trash, and More (including pin). -->
                     <Grid Grid.Row="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -178,10 +177,10 @@
                         </Button>
 
                         <Button Grid.Column="2" Style="{StaticResource Gallery.IconButton}"
-                                ToolTip="고정 전환 (Space 또는 P)"
-                                AutomationProperties.Name="고정 전환"
-                                Click="OnPinClick">
-                            <Path Data="{StaticResource Icon.Pin}" Width="20" Height="20"
+                                ToolTip="라이브러리에서 삭제 (Delete)"
+                                AutomationProperties.Name="캡처 삭제"
+                                Click="OnDeleteClick">
+                            <Path Data="{StaticResource Icon.Delete}" Width="20" Height="20"
                                   Stretch="None"
                                   Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                   StrokeThickness="1.6"
@@ -191,7 +190,7 @@
 
                         <Button Grid.Column="3"
                                 Style="{StaticResource Gallery.IconButton}"
-                                ToolTip="더 보기 — 내보내기, 텍스트 인식, 삭제"
+                                ToolTip="더 보기 — 핀 고정, 내보내기, 텍스트 인식"
                                 AutomationProperties.Name="더 보기"
                                 Click="OnMoreClick">
                             <Path Data="{StaticResource Icon.More}" Width="20" Height="20"
@@ -208,6 +207,11 @@
                                      record even though menu items are outside the visual tree. -->
                                 <ContextMenu DataContext="{Binding PlacementTarget.DataContext,
                                                                    RelativeSource={RelativeSource Self}}">
+                                    <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
+                                              CommandParameter="{Binding}"
+                                              AutomationProperties.Name="핀 고정 전환"
+                                              InputGestureText="P"
+                                              Click="OnPinMenuClick" />
                                     <MenuItem Header="텍스트 인식 (OCR)"
                                               CommandParameter="{Binding}"
                                               AutomationProperties.Name="텍스트 인식 (OCR)"

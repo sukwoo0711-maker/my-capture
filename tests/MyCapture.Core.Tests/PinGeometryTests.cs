@@ -181,4 +181,17 @@ public sealed class PinGeometryTests
         Assert.True(top >= 0);
         Assert.Equal(100, left, 3);
     }
+
+    [Theory]
+    [InlineData(-2500, -1100)]
+    [InlineData(3700, 500)]
+    public void PhysicalDesktop_AllowsBothEndsOfMixedDpiMonitorLayout(double x, double y)
+    {
+        // A 2560px display left/above a 3840px display: use one physical plane,
+        // regardless of their different 150%/200% UI scaling factors.
+        (double left, double top) = PinGeometry.KeepGrabbable(x, y, 600, 400,
+            -2560, -1440, 6400, 3600, 48);
+        Assert.Equal(x, left);
+        Assert.Equal(y, top);
+    }
 }

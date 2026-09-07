@@ -80,6 +80,8 @@ internal sealed class AnnotationEditorController
 
     /// <summary>Current stroke thickness applied to new shape/line/pen items.</summary>
     internal double StrokeThickness { get; set; } = 3;
+    internal AnnotationStrokeStyle StrokeStyle { get; private set; }
+    internal double FillTransparency { get; private set; } = 100;
 
     internal bool CanUndo => _undo.CanUndo;
 
@@ -363,7 +365,13 @@ internal sealed class AnnotationEditorController
         switch (_selected)
         {
             case ShapeAnnotation shape:
-                PushProperty(shape, "색상", static (s, v) => s.Stroke = v, shape.Stroke, color);
+                PushProperty(shape, "색상", static (s, v) =>
+                    {
+                        s.Stroke = v.Stroke;
+                        s.Fill = v.Fill;
+                    },
+                    (Stroke: shape.Stroke, Fill: shape.Fill),
+                    (Stroke: color, Fill: shape.FillMatchesStroke ? color.WithAlpha(shape.Fill.A) : shape.Fill));
                 break;
             case PolylineAnnotation line:
                 PushProperty(line, "색상", static (s, v) => s.Stroke = v, line.Stroke, color);
@@ -381,6 +389,11 @@ internal sealed class AnnotationEditorController
 
     internal void ApplyStrokeThickness(double thickness)
     {
+        if ((_selected is ShapeAnnotation { StrokeStyle: AnnotationStrokeStyle.ThickDashed })
+            || (_selected is null && Tool == EditorTool.Rectangle && StrokeStyle == AnnotationStrokeStyle.ThickDashed))
+        {
+            thickness = Math.Max(6, thickness);
+        }
         StrokeThickness = thickness;
         if (_selected is null)
         {
@@ -398,6 +411,46 @@ internal sealed class AnnotationEditorController
             case PenAnnotation pen:
                 PushProperty(pen, "두께", static (s, v) => s.StrokeThickness = v, pen.StrokeThickness, thickness);
                 break;
+        }
+
+        RaiseVisual();
+    }
+
+    internal void ApplyStrokeStyle(AnnotationStrokeStyle style)
+    {
+        StrokeStyle = Enum.IsDefined(style) ? style : AnnotationStrokeStyle.Solid;
+        if (StrokeStyle == AnnotationStrokeStyle.ThickDashed)
+        {
+            StrokeThickness = Math.Max(6, StrokeThickness);
+        }
+
+        if (_selected is ShapeAnnotation shape)
+        {
+            PushProperty(shape, "선 종류", static (s, v) =>
+                {
+                    s.StrokeStyle = v.Style;
+                    s.StrokeThickness = v.Thickness;
+                },
+                (Style: shape.StrokeStyle, Thickness: shape.StrokeThickness),
+                (Style: StrokeStyle, Thickness: StrokeStyle == AnnotationStrokeStyle.ThickDashed
+                    ? Math.Max(6, shape.StrokeThickness) : shape.StrokeThickness));
+        }
+
+        RaiseVisual();
+    }
+
+    internal void ApplyFillTransparency(double transparency)
+    {
+        FillTransparency = double.IsFinite(transparency) ? Math.Clamp(transparency, 0, 100) : 100;
+        if (_selected is ShapeAnnotation shape)
+        {
+            PushProperty(shape, "채우기 투명도", static (s, v) =>
+                {
+                    s.Fill = v.Fill;
+                    s.FillMatchesStroke = v.Matches;
+                },
+                (Fill: shape.Fill, Matches: shape.FillMatchesStroke),
+                (Fill: ShapeAnnotation.FillForTransparency(shape.Stroke, FillTransparency), Matches: true));
         }
 
         RaiseVisual();
@@ -473,6 +526,9 @@ internal sealed class AnnotationEditorController
                 Rect = new RectD(point.X, point.Y, 0, 0),
                 Stroke = StrokeColor,
                 StrokeThickness = StrokeThickness,
+                StrokeStyle = StrokeStyle,
+                Fill = ShapeAnnotation.FillForTransparency(StrokeColor, FillTransparency),
+                FillMatchesStroke = true,
             },
             EditorTool.Arrow => PolylineAnnotation.CreateArrow(point, point, StrokeColor, StrokeThickness),
             _ => throw new InvalidOperationException($"Tool {_tool} has no draft shape."),

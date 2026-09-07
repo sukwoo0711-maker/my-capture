@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '1.6.0'
+    [string]$Version = '1.7.0'
 )
 
 Set-StrictMode -Version 2.0
@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 $versionMatch = [regex]::Match($Version, $semVerPattern)
 if (-not $versionMatch.Success) {
-    throw "Version must use a SemVer core with an optional prerelease (for example 1.6.0 or 1.6.0-rc.1): $Version"
+    throw "Version must use a SemVer core with an optional prerelease (for example 1.7.0 or 1.7.0-rc.1): $Version"
 }
 
 $baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
@@ -412,7 +412,7 @@ FILE6=uninstall-cleanup.ps1
 
     $iexpressPath = Join-Path $env:SystemRoot 'System32\iexpress.exe'
     if (-not (Test-Path -LiteralPath $iexpressPath -PathType Leaf)) { throw "IExpress was not found: $iexpressPath" }
-    $iexpress = Start-Process -FilePath $iexpressPath -ArgumentList '/N', '/Q', $sed -Wait -PassThru
+    $iexpress = Start-Process -FilePath $iexpressPath -ArgumentList '/N', '/Q', $sed -WindowStyle Hidden -Wait -PassThru
     if ($iexpress.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $setup -PathType Leaf)) {
         throw "IExpress packaging failed: $($iexpress.ExitCode)"
     }

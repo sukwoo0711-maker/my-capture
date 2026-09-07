@@ -61,6 +61,7 @@ public sealed class OcrIndexingService
     private readonly Func<OcrSettings> _settings;
     private readonly ILogger<OcrIndexingService> _log;
     private readonly Dispatcher? _mutationDispatcher;
+    private readonly SemaphoreSlim _indexingGate = new(1, 1);
 
     /// <summary>Test-only observation point executed immediately before the dispatcher-owned cache mutation.</summary>
     internal Action? BeforeCacheOcrForTest { get; set; }
@@ -96,6 +97,28 @@ public sealed class OcrIndexingService
     public async Task<OcrIndexingOutcome> IndexMissingAsync(
         IProgress<OcrIndexingProgress>? progress = null,
         CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _indexingGate.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return OcrIndexingOutcome.Cancelled;
+        }
+        try
+        {
+            return await IndexMissingCoreAsync(progress, cancellationToken);
+        }
+        finally
+        {
+            _indexingGate.Release();
+        }
+    }
+
+    private async Task<OcrIndexingOutcome> IndexMissingCoreAsync(
+        IProgress<OcrIndexingProgress>? progress,
+        CancellationToken cancellationToken)
     {
         if (!_ocr.IsAvailable)
         {

@@ -131,6 +131,33 @@ internal sealed class RecordingControlWindow : Window
     /// <summary>External stop request (e.g. pressing Ctrl+Shift+X again).</summary>
     internal void RequestStop() => StopRecording();
 
+    // The coordinator keeps this visible until gallery registration and editor startup finish.
+    internal void ShowCompletionStatus(string text)
+    {
+        Opacity = 1;
+        _statusText.Text = text;
+        _primaryButton.Content = "저장 중…";
+        _primaryButton.IsEnabled = false;
+        _completionProgress.Visibility = Visibility.Visible;
+        AnnounceStatus();
+    }
+
+    private bool _completionPending;
+    private readonly ProgressBar _completionProgress = new()
+    {
+        Height = 3,
+        IsIndeterminate = true,
+        VerticalAlignment = VerticalAlignment.Bottom,
+        Visibility = Visibility.Collapsed,
+        Margin = new Thickness(0, 0, 0, -6),
+    };
+
+    internal void CompleteAndClose()
+    {
+        _completionPending = false;
+        Close();
+    }
+
     private Border BuildRegionFrame()
     {
         var frame = new AccessibleRegionFrame
@@ -231,6 +258,9 @@ internal sealed class RecordingControlWindow : Window
         AutomationProperties.SetName(cancel, "녹화 취소");
         Grid.SetColumn(cancel, 3);
         panel.Children.Add(cancel);
+        Grid.SetColumnSpan(_completionProgress, 4);
+        AutomationProperties.SetName(_completionProgress, "녹화 파일 처리 중");
+        panel.Children.Add(_completionProgress);
 
         return new Border
         {
@@ -294,7 +324,9 @@ internal sealed class RecordingControlWindow : Window
                 BorderThicknessPx,
                 StripHeight,
                 MinStripWidth);
-            RectD frameBox = layout.FrameBounds;
+            // An excluded frame may sit inside the capture so full-screen edges remain visible.
+            // Without exclusion keep every border pixel outside the source rectangle.
+            RectD frameBox = IsRecording && _captureExclusionApplied ? _screenRegion : layout.FrameBounds;
             RectD stripBox = layout.PaletteBounds;
             RectD windowPixels = layout.WindowBounds;
             _paletteOverlapsRegion = layout.PaletteOverlapsRegion;
@@ -371,6 +403,11 @@ internal sealed class RecordingControlWindow : Window
 
     private void OnPrimaryClicked()
     {
+        if (_stopping || _completionPending)
+        {
+            return;
+        }
+
         if (IsRecording)
         {
             StopRecording();
@@ -460,14 +497,16 @@ internal sealed class RecordingControlWindow : Window
 
         // Make the region interior click-through so the recorded app stays usable.
         SetRegionClickThrough(true);
-        _regionFrame.Visibility = Visibility.Collapsed;
+        _regionFrame.Visibility = Visibility.Visible;
+        _regionFrame.IsHitTestVisible = false;
+        _regionFrame.Background = null;
+        ApplyPhysicalLayout(positionHwnd: true);
         if (!_captureExclusionApplied && _paletteOverlapsRegion)
         {
             // Supported Windows 11 builds exclude the palette through display affinity. If that
-            // OS contract unexpectedly fails and no outside placement exists, hide the palette
-            // during capture rather than burn controls into the user's video. Ctrl+Shift+X still
-            // stops the recording.
-            Opacity = 0;
+            // OS contract unexpectedly fails and no outside placement exists, hide only the
+            // palette. The outline stays outside the captured pixels. Ctrl+Shift+X still stops.
+            _controlStrip.Visibility = Visibility.Collapsed;
         }
 
         _elapsedTimer = new DispatcherTimer(DispatcherPriority.Normal)
@@ -493,10 +532,13 @@ internal sealed class RecordingControlWindow : Window
 
         _stopping = true;
         Opacity = 1;
+        _controlStrip.Visibility = Visibility.Visible;
         Stopping?.Invoke(this, EventArgs.Empty);
         _elapsedTimer?.Stop();
         _primaryButton.IsEnabled = false;
-        _statusText.Text = "파일 확정 중… 창을 닫지 마세요";
+        _primaryButton.Content = "변환 중…";
+        _completionProgress.Visibility = Visibility.Visible;
+        _statusText.Text = "녹화 종료 · 동영상 파일 변환 중…";
         AnnounceStatus();
 
         RegionRecorder recorder = _recorder;
@@ -517,30 +559,45 @@ internal sealed class RecordingControlWindow : Window
         finally
         {
             recorder.Dispose();
+        }
+
+        // Native hotkey callbacks can enter on the owning STA without installing a WPF
+        // SynchronizationContext. Marshal explicitly after the encoder join in every case.
+        await Dispatcher.InvokeAsync(() =>
+        {
             if (ReferenceEquals(_recorder, recorder))
             {
                 _recorder = null;
             }
-        }
 
-        _finished = true;
-        if (result is not null)
-        {
-            RecordingFinished?.Invoke(this, result);
-        }
-        else
-        {
-            Failed?.Invoke(
-                this,
-                new RecordingFailedEventArgs(
-                    stopFailure ?? new InvalidOperationException("The recorder returned no completed clip.")));
-        }
+            _finished = true;
+            if (result is not null)
+            {
+                _completionPending = true;
+                ShowCompletionStatus("동영상 저장 중… 갤러리 등록을 준비합니다");
+                RecordingFinished?.Invoke(this, result);
+            }
+            else
+            {
+                Failed?.Invoke(
+                    this,
+                    new RecordingFailedEventArgs(
+                        stopFailure ?? new InvalidOperationException("The recorder returned no completed clip.")));
+            }
 
-        Close();
+            if (result is null)
+            {
+                Close();
+            }
+        });
     }
 
     private void CancelSession()
     {
+        if (_stopping)
+        {
+            return;
+        }
         StopCountdown();
 
         if (IsRecording)
@@ -557,6 +614,12 @@ internal sealed class RecordingControlWindow : Window
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        if (_stopping || _completionPending)
+        {
+            e.Handled = true;
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Escape:
@@ -653,7 +716,7 @@ internal sealed class RecordingControlWindow : Window
         // valid recording. Keep this short critical section visible and non-dismissible; the
         // window closes itself as soon as Stop() has returned and the private capture file is
         // complete. Application shutdown still reaches OnClosed after that boundary.
-        if (_stopping && !_finished)
+        if ((_stopping && !_finished) || _completionPending)
         {
             e.Cancel = true;
             _statusText.Text = "파일 확정 중… 완료되면 자동으로 닫힙니다";
