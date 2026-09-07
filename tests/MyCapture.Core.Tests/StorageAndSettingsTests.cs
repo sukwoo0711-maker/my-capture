@@ -13,8 +13,8 @@ internal sealed class TempWorkspace : IDisposable
 {
     public TempWorkspace()
     {
-        Root = Path.Combine(Path.GetTempPath(), "mycapture-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Root);
+        // Let the BCL allocate and create an owned random child with a constant prefix.
+        Root = Directory.CreateTempSubdirectory("mycapture-tests-").FullName;
     }
 
     public string Root { get; }

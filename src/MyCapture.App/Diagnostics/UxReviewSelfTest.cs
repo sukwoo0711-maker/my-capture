@@ -40,25 +40,26 @@ internal static class UxReviewSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-ux-review";
 
-    internal static int Run(string outputDirectory)
+    internal static int Run()
     {
-        string validatedDirectory;
+        DirectoryInfo output = UxReviewOutputDirectory.Create();
+        Console.WriteLine($"UX_REVIEW_OUTPUT={output.FullName}");
+        System.Diagnostics.Trace.TraceInformation("UX review output: {0}", output.FullName);
         try
         {
-            validatedDirectory = UxReviewOutputDirectory.Resolve(outputDirectory);
+            return RunGenerated(output.FullName);
         }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        catch (Exception ex)
         {
-            // Do not hand an invalid path back to the shell's generic exception-report
-            // writer: even a failure report must not create files outside the safe roots.
-            System.Diagnostics.Trace.TraceError("UX review output rejected: {0}", ex.Message);
+            // A failure report belongs to this generated directory too; no command-line
+            // output path is passed to the shell's generic fallback writer.
+            File.WriteAllText(Path.Combine(output.FullName, "ux-review-selftest-report.txt"),
+                $"RESULT: FAIL (unhandled exception)\n\n{ex}");
             return 2;
         }
-
-        return RunValidated(validatedDirectory);
     }
 
-    private static int RunValidated(string outputDirectory)
+    private static int RunGenerated(string outputDirectory)
     {
         Directory.CreateDirectory(outputDirectory);
         // A fresh child on every invocation prevents recovery/retention work on earlier fixtures.

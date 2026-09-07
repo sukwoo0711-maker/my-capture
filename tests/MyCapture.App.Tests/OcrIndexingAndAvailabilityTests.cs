@@ -185,7 +185,7 @@ public sealed class OcrIndexingAndAvailabilityTests
     [Fact]
     public async Task ConcurrentAutomaticAndManualPassesDoNotRecognizeTheSameGenerationTwice()
     {
-        string root = Path.Combine(Path.GetTempPath(), "mc-ocridx-concurrent-" + Guid.NewGuid().ToString("N"));
+        string root = Directory.CreateTempSubdirectory("mc-ocridx-concurrent-").FullName;
         try
         {
             GalleryController gallery = NewGallery(out CaptureQueue queue, root);

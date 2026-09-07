@@ -1308,10 +1308,18 @@ public partial class App : Application
         int uxIndex = FindSwitch(args, UxReviewSelfTest.CommandLineSwitch);
         if (uxIndex >= 0)
         {
-            return RunSelfTest(
-                OutputDirectoryAfter(args, uxIndex, "mycapture-ux-review"),
-                "ux-review-selftest-report.txt",
-                UxReviewSelfTest.Run);
+            int exitCode;
+            try
+            {
+                exitCode = UxReviewSelfTest.Run();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceError("UX review failed: {0}", ex);
+                exitCode = 2;
+            }
+            Shutdown(exitCode);
+            return true;
         }
 
         int captureIndex = FindSwitch(args, CaptureSelfTest.CommandLineSwitch);
