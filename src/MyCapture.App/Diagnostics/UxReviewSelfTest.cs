@@ -42,6 +42,24 @@ internal static class UxReviewSelfTest
 
     internal static int Run(string outputDirectory)
     {
+        string validatedDirectory;
+        try
+        {
+            validatedDirectory = UxReviewOutputDirectory.Resolve(outputDirectory);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // Do not hand an invalid path back to the shell's generic exception-report
+            // writer: even a failure report must not create files outside the safe roots.
+            System.Diagnostics.Trace.TraceError("UX review output rejected: {0}", ex.Message);
+            return 2;
+        }
+
+        return RunValidated(validatedDirectory);
+    }
+
+    private static int RunValidated(string outputDirectory)
+    {
         Directory.CreateDirectory(outputDirectory);
         // A fresh child on every invocation prevents recovery/retention work on earlier fixtures.
         AppPaths paths = AppPaths.CreateForRoot(Path.Combine(outputDirectory, "fixtures-" + Guid.NewGuid().ToString("N")));
