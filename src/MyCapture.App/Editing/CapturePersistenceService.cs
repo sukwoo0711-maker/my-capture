@@ -238,8 +238,10 @@ internal sealed class CapturePersistenceService
         _log.LogInformation(
             "Persisted original {Id} ({Width}x{Height}, {Bytes} bytes)",
             record.Id, record.Width, record.Height, bytes);
-
+        ImagePersisted?.Invoke(this, record);
     }
+
+    internal event EventHandler<CaptureRecord>? ImagePersisted;
 
     private void SaveRecordMetaOrThrow(CaptureRecord record)
     {
@@ -285,6 +287,7 @@ internal sealed class CapturePersistenceService
             EnsureExpectedGeneration(record, expectedContentRevision);
             FinalizeFiles files = WriteFinalizeFiles(record, flattened, document, assetBitmaps);
             CompleteFinalize(record, files);
+            ImagePersisted?.Invoke(this, record);
         }
         finally
         {
@@ -324,6 +327,7 @@ internal sealed class CapturePersistenceService
                 () => WriteFinalizeFiles(record, flattened, document, assetBitmaps),
                 "MyCapture capture persistence");
             CompleteFinalize(record, files);
+            ImagePersisted?.Invoke(this, record);
         }
         finally
         {

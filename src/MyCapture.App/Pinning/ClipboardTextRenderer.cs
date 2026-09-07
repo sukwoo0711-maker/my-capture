@@ -75,7 +75,7 @@ internal static class ClipboardTextRenderer
 
     private static BitmapSource RenderPlainText(string sourceText)
     {
-        string preview = CreatePlainPreview(sourceText);
+        string preview = CreatePlainPreview(sourceText).Replace("\t", "    ", StringComparison.Ordinal);
         FormattedText? text = preview.Length == 0
             ? null
             : CreateFormattedText(
@@ -88,6 +88,10 @@ internal static class ClipboardTextRenderer
         if (text is not null)
         {
             text.LineHeight = PlainLineHeight;
+            if (sourceText.Contains('\t') || sourceText.Contains('\n'))
+            {
+                text.SetFontFamily(new FontFamily("Consolas"));
+            }
         }
 
         double measuredWidth = text?.WidthIncludingTrailingWhitespace ?? 0;

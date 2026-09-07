@@ -326,6 +326,38 @@ public sealed class VideoCompositionIntegrationTests
     }
 
     [Fact]
+    public void AnimatedGifExporter_SmallestPresetProducesSmallerCanvasAndFewerFrames() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            string source = Path.Combine(root, "source.mp4");
+            string gif = Path.Combine(root, "small.gif");
+            string standardGif = Path.Combine(root, "standard.gif");
+            RecordingResult recording = EncodeBlackClip(source, 640, 360, 10, 10);
+            VideoEditDocument document = VideoEditDocument.CreateFor(640, 360, 1000);
+            int frames = AnimatedGifExporter.Export(recording, document, gif, quality: GifExportQuality.Smallest);
+            _ = AnimatedGifExporter.Export(recording, document, standardGif, quality: GifExportQuality.Standard);
+            long smallBytes = new FileInfo(gif).Length;
+            long standardBytes = new FileInfo(standardGif).Length;
+            Assert.True(smallBytes < standardBytes,
+                $"Smallest GIF should reduce file size: smallest={smallBytes} bytes, standard={standardBytes} bytes.");
+            var decoder = new GifBitmapDecoder(new Uri(gif), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            Assert.Equal(5, frames);
+            Assert.Equal(5, decoder.Frames.Count);
+            Assert.All(decoder.Frames, frame =>
+            {
+                Assert.Equal(480, frame.PixelWidth);
+                Assert.Equal(270, frame.PixelHeight);
+            });
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
     public void FrameEditLayer_IsCompositedAtItsSourceInterval() => RunSta(() =>
     {
         const int width = 80;

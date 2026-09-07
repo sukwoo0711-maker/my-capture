@@ -319,12 +319,14 @@ internal sealed class RegionRecordingCoordinator
             _log.LogError("Recording completed without a pending video-library session");
             _completionInProgress = false;
             _finishing = false;
+            (sender as RecordingControlWindow)?.CompleteAndClose();
             EndSessionIfIdle();
             return;
         }
 
         _finishing = true;
         _completionInProgress = true;
+        (sender as RecordingControlWindow)?.ShowCompletionStatus("녹화 저장 중… 갤러리와 미리 보기를 준비합니다");
         VideoLibraryItem item;
         try
         {
@@ -340,6 +342,7 @@ internal sealed class RegionRecordingCoordinator
             _writeSession = null;
             _completionInProgress = false;
             _finishing = false;
+            (sender as RecordingControlWindow)?.CompleteAndClose();
             MessageBox.Show(
                 "녹화 파일은 복구 표식과 함께 보존했지만 갤러리 등록을 완료하지 못했습니다. " +
                 "MyCapture를 다시 시작하면 복구를 시도합니다.\n\n" + ex.Message,
@@ -375,6 +378,7 @@ internal sealed class RegionRecordingCoordinator
             editor.Closed += OnEditorClosed;
             editor.Show();
             _ = editor.Activate();
+            (sender as RecordingControlWindow)?.CompleteAndClose();
         }
         catch (Exception ex)
         {
@@ -383,6 +387,7 @@ internal sealed class RegionRecordingCoordinator
             _editor = null;
             _finishing = false;
             _log.LogError(ex, "The recording was saved, but its editor could not be opened");
+            (sender as RecordingControlWindow)?.CompleteAndClose();
             MessageBox.Show(
                 "녹화는 갤러리에 안전하게 저장했지만 편집 창을 열지 못했습니다. " +
                 "갤러리에서 영상을 다시 열어 주세요.\n\n" + ex.Message,

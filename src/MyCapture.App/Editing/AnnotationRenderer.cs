@@ -97,13 +97,20 @@ internal sealed class AnnotationRenderer
         return new Rect(n.Left, n.Top, n.Width, n.Height);
     }
 
-    private static Pen StrokePen(ColorRgba color, double thickness)
+    private static Pen StrokePen(ColorRgba color, double thickness, AnnotationStrokeStyle style = AnnotationStrokeStyle.Solid)
     {
         var pen = new Pen(color.ToBrush(), Math.Max(0.01, thickness))
         {
             StartLineCap = PenLineCap.Round,
             EndLineCap = PenLineCap.Round,
             LineJoin = PenLineJoin.Round,
+            DashCap = style == AnnotationStrokeStyle.Dotted ? PenLineCap.Round : PenLineCap.Flat,
+            DashStyle = style switch
+            {
+                AnnotationStrokeStyle.Dashed or AnnotationStrokeStyle.ThickDashed => DashStyles.Dash,
+                AnnotationStrokeStyle.Dotted => DashStyles.Dot,
+                _ => DashStyles.Solid,
+            },
         };
         pen.Freeze();
         return pen;
@@ -112,7 +119,7 @@ internal sealed class AnnotationRenderer
     private static void DrawRectangle(DrawingContext dc, RectangleAnnotation rect)
     {
         Brush? fill = rect.Fill.ToBrushOrNull();
-        Pen? pen = rect.StrokeThickness > 0 ? StrokePen(rect.Stroke, rect.StrokeThickness) : null;
+        Pen? pen = rect.StrokeThickness > 0 ? StrokePen(rect.Stroke, rect.EffectiveStrokeThickness, rect.StrokeStyle) : null;
         Rect bounds = ToRect(rect.Rect);
         if (rect.CornerRadius > 0)
         {
@@ -127,7 +134,7 @@ internal sealed class AnnotationRenderer
     private static void DrawEllipse(DrawingContext dc, EllipseAnnotation ellipse)
     {
         Brush? fill = ellipse.Fill.ToBrushOrNull();
-        Pen? pen = ellipse.StrokeThickness > 0 ? StrokePen(ellipse.Stroke, ellipse.StrokeThickness) : null;
+        Pen? pen = ellipse.StrokeThickness > 0 ? StrokePen(ellipse.Stroke, ellipse.EffectiveStrokeThickness, ellipse.StrokeStyle) : null;
         Rect b = ToRect(ellipse.Rect);
         dc.DrawEllipse(fill, pen, new Point(b.Left + (b.Width / 2), b.Top + (b.Height / 2)), b.Width / 2, b.Height / 2);
     }

@@ -183,6 +183,38 @@ public sealed class OcrIndexingAndAvailabilityTests
     }
 
     [Fact]
+    public async Task ConcurrentAutomaticAndManualPassesDoNotRecognizeTheSameGenerationTwice()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mc-ocridx-concurrent-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            GalleryController gallery = NewGallery(out CaptureQueue queue, root);
+            var record = new CaptureRecord { Id = Guid.NewGuid(), CreatedAt = DateTimeOffset.UtcNow };
+            queue.Add(record);
+            Directory.CreateDirectory(queue.GetDirectory(record));
+            File.WriteAllBytes(queue.GetFilePath(record, CaptureFileNames.Original), [1]);
+            var ocr = new DelayedOcr();
+            var service = new OcrIndexingService(gallery, ocr, queue.GetDirectory,
+                () => new OcrSettings(), NullLogger<OcrIndexingService>.Instance);
+            Task<OcrIndexingOutcome> automatic = service.IndexMissingAsync();
+            await ocr.Started.Task;
+            Task<OcrIndexingOutcome> manual = service.IndexMissingAsync();
+            Assert.False(manual.IsCompleted);
+            using var queuedCancellation = new CancellationTokenSource();
+            Task<OcrIndexingOutcome> cancelled = service.IndexMissingAsync(cancellationToken: queuedCancellation.Token);
+            queuedCancellation.Cancel();
+            Assert.Equal(OcrIndexingOutcome.Cancelled, await cancelled);
+            ocr.Complete("indexed once");
+            Assert.Equal(OcrIndexingOutcome.Completed, await automatic);
+            Assert.Equal(OcrIndexingOutcome.NothingToDo, await manual);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public async Task Index_WhenEngineUnavailable_ReturnsUnavailable_WithoutCalling()
     {
         string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mc-ocridx-" + Guid.NewGuid().ToString("N"));

@@ -172,8 +172,13 @@
                                         <TextBlock Text="작업 흐름과 저장 방식을 조정합니다"
                                                    Style="{StaticResource Text.MutedBlock}" Margin="0,4,0,0" />
                                     </StackPanel>
-                                    <StackPanel IsItemsHost="True"
-                                                KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  CanContentScroll="False"
+                                                  Focusable="False">
+                                        <StackPanel IsItemsHost="True"
+                                                    KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                    </ScrollViewer>
                                 </DockPanel>
                             </Border>
                             <Border Grid.Column="1" Margin="16,0,0,0"
@@ -469,6 +474,8 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
                     <StackPanel>
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="저장소" />
+                        <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,16"
+                                   Text="라이브러리 이미지는 전용 캡처 폴더에 보관하며, 생성 후 7일이 지나면 오래된 순서대로 자동 삭제합니다. 핀 고정한 이미지와 편집 중인 이미지는 보관합니다. 동영상과 따로 내보내거나 저장한 파일에는 7일 자동 삭제를 적용하지 않습니다." />
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="최대 보관 개수" />
@@ -582,11 +589,9 @@
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="Ctrl+클릭 디바운스(ms)" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="이미지 복사와 OCR/원문 복사 더블클릭을 구분하기 위한 대기 시간. 120 ~ 800ms." />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
-                                     AutomationProperties.Name="Ctrl 클릭 디바운스 밀리초"
-                                     Text="{Binding CtrlClickDebounceMs, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="플로팅 화면 복사" />
+                            <TextBlock Style="{StaticResource Settings.Description}"
+                                       Text="플로팅 창을 클릭한 뒤 Ctrl+C를 누르면 이미지를 복사합니다. Ctrl+더블클릭은 원문 텍스트를 복사하며, 이미지에서는 로컬 OCR로 인식한 텍스트를 복사합니다." />
                         </StackPanel>
 
                     </StackPanel>

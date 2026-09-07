@@ -188,14 +188,12 @@ public sealed class PinSettings
     public bool CloseOnDoubleClick { get; set; } = true;
 
     /// <summary>
-    /// Delay before a plain <c>Ctrl</c>+click copies, in milliseconds.
+    /// Legacy copy-gesture delay retained for settings-file compatibility, in milliseconds.
     /// </summary>
     /// <remarks>
-    /// <c>Ctrl</c>+click copies the rendered image. <c>Ctrl</c>+double-click runs OCR for an
-    /// image pin or copies the retained original text for a text/table pin, so the single-click
-    /// action must wait long enough to know a second click is not coming. Below the OS
-    /// double-click time the image copy fires first and the semantic action then overwrites the
-    /// clipboard, which looks like a bug.
+    /// No longer controls a UI gesture. A focused pin uses <c>Ctrl+C</c> to copy its image;
+    /// <c>Ctrl</c>+double-click copies retained source text or locally recognized image text.
+    /// Preserve the serialized field and draft value when reading and saving older settings.
     /// </remarks>
     public int CtrlClickDebounceMs { get; set; } = 250;
 

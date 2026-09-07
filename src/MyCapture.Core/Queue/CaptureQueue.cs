@@ -134,6 +134,35 @@ public sealed class CaptureQueue
         EnforceLimits();
     }
 
+    /// <summary>Expires managed history in creation order. Pins and active editors retain ownership.
+    /// Explicit exports live outside the managed capture directories and are never visited.</summary>
+    public int ExpireHistory(DateTimeOffset now)
+    {
+        if (Volatile.Read(ref _evictionSuspensionCount) > 0)
+        {
+            return 0;
+        }
+
+        CaptureRecord[] expired = _records
+            .Where(record => record.IsImage && record.CreatedAt <= now.AddDays(-7)
+                             && !record.IsPinned && !IsEvictionLeased(record.Id))
+            .OrderBy(record => record.CreatedAt)
+            .ToArray();
+        foreach (CaptureRecord record in expired)
+        {
+            _records.Remove(record);
+            _totalBytes = Math.Max(0, _totalBytes - record.TotalBytes);
+            Evicted?.Invoke(this, new CaptureEvictedEventArgs(record, "retention-age"));
+        }
+
+        if (expired.Length > 0)
+        {
+            UpdatePinPressureFlag();
+            Save();
+        }
+        return expired.Length;
+    }
+
     /// <summary>
     /// Loads the index, falling back to rebuilding it from the capture directories.
     /// </summary>

@@ -62,6 +62,7 @@ internal sealed class VideoEditorWindow : Window
     private readonly Border _loadingOverlay;
     private readonly ListBox _overlayList;
     private ComboBox _gifSpeedComboBox = null!;
+    private ComboBox _gifQualityComboBox = null!;
     private Button _trimButton = null!;
     private Button _addTextButton = null!;
     private Button _editTextButton = null!;
@@ -166,6 +167,14 @@ internal sealed class VideoEditorWindow : Window
 
         _timeline = new TwoLineTimeline();
         _layerTimeline = new VideoLayerTimeline();
+        _layerTimeline.TextLayerSelected += (_, _) =>
+        {
+            if (_mediaReady && !_operationRunning)
+            {
+                RefreshOverlayList(_layerTimeline.SelectedTextId);
+            }
+        };
+        _layerTimeline.TextTimingChanged += OnLayerTextTimingChanged;
         _timeline.PlayheadChanged += OnTimelinePlayhead;
         _timeline.PlayheadInteractionCompleted += OnTimelinePlayheadInteractionCompleted;
         _timeline.TrimChanged += (_, _) => UpdateStatusForMode();
@@ -173,6 +182,7 @@ internal sealed class VideoEditorWindow : Window
         _statusLabel = new TextBlock
         {
             Text = "동영상을 불러오는 중…",
+            ToolTip = "←/→ 크게 이동 · Ctrl/Shift+←/→ 1프레임 · Ctrl+T 텍스트 · G GIF",
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
             FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
@@ -314,8 +324,8 @@ internal sealed class VideoEditorWindow : Window
     private Grid BuildLayout()
     {
         var root = new Grid { Margin = new Thickness(16) };
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // preview
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // timeline
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 180 }); // preview
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(2, GridUnitType.Star), MinHeight = 80 }); // timeline
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // controls
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // status
 
@@ -337,8 +347,25 @@ internal sealed class VideoEditorWindow : Window
         root.Children.Add(preview);
 
         Grid timeline = BuildTimeline();
-        Grid.SetRow(timeline, 1);
-        root.Children.Add(timeline);
+        var timelineScroll = new ScrollViewer
+        {
+            Name = "VideoTimelineToolsScroll",
+            Content = timeline,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Padding = new Thickness(0, 0, 8, 0),
+            Focusable = false,
+        };
+        timelineScroll.GotKeyboardFocus += (_, args) =>
+        {
+            if (args.NewFocus is FrameworkElement focused)
+            {
+                focused.BringIntoView();
+            }
+        };
+        AutomationProperties.SetName(timelineScroll, "영상 타임라인 및 레이어 도구");
+        Grid.SetRow(timelineScroll, 1);
+        root.Children.Add(timelineScroll);
 
         Grid controls = BuildControlRow();
         Grid.SetRow(controls, 2);
@@ -396,7 +423,8 @@ internal sealed class VideoEditorWindow : Window
         var lane = new Grid { Margin = new Thickness(0, 10, 0, 0) };
         lane.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        lane.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var label = new TextBlock
         {
@@ -412,11 +440,11 @@ internal sealed class VideoEditorWindow : Window
         Grid.SetColumn(_overlayList, 1);
         lane.Children.Add(_overlayList);
 
-        var actions = new StackPanel
+        var actions = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(10, 0, 0, 0),
+            Margin = new Thickness(0, 8, 0, 0),
         };
         _addTextButton = MakeIconButton("Icon.Text", "텍스트", "현재 위치에 시간 텍스트 추가 (Ctrl+T)", "Button.Secondary", AddTextOverlay);
         _editTextButton = MakeIconButton("Icon.Edit", "편집", "선택한 시간 텍스트 편집 (F2)", "Button.Ghost", EditSelectedOverlay);
@@ -451,8 +479,24 @@ internal sealed class VideoEditorWindow : Window
         AutomationProperties.SetName(_gifSpeedComboBox, "GIF 재생 배속");
         AutomationProperties.SetHelpText(_gifSpeedComboBox, "0.5배속부터 4배속 사이에서 GIF 재생 속도를 선택합니다.");
         actions.Children.Add(_gifSpeedComboBox);
+        _gifQualityComboBox = new ComboBox
+        {
+            Width = 210,
+            MinHeight = 32,
+            Margin = new Thickness(0, 0, 6, 0),
+            ToolTip = "해상도와 프레임 수를 줄여 GIF 용량을 줄입니다. 원본보다 확대하지 않습니다.",
+        };
+        foreach (GifExportQuality quality in new[] { GifExportQuality.Standard, GifExportQuality.Compact, GifExportQuality.Smallest })
+        {
+            _gifQualityComboBox.Items.Add(new ComboBoxItem { Content = quality.Label, Tag = quality });
+        }
+
+        _gifQualityComboBox.SelectedIndex = 0;
+        AutomationProperties.SetName(_gifQualityComboBox, "GIF 화질 및 용량");
+        actions.Children.Add(_gifQualityComboBox);
         actions.Children.Add(MakeIconButton("Icon.Export", "GIF", "선택 구간을 GIF로 내보내기 (G)", "Button.Ghost", ExportGif));
-        Grid.SetColumn(actions, 2);
+        Grid.SetRow(actions, 1);
+        Grid.SetColumnSpan(actions, 2);
         lane.Children.Add(actions);
 
         AutomationProperties.SetName(lane, "영상 레이어 및 GIF 도구");
@@ -527,6 +571,7 @@ internal sealed class VideoEditorWindow : Window
     private void SetEditControlsEnabled(bool enabled)
     {
         _timeline.IsEnabled = enabled;
+        _layerTimeline.IsEnabled = enabled;
         foreach (Control c in _editControls)
         {
             c.IsEnabled = enabled;
@@ -906,8 +951,19 @@ internal sealed class VideoEditorWindow : Window
     private Guid? SelectedLayerId() =>
         SelectedOverlay()?.Id ?? SelectedFrameLayer()?.Id;
 
+    private void OnLayerTextTimingChanged(object? sender, EventArgs e)
+    {
+        RefreshOverlayList(_layerTimeline.SelectedTextId);
+        RefreshTextPreview();
+        if (SelectedOverlay() is { } overlay)
+        {
+            _statusLabel.Text = $"텍스트 표시 시간: {FormatMs(overlay.StartMs)}–{FormatMs(overlay.EndMs)}";
+        }
+    }
+
     private void OnOverlaySelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        _layerTimeline.SelectText(SelectedOverlay()?.Id);
         UpdateOverlayActionStates();
         if (!_mediaReady)
         {
@@ -1299,6 +1355,8 @@ internal sealed class VideoEditorWindow : Window
 
         VideoEditDocument document = BuildCurrentDocument();
         double playbackSpeed = SelectedGifSpeed();
+        GifExportQuality quality = (_gifQualityComboBox.SelectedItem as ComboBoxItem)?.Tag as GifExportQuality
+            ?? GifExportQuality.Standard;
         if (document.TrimOutMs - document.TrimInMs > AnimatedGifExporter.MaximumDurationMs + 0.5)
         {
             _statusLabel.Text = "GIF는 최대 20초입니다. 시작/끝 지점을 줄여 주세요.";
@@ -1323,6 +1381,8 @@ internal sealed class VideoEditorWindow : Window
         _operationCts = new CancellationTokenSource();
         CancellationToken cancellationToken = _operationCts.Token;
         SetOperationRunning(true);
+        _statusLabel.Text = $"GIF 변환 준비 중… {quality.Label}";
+        _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
         var progress = new Progress<VideoFrameRenderProgress>(value =>
         {
             int percent = value.TotalFrames <= 0
@@ -1340,7 +1400,8 @@ internal sealed class VideoEditorWindow : Window
                     dialog.FileName,
                     progress,
                     cancellationToken,
-                    playbackSpeed),
+                    playbackSpeed,
+                    quality),
                 "MyCapture GIF exporter");
             _statusLabel.Text = string.Create(
                 CultureInfo.CurrentCulture,
@@ -1380,6 +1441,8 @@ internal sealed class VideoEditorWindow : Window
         SetEditControlsEnabled(!running && _mediaReady);
         _overlayList.IsEnabled = !running && _mediaReady;
         _gifSpeedComboBox.IsEnabled = !running && _mediaReady;
+        _gifQualityComboBox.IsEnabled = !running && _mediaReady;
+        _layerTimeline.IsEnabled = !running && _mediaReady;
         _cancelOperationButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         _cancelOperationButton.IsEnabled = running;
     }
@@ -1558,7 +1621,7 @@ internal sealed class VideoEditorWindow : Window
         string trimMode = _timeline.TrimModeEnabled ? "삭제 핸들 조정 중" : "자르기 대기";
         _statusLabel.Text = string.Create(
             CultureInfo.CurrentCulture,
-            $"←/→ 크게 · Ctrl/Shift+←/→ 1프레임 · Ctrl+T 텍스트 · G GIF · {trimMode} · {trim} · 레이어 {layers} · {recordingHealth}");
+            $"{trimMode} · {trim} · {layers} · {recordingHealth}");
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
     }
 

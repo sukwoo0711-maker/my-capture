@@ -313,4 +313,64 @@ public sealed class AnnotationEditorControllerTests
         c.Tool = EditorTool.Arrow;
         Assert.Null(c.Selected);
     }
+
+    [Fact]
+    public void NewRectangle_UsesStyleAndTransparencyPreferences()
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out _);
+        Assert.Equal(100, c.FillTransparency);
+        c.ApplyStrokeStyle(AnnotationStrokeStyle.ThickDashed);
+        c.ApplyFillTransparency(50);
+        c.ApplyStrokeColor(ColorRgba.FromRgb(10, 20, 30));
+        c.PointerDown(new PointD(10, 10));
+        c.PointerUp(new PointD(110, 60));
+        RectangleAnnotation rectangle = Assert.IsType<RectangleAnnotation>(Assert.Single(doc.Items));
+        Assert.Equal(AnnotationStrokeStyle.ThickDashed, rectangle.StrokeStyle);
+        Assert.True(rectangle.StrokeThickness >= 6);
+        Assert.Equal(new ColorRgba(128, 10, 20, 30), rectangle.Fill);
+        Assert.True(rectangle.FillMatchesStroke);
+    }
+
+    [Fact]
+    public void ExplicitTransparencyAndColorEdits_UndoRestoreLegacyFillAtomically()
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out _);
+        var rectangle = new RectangleAnnotation
+        {
+            Rect = new RectD(0, 0, 100, 50),
+            Stroke = ColorRgba.Black,
+            Fill = ColorRgba.FromRgb(10, 20, 30),
+        };
+        doc.Add(rectangle);
+        c.SetSelected(rectangle);
+        c.ApplyFillTransparency(50);
+        Assert.Equal(new ColorRgba(128, 0, 0, 0), rectangle.Fill);
+        c.ApplyStrokeColor(ColorRgba.White);
+        Assert.Equal(new ColorRgba(128, 255, 255, 255), rectangle.Fill);
+        Assert.True(c.PerformUndo());
+        Assert.Equal(ColorRgba.Black, rectangle.Stroke);
+        Assert.Equal(new ColorRgba(128, 0, 0, 0), rectangle.Fill);
+        Assert.True(c.PerformUndo());
+        Assert.Equal(ColorRgba.FromRgb(10, 20, 30), rectangle.Fill);
+        Assert.False(rectangle.FillMatchesStroke);
+        Assert.True(c.PerformRedo());
+        Assert.True(rectangle.FillMatchesStroke);
+    }
+
+    [Fact]
+    public void ThickDashedStyle_UndoRestoresStyleAndThicknessTogether()
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out _);
+        var rectangle = new RectangleAnnotation { Rect = new RectD(0, 0, 100, 50), StrokeThickness = 2 };
+        doc.Add(rectangle);
+        c.SetSelected(rectangle);
+        c.ApplyStrokeStyle(AnnotationStrokeStyle.ThickDashed);
+        Assert.Equal(6, rectangle.StrokeThickness);
+        Assert.True(c.PerformUndo());
+        Assert.Equal(AnnotationStrokeStyle.Solid, rectangle.StrokeStyle);
+        Assert.Equal(2, rectangle.StrokeThickness);
+        Assert.True(c.PerformRedo());
+        Assert.Equal(AnnotationStrokeStyle.ThickDashed, rectangle.StrokeStyle);
+        Assert.Equal(6, rectangle.StrokeThickness);
+    }
 }

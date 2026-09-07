@@ -207,7 +207,7 @@ internal sealed class PinManager
         pin.CloseAllRequested += (_, _) => CloseAll();
         pin.CopyRequested += OnPinCopyRequested;
         pin.OriginalTextCopyRequested += OnPinOriginalTextCopyRequested;
-        pin.OcrRequested += (_, source) => OcrRequested?.Invoke(this, source);
+        pin.OcrRequested += (_, source) => OcrRequested?.Invoke(pin, source);
         pin.SaveRequested += OnPinSaveRequested;
         pin.Closed += (_, _) => _pins.Remove(pin);
 

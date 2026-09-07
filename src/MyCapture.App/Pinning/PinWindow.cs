@@ -11,6 +11,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
 using MyCapture.Core.Pin;
+using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Display;
 
@@ -29,8 +30,8 @@ namespace MyCapture.App.Pinning;
 /// owns the WPF plumbing that cannot run without a message pump.
 /// </para>
 /// <para>
-/// Coordinates are device-independent (DIP) throughout, which under PerMonitorV2 is exactly
-/// what WPF <c>Window.Left/Top/Width/Height</c> expect. The image is drawn with
+/// Local layout and zoom use WPF DIP; dragging uses one physical virtual-desktop plane
+/// so a different monitor DPI cannot shorten the available movement range. The image is drawn with
 /// <see cref="BitmapScalingMode.HighQuality"/> so scaled pins stay crisp.
 /// </para>
 /// </remarks>
@@ -138,13 +139,13 @@ internal sealed class PinWindow : Window
         Content = _chrome;
 
         ToolTip = _originalText is null
-            ? "우클릭: 저장 · Ctrl+S: 빠른 저장 · Ctrl+Shift+S: 다른 이름으로 저장 · 드래그: 이동 · 휠: 확대/축소 · Ctrl+C: 복사"
+            ? "Ctrl+C: 이미지 복사 · Ctrl+더블클릭: 텍스트 복사 · 우클릭: 저장 · 드래그: 이동 · 휠: 확대/축소"
             : "우클릭: 저장/원문 복사 · Ctrl+더블클릭: 원문 텍스트 복사 · Ctrl+C: 보이는 이미지 복사 · 드래그: 이동 · 휠: 확대/축소";
         AutomationProperties.SetName(this, "MyCapture 화면 고정 창");
         AutomationProperties.SetHelpText(
             this,
             _originalText is null
-                ? "고정된 화면 이미지입니다. 마우스 오른쪽 단추 메뉴나 Ctrl+S로 원본 PNG를 저장하고, Ctrl+Shift+S로 위치를 선택합니다. 드래그로 이동, 마우스 휠로 확대·축소, Ctrl+휠로 투명도 조절, Ctrl+C로 복사, Esc 또는 Delete로 닫습니다. 클릭 통과를 켜면 Shift+F3을 두 번 눌러 해제할 수 있습니다."
+                ? "고정된 화면 이미지입니다. Ctrl+C는 이미지를 복사하고 Ctrl+더블클릭은 텍스트를 복사합니다. 마우스 오른쪽 단추 메뉴나 Ctrl+S로 원본 PNG를 저장하고, Ctrl+Shift+S로 위치를 선택합니다. 드래그로 이동, 마우스 휠로 확대·축소, Ctrl+휠로 투명도 조절, Esc 또는 Delete로 닫습니다. 클릭 통과를 켜면 Shift+F3을 두 번 눌러 해제할 수 있습니다."
                 : "텍스트를 이미지로 렌더링한 화면 고정 창입니다. Ctrl+C는 보이는 이미지를 복사하고, Ctrl+더블클릭은 플로팅 생성 시 보존한 원문 텍스트를 복사합니다. 마우스 오른쪽 단추 메뉴에서도 원문 복사를 실행할 수 있습니다.");
 
         BuildContextMenu();
@@ -158,9 +159,8 @@ internal sealed class PinWindow : Window
         };
         _feedbackTimer.Tick += OnFeedbackTimerTick;
 
-        // Debounces a plain Ctrl+click copy so a following click can turn it into the pin's
-        // content-specific Ctrl+double-click action instead (OCR or original-text copy). The
-        // interval is read from settings when the click arrives; the timer is created once here.
+        // Tracks the double-click interval without modifying the clipboard on a single click.
+        // Ctrl+C copies the rendered image; Ctrl+double-click copies text.
         _ctrlClickTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher);
         _ctrlClickTimer.Tick += OnCtrlClickTimerTick;
 
@@ -246,7 +246,7 @@ internal sealed class PinWindow : Window
 
     /// <summary>Completes feedback for copying a rendered pin's retained source text.</summary>
     internal void ReportOriginalTextCopyResult(bool copied) =>
-        ShowFeedback(copied ? "원문 텍스트 복사됨" : "원문 텍스트 복사 실패");
+        ShowFeedback(copied ? "텍스트 복사됨" : "텍스트 복사 실패");
 
     /// <summary>Test hook: whether the Ctrl+click copy debounce timer is currently armed.</summary>
     internal bool IsCtrlClickTimerRunning => _ctrlClickTimer.IsEnabled;
@@ -394,9 +394,8 @@ internal sealed class PinWindow : Window
 
         if (ctrl)
         {
-            // Ctrl gestures never drag. A single-click copies the rendered image, but only
-            // after a debounce so a second click can promote it to the pin's semantic action:
-            // OCR for an image, or exact source-text copy for a rendered text/table pin.
+            // Ctrl gestures never drag. A single click only focuses; double-click copies
+            // recognized text for an image or exact source text for a rendered text/table pin.
             if (e.ClickCount >= 2)
             {
                 Focus();
@@ -424,7 +423,11 @@ internal sealed class PinWindow : Window
         }
 
         _dragging = true;
-        _dragAnchor = e.GetPosition(this);
+        // Use the input event's local anchor. Reading the live global cursor here can
+        // observe a later queued movement and cancel the first drag delta entirely.
+        Point anchor = e.GetPosition(this);
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        _dragAnchor = new Point(anchor.X * dpi.DpiScaleX, anchor.Y * dpi.DpiScaleY);
         _ = CaptureMouse();
         Focus();
         e.Handled = true;
@@ -438,10 +441,8 @@ internal sealed class PinWindow : Window
             return;
         }
 
-        Point current = e.GetPosition(this);
-        double dx = current.X - _dragAnchor.X;
-        double dy = current.Y - _dragAnchor.Y;
-        MoveBy(dx, dy);
+        (int cursorX, int cursorY) = WindowStyleFacade.GetCursorPosition();
+        MovePhysical(cursorX - _dragAnchor.X, cursorY - _dragAnchor.Y);
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -552,16 +553,31 @@ internal sealed class PinWindow : Window
 
     private void MoveBy(double dx, double dy)
     {
-        double left = Left + dx;
-        double top = Top + dy;
-
-        (double dLeft, double dTop, double dWidth, double dHeight) = VirtualDesktopDip();
-        (left, top) = PinGeometry.KeepGrabbable(
-            left, top, Width, Height, dLeft, dTop, dWidth, dHeight, GrabMarginDip);
-
-        Left = left;
-        Top = top;
+        if (_handle == IntPtr.Zero)
+        {
+            Left += dx;
+            Top += dy;
+            return;
+        }
+        (int left, int top, _, _) = WindowStyleFacade.GetWindowBounds(_handle);
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        MovePhysical(left + (dx * dpi.DpiScaleX), top + (dy * dpi.DpiScaleY));
     }
+
+    private void MovePhysical(double left, double top)
+    {
+        (int currentLeft, int currentTop, int right, int bottom) = WindowStyleFacade.GetWindowBounds(_handle);
+        double width = right - currentLeft;
+        double height = bottom - currentTop;
+        if (width <= 0 || height <= 0) return;
+        RectD desktop = MonitorEnumerator.GetVirtualDesktopBounds();
+        (left, top) = PinGeometry.KeepGrabbable(left, top, width, height,
+            desktop.Left, desktop.Top, desktop.Width, desktop.Height,
+            GrabMarginDip * VisualTreeHelper.GetDpi(this).DpiScaleX);
+        PhysicalWindowPositioner.PlaceTopmost(_handle, new RectD(left, top, width, height));
+    }
+
+    internal void MovePhysicalForTest(double left, double top) => MovePhysical(left, top);
 
     private void ZoomAt(int notches, double pointerXDip, double pointerYDip)
     {
@@ -614,13 +630,16 @@ internal sealed class PinWindow : Window
 
     private (double Left, double Top, double Width, double Height) VirtualDesktopDip()
     {
-        // SystemParameters.VirtualScreen* are already in DIP on the primary DPI context,
-        // which is the coordinate space WPF Window.Left/Top use.
+        // Project the physical desktop into this window's current local DIP plane.
+        // A primary-monitor DIP rectangle clips movement on mixed-DPI desktops.
+        RectD desktop = MonitorEnumerator.GetVirtualDesktopBounds();
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        (int physicalLeft, int physicalTop, _, _) = WindowStyleFacade.GetWindowBounds(_handle);
         return (
-            SystemParameters.VirtualScreenLeft,
-            SystemParameters.VirtualScreenTop,
-            SystemParameters.VirtualScreenWidth,
-            SystemParameters.VirtualScreenHeight);
+            Left + ((desktop.Left - physicalLeft) / dpi.DpiScaleX),
+            Top + ((desktop.Top - physicalTop) / dpi.DpiScaleY),
+            desktop.Width / dpi.DpiScaleX,
+            desktop.Height / dpi.DpiScaleY);
     }
 
     private void CopyImageToClipboard()
@@ -631,8 +650,8 @@ internal sealed class PinWindow : Window
 
     private void RequestOcr()
     {
+        ShowFeedback("텍스트 복사 중…");
         OcrRequested?.Invoke(this, _image);
-        ShowFeedback("텍스트 인식 중…");
     }
 
     private void HandleCtrlDoubleClick()
@@ -768,9 +787,8 @@ internal sealed class PinWindow : Window
     }
 
     /// <summary>
-    /// Arms the copy debounce. If no second click arrives within the configured window the
-    /// timer fires and the copy happens; a second click (Ctrl+double-click) stops it first and
-    /// runs the content-specific secondary action, so the two gestures never race the clipboard.
+    /// Tracks the configured double-click interval. Expiry never changes the clipboard;
+    /// the second click invokes text copy and Ctrl+C independently invokes image copy.
     /// </summary>
     private void StartCtrlClickCopyDebounce()
     {
@@ -779,7 +797,7 @@ internal sealed class PinWindow : Window
 
         if (debounceMs == 0)
         {
-            CopyImageToClipboard();
+            // A Ctrl single-click only focuses the pin. Ctrl+C copies its image.
             return;
         }
 
@@ -790,7 +808,6 @@ internal sealed class PinWindow : Window
     private void OnCtrlClickTimerTick(object? sender, EventArgs e)
     {
         _ctrlClickTimer.Stop();
-        CopyImageToClipboard();
     }
 
     // ----- Feedback toast -----
@@ -880,7 +897,7 @@ internal sealed class PinWindow : Window
         }
         else
         {
-            menu.Items.Add(MenuItemFor("텍스트 인식 (OCR)", (_, _) => RequestOcr(), iconResourceKey: "Icon.Ocr"));
+            menu.Items.Add(MenuItemFor("텍스트 복사", (_, _) => RequestOcr(), iconResourceKey: "Icon.Copy", inputGestureText: "Ctrl+더블클릭"));
         }
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("100% (0)", (_, _) => ResetZoomCentered()));

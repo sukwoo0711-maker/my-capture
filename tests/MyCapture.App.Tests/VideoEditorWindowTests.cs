@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -78,10 +79,21 @@ public sealed class VideoEditorWindowTests
             var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), lf);
             editor.WindowStartupLocation = WindowStartupLocation.Manual;
             editor.Width = editor.MinWidth;
+            editor.Height = editor.MinHeight;
             editor.Left = -10000;
             editor.Top = -10000;
             editor.ShowActivated = false;
             editor.Show();
+            editor.UpdateLayout();
+            Grid layout = Assert.IsType<Grid>(editor.Content);
+            Border preview = layout.Children.OfType<Border>().Single(child => Grid.GetRow(child) == 0);
+            Border status = layout.Children.OfType<Border>().Single(child => Grid.GetRow(child) == 3);
+            ScrollViewer timelineTools = Assert.Single(layout.Children.OfType<ScrollViewer>());
+            Assert.True(preview.ActualHeight >= 180, "compact video editor lost its usable preview");
+            Assert.True(status.TranslatePoint(new Point(0, status.ActualHeight), layout).Y <= layout.ActualHeight + 0.5,
+                "compact video editor clipped the processing status");
+            Assert.Equal(ScrollBarVisibility.Disabled, timelineTools.HorizontalScrollBarVisibility);
+            Assert.True(timelineTools.ScrollableHeight > 0, "compact timeline tools should scroll instead of hiding preview/status");
 
             // Pump the dispatcher until ready or failed, bounded. The editor guarantees it
             // resolves within its own open-timeout fallback (~5s) even if MediaOpened is slow.

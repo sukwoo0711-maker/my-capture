@@ -34,11 +34,14 @@ internal static class AnimatedGifExporter
         string destinationPath,
         IProgress<VideoFrameRenderProgress>? progress = null,
         CancellationToken cancellationToken = default,
-        double playbackSpeed = 1.0)
+        double playbackSpeed = 1.0,
+        GifExportQuality? quality = null)
     {
         ArgumentNullException.ThrowIfNull(recording);
         ArgumentNullException.ThrowIfNull(editDocument);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        quality ??= GifExportQuality.Standard;
+        quality.Validate();
 
         VideoEditDocument document = editDocument.NormalizeFor(
             recording.Width,
@@ -51,9 +54,9 @@ internal static class AnimatedGifExporter
                 "GIF는 최대 20초까지 내보낼 수 있습니다. 타임라인의 시작/끝 지점을 줄여 주세요.");
         }
 
-        GifFrameSchedule schedule = BuildFrameSchedule(document, playbackSpeed);
+        GifFrameSchedule schedule = BuildFrameSchedule(document, playbackSpeed, quality.FramesPerSecond);
 
-        (int width, int height) = FitWithin(recording.Width, recording.Height, MaximumLongEdge);
+        (int width, int height) = FitWithin(recording.Width, recording.Height, quality.LongEdge);
         string destination = Path.GetFullPath(destinationPath);
         string? destinationDirectory = Path.GetDirectoryName(destination);
         if (string.IsNullOrEmpty(destinationDirectory))
@@ -97,7 +100,7 @@ internal static class AnimatedGifExporter
                             recording.OutputPath,
                             document.TrimInMs,
                             document.TrimOutMs,
-                            FramesPerSecond,
+                            quality.FramesPerSecond,
                             width,
                             height,
                             recording.Width,
@@ -164,7 +167,7 @@ internal static class AnimatedGifExporter
         }
     }
 
-    private static (int Width, int Height) FitWithin(int width, int height, int longEdge)
+    internal static (int Width, int Height) FitWithin(int width, int height, int longEdge)
     {
         int safeWidth = Math.Max(1, width);
         int safeHeight = Math.Max(1, height);
@@ -187,9 +190,14 @@ internal static class AnimatedGifExporter
     /// </summary>
     internal static GifFrameSchedule BuildFrameSchedule(
         VideoEditDocument document,
-        double playbackSpeed = 1.0)
+        double playbackSpeed = 1.0,
+        int framesPerSecond = FramesPerSecond)
     {
         ArgumentNullException.ThrowIfNull(document);
+        if (framesPerSecond is not (5 or 10))
+        {
+            throw new ArgumentOutOfRangeException(nameof(framesPerSecond));
+        }
         if (!double.IsFinite(playbackSpeed) || playbackSpeed is < 0.25 or > 4.0)
         {
             throw new ArgumentOutOfRangeException(
@@ -204,7 +212,7 @@ internal static class AnimatedGifExporter
                 durationMs / 10.0,
                 MidpointRounding.AwayFromZero)));
         var boundaries = new SortedSet<int> { 0, totalCentiseconds };
-        int cadenceCentiseconds = 100 / FramesPerSecond;
+        int cadenceCentiseconds = 100 / framesPerSecond;
         for (int boundary = cadenceCentiseconds;
              boundary < totalCentiseconds;
              boundary += cadenceCentiseconds)
