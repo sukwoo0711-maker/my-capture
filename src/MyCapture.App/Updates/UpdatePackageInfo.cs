@@ -6,6 +6,7 @@ namespace MyCapture.App.Updates;
 public sealed class UpdatePackageInfo
 {
     public UpdateVersion Version { get; }
+    public string ReleaseTag { get; }
     public string ReleaseTitle { get; }
     public string ReleaseNotes { get; }
     public Uri ReleaseUrl { get; }
@@ -24,7 +25,8 @@ public sealed class UpdatePackageInfo
         string setupAssetName,
         Uri setupDownloadUrl,
         long setupSizeBytes,
-        Uri checksumDownloadUrl)
+        Uri checksumDownloadUrl,
+        string? releaseTag = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(setupAssetName);
         ArgumentNullException.ThrowIfNull(setupDownloadUrl);
@@ -40,5 +42,60 @@ public sealed class UpdatePackageInfo
         SetupDownloadUrl = setupDownloadUrl;
         SetupSizeBytes = setupSizeBytes;
         ChecksumDownloadUrl = checksumDownloadUrl;
+
+        if (!string.IsNullOrWhiteSpace(releaseTag))
+        {
+            ReleaseTag = releaseTag.Trim();
+        }
+        else
+        {
+            ReleaseTag = DeriveReleaseTag(version, setupDownloadUrl);
+        }
+    }
+
+    public UpdatePackageInfo(
+        UpdateVersion version,
+        string releaseTitle,
+        string releaseNotes,
+        Uri releaseUrl,
+        DateTimeOffset publishedAt,
+        string setupAssetName,
+        Uri setupDownloadUrl,
+        long setupSizeBytes,
+        Uri checksumDownloadUrl)
+        : this(
+            version,
+            releaseTitle,
+            releaseNotes,
+            releaseUrl,
+            publishedAt,
+            setupAssetName,
+            setupDownloadUrl,
+            setupSizeBytes,
+            checksumDownloadUrl,
+            null)
+    {
+    }
+
+    private static string DeriveReleaseTag(UpdateVersion version, Uri setupDownloadUrl)
+    {
+        string path = setupDownloadUrl.AbsolutePath;
+        const string marker = "/releases/download/";
+        int idx = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+            string after = path.Substring(idx + marker.Length);
+            int slash = after.IndexOf('/');
+            if (slash > 0)
+            {
+                string tagSegment = Uri.UnescapeDataString(after.Substring(0, slash));
+                if (UpdateVersion.TryParse(tagSegment, out var parsed) && parsed.Value == version)
+                {
+                    return tagSegment;
+                }
+            }
+        }
+
+        return $"v{version.ToNormalizedString()}";
     }
 }

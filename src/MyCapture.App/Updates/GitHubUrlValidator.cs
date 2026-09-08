@@ -59,8 +59,81 @@ public static class GitHubUrlValidator
             return string.Equals(uri.AbsolutePath, expectedPath, StringComparison.OrdinalIgnoreCase);
         }
 
+        if (!string.IsNullOrWhiteSpace(expectedFileName))
+        {
+            string expectedPrefix = $"/{expectedOwner}/{expectedRepo}/releases/download/";
+            if (!uri.AbsolutePath.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string remaining = uri.AbsolutePath.Substring(expectedPrefix.Length);
+            string[] segments = remaining.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length != 2)
+            {
+                return false;
+            }
+
+            return string.Equals(segments[1], expectedFileName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedTag))
+        {
+            string expectedPrefix = $"/{expectedOwner}/{expectedRepo}/releases/download/{expectedTag}/";
+            return uri.AbsolutePath.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        string defaultPrefix = $"/{expectedOwner}/{expectedRepo}/releases/download/";
+        return uri.AbsolutePath.StartsWith(defaultPrefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Attempts to extract the tag and filename from a canonical GitHub download URI.
+    /// </summary>
+    public static bool TryExtractDownloadInfo(
+        Uri? uri,
+        string expectedOwner,
+        string expectedRepo,
+        out string? tag,
+        out string? fileName)
+    {
+        tag = null;
+        fileName = null;
+
+        if (uri is null || !uri.IsAbsoluteUri || !IsSecureHttps(uri))
+        {
+            return false;
+        }
+
+        if (!string.Equals(uri.Host, GitHubHost, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(expectedOwner) ||
+            string.IsNullOrWhiteSpace(expectedRepo) ||
+            !RepoOwnerNameRegex.IsMatch(expectedOwner) ||
+            !RepoOwnerNameRegex.IsMatch(expectedRepo))
+        {
+            return false;
+        }
+
         string expectedPrefix = $"/{expectedOwner}/{expectedRepo}/releases/download/";
-        return uri.AbsolutePath.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase);
+        if (!uri.AbsolutePath.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string remaining = uri.AbsolutePath.Substring(expectedPrefix.Length);
+        string[] segments = remaining.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length != 2)
+        {
+            return false;
+        }
+
+        tag = segments[0];
+        fileName = segments[1];
+        return true;
     }
 
     /// <summary>

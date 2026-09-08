@@ -42,6 +42,7 @@ public sealed class GitHubUpdateService : IUpdateService
         ILogger<GitHubUpdateService>? logger = null)
     {
         _options = options ?? new UpdateServiceOptions();
+        _options.Validate();
         _logger = logger;
 
         if (httpClient is not null)
@@ -99,6 +100,16 @@ public sealed class GitHubUpdateService : IUpdateService
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
                 cts.Token).ConfigureAwait(false);
+
+            // API final URI verification: injected HttpClient must not auto-redirect or divert API requests
+            if (response.RequestMessage?.RequestUri is not null &&
+                !string.Equals(response.RequestMessage.RequestUri.AbsoluteUri, url, StringComparison.OrdinalIgnoreCase))
+            {
+                return UpdateCheckResult.Failed(
+                    UpdateErrorKind.InvalidUrl,
+                    "GitHub API request was redirected or final URI does not match expected releases endpoint.",
+                    currentVersion);
+            }
 
             if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
             {
@@ -200,7 +211,8 @@ public sealed class GitHubUpdateService : IUpdateService
                 setupAssetName: setupAsset.Name ?? expectedSetupName,
                 setupDownloadUrl: setupUri,
                 setupSizeBytes: setupAsset.Size,
-                checksumDownloadUrl: checksumUri);
+                checksumDownloadUrl: checksumUri,
+                releaseTag: release.TagName);
 
             _logger?.LogInformation("Found valid update: {Version}", latest);
             return UpdateCheckResult.Available(currentVersion, packageInfo);
@@ -464,6 +476,16 @@ public sealed class GitHubUpdateService : IUpdateService
         IProgress<UpdateProgress>? progress,
         CancellationToken cancellationToken)
     {
+        if (_options.BufferSizeBytes <= 0)
+        {
+            throw new UpdateException(UpdateErrorKind.StagingError, "Buffer size must be greater than zero.");
+        }
+
+        if (expectedSizeBytes <= 0)
+        {
+            throw new UpdateException(UpdateErrorKind.InvalidReleaseData, "Expected installer size must be greater than zero.");
+        }
+
         using HttpResponseMessage response = await SendWithSafeRedirectsAsync(downloadUri, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
@@ -568,7 +590,7 @@ public sealed class GitHubUpdateService : IUpdateService
 
             // Injected client must not silently bypass redirect validation
             if (response.RequestMessage?.RequestUri is not null &&
-                !response.RequestMessage.RequestUri.Equals(currentUri))
+                !string.Equals(response.RequestMessage.RequestUri.AbsoluteUri, currentUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase))
             {
                 response.Dispose();
                 throw new UpdateException(UpdateErrorKind.InvalidUrl, "Automatic redirect detected. Injected HttpClient must not auto-redirect; all redirect hops must be validated individually.");
@@ -624,19 +646,82 @@ public sealed class GitHubUpdateService : IUpdateService
             return UpdateErrorKind.InvalidReleaseData;
         }
 
-        if (package.SetupSizeBytes <= 0 || package.SetupSizeBytes > _options.MaxInstallerSizeBytes)
+        if (package.SetupSizeBytes <= 0)
+        {
+            message = $"Package setup size ({package.SetupSizeBytes} bytes) must be greater than zero.";
+            return UpdateErrorKind.InvalidReleaseData;
+        }
+
+        if (package.SetupSizeBytes > _options.MaxInstallerSizeBytes)
         {
             message = $"Package setup size ({package.SetupSizeBytes} bytes) is out of bounds (1 to {_options.MaxInstallerSizeBytes} bytes).";
             return UpdateErrorKind.PayloadTooLarge;
         }
 
-        if (!GitHubUrlValidator.IsValidDownloadUri(package.SetupDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, null, package.SetupAssetName))
+        // Revalidate setup and checksum URLs against authorized repo, matching tag, and expected filenames
+        if (!GitHubUrlValidator.TryExtractDownloadInfo(package.SetupDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, out string? setupTag, out string? setupFile))
         {
             message = $"Package setup download URL '{package.SetupDownloadUrl}' failed security validation.";
             return UpdateErrorKind.InvalidUrl;
         }
 
-        if (!GitHubUrlValidator.IsValidDownloadUri(package.ChecksumDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, null, "SHA256SUMS.txt"))
+        if (!GitHubUrlValidator.TryExtractDownloadInfo(package.ChecksumDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, out string? checksumTag, out string? checksumFile))
+        {
+            message = $"Package checksum download URL '{package.ChecksumDownloadUrl}' failed security validation.";
+            return UpdateErrorKind.InvalidUrl;
+        }
+
+        if (!string.Equals(setupFile, package.SetupAssetName, StringComparison.Ordinal))
+        {
+            message = $"Setup URL asset filename '{setupFile}' does not match package asset name '{package.SetupAssetName}'.";
+            return UpdateErrorKind.InvalidUrl;
+        }
+
+        if (!string.Equals(checksumFile, "SHA256SUMS.txt", StringComparison.Ordinal))
+        {
+            message = $"Checksum URL filename '{checksumFile}' is not 'SHA256SUMS.txt'.";
+            return UpdateErrorKind.InvalidUrl;
+        }
+
+        // Setup and checksum must target the exact same release tag
+        if (!string.Equals(setupTag, checksumTag, StringComparison.OrdinalIgnoreCase))
+        {
+            message = $"Setup asset tag '{setupTag}' does not match checksum asset tag '{checksumTag}'.";
+            return UpdateErrorKind.InvalidUrl;
+        }
+
+        // URL release tag must match package version
+        if (!UpdateVersion.TryParse(setupTag, out UpdateVersion? urlTagVersion) ||
+            urlTagVersion.Value != package.Version)
+        {
+            message = $"Download URL tag '{setupTag}' does not match package version '{package.Version}'.";
+            return UpdateErrorKind.InvalidReleaseData;
+        }
+
+        // Retained release tag (if present) must match URL tag and package version
+        if (!string.IsNullOrWhiteSpace(package.ReleaseTag))
+        {
+            if (!string.Equals(setupTag, package.ReleaseTag, StringComparison.OrdinalIgnoreCase))
+            {
+                message = $"Download URL tag '{setupTag}' does not match package release tag '{package.ReleaseTag}'.";
+                return UpdateErrorKind.InvalidReleaseData;
+            }
+
+            if (!UpdateVersion.TryParse(package.ReleaseTag, out UpdateVersion? retainedTagVersion) ||
+                retainedTagVersion.Value != package.Version)
+            {
+                message = $"Package release tag '{package.ReleaseTag}' does not match package version '{package.Version}'.";
+                return UpdateErrorKind.InvalidReleaseData;
+            }
+        }
+
+        if (!GitHubUrlValidator.IsValidDownloadUri(package.SetupDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, setupTag, package.SetupAssetName))
+        {
+            message = $"Package setup download URL '{package.SetupDownloadUrl}' failed security validation.";
+            return UpdateErrorKind.InvalidUrl;
+        }
+
+        if (!GitHubUrlValidator.IsValidDownloadUri(package.ChecksumDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, checksumTag, "SHA256SUMS.txt"))
         {
             message = $"Package checksum download URL '{package.ChecksumDownloadUrl}' failed security validation.";
             return UpdateErrorKind.InvalidUrl;
