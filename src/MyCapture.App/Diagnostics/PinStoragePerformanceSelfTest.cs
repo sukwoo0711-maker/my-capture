@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Editing;
 using MyCapture.App.Gallery;
@@ -160,6 +161,7 @@ internal static class PinStoragePerformanceSelfTest
             BitmapSource image = SyntheticImage(width, height, true);
             var total = new double[16];
             var publication = new double[16];
+            var ownerService = new double[16];
             long publicationStart = 0;
             long published = 0;
             persistence.BeforeRecordMetadataCommit = _ => publicationStart = Stopwatch.GetTimestamp();
@@ -173,7 +175,9 @@ internal static class PinStoragePerformanceSelfTest
                 publicationStart = 0;
                 published = 0;
                 long started = Stopwatch.GetTimestamp();
-                CaptureRecord record = Await(persistence.PersistOriginalAsync(image, 1, "Synthetic fixture", "Synthetic"));
+                (CaptureRecord record, double ownerMs) = MeasureOwnerService(
+                    () => persistence.PersistOriginalAsync(image, 1, "Synthetic fixture", "Synthetic"));
+                ownerService[index] = ownerMs;
                 total[index] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 publication[index] = Stopwatch.GetElapsedTime(publicationStart, published).TotalMilliseconds;
                 realRecords.Add(record);
@@ -185,11 +189,15 @@ internal static class PinStoragePerformanceSelfTest
             persistence.BeforeRecordMetadataCommit = null;
             results.Add(new { Kind = "original-persistence", Width = width, Height = height, Samples = total.Length,
                 Total = Summary(total), MetadataIndexPublication = Summary(publication),
+                MetadataIndexPublicationTiming = "Await wall time from pre-metadata hook through durable notification; includes time when the owner thread is available.",
+                OwnerService = Summary(ownerService),
+                OwnerServiceScope = "Initial call and its owner-context async continuations, including record creation, serialization, marker cleanup and notification. Excludes waiting for image/disk workers. Broader than the baseline publication-only UI interval.",
                 ProcessCpuMs = (process.TotalProcessorTime - cpu).TotalMilliseconds,
                 AllocatedBytes = GC.GetTotalAllocatedBytes(true) - allocated });
         }
 
-        var gallery = new GalleryController(queue, NullLogger<GalleryController>.Instance);
+        var publicationLog = new PublicationLogger(failures, paths.IndexFile);
+        var gallery = new GalleryController(queue, publicationLog);
         foreach (int targetCount in new[] { 32, 300, 1000 })
         {
             // Only metadata is needed to exercise the actual queue serializer at larger history sizes.
@@ -197,20 +205,98 @@ internal static class PinStoragePerformanceSelfTest
                 queue.Add(new CaptureRecord { Width = 320, Height = 240, SourceWindowTitle = "Synthetic scale record", TotalBytes = 0 });
             var save = new double[16];
             var cache = new double[16];
+            var cacheOwnerService = new double[16];
             for (int index = 0; index < save.Length; index++)
             {
                 long started = Stopwatch.GetTimestamp();
-                queue.Save();
+                try { queue.Save(); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    failures.Add(DescribePublicationFailure($"Index save: records={targetCount}, sample={index}", ex, paths.IndexFile));
+                    throw;
+                }
                 save[index] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 started = Stopwatch.GetTimestamp();
                 CaptureRecord record = realRecords[index];
-                _ = gallery.CacheOcr(record.Id, "MyCapture Hello World 12345", "en-US", record.ContentRevision);
+                publicationLog.Stage = $"OCR: records={targetCount}, sample={index}, metadata={queue.GetFilePath(record, CaptureFileNames.Meta)}";
+                (bool published, double ownerMs) = MeasureOwnerService(
+                    () => gallery.CacheOcrAsync(record.Id, "MyCapture Hello World 12345", "en-US", record.ContentRevision));
+                if (!published) failures.Add("Synthetic OCR publication did not complete successfully.");
+                cacheOwnerService[index] = ownerMs;
                 cache[index] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             }
             results.Add(new { Kind = "index-publication", RecordCount = targetCount, Samples = save.Length,
-                QueueSave = Summary(save), OcrCacheMetaAndIndex = Summary(cache), IndexBytes = new FileInfo(paths.IndexFile).Length });
+                QueueSave = Summary(save), OcrCacheMetaAndIndex = Summary(cache),
+                OcrOwnerService = Summary(cacheOwnerService),
+                OcrTimingScope = "Meta/index value is awaited wall time; owner service measures initial invocation and owner-context continuations only. No unchanged-result skipping or coalescing.",
+                IndexBytes = new FileInfo(paths.IndexFile).Length });
         }
         MeasureOcr(outputDirectory, results, failures);
+    }
+
+    private static string DescribePublicationFailure(string stage, Exception exception, string indexPath) =>
+        $"{stage}; HRESULT=0x{exception.HResult:X8}; index={DescribeFile(indexPath)}; backup={DescribeFile(indexPath + ".bak")}; {exception}";
+
+    private static string DescribeFile(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Exists
+                ? $"{path} [bytes={file.Length}, attributes={file.Attributes}, modifiedUtc={file.LastWriteTimeUtc:O}]"
+                : $"{path} [absent]";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"{path} [inspection failed: HRESULT=0x{ex.HResult:X8}, {ex.Message}]";
+        }
+    }
+
+    private sealed class PublicationLogger(List<string> failures, string indexPath) : ILogger<GalleryController>
+    {
+        internal string Stage { get; set; } = "OCR";
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Warning;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (exception is not null) failures.Add(DescribePublicationFailure(Stage, exception, indexPath));
+        }
+    }
+
+    private static (T Result, double OwnerMs) MeasureOwnerService<T>(Func<Task<T>> action)
+    {
+        var observer = new OwnerServiceContext(SynchronizationContext.Current
+            ?? new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        Task<T>? pending = null;
+        observer.Measure(() => pending = action());
+        T result = Await(pending!);
+        return (result, observer.Milliseconds);
+    }
+
+    // Diagnostic-only observer. Scheduling still belongs to the real dispatcher; the timed
+    // intervals are application callbacks, not the caller's message pumping or disk wait.
+    private sealed class OwnerServiceContext(SynchronizationContext owner) : SynchronizationContext
+    {
+        internal double Milliseconds { get; private set; }
+
+        public override SynchronizationContext CreateCopy() => this;
+
+        public override void Post(SendOrPostCallback callback, object? state) =>
+            owner.Post(_ => Measure(() => callback(state)), null);
+
+        internal void Measure(Action callback)
+        {
+            SynchronizationContext? previous = Current;
+            SetSynchronizationContext(this);
+            long started = Stopwatch.GetTimestamp();
+            try { callback(); }
+            finally
+            {
+                Milliseconds += Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                SetSynchronizationContext(previous);
+            }
+        }
     }
 
     private static void MeasureOcr(string outputDirectory, List<object> results, List<string> failures)
