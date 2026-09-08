@@ -25,7 +25,7 @@ namespace MyCapture.App.Tests;
 /// default, the settings graph, the derived bitrate, the encoder contract exercised
 /// through a fake, and the recorder's start/stop guards.
 /// </summary>
-public sealed class RecordingFeatureTests
+public sealed class RecordingFeatureTests : KoreanCaptionTest
 {
     [Fact]
     public void RecordRegionHotkey_DefaultsToCtrlShiftX()

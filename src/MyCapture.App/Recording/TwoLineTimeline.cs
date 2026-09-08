@@ -23,7 +23,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 {
     private const double OverviewHeight = 34.0;
     private const double DetailHeight = 42.0;
-    private const double ConnectorHeight = 8.0;
+    // The connector also draws a 10.5pt explanatory line; reserve its complete glyph height.
+    private const double ConnectorHeight = 18.0;
     private const double EdgeGrab = 14.0;
     private const double BrushGripWidth = 12.0;
     private const double TrimHandleWidth = 18.0;
@@ -128,17 +129,17 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _detailCaption = BuildCaption();
 
         var panel = new StackPanel();
-        panel.Children.Add(Labelled(_overviewCaption, _overview, "전체 타임라인"));
+        panel.Children.Add(Labelled(_overviewCaption, _overview, UiText.Get("Text_B30298E33872")));
         panel.Children.Add(_connector);
-        panel.Children.Add(Labelled(_detailCaption, _detail, "세부 프레임 타임라인"));
+        panel.Children.Add(Labelled(_detailCaption, _detail, UiText.Get("Text_AB71749112CF")));
         Content = panel;
 
         AutomationProperties.SetHelpText(
             _overview,
-            "클립 전체입니다. 굵은 눈금 한 구간이 아래에 확대됩니다. 선택 몸통을 끌면 이동하고 큰 양 끝을 끌면 확대 범위를 조정합니다.");
+            UiText.Get("Text_0E7B9C44075A"));
         AutomationProperties.SetHelpText(
             _detail,
-            "상단 선택 구간의 시작과 끝을 전체 폭으로 확대한 프레임 타임라인입니다. 클릭과 트림은 프레임에 맞춰지고 휠로 확대합니다.");
+            UiText.Get("Text_6B4EE4E6C8FF"));
 
         _overview.Cursor = Cursors.Hand;
         _detail.Cursor = Cursors.Cross;
@@ -288,8 +289,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         AutomationProperties.SetHelpText(
             this,
             enabled
-                ? "자르기 모드입니다. 자홍색 시작/끝 삭제 핸들을 드래그하거나 방향키로 조정합니다. Tab은 조정할 핸들을 바꿉니다."
-                : "자르기 버튼을 누르면 영상 양끝의 삭제 범위를 조정할 수 있습니다.");
+                ? UiText.Get("Text_17543FEC3EBF")
+                : UiText.Get("Text_F2315240D532"));
         InvalidateRange();
     }
 
@@ -731,12 +732,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             ? Math.Max(1, (int)Math.Ceiling(_viewport.VisibleSpanMs / frameMs))
             : 1;
 
-        _overviewCaption.Text = string.Create(
-            CultureInfo.InvariantCulture,
-            $"전체 타임라인  |  시작 {FormatMs(0)}  →  끝 {FormatMs(_durationMs)}  |  굵은 눈금 {FormatMs(CoarseIntervalMs)}");
-        _detailCaption.Text = string.Create(
-            CultureInfo.InvariantCulture,
-            $"세부 타임라인  |  시작 {FormatMs(_viewport.ViewStartMs)}  →  끝 {FormatMs(_viewport.ViewEndMs)}  |  범위 {FormatMs(_viewport.VisibleSpanMs)} · {visibleFrames}프레임");
+        _overviewCaption.Text = UiText.Format("Text_4667ECA4EE5B", FormatMs(0), FormatMs(_durationMs), FormatMs(CoarseIntervalMs));
+        _detailCaption.Text = UiText.Format("Text_162F0703007C", FormatMs(_viewport.ViewStartMs), FormatMs(_viewport.ViewEndMs), FormatMs(_viewport.VisibleSpanMs), visibleFrames);
 
         AutomationProperties.SetName(_detail, _detailCaption.Text);
     }
@@ -830,7 +827,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         if (width >= 360)
         {
-            DrawText(dc, "위 선택 구간을 아래 전체 폭으로 확대", width / 2.0, 0,
+            DrawText(dc, UiText.Get("Text_41F81C272691"), width / 2.0, 0,
                 _textSecondary, 10.5, semiBold: true, _surfaceBase, centered: true);
         }
     }
@@ -869,7 +866,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                         DrawLine(dc, _minorTickPen, x, height * 0.68, x, height);
                     }
 
-                    DrawText(dc, "확대 + 또는 마우스 휠로 프레임 눈금 표시", width / 2.0,
+                    DrawText(dc, UiText.Get("Text_D9483E35CD83"), width / 2.0,
                         height * 0.36, _textSecondary, 11, semiBold: true, _surfaceScrim, centered: true);
                 }
 
@@ -976,7 +973,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         {
             DrawText(
                 dc,
-                "삭제",
+                UiText.Get("Text_6139B6C3ED73"),
                 left + (width / 2),
                 Math.Max(2, (height - 20) / 2),
                 _textPrimary,

@@ -24,7 +24,7 @@ internal class AnnotationEditorWindow : Window
         FrozenFrame sourceFrame,
         RectD sourceRegion,
         BitmapSource selectedBitmap,
-        string title = "MyCapture — 캡처 편집",
+        string? title = null,
         AnnotationDocument? initialDocument = null,
         IReadOnlyDictionary<string, BitmapSource>? initialAssets = null,
         IPrivacyRedactionService? privacyRedactionService = null)
@@ -34,7 +34,7 @@ internal class AnnotationEditorWindow : Window
 
         StandardWindowTheme.Apply(this);
 
-        Title = title;
+        Title = title ?? UiText.Get("Text_199EB510DA51");
         Background = Application.Current?.TryFindResource("Surface.Base") as Brush
             ?? new SolidColorBrush(Color.FromRgb(0x0B, 0x0F, 0x17));
         Foreground = Application.Current?.TryFindResource("Text.Primary") as Brush ?? Brushes.White;
@@ -53,7 +53,7 @@ internal class AnnotationEditorWindow : Window
         Width = Math.Min(desiredWidth, Math.Max(MinWidth, work.Width - 64));
         Height = Math.Min(desiredHeight, Math.Max(MinHeight, work.Height - 64));
 
-        AutomationProperties.SetName(this, "캡처 편집 창");
+        AutomationProperties.SetName(this, UiText.Get("Text_53DCBAF22F42"));
 
         _editor = new AnnotationEditorControl(
             sourceFrame,

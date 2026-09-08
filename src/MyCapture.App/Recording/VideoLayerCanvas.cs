@@ -26,8 +26,8 @@ internal sealed class VideoLayerCanvas : FrameworkElement
     {
         Focusable = true;
         ClipToBounds = true;
-        AutomationProperties.SetName(this, "영상 레이어 위치 및 크기 편집");
-        ToolTip = "레이어를 드래그해 이동 · 모서리를 드래그해 크기 조절 · 방향키 이동 · Shift+방향키 크기 · Esc 취소";
+        AutomationProperties.SetName(this, UiText.Get("Text_FA67EC449E04"));
+        ToolTip = UiText.Get("Text_0BDF6B210A31");
     }
 
     internal void SetDocument(VideoEditDocument document) { _document = document; InvalidateVisual(); }

@@ -125,8 +125,8 @@ internal sealed class VideoLibraryService
             DurationMs = 1,
             FrameRate = expectedFrameRate,
             DpiScale = 1,
-            SourceWindowTitle = "화면 녹화",
-            Title = "화면 녹화",
+            SourceWindowTitle = UiText.Get("Text_4F5AF20FAA6E"),
+            Title = UiText.Get("Text_4F5AF20FAA6E"),
         };
         record.RelativeDirectory = CaptureQueue.BuildRelativeDirectory(record.Id, record.CreatedAt);
 

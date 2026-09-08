@@ -23,8 +23,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private const int MagnifierSourcePixels = 15;
     private const double MagnifierDestinationPixels = 150;
 
-    internal const string InstructionText =
-        "드래그해 캡처할 영역을 선택하세요  ·  놓으면 편집 창이 열립니다  ·  Esc 취소";
+    internal static string InstructionText => UiText.Get("Text_798E080A9262");
 
     private readonly FrozenFrame _frame;
     private readonly bool _showMagnifier;

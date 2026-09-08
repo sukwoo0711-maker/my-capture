@@ -44,7 +44,7 @@ internal sealed class CaptureOverlayWindow : Window
 
     private void ConfigureWindowChrome(FrozenFrame frame)
     {
-        Title = "MyCapture — 자유 영역 선택";
+        Title = UiText.Get("Text_3816B940D53C");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.Manual;

@@ -9,7 +9,7 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-public sealed class RecordingWallClockWindowTests
+public sealed class RecordingWallClockWindowTests : KoreanCaptionTest
 {
     [Fact]
     public void Lifecycle_InitiallyDisabledWithoutTimer() => StaTestHost.Run(() =>

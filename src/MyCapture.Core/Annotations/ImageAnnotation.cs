@@ -54,7 +54,7 @@ public sealed class ImageAnnotation : AnnotationItem
     }
 
     [JsonIgnore]
-    public override string DisplayName => "이미지";
+    public override string DisplayName => UiText.Get("Text_302BAE127938");
 
     [JsonIgnore]
     public override RectD Bounds => _rect;

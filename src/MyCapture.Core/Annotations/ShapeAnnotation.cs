@@ -128,7 +128,7 @@ public sealed class RectangleAnnotation : ShapeAnnotation
     }
 
     [JsonIgnore]
-    public override string DisplayName => "사각형";
+    public override string DisplayName => UiText.Get("Text_DC0760235344");
 
     public override double DistanceTo(PointD point)
     {
@@ -158,7 +158,7 @@ public sealed class RectangleAnnotation : ShapeAnnotation
 public sealed class EllipseAnnotation : ShapeAnnotation
 {
     [JsonIgnore]
-    public override string DisplayName => "타원";
+    public override string DisplayName => UiText.Get("Text_59ADEC0FB6E4");
 
     public override double DistanceTo(PointD point)
     {

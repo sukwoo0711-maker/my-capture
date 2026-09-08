@@ -288,7 +288,7 @@ internal sealed class AnnotationEditorController
         {
             string before = text.Text;
             _undo.Push(new PropertyChangeCommand<TextAnnotation, string>(
-                text, "텍스트", static (t, v) => t.Text = v, before, finalText));
+                text, UiText.Get("Text_258AD4B095A1"), static (t, v) => t.Text = v, before, finalText));
             text.Text = finalText;
         }
 
@@ -330,7 +330,7 @@ internal sealed class AnnotationEditorController
         }
 
         RectangleAnnotation? last = null;
-        using (_undo.BeginBatch("민감정보 빠른 가리기"))
+        using (_undo.BeginBatch(UiText.Get("Text_ACE79917CCBE")))
         {
             foreach (RectD region in bounded)
             {
@@ -365,7 +365,7 @@ internal sealed class AnnotationEditorController
         switch (_selected)
         {
             case ShapeAnnotation shape:
-                PushProperty(shape, "색상", static (s, v) =>
+                PushProperty(shape, UiText.Get("Text_D1B87ACB2D22"), static (s, v) =>
                     {
                         s.Stroke = v.Stroke;
                         s.Fill = v.Fill;
@@ -374,13 +374,13 @@ internal sealed class AnnotationEditorController
                     (Stroke: color, Fill: shape.FillMatchesStroke ? color.WithAlpha(shape.Fill.A) : shape.Fill));
                 break;
             case PolylineAnnotation line:
-                PushProperty(line, "색상", static (s, v) => s.Stroke = v, line.Stroke, color);
+                PushProperty(line, UiText.Get("Text_D1B87ACB2D22"), static (s, v) => s.Stroke = v, line.Stroke, color);
                 break;
             case PenAnnotation pen:
-                PushProperty(pen, "색상", static (s, v) => s.Stroke = v, pen.Stroke, color);
+                PushProperty(pen, UiText.Get("Text_D1B87ACB2D22"), static (s, v) => s.Stroke = v, pen.Stroke, color);
                 break;
             case TextAnnotation text:
-                PushProperty(text, "색상", static (s, v) => s.Foreground = v, text.Foreground, color);
+                PushProperty(text, UiText.Get("Text_D1B87ACB2D22"), static (s, v) => s.Foreground = v, text.Foreground, color);
                 break;
         }
 
@@ -403,13 +403,13 @@ internal sealed class AnnotationEditorController
         switch (_selected)
         {
             case ShapeAnnotation shape:
-                PushProperty(shape, "두께", static (s, v) => s.StrokeThickness = v, shape.StrokeThickness, thickness);
+                PushProperty(shape, UiText.Get("Text_6953A4195620"), static (s, v) => s.StrokeThickness = v, shape.StrokeThickness, thickness);
                 break;
             case PolylineAnnotation line:
-                PushProperty(line, "두께", static (s, v) => s.StrokeThickness = v, line.StrokeThickness, thickness);
+                PushProperty(line, UiText.Get("Text_6953A4195620"), static (s, v) => s.StrokeThickness = v, line.StrokeThickness, thickness);
                 break;
             case PenAnnotation pen:
-                PushProperty(pen, "두께", static (s, v) => s.StrokeThickness = v, pen.StrokeThickness, thickness);
+                PushProperty(pen, UiText.Get("Text_6953A4195620"), static (s, v) => s.StrokeThickness = v, pen.StrokeThickness, thickness);
                 break;
         }
 
@@ -426,7 +426,7 @@ internal sealed class AnnotationEditorController
 
         if (_selected is ShapeAnnotation shape)
         {
-            PushProperty(shape, "선 종류", static (s, v) =>
+            PushProperty(shape, UiText.Get("Text_E0B58D1CFED1"), static (s, v) =>
                 {
                     s.StrokeStyle = v.Style;
                     s.StrokeThickness = v.Thickness;
@@ -444,7 +444,7 @@ internal sealed class AnnotationEditorController
         FillTransparency = double.IsFinite(transparency) ? Math.Clamp(transparency, 0, 100) : 100;
         if (_selected is ShapeAnnotation shape)
         {
-            PushProperty(shape, "채우기 투명도", static (s, v) =>
+            PushProperty(shape, UiText.Get("Text_5321CB80BCA3"), static (s, v) =>
                 {
                     s.Fill = v.Fill;
                     s.FillMatchesStroke = v.Matches;
@@ -741,7 +741,7 @@ internal sealed class AlreadyAddedCommand : IUndoableCommand
         _index = document.IndexOf(item);
     }
 
-    public string Description => $"{_item.DisplayName} 추가";
+    public string Description => UiText.Format("Text_47E781C43156", _item.DisplayName);
 
     public void Execute()
     {

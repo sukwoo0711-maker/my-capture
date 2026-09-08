@@ -98,7 +98,7 @@ internal sealed class PinImageSaveService
 
             if (!HasPngExtension(chosen))
             {
-                const string message = "PNG 파일 이름(.png)을 선택해 주세요.";
+string message = UiText.Get("Text_932DB1A4ED7F");
                 _log.LogWarning("Rejected pinned-image export with a non-PNG extension: {Path}", chosen);
                 return new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: message);
             }
@@ -179,8 +179,8 @@ internal sealed class PinImageSaveService
         string? directory = Path.GetDirectoryName(suggested);
         var dialog = new SaveFileDialog
         {
-            Title = "고정 이미지 저장",
-            Filter = "PNG 이미지 (*.png)|*.png",
+            Title = UiText.Get("Text_A97A3B71F038"),
+            Filter = UiText.Get("Text_FA2ADD387F12"),
             DefaultExt = ".png",
             AddExtension = true,
             OverwritePrompt = true,
@@ -199,14 +199,14 @@ internal sealed class PinImageSaveService
             e.Cancel = true;
             _ = owner is null
                 ? MessageBox.Show(
-                    "PNG 파일 이름(.png)을 선택해 주세요.",
-                    "고정 이미지 저장",
+                    UiText.Get("Text_932DB1A4ED7F"),
+                    UiText.Get("Text_A97A3B71F038"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information)
                 : MessageBox.Show(
                     owner,
-                    "PNG 파일 이름(.png)을 선택해 주세요.",
-                    "고정 이미지 저장",
+                    UiText.Get("Text_932DB1A4ED7F"),
+                    UiText.Get("Text_A97A3B71F038"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
         };

@@ -110,8 +110,8 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         SnapsToDevicePixels = true;
         Focusable = true;
         Cursor = Cursors.Hand;
-        ToolTip = "레이어 막대의 가운데를 드래그해 이동하거나 양 끝을 드래그해 길이를 조절합니다. 위/아래: 레이어 선택 · 좌/우: 시작 시간 · Shift+좌/우: 끝 시간 · Ctrl: 0.01초 단위 · Esc: 취소";
-        AutomationProperties.SetName(this, "영상 레이어 타임라인");
+        ToolTip = UiText.Get("Text_D6FD14107836");
+        AutomationProperties.SetName(this, UiText.Get("Text_9D6831D1954E"));
         AutomationProperties.SetHelpText(this, (string)ToolTip);
     }
 
@@ -144,7 +144,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             Height = nextHeight;
             AutomationProperties.SetHelpText(
                 this,
-                $"텍스트 레이어 {_textLayers.Count}개, 프레임 레이어 {_frameLayers.Count}개. {(string)ToolTip}");
+                UiText.Format("Text_060B5907DA2C", _textLayers.Count, _frameLayers.Count, (string)ToolTip));
             InvalidateMeasure();
         }
 
@@ -237,7 +237,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         // Draw Text Rows
         if (_textLayers.Count == 0)
         {
-            DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, "T  텍스트", "텍스트 레이어 없음", timelineWidth);
+            DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_541F62E38579"), UiText.Get("Text_49931F796C95"), timelineWidth);
             currentTop += EmptyTrackHeight + Gap;
         }
         else
@@ -245,7 +245,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             for (int index = 0; index < _textLayers.Count; index++)
             {
                 TimedTextOverlay layer = _textLayers[index];
-                string rowLabel = _textLayers.Count == 1 ? "T  텍스트" : $"T  텍스트 {index + 1}";
+                string rowLabel = _textLayers.Count == 1 ? UiText.Get("Text_541F62E38579") : UiText.Format("Text_AD80E1DD716A", index + 1);
                 DrawLayerRow(
                     dc,
                     currentTop,
@@ -265,7 +265,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         // Draw Frame Rows
         if (_frameLayers.Count == 0)
         {
-            DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, "F  프레임", "프레임 레이어 없음", timelineWidth);
+            DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_01EC445E93F5"), UiText.Get("Text_986A825EE823"), timelineWidth);
             currentTop += EmptyTrackHeight + Gap;
         }
         else
@@ -273,7 +273,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             for (int index = 0; index < _frameLayers.Count; index++)
             {
                 FrameEditLayer layer = _frameLayers[index];
-                string rowLabel = _frameLayers.Count == 1 ? "F  프레임" : $"F  프레임 {index + 1}";
+                string rowLabel = _frameLayers.Count == 1 ? UiText.Get("Text_01EC445E93F5") : UiText.Format("Text_F085C7366DEB", index + 1);
                 DrawLayerRow(
                     dc,
                     currentTop,
@@ -611,7 +611,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
                         target.StartMs = newStart;
                         target.EndMs = newEnd;
                         NotifyTimingChanged();
-                        AutomationProperties.SetName(this, $"텍스트 표시 시간: {target.StartMs / 1000:0.00}초부터 {target.EndMs / 1000:0.00}초까지");
+                        AutomationProperties.SetName(this, UiText.Format("Text_10D733234378", target.StartMs / 1000, target.EndMs / 1000));
                         InvalidateVisual();
                     }
                 }
@@ -636,7 +636,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
                         target.StartMs = newStart;
                         target.EndMs = newEnd;
                         NotifyTimingChanged();
-                        AutomationProperties.SetName(this, $"프레임 표시 시간: {target.StartMs / 1000:0.00}초부터 {target.EndMs / 1000:0.00}초까지");
+                        AutomationProperties.SetName(this, UiText.Format("Text_A89C81DCC2C9", target.StartMs / 1000, target.EndMs / 1000));
                         InvalidateVisual();
                     }
                 }
@@ -839,7 +839,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
                         text.StartMs, text.EndMs, _durationMs, isStartHandle, target);
                     NotifyTimingChanged();
                     NotifyTimingGestureCompleted();
-                    AutomationProperties.SetName(this, $"텍스트 표시 시간: {text.StartMs / 1000:0.00}초부터 {text.EndMs / 1000:0.00}초까지");
+                    AutomationProperties.SetName(this, UiText.Format("Text_10D733234378", text.StartMs / 1000, text.EndMs / 1000));
                     InvalidateVisual();
                     e.Handled = true;
                     return;
@@ -856,7 +856,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
                         frame.StartMs, frame.EndMs, _durationMs, isStartHandle, target);
                     NotifyTimingChanged();
                     NotifyTimingGestureCompleted();
-                    AutomationProperties.SetName(this, $"프레임 표시 시간: {frame.StartMs / 1000:0.00}초부터 {frame.EndMs / 1000:0.00}초까지");
+                    AutomationProperties.SetName(this, UiText.Format("Text_A89C81DCC2C9", frame.StartMs / 1000, frame.EndMs / 1000));
                     InvalidateVisual();
                     e.Handled = true;
                     return;

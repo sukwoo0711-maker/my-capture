@@ -24,7 +24,7 @@ namespace MyCapture.App.Tests;
 /// close-all are what is verified; the pure geometry/hit-testing is covered in the Core
 /// tests where no window is needed.
 /// </remarks>
-public sealed class PinManagerTests
+public sealed class PinManagerTests : KoreanCaptionTest
 {
     private static void RunSta(Action action)
     {

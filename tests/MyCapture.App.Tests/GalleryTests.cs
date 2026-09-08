@@ -26,7 +26,7 @@ namespace MyCapture.App.Tests;
 /// touches WPF imaging (creating real capture directories, decoding thumbnails, loading a
 /// re-edit context) runs on a dedicated STA thread, matching the other App tests.
 /// </remarks>
-public sealed class GalleryTests
+public sealed class GalleryTests : KoreanCaptionTest
 {
     private static void RunSta(Action action)
     {

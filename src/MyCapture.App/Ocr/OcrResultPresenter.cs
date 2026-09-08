@@ -127,7 +127,7 @@ internal sealed class OcrResultPresenter : IDisposable
             // Run() may just have cancelled a previous owner. Its late completion is intentionally
             // ignored, so this boundary must release the tray busy state itself.
             _setBusy(false);
-            _window.ShowResult(OcrResult.Failed("이미지를 준비할 수 없습니다."), _currentContext);
+            _window.ShowResult(OcrResult.Failed(UiText.Get("Text_F09A6C5A6A10")), _currentContext);
             return;
         }
 
@@ -154,7 +154,7 @@ internal sealed class OcrResultPresenter : IDisposable
         catch (Exception ex)
         {
             _log.LogWarning(ex, "OCR recognition threw unexpectedly");
-            result = OcrResult.Failed("텍스트 인식에 실패했습니다.");
+            result = OcrResult.Failed(UiText.Get("Text_AA254F35F02E"));
         }
 
         // Marshal back to the UI thread for all window/tray updates.

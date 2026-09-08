@@ -17,7 +17,7 @@ namespace MyCapture.App.Tests;
 /// The window's XAML/binding path is verified separately by the <c>--selftest-settings</c>
 /// live smoke, which avoids polluting this assembly's shared WPF Application state.
 /// </summary>
-public sealed class SettingsApplyAndWindowTests
+public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
 {
     private sealed class FakeRegistrar : IHotkeyRegistrar
     {

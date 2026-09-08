@@ -224,12 +224,8 @@ internal sealed partial class GalleryWindow : Window
             return;
         }
 
-        OcrCoverageHeadline.Text = string.Create(
-            System.Globalization.CultureInfo.CurrentCulture,
-            $"검색되지 않는 캡처 {coverage.Missing}개");
-        OcrCoverageDetail.Text = string.Create(
-            System.Globalization.CultureInfo.CurrentCulture,
-            $"새 캡처는 이 PC에서 자동으로 색인합니다. 전체 {coverage.Total}개 중 {coverage.WithOcrText}개가 검색 가능합니다. 필요하면 지금 다시 색인할 수 있습니다.");
+        OcrCoverageHeadline.Text = UiText.Format("Text_BE08A8230E51", coverage.Missing);
+        OcrCoverageDetail.Text = UiText.Format("Text_21AAACA9783A", coverage.Total, coverage.WithOcrText);
         OcrIndexButton.Visibility = Visibility.Visible;
         OcrIndexButton.IsEnabled = true;
         OcrCoverageBanner.Visibility = Visibility.Visible;
@@ -246,23 +242,19 @@ internal sealed partial class GalleryWindow : Window
 
         if (_queue.Records.Any(record => _commitService.IsRecordBusy(record.Id)))
         {
-            ShowStatus("캡처를 저장하는 중입니다. 완료된 뒤 다시 시도해 주세요.");
+            ShowStatus(UiText.Get("Text_EC81AD6B5A75"));
             return;
         }
 
         _ocrIndexingRunning = true;
         _ocrIndexingCts = new System.Threading.CancellationTokenSource();
-        OcrIndexButton.Content = "중지";
+        OcrIndexButton.Content = UiText.Get("Text_92CDEF3C5BC0");
         OcrCoverageBanner.Visibility = Visibility.Visible;
 
         var progress = new System.Progress<MyCapture.App.Ocr.OcrIndexingProgress>(p =>
         {
-            OcrCoverageHeadline.Text = string.Create(
-                System.Globalization.CultureInfo.CurrentCulture,
-                $"색인 중… {p.Processed}/{p.Total}");
-            OcrCoverageDetail.Text = string.Create(
-                System.Globalization.CultureInfo.CurrentCulture,
-                $"{p.Indexed}개 이미지의 검색 색인을 최신 상태로 만들었습니다.");
+            OcrCoverageHeadline.Text = UiText.Format("Text_C51C3FDBF019", p.Processed, p.Total);
+            OcrCoverageDetail.Text = UiText.Format("Text_AAED78A6EA00", p.Indexed);
         });
 
         MyCapture.App.Ocr.OcrIndexingOutcome outcome;
@@ -280,7 +272,7 @@ internal sealed partial class GalleryWindow : Window
             _ocrIndexingCts.Dispose();
             _ocrIndexingCts = null;
             _ocrIndexingRunning = false;
-            OcrIndexButton.Content = "지금 색인";
+            OcrIndexButton.Content = UiText.Get("Text_C5364F392040");
         }
 
         _log.LogInformation("OCR indexing pass ended: {Outcome}", outcome);
@@ -375,7 +367,7 @@ internal sealed partial class GalleryWindow : Window
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Could not stage capture {Id} for shell drag export", record.Id);
-            ShowStatus("이미지 파일을 준비할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+            ShowStatus(UiText.Get("Text_51F5EF959148"));
         }
 
         e.Handled = true;
@@ -459,7 +451,7 @@ internal sealed partial class GalleryWindow : Window
             string path = Path.GetFullPath(_videoLibrary.CurrentVideoPath(record));
             if (!File.Exists(path))
             {
-                ShowStatus("동영상 파일을 찾을 수 없습니다.");
+                ShowStatus(UiText.Get("Text_EC7FF66E22C9"));
                 return;
             }
 
@@ -484,8 +476,8 @@ internal sealed partial class GalleryWindow : Window
             _inlineVideoPath = path;
             _inlineMediaReady = false;
             _inlinePlaying = false;
-            InlinePlayButton.Content = "재생";
-            InlinePlaybackStatus.Text = "동영상 여는 중…";
+            InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
+            InlinePlaybackStatus.Text = UiText.Get("Text_AE614DABA128");
             InlineSeekSlider.Maximum = Math.Max(1, record.DurationMs);
             SetInlineSliderValue(0);
             InlineTimeLabel.Text = $"00:00 / {FormatPlaybackTime(record.DurationMs)}";
@@ -497,8 +489,8 @@ internal sealed partial class GalleryWindow : Window
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Could not open inline video {Id}", record.Id);
-            InlinePlaybackStatus.Text = "재생 준비 실패";
-            ShowStatus("라이브러리 안에서 동영상을 열 수 없습니다: " + ex.Message);
+            InlinePlaybackStatus.Text = UiText.Get("Text_B6AEB06C1E3E");
+            ShowStatus(UiText.Get("Text_EBC9F14582AD") + ex.Message);
         }
     }
 
@@ -509,7 +501,7 @@ internal sealed partial class GalleryWindow : Window
             ? InlineVideo.NaturalDuration.TimeSpan.TotalMilliseconds
             : Math.Max(1, InlineSeekSlider.Maximum);
         InlineSeekSlider.Maximum = Math.Max(1, durationMs);
-        InlinePlaybackStatus.Text = "재생 준비";
+        InlinePlaybackStatus.Text = UiText.Get("Text_6E86D1A85620");
         if (_inlineAutoPlayPending)
         {
             SetInlinePlayback(playing: true);
@@ -531,8 +523,8 @@ internal sealed partial class GalleryWindow : Window
         InlineVideo.Position = TimeSpan.Zero;
         _inlinePlaying = false;
         _inlinePlaybackTimer.Stop();
-        InlinePlayButton.Content = "재생";
-        InlinePlaybackStatus.Text = "재생 완료";
+        InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
+        InlinePlaybackStatus.Text = UiText.Get("Text_2223CE0FF051");
         SetInlineSliderValue(0);
         UpdateInlineTimeLabel();
     }
@@ -543,8 +535,8 @@ internal sealed partial class GalleryWindow : Window
         _inlinePlaying = false;
         _inlineAutoPlayPending = false;
         _inlinePlaybackTimer.Stop();
-        InlinePlayButton.Content = "재생";
-        InlinePlaybackStatus.Text = "재생할 수 없음";
+        InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
+        InlinePlaybackStatus.Text = UiText.Get("Text_875917AFD6EF");
         _log.LogWarning(e.ErrorException, "Inline gallery playback failed for {Path}", _inlineVideoPath);
     }
 
@@ -573,16 +565,16 @@ internal sealed partial class GalleryWindow : Window
             InlineVideo.Play();
             _inlinePlaying = true;
             _inlinePlaybackTimer.Start();
-            InlinePlayButton.Content = "일시정지";
-            InlinePlaybackStatus.Text = "라이브러리에서 재생 중";
+            InlinePlayButton.Content = UiText.Get("Text_4F51C0C8ADA8");
+            InlinePlaybackStatus.Text = UiText.Get("Text_8B5C97A7F917");
         }
         else
         {
             InlineVideo.Pause();
             _inlinePlaying = false;
             _inlinePlaybackTimer.Stop();
-            InlinePlayButton.Content = "재생";
-            InlinePlaybackStatus.Text = "일시정지";
+            InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
+            InlinePlaybackStatus.Text = UiText.Get("Text_4F51C0C8ADA8");
             UpdateInlinePlaybackPosition();
         }
     }
@@ -662,8 +654,8 @@ internal sealed partial class GalleryWindow : Window
         }
 
         InlineVideoPanel.Visibility = Visibility.Collapsed;
-        InlinePlayButton.Content = "재생";
-        InlinePlaybackStatus.Text = "재생 준비";
+        InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
+        InlinePlaybackStatus.Text = UiText.Get("Text_6E86D1A85620");
         SetInlineSliderValue(0);
     }
 
@@ -778,8 +770,8 @@ internal sealed partial class GalleryWindow : Window
 
         MessageBoxResult answer = MessageBox.Show(
             this,
-            $"이 캡처를 삭제할까요?\n\n{tile.ContextLabel}\n삭제하면 되돌릴 수 없습니다.",
-            "캡처 삭제",
+            UiText.Format("Text_249DBB18BB08", tile.ContextLabel),
+            UiText.Get("Text_89D4979D7596"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning,
             MessageBoxResult.Cancel);
@@ -827,7 +819,7 @@ internal sealed partial class GalleryWindow : Window
         BitmapSource? rendered = ImageCodec.TryLoad(renderedPath);
         if (rendered is null)
         {
-            ShowStatus("이미지를 복사할 수 없습니다. 파일이 없거나 손상되었습니다.");
+            ShowStatus(UiText.Get("Text_3BF4FEA88C51"));
             return;
         }
 
@@ -835,7 +827,7 @@ internal sealed partial class GalleryWindow : Window
         {
             if (!await ClipboardImageService.CopyImageAsync(rendered))
             {
-                ShowStatus("클립보드에 복사하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+                ShowStatus(UiText.Get("Text_75425A6D9BE8"));
             }
         }
         catch (Exception ex)
@@ -843,7 +835,7 @@ internal sealed partial class GalleryWindow : Window
             // async-void event handlers must never let a dispatcher shutdown or unexpected
             // clipboard provider failure escape into WPF's message pump.
             _log.LogWarning(ex, "Could not copy gallery capture {Id} to the clipboard", record.Id);
-            ShowStatus("클립보드에 복사하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+            ShowStatus(UiText.Get("Text_75425A6D9BE8"));
         }
     }
 
@@ -933,7 +925,7 @@ internal sealed partial class GalleryWindow : Window
 
         if (!_openEditors.Add(record.Id))
         {
-            ShowStatus("이 캡처는 이미 편집 중입니다.");
+            ShowStatus(UiText.Get("Text_63F240FA482C"));
             return;
         }
 
@@ -946,9 +938,9 @@ internal sealed partial class GalleryWindow : Window
             {
                 ShowStatus(failure switch
                 {
-                    GalleryReeditLoader.LoadFailure.MissingOriginal => "원본 이미지를 찾을 수 없어 편집할 수 없습니다.",
-                    GalleryReeditLoader.LoadFailure.UndecodableOriginal => "원본 이미지가 손상되어 편집할 수 없습니다.",
-                    _ => "이 캡처를 편집할 수 없습니다.",
+                    GalleryReeditLoader.LoadFailure.MissingOriginal => UiText.Get("Text_2618DA07C831"),
+                    GalleryReeditLoader.LoadFailure.UndecodableOriginal => UiText.Get("Text_7C821231A673"),
+                    _ => UiText.Get("Text_BCA2A41F7456"),
                 });
                 return;
             }
@@ -978,13 +970,13 @@ internal sealed partial class GalleryWindow : Window
         catch (CaptureGenerationConflictException ex)
         {
             _log.LogWarning(ex, "Re-edit rejected because capture {Id} changed", record.Id);
-            ShowStatus("다른 편집에서 이 캡처가 변경되었습니다. 현재 편집기를 닫고 다시 열어 주세요.");
+            ShowStatus(UiText.Get("Text_884F73809F89"));
             return false;
         }
         catch (Exception ex)
         {
             _log.LogError(ex, "Re-edit commit failed for {Id}", record.Id);
-            ShowStatus("저장에 실패했습니다. 다시 시도해 주세요.");
+            ShowStatus(UiText.Get("Text_5F310F33AB12"));
             return false;
         }
     }
@@ -1015,7 +1007,7 @@ internal sealed partial class GalleryWindow : Window
 
         if (!_openEditors.Add(record.Id))
         {
-            ShowStatus("이 동영상은 이미 편집 중입니다.");
+            ShowStatus(UiText.Get("Text_733011719B1C"));
             return;
         }
 
@@ -1045,7 +1037,7 @@ internal sealed partial class GalleryWindow : Window
         catch (Exception ex)
         {
             _log.LogError(ex, "Could not open video editor for {Id}", record.Id);
-            ShowStatus("동영상을 열 수 없습니다: " + ex.Message);
+            ShowStatus(UiText.Get("Text_FB0A09B025D3") + ex.Message);
         }
         finally
         {
@@ -1063,7 +1055,7 @@ internal sealed partial class GalleryWindow : Window
             return true;
         }
 
-        ShowStatus("이 캡처를 저장하는 중입니다. 완료된 뒤 다시 시도해 주세요.");
+        ShowStatus(UiText.Get("Text_E20E28D53DCE"));
         return false;
     }
 

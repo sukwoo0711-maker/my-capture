@@ -95,7 +95,7 @@ internal sealed class RecordingControlWindow : Window
         // the user is positioning the region; normal task windows use StandardWindowTheme.
         FluidMotion.SetWindowEntrance(this, false);
 
-        Title = "MyCapture — 영역 녹화";
+        Title = UiText.Get("Text_C750845B7AA3");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
@@ -144,7 +144,7 @@ internal sealed class RecordingControlWindow : Window
         Opacity = 1;
         _clockCheckBox.IsEnabled = false;
         _statusText.Text = text;
-        _primaryButton.Content = "저장 중…";
+        _primaryButton.Content = UiText.Get("Text_88DAAEEDFE4C");
         _primaryButton.IsEnabled = false;
         _completionProgress.Visibility = Visibility.Visible;
         AnnounceStatus();
@@ -204,10 +204,10 @@ internal sealed class RecordingControlWindow : Window
         frame.LostKeyboardFocus += (_, _) =>
             frame.BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x58, 0xC7, 0xF3));
 
-        AutomationProperties.SetName(frame, "녹화 영역 테두리 (드래그로 이동)");
+        AutomationProperties.SetName(frame, UiText.Get("Text_E7A732EAE7D5"));
         AutomationProperties.SetHelpText(
             frame,
-            "Tab으로 선택한 뒤 방향키로 이동합니다. Shift와 함께 누르면 10픽셀씩 이동합니다.");
+            UiText.Get("Text_66069CEAD9AE"));
         return frame;
     }
 
@@ -226,13 +226,13 @@ internal sealed class RecordingControlWindow : Window
 
         primary = new Button
         {
-            Content = _settings.UseStartDelay ? "지연 후 녹화" : "녹화 시작",
+            Content = _settings.UseStartDelay ? UiText.Get("Text_2AA27E2CEB7C") : UiText.Get("Text_255C28FD0AC2"),
             MinWidth = 108,
             VerticalAlignment = VerticalAlignment.Center,
             Style = TryStyle("Button.Primary"),
         };
         primary.Click += (_, _) => OnPrimaryClicked();
-        AutomationProperties.SetName(primary, "녹화 시작 또는 정지");
+        AutomationProperties.SetName(primary, UiText.Get("Text_78EFED021492"));
         Grid.SetColumn(primary, 0);
         panel.Children.Add(primary);
 
@@ -257,42 +257,42 @@ internal sealed class RecordingControlWindow : Window
             FontFamily = TryFont("Font.Mono"),
             FontSize = 15,
         };
-        AutomationProperties.SetName(timer, "녹화 경과 시간");
+        AutomationProperties.SetName(timer, UiText.Get("Text_F11BA21FB824"));
         Grid.SetColumn(timer, 2);
         panel.Children.Add(timer);
 
         clockCheck = new CheckBox
         {
-            Content = "시계",
+            Content = UiText.Get("Text_A658DC1B9407"),
             IsChecked = false,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 10, 0),
             FontSize = 13,
             Foreground = TryBrush("Text.Primary", Colors.White),
-            ToolTip = "녹화 시계 표시 (드래그로 이동, 마우스 휠로 크기 조절)",
+            ToolTip = UiText.Get("Text_54A00B1A2FDB"),
         };
         clockCheck.Checked += (_, _) => SetWallClockEnabled(true);
         clockCheck.Unchecked += (_, _) => SetWallClockEnabled(false);
-        AutomationProperties.SetName(clockCheck, "녹화 시계 표시");
+        AutomationProperties.SetName(clockCheck, UiText.Get("Text_D1E229E81B83"));
         AutomationProperties.SetHelpText(
             clockCheck,
-            "화면에 현재 날짜/시간 시계를 표시합니다. 드래그하여 이동하고 마우스 휠로 크기를 조절할 수 있습니다.");
+            UiText.Get("Text_E2395EBF6C65"));
         Grid.SetColumn(clockCheck, 3);
         panel.Children.Add(clockCheck);
 
         var cancel = new Button
         {
-            Content = "취소",
+            Content = UiText.Get("Text_BE876433993A"),
             MinWidth = 64,
             VerticalAlignment = VerticalAlignment.Center,
             Style = TryStyle("Button.Ghost"),
         };
         cancel.Click += (_, _) => CancelSession();
-        AutomationProperties.SetName(cancel, "녹화 취소");
+        AutomationProperties.SetName(cancel, UiText.Get("Text_E1C96EF1EA0F"));
         Grid.SetColumn(cancel, 4);
         panel.Children.Add(cancel);
         Grid.SetColumnSpan(_completionProgress, 5);
-        AutomationProperties.SetName(_completionProgress, "녹화 파일 처리 중");
+        AutomationProperties.SetName(_completionProgress, UiText.Get("Text_C1767C4F1218"));
         panel.Children.Add(_completionProgress);
 
         return new Border
@@ -468,7 +468,7 @@ internal sealed class RecordingControlWindow : Window
     {
         _countdownRemaining = seconds;
         _primaryButton.IsEnabled = false;
-        _statusText.Text = string.Create(CultureInfo.CurrentCulture, $"{_countdownRemaining}초 후 시작");
+        _statusText.Text = UiText.Format("Text_35114A85CCCE", _countdownRemaining);
         AnnounceStatus();
 
         _countdownTimer = new DispatcherTimer(DispatcherPriority.Normal)
@@ -485,7 +485,7 @@ internal sealed class RecordingControlWindow : Window
                 return;
             }
 
-            _statusText.Text = string.Create(CultureInfo.CurrentCulture, $"{_countdownRemaining}초 후 시작");
+            _statusText.Text = UiText.Format("Text_35114A85CCCE", _countdownRemaining);
             AnnounceStatus();
         };
         _countdownTimer.Start();
@@ -515,7 +515,7 @@ internal sealed class RecordingControlWindow : Window
             _log.LogError(ex, "Could not start recording");
             CloseWallClock();
             _clockCheckBox.IsChecked = false;
-            _statusText.Text = "녹화를 시작할 수 없습니다";
+            _statusText.Text = UiText.Get("Text_48C3B6EBA637");
             _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
             AnnounceStatus();
             _recorder?.Dispose();
@@ -526,9 +526,9 @@ internal sealed class RecordingControlWindow : Window
         }
 
         _readyAnnounced = false;
-        _primaryButton.Content = "녹화 정지";
+        _primaryButton.Content = UiText.Get("Text_74C6AEBB2B6D");
         _primaryButton.Style = TryStyle("Button.Danger");
-        _statusText.Text = "녹화 준비 중 · Esc 또는 정지로 종료";
+        _statusText.Text = UiText.Get("Text_72A13C33A79E");
         _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         AnnounceStatus();
 
@@ -564,7 +564,7 @@ internal sealed class RecordingControlWindow : Window
         if (!_readyAnnounced && _recorder?.IsReady == true)
         {
             _readyAnnounced = true;
-            _statusText.Text = "녹화 중 · Esc 또는 정지로 종료";
+            _statusText.Text = UiText.Get("Text_38B12BA58C48");
             AnnounceStatus();
         }
         TimeSpan elapsed = _recorder?.RecordedElapsed ?? TimeSpan.Zero;
@@ -585,9 +585,9 @@ internal sealed class RecordingControlWindow : Window
         Stopping?.Invoke(this, EventArgs.Empty);
         _elapsedTimer?.Stop();
         _primaryButton.IsEnabled = false;
-        _primaryButton.Content = "변환 중…";
+        _primaryButton.Content = UiText.Get("Text_4E7752D53B90");
         _completionProgress.Visibility = Visibility.Visible;
-        _statusText.Text = "녹화 종료 · 동영상 파일 변환 중…";
+        _statusText.Text = UiText.Get("Text_542965B456C7");
         AnnounceStatus();
 
         RegionRecorder recorder = _recorder;
@@ -626,7 +626,7 @@ internal sealed class RecordingControlWindow : Window
             if (result is not null)
             {
                 _completionPending = true;
-                ShowCompletionStatus("동영상 저장 중… 갤러리 등록을 준비합니다");
+                ShowCompletionStatus(UiText.Get("Text_528544494302"));
                 RecordingFinished?.Invoke(this, result);
             }
             else
@@ -777,7 +777,7 @@ internal sealed class RecordingControlWindow : Window
         if ((_stopping && !_finished) || _completionPending)
         {
             e.Cancel = true;
-            _statusText.Text = "파일 확정 중… 완료되면 자동으로 닫힙니다";
+            _statusText.Text = UiText.Get("Text_3024E9CAD0E5");
             AnnounceStatus();
             return;
         }

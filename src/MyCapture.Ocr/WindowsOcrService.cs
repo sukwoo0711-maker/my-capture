@@ -68,7 +68,7 @@ public sealed class WindowsOcrService : IOcrService
         if (!_recognizer.IsAvailable)
         {
             return OcrResult.Unavailable(
-                "이 시스템에서 OCR 언어 팩을 사용할 수 없습니다.");
+                UiText.Get("Text_D6580A6EEFB2"));
         }
 
         if (cancellationToken.IsCancellationRequested)
@@ -99,12 +99,12 @@ public sealed class WindowsOcrService : IOcrService
             or NotSupportedException)
         {
             _log.LogWarning(ex, "OCR could not decode the requested image");
-            return OcrResult.Failed("이미지를 불러올 수 없습니다.", stopwatch.Elapsed);
+            return OcrResult.Failed(UiText.Get("Text_475D185DC33B"), stopwatch.Elapsed);
         }
 
         if (source is null)
         {
-            return OcrResult.Failed("이미지를 불러올 수 없습니다.", stopwatch.Elapsed);
+            return OcrResult.Failed(UiText.Get("Text_475D185DC33B"), stopwatch.Elapsed);
         }
 
         IReadOnlyList<string> selectedLanguages = OcrPlanner.SelectLanguages(
@@ -134,7 +134,7 @@ public sealed class WindowsOcrService : IOcrService
             if (!upright.RecognizerWasAvailable)
             {
                 stopwatch.Stop();
-                return OcrResult.Unavailable("OCR 엔진을 만들 수 없습니다.");
+                return OcrResult.Unavailable(UiText.Get("Text_FB68C3A34978"));
             }
 
             OrientationResult best = upright;
@@ -170,7 +170,7 @@ public sealed class WindowsOcrService : IOcrService
             // strictly non-fatal for the caller.
             stopwatch.Stop();
             _log.LogWarning(ex, "OCR recognition failed");
-            return OcrResult.Failed("텍스트 인식에 실패했습니다.", stopwatch.Elapsed);
+            return OcrResult.Failed(UiText.Get("Text_AA254F35F02E"), stopwatch.Elapsed);
         }
     }
 

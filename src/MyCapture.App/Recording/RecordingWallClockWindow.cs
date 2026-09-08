@@ -72,7 +72,7 @@ internal sealed class RecordingWallClockWindow : Window
             _relativeY = 8.0 * _dpiScale;
         }
 
-        Title = "MyCapture — 녹화 시계";
+        Title = UiText.Get("Text_729D79099D9B");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
@@ -117,13 +117,13 @@ internal sealed class RecordingWallClockWindow : Window
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(8, 4, 8, 4),
             Child = _viewbox,
-            ToolTip = "녹화 시계 (드래그로 이동, 마우스 휠로 크기 조절)",
+            ToolTip = UiText.Get("Text_C4043E16721A"),
         };
 
-        AutomationProperties.SetName(_container, "녹화 시계");
+        AutomationProperties.SetName(_container, UiText.Get("Text_6A8150B5786A"));
         AutomationProperties.SetHelpText(
             _container,
-            "현재 녹화 시각 표시 (yyyy-MM-dd HH:mm:ss.fff). 마우스 왼쪽 버튼으로 드래그하여 이동하고 마우스 휠로 크기를 조절합니다.");
+            UiText.Get("Text_35151C153089"));
 
         Content = _container;
 

@@ -1,0 +1,2928 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data name="Settings.Language" xml:space="preserve">
+    <value>Display language</value>
+    <comment>Language selection</comment>
+  </data>
+  <data name="Settings.LanguageHint" xml:space="preserve">
+    <value>Click Apply to save. All windows and menus use the new language the next time MyCapture starts. Your current work stays open.</value>
+    <comment>Language selection</comment>
+  </data>
+  <data name="Settings.LanguageRestart" xml:space="preserve">
+    <value>Display language saved. Finish your work, then exit and reopen MyCapture to use the new language.</value>
+    <comment>Language selection</comment>
+  </data>
+  <data name="Settings.LanguageSystem" xml:space="preserve">
+    <value>Follow Windows language</value>
+    <comment>Language selection</comment>
+  </data>
+  <data name="Text_00480581AAB5" xml:space="preserve">
+    <value>Settings (&amp;O)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_009548FC2109" xml:space="preserve">
+    <value>{0} × {1} px  ·  Ctrl+C Copy  ·  Ctrl+S Save  ·  Esc Cancel</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_01EC445E93F5" xml:space="preserve">
+    <value>F  Frame</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_0226F79FE6FB" xml:space="preserve">
+    <value>Update cancelled.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_03151E566E1D" xml:space="preserve">
+    <value>MyCapture screen pin</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_03A1596F1681" xml:space="preserve">
+    <value>Copy text</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_0400CF56D074" xml:space="preserve">
+    <value>Edit again (Enter)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_04B54A7BED01" xml:space="preserve">
+    <value>Scrolling capture was cancelled.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_05184F5EA537" xml:space="preserve">
+    <value>Update and restart</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_060B5907DA2C" xml:space="preserve">
+    <value>{0} text layers, {1} frame layers. {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_0642E2D15469" xml:space="preserve">
+    <value>Copy failed</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_0669BC5BEA50" xml:space="preserve">
+    <value>{0} to {1} {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_06B3E66B7B78" xml:space="preserve">
+    <value>Text to display in the video</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_06F58809C083" xml:space="preserve">
+    <value>Save did not complete</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_071DBD0C6E2C" xml:space="preserve">
+    <value>Heavy dashed · at least 6 px</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_075F6F0A90DB" xml:space="preserve">
+    <value>Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_078C44D5A66E" xml:space="preserve">
+    <value>Redo</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_07E499DBBB2A" xml:space="preserve">
+    <value>Delayed capture cancelled</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_08269F2F1B3F" xml:space="preserve">
+    <value>Text position</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_083473DA3E8B" xml:space="preserve">
+    <value>MMM d, yyyy</value>
+    <comment>src\MyCapture.App\Gallery\GalleryDateGrouping.cs</comment>
+  </data>
+  <data name="Text_086F41200B47" xml:space="preserve">
+    <value>Shortcuts</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_096A13A757DB" xml:space="preserve">
+    <value>Region capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_0B201CC58BDD" xml:space="preserve">
+    <value>Finish editing (Ctrl+Enter)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_0BDF6B210A31" xml:space="preserve">
+    <value>Drag layers to move · Drag corners to resize · Arrow keys to move · Shift+arrows to resize · Esc to cancel</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerCanvas.cs</comment>
+  </data>
+  <data name="Text_0C2737643640" xml:space="preserve">
+    <value>Export</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_0CC5375DCF91" xml:space="preserve">
+    <value>Choose Quick Save folder</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_0D0920B35583" xml:space="preserve">
+    <value>Export animated GIF</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_0D3A337CA053" xml:space="preserve">
+    <value>Cannot load image</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_0DA5C524F6BB" xml:space="preserve">
+    <value>Saved · {0} frames</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_0DED92FCE6B0" xml:space="preserve">
+    <value>Delete annotation</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_0DFC300AD94D" xml:space="preserve">
+    <value>Global shortcuts</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_0E7B9C44075A" xml:space="preserve">
+    <value>The complete clip. One major interval is expanded below. Drag the selected area to move it; drag its large end handles to change the zoom range.</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_0ECA3A448221" xml:space="preserve">
+    <value>Selected {0}</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_0FA1A9D03BE3" xml:space="preserve">
+    <value>Could not change the startup setting: {0}</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_1003CFC78E66" xml:space="preserve">
+    <value>Edit again</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_10D733234378" xml:space="preserve">
+    <value>Text display: {0:0.00} to {1:0.00} seconds</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_1125C68F3C22" xml:space="preserve">
+    <value>Cancel download</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_1145FCF19412" xml:space="preserve">
+    <value>Browse capture folder</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_114E1105C3EE" xml:space="preserve">
+    <value>Cannot register the {0} shortcut{1}. Change it in Settings.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_115BCED49291" xml:space="preserve">
+    <value>Settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_11C2E8E755E4" xml:space="preserve">
+    <value>Zoom in</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_1218314DD9C8" xml:space="preserve">
+    <value>Thumbnail longest edge (pixels)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_1300F4BEEC76" xml:space="preserve">
+    <value>Pinned</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_13036A090EBA" xml:space="preserve">
+    <value>Find and edit images and videos in one place. Select or double-click a video to play it here.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_13A717215F51" xml:space="preserve">
+    <value>Settings save failed</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_151C77170A94" xml:space="preserve">
+    <value>Color {0}</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_15A28DE50DBB" xml:space="preserve">
+    <value>The save service is unavailable.</value>
+    <comment>src\MyCapture.App\Pinning\PinManager.cs</comment>
+  </data>
+  <data name="Text_15A871A266BE" xml:space="preserve">
+    <value>Copying text…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_162F0703007C" xml:space="preserve">
+    <value>Detailed timeline  |  Start {0}  →  End {1}  |  Range {2} · {3} frames</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_16803FE760A3" xml:space="preserve">
+    <value>Edit timed text</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_16DBAB47AC29" xml:space="preserve">
+    <value>Capture {0}</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_174531E69AB0" xml:space="preserve">
+    <value>Enter a filename pattern.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_17543FEC3EBF" xml:space="preserve">
+    <value>Trim mode. Drag the magenta start/end removal handles or adjust them with the arrow keys. Tab switches the active handle.</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_1764E00FE2EE" xml:space="preserve">
+    <value>Switch to installed app and restart</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_182650FB6543" xml:space="preserve">
+    <value>More transparent (Ctrl+scroll)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_1882C23FDDB1" xml:space="preserve">
+    <value>Text end time in seconds</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_188B0AF9BE23" xml:space="preserve">
+    <value>Recording preparation did not finish. Check available storage and your screen recording settings.
+
+</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_18AB379A433A" xml:space="preserve">
+    <value>Verifying installer…</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_190A3BE20786" xml:space="preserve">
+    <value>Arrow tool · Drag from start to end</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_195F0315EBCE" xml:space="preserve">
+    <value>Switch to the installed version. Destination: {0}{1}After downloading, the installed app will restart. Your current portable folder and its files will be retained.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_199EB510DA51" xml:space="preserve">
+    <value>MyCapture — Edit capture</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
+  </data>
+  <data name="Text_19FE9B81012C" xml:space="preserve">
+    <value>Smallest · 480 px / 5 fps</value>
+    <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
+  </data>
+  <data name="Text_1A8F33AE9F00" xml:space="preserve">
+    <value>Drag to a folder or the desktop to export a PNG file</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_1AEC9153DD98" xml:space="preserve">
+    <value>No edits to add as a frame layer</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_1BA9F7001237" xml:space="preserve">
+    <value>{0} tool ({1})</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_1C856E8BF798" xml:space="preserve">
+    <value>Recording countdown (seconds)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_1C944F0E89C3" xml:space="preserve">
+    <value>Check the official GitHub repository for the latest stable version. The installer's SHA-256 is verified before installation.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_1D9A98A69018" xml:space="preserve">
+    <value>Countdown (seconds)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_1DC093CD4D48" xml:space="preserve">
+    <value>OCR is unavailable on this system. A language pack may need to be installed.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_1DCD20923815" xml:space="preserve">
+    <value>Video image data is too large. Total layer data must be 64 MB or less. Reduce image sizes or the number of layers.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_1DFB8FE69D78" xml:space="preserve">
+    <value>Preparing GIF export… {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_1E0DD4F46A0C" xml:space="preserve">
+    <value>Fill transparency · 100%</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_1E8C10206F5B" xml:space="preserve">
+    <value>Close</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_1E94B43DC922" xml:space="preserve">
+    <value>The settings file is damaged. Starting with defaults.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_1FBCF51E2FF5" xml:space="preserve">
+    <value>Paste to screen</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_1FBF8C644D76" xml:space="preserve">
+    <value>Invalid shortcut (for example Ctrl+Shift+C).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_1FC9ECE11C93" xml:space="preserve">
+    <value>No images or videos yet. Your captures and recordings will appear here.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
+  </data>
+  <data name="Text_200EEC5A1E57" xml:space="preserve">
+    <value>Play/pause</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_205C50A145BA" xml:space="preserve">
+    <value>Reset to defaults</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_205E8D74A1C2" xml:space="preserve">
+    <value>Drag to draw a rectangle.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_20CF6A996B4D" xml:space="preserve">
+    <value>Copy the recognized text to the clipboard</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_21281475C002" xml:space="preserve">
+    <value>Small · 640 px / 10 fps</value>
+    <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
+  </data>
+  <data name="Text_21AAACA9783A" xml:space="preserve">
+    <value>New captures are indexed automatically on this PC. {1} of {0} items are searchable. You can reindex them now if needed.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_21C405702C2B" xml:space="preserve">
+    <value>Add image layer</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2223CE0FF051" xml:space="preserve">
+    <value>Playback finished</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_228A9CF0DE4A" xml:space="preserve">
+    <value>Shorten the selection or align layer start/end times closer to the 0.1-second grid.</value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_22A29FBD57AD" xml:space="preserve">
+    <value>Highlighter opacity</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_22B802C1B7FF" xml:space="preserve">
+    <value>Cancel editing (Esc)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_230D26DEB9AE" xml:space="preserve">
+    <value>Type your text, then press Esc or click elsewhere to finish</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_23A30AD1434C" xml:space="preserve">
+    <value>Scrolling capture requires at least two frames.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_2428B662D585" xml:space="preserve">
+    <value>Dashed</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_249DBB18BB08" xml:space="preserve">
+    <value>Delete this capture?
+
+{0}
+This cannot be undone.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_24A509A94313" xml:space="preserve">
+    <value>The fixed capture dimensions are invalid.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_254C836B9ED2" xml:space="preserve">
+    <value>Full-screen capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_255C28FD0AC2" xml:space="preserve">
+    <value>Start recording</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_257BE22416F8" xml:space="preserve">
+    <value>Scroll input was rejected. Only the verified portion was opened.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_258AD4B095A1" xml:space="preserve">
+    <value>Text</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_25A15C7C4EFF" xml:space="preserve">
+    <value>Start (seconds)</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_25E15E06C2EA" xml:space="preserve">
+    <value>MyCapture — Recording could not start</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_2618DA07C831" xml:space="preserve">
+    <value>The original image could not be found and cannot be edited.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_26FF7226E337" xml:space="preserve">
+    <value>{0} text layers, {1} frame layers</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_271908EF0BBE" xml:space="preserve">
+    <value>Dropped frames: {0} ({1:P1})</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2785CE58DF74" xml:space="preserve">
+    <value>Arrow</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_27FD5EFB7773" xml:space="preserve">
+    <value>100%: outline only · 0%: fill completely with the stroke color</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_284A54C660EC" xml:space="preserve">
+    <value>Maximum storage (GiB)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_295F3F963B4A" xml:space="preserve">
+    <value>Library images are stored in a dedicated capture folder and automatically deleted oldest first after 7 days. Pinned images and images being edited are retained. The 7-day cleanup does not apply to videos or separately saved/exported files.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_29C79CAFC1D7" xml:space="preserve">
+    <value>Add circle layer</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2A0C70A93334" xml:space="preserve">
+    <value>MyCapture — Edit frame image</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2AA27E2CEB7C" xml:space="preserve">
+    <value>Record after delay</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_2AE708D62044" xml:space="preserve">
+    <value>Drag from the start point to the end point to draw an arrow.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_2B53D424B10E" xml:space="preserve">
+    <value>Could not register shortcut '{0}'; its previous value was restored.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_2B7B1B697484" xml:space="preserve">
+    <value>Images must be at most 8192 px and 16 million pixels.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
+  </data>
+  <data name="Text_2BEE8F5FACA0" xml:space="preserve">
+    <value>You are up to date.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_2C20ADDA2018" xml:space="preserve">
+    <value>Region capture (&amp;R)	Ctrl+Shift+C</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_2C4E0E8262AF" xml:space="preserve">
+    <value>Cache recognized text with captures</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_2C6314D22377" xml:space="preserve">
+    <value>0.2–1.0 (1 is opaque).</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_2C64DDA4D878" xml:space="preserve">
+    <value>Edited</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_2CD093B673E5" xml:space="preserve">
+    <value>The settings file could not be read. Starting with defaults.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_2CDB4215BF83" xml:space="preserve">
+    <value>The video edit file exceeds 72 MB and cannot be opened. The original video and edit file have not been changed.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_2D7399F90B4F" xml:space="preserve">
+    <value>Enter comma-separated languages in priority order, for example ko-KR, en-US.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_2D8B0244F4F4" xml:space="preserve">
+    <value>No changes; keeping the current video</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2DC82774E99B" xml:space="preserve">
+    <value>Video save failed: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2E447977E64D" xml:space="preserve">
+    <value>Enter one of these frame rates: 10, 15, 24, 30, or 60.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_2F12FF262AAC" xml:space="preserve">
+    <value>30 fps is recommended. Choose 10/15 fps on slower systems or 60 fps for fast motion. If encoding falls behind, frames are adjusted to preserve playback speed.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_3024E9CAD0E5" xml:space="preserve">
+    <value>Finalizing file… This window will close when finished</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_302BAE127938" xml:space="preserve">
+    <value>Image</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_3063398CDECD" xml:space="preserve">
+    <value>Zoom in (+)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_3084C5AA0845" xml:space="preserve">
+    <value>Shape stroke style</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_31527734190B" xml:space="preserve">
+    <value>Cannot load video</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3185888F798A" xml:space="preserve">
+    <value>Put date formats in braces, for example capture_{yyyyMMdd}_{HHmmss}. The extension is added automatically.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_32512F9EA32E" xml:space="preserve">
+    <value>Video {0}</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_328D27BC4C06" xml:space="preserve">
+    <value>Enter start and end times as numbers of seconds.</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_328D9EF717EC" xml:space="preserve">
+    <value>Screen pin settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_331C366314D0" xml:space="preserve">
+    <value>Saving recording… Preparing library and preview</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_33406FC582BE" xml:space="preserve">
+    <value>Selection tool</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_337B5BC36C27" xml:space="preserve">
+    <value>Region history count</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_338C1B26A06A" xml:space="preserve">
+    <value>Right-click: save/copy original · Ctrl+double-click: copy original text · Ctrl+C: copy visible image · Drag: move · Wheel: zoom</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_339D1C10FD24" xml:space="preserve">
+    <value>GIF exports are limited to 20 seconds. Shorten the start/end selection.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_33EFD44366A7" xml:space="preserve">
+    <value>Screen pins</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_33F7635FDE36" xml:space="preserve">
+    <value>Cannot retrieve the current frame</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_35114A85CCCE" xml:space="preserve">
+    <value>Starting in {0} seconds</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_35151C153089" xml:space="preserve">
+    <value>Current recording time (yyyy-MM-dd HH:mm:ss.fff). Drag with the left mouse button to move and scroll to resize.</value>
+    <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
+  </data>
+  <data name="Text_35383149904D" xml:space="preserve">
+    <value>Edit video</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_35E5667BB610" xml:space="preserve">
+    <value>Shape fill transparency (percent)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_35E85A6E99A5" xml:space="preserve">
+    <value>Move/resize in the preview · Adjust display times on the layer bars below</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_36458FABBDBB" xml:space="preserve">
+    <value>Window capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_36C416EAD2CE" xml:space="preserve">
+    <value>Tools</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_3793EC0322DB" xml:space="preserve">
+    <value>More — pin, export, and recognize text</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_37AD4F28D422" xml:space="preserve">
+    <value>MyCapture — Library</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_37B3D3B11B26" xml:space="preserve">
+    <value>Copy</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_37DB9D0B1C8E" xml:space="preserve">
+    <value>Pencil</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_380199144757" xml:space="preserve">
+    <value>Text display interval: {0}–{1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3816B940D53C" xml:space="preserve">
+    <value>MyCapture — Select a region</value>
+    <comment>src\MyCapture.App\Capture\CaptureOverlayWindow.cs</comment>
+  </data>
+  <data name="Text_38476EDDA50B" xml:space="preserve">
+    <value>Delayed capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_3862727D2DCB" xml:space="preserve">
+    <value>The allowed range is {0:0.###}–{1:0.###} GiB.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_388CC5AD1AE8" xml:space="preserve">
+    <value>Double arrow</value>
+    <comment>src\MyCapture.Core\Annotations\PolylineAnnotation.cs</comment>
+  </data>
+  <data name="Text_38B12BA58C48" xml:space="preserve">
+    <value>Recording · Esc or Stop to finish</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_38FF9B0AA541" xml:space="preserve">
+    <value>Delayed capture (&amp;D)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_39B10B03FD99" xml:space="preserve">
+    <value>Frame alignment could not be verified. Only the verified portion was opened.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_39E626945336" xml:space="preserve">
+    <value>Currently unavailable because no Windows OCR language pack is available.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_39EFEAD98C7D" xml:space="preserve">
+    <value>Skip</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3B5DD12EE3D1" xml:space="preserve">
+    <value>Searching for sensitive information… Your image stays on this device</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_3BC6235E1D18" xml:space="preserve">
+    <value>Today</value>
+    <comment>src\MyCapture.App\Gallery\GalleryDateGrouping.cs</comment>
+  </data>
+  <data name="Text_3BF4FEA88C51" xml:space="preserve">
+    <value>The image cannot be copied. Its file is missing or damaged.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_3D1E714B56CA" xml:space="preserve">
+    <value>Copy to clipboard did not complete</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_3DEFBAD62044" xml:space="preserve">
+    <value>Safely stop the operation and clean up temporary files.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3DF1B247086E" xml:space="preserve">
+    <value>Frame display interval: {0}–{1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3E409AB1A37C" xml:space="preserve">
+    <value>Annotation editor</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_4004AC930045" xml:space="preserve">
+    <value>Text added: {0}–{1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_4033027EAEDB" xml:space="preserve">
+    <value>Cannot save capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_4048C8E18C61" xml:space="preserve">
+    <value>The region was captured, but could not be copied to the clipboard. Press Ctrl+C in the editor to try again.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_40F24016E78F" xml:space="preserve">
+    <value>Cannot start delayed capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_41216A109463" xml:space="preserve">
+    <value>Click-through on · Press Shift+F3 twice to turn off</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_41F81C272691" xml:space="preserve">
+    <value>The selected interval above fills the timeline below</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_41FC07B1EA9B" xml:space="preserve">
+    <value>The end must be after the start, between 0 and {0:0.###} seconds.</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_422F61DDCB7C" xml:space="preserve">
+    <value>Copy to clipboard failed</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_424D8C634E79" xml:space="preserve">
+    <value>Full duration</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_425C77DFA926" xml:space="preserve">
+    <value>Highlighter</value>
+    <comment>src\MyCapture.Core\Annotations\PenAnnotation.cs</comment>
+  </data>
+  <data name="Text_42A667BC71B0" xml:space="preserve">
+    <value>Copy image</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_42B9E5111FE2" xml:space="preserve">
+    <value>Downloading verification information…</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_42DA25F8F77F" xml:space="preserve">
+    <value>Update installation or restart could not be confirmed. Check the log path shown here and start MyCapture again.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_45E6B157C051" xml:space="preserve">
+    <value>The safe size limit was reached. Only the verified portion was opened.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_4601577BA0F6" xml:space="preserve">
+    <value>Trim</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_460404601E2D" xml:space="preserve">
+    <value>The image layer data header contains too much whitespace. Add the image again.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_4667ECA4EE5B" xml:space="preserve">
+    <value>Full timeline  |  Start {0}  →  End {1}  |  Major ticks {2}</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_475D185DC33B" xml:space="preserve">
+    <value>Cannot load the image.</value>
+    <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
+  </data>
+  <data name="Text_47E781C43156" xml:space="preserve">
+    <value>Add {0}</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
+  </data>
+  <data name="Text_483B0F23F316" xml:space="preserve">
+    <value>Preview seek failed: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_48C3B6EBA637" xml:space="preserve">
+    <value>Cannot start recording</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_48D137437347" xml:space="preserve">
+    <value>Zoom out detailed timeline (Ctrl+Shift+-)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_48FA3D0E60A0" xml:space="preserve">
+    <value>MyCapture delayed capture</value>
+    <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
+  </data>
+  <data name="Text_49020661A850" xml:space="preserve">
+    <value>MyCapture — Editor could not open</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_49931F796C95" xml:space="preserve">
+    <value>No text layers</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_4A376FDFB111" xml:space="preserve">
+    <value>{0} · Recognizing…</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_4A48782E904C" xml:space="preserve">
+    <value>Rectangle tool</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_4AF6F7075C61" xml:space="preserve">
+    <value>Image insertion cancelled</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_4B4B0D333A67" xml:space="preserve">
+    <value>There is no window to capture under the pointer.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_4B4D91FFC215" xml:space="preserve">
+    <value>Scrolling capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_4B622E994DF4" xml:space="preserve">
+    <value>Frame layer, {0} to {1}, {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_4B8D541EBE6D" xml:space="preserve">
+    <value>Search</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_4BE214FF10B0" xml:space="preserve">
+    <value>Include mouse pointer</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_4C160257F02C" xml:space="preserve">
+    <value>Copying…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_4C27BFC6C0E5" xml:space="preserve">
+    <value>Edit frame · {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_4C561D57BFCE" xml:space="preserve">
+    <value>Browse Quick Save folder</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_4D5F7094119C" xml:space="preserve">
+    <value>Start full-text capture indexing</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_4D6051F71010" xml:space="preserve">
+    <value>Editing status</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_4D69B33A2FD7" xml:space="preserve">
+    <value>Could not check the startup registration.</value>
+    <comment>src\MyCapture.Core\Settings\StartupRegistrationService.cs</comment>
+  </data>
+  <data name="Text_4DAE3A1EEAE4" xml:space="preserve">
+    <value>Start/stop recording a screen region</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_4DBA30197C0A" xml:space="preserve">
+    <value>Scrolling capture (&amp;S)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_4DCACB688866" xml:space="preserve">
+    <value>PNG image|*.png</value>
+    <comment>src\MyCapture.App\Editing\CaptureCommitService.cs</comment>
+  </data>
+  <data name="Text_4E7752D53B90" xml:space="preserve">
+    <value>Converting…</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_4E8DBEEA67E4" xml:space="preserve">
+    <value>Font family</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_4E99F6190A6C" xml:space="preserve">
+    <value>An error occurred while restoring the startup setting. Check it in Settings.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_4F445554C9D0" xml:space="preserve">
+    <value>Resize with the edge handles or drag to move.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_4F51C0C8ADA8" xml:space="preserve">
+    <value>Pause</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_4F5AF20FAA6E" xml:space="preserve">
+    <value>Screen recording</value>
+    <comment>src\MyCapture.App\Recording\VideoLibraryService.cs</comment>
+  </data>
+  <data name="Text_4FC883F8F1CA" xml:space="preserve">
+    <value>{0} value {1} was outside the allowed range and was adjusted to {2}.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_4FED89116C1F" xml:space="preserve">
+    <value>Hide/show all pins</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_50EE4EA7C243" xml:space="preserve">
+    <value>Capture</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_512989791C19" xml:space="preserve">
+    <value>General</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_514880F82297" xml:space="preserve">
+    <value>Storage</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_51F5EF959148" xml:space="preserve">
+    <value>The image file could not be prepared. Please try again shortly.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_5260EE77B969" xml:space="preserve">
+    <value>The clipboard does not contain an image, text, or a table.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_528544494302" xml:space="preserve">
+    <value>Saving video… Preparing library entry</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_5321CB80BCA3" xml:space="preserve">
+    <value>Fill transparency</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
+  </data>
+  <data name="Text_53A86A0A3347" xml:space="preserve">
+    <value>GIF saved · {0:0.#}× · {1} frames · {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_53DCBAF22F42" xml:space="preserve">
+    <value>Capture editor window</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
+  </data>
+  <data name="Text_541F62E38579" xml:space="preserve">
+    <value>T  Text</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_542965B456C7" xml:space="preserve">
+    <value>Recording ended · Converting video…</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_5461D9E26042" xml:space="preserve">
+    <value>Enter a number (allowed range: {0}).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_54A00B1A2FDB" xml:space="preserve">
+    <value>Show recording clock (drag to move, scroll to resize)</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_5564316AA7EB" xml:space="preserve">
+    <value>Shortcut conflict</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_55694B0252DB" xml:space="preserve">
+    <value>A pinned window displaying rendered text. Ctrl+C copies the visible image. Ctrl+double-click copies the original text retained when the pin was created. You can also copy the original text from the context menu.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_55D025693B34" xml:space="preserve">
+    <value>The filename pattern was empty and was reset to its default.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_5626DD9C2F6A" xml:space="preserve">
+    <value>{0} · Recognition cancelled.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_563638D54DBC" xml:space="preserve">
+    <value>Click an annotation to select it, then move or resize it.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_571C8E331C15" xml:space="preserve">
+    <value>Preparing the exact frame…</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_574815F8C801" xml:space="preserve">
+    <value>Capture a region · Copy · Edit</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_576701BE51C1" xml:space="preserve">
+    <value>You can add up to {0} frame layers.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_57950AFF46BC" xml:space="preserve">
+    <value>Save As</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_579BAB6C0833" xml:space="preserve">
+    <value>Unpin</value>
+    <comment>src\MyCapture.App\Gallery\GalleryConverters.cs</comment>
+  </data>
+  <data name="Text_57B9B3F05935" xml:space="preserve">
+    <value>The GIF exceeds {0} frames including layer timing boundaries. </value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_5825293860A7" xml:space="preserve">
+    <value>Save and export (Ctrl+S · Ctrl+Shift+S)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_58726BF27E70" xml:space="preserve">
+    <value>No results found.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
+  </data>
+  <data name="Text_58B2C0573E72" xml:space="preserve">
+    <value>No OCR language pack installed</value>
+    <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
+  </data>
+  <data name="Text_59208AC2B48E" xml:space="preserve">
+    <value>Search titles, window names, and recognized text  ·  Ctrl+F</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_594449493143" xml:space="preserve">
+    <value>Supported frame rates are 10, 15, 24, 30, and 60 fps.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_59ADEC0FB6E4" xml:space="preserve">
+    <value>Ellipse</value>
+    <comment>src\MyCapture.Core\Annotations\ShapeAnnotation.cs</comment>
+  </data>
+  <data name="Text_59CC7803B118" xml:space="preserve">
+    <value>←/→ Jump · Ctrl/Shift+←/→ One frame · Ctrl+T Text · G GIF</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_59D43391538F" xml:space="preserve">
+    <value>Copy rendered image (Ctrl+C)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_5A932820414F" xml:space="preserve">
+    <value>Quick Save folder</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_5B59BB806FB5" xml:space="preserve">
+    <value>Reduce GIF size by lowering resolution and frame count. The original is never upscaled.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_5B8BBBA7AA27" xml:space="preserve">
+    <value>Cannot pin to screen</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_5C2CD3EFE79B" xml:space="preserve">
+    <value>Closing the app and installing the update…</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_5C6A8668C3C0" xml:space="preserve">
+    <value>Improve recognition of small text. 1.0–4.0.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_5C9B3C62EC41" xml:space="preserve">
+    <value>Text copied</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_5D27F0D47A0B" xml:space="preserve">
+    <value>Annotation deleted · Ctrl+Z to undo</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_5D92A3982F2F" xml:space="preserve">
+    <value>Fill transparency · {0:0}%</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_5DBC2621FC1E" xml:space="preserve">
+    <value>No high-confidence matches found</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_5DD4908475B6" xml:space="preserve">
+    <value>The selected file cannot be read as an image.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_5E3720825B85" xml:space="preserve">
+    <value>OCR settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_5E8959D18390" xml:space="preserve">
+    <value>More</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_5F2733BE4219" xml:space="preserve">
+    <value>GIF options</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_5F310F33AB12" xml:space="preserve">
+    <value>Save failed. Please try again.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_5FAE4DA04904" xml:space="preserve">
+    <value>Cancel operation</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_5FB926229090" xml:space="preserve">
+    <value>Save</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_608AF5822E3A" xml:space="preserve">
+    <value>MyCapture — {0} · {1:N0} captures</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_60CBF2E08D0D" xml:space="preserve">
+    <value>MyCapture — Settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_60E0184FCBE5" xml:space="preserve">
+    <value>{0} failed</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_613230F07E18" xml:space="preserve">
+    <value>Run OCR again</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_6139B6C3ED73" xml:space="preserve">
+    <value>Delete</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_6152EFC59724" xml:space="preserve">
+    <value>Ready to trim</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6182AA2DFF8D" xml:space="preserve">
+    <value>Scrolling capture started</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_6235669450B0" xml:space="preserve">
+    <value>Add timed text</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_626745049C0B" xml:space="preserve">
+    <value>Recording could not finish normally. Incomplete temporary files were cleaned up so they are not added to the library as valid recordings.
+
+</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_628CA8F9904F" xml:space="preserve">
+    <value>Zoom step</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_62AE4531CA74" xml:space="preserve">
+    <value>The image layer is too large. Each layer must be at most 8192 px and use no more than 64 MB of decoded memory.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_632459CEB61F" xml:space="preserve">
+    <value>Text tool · Click the image to type</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_63F240FA482C" xml:space="preserve">
+    <value>This capture is already being edited.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_6421F1340C28" xml:space="preserve">
+    <value>Saving video… {0}% ({1}/{2})</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_646F2DBF1852" xml:space="preserve">
+    <value> and {0} more</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_6474F56C528B" xml:space="preserve">
+    <value>Selected text layer deleted</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_64A5A9D59A21" xml:space="preserve">
+    <value>Frame edits added as a separate layer · {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_651505CC0499" xml:space="preserve">
+    <value>seconds until capture</value>
+    <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
+  </data>
+  <data name="Text_65BB6610ACA0" xml:space="preserve">
+    <value>Full-screen capture (&amp;F)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_66069CEAD9AE" xml:space="preserve">
+    <value>Select with Tab, then move with the arrow keys. Hold Shift to move 10 pixels at a time.</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_669D90D96A45" xml:space="preserve">
+    <value>Examples: Ctrl+Shift+C, F3, Shift+F3. Leave blank to leave a command unassigned. The capture shortcut cannot be blank.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_66BA5DCDA810" xml:space="preserve">
+    <value>Open library</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_67781174A42E" xml:space="preserve">
+    <value>Reorder {0}</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_67CAE5B118A3" xml:space="preserve">
+    <value>Color changed to {0}</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_67FE4AF7D334" xml:space="preserve">
+    <value>Toggle click-through</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_684786FB2840" xml:space="preserve">
+    <value>Pencil (P) — draw freely</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_68CAE75183FF" xml:space="preserve">
+    <value>Round dotted</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_690A5972C5C2" xml:space="preserve">
+    <value>Cannot add image: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6953A4195620" xml:space="preserve">
+    <value>Width</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
+  </data>
+  <data name="Text_695F77F44D69" xml:space="preserve">
+    <value>Save recognized text with captures</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_69D1C5307298" xml:space="preserve">
+    <value>Zoom out</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6A0F998C2819" xml:space="preserve">
+    <value>Library</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_6A1C963D5BC5" xml:space="preserve">
+    <value>Apply</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_6A4B9316D8C2" xml:space="preserve">
+    <value>An unexpected error occurred.
+
+{0}</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_6A72B554A7C2" xml:space="preserve">
+    <value>Unknown error</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6A8150B5786A" xml:space="preserve">
+    <value>Recording clock</value>
+    <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
+  </data>
+  <data name="Text_6AE98E57E121" xml:space="preserve">
+    <value>Sensitive information search cancelled</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_6B4EE4E6C8FF" xml:space="preserve">
+    <value>A frame timeline showing the selected interval across its full width. Clicking and trimming snap to frames. Scroll to zoom.</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_6C0B9DD710AB" xml:space="preserve">
+    <value>Position</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_6C10CBA5050D" xml:space="preserve">
+    <value>FrameRate {0} is unsupported and was adjusted to 30 fps.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_6C7D2ADB7EB3" xml:space="preserve">
+    <value>The PNG image is too large or its header is damaged.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
+  </data>
+  <data name="Text_6CA53DEDFF4A" xml:space="preserve">
+    <value>Show full timeline (reset zoom)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6D63E8966A24" xml:space="preserve">
+    <value>Sensitive information search failed · Your image remains in the editor</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_6D74F9324ACB" xml:space="preserve">
+    <value>General settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_6D9F1A20DDCC" xml:space="preserve">
+    <value>GIF timing has a resolution of 0.01 seconds. Extend timed text intervals shorter than 0.01 seconds.</value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_6DDE7DF5BF97" xml:space="preserve">
+    <value>Settings were saved, but the capture index could not be saved. The new retention limits apply to this session; the index will be written on the next save.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_6E86D1A85620" xml:space="preserve">
+    <value>Preparing playback</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_6EAF5A406E0E" xml:space="preserve">
+    <value>Copied · </value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_6EB131FB1810" xml:space="preserve">
+    <value>Cancelling scrolling capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_6F025107D313" xml:space="preserve">
+    <value>There is no previous region to repeat.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_6F1D1FE90E37" xml:space="preserve">
+    <value>Open library shortcut</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_6FF5C7B32202" xml:space="preserve">
+    <value>Start/stop region recording shortcut</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_70534261ED6C" xml:space="preserve">
+    <value>Delayed capture was cancelled.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_70EC2D232B4F" xml:space="preserve">
+    <value>Stroke width</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_70EECBC7C211" xml:space="preserve">
+    <value>Cannot start capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_7116B7156511" xml:space="preserve">
+    <value>Toggle click-through shortcut</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_71FBF04B7201" xml:space="preserve">
+    <value>Maximum retained items</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_72147902C22E" xml:space="preserve">
+    <value>Filename pattern</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7245B7D87A08" xml:space="preserve">
+    <value>Recognize again</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_727333AB0740" xml:space="preserve">
+    <value>Done</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_728F6813B235" xml:space="preserve">
+    <value>Multiple edits</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_729D79099D9B" xml:space="preserve">
+    <value>MyCapture — Recording clock</value>
+    <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
+  </data>
+  <data name="Text_72A13C33A79E" xml:space="preserve">
+    <value>Preparing recording · Esc or Stop to finish</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_72B6DBA8AAC5" xml:space="preserve">
+    <value>Exit (&amp;X)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_733011719B1C" xml:space="preserve">
+    <value>This video is already being edited.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_73D6AF7EE15B" xml:space="preserve">
+    <value>Ctrl+C: copy image · Ctrl+double-click: copy text · Right-click: save · Drag: move · Wheel: zoom</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_73FE4A51DAAE" xml:space="preserve">
+    <value>Selecting region</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_74C6AEBB2B6D" xml:space="preserve">
+    <value>Stop recording</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_74EEFE6E43AE" xml:space="preserve">
+    <value>Copy the edited image to the clipboard (Ctrl+C)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_75306DAE2E60" xml:space="preserve">
+    <value>Start/stop region recording</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7530A6E985BD" xml:space="preserve">
+    <value>GIF speed</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_75425A6D9BE8" xml:space="preserve">
+    <value>Could not copy to the clipboard. Please try again shortly.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_756622E6954E" xml:space="preserve">
+    <value>Ctrl+Shift+C captures your dragged region without snapping to windows. Release the mouse to open the editor.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_764879D98E25" xml:space="preserve">
+    <value>Enter a number for the storage limit (GiB).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_773C24F0A693" xml:space="preserve">
+    <value>The countdown window cannot be excluded from the recording.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_784572D51B63" xml:space="preserve">
+    <value>Delete from library (Delete)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_78666F37A521" xml:space="preserve">
+    <value>Copying to clipboard…</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_78C743CC6F59" xml:space="preserve">
+    <value>Choose where to save a PNG at its original resolution.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_78EFED021492" xml:space="preserve">
+    <value>Start or stop recording</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_79188256BC8D" xml:space="preserve">
+    <value>MyCapture — Edit recording</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_7926541DAB63" xml:space="preserve">
+    <value>Update location: {0}{1}After downloading, the app at this location will be updated and restarted.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_798E080A9262" xml:space="preserve">
+    <value>Drag to select a region  ·  Release to open the editor  ·  Esc to cancel</value>
+    <comment>src\MyCapture.App\Capture\CaptureOverlayView.cs</comment>
+  </data>
+  <data name="Text_79B3DB1CD566" xml:space="preserve">
+    <value>Cancel the current video save or GIF export</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_79C5ADA11647" xml:space="preserve">
+    <value>Yesterday</value>
+    <comment>src\MyCapture.App\Gallery\GalleryDateGrouping.cs</comment>
+  </data>
+  <data name="Text_7A3486B4FEBF" xml:space="preserve">
+    <value>Enter some text.</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_7A4300DB8119" xml:space="preserve">
+    <value>Export settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7A4FE9D482AD" xml:space="preserve">
+    <value>Capture last region again</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7AF81E702151" xml:space="preserve">
+    <value>Zoom step size</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7C7E6C9D8CD7" xml:space="preserve">
+    <value>You can recover the image using Save As or Copy to Clipboard.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_7C821231A673" xml:space="preserve">
+    <value>The original image is damaged and cannot be edited.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_7CB3F50C1B9F" xml:space="preserve">
+    <value>Library playback</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_7CD1B787C3E6" xml:space="preserve">
+    <value>MyCapture — Text recognition</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_7DDE1114417E" xml:space="preserve">
+    <value>Finish trim</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_7DFFA4D81765" xml:space="preserve">
+    <value>Delete selected annotation (Delete)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_7E6DD424D331" xml:space="preserve">
+    <value>Loading video… {0}%</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_7F2ED132EA3B" xml:space="preserve">
+    <value>Repeat last region shortcut</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7F7A6F648B25" xml:space="preserve">
+    <value>Cancel (Esc)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_80A33648EAF2" xml:space="preserve">
+    <value>Toggle pin</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_80FD8A8BF5F2" xml:space="preserve">
+    <value>10–5000 items.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_815E84CD61AB" xml:space="preserve">
+    <value>Capture stopped because the overlap between the frames could not be verified.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_82B423E5AFB8" xml:space="preserve">
+    <value>To cancel, choose Cancel Scrolling Capture from the tray menu.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_8300472A5BE3" xml:space="preserve">
+    <value>Save a PNG at its original resolution in the configured Quick Save folder.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_831103D5C64B" xml:space="preserve">
+    <value>Loading video…</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_83BBF1497B9D" xml:space="preserve">
+    <value>GIF export failed: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_845D771D4CCB" xml:space="preserve">
+    <value>[Text]  {0}–{1}  {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_84DD6E381DCA" xml:space="preserve">
+    <value>Attention needed</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_84EB14013BF5" xml:space="preserve">
+    <value>Start set to {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_854582314EBD" xml:space="preserve">
+    <value>Recognize text (OCR)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_85C1E3734392" xml:space="preserve">
+    <value>Allowed range: 0–60 seconds.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_85E926C7F694" xml:space="preserve">
+    <value>MyCapture pinned window</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_8739F6684453" xml:space="preserve">
+    <value>Library (&amp;G)	Ctrl+Shift+Z</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_875917AFD6EF" xml:space="preserve">
+    <value>Cannot play</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_875E3EA22A90" xml:space="preserve">
+    <value>GitHub's request limit was reached. Try again shortly.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_8773C2A9C3EA" xml:space="preserve">
+    <value>No items to display yet</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_878A28AF568C" xml:space="preserve">
+    <value>Repeat last region (&amp;L)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_87B0ACEF85A7" xml:space="preserve">
+    <value>Edit</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_87B145D16453" xml:space="preserve">
+    <value>MyCapture — Recording save failed</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_8839D136ACA2" xml:space="preserve">
+    <value>Capture delay (seconds)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_884F73809F89" xml:space="preserve">
+    <value>This capture changed in another editor. Close this editor and reopen it.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_88DAAEEDFE4C" xml:space="preserve">
+    <value>Saving…</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_89CF3D468EC1" xml:space="preserve">
+    <value>MyCapture — Recording failed</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_89D4979D7596" xml:space="preserve">
+    <value>Delete capture</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_8A3ADCEB89EF" xml:space="preserve">
+    <value>Select (V) — select, move, and resize annotations</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8A98DFB08E97" xml:space="preserve">
+    <value>Pin</value>
+    <comment>src\MyCapture.App\Gallery\GalleryConverters.cs</comment>
+  </data>
+  <data name="Text_8AA2E937C447" xml:space="preserve">
+    <value>Draw freely on the image.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8B22B7BBB0CD" xml:space="preserve">
+    <value>Redone</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8B5C97A7F917" xml:space="preserve">
+    <value>Playing in library</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_8BDB6F46B7FF" xml:space="preserve">
+    <value>Empty text cancelled</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8C99A8AB9C4C" xml:space="preserve">
+    <value>The limit of {0} frames was reached. Only the verified portion was opened.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_8D1A750C9351" xml:space="preserve">
+    <value>Select</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8D1EFD1B2B84" xml:space="preserve">
+    <value>Video editing layers</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_8D723235CBF3" xml:space="preserve">
+    <value>Recording frame</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_8F2EA9820639" xml:space="preserve">
+    <value>Bottom</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_8F8C3D476B1D" xml:space="preserve">
+    <value>Delete {0}</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_90290F46A7D5" xml:space="preserve">
+    <value>Recording is starting or finishing. Please try capturing again shortly.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_9098D098B1DA" xml:space="preserve">
+    <value>GIF exports are limited to 20 seconds. Shorten the timeline selection.</value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_91390EADFAD4" xml:space="preserve">
+    <value>Start</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_9163C86EDB22" xml:space="preserve">
+    <value>Delete selected timed text (Delete)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_9165ADFF8EF8" xml:space="preserve">
+    <value>Initial opacity</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_92675EB6DE53" xml:space="preserve">
+    <value>Image tool · Click the image to choose a file</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_92CDEF3C5BC0" xml:space="preserve">
+    <value>Stop</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_92E815063265" xml:space="preserve">
+    <value>Repeat last region</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_92EBA2788912" xml:space="preserve">
+    <value>Thumbnail longest edge in pixels</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_93103CC109A3" xml:space="preserve">
+    <value>Rectangle tool · Drag on the image</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_931CB240652A" xml:space="preserve">
+    <value>Annotation default settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_932DB1A4ED7F" xml:space="preserve">
+    <value>Choose a PNG filename (.png).</value>
+    <comment>src\MyCapture.App\Editing\CaptureCommitService.cs</comment>
+  </data>
+  <data name="Text_93B88ACD46F6" xml:space="preserve">
+    <value>Videos support up to 100 graphic layers. Remove some layers.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_93CBE1538A34" xml:space="preserve">
+    <value>Settings applied</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_93D363BDFEA5" xml:space="preserve">
+    <value>Insert image (I) — choose a file</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_93EB8FA7F9BC" xml:space="preserve">
+    <value>Balance smoothness and performance</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_94A8B744467B" xml:space="preserve">
+    <value>Allowed range: 1–10 seconds.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_95B00006092B" xml:space="preserve">
+    <value>Leave blank to use the default location.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_963745AB00F4" xml:space="preserve">
+    <value>Applies only to your user account. Administrator access is not required.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9693E1EB3EDB" xml:space="preserve">
+    <value>Copied</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_976A6C92B870" xml:space="preserve">
+    <value>Copy original text</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_97B224926F71" xml:space="preserve">
+    <value>Change {1} of {0}</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_986A825EE823" xml:space="preserve">
+    <value>No frame layers</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_98F1681CB686" xml:space="preserve">
+    <value>Start at sign-in</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9900FB36633B" xml:space="preserve">
+    <value>Zoom change per wheel step. 0.02–0.5.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_991A1A1FF9ED" xml:space="preserve">
+    <value>Add timed text at the current position (Ctrl+T)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_994DA3588A6B" xml:space="preserve">
+    <value>Click the image to choose a file to insert.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_9984B98A4667" xml:space="preserve">
+    <value>Video image layers exceed the 256 MB memory limit. Reduce image sizes or the number of layers and try again.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_99851CC7E6A4" xml:space="preserve">
+    <value>Solid</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_99A2B3E1BD9D" xml:space="preserve">
+    <value>Capture folder</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_99B8BDC92E9D" xml:space="preserve">
+    <value>Upscale before recognition</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_99CBBE7CFB4C" xml:space="preserve">
+    <value>Apply (Ctrl+S)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9A07C688760E" xml:space="preserve">
+    <value>Saving unavailable</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_9A6259D8B7CF" xml:space="preserve">
+    <value>Enter a whole number (allowed range: {0}).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_9A9C87658130" xml:space="preserve">
+    <value>Play or pause</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_9B59CBE34062" xml:space="preserve">
+    <value>Mosaic block size</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9C208B575A0D" xml:space="preserve">
+    <value>Preferred languages (BCP-47)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9C4458907087" xml:space="preserve">
+    <value>Images must be 24 MB or smaller.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
+  </data>
+  <data name="Text_9C49B0923292" xml:space="preserve">
+    <value>Frames per second (FPS)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9CD399964425" xml:space="preserve">
+    <value>Pencil tool · Draw freely</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_9D6831D1954E" xml:space="preserve">
+    <value>Video layer timeline</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_9DB22E7B0ADA" xml:space="preserve">
+    <value>Checking the latest version…</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_9DDB97F03D7D" xml:space="preserve">
+    <value>Video playback position</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_9DEC678AE6FF" xml:space="preserve">
+    <value>Processing</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_9E0860CEAEC2" xml:space="preserve">
+    <value>The capture was saved to history, but could not be copied to the clipboard. Press Ctrl+C in the editor to try again.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_9E479FEB720B" xml:space="preserve">
+    <value>The first screen exceeds the safe scrolling capture limit.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_9E53B74AE062" xml:space="preserve">
+    <value>Recognition status</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_9E5A499FF162" xml:space="preserve">
+    <value>Text recognition (OCR)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9E5B73EAD5B5" xml:space="preserve">
+    <value>Selection {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_9EA9BD59E20C" xml:space="preserve">
+    <value>Update</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_9F05CC6FEDE5" xml:space="preserve">
+    <value>Video save cancelled</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A00997F45D07" xml:space="preserve">
+    <value>Click a floating window and press Ctrl+C to copy its image. Ctrl+double-click copies the original text, or text recognized locally by OCR for images.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_A31A72A338DD" xml:space="preserve">
+    <value>Use OCR to redact emails, Korean phone and resident registration numbers, payment card numbers, IP addresses, and secret keys (Ctrl+Shift+R)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_A35D0E14E844" xml:space="preserve">
+    <value>Editing toolbar row 2</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A492D3026996" xml:space="preserve">
+    <value>Standard · 960 px / 10 fps</value>
+    <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
+  </data>
+  <data name="Text_A4B69FAF0C11" xml:space="preserve">
+    <value>All</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A51DCD82F2A1" xml:space="preserve">
+    <value>Font size</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_A57954F341E2" xml:space="preserve">
+    <value>There is no window to capture by scrolling.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_A5E52C2DDFC0" xml:space="preserve">
+    <value>Image tool</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_A600C689F4FB" xml:space="preserve">
+    <value>{0} · No text recognized. The image may contain no text, or the text may be too small.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_A610CF019CF2" xml:space="preserve">
+    <value>Text layers: {0} · Frame layers: {1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A6434B74B299" xml:space="preserve">
+    <value>End (seconds)</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_A658DC1B9407" xml:space="preserve">
+    <value>Clock</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_A7937F29AF18" xml:space="preserve">
+    <value>There is no region to capture by scrolling.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_A79A9F93D479" xml:space="preserve">
+    <value>Edit the current frame as an image (E)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A7C9AFB5B1AF" xml:space="preserve">
+    <value>Text recognition</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_A81F975C401F" xml:space="preserve">
+    <value>Save As…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_A862C01DBF76" xml:space="preserve">
+    <value>Could not save the pinned image.
+
+{0}</value>
+    <comment>src\MyCapture.App\Pinning\PinManager.cs</comment>
+  </data>
+  <data name="Text_A89C81DCC2C9" xml:space="preserve">
+    <value>Frame display: {0:0.00} to {1:0.00} seconds</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_A91B71C5A3C7" xml:space="preserve">
+    <value>2–128 image pixels.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_A925E80E33B3" xml:space="preserve">
+    <value>Close (Esc)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_A97A3B71F038" xml:space="preserve">
+    <value>Save pinned image</value>
+    <comment>src\MyCapture.App\Pinning\PinImageSaveService.cs</comment>
+  </data>
+  <data name="Text_AA254F35F02E" xml:space="preserve">
+    <value>Text recognition failed.</value>
+    <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
+  </data>
+  <data name="Text_AA3D7105289A" xml:space="preserve">
+    <value>, image</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_AA763F299972" xml:space="preserve">
+    <value>Enter at least one OCR language (for example ko-KR, en-US).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_AAED78A6EA00" xml:space="preserve">
+    <value>Updated the search index for {0} images.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_AB71749112CF" xml:space="preserve">
+    <value>Detailed frame timeline</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_ABAB2010D671" xml:space="preserve">
+    <value>Settings could not be saved. Check whether the folder is read-only, the disk is full, or another item conflicts with the settings file path, then try again. No changes were applied; your previous settings are retained.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_ACE79917CCBE" xml:space="preserve">
+    <value>Quick Redact sensitive information</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
+  </data>
+  <data name="Text_AD101D75FFAE" xml:space="preserve">
+    <value>There is nothing to capture.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_AD80E1DD716A" xml:space="preserve">
+    <value>T  Text {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_AD823133F009" xml:space="preserve">
+    <value>Shortcut '{0}' is used more than once.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_AE614DABA128" xml:space="preserve">
+    <value>Opening video…</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_AE6C1447BA99" xml:space="preserve">
+    <value>Supported values: 10, 15, 24, 30, 60. The default is 30 fps.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_AE94EC51B2C2" xml:space="preserve">
+    <value>Save failed</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_AEB8B9AA4E6F" xml:space="preserve">
+    <value>Edit selected timed text (F2)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_AF588C59EB7B" xml:space="preserve">
+    <value>Region capture shortcut</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B007F71CC3B2" xml:space="preserve">
+    <value>GIF export cancelled</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_B09611FF35C1" xml:space="preserve">
+    <value>Text added · Ctrl+Z to undo</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_B0B5252B194F" xml:space="preserve">
+    <value>Cannot prepare the current frame: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_B0F8B4B6D520" xml:space="preserve">
+    <value>The update could not be completed. Check your network connection and available storage, then try again.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_B2B3E2E19B90" xml:space="preserve">
+    <value>An error occurred while restoring previous shortcuts. Some shortcuts may not work; restart the application.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_B2FD5E226F6B" xml:space="preserve">
+    <value>Insert image</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_B30298E33872" xml:space="preserve">
+    <value>Full timeline</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_B36A1FC25CCE" xml:space="preserve">
+    <value>Cancel capture on focus loss</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B3711BAFCD9C" xml:space="preserve">
+    <value>Text (T) — click to type</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_B39342508541" xml:space="preserve">
+    <value>Previous frame (Ctrl/Shift+← or ,)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_B3B047802E13" xml:space="preserve">
+    <value>Scroll input cannot be sent to the target window.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_B3D3A625A748" xml:space="preserve">
+    <value>Storage settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B4B8EE7BE3D6" xml:space="preserve">
+    <value>Cannot complete capture</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_B53B72EF2371" xml:space="preserve">
+    <value>Choosing save location…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_B53D43740F41" xml:space="preserve">
+    <value>Paste to screen shortcut</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B62C5C65821E" xml:space="preserve">
+    <value>Leave blank for the default location. Folder changes take effect after restart; existing files will not be moved or deleted.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B64A6FFA1008" xml:space="preserve">
+    <value>The previous startup setting could not be restored. Check it in Settings.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_B64CA1BE6711" xml:space="preserve">
+    <value>Enter a font family.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_B651C2B6BDA9" xml:space="preserve">
+    <value>The file cannot be saved. Check the destination and your permissions.</value>
+    <comment>src\MyCapture.App\Pinning\PinManager.cs</comment>
+  </data>
+  <data name="Text_B659038CC17D" xml:space="preserve">
+    <value>Rectangle (R) — drag on the image</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_B6AEB06C1E3E" xml:space="preserve">
+    <value>Playback preparation failed</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_B6D9CAB382C8" xml:space="preserve">
+    <value>{0:N0} items</value>
+    <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
+  </data>
+  <data name="Text_B6DE798A150D" xml:space="preserve">
+    <value>Copy from a floating window</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B753165F6585" xml:space="preserve">
+    <value>Next frame (Ctrl/Shift+→ or .)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_B75AA3DC8AFB" xml:space="preserve">
+    <value>Recognized text</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_B89071D80D8F" xml:space="preserve">
+    <value>Save changes. Shortcut: Ctrl+S.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B8C3BBBF49E2" xml:space="preserve">
+    <value>MMM d (ddd)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryDateGrouping.cs</comment>
+  </data>
+  <data name="Text_B9D242426446" xml:space="preserve">
+    <value>Show magnifier while selecting</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BA0448903510" xml:space="preserve">
+    <value>Lower the value to fill the shape with its stroke color.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_BA79DCE6BD5D" xml:space="preserve">
+    <value>The recording was safely saved to the library, but the editor could not open. Reopen the video from the library.
+
+</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_BB7798D87E07" xml:space="preserve">
+    <value>Copy the original text retained when this floating image was created.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_BBA2EFF5675C" xml:space="preserve">
+    <value>Show removal handles at both ends of the video, or leave trim mode</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_BC1D92BC8EFA" xml:space="preserve">
+    <value>Recording frames per second</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BCA2A41F7456" xml:space="preserve">
+    <value>This capture cannot be edited.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_BCC2F939B733" xml:space="preserve">
+    <value>Text copy failed</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_BCEDE50E5248" xml:space="preserve">
+    <value>Capture anywhere with the same shortcuts, then continue editing in your local library.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BD975387F343" xml:space="preserve">
+    <value>Cancel capture when switching windows</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BDA4A255187A" xml:space="preserve">
+    <value>Adjust your workflow and storage</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BDB7C68F7452" xml:space="preserve">
+    <value>Copying original text…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_BE08A8230E51" xml:space="preserve">
+    <value>{0} captures are not searchable</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_BE3D621D8A32" xml:space="preserve">
+    <value>Pass mouse input to the window underneath. Press Shift+F3 twice to turn this off.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_BE4215610EBC" xml:space="preserve">
+    <value>Trim mode · Drag the magenta removal handles · Tab/←/→ for keyboard control</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_BE876433993A" xml:space="preserve">
+    <value>Cancel</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_BEE32B2A6B1A" xml:space="preserve">
+    <value>Edit frame</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_BF0FF22A113E" xml:space="preserve">
+    <value>OCR available</value>
+    <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
+  </data>
+  <data name="Text_BFA39DD9B85B" xml:space="preserve">
+    <value>Recording</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C0C699C12863" xml:space="preserve">
+    <value>Adjusting removal handle</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C11734267E6B" xml:space="preserve">
+    <value>Video</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_C1767C4F1218" xml:space="preserve">
+    <value>Processing recording file</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_C19FD6787279" xml:space="preserve">
+    <value>Circle</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C1A40373A077" xml:space="preserve">
+    <value>Save failed</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_C1BE53C8ADAF" xml:space="preserve">
+    <value>No dropped frames</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C2A254402263" xml:space="preserve">
+    <value>Window capture shortcut</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C2F4730D02E8" xml:space="preserve">
+    <value>Drag to move.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_C315173385E0" xml:space="preserve">
+    <value>Quick Save folder path</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C4043E16721A" xml:space="preserve">
+    <value>Recording clock (drag to move, scroll to resize)</value>
+    <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
+  </data>
+  <data name="Text_C4656CD904CA" xml:space="preserve">
+    <value>Number of previous regions to keep for repeat capture. 1–200.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C48278DA0670" xml:space="preserve">
+    <value>The update file could not be verified. It was not installed.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_C4DFF18A59CA" xml:space="preserve">
+    <value>Creating GIF… {0}% ({1}/{2})</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C5176D8C3041" xml:space="preserve">
+    <value>Zoom in detailed timeline (Ctrl+Shift+=)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C51C3FDBF019" xml:space="preserve">
+    <value>Indexing… {0}/{1}</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_C5364F392040" xml:space="preserve">
+    <value>Index now</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_C536D125279E" xml:space="preserve">
+    <value>Browse</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C5AC44062ACA" xml:space="preserve">
+    <value>The recording and its recovery marker were retained, but could not be added to the library. MyCapture will retry recovery on the next start.
+
+</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_C5B654A9AE39" xml:space="preserve">
+    <value>Clipboard unavailable</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_C61A081610C9" xml:space="preserve">
+    <value>Undo (Ctrl+Z)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_C68C66E8758A" xml:space="preserve">
+    <value>Download and verification complete. Save your work before installation.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_C7000F39A0DF" xml:space="preserve">
+    <value>Trim applied · Keeping {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C7011B8D345C" xml:space="preserve">
+    <value>Ctrl+double-click</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_C740003A2150" xml:space="preserve">
+    <value>Opacity {0:0}%</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_C750845B7AA3" xml:space="preserve">
+    <value>MyCapture — Region recording</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_C7E7E4FA07DA" xml:space="preserve">
+    <value>Added {0} · Ctrl+Z to undo</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_C8FFDDF126A8" xml:space="preserve">
+    <value>Recognize text in unindexed captures to include them in full-text search</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_CA6DE730BB6E" xml:space="preserve">
+    <value>MyCapture could not start.
+
+{0}</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_CA8A8225E428" xml:space="preserve">
+    <value>Line</value>
+    <comment>src\MyCapture.Core\Annotations\PolylineAnnotation.cs</comment>
+  </data>
+  <data name="Text_CC2687CDFC63" xml:space="preserve">
+    <value>Cancelling and cleaning up temporary files…</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_CDC04935B675" xml:space="preserve">
+    <value>'{0}' is not a valid language tag (for example ko-KR, en-US).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_CE2F7B272674" xml:space="preserve">
+    <value>Downloading installer… {0:F0}%</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_CE57D5CA2394" xml:space="preserve">
+    <value>Pin to screen failed</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_CE706412FA75" xml:space="preserve">
+    <value>Undo</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_CEFF481585C2" xml:space="preserve">
+    <value>Pencil tool</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_CF32FE576AE7" xml:space="preserve">
+    <value>The allowed range is {0}.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_CFACAAC223E9" xml:space="preserve">
+    <value>The capture shortcut was empty and was reset to Ctrl+Shift+C.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_CFC4974E7244" xml:space="preserve">
+    <value>Choose GIF playback speed from 0.5× to 4×.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_CFC51550591E" xml:space="preserve">
+    <value>Settings categories</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_CFD6A8C2BFA5" xml:space="preserve">
+    <value>Export selection as GIF (G)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D0113E3B1184" xml:space="preserve">
+    <value>More opaque (Ctrl+scroll)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_D0FD12A01E4A" xml:space="preserve">
+    <value>Wait for the sensitive information search to finish before saving · Esc to cancel</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D116685C040E" xml:space="preserve">
+    <value>Free region capture</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_D1357BFAAF9A" xml:space="preserve">
+    <value>The filename pattern does not produce a valid filename.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_D18267AE0420" xml:space="preserve">
+    <value>Animated GIF (*.gif)|*.gif</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D1ACE701CBFE" xml:space="preserve">
+    <value>The capture shortcut cannot be blank.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_D1B87ACB2D22" xml:space="preserve">
+    <value>Color</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D1E229E81B83" xml:space="preserve">
+    <value>Show recording clock</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_D1F0DAEAA780" xml:space="preserve">
+    <value>Capture stopped because the capture window cannot be excluded from the recording.</value>
+    <comment>src\MyCapture.App\Capture\CaptureOverlayCoordinator.cs</comment>
+  </data>
+  <data name="Text_D1F6E7772569" xml:space="preserve">
+    <value>{0} · Language {1} · {2} lines · {3:0} ms</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_D2ABBB3968D3" xml:space="preserve">
+    <value>Finish recording, capturing, or editing and apply your settings, then try again.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_D2E201C9D452" xml:space="preserve">
+    <value>Frame</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D3F7F6C952A8" xml:space="preserve">
+    <value>GIF playback speed</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D41AD4FCB417" xml:space="preserve">
+    <value>Center</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_D43A776C5E28" xml:space="preserve">
+    <value>Play</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_D44617983641" xml:space="preserve">
+    <value>Export as GIF</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_D53ABD064C5E" xml:space="preserve">
+    <value>Arrow (A) — drag from start to end</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D5A4B6986227" xml:space="preserve">
+    <value>The monitor for the previous region is disconnected. Select a new region.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_D5A82B3B1F83" xml:space="preserve">
+    <value>Arrow tool</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D5D43E09190C" xml:space="preserve">
+    <value>Frame {0}/{1} · {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D613D66285DC" xml:space="preserve">
+    <value>No more scrollable content was found.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_D6580A6EEFB2" xml:space="preserve">
+    <value>OCR language packs are unavailable on this system.</value>
+    <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
+  </data>
+  <data name="Text_D65A9E5A4C1A" xml:space="preserve">
+    <value>Zoom out (-)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_D6E142D9293C" xml:space="preserve">
+    <value>Hide all pins shortcut</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_D6FD14107836" xml:space="preserve">
+    <value>Drag the middle of a layer bar to move it or drag its ends to resize the interval. Up/down: select layer · Left/right: start time · Shift+left/right: end time · Ctrl: 0.01-second steps · Esc: cancel</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_D7231656D075" xml:space="preserve">
+    <value>Selected frame layer deleted</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D75A61C65264" xml:space="preserve">
+    <value>Esc to cancel</value>
+    <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
+  </data>
+  <data name="Text_D7FF669E0B69" xml:space="preserve">
+    <value>Preferred OCR languages</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_D8538A946A6C" xml:space="preserve">
+    <value>The capture folder change takes effect after restart. Existing files will not be moved or deleted.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_D8A09D5BCDCB" xml:space="preserve">
+    <value>{0} / {1}  ·  Frame {2}/{3}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D8A23CD47E7A" xml:space="preserve">
+    <value>Reset all values to defaults. You can cancel these changes until you click Apply.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_D8A75FF54AF8" xml:space="preserve">
+    <value>GIF speed and quality settings</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D8F5F6738520" xml:space="preserve">
+    <value>Add rectangle layer</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D8F8A6B5650D" xml:space="preserve">
+    <value>Image added · Ctrl+Z to undo</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D9378793F9FE" xml:space="preserve">
+    <value>Video timeline and layer tools</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D9483E35CD83" xml:space="preserve">
+    <value>Zoom in (+) or scroll to show frame ticks</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_D9F974C95F68" xml:space="preserve">
+    <value>Save text</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_D9FC5F981274" xml:space="preserve">
+    <value>MyCapture — Edit again</value>
+    <comment>src\MyCapture.App\Gallery\GalleryEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DA09CBABFC1E" xml:space="preserve">
+    <value>Loading video… 0%</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DA9B79FCBFC8" xml:space="preserve">
+    <value>GIF quality and size</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DAB3F35F5BD0" xml:space="preserve">
+    <value>Text tool</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DAF93C3AA95D" xml:space="preserve">
+    <value>Undone</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DB39E24CEA42" xml:space="preserve">
+    <value>Delayed capture countdown</value>
+    <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
+  </data>
+  <data name="Text_DBAF1D995258" xml:space="preserve">
+    <value>Stroke width changed to {0:0} px</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DC0760235344" xml:space="preserve">
+    <value>Rectangle</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DC710AA11970" xml:space="preserve">
+    <value>Go to the start of the retained video</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DC9F5ED04461" xml:space="preserve">
+    <value>Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|All files|*.*</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DCA8CAFD9D0D" xml:space="preserve">
+    <value>Layers</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DD2EFE395A75" xml:space="preserve">
+    <value>Quick workflow</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_DD9DFB5B4BE3" xml:space="preserve">
+    <value>Cannot play video: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DDB4DA1FC0AE" xml:space="preserve">
+    <value>Move/resize {0}</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_DFB3664A9A08" xml:space="preserve">
+    <value>, video {0}</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_DFC084A111D0" xml:space="preserve">
+    <value>Quick Save</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DFCA22AB9F61" xml:space="preserve">
+    <value>Go to the end of the retained video</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E04C819FB554" xml:space="preserve">
+    <value>MyCapture requires Windows 11 or later.</value>
+    <comment>src\MyCapture.App\Diagnostics\HostRequirementGate.cs</comment>
+  </data>
+  <data name="Text_E0B58D1CFED1" xml:space="preserve">
+    <value>Stroke style</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_E0BEBB354D8F" xml:space="preserve">
+    <value>Top</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_E11F2F71F169" xml:space="preserve">
+    <value>Drag to a folder or the desktop to export an MP4 file</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_E145645E75F3" xml:space="preserve">
+    <value>The default recording shortcut was changed to Ctrl+Shift+X.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_E166B75FADF4" xml:space="preserve">
+    <value>Jump backward</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E1C96EF1EA0F" xml:space="preserve">
+    <value>Cancel recording</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_E1E40E743D3B" xml:space="preserve">
+    <value>The image layer is too large. Reduce the image dimensions.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
+  </data>
+  <data name="Text_E20E28D53DCE" xml:space="preserve">
+    <value>This capture is being saved. Try again when saving finishes.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_E22E2C953A8B" xml:space="preserve">
+    <value>A pinned screen image. Ctrl+C copies the image; Ctrl+double-click copies text. Use the context menu or Ctrl+S to save the original PNG, or Ctrl+Shift+S to choose a destination. Drag to move, scroll to zoom, Ctrl+scroll to adjust opacity, and Esc or Delete to close. To disable click-through, press Shift+F3 twice.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_E2395EBF6C65" xml:space="preserve">
+    <value>Show the current date and time on screen. Drag to move the clock and scroll to resize it.</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_E285D4BC2FA3" xml:space="preserve">
+    <value>Current version {0}</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_E2B271067CCF" xml:space="preserve">
+    <value>The fixed-size region is outside this monitor.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_E3348500E6DB" xml:space="preserve">
+    <value>Save trimmed video</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E33E531B40C6" xml:space="preserve">
+    <value>The scrolling result exceeds the safe size limit.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_E395E2567985" xml:space="preserve">
+    <value>Quick Redact</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_E3B50B06C736" xml:space="preserve">
+    <value>Cannot create frame layer: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E3F51EDC0F16" xml:space="preserve">
+    <value>Saved · {0}</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_E414AD855B8D" xml:space="preserve">
+    <value>Pen</value>
+    <comment>src\MyCapture.Core\Annotations\PenAnnotation.cs</comment>
+  </data>
+  <data name="Text_E485D788C2BE" xml:space="preserve">
+    <value>, pinned</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_E5CAF7CFC916" xml:space="preserve">
+    <value>Jump forward</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E5F541120733" xml:space="preserve">
+    <value>Text recognition results window</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_E657405F6B2D" xml:space="preserve">
+    <value>Close all</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_E68076415933" xml:space="preserve">
+    <value>Another application is using the clipboard. Please try again shortly.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_E68817537C75" xml:space="preserve">
+    <value>Redacted {0} potential matches · Review them; Ctrl+Z undoes the batch</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_E6A0E3D10B47" xml:space="preserve">
+    <value>Annotations</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_E75BE1B916FD" xml:space="preserve">
+    <value>Transparent frame editing layer composited over the original video</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E7770F293C4C" xml:space="preserve">
+    <value>Full-screen capture shortcut</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_E77D23C3D35B" xml:space="preserve">
+    <value>Text edited: {0}–{1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E7A732EAE7D5" xml:space="preserve">
+    <value>Recording region border (drag to move)</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_E87551A1A39F" xml:space="preserve">
+    <value>Cannot save the frame image</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_E8B876F98CD8" xml:space="preserve">
+    <value>Cancel scrolling capture (&amp;S)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_E8DF95164C87" xml:space="preserve">
+    <value>Click the image, then type your text.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_E9059CA2B6E3" xml:space="preserve">
+    <value>Video layer and GIF tools</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_EA1FBABE64F3" xml:space="preserve">
+    <value>Window capture (&amp;W)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_EA33C8FF45A0" xml:space="preserve">
+    <value>Save menu</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_EB29C2038682" xml:space="preserve">
+    <value>Cannot retain the original frame</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_EB9AB8D7D13C" xml:space="preserve">
+    <value>Find sensitive information with local OCR and add editable black rectangles over it.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_EB9E222E4C18" xml:space="preserve">
+    <value>You can add up to {0} timed text items.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_EBC9F14582AD" xml:space="preserve">
+    <value>Cannot open video in the library: </value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_EC38F786B534" xml:space="preserve">
+    <value>Close library playback panel</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_EC43594BD44D" xml:space="preserve">
+    <value>[Frame]  {0}–{1}  {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_EC7FF66E22C9" xml:space="preserve">
+    <value>The video file could not be found.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_EC81AD6B5A75" xml:space="preserve">
+    <value>The capture is being saved. Try again when saving finishes.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_EE36971D5C4B" xml:space="preserve">
+    <value>Quick Redact is unavailable because no Windows OCR language pack is available</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_EEA09781BBD7" xml:space="preserve">
+    <value>Text appears only during the specified interval and is permanently rendered into MP4 and GIF exports. Press Ctrl+Enter to save.</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_EF7DD8DA5437" xml:space="preserve">
+    <value>Check your input</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_EF83F428AA11" xml:space="preserve">
+    <value>Recording editor window</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_EFA9B778C037" xml:space="preserve">
+    <value>End set to {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_F018AA1A2813" xml:space="preserve">
+    <value>Capture will stop after the current frame finishes processing.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_F04B7153934A" xml:space="preserve">
+    <value>Choose capture folder</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_F085C7366DEB" xml:space="preserve">
+    <value>F  Frame {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_F09A6C5A6A10" xml:space="preserve">
+    <value>The image could not be prepared.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultPresenter.cs</comment>
+  </data>
+  <data name="Text_F0C27AB1BA08" xml:space="preserve">
+    <value>Double-click to close a pin</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F0CFD62F0971" xml:space="preserve">
+    <value>Include pointer in recordings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F11BA21FB824" xml:space="preserve">
+    <value>Recording elapsed time</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_F122632462DF" xml:space="preserve">
+    <value>Save cancelled</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_F1A864DCBEC4" xml:space="preserve">
+    <value> · Storage limit temporarily exceeded to protect pinned items</value>
+    <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
+  </data>
+  <data name="Text_F1C1BB1D5771" xml:space="preserve">
+    <value>Countdown before recording</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F2315240D532" xml:space="preserve">
+    <value>Click Trim to adjust how much to remove from the start and end.</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_F296CB19F0A2" xml:space="preserve">
+    <value>Ready</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_F2F36C2D52F6" xml:space="preserve">
+    <value>GIF timing has a resolution of 0.01 seconds. Extend frame layer intervals to at least 0.01 seconds.</value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_F371688B8EE8" xml:space="preserve">
+    <value>Windows OCR language packs are missing, so text recognition and full-text capture search are unavailable. In Settings → Time &amp; language → Language &amp; region, add Optical character recognition (OCR) under your language's features, then try again. Capture, annotation, recording, and other features still work offline.</value>
+    <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
+  </data>
+  <data name="Text_F3C7FE27A258" xml:space="preserve">
+    <value>Start MyCapture automatically when you sign in to Windows.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F457141C336A" xml:space="preserve">
+    <value>Redo (Ctrl+Y)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_F47CC25B5D11" xml:space="preserve">
+    <value>The previous shortcuts could not be restored. Some shortcuts may not work; restart the application.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_F5416FA54E13" xml:space="preserve">
+    <value>Capture settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F554B87B81B3" xml:space="preserve">
+    <value>Stroke added · Keep drawing · Ctrl+Z to undo</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_F5BF49635D43" xml:space="preserve">
+    <value>Preferences</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F6249F8FCEAE" xml:space="preserve">
+    <value>Change points of {0}</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_F64AB9FE8BCD" xml:space="preserve">
+    <value>Invalid folder path.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_F6C3295E346E" xml:space="preserve">
+    <value>Capture folder path</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F6C51786B910" xml:space="preserve">
+    <value>Available languages: {0}. All processing runs offline on this PC.</value>
+    <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
+  </data>
+  <data name="Text_F73E8EBF6CE0" xml:space="preserve">
+    <value>Recognized text. Press Ctrl+A to select all or Ctrl+C to copy.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_F87FEA248BDD" xml:space="preserve">
+    <value>A capture is already in progress.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_F91180061AA3" xml:space="preserve">
+    <value>Install and restart</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_FA22CDFB3221" xml:space="preserve">
+    <value>End</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_FA24C3FC395F" xml:space="preserve">
+    <value>Click-through off</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_FA2ADD387F12" xml:space="preserve">
+    <value>PNG image (*.png)|*.png</value>
+    <comment>src\MyCapture.App\Pinning\PinImageSaveService.cs</comment>
+  </data>
+  <data name="Text_FA339B8FA77F" xml:space="preserve">
+    <value>Shortcut settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FA5045A86267" xml:space="preserve">
+    <value>Highlighter opacity (alpha)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FA67EC449E04" xml:space="preserve">
+    <value>Edit video layer position and size</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerCanvas.cs</comment>
+  </data>
+  <data name="Text_FAC754F72C25" xml:space="preserve">
+    <value>Annotation text input</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_FACB0016A977" xml:space="preserve">
+    <value>Cannot load video preview</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_FADDD953571F" xml:space="preserve">
+    <value>Recording settings</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FAE3A646286D" xml:space="preserve">
+    <value>Input error summary</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FB0A09B025D3" xml:space="preserve">
+    <value>Cannot open video: </value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_FB68C3A34978" xml:space="preserve">
+    <value>Cannot create the OCR engine.</value>
+    <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
+  </data>
+  <data name="Text_FC05BD860043" xml:space="preserve">
+    <value>Maximum storage in gibibytes</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FD6443988325" xml:space="preserve">
+    <value>Playing · Text preview active</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_FE872AF40869" xml:space="preserve">
+    <value>Text start time in seconds</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_FEAA5199651D" xml:space="preserve">
+    <value>Manage capture, retention, export, and editing defaults in one place.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FEFD9D67E873" xml:space="preserve">
+    <value>Selection tool · Click an annotation to select it</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+</root>

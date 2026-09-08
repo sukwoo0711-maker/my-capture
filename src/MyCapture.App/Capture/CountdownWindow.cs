@@ -42,7 +42,7 @@ internal sealed class CountdownWindow : Window
         // overlay, so a short content reveal makes the delay feel intentional and responsive.
         FluidMotion.SetWindowEntrance(this, true);
 
-        Title = "MyCapture 지연 캡처";
+        Title = UiText.Get("Text_48FA3D0E60A0");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
@@ -68,7 +68,7 @@ internal sealed class CountdownWindow : Window
         // AutomationProperties give a screen reader something meaningful to announce while
         // the countdown runs; the label is a Polite live region and each tick explicitly
         // raises a live-region change so the remaining seconds are read aloud as they update.
-        AutomationProperties.SetName(_label, "지연 캡처 카운트다운");
+        AutomationProperties.SetName(_label, UiText.Get("Text_DB39E24CEA42"));
         AutomationProperties.SetLiveSetting(_label, AutomationLiveSetting.Polite);
 
         // Number plus Korean context only — no English all-caps eyebrow. The panel stays a
@@ -77,7 +77,7 @@ internal sealed class CountdownWindow : Window
         content.Children.Add(_label);
         content.Children.Add(new TextBlock
         {
-            Text = "초 후 캡처됩니다",
+            Text = UiText.Get("Text_651505CC0499"),
             Foreground = Application.Current?.TryFindResource("Text.Secondary") as Brush ?? Brushes.LightGray,
             FontSize = 13,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -85,7 +85,7 @@ internal sealed class CountdownWindow : Window
         });
         content.Children.Add(new TextBlock
         {
-            Text = "Esc로 취소",
+            Text = UiText.Get("Text_D75A61C65264"),
             Foreground = Application.Current?.TryFindResource("Text.Muted") as Brush ?? Brushes.LightGray,
             FontSize = 12,
             HorizontalAlignment = HorizontalAlignment.Center,

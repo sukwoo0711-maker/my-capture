@@ -71,10 +71,10 @@ internal sealed partial class SettingsWindow : Window
     }
 
     internal static readonly RoutedUICommand ApplyCommand =
-        new("적용", nameof(ApplyCommand), typeof(SettingsWindow));
+        new(UiText.Get("Text_6A1C963D5BC5"), nameof(ApplyCommand), typeof(SettingsWindow));
 
     internal static readonly RoutedUICommand CancelCommand =
-        new("취소", nameof(CancelCommand), typeof(SettingsWindow));
+        new(UiText.Get("Text_BE876433993A"), nameof(CancelCommand), typeof(SettingsWindow));
 
     /// <summary>Raised after a successful apply, so the shell can react (e.g. refresh state).</summary>
     internal event EventHandler<SettingsApplyResult>? Applied;
@@ -184,7 +184,7 @@ internal sealed partial class SettingsWindow : Window
             MessageBox.Show(
                 this,
                 string.Join(Environment.NewLine, result.Messages),
-                "설정 저장 실패",
+                UiText.Get("Text_13A717215F51"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
@@ -200,7 +200,7 @@ internal sealed partial class SettingsWindow : Window
             MessageBox.Show(
                 this,
                 string.Join(Environment.NewLine, result.Messages),
-                "설정 적용",
+                UiText.Get("Text_93CBE1538A34"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }
@@ -222,10 +222,10 @@ internal sealed partial class SettingsWindow : Window
     // ---- Folder browse -------------------------------------------------------------
 
     private void OnBrowseCapturesDirectory(object sender, RoutedEventArgs e) =>
-        BrowseInto(value => _draft.CapturesDirectoryOverride = value, _draft.CapturesDirectoryOverride, "캡처 저장 폴더 선택");
+        BrowseInto(value => _draft.CapturesDirectoryOverride = value, _draft.CapturesDirectoryOverride, UiText.Get("Text_F04B7153934A"));
 
     private void OnBrowseQuickSaveDirectory(object sender, RoutedEventArgs e) =>
-        BrowseInto(value => _draft.QuickSaveDirectoryOverride = value, _draft.QuickSaveDirectoryOverride, "빠른 저장 폴더 선택");
+        BrowseInto(value => _draft.QuickSaveDirectoryOverride = value, _draft.QuickSaveDirectoryOverride, UiText.Get("Text_0CC5375DCF91"));
 
     private void BrowseInto(Action<string> assign, string current, string title)
     {

@@ -71,7 +71,7 @@ public sealed class FrameEditLayer
 
     public double EndMs { get; set; }
 
-    public string Name { get; set; } = "프레임 편집";
+    public string Name { get; set; } = UiText.Get("Text_BEE32B2A6B1A");
 
     public string OverlayPngBase64 { get; set; } = string.Empty;
 
@@ -237,7 +237,7 @@ public sealed class VideoEditDocument
                 : layer.Id;
             _ = frameLayerIds.Add(id);
             string name = string.IsNullOrWhiteSpace(layer.Name)
-                ? "프레임 편집"
+                ? UiText.Get("Text_BEE32B2A6B1A")
                 : layer.Name.Trim();
             if (name.Length > MaximumFrameLayerNameLength)
             {

@@ -39,14 +39,14 @@ internal sealed class OcrResultWindow : Window
     {
         StandardWindowTheme.Apply(this);
 
-        Title = "MyCapture — 텍스트 인식";
+        Title = UiText.Get("Text_7CD1B787C3E6");
         Width = 680;
         Height = 560;
         MinWidth = 440;
         MinHeight = 340;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ShowInTaskbar = true;
-        AutomationProperties.SetName(this, "텍스트 인식 결과 창");
+        AutomationProperties.SetName(this, UiText.Get("Text_E5F541120733"));
 
         // Uniform dark root: one calm surface frames the whole window so the recognised text is
         // the only thing that stands out. The window Style already sets this, but making it
@@ -66,7 +66,7 @@ internal sealed class OcrResultWindow : Window
         var heading = new StackPanel { Margin = new Thickness(24, 22, 24, 16) };
         heading.Children.Add(new TextBlock
         {
-            Text = "텍스트 인식",
+            Text = UiText.Get("Text_A7C9AFB5B1AF"),
             Foreground = ResourceBrush("Text.Primary", Brushes.White),
             FontFamily = Application.Current?.TryFindResource("Font.Display") as FontFamily ?? new FontFamily("Segoe UI"),
             FontSize = 24,
@@ -80,7 +80,7 @@ internal sealed class OcrResultWindow : Window
             Foreground = ResourceBrush("Text.Secondary", Brushes.LightGray),
             FontSize = 12,
         };
-        AutomationProperties.SetName(_status, "인식 상태");
+        AutomationProperties.SetName(_status, UiText.Get("Text_9E53B74AE062"));
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         heading.Children.Add(_status);
 
@@ -108,9 +108,9 @@ internal sealed class OcrResultWindow : Window
             Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x08, 0x0C, 0x12))),
             BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
         };
-        AutomationProperties.SetName(_textBox, "인식된 텍스트");
+        AutomationProperties.SetName(_textBox, UiText.Get("Text_B75AA3DC8AFB"));
         AutomationProperties.SetHelpText(
-            _textBox, "인식된 텍스트입니다. Ctrl+A로 전체 선택, Ctrl+C로 복사할 수 있습니다.");
+            _textBox, UiText.Get("Text_F73E8EBF6CE0"));
 
         var textFrame = new Border
         {
@@ -133,14 +133,14 @@ internal sealed class OcrResultWindow : Window
         };
 
         // Rerun stays a quiet secondary: a ghost button that recedes so it never rivals Copy.
-        _rerunButton = MakeButton("다시 인식", "OCR을 다시 실행합니다");
+        _rerunButton = MakeButton(UiText.Get("Text_7245B7D87A08"), UiText.Get("Text_613230F07E18"));
         _rerunButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
         _rerunButton.Margin = new Thickness(0, 0, 8, 0);
         _rerunButton.Click += (_, _) => RerunRequested?.Invoke(this, EventArgs.Empty);
         buttons.Children.Add(_rerunButton);
 
         // Copy is the sole primary action — the one thing this window exists to make easy.
-        _copyButton = MakeButton("복사", "인식된 텍스트를 클립보드에 복사합니다");
+        _copyButton = MakeButton(UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_20CF6A996B4D"));
         _copyButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         _copyButton.Click += (_, _) => CopyText();
         buttons.Children.Add(_copyButton);
@@ -194,7 +194,7 @@ internal sealed class OcrResultWindow : Window
     /// <summary>Shows a busy state while a (re)run is in flight, keeping the window responsive.</summary>
     internal void ShowBusy(string contextLabel)
     {
-        _status.Text = $"{contextLabel} · 인식 중…";
+        _status.Text = UiText.Format("Text_4A376FDFB111", contextLabel);
         _rerunButton.IsEnabled = false;
         _copyButton.IsEnabled = false;
 
@@ -223,14 +223,14 @@ internal sealed class OcrResultWindow : Window
                 _textBox.Text = result.Text;
                 _copyButton.IsEnabled = true;
                 _status.Text =
-                    $"{contextLabel} · 언어 {result.LanguageTag} · {result.Lines.Count}줄 · {result.Elapsed.TotalMilliseconds:0}ms";
+                    UiText.Format("Text_D1F6E7772569", contextLabel, result.LanguageTag, result.Lines.Count, result.Elapsed.TotalMilliseconds);
                 break;
 
             case OcrStatus.NoText:
                 _textBox.Text = string.Empty;
                 _copyButton.IsEnabled = false;
                 _status.Text =
-                    $"{contextLabel} · 인식된 텍스트가 없습니다. 이미지에 글자가 없거나 너무 작을 수 있습니다.";
+                    UiText.Format("Text_A600C689F4FB", contextLabel);
                 break;
 
             case OcrStatus.Unavailable:
@@ -238,19 +238,19 @@ internal sealed class OcrResultWindow : Window
                 _copyButton.IsEnabled = false;
                 _status.Text =
                     result.Message ??
-                    "이 시스템에서 OCR을 사용할 수 없습니다. 언어 팩 설치가 필요할 수 있습니다.";
+                    UiText.Get("Text_1DC093CD4D48");
                 break;
 
             case OcrStatus.Cancelled:
                 _textBox.Text = string.Empty;
                 _copyButton.IsEnabled = false;
-                _status.Text = $"{contextLabel} · 인식이 취소되었습니다.";
+                _status.Text = UiText.Format("Text_5626DD9C2F6A", contextLabel);
                 break;
 
             default:
                 _textBox.Text = string.Empty;
                 _copyButton.IsEnabled = false;
-                _status.Text = result.Message ?? "텍스트 인식에 실패했습니다.";
+                _status.Text = result.Message ?? UiText.Get("Text_AA254F35F02E");
                 break;
         }
     }
@@ -265,12 +265,12 @@ internal sealed class OcrResultWindow : Window
         try
         {
             Clipboard.SetText(_textBox.Text);
-            _status.Text = "복사됨 · " + _status.Text;
+            _status.Text = UiText.Get("Text_6EAF5A406E0E") + _status.Text;
         }
         catch (System.Runtime.InteropServices.COMException)
         {
             // Clipboard momentarily locked by another app; a copy failure must not throw.
-            _status.Text = "클립보드에 복사하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+            _status.Text = UiText.Get("Text_75425A6D9BE8");
         }
     }
 

@@ -29,18 +29,16 @@ public sealed record OcrAvailability(
             return new OcrAvailability(
                 IsAvailable: false,
                 SupportedLanguages: supportedLanguages,
-                Headline: "OCR 언어 팩이 설치되어 있지 않습니다",
-                Detail: "이 PC에 Windows OCR 언어 팩이 없어 텍스트 인식과 캡처 전문 검색을 사용할 수 없습니다. " +
-                        "설정 → 시간 및 언어 → 언어 및 지역에서 언어의 [언어 기능]에 '광학 문자 인식(OCR)'을 추가한 뒤 다시 시도하세요. " +
-                        "인터넷 연결 없이도 캡처·주석·녹화 등 나머지 기능은 정상 동작합니다.");
+                Headline: UiText.Get("Text_58B2C0573E72"),
+                Detail: UiText.Get("Text_F371688B8EE8"));
         }
 
         string langs = string.Join(", ", supportedLanguages);
         return new OcrAvailability(
             IsAvailable: true,
             SupportedLanguages: supportedLanguages,
-            Headline: "OCR 사용 가능",
-            Detail: $"인식 가능한 언어: {langs}. 모든 처리는 이 PC에서 오프라인으로 수행됩니다.");
+            Headline: UiText.Get("Text_BF0FF22A113E"),
+            Detail: UiText.Format("Text_F6C51786B910", langs));
     }
 
     /// <summary>Convenience overload taking the service directly.</summary>

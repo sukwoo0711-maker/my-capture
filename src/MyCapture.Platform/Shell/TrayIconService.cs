@@ -277,22 +277,22 @@ public sealed class TrayIconService : IDisposable
 
         try
         {
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuCapture, "영역 캡처(&R)\tCtrl+Shift+C");
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuCaptureWindow, "창 캡처(&W)");
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuCaptureFullScreen, "전체 화면 캡처(&F)");
+            AppendMenu(menu, NativeMethods.MF_STRING, MenuCapture, UiText.Get("Text_2C20ADDA2018"));
+            AppendMenu(menu, NativeMethods.MF_STRING, MenuCaptureWindow, UiText.Get("Text_EA1FBABE64F3"));
+            AppendMenu(menu, NativeMethods.MF_STRING, MenuCaptureFullScreen, UiText.Get("Text_65BB6610ACA0"));
             AppendMenu(
                 menu,
                 NativeMethods.MF_STRING,
                 MenuScrollingCapture,
-                _scrollingCaptureActive ? "스크롤 캡처 취소(&S)" : "스크롤 캡처(&S)");
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuRepeatLastRegion, "이전 영역 반복(&L)");
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuDelayedCapture, "지연 캡처(&D)");
+                _scrollingCaptureActive ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"));
+            AppendMenu(menu, NativeMethods.MF_STRING, MenuRepeatLastRegion, UiText.Get("Text_878A28AF568C"));
+            AppendMenu(menu, NativeMethods.MF_STRING, MenuDelayedCapture, UiText.Get("Text_38FF9B0AA541"));
             AppendMenu(menu, NativeMethods.MF_SEPARATOR, 0, null);
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuGallery, "라이브러리(&G)\tCtrl+Shift+Z");
+            AppendMenu(menu, NativeMethods.MF_STRING, MenuGallery, UiText.Get("Text_8739F6684453"));
             AppendMenu(menu, NativeMethods.MF_SEPARATOR, 0, null);
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuSettings, "설정(&O)");
+            AppendMenu(menu, NativeMethods.MF_STRING, MenuSettings, UiText.Get("Text_00480581AAB5"));
             AppendMenu(menu, NativeMethods.MF_SEPARATOR, 0, null);
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuExit, "종료(&X)");
+            AppendMenu(menu, NativeMethods.MF_STRING, MenuExit, UiText.Get("Text_72B6DBA8AAC5"));
             _ = NativeMethods.SetMenuDefaultItem(menu, MenuCapture, 0);
 
             NativeMethods.POINT point;
@@ -397,13 +397,13 @@ public sealed class TrayIconService : IDisposable
     {
         string status = _state switch
         {
-            TrayIconState.Capturing => "영역 선택 중",
-            TrayIconState.Busy => "처리 중",
-            TrayIconState.Error => "확인 필요",
-            _ => "준비됨",
+            TrayIconState.Capturing => UiText.Get("Text_73FE4A51DAAE"),
+            TrayIconState.Busy => UiText.Get("Text_9DEC678AE6FF"),
+            TrayIconState.Error => UiText.Get("Text_84DD6E381DCA"),
+            _ => UiText.Get("Text_F296CB19F0A2"),
         };
 
-        return Truncate($"MyCapture — {status} · 캡처 {_captureCount:N0}개", 127);
+        return Truncate(UiText.Format("Text_608AF5822E3A", status, _captureCount), 127);
     }
 
     private IntPtr LoadIcon(string path)

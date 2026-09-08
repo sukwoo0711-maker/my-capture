@@ -39,7 +39,7 @@ internal sealed class CaptureOverlayCoordinator
     private void PrepareWindow(Window window)
     {
         if (RequiresCaptureExclusion?.Invoke() == true && !ApplyCaptureExclusion(window))
-            throw new InvalidOperationException("캡처 창을 녹화 영상에서 제외할 수 없어 캡처를 중단했습니다.");
+            throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
     }
 
     internal event EventHandler<AnnotationEditingResult>? EditingCompleted;

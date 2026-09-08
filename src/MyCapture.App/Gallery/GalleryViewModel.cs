@@ -92,18 +92,18 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     /// <summary>Empty-state message, tailored to whether a search is active.</summary>
     public string EmptyStateText =>
         QueueIsEmpty
-            ? "아직 이미지나 동영상이 없습니다. 캡처하거나 녹화하면 여기에 표시됩니다."
-            : "검색 결과가 없습니다.";
+            ? UiText.Get("Text_1FC9ECE11C93")
+            : UiText.Get("Text_58726BF27E70");
 
     /// <summary>Count and storage summary, for example "캡처 12개 · 34.5 MB".</summary>
     public string SummaryText
     {
         get
         {
-            string count = $"항목 {_controller.Count:N0}개";
+            string count = UiText.Format("Text_B6D9CAB382C8", _controller.Count);
             string storage = FormatBytes(_controller.TotalBytes);
             string pins = _controller.IsOverCapacityDueToPins
-                ? " · 고정 항목 보호로 저장 한도를 일시 초과했습니다"
+                ? UiText.Get("Text_F1A864DCBEC4")
                 : string.Empty;
             return $"{count} · {storage}{pins}";
         }

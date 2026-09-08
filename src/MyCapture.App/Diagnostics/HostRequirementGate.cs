@@ -40,7 +40,7 @@ internal static class HostRequirementGate
 
     /// <summary>Korean user-facing text followed by the invariant technical detail.</summary>
     internal static string BuildMessage(Version? osVersion) =>
-        "MyCapture는 Windows 11 이상에서만 실행됩니다."
+        UiText.Get("Text_E04C819FB554")
         + Environment.NewLine
         + Environment.NewLine
         + WindowsSupportPolicy.DescribeUnsupportedHost(osVersion);

@@ -52,7 +52,7 @@ public sealed class PenAnnotation : AnnotationItem
     public bool IsHighlighter { get; set; }
 
     [JsonIgnore]
-    public override string DisplayName => IsHighlighter ? "형광펜" : "펜";
+    public override string DisplayName => IsHighlighter ? UiText.Get("Text_425C77DFA926") : UiText.Get("Text_E414AD855B8D");
 
     [JsonIgnore]
     public override RectD Bounds => GeometryMath.BoundsOf(_points);

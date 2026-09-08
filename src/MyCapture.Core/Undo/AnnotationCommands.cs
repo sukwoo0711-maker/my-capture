@@ -15,7 +15,7 @@ public sealed class CompositeCommand : IUndoableCommand
         ArgumentNullException.ThrowIfNull(commands);
 
         _commands = [.. commands];
-        Description = string.IsNullOrWhiteSpace(description) ? "여러 편집" : description;
+        Description = string.IsNullOrWhiteSpace(description) ? UiText.Get("Text_728F6813B235") : description;
     }
 
     public string Description { get; }
@@ -54,7 +54,7 @@ public sealed class AddAnnotationCommand : IUndoableCommand
         _item = item ?? throw new ArgumentNullException(nameof(item));
     }
 
-    public string Description => $"{_item.DisplayName} 추가";
+    public string Description => UiText.Format("Text_47E781C43156", _item.DisplayName);
 
     public void Execute()
     {
@@ -90,7 +90,7 @@ public sealed class RemoveAnnotationCommand : IUndoableCommand
         _index = _document.IndexOf(item);
     }
 
-    public string Description => $"{_item.DisplayName} 삭제";
+    public string Description => UiText.Format("Text_8F8C3D476B1D", _item.DisplayName);
 
     public void Execute()
     {
@@ -122,7 +122,7 @@ public sealed class TransformAnnotationCommand : IUndoableCommand
         _after = after;
     }
 
-    public string Description => $"{_item.DisplayName} 이동/크기 변경";
+    public string Description => UiText.Format("Text_DDB4DA1FC0AE", _item.DisplayName);
 
     public void Execute() => _item.SetBounds(_after);
 
@@ -174,7 +174,7 @@ public sealed class PropertyChangeCommand<TItem, TValue> : IUndoableCommand
         _after = after;
     }
 
-    public string Description => $"{_item.DisplayName} {_propertyLabel} 변경";
+    public string Description => UiText.Format("Text_97B224926F71", _item.DisplayName, _propertyLabel);
 
     public void Execute() => _setter(_item, _after);
 
@@ -212,7 +212,7 @@ public sealed class ReorderAnnotationCommand : IUndoableCommand
         _toIndex = Math.Clamp(toIndex, 0, Math.Max(0, _document.Items.Count - 1));
     }
 
-    public string Description => $"{_item.DisplayName} 순서 변경";
+    public string Description => UiText.Format("Text_67781174A42E", _item.DisplayName);
 
     public void Execute() => Move(_fromIndex, _toIndex);
 
@@ -257,7 +257,7 @@ public sealed class ReplacePointsCommand : IUndoableCommand
         _after = [.. after];
     }
 
-    public string Description => $"{_item.DisplayName} 점 변경";
+    public string Description => UiText.Format("Text_F6249F8FCEAE", _item.DisplayName);
 
     public void Execute() => Apply(_after);
 

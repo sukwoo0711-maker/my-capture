@@ -10,7 +10,7 @@ namespace MyCapture.App.Tests;
 /// must keep one numeric focal point, use Korean context instead of decorative English copy, and
 /// expose every tick as a polite live-region update.
 /// </summary>
-public sealed class CountdownWindowAccessibilityTests
+public sealed class CountdownWindowAccessibilityTests : KoreanCaptionTest
 {
     [Fact]
     public void CountdownUsesKoreanContextAndPoliteLiveRegion()
