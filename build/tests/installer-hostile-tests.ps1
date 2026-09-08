@@ -84,7 +84,12 @@ function Invoke-UpdaterInstaller([string]$TargetRoot, [string[]]$ExtraArguments)
     [IO.Directory]::CreateDirectory($sessionDirectory) | Out-Null
     $sessionFile = Join-Path $sessionDirectory 'update-session.json'
     $token = [guid]::NewGuid().ToString('N')
-    @{ Token = $token; Version = $Version; InstallRoot = $TargetRoot; ParentId = [int]::MaxValue } |
+    $sessionMetadata = @{ Token = $token; Version = $Version; InstallRoot = $TargetRoot; ParentId = [int]::MaxValue }
+    if (Test-Path -LiteralPath (Join-Path $TargetRoot 'install-manifest.json')) {
+        $sessionMetadata.TargetMode = 'OwnedInstall'
+        $sessionMetadata.SourceRoot = $TargetRoot
+    }
+    $sessionMetadata |
         ConvertTo-Json | Set-Content -LiteralPath $sessionFile -Encoding UTF8
     $previousSession = $env:MYCAPTURE_UPDATE_SESSION
     try {
@@ -325,6 +330,10 @@ try {
     $rollbackHash = Get-Sha256 $rollbackSentinel
     Write-Pass 'unicode-install' "exit=0 root=$installRoot"
 
+    $code = Invoke-UpdaterInstaller $installRoot @()
+    Assert-Equal 0 $code 'Owned in-place update failed.'
+    Assert-Equal $rollbackHash (Get-Sha256 $rollbackSentinel) 'Owned update did not preserve an extra user file.'
+    Write-Pass 'updater-user-files' 'owned custom update preserved unmanifested file and its exact hash'
     foreach ($fault in @('AfterBackup', 'AfterCommit')) {
         $code = Invoke-UpdaterInstaller $installRoot @('-TestFault', $fault)
         Assert-Equal 17 $code "$fault should use commit/rollback exit 17."

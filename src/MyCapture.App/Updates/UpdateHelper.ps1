@@ -17,6 +17,25 @@ function Get-InstalledBinaryVersion([string]$Path) {
     return '{0}.{1}.{2}' -f $version.FileMajorPart, $version.FileMinorPart, $version.FileBuildPart
 }
 function Start-UpdateProcess($Info) { return [Diagnostics.Process]::Start($Info) }
+function Assert-SessionTarget($Config) {
+    $defaultRoot = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'Programs\MyCapture'
+    if ($Config.TargetMode -eq 'InstallToDefault') {
+        if (-not [string]::Equals([string]$Config.InstallRoot, $defaultRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Portable conversion must use the default per-user destination.' }
+        return
+    }
+    if ($Config.TargetMode -ne 'OwnedInstall' -or -not [string]::Equals([string]$Config.SourceRoot, [string]$Config.InstallRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Update source and target do not match.' }
+    $marker = Join-Path $Config.SourceRoot 'install-manifest.json'
+    Assert-NoLinks $marker
+    $old = Get-Content -LiteralPath $marker -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($old.Product -ne 'MyCapture') { throw 'Update source is not an owned installation.' }
+    foreach ($name in @('MyCapture.exe', 'MyCapture.dll')) {
+        $file = Join-Path $Config.SourceRoot $name
+        Assert-NoLinks $file
+        $entries = @($old.Files | Where-Object { $_.Path -ceq $name })
+        if ($entries.Count -ne 1 -or (Get-Item -LiteralPath $file).Length -ne [long]$entries[0].Bytes -or
+            (Get-Hash $file) -ne [string]$entries[0].Sha256) { throw 'Installed source changed before update.' }
+    }
+}
 function Confirm-AndRestart($config, $receipt) {
     if ($receipt.Token -ne $config.Token -or $receipt.Version -ne $config.Version -or [int]$receipt.ExitCode -ne 0 -or
         -not [string]::Equals([string]$receipt.InstallRoot, [string]$config.InstallRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Installer failed or returned an unexpected receipt.' }
@@ -58,6 +77,7 @@ try {
         if (-not $parent.WaitForExit(60000)) { throw 'Application did not exit; installation was not started.' }
         $parent.Dispose()
     }
+    Assert-SessionTarget $config
     Assert-NoLinks $expectedInstaller
     # Recheck after parent exit. Keep the package locked until the installer receipt arrives.
     $locked = [IO.File]::Open($expectedInstaller, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
@@ -101,7 +121,7 @@ catch {
     try {
         Add-Type -AssemblyName PresentationFramework
         $description = if ($config) { [string]$config.FailureMessage } else { 'MyCapture update could not be confirmed.' }
-        [System.Windows.MessageBox]::Show($description + [Environment]::NewLine + $log, 'MyCapture', 'OK', 'Error') | Out-Null
+        [System.Windows.MessageBox]::Show($description + [Environment]::NewLine + $message + [Environment]::NewLine + $log, 'MyCapture', 'OK', 'Error') | Out-Null
     } catch { }
     exit 1
 }

@@ -307,6 +307,81 @@ function Get-SafeInstallRoot {
     return $full
 }
 
+function Assert-UpdateRootBoundary([string]$Root) {
+    $full = [IO.Path]::GetFullPath($Root).TrimEnd('\')
+    foreach ($folder in @('Windows', 'ProgramFiles', 'ProgramFilesX86', 'UserProfile', 'LocalApplicationData', 'ApplicationData', 'DesktopDirectory', 'MyDocuments')) {
+        $protected = [Environment]::GetFolderPath([Environment+SpecialFolder]::$folder)
+        if ($folder -in @('Windows', 'ProgramFiles', 'ProgramFilesX86') -and $protected -and
+            $full.StartsWith($protected + '\', [StringComparison]::OrdinalIgnoreCase)) { Throw-InstallerError $ExitUnsafePath 'Per-user updater cannot replace a system-directory installation.' }
+        if ($protected -and ([string]::Equals($full, $protected, [StringComparison]::OrdinalIgnoreCase) -or
+            $protected.StartsWith($full + '\', [StringComparison]::OrdinalIgnoreCase))) { Throw-InstallerError $ExitUnsafePath 'Updater cannot target a system or user-data root.' }
+    }
+    $current = $full
+    while ($current) {
+        if ([IO.Directory]::Exists($current) -and ([IO.File]::GetAttributes($current) -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            Throw-InstallerError $ExitUnsafePath 'Update target contains a reparse point.'
+        }
+        $current = [IO.Path]::GetDirectoryName($current)
+    }
+}
+
+function Assert-OwnedUpdateSource([string]$Root) {
+    Assert-UpdateRootBoundary $Root
+    $marker = Join-Path $Root 'install-manifest.json'
+    if (-not [IO.File]::Exists($marker) -or ([IO.File]::GetAttributes($marker) -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        Throw-InstallerError $ExitExistingInstall 'An in-place update requires an owned installation manifest.'
+    }
+    $old = Read-And-ValidateManifest $marker
+    foreach ($name in @('MyCapture.exe', 'MyCapture.dll')) {
+        $entries = @($old.Files | Where-Object { [string]$_.Path -ceq $name })
+        $path = Join-Path $Root $name
+        if ($entries.Count -ne 1 -or -not [IO.File]::Exists($path) -or
+            ([IO.File]::GetAttributes($path) -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            (Get-Item -LiteralPath $path).Length -ne [long]$entries[0].Bytes -or -not (Test-HashEquals $path ([string]$entries[0].Sha256))) {
+            Throw-InstallerError $ExitIntegrity 'Installed application does not match its ownership manifest.'
+        }
+    }
+}
+
+function Preserve-UserInstallFiles([string]$OldRoot, [string]$StageRoot) {
+    if (-not [IO.Directory]::Exists($OldRoot)) { return }
+    $owned = @{}
+    $marker = Join-Path $OldRoot 'install-manifest.json'
+    if ([IO.File]::Exists($marker)) {
+        $oldManifest = Read-And-ValidateManifest $marker
+        foreach ($record in @($oldManifest.Files)) { $owned[([string]$record.Path).Replace('/', '\')] = $true }
+    }
+    foreach ($name in @('install-manifest.json', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1')) { $owned[$name] = $true }
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $pending.Push($OldRoot)
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        foreach ($item in @(Get-ChildItem -LiteralPath $directory -Force)) {
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { Throw-InstallerError $ExitUnsafePath 'User files contain a link; update stopped without replacing them.' }
+            if ($item.PSIsContainer) {
+                $relativeDirectory = $item.FullName.Substring($OldRoot.TrimEnd('\').Length + 1)
+                $targetDirectory = Join-Path $StageRoot $relativeDirectory
+                if ([IO.File]::Exists($targetDirectory)) { Throw-InstallerError $ExitExistingInstall "A user directory conflicts with the new package: $relativeDirectory" }
+                [IO.Directory]::CreateDirectory($targetDirectory) | Out-Null
+                $pending.Push($item.FullName)
+                continue
+            }
+            $relative = $item.FullName.Substring($OldRoot.TrimEnd('\').Length + 1)
+            if ($owned.ContainsKey($relative)) { continue }
+            $destination = Join-Path $StageRoot $relative
+            if ([IO.File]::Exists($destination) -or [IO.Directory]::Exists($destination)) {
+                Throw-InstallerError $ExitExistingInstall "A user file conflicts with the new package: $relative. Move it to another folder before retrying."
+            }
+            [IO.Directory]::CreateDirectory((Split-Path -Parent $destination)) | Out-Null
+            $sourceStream = [IO.File]::Open($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+            try {
+                $targetStream = [IO.File]::Open($destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                try { $sourceStream.CopyTo($targetStream) } finally { $targetStream.Dispose() }
+            }
+            finally { $sourceStream.Dispose() }
+        }
+    }
+}
 function Assert-ParentWritable {
     param([string]$Parent)
     try {
@@ -587,15 +662,33 @@ try {
             $linkCheck = [IO.Path]::GetDirectoryName($linkCheck)
         }
         $update = Get-Content -LiteralPath $sessionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($update.Token -notmatch '^[a-f0-9]{32}$' -or $update.Version -ne $manifest.Version) { Throw-InstallerError $ExitIntegrity 'Invalid updater session identity.' }
+        $script:UpdateReceipt = Join-Path $sessionDirectory 'install-result.json'
+        if (Test-Path -LiteralPath $script:UpdateReceipt) { Throw-InstallerError $ExitUnsafePath 'Updater receipt already exists.' }
+        $script:UpdateSession = $update
+        $script:QuietMode = $true
+
+        # IExpress inherits the session, so custom roots selected by the running app are
+        # accepted only after independently proving that exact source's installed ownership.
+        if ($update.PSObject.Properties['TargetMode']) {
+            if ([string]$update.TargetMode -eq 'OwnedInstall') {
+                $candidate = Get-SafeInstallRoot ([string]$update.InstallRoot) $manifest
+                if (-not [string]::Equals($candidate, [IO.Path]::GetFullPath([string]$update.SourceRoot).TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) {
+                    Throw-InstallerError $ExitUnsafePath 'Update target does not match its owned source.'
+                }
+                Assert-OwnedUpdateSource $candidate
+                $expectedUpdateInstallRoot = $candidate
+                # Existing custom installations retain their shell registration unchanged.
+                if (-not [string]::Equals($candidate, (Join-Path $localData 'Programs\MyCapture'), [StringComparison]::OrdinalIgnoreCase)) { $NoShellIntegration = $true }
+            }
+            elseif ([string]$update.TargetMode -ne 'InstallToDefault') { Throw-InstallerError $ExitUnsafePath 'Unknown updater target mode.' }
+        }
+        Assert-UpdateRootBoundary $expectedUpdateInstallRoot
         if ($update.Token -notmatch '^[a-f0-9]{32}$' -or $update.Version -ne $manifest.Version -or
             -not [string]::Equals([string]$update.InstallRoot, $expectedUpdateInstallRoot, [StringComparison]::OrdinalIgnoreCase)) {
             Throw-InstallerError $ExitIntegrity 'Updater session does not match this package.'
         }
 
-        $script:UpdateReceipt = Join-Path $sessionDirectory 'install-result.json'
-        if (Test-Path -LiteralPath $script:UpdateReceipt) { Throw-InstallerError $ExitUnsafePath 'Updater receipt already exists.' }
-        $script:UpdateSession = $update
-        $script:QuietMode = $true
         $InstallRoot = [string]$update.InstallRoot
         $parentProcess = Get-Process -Id ([int]$update.ParentId) -ErrorAction SilentlyContinue
         if ($parentProcess) { $parentProcess.Dispose(); Throw-InstallerError $ExitProcessStop 'Updater parent is still running.' }
@@ -630,6 +723,7 @@ try {
     }
     else {
         Stop-InstalledApplication (Join-Path $script:InstallRootFull 'MyCapture.exe')
+        if ($script:UpdateSession) { Preserve-UserInstallFiles $script:InstallRootFull $script:StageRoot }
         try {
             if ([IO.Directory]::Exists($script:InstallRootFull)) {
                 Move-DirectoryWithRetry $script:InstallRootFull $script:BackupRoot

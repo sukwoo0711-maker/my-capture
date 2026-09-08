@@ -9,34 +9,16 @@ namespace MyCapture.App.Updates;
 /// <summary>Prepares a per-session handoff. No installer runs until the parent has exited.</summary>
 internal sealed class UpdateInstaller
 {
-    internal static bool SupportsCurrentInstallation => SupportsInstallation(AppContext.BaseDirectory,
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "MyCapture"));
-
-    internal static bool SupportsInstallation(string currentDirectory, string defaultDirectory)
-    {
-        if (!string.Equals(Path.GetFullPath(currentDirectory).TrimEnd(Path.DirectorySeparatorChar),
-            Path.GetFullPath(defaultDirectory).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)) return false;
-        try
-        {
-            string marker = Path.Combine(currentDirectory, "install-manifest.json");
-            AssertNoReparsePoints(marker);
-            using var manifest = JsonDocument.Parse(File.ReadAllText(marker));
-            return manifest.RootElement.GetProperty("Product").GetString() == "MyCapture" &&
-                UpdateVersion.TryParse(manifest.RootElement.GetProperty("Version").GetString(), out _);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or KeyNotFoundException or InvalidOperationException)
-        {
-            return false;
-        }
-    }
     private readonly Action<ProcessStartInfo> _start;
     internal UpdateInstaller(Action<ProcessStartInfo>? start = null) =>
         _start = start ?? (info => { using var process = Process.Start(info) ?? throw new IOException("Updater helper did not start."); });
 
     internal async Task<bool> InstallAsync(VerifiedUpdatePackage package, Func<bool> canExit,
-        Action exit, CancellationToken cancellationToken)
+        Action exit, CancellationToken cancellationToken, UpdateTarget? target = null)
     {
         ArgumentNullException.ThrowIfNull(package);
+        target ??= UpdateTarget.Resolve(AppContext.BaseDirectory, UpdateTarget.DefaultRoot);
+        await target.ValidateAsync(cancellationToken);
         string session = package.StagingDirectory;
         string expectedName = $"MyCapture-{package.Version}-win-x64-setup.exe";
         if (!string.Equals(Path.Combine(session, expectedName), package.InstallerPath, StringComparison.OrdinalIgnoreCase))
@@ -66,7 +48,9 @@ internal sealed class UpdateInstaller
             Bytes = package.FileSizeBytes,
             Version = package.Version.ToNormalizedString(),
             Token = Guid.NewGuid().ToString("N"),
-            InstallRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "MyCapture"),
+            InstallRoot = target.InstallRoot,
+            SourceRoot = target.SourceRoot,
+            TargetMode = target.IsPortableMigration ? "InstallToDefault" : "OwnedInstall",
             FailureMessage = UpdateStrings.HelperFailed,
         };
         await using (var file = new FileStream(configPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))

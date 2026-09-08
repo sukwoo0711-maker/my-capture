@@ -1,4 +1,4 @@
-﻿using MyCapture.App.Updates;
+using MyCapture.App.Updates;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -26,6 +26,21 @@ public sealed class UpdateSessionTests
         Assert.Equal(1, service.Calls);
     }
 
+    [Fact]
+    public async Task ClosingDuringDownloadDisposesLateSuccessInsteadOfOfferingInstallation()
+    {
+        using var fixture = new UpdateInstallerTests.PackageFixture();
+        var service = new DelayedService();
+        using var session = new UpdateSession(service);
+        var pending = session.DownloadAsync(new UpdateVersion(1, 7, 0), fixture.Directory, new Progress<UpdateProgress>());
+        session.Dispose();
+        service.Completion.SetResult(StagedUpdateResult.Success(fixture.Package));
+        var result = await pending;
+        Assert.Equal(UpdateErrorKind.Cancelled, result!.ErrorKind);
+        Assert.Null(result.VerifiedPackage);
+        Assert.False(System.IO.File.Exists(fixture.Package.InstallerPath));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => session.DownloadAsync(new UpdateVersion(1, 7, 0), fixture.Directory, new Progress<UpdateProgress>()));
+    }
     private sealed class DelayedService : IUpdateService
     {
         internal TaskCompletionSource<StagedUpdateResult> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

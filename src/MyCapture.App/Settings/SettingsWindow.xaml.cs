@@ -118,6 +118,7 @@ internal sealed partial class SettingsWindow : Window
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
     internal void CloseForExit()
     {
+        ++_updateProgressGeneration;
         _updates.Cancel();
         if (!_installingUpdate) _stagedUpdate?.Cleanup();
         _allowClose = true;
@@ -130,7 +131,6 @@ internal sealed partial class SettingsWindow : Window
         if (!_allowClose)
         {
             e.Cancel = true;
-            _updates.Cancel();
             CancelToTray();
             return;
         }
@@ -206,13 +206,13 @@ internal sealed partial class SettingsWindow : Window
         }
         else
         {
-            _updates.Cancel();
             CancelToTray(); // Clean apply with nothing to report: hide back to the tray.
         }
     }
 
     private void CancelToTray()
     {
+        ++_updateProgressGeneration;
         _updates.Cancel();
         // Discard edits by dropping the draft, then hide.
         ReloadDraft();

@@ -71,23 +71,6 @@ public sealed class UpdateInstallerTests
             () => true, () => Assert.Fail("Must not exit"), cancellation.Token));
     }
 
-    [Fact]
-    public void PortableCustomAndUnownedLocationsAreNotClaimedAsUpdatable()
-    {
-        string root = Path.Combine(Path.GetTempPath(), "mycapture-location-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        string marker = Path.Combine(root, "install-manifest.json");
-        try
-        {
-            Assert.False(UpdateInstaller.SupportsInstallation(root, root));
-            File.WriteAllText(marker, "{\"Product\":\"OtherApp\",\"Version\":\"1.7.1\"}");
-            Assert.False(UpdateInstaller.SupportsInstallation(root, root));
-            File.WriteAllText(marker, "{\"Product\":\"MyCapture\",\"Version\":\"1.7.1\"}");
-            Assert.False(UpdateInstaller.SupportsInstallation(root, root + "-default"));
-            Assert.True(UpdateInstaller.SupportsInstallation(root, root));
-        }
-        finally { File.Delete(marker); Directory.Delete(root, false); }
-    }
     internal sealed class PackageFixture : IDisposable
     {
         internal string Directory { get; } = Path.Combine(Path.GetTempPath(), "mycapture updater ' & tests " + Guid.NewGuid().ToString("N"));

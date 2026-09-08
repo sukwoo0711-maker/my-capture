@@ -1,4 +1,4 @@
-﻿# Fake process boundaries only. Does not install, stop, or start MyCapture.
+# Fake process boundaries only. Does not install, stop, or start MyCapture.
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repository 'src\MyCapture.App\Updates\UpdateHelper.ps1') -FunctionsOnly
@@ -33,6 +33,17 @@ try {
     $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
     $config = [pscustomobject]@{ Token = 'session-token'; Version = '1.8.0'; InstallRoot = $testRoot }
     $receipt = [pscustomobject]@{ Token = 'session-token'; Version = '1.8.0'; InstallRoot = $testRoot; ExitCode = 17 }
+    $targetConfig = [pscustomobject]@{ TargetMode = 'OwnedInstall'; SourceRoot = $testRoot; InstallRoot = $testRoot }
+    Assert-SessionTarget $targetConfig
+    $targetConfig.SourceRoot = $testRoot + '-other'
+    Assert-Rejected { Assert-SessionTarget $targetConfig }
+    $targetConfig.SourceRoot = $testRoot
+    $targetConfig.TargetMode = 'InstallToDefault'
+    $targetConfig.InstallRoot = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'Programs\MyCapture'
+    Assert-SessionTarget $targetConfig
+    $targetConfig.InstallRoot = $testRoot
+    Assert-Rejected { Assert-SessionTarget $targetConfig }
+    $targetConfig.TargetMode = 'OwnedInstall'
     Assert-Rejected { Confirm-AndRestart $config $receipt }
     $receipt.ExitCode = 0
     $receipt.Token = 'other-token'
@@ -54,6 +65,7 @@ try {
     $script:BinaryVersion = '1.8.0'
     $binaryPath = Join-Path $testRoot 'MyCapture.dll'
     [IO.File]::AppendAllText($binaryPath, 'tamper')
+    Assert-Rejected { Assert-SessionTarget $targetConfig }
     Assert-Rejected { Confirm-AndRestart $config $receipt }
     [IO.File]::WriteAllText($binaryPath, 'synthetic executable, never launched')
     if ($script:Starts -ne 0) { throw 'An unconfirmed update reached restart.' }
@@ -62,7 +74,7 @@ try {
     $script:Dies = $true
     Assert-Rejected { Confirm-AndRestart $config $receipt }
     if ($script:Starts -ne 2) { throw 'Early exit fake was not exercised.' }
-    Write-Output 'PASS: 9 receipt, manifest, hash, version, and fake restart cases.'
+    Write-Output 'PASS: 14 target, receipt, manifest, hash, version, and fake restart cases.'
 }
 finally {
     foreach ($name in @('MyCapture.exe', 'MyCapture.dll', 'install-manifest.json')) { Remove-Item -LiteralPath (Join-Path $testRoot $name) -Force -ErrorAction SilentlyContinue }
