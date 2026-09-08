@@ -70,7 +70,12 @@ internal sealed class CaptureOverlayWindow : Window
     internal event EventHandler? SelectionCancelled;
 
     private void OnSourceInitialized(object? sender, EventArgs e)
-        => PlacePhysicalBounds();
+    {
+        // EnsureHandle may create this HWND solely to apply recording exclusion.
+        // PlaceTopmost uses SWP_SHOWWINDOW, so never call it while still hidden.
+        // ContentRendered reasserts physical placement after the authorized Show.
+        if (IsVisible) PlacePhysicalBounds();
+    }
 
     private void PlacePhysicalBounds()
     {

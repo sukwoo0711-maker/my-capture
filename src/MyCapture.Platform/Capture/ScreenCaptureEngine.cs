@@ -292,6 +292,97 @@ public sealed class ScreenCaptureEngine
     }
 
     /// <summary>
+    /// Creates a fixed-region capture surface owned by the calling thread.
+    /// </summary>
+    public CaptureSession CreateSession(RectD screenBounds, bool includeCursor) =>
+        new(this, screenBounds, includeCursor);
+
+    /// <summary>Reusable native resources; never shared with still captures or another recorder.</summary>
+    public sealed class CaptureSession : IDisposable
+    {
+        private readonly ScreenCaptureEngine _owner;
+        private readonly int _threadId = Environment.CurrentManagedThreadId;
+        private readonly RectD _pixels;
+        private readonly bool _includeCursor;
+        private readonly IntPtr _desktop = NativeMethods.GetDesktopWindow();
+        private IntPtr _screenDc;
+        private IntPtr _memoryDc;
+        private IntPtr _bitmap;
+        private bool _disposed;
+
+        internal CaptureSession(ScreenCaptureEngine owner, RectD bounds, bool includeCursor)
+        {
+            _owner = owner;
+            _pixels = bounds.Normalized().ToPixelBounds();
+            _includeCursor = includeCursor;
+            Width = Math.Max(1, checked((int)_pixels.Width));
+            Height = Math.Max(1, checked((int)_pixels.Height));
+            try
+            {
+                _screenDc = NativeMethods.GetWindowDC(_desktop);
+                if (_screenDc == IntPtr.Zero) throw new InvalidOperationException("Could not obtain desktop DC.");
+                _memoryDc = NativeMethods.CreateCompatibleDC(_screenDc);
+                if (_memoryDc == IntPtr.Zero) throw new InvalidOperationException("Could not create capture DC.");
+                _bitmap = NativeMethods.CreateCompatibleBitmap(_screenDc, Width, Height);
+                if (_bitmap == IntPtr.Zero) throw new InvalidOperationException("Could not allocate capture bitmap.");
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
+        }
+
+        public int Width { get; }
+        public int Height { get; }
+
+        public void CaptureInto(byte[] destination, int stride)
+        {
+            VerifyThread();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ArgumentNullException.ThrowIfNull(destination);
+            if (stride < checked(Width * 4)) throw new ArgumentOutOfRangeException(nameof(stride));
+            if (destination.Length < checked(stride * Height)) throw new ArgumentException("Buffer is too small.", nameof(destination));
+            IntPtr previous = NativeMethods.SelectObject(_memoryDc, _bitmap);
+            if (IsInvalidGdiHandle(previous)) throw new InvalidOperationException("Could not select capture bitmap.");
+            try
+            {
+                if (!NativeMethods.BitBlt(_memoryDc, 0, 0, Width, Height, _screenDc,
+                    (int)_pixels.Left, (int)_pixels.Top, NativeMethods.SRCCOPY | NativeMethods.CAPTUREBLT))
+                    throw new InvalidOperationException($"BitBlt failed (Win32 {Marshal.GetLastWin32Error()}).");
+                if (_includeCursor) _owner.DrawCursor(_memoryDc, (int)_pixels.Left, (int)_pixels.Top, Width, Height);
+            }
+            finally
+            {
+                // GetDIBits requires deselection on every frame, including error paths.
+                if (IsInvalidGdiHandle(NativeMethods.SelectObject(_memoryDc, previous)))
+                {
+                    Dispose();
+                    throw new InvalidOperationException("Could not deselect capture bitmap.");
+                }
+            }
+            CopyTopDownBgra(_memoryDc, _bitmap, Width, Height, destination, stride);
+        }
+
+        private void VerifyThread()
+        {
+            if (_threadId != Environment.CurrentManagedThreadId)
+                throw new InvalidOperationException("Capture resources belong to their creating thread.");
+        }
+
+        public void Dispose()
+        {
+            VerifyThread();
+            if (_disposed) return;
+            _disposed = true;
+            // Deleting the DC first releases a selection even if restoration failed.
+            if (_memoryDc != IntPtr.Zero) { NativeMethods.DeleteDC(_memoryDc); _memoryDc = IntPtr.Zero; }
+            if (_bitmap != IntPtr.Zero) { NativeMethods.DeleteObject(_bitmap); _bitmap = IntPtr.Zero; }
+            if (_screenDc != IntPtr.Zero) { NativeMethods.ReleaseDC(_desktop, _screenDc); _screenDc = IntPtr.Zero; }
+        }
+    }
+
+    /// <summary>
     /// Crops a frozen frame.
     /// </summary>
     /// <remarks>

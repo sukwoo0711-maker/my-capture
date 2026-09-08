@@ -69,7 +69,7 @@ internal sealed class RecordingControlWindow : Window
 
     private RegionRecorder? _recorder;
     private DispatcherTimer? _elapsedTimer;
-    private DateTimeOffset _startedAt;
+    private bool _readyAnnounced;
     private DispatcherTimer? _countdownTimer;
     private int _countdownRemaining;
     private bool _stopping;
@@ -133,6 +133,7 @@ internal sealed class RecordingControlWindow : Window
     internal event EventHandler? Stopping;
 
     internal bool IsRecording => _recorder is { IsRecording: true };
+    internal bool CanCaptureStill => _recorder is { IsReady: true } && !_stopping && !_completionPending && !_finished;
 
     /// <summary>External stop request (e.g. pressing Ctrl+Shift+X again).</summary>
     internal void RequestStop() => StopRecording();
@@ -524,10 +525,10 @@ internal sealed class RecordingControlWindow : Window
             return;
         }
 
-        _startedAt = DateTimeOffset.Now;
+        _readyAnnounced = false;
         _primaryButton.Content = "녹화 정지";
         _primaryButton.Style = TryStyle("Button.Danger");
-        _statusText.Text = "녹화 중 · Esc 또는 정지로 종료";
+        _statusText.Text = "녹화 준비 중 · Esc 또는 정지로 종료";
         _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         AnnounceStatus();
 
@@ -555,7 +556,18 @@ internal sealed class RecordingControlWindow : Window
 
     private void UpdateTimer()
     {
-        TimeSpan elapsed = DateTimeOffset.Now - _startedAt;
+        if (_recorder is { IsRecording: false } && !_stopping && !_finished)
+        {
+            StopRecording();
+            return;
+        }
+        if (!_readyAnnounced && _recorder?.IsReady == true)
+        {
+            _readyAnnounced = true;
+            _statusText.Text = "녹화 중 · Esc 또는 정지로 종료";
+            AnnounceStatus();
+        }
+        TimeSpan elapsed = _recorder?.RecordedElapsed ?? TimeSpan.Zero;
         _timerText.Text = elapsed.ToString(elapsed.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss", CultureInfo.InvariantCulture);
     }
 

@@ -74,6 +74,8 @@ internal sealed class RegionRecordingCoordinator
 
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
 
+    internal bool CanCaptureStill => !_finishing && !_completionInProgress && _controls?.CanCaptureStill == true;
+
     internal bool IsActive =>
         _selectionOverlay is not null
         || _controls is not null

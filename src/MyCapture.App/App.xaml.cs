@@ -240,6 +240,9 @@ public partial class App : Application
             RestoreTrayAfterCapture();
         };
         _overlay.CommitRequested = HandleCommitAsync;
+        _overlay.RequiresCaptureExclusion = () => _recorder?.CanCaptureStill == true;
+        _overlay.TransitionFailed += exception =>
+            _tray?.ShowBalloon("캡처를 완료할 수 없습니다", exception.Message, TrayBalloonKind.Error);
 
         // Region video recording (Ctrl+Shift+X). Shares the capture engine and, on a
         // frame-image edit, the same persistence/commit path as still capture so recordings
@@ -533,6 +536,12 @@ public partial class App : Application
         countdown.Elapsed += OnElapsed;
         countdown.Cancelled += OnCancelled;
         countdown.Closed += (_, _) => { if (_activeCountdown == countdown) { Cleanup(); RestoreTrayAfterCapture(); } };
+        if (_recorder?.CanCaptureStill == true && !CaptureWindowExclusion.TryApply(countdown))
+        {
+            countdown.Close();
+            _tray?.ShowBalloon("지연 캡처를 시작할 수 없습니다", "카운트다운 창을 녹화에서 제외할 수 없습니다.", TrayBalloonKind.Error);
+            return;
+        }
         countdown.Show();
         countdown.Activate();
     }
@@ -632,14 +641,14 @@ public partial class App : Application
 
     private bool GuardStillCapture(string mode)
     {
-        if (_recorder?.IsActive != true)
-        {
+        if (_overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)
+            return false;
+        if (_recorder?.IsActive != true || _recorder.CanCaptureStill)
             return true;
-        }
 
         _tray?.ShowBalloon(
             mode,
-            "녹화 중에는 스크린샷을 시작할 수 없습니다.",
+            "녹화 준비 또는 마무리 중입니다. 잠시 후 다시 캡처해 주세요.",
             TrayBalloonKind.Information,
             playSound: false);
         return false;
@@ -872,7 +881,7 @@ public partial class App : Application
     /// </summary>
     private void HandleRecordRegion()
     {
-        if (_recorder is null)
+        if (_recorder is null || (!_recorder.IsActive && (_overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)))
         {
             return;
         }

@@ -24,6 +24,8 @@ public sealed record RecordingResult(
     int Width,
     int Height)
 {
+    public RecordingPerformance? Performance { get; init; }
+
     /// <summary>Frames that should have been produced over the elapsed wall-clock time.</summary>
     public long ExpectedFrames => DurationMs > 0 && Fps > 0
         ? Math.Max(EmittedFrames, (long)Math.Ceiling(DurationMs * Fps / 1000.0))
@@ -42,6 +44,10 @@ public sealed record RecordingResult(
         ? DroppedFrames / (double)ExpectedFrames
         : 0;
 }
+
+/// <summary>Constant-space production timing totals, separate from the recorded duration.</summary>
+public sealed record RecordingPerformance(double InitializationMs, double CaptureTotalMs,
+    double CaptureMaxMs, double EncodeTotalMs, double EncodeMaxMs, double FinalizationMs);
 
 /// <summary>
 /// Drives the grab → pace → encode loop for a region recording on a dedicated
@@ -72,6 +78,20 @@ public sealed class RegionRecorder : IDisposable
     private IVideoEncoder? _encoder;
     private RecordingResult? _result;
     private Exception? _failure;
+    private long _recordingStarted;
+    private long _recordingEnded;
+
+    public bool IsReady => Interlocked.Read(ref _recordingStarted) != 0 && IsRecording && !_stopRequested;
+
+    public TimeSpan RecordedElapsed
+    {
+        get
+        {
+            long started = Interlocked.Read(ref _recordingStarted);
+            long ended = Interlocked.Read(ref _recordingEnded);
+            return started == 0 ? TimeSpan.Zero : Stopwatch.GetElapsedTime(started, ended == 0 ? Stopwatch.GetTimestamp() : ended);
+        }
+    }
 
     public RegionRecorder(
         RegionFrameGrabber grabber,
@@ -98,6 +118,8 @@ public sealed class RegionRecorder : IDisposable
             throw new InvalidOperationException("A recording is already in progress.");
         }
 
+        Interlocked.Exchange(ref _recordingStarted, 0);
+        Interlocked.Exchange(ref _recordingEnded, 0);
         _stopRequested = false;
         _result = null;
         _failure = null;
@@ -167,12 +189,17 @@ public sealed class RegionRecorder : IDisposable
 
     private void CaptureLoop(RecordingClock clock, VideoEncoderOptions options)
     {
-        var stopwatch = Stopwatch.StartNew();
+        var stopwatch = new Stopwatch();
+        long initializationStarted = Stopwatch.GetTimestamp();
+        double captureTotal = 0, captureMax = 0, encodeTotal = 0, encodeMax = 0;
         try
         {
             // Create the encoder here, on this MTA capture thread, so the MF Sink Writer's
             // COM objects live in the same apartment that will write every frame.
             _encoder = _encoderFactory(options);
+            double initializationMs = Stopwatch.GetElapsedTime(initializationStarted).TotalMilliseconds;
+            Interlocked.Exchange(ref _recordingStarted, Stopwatch.GetTimestamp());
+            stopwatch.Start();
 
             // Always execute one capture iteration after encoder initialisation. H.264 MFT
             // startup can occasionally take longer than a very short recording; if Stop was
@@ -184,13 +211,21 @@ public sealed class RegionRecorder : IDisposable
                 double elapsed = stopwatch.Elapsed.TotalMilliseconds;
                 if (clock.TryClaimFrame(elapsed, out double timestampMs))
                 {
+                    long phaseStarted = Stopwatch.GetTimestamp();
                     byte[] pixels = _grabber.GrabInto();
+                    double captureMs = Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
+                    captureTotal += captureMs;
+                    captureMax = Math.Max(captureMax, captureMs);
+                    phaseStarted = Stopwatch.GetTimestamp();
                     _encoder!.WriteFrame(new EncoderFrame(
                         pixels,
                         _grabber.Width,
                         _grabber.Height,
                         _grabber.Stride,
                         timestampMs));
+                    double encodeMs = Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
+                    encodeTotal += encodeMs;
+                    encodeMax = Math.Max(encodeMax, encodeMs);
                 }
 
                 if (_stopRequested)
@@ -207,7 +242,10 @@ public sealed class RegionRecorder : IDisposable
             }
 
             stopwatch.Stop();
+            Interlocked.Exchange(ref _recordingEnded, Stopwatch.GetTimestamp());
+            long finalizeStarted = Stopwatch.GetTimestamp();
             _encoder!.Complete();
+            double finalizationMs = Stopwatch.GetElapsedTime(finalizeStarted).TotalMilliseconds;
 
             _result = new RecordingResult(
                 options.OutputPath,
@@ -215,7 +253,10 @@ public sealed class RegionRecorder : IDisposable
                 options.Fps,
                 clock.EmittedFrames,
                 _grabber.Width,
-                _grabber.Height);
+                _grabber.Height)
+            {
+                Performance = new RecordingPerformance(initializationMs, captureTotal, captureMax, encodeTotal, encodeMax, finalizationMs),
+            };
 
             _log.LogInformation(
                 "Recording finished: {Frames}/{ExpectedFrames} frame(s) over {Duration:0}ms; " +
@@ -250,6 +291,8 @@ public sealed class RegionRecorder : IDisposable
             finally
             {
                 _encoder = null;
+                Interlocked.CompareExchange(ref _recordingEnded, Stopwatch.GetTimestamp(), 0);
+                _grabber.Dispose();
             }
         }
     }

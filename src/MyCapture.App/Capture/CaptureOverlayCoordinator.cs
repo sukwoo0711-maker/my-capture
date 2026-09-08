@@ -32,6 +32,15 @@ internal sealed class CaptureOverlayCoordinator
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
 
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
+    internal Func<bool>? RequiresCaptureExclusion { get; set; }
+    internal Func<Window, bool> ApplyCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApply;
+    internal event Action<Exception>? TransitionFailed;
+
+    private void PrepareWindow(Window window)
+    {
+        if (RequiresCaptureExclusion?.Invoke() == true && !ApplyCaptureExclusion(window))
+            throw new InvalidOperationException("캡처 창을 녹화 영상에서 제외할 수 없어 캡처를 중단했습니다.");
+    }
 
     internal event EventHandler<AnnotationEditingResult>? EditingCompleted;
 
@@ -78,7 +87,16 @@ internal sealed class CaptureOverlayCoordinator
             frame.PixelWidth,
             frame.PixelHeight);
 
-        overlay.Show();
+        try
+        {
+            PrepareWindow(overlay);
+            overlay.Show();
+        }
+        catch
+        {
+            overlay.Close();
+            throw;
+        }
         _ = overlay.Activate();
     }
 
@@ -209,6 +227,7 @@ internal sealed class CaptureOverlayCoordinator
             editor.Committed += OnEditorCommitted;
             editor.Cancelled += OnEditorCancelled;
             editor.Closed += OnEditorClosed;
+            PrepareWindow(editor);
             editor.Show();
             _ = editor.Activate();
         }
@@ -218,6 +237,7 @@ internal sealed class CaptureOverlayCoordinator
             // recovery-export mode. An unexpected transition/window failure must still release
             // the single-session guard instead of leaving capture permanently wedged.
             _log.LogError(ex, "Could not complete the selection-to-editor transition");
+            TransitionFailed?.Invoke(ex);
             if (_activeEditor is { } failedEditor)
             {
                 failedEditor.Committed -= OnEditorCommitted;
