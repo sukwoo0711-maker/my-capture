@@ -53,6 +53,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
     internal event EventHandler? LayerSelected;
     internal event EventHandler? LayerTimingChanged;
+    internal event EventHandler? LayerTimingInteractionStarted;
     internal event EventHandler? LayerTimingInteractionCompleted;
     internal event EventHandler? TextTimingChanged;
     internal event EventHandler? TextLayerSelected;
@@ -532,6 +533,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             }
 
             _dragInitialStartMs = startMs;
+            LayerTimingInteractionStarted?.Invoke(this, EventArgs.Empty);
             _dragInitialEndMs = endMs;
             _dragStartMouseX = point.X;
             _dragTargetId = layerId;
@@ -804,6 +806,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
         if (e.Key is Key.Left or Key.Right && _selectedId.HasValue)
         {
+            LayerTimingInteractionStarted?.Invoke(this, EventArgs.Empty);
             bool isStartHandle = !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
             double step = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? 10 : 100;
             double delta = e.Key == Key.Left ? -step : step;

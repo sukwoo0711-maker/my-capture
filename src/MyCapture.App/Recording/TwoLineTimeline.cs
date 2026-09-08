@@ -21,9 +21,9 @@ namespace MyCapture.App.Recording;
 /// </remarks>
 internal sealed class TwoLineTimeline : ContentControl, IDisposable
 {
-    private const double OverviewHeight = 58.0;
-    private const double DetailHeight = 64.0;
-    private const double ConnectorHeight = 15.0;
+    private const double OverviewHeight = 34.0;
+    private const double DetailHeight = 42.0;
+    private const double ConnectorHeight = 8.0;
     private const double EdgeGrab = 14.0;
     private const double BrushGripWidth = 12.0;
     private const double TrimHandleWidth = 18.0;

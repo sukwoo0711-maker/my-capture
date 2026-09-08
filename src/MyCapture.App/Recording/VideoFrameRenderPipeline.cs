@@ -253,7 +253,7 @@ internal static class VideoFrameRenderPipeline
         return buffer;
     }
 
-    private static BitmapSource RenderFrame(
+    internal static BitmapSource RenderFrame(
         ImageSource source,
         int width,
         int height,
@@ -392,6 +392,7 @@ internal static class FrameEditLayerRenderer
             try
             {
                 byte[] bytes = Convert.FromBase64String(layer.OverlayPngBase64);
+                if (!HasSafePngDimensions(bytes)) { continue; }
                 using var stream = new MemoryStream(bytes, writable: false);
                 var decoder = new PngBitmapDecoder(
                     stream,
@@ -417,6 +418,18 @@ internal static class FrameEditLayerRenderer
         return decoded;
     }
 
+    // PNG's IHDR precedes compressed pixels, so reject expansion bombs before WIC allocates them.
+    internal static bool HasSafePngDimensions(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < 33 || !bytes[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 })
+            || !bytes.Slice(12, 4).SequenceEqual("IHDR"u8)) { return false; }
+        uint width = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.Slice(16, 4));
+        uint height = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.Slice(20, 4));
+        ulong decodedBytesPerPixel = bytes[24] == 16 ? 8UL : 4UL;
+        return width is > 0 and <= 8192 && height is > 0 and <= 8192
+            && (ulong)width * height * decodedBytesPerPixel <= 64 * 1024 * 1024;
+    }
+
     internal static void Draw(
         DrawingContext dc,
         IReadOnlyList<FrameEditLayer> layers,
@@ -430,10 +443,15 @@ internal static class FrameEditLayerRenderer
         {
             if (layer.IsActiveAt(sourceTimeMs) && bitmaps.TryGetValue(layer.Id, out BitmapSource? bitmap))
             {
-                dc.DrawImage(bitmap, new Rect(0, 0, width, height));
+                dc.DrawImage(bitmap, GetBounds(layer.Bounds, width, height));
             }
         }
     }
+
+    internal static Rect GetBounds(VideoLayerBounds? bounds, double width, double height) =>
+        bounds?.Normalize() is { } b
+            ? new Rect(b.X * width, b.Y * height, b.Width * width, b.Height * height)
+            : new Rect(0, 0, width, height);
 }
 
 /// <summary>Shared WYSIWYG text compositor used by preview, MP4 render and GIF export.</summary>
@@ -482,7 +500,8 @@ internal static class TimedTextOverlayRenderer
         double sourceTimeMs,
         double width,
         double height,
-        double pixelsPerDip)
+        double pixelsPerDip,
+        IDictionary<Guid, Rect>? bounds = null)
     {
         ArgumentNullException.ThrowIfNull(dc);
         IReadOnlyList<TimedTextOverlay> active = ActiveAt(overlays, sourceTimeMs);
@@ -538,13 +557,36 @@ internal static class TimedTextOverlayRenderer
             y = Math.Clamp(y, 0, Math.Max(0, height - boxHeight));
 
             var box = new Rect(x, y, boxWidth, boxHeight);
+            Rect destination = overlay.Bounds is null
+                ? box
+                : FrameEditLayerRenderer.GetBounds(overlay.Bounds, width, height);
+            if (bounds is not null)
+            {
+                bounds[overlay.Id] = destination;
+            }
+
+            dc.PushTransform(new MatrixTransform(
+                destination.Width / box.Width, 0, 0, destination.Height / box.Height,
+                destination.X - (box.X * destination.Width / box.Width),
+                destination.Y - (box.Y * destination.Height / box.Height)));
             dc.DrawRoundedRectangle(OverlayBackground, null, box, paddingY, paddingY);
 
             double glyphOriginX = x + ((boxWidth - text.MaxTextWidth) / 2);
             double glyphOriginY = y + ((boxHeight - text.Height) / 2);
             dc.DrawText(text, new Point(glyphOriginX, glyphOriginY));
+            dc.Pop();
 
             placementOffsets[overlay.Placement] = offset + boxHeight + Math.Max(6, height * 0.01);
         }
+    }
+
+    internal static IReadOnlyDictionary<Guid, Rect> GetBounds(
+        IReadOnlyList<TimedTextOverlay> overlays, double time, double width, double height)
+    {
+        var result = new Dictionary<Guid, Rect>();
+        var visual = new DrawingVisual();
+        using DrawingContext dc = visual.RenderOpen();
+        Draw(dc, overlays, time, width, height, 1, result);
+        return result;
     }
 }

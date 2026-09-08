@@ -94,6 +94,12 @@ public sealed class VideoEditorWindowTests
                 "compact video editor clipped the processing status");
             Assert.Equal(ScrollBarVisibility.Disabled, timelineTools.HorizontalScrollBarVisibility);
             Assert.True(timelineTools.ScrollableHeight > 0, "compact timeline tools should scroll instead of hiding preview/status");
+            foreach (string label in new[] { "사각형", "원", "이미지" })
+            {
+                Button add = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, label));
+                Point bottom = add.TranslatePoint(new Point(0, add.ActualHeight), layout);
+                Assert.True(add.IsVisible && bottom.Y <= layout.ActualHeight, $"{label} add tool is hidden in compact editor");
+            }
 
             // Pump the dispatcher until ready or failed, bounded. The editor guarantees it
             // resolves within its own open-timeout fallback (~5s) even if MediaOpened is slow.
@@ -106,6 +112,25 @@ public sealed class VideoEditorWindowTests
             Assert.False(editor.HasMediaFailedForTest, "editor reported media failure: " + editor.MediaFailureForTest);
             Assert.True(editor.IsMediaReadyForTest, "editor did not become ready for the 2s clip");
             Assert.True(editor.DurationMsForTest > 0, "editor reported a non-positive duration");
+            Button shape = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, "사각형"));
+            shape.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var canvas = Descendants(layout).OfType<VideoLayerCanvas>().Single();
+            Assert.NotNull(canvas.SelectedId);
+            var documentField = typeof(VideoEditorWindow).GetField("_editDocument", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            var spatialDocument = (VideoEditDocument)documentField.GetValue(editor)!;
+            Assert.Single(spatialDocument.FrameEditLayers);
+            VideoLayerBounds before = spatialDocument.FrameEditLayers[0].Bounds!;
+            canvas.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(editor), 0, System.Windows.Input.Key.Right) { RoutedEvent = System.Windows.Input.Keyboard.KeyDownEvent });
+            Assert.True(spatialDocument.FrameEditLayers[0].Bounds!.X > before.X);
+            typeof(VideoEditorWindow).GetMethod("RestoreEdit", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(editor, [false]);
+            Assert.Equal(before, ((VideoEditDocument)documentField.GetValue(editor)!).FrameEditLayers[0].Bounds);
+            DateTime layerSeekDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+            while ((editor.PreviewSeekCoordinatorForTest.HasPendingForTest || editor.PreviewSeekCoordinatorForTest.IsInFlightForTest)
+                && DateTime.UtcNow < layerSeekDeadline)
+            {
+                PumpFor(TimeSpan.FromMilliseconds(10));
+            }
 
             TwoLineTimeline timeline = editor.TimelineForTest;
             Assert.True(timeline.IsEnabled, "two-line timeline stayed disabled after media became ready");
@@ -128,7 +153,8 @@ public sealed class VideoEditorWindowTests
             timeline.SeekFromOverview(previewTarget);
             PreviewSeekCoordinator coordinator = editor.PreviewSeekCoordinatorForTest;
             DateTime previewDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
-            while (coordinator.PresentedGeneration == 0 && DateTime.UtcNow < previewDeadline)
+            while ((Math.Abs(coordinator.RequestedPreviewPositionMs - previewTarget) > 0.1
+                || coordinator.HasPendingForTest || coordinator.IsInFlightForTest) && DateTime.UtcNow < previewDeadline)
             {
                 PumpFor(TimeSpan.FromMilliseconds(10));
             }
@@ -160,6 +186,16 @@ public sealed class VideoEditorWindowTests
             timeline.FitAll();
             Assert.True(timeline.IsFitAll, "fit-all did not restore the complete overview");
 
+            Button play = Descendants(layout).OfType<Button>().Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == "재생 또는 일시정지");
+            var playbackTimer = (DispatcherTimer)typeof(VideoEditorWindow).GetField("_playbackTimer", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(editor)!;
+            play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            DateTime playbackDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+            while (!playbackTimer.IsEnabled && DateTime.UtcNow < playbackDeadline) { PumpFor(TimeSpan.FromMilliseconds(10)); }
+            Assert.True(playbackTimer.IsEnabled, "playback did not start after pending seek reconciliation");
+            timeline.SeekFromOverview(0);
+            Assert.False(playbackTimer.IsEnabled, "scrubbing left the paused playback timer running");
+            PumpFor(TimeSpan.FromMilliseconds(100));
+            Assert.False(playbackTimer.IsEnabled, "paused playback timer restarted without a play request");
             editor.Close();
         }
         finally
@@ -184,7 +220,7 @@ public sealed class VideoEditorWindowTests
         Assert.Contains("시작 00:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
         Assert.Contains("끝 00:01.000", timeline.DetailRangeText, StringComparison.Ordinal);
         Assert.Contains("15프레임", timeline.DetailRangeText, StringComparison.Ordinal);
-        Assert.True(timeline.DesiredSize.Height >= 150, "the stronger two-line guide rendered too small");
+        Assert.InRange(timeline.DesiredSize.Height, 100, 155); // Compact guide leaves room for spatial-layer tracks.
 
         timeline.SeekFromOverview(6_000);
         Assert.InRange(timeline.PlayheadMs, timeline.ViewStartMs, timeline.ViewEndMs);
@@ -214,4 +250,14 @@ public sealed class VideoEditorWindowTests
         timeline.SetPlayhead(10_000);
         Assert.Equal(7_500, timeline.PlayheadMs, precision: 1);
     });
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            DependencyObject child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+            yield return child;
+            foreach (DependencyObject nested in Descendants(child)) { yield return nested; }
+        }
+    }
 }

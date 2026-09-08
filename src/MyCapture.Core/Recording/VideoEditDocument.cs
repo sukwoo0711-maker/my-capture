@@ -1,5 +1,22 @@
 namespace MyCapture.Core.Recording;
 
+/// <summary>Position and size relative to the source canvas; null retains legacy layout.</summary>
+public sealed record VideoLayerBounds(double X, double Y, double Width, double Height)
+{
+    public VideoLayerBounds? Normalize()
+    {
+        if (!double.IsFinite(X) || !double.IsFinite(Y) || !double.IsFinite(Width)
+            || !double.IsFinite(Height) || Width <= 0 || Height <= 0)
+        {
+            return null;
+        }
+
+        double width = Math.Clamp(Width, 0.01, 1);
+        double height = Math.Clamp(Height, 0.01, 1);
+        return new(Math.Clamp(X, 0, 1 - width), Math.Clamp(Y, 0, 1 - height), width, height);
+    }
+}
+
 /// <summary>Vertical anchor used by a timed text note in a video.</summary>
 public enum VideoTextPlacement
 {
@@ -24,6 +41,8 @@ public sealed class TimedTextOverlay
 
     public VideoTextPlacement Placement { get; set; } = VideoTextPlacement.Bottom;
 
+    public VideoLayerBounds? Bounds { get; set; }
+
     public bool IsActiveAt(double sourceTimeMs) =>
         double.IsFinite(sourceTimeMs)
         && sourceTimeMs >= StartMs
@@ -36,6 +55,7 @@ public sealed class TimedTextOverlay
         EndMs = EndMs,
         Text = Text,
         Placement = Placement,
+        Bounds = Bounds,
     };
 }
 
@@ -55,6 +75,8 @@ public sealed class FrameEditLayer
 
     public string OverlayPngBase64 { get; set; } = string.Empty;
 
+    public VideoLayerBounds? Bounds { get; set; }
+
     public bool IsActiveAt(double sourceTimeMs) =>
         double.IsFinite(sourceTimeMs)
         && sourceTimeMs >= StartMs
@@ -67,6 +89,7 @@ public sealed class FrameEditLayer
         EndMs = EndMs,
         Name = Name,
         OverlayPngBase64 = OverlayPngBase64,
+        Bounds = Bounds,
     };
 }
 
@@ -76,7 +99,7 @@ public sealed class FrameEditLayer
 /// </summary>
 public sealed class VideoEditDocument
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
     public const int MaximumOverlayCount = 100;
     public const int MaximumFrameLayerCount = 100;
     public const int MaximumTextLength = 500;
@@ -181,13 +204,15 @@ public sealed class VideoEditDocument
                 StartMs = start,
                 EndMs = end,
                 Text = text,
+                Bounds = overlay.Bounds?.Normalize(),
                 Placement = Enum.IsDefined(overlay.Placement)
                     ? overlay.Placement
                     : VideoTextPlacement.Bottom,
             });
         }
 
-        var frameLayerIds = new HashSet<Guid>();
+        // Selection is shared across text and bitmap tracks, so IDs must be document-wide.
+        HashSet<Guid> frameLayerIds = ids;
         foreach (FrameEditLayer layer in FrameEditLayers ?? [])
         {
             if (normalized.FrameEditLayers.Count >= MaximumFrameLayerCount
@@ -226,6 +251,7 @@ public sealed class VideoEditDocument
                 EndMs = end,
                 Name = name,
                 OverlayPngBase64 = layer.OverlayPngBase64,
+                Bounds = layer.Bounds?.Normalize(),
             });
         }
 

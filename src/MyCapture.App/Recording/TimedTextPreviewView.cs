@@ -8,7 +8,12 @@ namespace MyCapture.App.Recording;
 /// <summary>Letterbox-aware preview surface that uses the exact final-output text compositor.</summary>
 internal sealed class TimedTextPreviewView : FrameworkElement
 {
-    private sealed record CachedFrame(string Base64, BitmapSource Bitmap);
+    private sealed record CachedFrame(string Base64, BitmapSource? Bitmap, long LastUse);
+    private long _cacheClock;
+    internal long InactiveCacheBudgetBytes { get; set; } = 32 * 1024 * 1024;
+    internal int DecodeAttempts { get; private set; }
+    internal long InactiveCachedBytes => _decodedFrameCache.Where(p => !_frameLayers.Any(l => l.Id == p.Key && l.IsActiveAt(_sourceTimeMs))).Sum(p => BitmapBytes(p.Value.Bitmap));
+    private static long BitmapBytes(BitmapSource? bitmap) => bitmap is null ? 0 : (long)bitmap.PixelWidth * bitmap.PixelHeight * ((bitmap.Format.BitsPerPixel + 7) / 8);
 
     private readonly Dictionary<Guid, CachedFrame> _decodedFrameCache = new();
     private IReadOnlyList<TimedTextOverlay> _overlays = [];
@@ -49,97 +54,51 @@ internal sealed class TimedTextPreviewView : FrameworkElement
     {
         _frameLayers = layers ?? [];
 
-        int budget = VideoEditDocument.MaximumFrameLayerCount;
-        int validCount = Math.Min(_frameLayers.Count, budget);
-        var currentIds = new HashSet<Guid>(validCount);
-        for (int i = 0; i < validCount; i++)
-        {
-            FrameEditLayer layer = _frameLayers[i];
-            if (layer is not null && layer.Id != Guid.Empty)
-            {
-                _ = currentIds.Add(layer.Id);
-            }
-        }
-
-        List<Guid>? toRemove = null;
-        if (_decodedFrameCache.Count > 0)
-        {
-            foreach (Guid cachedId in _decodedFrameCache.Keys)
-            {
-                if (!currentIds.Contains(cachedId))
-                {
-                    toRemove ??= [];
-                    toRemove.Add(cachedId);
-                }
-            }
-
-            if (toRemove is not null)
-            {
-                for (int i = 0; i < toRemove.Count; i++)
-                {
-                    _decodedFrameCache.Remove(toRemove[i]);
-                }
-            }
-        }
-
-        List<FrameEditLayer>? toDecode = null;
-        for (int i = 0; i < validCount; i++)
-        {
-            FrameEditLayer layer = _frameLayers[i];
-            if (layer is null
-                || string.IsNullOrWhiteSpace(layer.OverlayPngBase64)
-                || layer.OverlayPngBase64.Length > VideoEditDocument.MaximumFrameLayerEncodedLength)
-            {
-                if (layer is not null)
-                {
-                    _decodedFrameCache.Remove(layer.Id);
-                }
-
-                continue;
-            }
-
-            if (_decodedFrameCache.TryGetValue(layer.Id, out CachedFrame? cached))
-            {
-                if (string.Equals(cached.Base64, layer.OverlayPngBase64, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                _decodedFrameCache.Remove(layer.Id);
-            }
-
-            toDecode ??= [];
-            toDecode.Add(layer);
-        }
-
-        if (toDecode is { Count: > 0 })
-        {
-            IReadOnlyDictionary<Guid, BitmapSource> newlyDecoded =
-                FrameEditLayerRenderer.Decode(toDecode);
-            for (int i = 0; i < toDecode.Count; i++)
-            {
-                FrameEditLayer layer = toDecode[i];
-                if (newlyDecoded.TryGetValue(layer.Id, out BitmapSource? bitmap))
-                {
-                    _decodedFrameCache[layer.Id] = new CachedFrame(layer.OverlayPngBase64, bitmap);
-                }
-            }
-        }
-
-        if (toDecode is not null || toRemove is not null || _frameLayerBitmaps.Count != _decodedFrameCache.Count)
-        {
-            var bitmaps = new Dictionary<Guid, BitmapSource>(_decodedFrameCache.Count);
-            foreach (KeyValuePair<Guid, CachedFrame> pair in _decodedFrameCache)
-            {
-                bitmaps[pair.Key] = pair.Value.Bitmap;
-            }
-
-            _frameLayerBitmaps = bitmaps;
-        }
-
+        RefreshDecodedFrames();
         InvalidateVisual();
     }
 
+    private void RefreshDecodedFrames()
+    {
+        var current = _frameLayers.Take(VideoEditDocument.MaximumFrameLayerCount)
+            .GroupBy(layer => layer.Id).ToDictionary(group => group.Key, group => group.First());
+        foreach (Guid id in _decodedFrameCache.Keys.ToArray())
+        {
+            if (!current.TryGetValue(id, out FrameEditLayer? layer)
+                || _decodedFrameCache[id].Base64 != layer.OverlayPngBase64)
+            {
+                _decodedFrameCache.Remove(id);
+            }
+        }
+
+        var active = new Dictionary<Guid, BitmapSource>();
+        foreach (FrameEditLayer layer in current.Values)
+        {
+            if (!layer.IsActiveAt(_sourceTimeMs)) { continue; }
+            if (!_decodedFrameCache.TryGetValue(layer.Id, out CachedFrame? cached))
+            {
+                DecodeAttempts++;
+                FrameEditLayerRenderer.Decode([layer]).TryGetValue(layer.Id, out BitmapSource? bitmap);
+                cached = new CachedFrame(layer.OverlayPngBase64, bitmap, ++_cacheClock);
+            }
+
+            _decodedFrameCache[layer.Id] = cached with { LastUse = ++_cacheClock };
+            if (cached.Bitmap is { } decoded) { active[layer.Id] = decoded; }
+        }
+
+        // Active layers are required for correctness. Only inactive retention has a byte budget;
+        // never decode unseen inactive entries just to decide whether to retain them.
+        long retained = 0;
+        foreach (var pair in _decodedFrameCache.OrderByDescending(p => p.Value.LastUse).ToArray())
+        {
+            if (current[pair.Key].IsActiveAt(_sourceTimeMs)) { continue; }
+            long bytes = BitmapBytes(pair.Value.Bitmap);
+            if (retained + bytes > InactiveCacheBudgetBytes) { _decodedFrameCache.Remove(pair.Key); }
+            else { retained += bytes; }
+        }
+
+        _frameLayerBitmaps = active;
+    }
     internal void SetSourceTime(double sourceTimeMs)
     {
         double next = double.IsFinite(sourceTimeMs) ? Math.Max(0, sourceTimeMs) : 0;
@@ -179,6 +138,7 @@ internal sealed class TimedTextPreviewView : FrameworkElement
         _sourceTimeMs = next;
         if (activeSetChanged)
         {
+            RefreshDecodedFrames();
             InvalidateVisual();
         }
     }
