@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Storage;
@@ -21,7 +22,7 @@ public sealed class EnglishLayoutTests
     public void VideoEditorEnglishActionsAndStatusFitNativeWindow(int width, int height) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("en-US");
-        string root = Path.Combine(Path.GetTempPath(), "mc-en-layout-" + Guid.NewGuid().ToString("N"));
+        string root = OwnedTestDirectory.Create("mc-en-layout-");
         var recording = new RecordingResult(Path.Combine(root, "layout-only.mp4"), 2000, 30, 60, 320, 240);
         var window = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
         try
@@ -71,14 +72,18 @@ public sealed class EnglishLayoutTests
             string? evidence = Environment.GetEnvironmentVariable("MYCAPTURE_LOCALIZATION_EVIDENCE");
             if (!string.IsNullOrEmpty(evidence))
             {
-                Directory.CreateDirectory(evidence);
-                using FileStream stream = File.Create(Path.Combine(evidence, $"video-english-{width}.png"));
+                evidence = DiagnosticOutputPaths.Create(evidence);
+                using FileStream stream = File.Create(DiagnosticOutputPaths.Child(evidence, $"video-english-{width}.png"));
                 var encoder = new PngBitmapEncoder();
                 encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 encoder.Save(stream);
             }
         }
-        finally { window.Close(); }
+        finally
+        {
+            try { window.Close(); }
+            finally { OwnedTestDirectory.Delete(root); }
+        }
     });
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)

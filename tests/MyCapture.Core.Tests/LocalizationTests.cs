@@ -6,7 +6,6 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
-using MyCapture.Core.Storage;
 using Xunit;
 
 namespace MyCapture.Core.Tests;
@@ -34,21 +33,17 @@ public sealed class LocalizationTests
     [InlineData("en-US")]
     public void DraftCloneAndDiskRoundTripPreserveLanguageWithoutMutatingUserText(string language)
     {
-        string root = Path.Combine(Path.GetTempPath(), "mc-localization-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            var original = new AppSettings();
-            var draft = new SettingsDraft(original) { Language = language, FileNamePattern = "my_기록_{yyyyMMdd}" };
-            Assert.Empty(original.General.Language);
-            AppSettings next = draft.ToAppSettings().DeepClone();
-            var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
-            store.Save(next);
-            AppSettings loaded = store.Load();
-            Assert.Equal(language, loaded.General.Language);
-            Assert.Equal("my_기록_{yyyyMMdd}", loaded.Export.FileNamePattern);
-            Assert.Equal(language, new SettingsDraft(loaded).Language);
-        }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+        using var workspace = new TempWorkspace();
+        var original = new AppSettings();
+        var draft = new SettingsDraft(original) { Language = language, FileNamePattern = "my_기록_{yyyyMMdd}" };
+        Assert.Empty(original.General.Language);
+        AppSettings next = draft.ToAppSettings().DeepClone();
+        var store = new SettingsStore(workspace.Paths, NullLogger<SettingsStore>.Instance);
+        store.Save(next);
+        AppSettings loaded = store.Load();
+        Assert.Equal(language, loaded.General.Language);
+        Assert.Equal("my_기록_{yyyyMMdd}", loaded.Export.FileNamePattern);
+        Assert.Equal(language, new SettingsDraft(loaded).Language);
     }
 
     [Fact]
