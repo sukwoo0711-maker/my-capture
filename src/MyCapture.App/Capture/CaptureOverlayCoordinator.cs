@@ -190,7 +190,24 @@ internal sealed class CaptureOverlayCoordinator
     private static void VerifyDispatcherAccess() =>
         (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).VerifyAccess();
 
-    private async Task AnnounceSelectionAndOpenEditorAsync(CaptureSelectionCompletedEventArgs selection)
+    private Task AnnounceSelectionAndOpenEditorAsync(CaptureSelectionCompletedEventArgs selection)
+    {
+        // Native hotkey callbacks can run on the STA without a WPF synchronization context.
+        // Keep persistence continuations and all window/exclusion state on the owning dispatcher.
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(
+                Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher));
+            return AnnounceSelectionAndOpenEditorCoreAsync(selection);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    private async Task AnnounceSelectionAndOpenEditorCoreAsync(CaptureSelectionCompletedEventArgs selection)
     {
         _log.LogInformation(
             "Selected free region {Region} ({Width}x{Height}); opening standalone editor",

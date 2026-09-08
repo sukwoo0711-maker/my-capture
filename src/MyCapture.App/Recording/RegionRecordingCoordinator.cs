@@ -74,7 +74,11 @@ internal sealed class RegionRecordingCoordinator
 
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
 
-    internal bool CanCaptureStill => !_finishing && !_completionInProgress && _controls?.CanCaptureStill == true;
+    internal bool CanCaptureStill => !_finishing && !_completionInProgress
+        && (_controls?.CanCaptureStill == true || (_editor is not null && _controls is null && _selectionOverlay is null));
+
+    // Starting a new still and protecting a window during a stop transition are different decisions.
+    internal bool RequiresCaptureExclusion => _controls?.IsRecording == true;
 
     internal bool IsActive =>
         _selectionOverlay is not null

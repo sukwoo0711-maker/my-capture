@@ -1,11 +1,14 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
+using MyCapture.App.Recording;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Capture;
@@ -23,8 +26,10 @@ public sealed class RecordingCaptureLifecycleTests
         using var initializing = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
         var encoder = new Encoder();
+        int factoryThread = 0;
         using var recorder = new RegionRecorder(new RegionFrameGrabber(fixture.Engine, false), _ =>
         {
+            factoryThread = Environment.CurrentManagedThreadId;
             initializing.Set();
             Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
             return encoder;
@@ -42,7 +47,8 @@ public sealed class RecordingCaptureLifecycleTests
         Assert.Equal(new[] { 0d }, encoder.Timestamps);
         Assert.True(encoder.Completed);
         Assert.True(encoder.Disposed);
-        Assert.Equal(encoder.CreatedThread, encoder.DisposedThread);
+        Assert.Equal(factoryThread, encoder.WriteThread);
+        Assert.Equal(factoryThread, encoder.DisposedThread);
         Assert.True(result.Performance!.InitializationMs >= 250);
         Assert.True(result.DurationMs < result.Performance.InitializationMs);
         Assert.False(recorder.IsReady);
@@ -57,7 +63,7 @@ public sealed class RecordingCaptureLifecycleTests
         byte[] expected = new byte[320 * 240 * 4];
         fixture.Engine.CaptureRegionInto(fixture.Region, includeCursor, expected, 1280);
         // Warm both paths before counting GDI objects.
-        using (var warm = fixture.Engine.CreateSession(fixture.Region, includeCursor)) warm.CaptureInto(expected, 1280);
+        using (var warm = fixture.Engine.CreateSession(fixture.Region, includeCursor)) warm.CaptureInto(new byte[expected.Length], 1280);
         uint before = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
         for (int sessionIndex = 0; sessionIndex < 8; sessionIndex++)
         {
@@ -116,18 +122,80 @@ public sealed class RecordingCaptureLifecycleTests
         Assert.False(coordinator.IsActive);
     });
 
+    [Fact]
+    public void StopDuringPersistence_StillRequiresEditorExclusionUntilCaptureThreadJoins() => StaTestHost.Run(() =>
+    {
+        using var fixture = new SyntheticCaptureFixture();
+        using var written = new ManualResetEventSlim();
+        using var completing = new ManualResetEventSlim();
+        using var finish = new ManualResetEventSlim();
+        var encoder = new Encoder
+        {
+            OnWrite = written.Set,
+            OnComplete = () => { completing.Set(); if (!finish.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException(); },
+        };
+        using var recorder = new RegionRecorder(new RegionFrameGrabber(fixture.Engine, false), _ => encoder, NullLogger.Instance);
+        var controls = new RecordingControlWindow(fixture.Region, new RecordingSettings(), () => recorder,
+            () => "unused.mp4", NullLogger<RecordingControlWindow>.Instance) { ShowActivated = false };
+        // This state-only seam avoids unrelated gallery recovery I/O. The real control/recorder
+        // and asynchronous selection transition below exercise the stop race.
+        var recording = (RegionRecordingCoordinator)RuntimeHelpers.GetUninitializedObject(typeof(RegionRecordingCoordinator));
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(RegionRecordingCoordinator).GetField("_controls", flags)!.SetValue(recording, controls);
+        var persistence = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool exclusionRequested = false;
+        var capture = new CaptureOverlayCoordinator(fixture.Engine,
+            new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance)
+        {
+            RequiresCaptureExclusion = () => recording.RequiresCaptureExclusion,
+            ApplyCaptureExclusion = _ => { exclusionRequested = true; return false; },
+            SelectionPersistRequested = _ => persistence.Task,
+        };
+        try
+        {
+            controls.Show();
+            typeof(RecordingControlWindow).GetMethod("OnPrimaryClicked", flags)!.Invoke(controls, null);
+            Assert.True(written.Wait(TimeSpan.FromSeconds(5)));
+            Assert.True(recording.CanCaptureStill);
+            var frame = new FrozenFrame(fixture.Engine.CaptureRegion(fixture.Region, false), fixture.Region, null, 0);
+            capture.StartWithSelection(frame, new RectD(0, 0, 40, 40));
+            controls.RequestStop();
+            Assert.True(completing.Wait(TimeSpan.FromSeconds(5)));
+            Assert.False(recording.CanCaptureStill);
+            Assert.True(recording.RequiresCaptureExclusion);
+            persistence.SetResult();
+            DateTime deadline = DateTime.UtcNow.AddSeconds(3);
+            while (!capture.LastTransitionForTest.IsCompleted && DateTime.UtcNow < deadline) SyntheticCaptureFixture.Pump(10);
+            Assert.True(capture.LastTransitionForTest.IsCompletedSuccessfully);
+            Assert.True(exclusionRequested);
+            Assert.False(capture.IsActive);
+        }
+        finally
+        {
+            finish.Set();
+            persistence.TrySetResult();
+            DateTime deadline = DateTime.UtcNow.AddSeconds(3);
+            while (controls.IsRecording && DateTime.UtcNow < deadline) SyntheticCaptureFixture.Pump(10);
+            SyntheticCaptureFixture.Pump(30);
+            capture.Cancel();
+            controls.CompleteAndClose();
+        }
+        Assert.False(recording.RequiresCaptureExclusion);
+    });
+
     private sealed class Encoder : IVideoEncoder
     {
         public List<double> Timestamps { get; } = [];
         public Action? OnWrite { get; init; }
+        public Action? OnComplete { get; init; }
         public bool Completed { get; private set; }
         public bool Disposed { get; private set; }
-        public int CreatedThread { get; private set; }
+        public int WriteThread { get; private set; }
         public int DisposedThread { get; private set; }
         public int Width => 320;
         public int Height => 240;
-        public void WriteFrame(in EncoderFrame frame) { CreatedThread = Environment.CurrentManagedThreadId; Timestamps.Add(frame.TimestampMs); OnWrite?.Invoke(); }
-        public void Complete() => Completed = true;
+        public void WriteFrame(in EncoderFrame frame) { WriteThread = Environment.CurrentManagedThreadId; Timestamps.Add(frame.TimestampMs); OnWrite?.Invoke(); }
+        public void Complete() { Completed = true; OnComplete?.Invoke(); }
         public void Dispose() { Disposed = true; DisposedThread = Environment.CurrentManagedThreadId; }
     }
 

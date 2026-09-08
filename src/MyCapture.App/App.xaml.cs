@@ -240,7 +240,7 @@ public partial class App : Application
             RestoreTrayAfterCapture();
         };
         _overlay.CommitRequested = HandleCommitAsync;
-        _overlay.RequiresCaptureExclusion = () => _recorder?.CanCaptureStill == true;
+        _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
         _overlay.TransitionFailed += exception =>
             _tray?.ShowBalloon("캡처를 완료할 수 없습니다", exception.Message, TrayBalloonKind.Error);
 
@@ -536,7 +536,7 @@ public partial class App : Application
         countdown.Elapsed += OnElapsed;
         countdown.Cancelled += OnCancelled;
         countdown.Closed += (_, _) => { if (_activeCountdown == countdown) { Cleanup(); RestoreTrayAfterCapture(); } };
-        if (_recorder?.CanCaptureStill == true && !CaptureWindowExclusion.TryApply(countdown))
+        if (_recorder?.RequiresCaptureExclusion == true && !CaptureWindowExclusion.TryApply(countdown))
         {
             countdown.Close();
             _tray?.ShowBalloon("지연 캡처를 시작할 수 없습니다", "카운트다운 창을 녹화에서 제외할 수 없습니다.", TrayBalloonKind.Error);
