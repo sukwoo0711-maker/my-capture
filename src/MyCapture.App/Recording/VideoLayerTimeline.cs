@@ -63,9 +63,27 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     internal Guid? SelectedTextId => _selectedId;
     internal bool IsDragging => _dragging;
 
+    internal Rect SelectedBarBounds
+    {
+        get
+        {
+            for (int i = 0; i < _textLayers.Count; i++)
+            {
+                if (_textLayers[i].Id == _selectedId) { return GetTextBarRect(i, ActualWidth); }
+            }
+            for (int i = 0; i < _frameLayers.Count; i++)
+            {
+                if (_frameLayers[i].Id == _selectedId) { return GetFrameBarRect(i, ActualWidth); }
+            }
+            return Rect.Empty;
+        }
+    }
+
     internal void SelectLayer(Guid? id)
     {
+        bool changed = _selectedId != id;
         _selectedId = id;
+        if (changed && !SelectedBarBounds.IsEmpty) { BringIntoView(SelectedBarBounds); }
         InvalidateVisual();
     }
 
@@ -849,6 +867,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
     private void NotifyLayerSelected()
     {
+        if (!SelectedBarBounds.IsEmpty) { BringIntoView(SelectedBarBounds); }
         LayerSelected?.Invoke(this, EventArgs.Empty);
         TextLayerSelected?.Invoke(this, EventArgs.Empty);
     }

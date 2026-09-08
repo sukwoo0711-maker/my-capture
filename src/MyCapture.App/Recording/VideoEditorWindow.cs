@@ -146,7 +146,7 @@ internal sealed class VideoEditorWindow : Window
         ShowInTaskbar = true;
         UseLayoutRounding = true;
         MinWidth = 760;
-        MinHeight = 560;
+        MinHeight = 555;
 
         Rect work = SystemParameters.WorkArea;
         Width = Math.Min(Math.Max(920, recording.Width + 120), Math.Max(MinWidth, work.Width - 80));
@@ -206,8 +206,10 @@ internal sealed class VideoEditorWindow : Window
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
             FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
         };
+        _statusLabel.SetBinding(ToolTipProperty, new Binding(nameof(TextBlock.Text)) { Source = _statusLabel });
         AutomationProperties.SetLiveSetting(_statusLabel, AutomationLiveSetting.Polite);
         _loadingLabel = new TextBlock
         {
@@ -345,9 +347,9 @@ internal sealed class VideoEditorWindow : Window
 
     private Grid BuildLayout()
     {
-        var root = new Grid { Margin = new Thickness(16) };
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 180 }); // preview
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(2, GridUnitType.Star), MinHeight = 80 }); // timeline
+        var root = new Grid { Margin = new Thickness(12) };
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(3, GridUnitType.Star), MinHeight = 112 }); // preview
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(240) }); // compact timeline; spare space belongs to preview
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // controls
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // status
 
@@ -399,7 +401,7 @@ internal sealed class VideoEditorWindow : Window
 
         var statusBar = new Border
         {
-            Margin = new Thickness(0, 10, 0, 0),
+            Margin = new Thickness(0, 4, 0, 0),
             Child = _statusLabel,
         };
         Grid.SetRow(statusBar, 3);
@@ -417,7 +419,7 @@ internal sealed class VideoEditorWindow : Window
             return _timelineCache;
         }
 
-        var timeline = new Grid { Margin = new Thickness(0, 14, 0, 0) };
+        var timeline = new Grid { Margin = new Thickness(0, 6, 0, 0) };
         timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // two-line timeline
         timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // position label
         timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // layer tracks
@@ -444,7 +446,7 @@ internal sealed class VideoEditorWindow : Window
 
     private FrameworkElement BuildOverlayLane()
     {
-        var lane = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+        var lane = new Grid { Margin = new Thickness(0, 4, 0, 0) };
         lane.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -470,7 +472,7 @@ internal sealed class VideoEditorWindow : Window
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 8, 0, 0),
+            Margin = new Thickness(0, 4, 0, 0),
         };
         _addTextButton = MakeIconButton("Icon.Text", "텍스트", "현재 위치에 시간 텍스트 추가 (Ctrl+T)", "Button.Secondary", AddTextOverlay);
         _editTextButton = MakeIconButton("Icon.Edit", "편집", "선택한 시간 텍스트 편집 (F2)", "Button.Ghost", EditSelectedOverlay);
@@ -481,7 +483,8 @@ internal sealed class VideoEditorWindow : Window
         actions.Children.Add(MakeButton("이미지", "이미지 레이어 추가", "Button.Secondary", AddImageLayer));
         actions.Children.Add(_editTextButton);
         actions.Children.Add(_deleteTextButton);
-        actions.Children.Add(new TextBlock
+        var gifSettings = new StackPanel { Margin = new Thickness(6) };
+        gifSettings.Children.Add(new TextBlock
         {
             Text = "GIF 배속",
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
@@ -507,7 +510,7 @@ internal sealed class VideoEditorWindow : Window
         _gifSpeedComboBox.SelectedIndex = 1;
         AutomationProperties.SetName(_gifSpeedComboBox, "GIF 재생 배속");
         AutomationProperties.SetHelpText(_gifSpeedComboBox, "0.5배속부터 4배속 사이에서 GIF 재생 속도를 선택합니다.");
-        actions.Children.Add(_gifSpeedComboBox);
+        gifSettings.Children.Add(_gifSpeedComboBox);
         _gifQualityComboBox = new ComboBox
         {
             Width = 210,
@@ -522,7 +525,14 @@ internal sealed class VideoEditorWindow : Window
 
         _gifQualityComboBox.SelectedIndex = 0;
         AutomationProperties.SetName(_gifQualityComboBox, "GIF 화질 및 용량");
-        actions.Children.Add(_gifQualityComboBox);
+        gifSettings.Children.Add(_gifQualityComboBox);
+        var gifMenu = new ContextMenu();
+        gifMenu.Items.Add(new MenuItem { Header = gifSettings, StaysOpenOnClick = true });
+        Button gifOptions = MakeButton("GIF 옵션", "GIF 배속과 화질 설정", "Button.Ghost", () => gifMenu.IsOpen = true);
+        gifOptions.ContextMenu = gifMenu;
+        gifMenu.PlacementTarget = gifOptions;
+        gifMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        actions.Children.Add(gifOptions);
         actions.Children.Add(MakeIconButton("Icon.Export", "GIF", "선택 구간을 GIF로 내보내기 (G)", "Button.Ghost", ExportGif));
         Grid.SetRow(actions, 1);
         Grid.SetColumnSpan(actions, 2);
@@ -559,7 +569,7 @@ internal sealed class VideoEditorWindow : Window
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 8, 0, 0),
+            Margin = new Thickness(0, 4, 0, 0),
         };
         precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.ZoomOut", "축소", "세부 타임라인 축소 (Ctrl+Shift+-)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
         precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.ZoomIn", "확대", "세부 타임라인 확대 (Ctrl+Shift+=)", "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));

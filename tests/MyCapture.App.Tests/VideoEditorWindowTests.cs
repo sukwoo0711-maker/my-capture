@@ -76,10 +76,23 @@ public sealed class VideoEditorWindowTests
             Assert.True(File.Exists(clip) && new FileInfo(clip).Length > 1000, "test clip was not produced");
 
             using ILoggerFactory lf = LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.Warning));
-            var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), lf);
+            var initialEdits = VideoEditDocument.CreateFor(rec.Width, rec.Height, rec.DurationMs);
+            initialEdits.TextOverlays.Add(new TimedTextOverlay { Text = "visible timeline caption", StartMs = 0, EndMs = rec.DurationMs });
+            var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), lf, initialEdits);
+            // Reuse production sizing tokens without creating a process-global WPF Application
+            // in this isolated STA test. Default WPF buttons are smaller than the actual app.
+            var theme = new ResourceDictionary { Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Tokens.xaml") };
+            editor.FontSize = (double)theme["FontSize.Body"];
+            foreach (Button button in Descendants((DependencyObject)editor.Content).OfType<Button>())
+            {
+                button.MinHeight = (double)theme["Size.HitTarget"];
+                button.Padding = (Thickness)theme["Padding.Control"];
+                button.BorderThickness = new Thickness(1);
+                button.FontWeight = FontWeights.SemiBold;
+            }
             editor.WindowStartupLocation = WindowStartupLocation.Manual;
-            editor.Width = editor.MinWidth;
-            editor.Height = editor.MinHeight;
+            editor.Width = 770;
+            editor.Height = 555;
             editor.Left = -10000;
             editor.Top = -10000;
             editor.ShowActivated = false;
@@ -89,11 +102,27 @@ public sealed class VideoEditorWindowTests
             Border preview = layout.Children.OfType<Border>().Single(child => Grid.GetRow(child) == 0);
             Border status = layout.Children.OfType<Border>().Single(child => Grid.GetRow(child) == 3);
             ScrollViewer timelineTools = Assert.Single(layout.Children.OfType<ScrollViewer>());
-            Assert.True(preview.ActualHeight >= 180, "compact video editor lost its usable preview");
+            Assert.True(preview.ActualHeight >= 112, "compact video editor lost its usable preview");
             Assert.True(status.TranslatePoint(new Point(0, status.ActualHeight), layout).Y <= layout.ActualHeight + 0.5,
                 "compact video editor clipped the processing status");
             Assert.Equal(ScrollBarVisibility.Disabled, timelineTools.HorizontalScrollBarVisibility);
-            Assert.True(timelineTools.ScrollableHeight > 0, "compact timeline tools should scroll instead of hiding preview/status");
+            var layerTracks = Descendants(layout).OfType<VideoLayerTimeline>().Single();
+            layerTracks.SelectLayer(initialEdits.TextOverlays[0].Id);
+            editor.UpdateLayout();
+            Rect selectedBar = layerTracks.SelectedBarBounds;
+            Assert.False(selectedBar.IsEmpty);
+            Assert.InRange(layerTracks.TranslatePoint(selectedBar.TopLeft, timelineTools).Y, 0, timelineTools.ViewportHeight);
+            Assert.InRange(layerTracks.TranslatePoint(selectedBar.BottomRight, timelineTools).Y, 0, timelineTools.ViewportHeight);
+            foreach (TextBlock caption in Descendants(editor.TimelineForTest).OfType<TextBlock>())
+            {
+                Assert.InRange(caption.TranslatePoint(new Point(0, 0), timelineTools).Y, 0, timelineTools.ViewportHeight);
+                Assert.InRange(caption.TranslatePoint(new Point(0, caption.ActualHeight), timelineTools).Y, 0, timelineTools.ViewportHeight);
+            }
+            foreach (FrameworkElement strip in Descendants(editor.TimelineForTest).OfType<TimelineRenderSurface>())
+            {
+                Assert.InRange(strip.TranslatePoint(new Point(0, 0), timelineTools).Y, 0, timelineTools.ViewportHeight);
+                Assert.InRange(strip.TranslatePoint(new Point(0, strip.ActualHeight), timelineTools).Y, 0, timelineTools.ViewportHeight);
+            }
             foreach (string label in new[] { "사각형", "원", "이미지" })
             {
                 Button add = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, label));
@@ -114,6 +143,8 @@ public sealed class VideoEditorWindowTests
             Assert.True(editor.DurationMsForTest > 0, "editor reported a non-positive duration");
             Button shape = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, "사각형"));
             shape.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            editor.UpdateLayout();
+            Assert.InRange(layerTracks.TranslatePoint(layerTracks.SelectedBarBounds.BottomRight, timelineTools).Y, 0, timelineTools.ViewportHeight);
             var canvas = Descendants(layout).OfType<VideoLayerCanvas>().Single();
             Assert.NotNull(canvas.SelectedId);
             var documentField = typeof(VideoEditorWindow).GetField("_editDocument", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
@@ -196,6 +227,17 @@ public sealed class VideoEditorWindowTests
             Assert.False(playbackTimer.IsEnabled, "scrubbing left the paused playback timer running");
             PumpFor(TimeSpan.FromMilliseconds(100));
             Assert.False(playbackTimer.IsEnabled, "paused playback timer restarted without a play request");
+            double compactPreviewHeight = preview.ActualHeight;
+            double compactTimelineHeight = timelineTools.ActualHeight;
+            editor.Width = 1200;
+            editor.Height = 900;
+            editor.UpdateLayout();
+            Assert.True(preview.ActualHeight >= compactPreviewHeight + 300, "larger window left spare height in an empty timeline instead of preview");
+            Assert.Equal(compactTimelineHeight, timelineTools.ActualHeight, 1);
+            Button gifOptions = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, "GIF 옵션"));
+            gifOptions.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.True(gifOptions.ContextMenu.IsOpen);
+            gifOptions.ContextMenu.IsOpen = false;
             editor.Close();
         }
         finally
