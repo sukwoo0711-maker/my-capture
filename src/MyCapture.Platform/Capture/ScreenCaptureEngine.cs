@@ -83,12 +83,17 @@ public sealed record FrozenFrame(
 /// </remarks>
 public sealed class ScreenCaptureEngine
 {
+    private static readonly IntPtr HgdiError = new(-1);
+
     private readonly ILogger<ScreenCaptureEngine> _log;
 
     public ScreenCaptureEngine(ILogger<ScreenCaptureEngine> log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
+
+    private static bool IsInvalidGdiHandle(IntPtr handle) =>
+        handle == IntPtr.Zero || handle == HgdiError;
 
     /// <summary>
     /// Initialises the GDI and WPF imaging path with a one-pixel capture.
@@ -231,6 +236,11 @@ public sealed class ScreenCaptureEngine
             }
 
             previousObject = NativeMethods.SelectObject(memoryDc, bitmapHandle);
+            if (IsInvalidGdiHandle(previousObject))
+            {
+                throw new InvalidOperationException(
+                    $"Could not select bitmap into memory device context (Win32 error {Marshal.GetLastWin32Error()}).");
+            }
 
             bool copied = NativeMethods.BitBlt(
                 memoryDc, 0, 0, width, height,
@@ -248,11 +258,21 @@ public sealed class ScreenCaptureEngine
                 DrawCursor(memoryDc, originX, originY, width, height);
             }
 
+            // Deselect bitmap before consumer readback as required by GetDIBits Win32 contract.
+            IntPtr restored = NativeMethods.SelectObject(memoryDc, previousObject);
+            if (IsInvalidGdiHandle(restored))
+            {
+                throw new InvalidOperationException(
+                    $"Could not restore original object to memory device context (Win32 error {Marshal.GetLastWin32Error()}).");
+            }
+
+            previousObject = IntPtr.Zero;
+
             return consume(memoryDc, bitmapHandle, width, height);
         }
         finally
         {
-            if (previousObject != IntPtr.Zero && memoryDc != IntPtr.Zero)
+            if (!IsInvalidGdiHandle(previousObject) && memoryDc != IntPtr.Zero)
             {
                 NativeMethods.SelectObject(memoryDc, previousObject);
             }
@@ -399,10 +419,10 @@ public sealed class ScreenCaptureEngine
                     memoryDc, bitmapHandle, 0, (uint)height, (IntPtr)pinned, ref info,
                     NativeMethods.DIB_RGB_COLORS);
 
-                if (scanLines == 0)
+                if (scanLines != height)
                 {
                     throw new InvalidOperationException(
-                        $"GetDIBits returned no scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
+                        $"GetDIBits returned {scanLines} of {height} scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
                 }
             }
         }
@@ -449,10 +469,10 @@ public sealed class ScreenCaptureEngine
                     int scanLines = NativeMethods.GetDIBits(
                         memoryDc, bitmapHandle, 0, (uint)height, (IntPtr)pinned, ref info,
                         NativeMethods.DIB_RGB_COLORS);
-                    if (scanLines == 0)
+                    if (scanLines != height)
                     {
                         throw new InvalidOperationException(
-                            $"GetDIBits returned no scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
+                            $"GetDIBits returned {scanLines} of {height} scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
                     }
                 }
             }
@@ -467,10 +487,10 @@ public sealed class ScreenCaptureEngine
                     int scanLines = NativeMethods.GetDIBits(
                         memoryDc, bitmapHandle, 0, (uint)height, (IntPtr)pinned, ref info,
                         NativeMethods.DIB_RGB_COLORS);
-                    if (scanLines == 0)
+                    if (scanLines != height)
                     {
                         throw new InvalidOperationException(
-                            $"GetDIBits returned no scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
+                            $"GetDIBits returned {scanLines} of {height} scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
                     }
                 }
             }
