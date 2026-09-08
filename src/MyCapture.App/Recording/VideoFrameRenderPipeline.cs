@@ -439,9 +439,42 @@ internal static class FrameEditLayerRenderer
 /// <summary>Shared WYSIWYG text compositor used by preview, MP4 render and GIF export.</summary>
 internal static class TimedTextOverlayRenderer
 {
+    private static readonly Typeface OverlayTypeface = new(
+        new FontFamily("Malgun Gothic"),
+        FontStyles.Normal,
+        FontWeights.SemiBold,
+        FontStretches.Normal);
+
+    private static readonly SolidColorBrush OverlayBackground = CreateOverlayBackground();
+
+    private static SolidColorBrush CreateOverlayBackground()
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(0xC8, 0x08, 0x08, 0x08));
+        brush.Freeze();
+        return brush;
+    }
+
     internal static IReadOnlyList<TimedTextOverlay> ActiveAt(
         IReadOnlyList<TimedTextOverlay> overlays,
-        double sourceTimeMs) => overlays.Where(overlay => overlay.IsActiveAt(sourceTimeMs)).ToList();
+        double sourceTimeMs)
+    {
+        if (overlays is null || overlays.Count == 0)
+        {
+            return [];
+        }
+
+        var active = new List<TimedTextOverlay>();
+        for (int index = 0; index < overlays.Count; index++)
+        {
+            TimedTextOverlay overlay = overlays[index];
+            if (overlay is not null && overlay.IsActiveAt(sourceTimeMs))
+            {
+                active.Add(overlay);
+            }
+        }
+
+        return active;
+    }
 
     internal static void Draw(
         DrawingContext dc,
@@ -463,30 +496,37 @@ internal static class TimedTextOverlayRenderer
         double verticalMargin = Math.Max(14, height * 0.05);
         double paddingX = Math.Max(10, fontSize * 0.45);
         double paddingY = Math.Max(6, fontSize * 0.24);
-        var typeface = new Typeface(new FontFamily("Malgun Gothic"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
-        var foreground = Brushes.White;
-        var background = new SolidColorBrush(Color.FromArgb(0xC8, 0x08, 0x08, 0x08));
-        background.Freeze();
+
+        double maxBoxWidth = Math.Max(1, width - (horizontalMargin * 2));
+        double maxTextWidth = Math.Max(1, maxBoxWidth - (paddingX * 2));
+        double maxBoxHeight = Math.Min(height, Math.Max(height * 0.4, (fontSize * 1.4) + (paddingY * 2)));
+        double maxTextHeight = Math.Max(fontSize * 1.4, maxBoxHeight - (paddingY * 2));
+        double dip = Math.Max(1, pixelsPerDip);
 
         var placementOffsets = new Dictionary<VideoTextPlacement, double>();
         foreach (TimedTextOverlay overlay in active)
         {
+            if (string.IsNullOrWhiteSpace(overlay.Text))
+            {
+                continue;
+            }
+
             var text = new FormattedText(
                 overlay.Text,
                 CultureInfo.CurrentUICulture,
                 FlowDirection.LeftToRight,
-                typeface,
+                OverlayTypeface,
                 fontSize,
-                foreground,
-                Math.Max(1, pixelsPerDip))
+                Brushes.White,
+                dip)
             {
                 TextAlignment = TextAlignment.Center,
-                MaxTextWidth = Math.Max(1, width - (horizontalMargin * 2) - (paddingX * 2)),
-                MaxTextHeight = Math.Max(fontSize * 1.4, height * 0.35),
+                MaxTextWidth = maxTextWidth,
+                MaxTextHeight = maxTextHeight,
             };
 
-            double boxWidth = Math.Min(width - (horizontalMargin * 2), text.Width + (paddingX * 2));
-            double boxHeight = Math.Min(height * 0.4, text.Height + (paddingY * 2));
+            double boxWidth = Math.Max(1, Math.Min(maxBoxWidth, text.Width + (paddingX * 2)));
+            double boxHeight = Math.Max(1, Math.Min(maxBoxHeight, text.Height + (paddingY * 2)));
             placementOffsets.TryGetValue(overlay.Placement, out double offset);
             double x = (width - boxWidth) / 2;
             double y = overlay.Placement switch
@@ -498,8 +538,12 @@ internal static class TimedTextOverlayRenderer
             y = Math.Clamp(y, 0, Math.Max(0, height - boxHeight));
 
             var box = new Rect(x, y, boxWidth, boxHeight);
-            dc.DrawRoundedRectangle(background, null, box, paddingY, paddingY);
-            dc.DrawText(text, new Point(x + paddingX, y + paddingY));
+            dc.DrawRoundedRectangle(OverlayBackground, null, box, paddingY, paddingY);
+
+            double glyphOriginX = x + ((boxWidth - text.MaxTextWidth) / 2);
+            double glyphOriginY = y + ((boxHeight - text.Height) / 2);
+            dc.DrawText(text, new Point(glyphOriginX, glyphOriginY));
+
             placementOffsets[overlay.Placement] = offset + boxHeight + Math.Max(6, height * 0.01);
         }
     }
