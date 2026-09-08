@@ -16,6 +16,34 @@ namespace MyCapture.App.Tests;
 public sealed class VideoLibraryServiceTests
 {
     [Fact]
+    public void Load_RejectsOversizedFileAndDecodedAssetSetWithoutChangingSourceOrMetadata()
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            CaptureQueue queue = NewQueue(paths);
+            var library = new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance);
+            CaptureRecord record = CreateVideoRecord();
+            Directory.CreateDirectory(queue.GetDirectory(record));
+            string source = library.SourcePath(record);
+            File.WriteAllBytes(source, [1, 2, 3]); // Load validates edit metadata without decoding video.
+            string edits = queue.GetFilePath(record, CaptureFileNames.VideoEdits);
+            using (var file = File.Create(edits)) { file.SetLength(VideoLayerResourceBudget.MaximumDocumentFileBytes + 1); }
+            Assert.Throws<VideoLayerLimitException>(() => library.Load(record));
+            Assert.Equal(VideoLayerResourceBudget.MaximumDocumentFileBytes + 1, new FileInfo(edits).Length);
+            var document = VideoEditDocument.CreateFor(160, 90, 1000);
+            document.FrameEditLayers = Enumerable.Range(0, 5).Select(_ => VideoLayerResourceBudgetTests.HeaderLayer()).ToList();
+            string json = JsonSerializer.Serialize(document);
+            File.WriteAllText(edits, json);
+            Assert.Throws<VideoLayerLimitException>(() => library.Load(record));
+            Assert.Equal(json, File.ReadAllText(edits));
+            Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(source));
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    [Fact]
     public void Mp4SignatureParser_FillsHeaderAcrossShortStreamReads()
     {
         byte[] header =

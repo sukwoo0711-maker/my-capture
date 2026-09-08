@@ -129,6 +129,7 @@ internal sealed class VideoEditorWindow : Window
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _log = loggerFactory.CreateLogger<VideoEditorWindow>();
+        VideoLayerResourceBudget.Validate(editDocument?.FrameEditLayers);
         _editDocument = (editDocument ?? VideoEditDocument.CreateFor(
                 recording.Width,
                 recording.Height,
@@ -993,12 +994,24 @@ internal sealed class VideoEditorWindow : Window
 
     private void AddGraphicLayer(FrameEditLayer layer)
     {
+        if (!TryValidateLayerResources([.. _editDocument.FrameEditLayers, layer])) { return; }
         RememberEdit();
         _editDocument.FrameEditLayers.Add(layer);
         RefreshOverlayList(layer.Id);
         RefreshTextPreview();
         Seek(layer.StartMs);
         _statusLabel.Text = "미리보기에서 이동/크기 조절 · 아래 레이어 막대에서 표시 시간 조절";
+    }
+
+    private bool TryValidateLayerResources(IReadOnlyList<FrameEditLayer> layers)
+    {
+        try { VideoLayerResourceBudget.Validate(layers); return true; }
+        catch (VideoLayerLimitException ex)
+        {
+            _statusLabel.Text = ex.Message;
+            _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
+            return false;
+        }
     }
 
     private void AddTextOverlay()
@@ -1387,6 +1400,7 @@ internal sealed class VideoEditorWindow : Window
                 Name = $"프레임 편집 · {FormatMs(start)}",
                 OverlayPngBase64 = encoded,
             };
+            if (!TryValidateLayerResources([.. _editDocument.FrameEditLayers, layer])) { return; }
             RememberEdit();
             _editDocument.FrameEditLayers.Add(layer);
             RefreshOverlayList(layer.Id);
@@ -1459,6 +1473,7 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
+        if (!TryValidateLayerResources(_editDocument.FrameEditLayers)) { return; }
         VideoEditDocument document = BuildCurrentDocument();
         if (_initialDocument is not null && DocumentsEquivalent(_initialDocument, document))
         {
@@ -1553,6 +1568,7 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
+        if (!TryValidateLayerResources(_editDocument.FrameEditLayers)) { return; }
         VideoEditDocument document = BuildCurrentDocument();
         double playbackSpeed = SelectedGifSpeed();
         GifExportQuality quality = (_gifQualityComboBox.SelectedItem as ComboBoxItem)?.Tag as GifExportQuality

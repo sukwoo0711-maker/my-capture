@@ -297,6 +297,7 @@ internal static class VideoFrameRenderPipeline
 
     private static void Validate(VideoFrameRenderRequest request)
     {
+        VideoLayerResourceBudget.Validate(request.FrameEditLayers);
         if (string.IsNullOrWhiteSpace(request.SourcePath) || !File.Exists(request.SourcePath))
         {
             throw new FileNotFoundException("The source video is unavailable.", request.SourcePath);
@@ -379,6 +380,7 @@ internal static class FrameEditLayerRenderer
         IReadOnlyList<FrameEditLayer> layers)
     {
         ArgumentNullException.ThrowIfNull(layers);
+        VideoLayerResourceBudget.Validate(layers);
         var decoded = new Dictionary<Guid, BitmapSource>();
         foreach (FrameEditLayer layer in layers)
         {

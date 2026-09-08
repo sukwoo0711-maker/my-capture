@@ -52,6 +52,7 @@ internal sealed class TimedTextPreviewView : FrameworkElement
 
     internal void SetFrameLayers(IReadOnlyList<FrameEditLayer> layers)
     {
+        VideoLayerResourceBudget.Validate(layers);
         _frameLayers = layers ?? [];
 
         RefreshDecodedFrames();

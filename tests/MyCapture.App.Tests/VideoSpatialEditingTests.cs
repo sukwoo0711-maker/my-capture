@@ -131,7 +131,7 @@ public sealed class VideoSpatialEditingTests
         byte[] png = Convert.FromBase64String(MakeDocument(320, 240).FrameEditLayers[0].OverlayPngBase64);
         System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(png.AsSpan(16, 4), 50000);
         Assert.False(FrameEditLayerRenderer.HasSafePngDimensions(png));
-        Assert.Empty(FrameEditLayerRenderer.Decode([new FrameEditLayer { OverlayPngBase64 = Convert.ToBase64String(png) }]));
+        Assert.Throws<VideoLayerLimitException>(() => FrameEditLayerRenderer.Decode([new FrameEditLayer { OverlayPngBase64 = Convert.ToBase64String(png) }]));
     });
 
     private static VideoEditDocument MakeDocument(int width, int height)

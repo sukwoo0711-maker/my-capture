@@ -40,6 +40,7 @@ internal static class AnimatedGifExporter
         ArgumentNullException.ThrowIfNull(recording);
         ArgumentNullException.ThrowIfNull(editDocument);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        VideoLayerResourceBudget.Validate(editDocument.FrameEditLayers);
         quality ??= GifExportQuality.Standard;
         quality.Validate();
 

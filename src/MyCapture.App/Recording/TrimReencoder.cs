@@ -29,6 +29,7 @@ internal static class TrimReencoder
         ArgumentNullException.ThrowIfNull(recording);
         ArgumentNullException.ThrowIfNull(encoderFactory);
         ArgumentNullException.ThrowIfNull(log);
+        VideoLayerResourceBudget.Validate(frameEditLayers);
 
         int fps = Math.Max(1, recording.Fps);
         int width = recording.Width;
