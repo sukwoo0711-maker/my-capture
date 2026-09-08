@@ -177,6 +177,39 @@ public sealed class GalleryController
         return true;
     }
 
+    /// <summary>Publishes OCR without waiting for disk on the owner thread. Admission precedes revision validation.</summary>
+    public async Task<bool> CacheOcrAsync(
+        Guid id,
+        string text,
+        string? languageTag,
+        long? expectedContentRevision = null,
+        CancellationToken cancellationToken = default)
+    {
+        using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        CaptureRecord? record = _queue.Find(id);
+        if (record is null || (expectedContentRevision is { } expected && record.ContentRevision != expected))
+            return false;
+
+        using IDisposable evictionLease = _queue.AcquireEvictionLease(id);
+        record.OcrText = text;
+        record.OcrLanguage = languageTag;
+        record.OcrContentRevision = record.ContentRevision;
+        record.UpdatedAt = DateTimeOffset.Now;
+        try
+        {
+            // Serialization finishes here on the owner context; only immutable strings go to disk.
+            await _queue.PublishRecordAsync(record, reservation);
+            _log.LogInformation("Cached OCR text ({Length} chars) on {Id}", text.Length, id);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.LogWarning(ex, "Could not persist cached OCR for {Id}", id);
+            return false;
+        }
+        return true;
+    }
+
     /// <summary>
     /// Re-measures a finalised capture's byte total and refreshes it in the queue, used
     /// after a re-edit commit changes the files on disk. Best-effort; a metadata refresh

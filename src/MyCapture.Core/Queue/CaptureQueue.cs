@@ -60,6 +60,9 @@ public sealed class CaptureQueue
     private readonly ILogger<CaptureQueue> _log;
     private readonly ObservableCollection<CaptureRecord> _records = [];
     private readonly Lock _writeGate = new();
+    private readonly SemaphoreSlim _publicationSlots = new(8, 8);
+    private Task _publicationTail = Task.CompletedTask;
+    internal Action<string, string>? BeforePublicationWriteForTest { get; set; }
     private readonly object _evictionLeaseGate = new();
     private readonly Dictionary<Guid, int> _evictionLeaseCounts = [];
     private int _evictionSuspensionCount;
@@ -334,15 +337,15 @@ public sealed class CaptureQueue
     /// </summary>
     public void Save()
     {
-        // Snapshot and serialization belong inside the same gate as the atomic write. If a
-        // background metadata operation serialized an old generation before waiting here, it
-        // could otherwise overwrite a newer editor commit after that commit released the gate.
+        Task publication;
         lock (_writeGate)
         {
             var index = new CaptureIndexFile { Records = [.. _records] };
             string json = JsonSerializer.Serialize(index, SerializerOptions);
-            AtomicFile.WriteAllText(_paths.IndexFile, json);
+            publication = EnqueuePublication(null, [(_paths.IndexFile, json)]);
         }
+        // The writer never needs this gate or the caller dispatcher. This is also the exit drain.
+        publication.GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -377,12 +380,63 @@ public sealed class CaptureQueue
     {
         ArgumentNullException.ThrowIfNull(record);
 
+        Task publication;
         lock (_writeGate)
         {
             string path = GetFilePath(record, CaptureFileNames.Meta);
             string json = JsonSerializer.Serialize(record, MetaSerializerOptions);
-            AtomicFile.WriteAllText(path, json);
+            publication = EnqueuePublication(null, [(path, json)]);
         }
+        publication.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Waits for capacity before a caller mutates or serializes owner-thread records. After
+    /// awaiting, revalidate the record and generation on its owner context before publication.
+    /// </summary>
+    public async Task<CaptureWriteReservation> ReservePublicationAsync(CancellationToken cancellationToken = default)
+    {
+        await _publicationSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return new CaptureWriteReservation(_publicationSlots);
+    }
+
+    /// <summary>
+    /// Serializes on the calling owner thread, then durably writes metadata and index as one
+    /// ordered job. Hold an eviction lease until completion. No mutable record reaches the writer.
+    /// </summary>
+    public Task PublishRecordAsync(CaptureRecord record, CaptureWriteReservation reservation)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentNullException.ThrowIfNull(reservation);
+        lock (_writeGate)
+        {
+            string path = GetFilePath(record, CaptureFileNames.Meta);
+            string metadata = JsonSerializer.Serialize(record, MetaSerializerOptions);
+            string index = JsonSerializer.Serialize(new CaptureIndexFile { Records = [.. _records] }, SerializerOptions);
+            return EnqueuePublication(reservation, [(path, metadata), (_paths.IndexFile, index)]);
+        }
+    }
+
+    // Called only under _writeGate, after immutable serialization. A failed predecessor does
+    // not poison later writes: each caller observes its own failure, and recovery may publish next.
+    private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, string Content)[] files)
+    {
+        // Synchronous owner saves bypass the async pool: slots can belong to awaiters whose
+        // continuations still need that owner thread. Waiting for those slots here deadlocks.
+        reservation?.Accept(_publicationSlots);
+        _publicationTail = _publicationTail.ContinueWith(_ =>
+        {
+            try
+            {
+                foreach ((string path, string content) in files)
+                {
+                    BeforePublicationWriteForTest?.Invoke(path, content);
+                    AtomicFile.WriteAllText(path, content);
+                }
+            }
+            finally { reservation?.Complete(); }
+        }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        return _publicationTail;
     }
 
     public string GetDirectory(CaptureRecord record)

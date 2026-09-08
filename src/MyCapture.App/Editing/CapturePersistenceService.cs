@@ -111,7 +111,22 @@ internal sealed class CapturePersistenceService
         long bytes = await StaThreadTask.RunAsync(
             () => WriteOriginalFiles(record, original),
             "MyCapture original persistence");
-        CompleteOriginal(record, bytes);
+        using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync();
+        using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
+        _busyRecords.TryAdd(record.Id, 0);
+        try
+        {
+            PrepareOriginalPublication(record, bytes);
+            BeforeRecordMetadataCommit?.Invoke(record.Id);
+            await _queue.PublishRecordAsync(record, reservation);
+            FinishOriginalPublication(record, bytes);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            MarkBlocked(record.Id, BlockReason.PendingOriginal);
+            throw;
+        }
+        finally { _busyRecords.TryRemove(record.Id, out _); }
         return record;
     }
 
@@ -218,13 +233,7 @@ internal sealed class CapturePersistenceService
 
     private void CompleteOriginal(CaptureRecord record, long bytes)
     {
-        record.HasAnnotations = false;
-        record.TotalBytes = bytes;
-
-        // Index first (so the record is discoverable) then the recovery sidecar (so a lost
-        // index can be rebuilt). The meta.json byte cost is small and recovery-only, so it
-        // is intentionally not folded into the tracked byte total.
-        _queue.Add(record);
+        PrepareOriginalPublication(record, bytes);
         try
         {
             SaveRecordMetaOrThrow(record);
@@ -235,6 +244,19 @@ internal sealed class CapturePersistenceService
             MarkBlocked(record.Id, BlockReason.PendingOriginal);
             throw;
         }
+        FinishOriginalPublication(record, bytes);
+    }
+
+    private void PrepareOriginalPublication(CaptureRecord record, long bytes)
+    {
+        record.HasAnnotations = false;
+        record.TotalBytes = bytes;
+        // Metadata precedes the index. The small recovery metadata cost is not tracked.
+        _queue.Add(record);
+    }
+
+    private void FinishOriginalPublication(CaptureRecord record, long bytes)
+    {
         string pendingPath = Path.Combine(_queue.GetDirectory(record), CaptureFileNames.OriginalPending);
         TryDeleteFile(pendingPath);
         if (File.Exists(pendingPath))
