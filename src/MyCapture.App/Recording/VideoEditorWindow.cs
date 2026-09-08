@@ -83,6 +83,7 @@ internal sealed class VideoEditorWindow : Window
     private bool _isPlaying;
     private bool _operationRunning;
     private bool _closeRequested;
+    private bool _updatingOverlayList;
 
     // Test hooks so a headless self-test can confirm the editor actually reaches the ready
     // state for a real clip (the field report: a ~2s video failed to load).
@@ -167,14 +168,15 @@ internal sealed class VideoEditorWindow : Window
 
         _timeline = new TwoLineTimeline();
         _layerTimeline = new VideoLayerTimeline();
-        _layerTimeline.TextLayerSelected += (_, _) =>
+        _layerTimeline.LayerSelected += (_, _) =>
         {
             if (_mediaReady && !_operationRunning)
             {
-                RefreshOverlayList(_layerTimeline.SelectedTextId);
+                RefreshOverlayList(_layerTimeline.SelectedLayerId);
             }
         };
-        _layerTimeline.TextTimingChanged += OnLayerTextTimingChanged;
+        _layerTimeline.LayerTimingChanged += OnLayerTimingChanged;
+        _layerTimeline.LayerTimingInteractionCompleted += OnLayerTimingInteractionCompleted;
         _timeline.PlayheadChanged += OnTimelinePlayhead;
         _timeline.PlayheadInteractionCompleted += OnTimelinePlayheadInteractionCompleted;
         _timeline.TrimChanged += (_, _) => UpdateStatusForMode();
@@ -951,21 +953,63 @@ internal sealed class VideoEditorWindow : Window
     private Guid? SelectedLayerId() =>
         SelectedOverlay()?.Id ?? SelectedFrameLayer()?.Id;
 
-    private void OnLayerTextTimingChanged(object? sender, EventArgs e)
+    private void OnLayerTextTimingChanged(object? sender, EventArgs e) =>
+        OnLayerTimingChanged(sender, e);
+
+    private void OnLayerTimingChanged(object? sender, EventArgs e)
     {
-        RefreshOverlayList(_layerTimeline.SelectedTextId);
-        RefreshTextPreview();
-        if (SelectedOverlay() is { } overlay)
+        _overlayPreview.SetOverlays(_editDocument.TextOverlays);
+        _overlayPreview.SetFrameLayers(_editDocument.FrameEditLayers);
+        _overlayPreview.SetSourceTime(CurrentMs());
+
+        Guid? selectedId = _layerTimeline.SelectedLayerId;
+        if (_editDocument.TextOverlays.FirstOrDefault(item => item.Id == selectedId) is { } overlay)
         {
             _statusLabel.Text = $"텍스트 표시 시간: {FormatMs(overlay.StartMs)}–{FormatMs(overlay.EndMs)}";
+        }
+        else if (_editDocument.FrameEditLayers.FirstOrDefault(item => item.Id == selectedId) is { } frameLayer)
+        {
+            _statusLabel.Text = $"프레임 표시 시간: {FormatMs(frameLayer.StartMs)}–{FormatMs(frameLayer.EndMs)}";
+        }
+    }
+
+    private void OnLayerTimingInteractionCompleted(object? sender, EventArgs e)
+    {
+        if (!_mediaReady)
+        {
+            return;
+        }
+
+        RefreshOverlayList(_layerTimeline.SelectedLayerId);
+        RefreshTextPreview();
+
+        Guid? selectedId = _layerTimeline.SelectedLayerId;
+        double? seekTarget = SelectedOverlay()?.StartMs
+            ?? SelectedFrameLayer()?.StartMs
+            ?? _editDocument.TextOverlays.FirstOrDefault(o => o.Id == selectedId)?.StartMs
+            ?? _editDocument.FrameEditLayers.FirstOrDefault(f => f.Id == selectedId)?.StartMs;
+
+        if (seekTarget.HasValue)
+        {
+            _previewSeeks.RequestExact(Math.Clamp(seekTarget.Value, _timeline.InMs, _timeline.OutMs));
         }
     }
 
     private void OnOverlaySelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        _layerTimeline.SelectText(SelectedOverlay()?.Id);
+        if (_updatingOverlayList)
+        {
+            return;
+        }
+
+        _layerTimeline.SelectLayer(SelectedLayerId());
         UpdateOverlayActionStates();
         if (!_mediaReady)
+        {
+            return;
+        }
+
+        if (_layerTimeline.IsDragging)
         {
             return;
         }
@@ -982,55 +1026,63 @@ internal sealed class VideoEditorWindow : Window
 
     private void RefreshOverlayList(Guid? selectedId = null)
     {
-        Guid? keep = selectedId ?? SelectedLayerId();
-        _overlayList.Items.Clear();
-        foreach (TimedTextOverlay overlay in _editDocument.TextOverlays.OrderBy(item => item.StartMs))
+        _updatingOverlayList = true;
+        try
         {
-            string oneLine = overlay.Text.Replace('\r', ' ').Replace('\n', ' ');
-            if (oneLine.Length > 38)
+            Guid? keep = selectedId ?? SelectedLayerId();
+            _overlayList.Items.Clear();
+            foreach (TimedTextOverlay overlay in _editDocument.TextOverlays.OrderBy(item => item.StartMs))
             {
-                oneLine = oneLine[..38] + "…";
+                string oneLine = overlay.Text.Replace('\r', ' ').Replace('\n', ' ');
+                if (oneLine.Length > 38)
+                {
+                    oneLine = oneLine[..38] + "…";
+                }
+
+                var item = new ListBoxItem
+                {
+                    Content = $"[텍스트]  {FormatMs(overlay.StartMs)}–{FormatMs(overlay.EndMs)}  {oneLine}",
+                    Tag = overlay,
+                    ToolTip = overlay.Text,
+                    Padding = new Thickness(8, 4, 8, 4),
+                };
+                AutomationProperties.SetName(item, $"{FormatMs(overlay.StartMs)}부터 {FormatMs(overlay.EndMs)}까지 {oneLine}");
+                _overlayList.Items.Add(item);
+                if (keep == overlay.Id)
+                {
+                    _overlayList.SelectedItem = item;
+                }
             }
 
-            var item = new ListBoxItem
+            foreach (FrameEditLayer layer in _editDocument.FrameEditLayers.OrderBy(item => item.StartMs))
             {
-                Content = $"[텍스트]  {FormatMs(overlay.StartMs)}–{FormatMs(overlay.EndMs)}  {oneLine}",
-                Tag = overlay,
-                ToolTip = overlay.Text,
-                Padding = new Thickness(8, 4, 8, 4),
-            };
-            AutomationProperties.SetName(item, $"{FormatMs(overlay.StartMs)}부터 {FormatMs(overlay.EndMs)}까지 {oneLine}");
-            _overlayList.Items.Add(item);
-            if (keep == overlay.Id)
-            {
-                _overlayList.SelectedItem = item;
+                var item = new ListBoxItem
+                {
+                    Content = $"[프레임]  {FormatMs(layer.StartMs)}–{FormatMs(layer.EndMs)}  {layer.Name}",
+                    Tag = layer,
+                    ToolTip = "원본 영상 위에 합성되는 투명 프레임 편집 레이어",
+                    Padding = new Thickness(8, 4, 8, 4),
+                };
+                AutomationProperties.SetName(
+                    item,
+                    $"프레임 레이어, {FormatMs(layer.StartMs)}부터 {FormatMs(layer.EndMs)}까지, {layer.Name}");
+                _overlayList.Items.Add(item);
+                if (keep == layer.Id)
+                {
+                    _overlayList.SelectedItem = item;
+                }
             }
+
+            AutomationProperties.SetHelpText(
+                _overlayList,
+                $"텍스트 레이어 {_editDocument.TextOverlays.Count}개, 프레임 레이어 {_editDocument.FrameEditLayers.Count}개");
+            _layerTimeline.SetLayers(_editDocument.TextOverlays, _editDocument.FrameEditLayers);
+            UpdateOverlayActionStates();
         }
-
-        foreach (FrameEditLayer layer in _editDocument.FrameEditLayers.OrderBy(item => item.StartMs))
+        finally
         {
-            var item = new ListBoxItem
-            {
-                Content = $"[프레임]  {FormatMs(layer.StartMs)}–{FormatMs(layer.EndMs)}  {layer.Name}",
-                Tag = layer,
-                ToolTip = "원본 영상 위에 합성되는 투명 프레임 편집 레이어",
-                Padding = new Thickness(8, 4, 8, 4),
-            };
-            AutomationProperties.SetName(
-                item,
-                $"프레임 레이어, {FormatMs(layer.StartMs)}부터 {FormatMs(layer.EndMs)}까지, {layer.Name}");
-            _overlayList.Items.Add(item);
-            if (keep == layer.Id)
-            {
-                _overlayList.SelectedItem = item;
-            }
+            _updatingOverlayList = false;
         }
-
-        AutomationProperties.SetHelpText(
-            _overlayList,
-            $"텍스트 레이어 {_editDocument.TextOverlays.Count}개, 프레임 레이어 {_editDocument.FrameEditLayers.Count}개");
-        _layerTimeline.SetLayers(_editDocument.TextOverlays, _editDocument.FrameEditLayers);
-        UpdateOverlayActionStates();
     }
 
     private void UpdateOverlayActionStates()
@@ -1703,6 +1755,8 @@ internal sealed class VideoEditorWindow : Window
         StopLoadTimers();
         _timeline.PlayheadChanged -= OnTimelinePlayhead;
         _timeline.PlayheadInteractionCompleted -= OnTimelinePlayheadInteractionCompleted;
+        _layerTimeline.LayerTimingChanged -= OnLayerTimingChanged;
+        _layerTimeline.LayerTimingInteractionCompleted -= OnLayerTimingInteractionCompleted;
         _previewSeeks.PreviewPresented -= OnPreviewPresented;
         _previewSeeks.SeekFailed -= OnPreviewSeekFailed;
         _previewSeeks.Dispose();
