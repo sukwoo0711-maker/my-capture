@@ -6,11 +6,12 @@ namespace MyCapture.App.Updates;
 
 /// <summary>
 /// Parses and queries standard SHA256SUMS.txt files produced by the build and release pipeline.
+/// Rejects duplicate or conflicting entries and path-qualified filenames.
 /// </summary>
 public sealed class Sha256ChecksumFile
 {
     private static readonly Regex ChecksumLineRegex = new(
-        @"^(?<hash>[0-9a-fA-F]{64})\s+[*§]?(?<filename>.+)$",
+        @"^(?<hash>[0-9a-fA-F]{64})\s+[* ]?(?<filename>[^\r\n]+)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly Dictionary<string, string> _checksums;
@@ -38,25 +39,39 @@ public sealed class Sha256ChecksumFile
             Match match = ChecksumLineRegex.Match(line);
             if (!match.Success)
             {
-                continue;
+                throw new UpdateException(
+                    UpdateErrorKind.ChecksumParseFailed,
+                    $"Malformed checksum line: '{line}'.");
             }
 
             string hash = match.Groups["hash"].Value.ToLowerInvariant();
-            string filename = match.Groups["filename"].Value.Trim();
+            string rawFilename = match.Groups["filename"].Value.Trim();
 
-            // Strip relative directory qualifiers like ./ or .\ if present
-            if (filename.StartsWith("./", StringComparison.Ordinal) ||
-                filename.StartsWith(".\\", StringComparison.Ordinal))
+            // Reject path-qualified filenames: no directory separators, relative segments, or invalid characters
+            if (rawFilename.Contains('/') ||
+                rawFilename.Contains('\\') ||
+                rawFilename.StartsWith('.') ||
+                rawFilename.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             {
-                filename = filename.Substring(2);
+                throw new UpdateException(
+                    UpdateErrorKind.ChecksumParseFailed,
+                    $"Path-qualified or invalid filename '{rawFilename}' is not allowed in checksum file.");
             }
 
-            // Normalize to leaf filename for lookup resilience
-            string leafName = Path.GetFileName(filename);
-            if (!string.IsNullOrWhiteSpace(leafName))
+            // Reject duplicate or conflicting checksum entries
+            if (!checksums.TryAdd(rawFilename, hash))
             {
-                checksums[leafName] = hash;
+                throw new UpdateException(
+                    UpdateErrorKind.ChecksumParseFailed,
+                    $"Duplicate or conflicting checksum entry for '{rawFilename}'.");
             }
+        }
+
+        if (checksums.Count == 0)
+        {
+            throw new UpdateException(
+                UpdateErrorKind.ChecksumParseFailed,
+                "Checksum file contains no valid entries.");
         }
 
         return new Sha256ChecksumFile(checksums);
@@ -65,12 +80,15 @@ public sealed class Sha256ChecksumFile
     public bool TryGetChecksum(string filename, [NotNullWhen(true)] out string? sha256)
     {
         sha256 = null;
-        if (string.IsNullOrWhiteSpace(filename))
+        if (string.IsNullOrWhiteSpace(filename) ||
+            filename.Contains('/') ||
+            filename.Contains('\\') ||
+            filename.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         {
             return false;
         }
 
-        string leafName = Path.GetFileName(filename.Trim());
-        return _checksums.TryGetValue(leafName, out sha256);
+        // Exact match lookup only; no basename acceptance
+        return _checksums.TryGetValue(filename.Trim(), out sha256);
     }
 }

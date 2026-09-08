@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
 namespace MyCapture.App.Updates;
@@ -14,6 +16,13 @@ namespace MyCapture.App.Updates;
 /// </summary>
 public sealed class GitHubUpdateService : IUpdateService
 {
+    private const int MaxApiByteLimit = 1024 * 1024; // 1 MiB streaming bound for API metadata
+    private const int MaxRedirectHops = 5;
+
+    private static readonly Regex RepoOwnerNameRegex = new(
+        @"^[a-zA-Z0-9_.-]+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -60,10 +69,22 @@ public sealed class GitHubUpdateService : IUpdateService
     {
         ThrowIfDisposed();
 
+        if (string.IsNullOrWhiteSpace(_options.RepositoryOwner) ||
+            string.IsNullOrWhiteSpace(_options.RepositoryName) ||
+            !RepoOwnerNameRegex.IsMatch(_options.RepositoryOwner) ||
+            !RepoOwnerNameRegex.IsMatch(_options.RepositoryName))
+        {
+            return UpdateCheckResult.Failed(
+                UpdateErrorKind.CheckFailed,
+                "Repository owner or repository name in options is invalid.",
+                currentVersion);
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(_options.CheckTimeout);
 
-        string url = $"{_options.ApiBaseUrl.TrimEnd('/')}/repos/{_options.RepositoryOwner}/{_options.RepositoryName}/releases/latest";
+        // Exact canonical GitHub Releases API endpoint only; no arbitrary API URL allowed
+        string url = $"https://api.github.com/repos/{_options.RepositoryOwner}/{_options.RepositoryName}/releases/latest";
         _logger?.LogDebug("Checking latest release at {Url}", url);
 
         try
@@ -73,76 +94,42 @@ public sealed class GitHubUpdateService : IUpdateService
             request.Headers.UserAgent.ParseAdd($"MyCapture-Updater/{currentVersion.ToNormalizedString()}");
             request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
 
-            using HttpResponseMessage response = await _httpClient.SendAsync(request, cts.Token).ConfigureAwait(false);
+            // API HeadersRead with bounded streaming
+            using HttpResponseMessage response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cts.Token).ConfigureAwait(false);
 
             if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
             {
-                _logger?.LogWarning("GitHub API rate limit exceeded when checking updates");
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.RateLimited,
-                    "GitHub API rate limit exceeded.",
-                    currentVersion);
+                return UpdateCheckResult.Failed(UpdateErrorKind.RateLimited, "GitHub API rate limit exceeded.", currentVersion);
             }
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                _logger?.LogWarning("GitHub release not found at {Url}", url);
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.CheckFailed,
-                    "Latest release was not found in the target repository.",
-                    currentVersion);
+                return UpdateCheckResult.Failed(UpdateErrorKind.CheckFailed, "Latest release was not found in the target repository.", currentVersion);
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger?.LogWarning("GitHub release check failed with status {StatusCode}", response.StatusCode);
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.CheckFailed,
-                    $"GitHub API responded with HTTP status {(int)response.StatusCode} ({response.StatusCode}).",
-                    currentVersion);
+                return UpdateCheckResult.Failed(UpdateErrorKind.CheckFailed, $"GitHub API responded with HTTP status {(int)response.StatusCode} ({response.StatusCode}).", currentVersion);
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token).ConfigureAwait(false);
-            GitHubReleaseDto? release = await JsonSerializer.DeserializeAsync<GitHubReleaseDto>(
-                stream,
-                JsonOptions,
-                cts.Token).ConfigureAwait(false);
-
-            if (release is null)
+            if (response.Content.Headers.ContentLength > MaxApiByteLimit)
             {
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.InvalidReleaseData,
-                    "Failed to deserialize GitHub release JSON.",
-                    currentVersion);
+                return UpdateCheckResult.Failed(UpdateErrorKind.InvalidReleaseData, $"Release metadata declared size exceeds limit of {MaxApiByteLimit} bytes.", currentVersion);
             }
 
-            if (release.Draft)
-            {
-                _logger?.LogInformation("Latest release is marked as draft; ignoring");
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.InvalidReleaseData,
-                    "Latest release is marked as a draft and cannot be used for updates.",
-                    currentVersion);
-            }
+            await using Stream rawStream = await response.Content.ReadAsStreamAsync(cts.Token).ConfigureAwait(false);
+            byte[] rawBytes = await ReadBoundedBytesAsync(rawStream, MaxApiByteLimit, cts.Token).ConfigureAwait(false);
 
-            if (release.Prerelease)
-            {
-                _logger?.LogInformation("Latest release is marked as prerelease; ignoring");
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.InvalidReleaseData,
-                    "Latest release is marked as a prerelease and cannot be used for stable updates.",
-                    currentVersion);
-            }
-
-            if (string.IsNullOrWhiteSpace(release.TagName) ||
+            GitHubReleaseDto? release = JsonSerializer.Deserialize<GitHubReleaseDto>(rawBytes, JsonOptions);
+            if (release is null || release.Draft || release.Prerelease ||
+                string.IsNullOrWhiteSpace(release.TagName) ||
                 !UpdateVersion.TryParse(release.TagName, out UpdateVersion? releaseVersion) ||
                 releaseVersion.Value.IsPrerelease)
             {
-                _logger?.LogWarning("Release tag '{TagName}' is invalid or prerelease", release.TagName);
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.InvalidReleaseData,
-                    $"Release version tag '{release.TagName}' is missing, malformed, or a prerelease.",
-                    currentVersion);
+                return UpdateCheckResult.Failed(UpdateErrorKind.InvalidReleaseData, "Release metadata is null, draft, prerelease, or has invalid version tag.", currentVersion);
             }
 
             UpdateVersion latest = releaseVersion.Value;
@@ -152,76 +139,55 @@ public sealed class GitHubUpdateService : IUpdateService
                 return UpdateCheckResult.UpToDate(currentVersion, latest);
             }
 
-            // Select exact setup asset: MyCapture-{VERSION}-win-x64-setup.exe
+            // Exact unique asset names
             string expectedSetupName = $"MyCapture-{latest.ToNormalizedString()}-win-x64-setup.exe";
-            GitHubAssetDto? setupAsset = release.Assets?.FirstOrDefault(
-                a => string.Equals(a.Name, expectedSetupName, StringComparison.OrdinalIgnoreCase));
+            const string expectedChecksumName = "SHA256SUMS.txt";
 
-            if (setupAsset is null && !string.IsNullOrWhiteSpace(release.TagName))
-            {
-                // Fallback check in case the asset name used the raw tag name (e.g. v-prefixed)
-                setupAsset = release.Assets?.FirstOrDefault(
-                    a => string.Equals(a.Name, $"MyCapture-{release.TagName.Trim()}-win-x64-setup.exe", StringComparison.OrdinalIgnoreCase));
-            }
-
+            GitHubAssetDto? setupAsset = GetExactUniqueAsset(release.Assets, expectedSetupName, out UpdateErrorKind? setupErr, out string? setupMsg);
             if (setupAsset is null)
             {
-                _logger?.LogWarning("Setup executable {ExpectedName} missing from release assets", expectedSetupName);
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.AssetNotFound,
-                    $"Required setup asset '{expectedSetupName}' was not found in release assets.",
-                    currentVersion,
-                    latest);
+                return UpdateCheckResult.Failed(setupErr!.Value, setupMsg!, currentVersion, latest);
             }
 
-            // Select checksum asset: SHA256SUMS.txt
-            GitHubAssetDto? checksumAsset = release.Assets?.FirstOrDefault(
-                a => string.Equals(a.Name, "SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase));
-
+            GitHubAssetDto? checksumAsset = GetExactUniqueAsset(release.Assets, expectedChecksumName, out UpdateErrorKind? csErr, out string? csMsg);
             if (checksumAsset is null)
             {
-                _logger?.LogWarning("SHA256SUMS.txt missing from release assets");
+                return UpdateCheckResult.Failed(csErr!.Value, csMsg!, currentVersion, latest);
+            }
+
+            // Positive bounded sizes
+            if (setupAsset.Size <= 0 || setupAsset.Size > _options.MaxInstallerSizeBytes)
+            {
                 return UpdateCheckResult.Failed(
-                    UpdateErrorKind.AssetNotFound,
-                    "Required checksum asset 'SHA256SUMS.txt' was not found in release assets.",
+                    setupAsset.Size <= 0 ? UpdateErrorKind.InvalidReleaseData : UpdateErrorKind.PayloadTooLarge,
+                    $"Setup asset size ({setupAsset.Size} bytes) is out of valid bounds (1 to {_options.MaxInstallerSizeBytes} bytes).",
                     currentVersion,
                     latest);
             }
 
-            // Validate download URLs
-            if (!Uri.TryCreate(setupAsset.BrowserDownloadUrl, UriKind.Absolute, out Uri? setupUri) ||
-                !GitHubUrlValidator.IsValidDownloadUri(setupUri, _options.RepositoryOwner, _options.RepositoryName))
+            if (checksumAsset.Size <= 0 || checksumAsset.Size > _options.MaxChecksumSizeBytes)
             {
-                _logger?.LogWarning("Setup download URL is not a canonical GitHub URL: {Url}", setupAsset.BrowserDownloadUrl);
                 return UpdateCheckResult.Failed(
-                    UpdateErrorKind.InvalidUrl,
-                    $"Setup download URL '{setupAsset.BrowserDownloadUrl}' was rejected by security policy.",
+                    checksumAsset.Size <= 0 ? UpdateErrorKind.InvalidReleaseData : UpdateErrorKind.PayloadTooLarge,
+                    $"Checksum asset size ({checksumAsset.Size} bytes) is out of valid bounds (1 to {_options.MaxChecksumSizeBytes} bytes).",
                     currentVersion,
                     latest);
+            }
+
+            // Same tag association & canonical repo/tag/filename initial download URLs (not githubusercontent)
+            if (!Uri.TryCreate(setupAsset.BrowserDownloadUrl, UriKind.Absolute, out Uri? setupUri) ||
+                !GitHubUrlValidator.IsValidDownloadUri(setupUri, _options.RepositoryOwner, _options.RepositoryName, release.TagName, setupAsset.Name))
+            {
+                return UpdateCheckResult.Failed(UpdateErrorKind.InvalidUrl, $"Setup download URL '{setupAsset.BrowserDownloadUrl}' was rejected by security policy.", currentVersion, latest);
             }
 
             if (!Uri.TryCreate(checksumAsset.BrowserDownloadUrl, UriKind.Absolute, out Uri? checksumUri) ||
-                !GitHubUrlValidator.IsValidDownloadUri(checksumUri, _options.RepositoryOwner, _options.RepositoryName))
+                !GitHubUrlValidator.IsValidDownloadUri(checksumUri, _options.RepositoryOwner, _options.RepositoryName, release.TagName, checksumAsset.Name))
             {
-                _logger?.LogWarning("Checksum download URL is not a canonical GitHub URL: {Url}", checksumAsset.BrowserDownloadUrl);
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.InvalidUrl,
-                    $"Checksum download URL '{checksumAsset.BrowserDownloadUrl}' was rejected by security policy.",
-                    currentVersion,
-                    latest);
+                return UpdateCheckResult.Failed(UpdateErrorKind.InvalidUrl, $"Checksum download URL '{checksumAsset.BrowserDownloadUrl}' was rejected by security policy.", currentVersion, latest);
             }
 
-            if (setupAsset.Size > _options.MaxInstallerSizeBytes)
-            {
-                _logger?.LogWarning("Setup asset size {Size} exceeds limit {Limit}", setupAsset.Size, _options.MaxInstallerSizeBytes);
-                return UpdateCheckResult.Failed(
-                    UpdateErrorKind.PayloadTooLarge,
-                    $"Setup asset size ({setupAsset.Size} bytes) exceeds safety limit of {_options.MaxInstallerSizeBytes} bytes.",
-                    currentVersion,
-                    latest);
-            }
-
-            Uri releaseWebUrl = Uri.TryCreate(release.HtmlUrl, UriKind.Absolute, out Uri? htmlUri)
+            Uri releaseWebUrl = Uri.TryCreate(release.HtmlUrl, UriKind.Absolute, out Uri? htmlUri) && GitHubUrlValidator.IsSecureHttps(htmlUri)
                 ? htmlUri
                 : new Uri($"https://github.com/{_options.RepositoryOwner}/{_options.RepositoryName}/releases/tag/{release.TagName}");
 
@@ -241,34 +207,19 @@ public sealed class GitHubUpdateService : IUpdateService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return UpdateCheckResult.Failed(
-                UpdateErrorKind.Cancelled,
-                "Update check was cancelled by the caller.",
-                currentVersion);
+            return UpdateCheckResult.Failed(UpdateErrorKind.Cancelled, "Update check was cancelled by the caller.", currentVersion);
         }
         catch (OperationCanceledException)
         {
-            _logger?.LogWarning("Update check timed out after {Timeout}", _options.CheckTimeout);
-            return UpdateCheckResult.Failed(
-                UpdateErrorKind.CheckFailed,
-                $"Update check timed out after {_options.CheckTimeout.TotalSeconds:F0} seconds.",
-                currentVersion);
+            return UpdateCheckResult.Failed(UpdateErrorKind.CheckFailed, $"Update check timed out after {_options.CheckTimeout.TotalSeconds:F0} seconds.", currentVersion);
         }
-        catch (HttpRequestException ex)
+        catch (UpdateException ex)
         {
-            _logger?.LogWarning(ex, "Network error during update check");
-            return UpdateCheckResult.Failed(
-                UpdateErrorKind.CheckFailed,
-                $"Network error while contacting release service: {ex.Message}",
-                currentVersion);
+            return UpdateCheckResult.Failed(ex.ErrorKind, ex.Message, currentVersion);
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Unexpected error during update check");
-            return UpdateCheckResult.Failed(
-                UpdateErrorKind.CheckFailed,
-                $"Unexpected error during update check: {ex.Message}",
-                currentVersion);
+            return UpdateCheckResult.Failed(UpdateErrorKind.CheckFailed, $"Error during update check: {ex.Message}", currentVersion);
         }
     }
 
@@ -292,45 +243,53 @@ public sealed class GitHubUpdateService : IUpdateService
         ArgumentNullException.ThrowIfNull(package);
         ArgumentException.ThrowIfNullOrWhiteSpace(stagingRoot);
 
+        // Validate package filename/version BEFORE any filesystem paths
+        UpdateErrorKind? validationError = ValidatePackage(package, out string? validationMessage);
+        if (validationError is not null)
+        {
+            return StagedUpdateResult.Failed(validationError.Value, validationMessage ?? "Package validation failed.");
+        }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(_options.DownloadTimeout);
 
         string canonicalStagingRoot = Path.GetFullPath(stagingRoot);
         try
         {
+            if (Directory.Exists(canonicalStagingRoot) &&
+                (new DirectoryInfo(canonicalStagingRoot).Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, "Staging root directory must not be a reparse point.");
+            }
             Directory.CreateDirectory(canonicalStagingRoot);
         }
         catch (Exception ex)
         {
-            return StagedUpdateResult.Failed(
-                UpdateErrorKind.StagingError,
-                $"Unable to access or create staging root directory: {ex.Message}");
+            return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, $"Unable to access or create staging root directory: {ex.Message}");
         }
 
-        // Generate unique isolated session directory
         string sessionDirName = $"update-{package.Version.ToNormalizedString()}-{Guid.NewGuid():N}";
         string sessionDirectory = Path.Combine(canonicalStagingRoot, sessionDirName);
         string fullSessionDir = Path.GetFullPath(sessionDirectory);
 
-        // Security check: ensure session directory stays strictly within staging root
         string requiredPrefix = canonicalStagingRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                                 + Path.DirectorySeparatorChar;
         if (!fullSessionDir.StartsWith(requiredPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            return StagedUpdateResult.Failed(
-                UpdateErrorKind.StagingError,
-                "Staging directory traversal was detected and blocked.");
+            return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, "Staging directory traversal was detected and blocked.");
         }
 
         try
         {
             Directory.CreateDirectory(fullSessionDir);
+            if ((new DirectoryInfo(fullSessionDir).Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, "Created session directory was detected as a reparse point.");
+            }
         }
         catch (Exception ex)
         {
-            return StagedUpdateResult.Failed(
-                UpdateErrorKind.StagingError,
-                $"Failed to create update session directory: {ex.Message}");
+            return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, $"Failed to create update session directory: {ex.Message}");
         }
 
         string tempInstallerPath = Path.Combine(fullSessionDir, $"{package.SetupAssetName}.downloading");
@@ -339,30 +298,18 @@ public sealed class GitHubUpdateService : IUpdateService
 
         try
         {
-            // 1. Download and parse SHA256SUMS.txt
+            // 1. Download and parse SHA256SUMS.txt (byte bounded)
             progress?.Report(UpdateProgress.DownloadingChecksums());
-            _logger?.LogDebug("Downloading checksums from {Url}", package.ChecksumDownloadUrl);
-
-            string checksumContent = await DownloadChecksumFileContentAsync(
-                package.ChecksumDownloadUrl,
-                cts.Token).ConfigureAwait(false);
-
+            string checksumContent = await DownloadChecksumFileContentAsync(package.ChecksumDownloadUrl, cts.Token).ConfigureAwait(false);
             await File.WriteAllTextAsync(checksumFilePath, checksumContent, cts.Token).ConfigureAwait(false);
 
             var checksumFile = Sha256ChecksumFile.Parse(checksumContent);
             if (!checksumFile.TryGetChecksum(package.SetupAssetName, out string? expectedSha256))
             {
-                throw new UpdateException(
-                    UpdateErrorKind.ChecksumParseFailed,
-                    $"SHA256SUMS.txt does not contain a valid checksum entry for '{package.SetupAssetName}'.");
+                throw new UpdateException(UpdateErrorKind.ChecksumParseFailed, $"SHA256SUMS.txt does not contain a valid checksum entry for '{package.SetupAssetName}'.");
             }
 
-            _logger?.LogDebug("Expected SHA256 for {Asset}: {Hash}", package.SetupAssetName, expectedSha256);
-
-            // 2. Download installer with streaming SHA-256 computation and progress
-            progress?.Report(UpdateProgress.DownloadingInstaller(0, package.SetupSizeBytes));
-            _logger?.LogInformation("Downloading installer to {Path}", tempInstallerPath);
-
+            // 2. Download installer with async sequential IO, bounded size, progress capping, and hash check
             long bytesReceived = await DownloadInstallerStreamAsync(
                 package.SetupDownloadUrl,
                 tempInstallerPath,
@@ -371,12 +318,8 @@ public sealed class GitHubUpdateService : IUpdateService
                 progress,
                 cts.Token).ConfigureAwait(false);
 
-            // 3. Move verified installer to its final usable file name
-            if (File.Exists(finalInstallerPath))
-            {
-                File.Delete(finalInstallerPath);
-            }
-            File.Move(tempInstallerPath, finalInstallerPath);
+            // 3. Move verified installer to final file name
+            File.Move(tempInstallerPath, finalInstallerPath, overwrite: true);
 
             progress?.Report(UpdateProgress.Ready(bytesReceived));
             _logger?.LogInformation("Successfully verified and staged update: {Path}", finalInstallerPath);
@@ -384,6 +327,7 @@ public sealed class GitHubUpdateService : IUpdateService
             var verifiedPackage = new VerifiedUpdatePackage(
                 version: package.Version,
                 installerPath: finalInstallerPath,
+                checksumPath: checksumFilePath,
                 expectedSha256: expectedSha256,
                 actualSha256: expectedSha256,
                 fileSizeBytes: bytesReceived,
@@ -395,39 +339,27 @@ public sealed class GitHubUpdateService : IUpdateService
 
             return StagedUpdateResult.Success(verifiedPackage);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            _logger?.LogInformation("Update download was cancelled by caller");
-            SafeCleanupSession(fullSessionDir, canonicalStagingRoot);
-            progress?.Report(UpdateProgress.Cancelled(0));
-            return StagedUpdateResult.Failed(
-                UpdateErrorKind.Cancelled,
-                "Update download was cancelled by the caller.");
-        }
-        catch (OperationCanceledException)
-        {
-            _logger?.LogWarning("Update download timed out after {Timeout}", _options.DownloadTimeout);
-            SafeCleanupSession(fullSessionDir, canonicalStagingRoot);
-            progress?.Report(UpdateProgress.Failed(0));
-            return StagedUpdateResult.Failed(
-                UpdateErrorKind.DownloadFailed,
-                $"Update download timed out after {_options.DownloadTimeout.TotalMinutes:F1} minutes.");
-        }
-        catch (UpdateException ex)
-        {
-            _logger?.LogWarning(ex, "Update error: {Message}", ex.Message);
-            SafeCleanupSession(fullSessionDir, canonicalStagingRoot);
-            progress?.Report(UpdateProgress.Failed(0));
-            return StagedUpdateResult.Failed(ex.ErrorKind, ex.Message);
-        }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Unexpected download failure");
-            SafeCleanupSession(fullSessionDir, canonicalStagingRoot);
+            CleanupSessionFiles(fullSessionDir, tempInstallerPath, finalInstallerPath, checksumFilePath);
+            if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested)
+            {
+                progress?.Report(UpdateProgress.Cancelled(0));
+                return StagedUpdateResult.Failed(UpdateErrorKind.Cancelled, "Update download was cancelled by the caller.");
+            }
             progress?.Report(UpdateProgress.Failed(0));
-            return StagedUpdateResult.Failed(
-                UpdateErrorKind.DownloadFailed,
-                $"Download failure: {ex.Message}");
+            UpdateErrorKind kind = ex switch
+            {
+                UpdateException ue => ue.ErrorKind,
+                OperationCanceledException => UpdateErrorKind.DownloadFailed,
+                _ => UpdateErrorKind.DownloadFailed
+            };
+            string msg = ex switch
+            {
+                OperationCanceledException => $"Update download timed out after {_options.DownloadTimeout.TotalMinutes:F1} minutes.",
+                _ => ex.Message
+            };
+            return StagedUpdateResult.Failed(kind, msg);
         }
     }
 
@@ -449,11 +381,7 @@ public sealed class GitHubUpdateService : IUpdateService
             return StagedUpdateResult.Failed(kind, checkResult.ErrorMessage ?? "Application is already up to date.");
         }
 
-        return await DownloadAndStageAsync(
-            checkResult.PackageInfo,
-            stagingRoot,
-            progress,
-            cancellationToken).ConfigureAwait(false);
+        return await DownloadAndStageAsync(checkResult.PackageInfo, stagingRoot, progress, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -467,51 +395,65 @@ public sealed class GitHubUpdateService : IUpdateService
         return CheckAndStageAsync(UpdateVersion.FromVersion(currentVersion), stagingRoot, progress, cancellationToken);
     }
 
-    private async Task<string> DownloadChecksumFileContentAsync(
-        Uri checksumUri,
-        CancellationToken cancellationToken)
+    private static GitHubAssetDto? GetExactUniqueAsset(
+        List<GitHubAssetDto>? assets,
+        string expectedName,
+        out UpdateErrorKind? error,
+        out string? message)
     {
-        using HttpResponseMessage response = await SendWithSafeRedirectsAsync(
-            checksumUri,
-            cancellationToken).ConfigureAwait(false);
+        error = null;
+        message = null;
+        var matches = assets?.Where(a => string.Equals(a.Name, expectedName, StringComparison.Ordinal)).ToList();
+        if (matches is null || matches.Count == 0)
+        {
+            error = UpdateErrorKind.AssetNotFound;
+            message = $"Required asset '{expectedName}' was not found in release assets.";
+            return null;
+        }
+        if (matches.Count > 1)
+        {
+            error = UpdateErrorKind.InvalidReleaseData;
+            message = $"Multiple conflicting assets named '{expectedName}' found in release.";
+            return null;
+        }
+        return matches[0];
+    }
 
+    private static async Task<byte[]> ReadBoundedBytesAsync(Stream stream, long maxBytes, CancellationToken ct)
+    {
+        using var ms = new MemoryStream();
+        byte[] buf = new byte[8192];
+        long total = 0;
+        int read;
+        while ((read = await stream.ReadAsync(buf.AsMemory(0, buf.Length), ct).ConfigureAwait(false)) > 0)
+        {
+            total += read;
+            if (total > maxBytes)
+            {
+                throw new UpdateException(UpdateErrorKind.PayloadTooLarge, $"Content exceeded streaming byte limit of {maxBytes} bytes.");
+            }
+            ms.Write(buf, 0, read);
+        }
+        return ms.ToArray();
+    }
+
+    private async Task<string> DownloadChecksumFileContentAsync(Uri checksumUri, CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage response = await SendWithSafeRedirectsAsync(checksumUri, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            throw new UpdateException(
-                UpdateErrorKind.DownloadFailed,
-                $"Failed to download checksum file: HTTP {(int)response.StatusCode} ({response.StatusCode}).");
+            throw new UpdateException(UpdateErrorKind.DownloadFailed, $"Failed to download checksum file: HTTP {(int)response.StatusCode}.");
         }
 
         if (response.Content.Headers.ContentLength > _options.MaxChecksumSizeBytes)
         {
-            throw new UpdateException(
-                UpdateErrorKind.PayloadTooLarge,
-                $"SHA256SUMS.txt declared size exceeds maximum allowed of {_options.MaxChecksumSizeBytes} bytes.");
+            throw new UpdateException(UpdateErrorKind.PayloadTooLarge, $"SHA256SUMS.txt declared size exceeds limit of {_options.MaxChecksumSizeBytes} bytes.");
         }
 
+        // Strictly count bytes read from stream
         await using Stream contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var reader = new StreamReader(contentStream);
-
-        // Read up to limit
-        char[] buffer = new char[4096];
-        int totalCharsRead = 0;
-        int maxChars = (int)Math.Min(_options.MaxChecksumSizeBytes, int.MaxValue);
-        var sb = new System.Text.StringBuilder();
-
-        int charsRead;
-        while ((charsRead = await reader.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
-        {
-            totalCharsRead += charsRead;
-            if (totalCharsRead > maxChars)
-            {
-                throw new UpdateException(
-                    UpdateErrorKind.PayloadTooLarge,
-                    "SHA256SUMS.txt content exceeded size limit.");
-            }
-            sb.Append(buffer, 0, charsRead);
-        }
-
-        return sb.ToString();
+        byte[] bytes = await ReadBoundedBytesAsync(contentStream, _options.MaxChecksumSizeBytes, cancellationToken).ConfigureAwait(false);
+        return System.Text.Encoding.UTF8.GetString(bytes);
     }
 
     private async Task<long> DownloadInstallerStreamAsync(
@@ -522,61 +464,70 @@ public sealed class GitHubUpdateService : IUpdateService
         IProgress<UpdateProgress>? progress,
         CancellationToken cancellationToken)
     {
-        using HttpResponseMessage response = await SendWithSafeRedirectsAsync(
-            downloadUri,
-            cancellationToken).ConfigureAwait(false);
-
+        using HttpResponseMessage response = await SendWithSafeRedirectsAsync(downloadUri, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            throw new UpdateException(
-                UpdateErrorKind.DownloadFailed,
-                $"Failed to download installer package: HTTP {(int)response.StatusCode} ({response.StatusCode}).");
+            throw new UpdateException(UpdateErrorKind.DownloadFailed, $"Failed to download installer package: HTTP {(int)response.StatusCode}.");
         }
 
         long? declaredLength = response.Content.Headers.ContentLength;
         if (declaredLength > _options.MaxInstallerSizeBytes)
         {
-            throw new UpdateException(
-                UpdateErrorKind.PayloadTooLarge,
-                $"Installer declared length ({declaredLength.Value} bytes) exceeds maximum limit of {_options.MaxInstallerSizeBytes} bytes.");
+            throw new UpdateException(UpdateErrorKind.PayloadTooLarge, $"Installer declared length ({declaredLength.Value} bytes) exceeds limit of {_options.MaxInstallerSizeBytes} bytes.");
         }
 
-        long totalExpected = declaredLength ?? (expectedSizeBytes > 0 ? expectedSizeBytes : -1);
-
         await using Stream networkStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+
+        // Async sequential file IO without WriteThrough per chunk
         await using var fileStream = new FileStream(
             destinationPath,
             FileMode.CreateNew,
             FileAccess.Write,
             FileShare.None,
             bufferSize: _options.BufferSizeBytes,
-            FileOptions.WriteThrough);
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
 
         using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         byte[] buffer = new byte[_options.BufferSizeBytes];
         long bytesReceived = 0;
         int bytesRead;
 
+        // Cap progress to prevent UI flooding
+        long lastReportTicks = Stopwatch.GetTimestamp();
+        TimeSpan minReportInterval = TimeSpan.FromMilliseconds(50);
+        progress?.Report(UpdateProgress.DownloadingInstaller(0, expectedSizeBytes));
+
         while ((bytesRead = await networkStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
         {
             bytesReceived += bytesRead;
             if (bytesReceived > _options.MaxInstallerSizeBytes)
             {
-                throw new UpdateException(
-                    UpdateErrorKind.PayloadTooLarge,
-                    $"Downloaded bytes exceeded maximum safety limit of {_options.MaxInstallerSizeBytes} bytes.");
+                throw new UpdateException(UpdateErrorKind.PayloadTooLarge, $"Downloaded bytes exceeded limit of {_options.MaxInstallerSizeBytes} bytes.");
             }
 
             sha256.AppendData(buffer, 0, bytesRead);
             await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
 
-            progress?.Report(UpdateProgress.DownloadingInstaller(
-                bytesReceived,
-                totalExpected > 0 ? totalExpected : null));
+            if (progress is not null)
+            {
+                long nowTicks = Stopwatch.GetTimestamp();
+                if (Stopwatch.GetElapsedTime(lastReportTicks, nowTicks) >= minReportInterval || bytesReceived == expectedSizeBytes)
+                {
+                    lastReportTicks = nowTicks;
+                    progress.Report(UpdateProgress.DownloadingInstaller(bytesReceived, expectedSizeBytes));
+                }
+            }
         }
 
+        // Final durable flush to physical storage
         await fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
         fileStream.Flush(flushToDisk: true);
+
+        // Download byte count must equal selected release size
+        if (bytesReceived != expectedSizeBytes)
+        {
+            throw new UpdateException(UpdateErrorKind.DownloadFailed, $"Downloaded installer byte count ({bytesReceived}) does not match expected size ({expectedSizeBytes}).");
+        }
 
         // Verify SHA-256 hash
         progress?.Report(UpdateProgress.VerifyingIntegrity(bytesReceived));
@@ -585,32 +536,28 @@ public sealed class GitHubUpdateService : IUpdateService
 
         if (!string.Equals(actualHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
         {
-            throw new UpdateException(
-                UpdateErrorKind.HashMismatch,
-                $"SHA-256 integrity verification failed for downloaded installer. Expected: {expectedSha256}, Actual: {actualHash}");
+            throw new UpdateException(UpdateErrorKind.HashMismatch, $"SHA-256 verification failed. Expected: {expectedSha256}, Actual: {actualHash}");
         }
 
         return bytesReceived;
     }
 
-    private async Task<HttpResponseMessage> SendWithSafeRedirectsAsync(
-        Uri initialUri,
-        CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendWithSafeRedirectsAsync(Uri initialUri, CancellationToken cancellationToken)
     {
         Uri currentUri = initialUri;
-        int redirectCount = 0;
-        const int maxRedirects = 5;
 
-        while (true)
+        for (int redirectCount = 0; ; redirectCount++)
         {
-            if (!GitHubUrlValidator.IsValidDownloadUri(currentUri, _options.RepositoryOwner, _options.RepositoryName))
+            bool valid = redirectCount == 0
+                ? GitHubUrlValidator.IsValidDownloadUri(currentUri, _options.RepositoryOwner, _options.RepositoryName)
+                : GitHubUrlValidator.IsValidRedirectUri(currentUri, _options.RepositoryOwner, _options.RepositoryName);
+
+            if (!valid)
             {
-                throw new UpdateException(
-                    UpdateErrorKind.InvalidUrl,
-                    $"URI '{currentUri}' is not an authorized GitHub download endpoint.");
+                throw new UpdateException(UpdateErrorKind.InvalidUrl, $"URI '{currentUri}' is not an authorized download endpoint.");
             }
 
-            var request = new HttpRequestMessage(HttpMethod.Get, currentUri);
+            using var request = new HttpRequestMessage(HttpMethod.Get, currentUri);
             request.Headers.Accept.ParseAdd("*/*");
             request.Headers.UserAgent.ParseAdd("MyCapture-Updater/1.0");
 
@@ -619,15 +566,20 @@ public sealed class GitHubUpdateService : IUpdateService
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken).ConfigureAwait(false);
 
+            // Injected client must not silently bypass redirect validation
+            if (response.RequestMessage?.RequestUri is not null &&
+                !response.RequestMessage.RequestUri.Equals(currentUri))
+            {
+                response.Dispose();
+                throw new UpdateException(UpdateErrorKind.InvalidUrl, "Automatic redirect detected. Injected HttpClient must not auto-redirect; all redirect hops must be validated individually.");
+            }
+
             if (IsRedirectStatusCode(response.StatusCode))
             {
-                redirectCount++;
-                if (redirectCount > maxRedirects)
+                if (redirectCount >= MaxRedirectHops)
                 {
                     response.Dispose();
-                    throw new UpdateException(
-                        UpdateErrorKind.DownloadFailed,
-                        "Too many HTTP redirects encountered while downloading asset.");
+                    throw new UpdateException(UpdateErrorKind.DownloadFailed, $"Too many HTTP redirects encountered (limit: {MaxRedirectHops}).");
                 }
 
                 Uri? location = response.Headers.Location;
@@ -635,34 +587,117 @@ public sealed class GitHubUpdateService : IUpdateService
 
                 if (location is null)
                 {
-                    throw new UpdateException(
-                        UpdateErrorKind.DownloadFailed,
-                        "HTTP redirect response was missing a Location header.");
+                    throw new UpdateException(UpdateErrorKind.DownloadFailed, "HTTP redirect response was missing a Location header.");
                 }
 
                 Uri nextUri = location.IsAbsoluteUri ? location : new Uri(currentUri, location);
                 if (!GitHubUrlValidator.IsValidRedirectUri(nextUri, _options.RepositoryOwner, _options.RepositoryName))
                 {
-                    throw new UpdateException(
-                        UpdateErrorKind.InvalidUrl,
-                        $"Redirect to '{nextUri}' was rejected because it does not target authorized GitHub infrastructure.");
+                    throw new UpdateException(UpdateErrorKind.InvalidUrl, $"Redirect to '{nextUri}' was rejected because it does not target authorized GitHub infrastructure.");
                 }
 
                 currentUri = nextUri;
                 continue;
             }
 
-            // Verify final URI after automatic redirect (if HttpClient handler handled redirect internally)
-            Uri finalUri = response.RequestMessage?.RequestUri ?? currentUri;
-            if (!GitHubUrlValidator.IsValidRedirectUri(finalUri, _options.RepositoryOwner, _options.RepositoryName))
+            return response;
+        }
+    }
+
+    private UpdateErrorKind? ValidatePackage(UpdatePackageInfo package, out string? message)
+    {
+        message = null;
+
+        if (package.Version.IsPrerelease || package.Version.Major < 0 || package.Version.Minor < 0 || package.Version.Patch < 0)
+        {
+            message = "Package version is invalid or marked as a prerelease.";
+            return UpdateErrorKind.InvalidReleaseData;
+        }
+
+        string expectedSetupName = $"MyCapture-{package.Version.ToNormalizedString()}-win-x64-setup.exe";
+        if (!string.Equals(package.SetupAssetName, expectedSetupName, StringComparison.Ordinal) ||
+            package.SetupAssetName.Contains('/') ||
+            package.SetupAssetName.Contains('\\') ||
+            package.SetupAssetName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            message = $"Package setup asset name '{package.SetupAssetName}' does not match expected convention '{expectedSetupName}' or contains invalid characters.";
+            return UpdateErrorKind.InvalidReleaseData;
+        }
+
+        if (package.SetupSizeBytes <= 0 || package.SetupSizeBytes > _options.MaxInstallerSizeBytes)
+        {
+            message = $"Package setup size ({package.SetupSizeBytes} bytes) is out of bounds (1 to {_options.MaxInstallerSizeBytes} bytes).";
+            return UpdateErrorKind.PayloadTooLarge;
+        }
+
+        if (!GitHubUrlValidator.IsValidDownloadUri(package.SetupDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, null, package.SetupAssetName))
+        {
+            message = $"Package setup download URL '{package.SetupDownloadUrl}' failed security validation.";
+            return UpdateErrorKind.InvalidUrl;
+        }
+
+        if (!GitHubUrlValidator.IsValidDownloadUri(package.ChecksumDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, null, "SHA256SUMS.txt"))
+        {
+            message = $"Package checksum download URL '{package.ChecksumDownloadUrl}' failed security validation.";
+            return UpdateErrorKind.InvalidUrl;
+        }
+
+        return null;
+    }
+
+    private static void CleanupSessionFiles(string sessionDirectory, params string?[] filePaths)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(sessionDirectory) || !Directory.Exists(sessionDirectory))
             {
-                response.Dispose();
-                throw new UpdateException(
-                    UpdateErrorKind.InvalidUrl,
-                    $"Final download URI '{finalUri}' after automatic redirect is not authorized.");
+                return;
             }
 
-            return response;
+            var dirInfo = new DirectoryInfo(sessionDirectory);
+            if ((dirInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                return;
+            }
+
+            foreach (string? filePath in filePaths)
+            {
+                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    string? parentDir = Path.GetDirectoryName(filePath);
+                    if (!string.Equals(parentDir, dirInfo.FullName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var fileInfo = new FileInfo(filePath);
+                    if ((fileInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+                    {
+                        continue;
+                    }
+
+                    File.Delete(filePath);
+                }
+                catch
+                {
+                }
+            }
+
+            try
+            {
+                Directory.Delete(sessionDirectory, recursive: false);
+            }
+            catch
+            {
+            }
+        }
+        catch
+        {
         }
     }
 
@@ -672,99 +707,6 @@ public sealed class GitHubUpdateService : IUpdateService
              or HttpStatusCode.SeeOther
              or HttpStatusCode.TemporaryRedirect
              or (HttpStatusCode)308;
-
-    /// <summary>
-    /// Safely cleans up the session directory, ensuring no deletion touches outside the session dir.
-    /// </summary>
-    public static void SafeCleanupSession(string sessionDirectory, string stagingRoot)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(sessionDirectory) || string.IsNullOrWhiteSpace(stagingRoot))
-            {
-                return;
-            }
-
-            string fullSession = Path.GetFullPath(sessionDirectory);
-            string fullStaging = Path.GetFullPath(stagingRoot);
-
-            string prefix = fullStaging.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                            + Path.DirectorySeparatorChar;
-
-            // Strict path containment check
-            if (!fullSession.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            if (!Directory.Exists(fullSession))
-            {
-                return;
-            }
-
-            foreach (string file in Directory.EnumerateFiles(fullSession, "*", SearchOption.TopDirectoryOnly))
-            {
-                try
-                {
-                    File.Delete(file);
-                }
-                catch (Exception)
-                {
-                }
-            }
-
-            try
-            {
-                Directory.Delete(fullSession, recursive: false);
-            }
-            catch (Exception)
-            {
-            }
-        }
-        catch (Exception)
-        {
-        }
-    }
-
-    /// <summary>
-    /// Cleans up stale update session directories in the staging root older than the specified age.
-    /// </summary>
-    public static int CleanUpStaleUpdateDirectories(string stagingRoot, TimeSpan? maxAge = null)
-    {
-        if (string.IsNullOrWhiteSpace(stagingRoot) || !Directory.Exists(stagingRoot))
-        {
-            return 0;
-        }
-
-        TimeSpan threshold = maxAge ?? TimeSpan.FromHours(24);
-        DateTime cutoff = DateTime.UtcNow - threshold;
-        int cleanedCount = 0;
-
-        try
-        {
-            string canonicalRoot = Path.GetFullPath(stagingRoot);
-            foreach (string dir in Directory.EnumerateDirectories(canonicalRoot, "update-*", SearchOption.TopDirectoryOnly))
-            {
-                try
-                {
-                    DateTime created = Directory.GetCreationTimeUtc(dir);
-                    if (created < cutoff)
-                    {
-                        SafeCleanupSession(dir, canonicalRoot);
-                        cleanedCount++;
-                    }
-                }
-                catch (Exception)
-                {
-                }
-            }
-        }
-        catch (Exception)
-        {
-        }
-
-        return cleanedCount;
-    }
 
     private void ThrowIfDisposed()
     {

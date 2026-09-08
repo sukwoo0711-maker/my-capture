@@ -7,11 +7,8 @@ public sealed class UpdateServiceOptions
 {
     public const string DefaultOwner = "sukwoo0711-maker";
     public const string DefaultRepo = "my-capture";
-    public const string DefaultApiBaseUrl = "https://api.github.com";
-
     public string RepositoryOwner { get; init; } = DefaultOwner;
     public string RepositoryName { get; init; } = DefaultRepo;
-    public string ApiBaseUrl { get; init; } = DefaultApiBaseUrl;
 
     public TimeSpan CheckTimeout { get; init; } = TimeSpan.FromSeconds(15);
     public TimeSpan DownloadTimeout { get; init; } = TimeSpan.FromMinutes(5);
