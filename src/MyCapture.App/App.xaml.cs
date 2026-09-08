@@ -1408,6 +1408,13 @@ public partial class App : Application
                 OcrSelfTest.Run);
         }
 
+        int pinStorageIndex = FindSwitch(args, PinStoragePerformanceSelfTest.CommandLineSwitch);
+        if (pinStorageIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(args, pinStorageIndex, "mycapture-pin-storage-performance");
+            return RunSelfTest(outputDirectory, "pin-storage-performance-report.txt", PinStoragePerformanceSelfTest.Run);
+        }
+
         int recordingPerformanceIndex = FindSwitch(args, RecordingPerformanceSelfTest.CommandLineSwitch);
         if (recordingPerformanceIndex >= 0)
         {
