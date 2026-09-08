@@ -110,6 +110,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     public bool HasErrors => _errors.Count > 0;
 
+    /// <summary>Empty follows Windows; ko-KR and en are the supported explicit UI choices.</summary>
+    public string Language
+    {
+        get => _language;
+        set => Set(ref _language, value ?? string.Empty);
+    }
     // ================= General =================
 
     public bool LaunchAtLogin { get => _launchAtLogin; set => Set(ref _launchAtLogin, value); }
@@ -325,7 +331,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     public string FontFamily
     {
         get => _fontFamily;
-        set { if (Set(ref _fontFamily, value)) ValidateNonEmpty(value, nameof(FontFamily), "글꼴 이름을 입력해 주세요."); }
+        set { if (Set(ref _fontFamily, value)) ValidateNonEmpty(value, nameof(FontFamily), UiText.Get("Text_B64CA1BE6711")); }
     }
 
     public string MosaicBlockSize
@@ -409,7 +415,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedRecentColors = [.. s.Annotation.RecentColors];
         _preservedColorFormat = s.Capture.ColorFormat;
         _preservedPreserveTransparency = s.Export.PreserveTransparency;
-        _preservedLanguage = s.General.Language;
+        _language = s.General.Language;
         _preservedIsFirstRun = s.General.IsFirstRun;
         _preservedRecordingBitrateBitsPerSecond = s.Recording.BitrateBitsPerSecond;
         _preservedRecordingCoarseStepSeconds = s.Recording.CoarseStepSeconds;
@@ -444,7 +450,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 LaunchAtLogin = _launchAtLogin,
                 NotifyOnQuickSave = _notifyOnQuickSave,
                 PlayCaptureSound = _playCaptureSound,
-                Language = _preservedLanguage,
+                Language = _language,
                 IsFirstRun = _preservedIsFirstRun,
             },
             Capture =
@@ -582,7 +588,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ValidateDouble(_upscaleFactor, SettingsRanges.UpscaleFactor, nameof(UpscaleFactor));
         ValidateDouble(_strokeThickness, SettingsRanges.StrokeThickness, nameof(StrokeThickness));
         ValidateDouble(_fontSize, SettingsRanges.FontSize, nameof(FontSize));
-        ValidateNonEmpty(_fontFamily, nameof(FontFamily), "글꼴 이름을 입력해 주세요.");
+        ValidateNonEmpty(_fontFamily, nameof(FontFamily), UiText.Get("Text_B64CA1BE6711"));
         ValidateInt(_mosaicBlockSize, SettingsRanges.MosaicBlockSize, nameof(MosaicBlockSize));
         ValidateInt(_highlighterAlpha, SettingsRanges.HighlighterAlpha, nameof(HighlighterAlpha));
         ValidateAllHotkeys();
@@ -592,25 +598,25 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         if (!int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
         {
-            SetError(property!, $"정수를 입력해 주세요 (허용 범위 {range.Describe()}).");
+            SetError(property!, UiText.Format("Text_9A6259D8B7CF", range.Describe()));
             return;
         }
 
-        SetErrorState(property!, range.Contains(parsed), $"허용 범위는 {range.Describe()}입니다.");
+        SetErrorState(property!, range.Contains(parsed), UiText.Format("Text_CF32FE576AE7", range.Describe()));
     }
 
     private void ValidateRecordingFrameRate(string value)
     {
         if (!int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
         {
-            SetError(nameof(RecordingFrameRate), "프레임 속도는 10, 15, 24, 30, 60 중 하나를 입력해 주세요.");
+            SetError(nameof(RecordingFrameRate), UiText.Get("Text_2E447977E64D"));
             return;
         }
 
         SetErrorState(
             nameof(RecordingFrameRate),
             SettingsRanges.RecordingFrameRates.Contains(parsed),
-            "지원하는 프레임 속도는 10, 15, 24, 30, 60fps입니다.");
+            UiText.Get("Text_594449493143"));
     }
 
     private void ValidateDouble(string value, Range<double> range, [CallerMemberName] string? property = null)
@@ -618,11 +624,11 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         if (!double.TryParse(value?.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)
             || double.IsNaN(parsed) || double.IsInfinity(parsed))
         {
-            SetError(property!, $"숫자를 입력해 주세요 (허용 범위 {range.Describe()}).");
+            SetError(property!, UiText.Format("Text_5461D9E26042", range.Describe()));
             return;
         }
 
-        SetErrorState(property!, range.Contains(parsed), $"허용 범위는 {range.Describe()}입니다.");
+        SetErrorState(property!, range.Contains(parsed), UiText.Format("Text_CF32FE576AE7", range.Describe()));
     }
 
     private void ValidateMaxGiB(string value)
@@ -630,7 +636,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         if (!double.TryParse(value?.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double gib)
             || double.IsNaN(gib) || double.IsInfinity(gib))
         {
-            SetError(nameof(MaxGiB), "저장 한도(GiB)에 숫자를 입력해 주세요.");
+            SetError(nameof(MaxGiB), UiText.Get("Text_764879D98E25"));
             return;
         }
 
@@ -641,7 +647,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         SetErrorState(
             nameof(MaxGiB),
             ok,
-            string.Format(CultureInfo.InvariantCulture, "허용 범위는 {0:0.###} ~ {1:0.###} GiB입니다.", minGiB, maxGiB));
+            string.Format(CultureInfo.InvariantCulture, UiText.Get("Text_3862727D2DCB"), minGiB, maxGiB));
     }
 
     private void ValidateFileNamePattern(string value)
@@ -649,7 +655,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         string trimmed = value?.Trim() ?? string.Empty;
         if (trimmed.Length == 0)
         {
-            SetError(nameof(FileNamePattern), "파일명 패턴을 입력해 주세요.");
+            SetError(nameof(FileNamePattern), UiText.Get("Text_174531E69AB0"));
             return;
         }
 
@@ -662,7 +668,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         SetErrorState(
             nameof(FileNamePattern),
             ok,
-            "파일명 패턴이 유효한 파일 이름을 만들지 못합니다.");
+            UiText.Get("Text_D1357BFAAF9A"));
     }
 
     private void ValidateLanguages(string value)
@@ -670,7 +676,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         List<string> tags = ParseLanguages(value);
         if (tags.Count == 0)
         {
-            SetError(nameof(PreferredLanguages), "OCR 언어를 하나 이상 입력해 주세요 (예: ko-KR, en-US).");
+            SetError(nameof(PreferredLanguages), UiText.Get("Text_AA763F299972"));
             return;
         }
 
@@ -678,7 +684,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         {
             if (!IsPlausibleBcp47(tag))
             {
-                SetError(nameof(PreferredLanguages), $"'{tag}'은(는) 올바른 언어 태그가 아닙니다 (예: ko-KR, en-US).");
+                SetError(nameof(PreferredLanguages), UiText.Format("Text_CDC04935B675", tag));
                 return;
             }
         }
@@ -705,7 +711,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         catch (NotSupportedException) { ok = false; }
         catch (PathTooLongException) { ok = false; }
 
-        SetErrorState(property, ok, "올바른 폴더 경로가 아닙니다.");
+        SetErrorState(property, ok, UiText.Get("Text_F64AB9FE8BCD"));
     }
 
     private void ValidateNonEmpty(string value, string property, string message) =>
@@ -736,7 +742,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         {
             if (!Hotkey.TryParse(raw, out Hotkey hotkey))
             {
-                SetError(property, "올바른 단축키가 아닙니다 (예: Ctrl+Shift+C).");
+                SetError(property, UiText.Get("Text_1FBF8C644D76"));
                 continue;
             }
 
@@ -747,7 +753,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         // Capture must remain assigned: an unassigned capture chord makes the app inert.
         if (parsed.TryGetValue(nameof(CaptureHotkey), out Hotkey? capture) && capture is not null && !capture.IsAssigned)
         {
-            SetError(nameof(CaptureHotkey), "캡처 단축키는 비워 둘 수 없습니다.");
+            SetError(nameof(CaptureHotkey), UiText.Get("Text_D1ACE701CBFE"));
         }
 
         // Duplicate detection over assigned chords using semantic (value) equality.
@@ -761,7 +767,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
             if (seen.ContainsKey(hotkey))
             {
-                SetError(property, $"'{hotkey}' 단축키가 중복되었습니다.");
+                SetError(property, UiText.Format("Text_AD823133F009", hotkey));
             }
             else
             {
@@ -885,7 +891,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private List<Primitives.ColorRgba> _preservedRecentColors = [];
     private ColorFormat _preservedColorFormat;
     private bool _preservedPreserveTransparency;
-    private string _preservedLanguage = string.Empty;
+    private string _language = string.Empty;
     private bool _preservedIsFirstRun;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;

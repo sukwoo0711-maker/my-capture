@@ -57,13 +57,19 @@ internal sealed class RecordingControlWindow : Window
     private readonly Button _primaryButton;
     private readonly TextBlock _statusText;
     private readonly TextBlock _timerText;
+    private readonly CheckBox _clockCheckBox;
     private readonly Border _regionFrame;
     private readonly Border _controlStrip;
     private readonly Canvas _root;
 
+    private RecordingWallClockWindow? _wallClock;
+    private double _wallClockFontSize = RecordingWallClockWindow.DefaultFontSize;
+    private double? _wallClockRelativeX;
+    private double? _wallClockRelativeY;
+
     private RegionRecorder? _recorder;
     private DispatcherTimer? _elapsedTimer;
-    private DateTimeOffset _startedAt;
+    private bool _readyAnnounced;
     private DispatcherTimer? _countdownTimer;
     private int _countdownRemaining;
     private bool _stopping;
@@ -89,7 +95,7 @@ internal sealed class RecordingControlWindow : Window
         // the user is positioning the region; normal task windows use StandardWindowTheme.
         FluidMotion.SetWindowEntrance(this, false);
 
-        Title = "MyCapture — 영역 녹화";
+        Title = UiText.Get("Text_C750845B7AA3");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
@@ -104,7 +110,7 @@ internal sealed class RecordingControlWindow : Window
         _regionFrame = BuildRegionFrame();
         _root.Children.Add(_regionFrame);
 
-        _controlStrip = BuildControlStrip(out _primaryButton, out _statusText, out _timerText);
+        _controlStrip = BuildControlStrip(out _primaryButton, out _statusText, out _timerText, out _clockCheckBox);
         _controlStrip.MinWidth = MinStripWidth;
         _root.Children.Add(_controlStrip);
 
@@ -127,6 +133,7 @@ internal sealed class RecordingControlWindow : Window
     internal event EventHandler? Stopping;
 
     internal bool IsRecording => _recorder is { IsRecording: true };
+    internal bool CanCaptureStill => _recorder is { IsReady: true } && !_stopping && !_completionPending && !_finished;
 
     /// <summary>External stop request (e.g. pressing Ctrl+Shift+X again).</summary>
     internal void RequestStop() => StopRecording();
@@ -135,8 +142,9 @@ internal sealed class RecordingControlWindow : Window
     internal void ShowCompletionStatus(string text)
     {
         Opacity = 1;
+        _clockCheckBox.IsEnabled = false;
         _statusText.Text = text;
-        _primaryButton.Content = "저장 중…";
+        _primaryButton.Content = UiText.Get("Text_88DAAEEDFE4C");
         _primaryButton.IsEnabled = false;
         _completionProgress.Visibility = Visibility.Visible;
         AnnounceStatus();
@@ -154,6 +162,7 @@ internal sealed class RecordingControlWindow : Window
 
     internal void CompleteAndClose()
     {
+        CloseWallClock();
         _completionPending = false;
         Close();
     }
@@ -195,30 +204,35 @@ internal sealed class RecordingControlWindow : Window
         frame.LostKeyboardFocus += (_, _) =>
             frame.BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x58, 0xC7, 0xF3));
 
-        AutomationProperties.SetName(frame, "녹화 영역 테두리 (드래그로 이동)");
+        AutomationProperties.SetName(frame, UiText.Get("Text_E7A732EAE7D5"));
         AutomationProperties.SetHelpText(
             frame,
-            "Tab으로 선택한 뒤 방향키로 이동합니다. Shift와 함께 누르면 10픽셀씩 이동합니다.");
+            UiText.Get("Text_66069CEAD9AE"));
         return frame;
     }
 
-    private Border BuildControlStrip(out Button primary, out TextBlock status, out TextBlock timer)
+    private Border BuildControlStrip(
+        out Button primary,
+        out TextBlock status,
+        out TextBlock timer,
+        out CheckBox clockCheck)
     {
         var panel = new Grid { Margin = new Thickness(10, 8, 10, 8) };
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         primary = new Button
         {
-            Content = _settings.UseStartDelay ? "지연 후 녹화" : "녹화 시작",
+            Content = _settings.UseStartDelay ? UiText.Get("Text_2AA27E2CEB7C") : UiText.Get("Text_255C28FD0AC2"),
             MinWidth = 108,
             VerticalAlignment = VerticalAlignment.Center,
             Style = TryStyle("Button.Primary"),
         };
         primary.Click += (_, _) => OnPrimaryClicked();
-        AutomationProperties.SetName(primary, "녹화 시작 또는 정지");
+        AutomationProperties.SetName(primary, UiText.Get("Text_78EFED021492"));
         Grid.SetColumn(primary, 0);
         panel.Children.Add(primary);
 
@@ -243,23 +257,42 @@ internal sealed class RecordingControlWindow : Window
             FontFamily = TryFont("Font.Mono"),
             FontSize = 15,
         };
-        AutomationProperties.SetName(timer, "녹화 경과 시간");
+        AutomationProperties.SetName(timer, UiText.Get("Text_F11BA21FB824"));
         Grid.SetColumn(timer, 2);
         panel.Children.Add(timer);
 
+        clockCheck = new CheckBox
+        {
+            Content = UiText.Get("Text_A658DC1B9407"),
+            IsChecked = false,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0),
+            FontSize = 13,
+            Foreground = TryBrush("Text.Primary", Colors.White),
+            ToolTip = UiText.Get("Text_54A00B1A2FDB"),
+        };
+        clockCheck.Checked += (_, _) => SetWallClockEnabled(true);
+        clockCheck.Unchecked += (_, _) => SetWallClockEnabled(false);
+        AutomationProperties.SetName(clockCheck, UiText.Get("Text_D1E229E81B83"));
+        AutomationProperties.SetHelpText(
+            clockCheck,
+            UiText.Get("Text_E2395EBF6C65"));
+        Grid.SetColumn(clockCheck, 3);
+        panel.Children.Add(clockCheck);
+
         var cancel = new Button
         {
-            Content = "취소",
+            Content = UiText.Get("Text_BE876433993A"),
             MinWidth = 64,
             VerticalAlignment = VerticalAlignment.Center,
             Style = TryStyle("Button.Ghost"),
         };
         cancel.Click += (_, _) => CancelSession();
-        AutomationProperties.SetName(cancel, "녹화 취소");
-        Grid.SetColumn(cancel, 3);
+        AutomationProperties.SetName(cancel, UiText.Get("Text_E1C96EF1EA0F"));
+        Grid.SetColumn(cancel, 4);
         panel.Children.Add(cancel);
-        Grid.SetColumnSpan(_completionProgress, 4);
-        AutomationProperties.SetName(_completionProgress, "녹화 파일 처리 중");
+        Grid.SetColumnSpan(_completionProgress, 5);
+        AutomationProperties.SetName(_completionProgress, UiText.Get("Text_C1767C4F1218"));
         panel.Children.Add(_completionProgress);
 
         return new Border
@@ -358,6 +391,8 @@ internal sealed class RecordingControlWindow : Window
                     PhysicalWindowPositioner.PlaceTopmost(hwnd, windowPixels);
                 }
             }
+
+            _wallClock?.UpdateRecordingRegion(_screenRegion, scale);
         }
         finally
         {
@@ -433,7 +468,7 @@ internal sealed class RecordingControlWindow : Window
     {
         _countdownRemaining = seconds;
         _primaryButton.IsEnabled = false;
-        _statusText.Text = string.Create(CultureInfo.CurrentCulture, $"{_countdownRemaining}초 후 시작");
+        _statusText.Text = UiText.Format("Text_35114A85CCCE", _countdownRemaining);
         AnnounceStatus();
 
         _countdownTimer = new DispatcherTimer(DispatcherPriority.Normal)
@@ -450,7 +485,7 @@ internal sealed class RecordingControlWindow : Window
                 return;
             }
 
-            _statusText.Text = string.Create(CultureInfo.CurrentCulture, $"{_countdownRemaining}초 후 시작");
+            _statusText.Text = UiText.Format("Text_35114A85CCCE", _countdownRemaining);
             AnnounceStatus();
         };
         _countdownTimer.Start();
@@ -478,7 +513,9 @@ internal sealed class RecordingControlWindow : Window
         catch (Exception ex)
         {
             _log.LogError(ex, "Could not start recording");
-            _statusText.Text = "녹화를 시작할 수 없습니다";
+            CloseWallClock();
+            _clockCheckBox.IsChecked = false;
+            _statusText.Text = UiText.Get("Text_48C3B6EBA637");
             _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
             AnnounceStatus();
             _recorder?.Dispose();
@@ -488,10 +525,10 @@ internal sealed class RecordingControlWindow : Window
             return;
         }
 
-        _startedAt = DateTimeOffset.Now;
-        _primaryButton.Content = "녹화 정지";
+        _readyAnnounced = false;
+        _primaryButton.Content = UiText.Get("Text_74C6AEBB2B6D");
         _primaryButton.Style = TryStyle("Button.Danger");
-        _statusText.Text = "녹화 중 · Esc 또는 정지로 종료";
+        _statusText.Text = UiText.Get("Text_72A13C33A79E");
         _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         AnnounceStatus();
 
@@ -519,7 +556,18 @@ internal sealed class RecordingControlWindow : Window
 
     private void UpdateTimer()
     {
-        TimeSpan elapsed = DateTimeOffset.Now - _startedAt;
+        if (_recorder is { IsRecording: false } && !_stopping && !_finished)
+        {
+            StopRecording();
+            return;
+        }
+        if (!_readyAnnounced && _recorder?.IsReady == true)
+        {
+            _readyAnnounced = true;
+            _statusText.Text = UiText.Get("Text_38B12BA58C48");
+            AnnounceStatus();
+        }
+        TimeSpan elapsed = _recorder?.RecordedElapsed ?? TimeSpan.Zero;
         _timerText.Text = elapsed.ToString(elapsed.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss", CultureInfo.InvariantCulture);
     }
 
@@ -533,12 +581,13 @@ internal sealed class RecordingControlWindow : Window
         _stopping = true;
         Opacity = 1;
         _controlStrip.Visibility = Visibility.Visible;
+        _clockCheckBox.IsEnabled = false;
         Stopping?.Invoke(this, EventArgs.Empty);
         _elapsedTimer?.Stop();
         _primaryButton.IsEnabled = false;
-        _primaryButton.Content = "변환 중…";
+        _primaryButton.Content = UiText.Get("Text_4E7752D53B90");
         _completionProgress.Visibility = Visibility.Visible;
-        _statusText.Text = "녹화 종료 · 동영상 파일 변환 중…";
+        _statusText.Text = UiText.Get("Text_542965B456C7");
         AnnounceStatus();
 
         RegionRecorder recorder = _recorder;
@@ -565,6 +614,9 @@ internal sealed class RecordingControlWindow : Window
         // SynchronizationContext. Marshal explicitly after the encoder join in every case.
         await Dispatcher.InvokeAsync(() =>
         {
+            // The recorder has stopped capturing; close wall clock so final frames retain the clock.
+            CloseWallClock();
+
             if (ReferenceEquals(_recorder, recorder))
             {
                 _recorder = null;
@@ -574,7 +626,7 @@ internal sealed class RecordingControlWindow : Window
             if (result is not null)
             {
                 _completionPending = true;
-                ShowCompletionStatus("동영상 저장 중… 갤러리 등록을 준비합니다");
+                ShowCompletionStatus(UiText.Get("Text_528544494302"));
                 RecordingFinished?.Invoke(this, result);
             }
             else
@@ -608,6 +660,7 @@ internal sealed class RecordingControlWindow : Window
             return;
         }
 
+        CloseWallClock();
         Cancelled?.Invoke(this, EventArgs.Empty);
         Close();
     }
@@ -635,6 +688,11 @@ internal sealed class RecordingControlWindow : Window
 
                 break;
             case Key.Enter or Key.Space when !IsRecording && _countdownTimer is null:
+                if (_clockCheckBox.IsKeyboardFocusWithin)
+                {
+                    break;
+                }
+
                 e.Handled = true;
                 OnPrimaryClicked();
                 break;
@@ -719,7 +777,7 @@ internal sealed class RecordingControlWindow : Window
         if ((_stopping && !_finished) || _completionPending)
         {
             e.Cancel = true;
-            _statusText.Text = "파일 확정 중… 완료되면 자동으로 닫힙니다";
+            _statusText.Text = UiText.Get("Text_3024E9CAD0E5");
             AnnounceStatus();
             return;
         }
@@ -729,6 +787,7 @@ internal sealed class RecordingControlWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        CloseWallClock();
         KeyDown -= OnKeyDown;
         SourceInitialized -= OnSourceInitialized;
         ContentRendered -= OnContentRendered;
@@ -757,6 +816,64 @@ internal sealed class RecordingControlWindow : Window
         }
 
         base.OnClosed(e);
+    }
+
+    private void SetWallClockEnabled(bool enabled)
+    {
+        if (enabled)
+        {
+            if (_wallClock is null && !_stopping && !_finished)
+            {
+                double scale = ResolveWindowScale();
+                _wallClock = new RecordingWallClockWindow(
+                    _screenRegion,
+                    scale,
+                    _settings.TargetFps,
+                    _wallClockFontSize,
+                    _wallClockRelativeX,
+                    _wallClockRelativeY);
+                _wallClock.Closed += OnWallClockClosed;
+                _wallClock.Show();
+            }
+        }
+        else
+        {
+            CloseWallClock();
+        }
+    }
+
+    private void OnWallClockClosed(object? sender, EventArgs e)
+    {
+        if (sender is RecordingWallClockWindow clock)
+        {
+            clock.Closed -= OnWallClockClosed;
+            _wallClockFontSize = clock.CurrentFontSize;
+            _wallClockRelativeX = clock.RelativeX;
+            _wallClockRelativeY = clock.RelativeY;
+            if (ReferenceEquals(_wallClock, clock))
+            {
+                _wallClock = null;
+            }
+
+            if (_clockCheckBox.IsChecked == true && !_stopping && !_finished)
+            {
+                _clockCheckBox.IsChecked = false;
+            }
+        }
+    }
+
+    private void CloseWallClock()
+    {
+        if (_wallClock is not null)
+        {
+            RecordingWallClockWindow clock = _wallClock;
+            _wallClock = null;
+            clock.Closed -= OnWallClockClosed;
+            _wallClockFontSize = clock.CurrentFontSize;
+            _wallClockRelativeX = clock.RelativeX;
+            _wallClockRelativeY = clock.RelativeY;
+            clock.CloseClock();
+        }
     }
 
     private sealed class AccessibleRegionFrame : Border

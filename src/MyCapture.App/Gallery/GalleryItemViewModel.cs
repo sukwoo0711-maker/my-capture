@@ -57,15 +57,15 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public bool IsImage => Record.IsImage;
 
-    public string ActionLabel => IsVideo ? "영상 편집" : "편집";
+    public string ActionLabel => IsVideo ? UiText.Get("Text_35383149904D") : UiText.Get("Text_87B0ACEF85A7");
 
     public string ExportToolTip => IsVideo
-        ? "폴더나 바탕화면으로 드래그해 MP4 파일로 내보내기"
-        : "폴더나 바탕화면으로 드래그해 PNG 파일로 내보내기";
+        ? UiText.Get("Text_E11F2F71F169")
+        : UiText.Get("Text_1A8F33AE9F00");
 
     public string PreviewUnavailableText => IsVideo
-        ? "동영상 미리보기를 읽을 수 없음"
-        : "이미지를 읽을 수 없음";
+        ? UiText.Get("Text_FACB0016A977")
+        : UiText.Get("Text_0D3A337CA053");
 
     public string DurationCaption => IsVideo ? FormatDuration(Record.DurationMs) : string.Empty;
 
@@ -80,7 +80,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     /// <summary>Non-empty label for confirmations, OCR windows and other contextual UI.</summary>
     public string ContextLabel => HasCaption
         ? Caption
-        : IsVideo ? $"동영상 {TimeCaption}" : $"캡처 {TimeCaption}";
+        : IsVideo ? UiText.Format("Text_32512F9EA32E", TimeCaption) : UiText.Format("Text_16DBAB47AC29", TimeCaption);
 
     /// <summary>Accessible, human-readable label for the tile without an “untitled” phrase.</summary>
     public string AccessibleName
@@ -88,8 +88,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         get
         {
             string time = Record.CreatedAt.DateTime.ToString("yyyy-MM-dd HH:mm");
-            string pin = Record.IsPinned ? ", 고정됨" : string.Empty;
-            string media = IsVideo ? $", 동영상 {DurationCaption}" : ", 이미지";
+            string pin = Record.IsPinned ? UiText.Get("Text_E485D788C2BE") : string.Empty;
+            string media = IsVideo ? UiText.Format("Text_DFB3664A9A08", DurationCaption) : UiText.Get("Text_AA3D7105289A");
             return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}";
         }
     }

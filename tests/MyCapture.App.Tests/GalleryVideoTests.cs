@@ -8,7 +8,7 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-public sealed class GalleryVideoTests
+public sealed class GalleryVideoTests : KoreanCaptionTest
 {
     [Fact]
     public void VideoTile_ExposesPlaybackEditGifAndDurationSemantics()

@@ -39,4 +39,5 @@
     <None Update="Assets\tray-error.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup><EmbeddedResource Include="Updates\UpdateHelper.ps1" LogicalName="MyCapture.UpdateHelper.ps1" /></ItemGroup>
 </Project>

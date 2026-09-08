@@ -29,7 +29,7 @@ internal sealed class TimedTextOverlayDialog : Window
         _id = existing?.Id ?? Guid.NewGuid();
 
         StandardWindowTheme.Apply(this);
-        Title = existing is null ? "시간 텍스트 추가" : "시간 텍스트 편집";
+        Title = existing is null ? UiText.Get("Text_6235669450B0") : UiText.Get("Text_16803FE760A3");
         Width = 520;
         SizeToContent = SizeToContent.Height;
         MinHeight = 360;
@@ -57,18 +57,18 @@ internal sealed class TimedTextOverlayDialog : Window
             MaxLength = VideoEditDocument.MaximumTextLength,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
-        AutomationProperties.SetName(_text, "영상에 남길 텍스트");
+        AutomationProperties.SetName(_text, UiText.Get("Text_06B3E66B7B78"));
 
         _start = TimeBox(startMs);
-        AutomationProperties.SetName(_start, "텍스트 시작 시간 초");
+        AutomationProperties.SetName(_start, UiText.Get("Text_FE872AF40869"));
         _end = TimeBox(endMs);
-        AutomationProperties.SetName(_end, "텍스트 종료 시간 초");
+        AutomationProperties.SetName(_end, UiText.Get("Text_1882C23FDDB1"));
 
         var placements = new[]
         {
-            new PlacementChoice("아래", VideoTextPlacement.Bottom),
-            new PlacementChoice("가운데", VideoTextPlacement.Center),
-            new PlacementChoice("위", VideoTextPlacement.Top),
+            new PlacementChoice(UiText.Get("Text_8F2EA9820639"), VideoTextPlacement.Bottom),
+            new PlacementChoice(UiText.Get("Text_D41AD4FCB417"), VideoTextPlacement.Center),
+            new PlacementChoice(UiText.Get("Text_E0BEBB354D8F"), VideoTextPlacement.Top),
         };
         _placement = new ComboBox
         {
@@ -77,7 +77,7 @@ internal sealed class TimedTextOverlayDialog : Window
             SelectedItem = placements.First(choice => choice.Value == (existing?.Placement ?? VideoTextPlacement.Bottom)),
             MinWidth = 140,
         };
-        AutomationProperties.SetName(_placement, "텍스트 위치");
+        AutomationProperties.SetName(_placement, UiText.Get("Text_08269F2F1B3F"));
 
         _error = new TextBlock
         {
@@ -106,33 +106,33 @@ internal sealed class TimedTextOverlayDialog : Window
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         }
 
-        root.Children.Add(Label("영상에 남길 텍스트", 0));
+        root.Children.Add(Label(UiText.Get("Text_06B3E66B7B78"), 0));
         Grid.SetRow(_text, 1);
         _text.Margin = new Thickness(0, 6, 0, 14);
         root.Children.Add(_text);
 
+        // Labels sit above their controls so longer translated labels never push fields outside the dialog.
         var timing = new Grid();
-        timing.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        timing.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
-        timing.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
-        timing.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        timing.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
-        timing.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
-        timing.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        timing.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-        Add(timing, new TextBlock { Text = "시작(초)", VerticalAlignment = VerticalAlignment.Center }, 0);
-        Add(timing, _start, 1);
-        Add(timing, new TextBlock { Text = "끝(초)", VerticalAlignment = VerticalAlignment.Center }, 3);
-        Add(timing, _end, 4);
-        Add(timing, new TextBlock { Text = "위치", VerticalAlignment = VerticalAlignment.Center }, 6);
-        Add(timing, _placement, 7);
+        for (int column = 0; column < 3; column++)
+            timing.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        timing.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        timing.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Add(timing, new TextBlock { Text = UiText.Get("Text_25A15C7C4EFF"), TextWrapping = TextWrapping.Wrap }, 0);
+        Add(timing, new TextBlock { Text = UiText.Get("Text_A6434B74B299"), TextWrapping = TextWrapping.Wrap }, 1);
+        Add(timing, new TextBlock { Text = UiText.Get("Text_6C0B9DD710AB"), TextWrapping = TextWrapping.Wrap }, 2);
+        Control[] fields = [_start, _end, _placement];
+        for (int column = 0; column < fields.Length; column++)
+        {
+            fields[column].Margin = new Thickness(0, 6, column == 2 ? 0 : 12, 0);
+            Grid.SetRow(fields[column], 1);
+            Add(timing, fields[column], column);
+        }
         Grid.SetRow(timing, 2);
         root.Children.Add(timing);
 
         var hint = new TextBlock
         {
-            Text = "텍스트는 지정한 구간에만 보이며 MP4와 GIF에 영구 합성됩니다. Ctrl+Enter로 저장할 수 있습니다.",
+            Text = UiText.Get("Text_EEA09781BBD7"),
             Foreground = ResourceBrush("Text.Secondary", Colors.LightGray),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 12, 0, 0),
@@ -150,8 +150,8 @@ internal sealed class TimedTextOverlayDialog : Window
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 16, 0, 0),
         };
-        var cancel = new Button { Content = "취소", MinWidth = 88, IsCancel = true };
-        var save = new Button { Content = "텍스트 저장", MinWidth = 112, IsDefault = true, Margin = new Thickness(8, 0, 0, 0) };
+        var cancel = new Button { Content = UiText.Get("Text_BE876433993A"), MinWidth = 88, IsCancel = true };
+        var save = new Button { Content = UiText.Get("Text_D9F974C95F68"), MinWidth = 112, IsDefault = true, Margin = new Thickness(8, 0, 0, 0) };
         save.Click += (_, _) => Save();
         buttons.Children.Add(cancel);
         buttons.Children.Add(save);
@@ -165,14 +165,14 @@ internal sealed class TimedTextOverlayDialog : Window
         string text = _text.Text.Trim();
         if (string.IsNullOrWhiteSpace(text))
         {
-            Fail("텍스트를 입력해 주세요.", _text);
+            Fail(UiText.Get("Text_7A3486B4FEBF"), _text);
             return;
         }
 
         if (!TrySeconds(_start.Text, out double startSeconds)
             || !TrySeconds(_end.Text, out double endSeconds))
         {
-            Fail("시작과 끝 시간을 초 단위 숫자로 입력해 주세요.", _start);
+            Fail(UiText.Get("Text_328D27BC4C06"), _start);
             return;
         }
 
@@ -181,9 +181,7 @@ internal sealed class TimedTextOverlayDialog : Window
         if (startMs < 0 || endMs > _durationMs + 0.5 || endMs <= startMs)
         {
             Fail(
-                string.Create(
-                    CultureInfo.CurrentCulture,
-                    $"0초부터 {(_durationMs / 1000):0.###}초 사이에서 끝이 시작보다 늦어야 합니다."),
+                UiText.Format("Text_41FC07B1EA9B", (_durationMs / 1000)),
                 _start);
             return;
         }

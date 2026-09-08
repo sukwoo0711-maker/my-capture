@@ -109,7 +109,7 @@ public sealed class StartupRegistrationService
                 // otherwise let the setting claim an enabled state that is not real.
                 return IsEnabled()
                     ? StartupApplyResult.Ok(true)
-                    : StartupApplyResult.Fail(true, "시작 프로그램 등록을 확인하지 못했습니다.");
+                    : StartupApplyResult.Fail(true, UiText.Get("Text_4D69B33A2FD7"));
             }
 
             Disable();

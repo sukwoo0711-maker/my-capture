@@ -40,6 +40,7 @@ internal static class AnimatedGifExporter
         ArgumentNullException.ThrowIfNull(recording);
         ArgumentNullException.ThrowIfNull(editDocument);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        VideoLayerResourceBudget.Validate(editDocument.FrameEditLayers);
         quality ??= GifExportQuality.Standard;
         quality.Validate();
 
@@ -51,7 +52,7 @@ internal static class AnimatedGifExporter
         if (duration > MaximumDurationMs + 0.5)
         {
             throw new GifExportLimitException(
-                "GIF는 최대 20초까지 내보낼 수 있습니다. 타임라인의 시작/끝 지점을 줄여 주세요.");
+                UiText.Get("Text_9098D098B1DA"));
         }
 
         GifFrameSchedule schedule = BuildFrameSchedule(document, playbackSpeed, quality.FramesPerSecond);
@@ -245,7 +246,7 @@ internal static class AnimatedGifExporter
             if (endCs <= startCs)
             {
                 throw new GifExportLimitException(
-                    "GIF 시간 해상도는 0.01초입니다. 0.01초보다 짧은 시간 텍스트 구간을 늘려 주세요.");
+                    UiText.Get("Text_6D9F1A20DDCC"));
             }
 
             _ = boundaries.Add(startCs);
@@ -281,7 +282,7 @@ internal static class AnimatedGifExporter
             if (endCs <= startCs)
             {
                 throw new GifExportLimitException(
-                    "GIF 시간 해상도는 0.01초입니다. 프레임 레이어 표시 구간을 0.01초 이상으로 늘려 주세요.");
+                    UiText.Get("Text_F2F36C2D52F6"));
             }
 
             _ = boundaries.Add(startCs);
@@ -296,8 +297,8 @@ internal static class AnimatedGifExporter
         if (frameCount > MaximumFrames)
         {
             throw new GifExportLimitException(
-                $"레이어 시간 경계를 포함한 GIF 프레임 수가 최대 {MaximumFrames}개를 초과합니다. " +
-                "구간을 줄이거나 레이어 시작/끝 시간을 0.1초 눈금에 가깝게 조정해 주세요.");
+                UiText.Format("Text_57B9B3F05935", MaximumFrames) +
+                UiText.Get("Text_228A9CF0DE4A"));
         }
 
         int[] ordered = boundaries.ToArray();

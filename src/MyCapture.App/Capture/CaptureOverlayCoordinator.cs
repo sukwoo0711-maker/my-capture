@@ -32,6 +32,15 @@ internal sealed class CaptureOverlayCoordinator
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
 
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
+    internal Func<bool>? RequiresCaptureExclusion { get; set; }
+    internal Func<Window, bool> ApplyCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApply;
+    internal event Action<Exception>? TransitionFailed;
+
+    private void PrepareWindow(Window window)
+    {
+        if (RequiresCaptureExclusion?.Invoke() == true && !ApplyCaptureExclusion(window))
+            throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
+    }
 
     internal event EventHandler<AnnotationEditingResult>? EditingCompleted;
 
@@ -78,7 +87,16 @@ internal sealed class CaptureOverlayCoordinator
             frame.PixelWidth,
             frame.PixelHeight);
 
-        overlay.Show();
+        try
+        {
+            PrepareWindow(overlay);
+            overlay.Show();
+        }
+        catch
+        {
+            overlay.Close();
+            throw;
+        }
         _ = overlay.Activate();
     }
 
@@ -172,7 +190,24 @@ internal sealed class CaptureOverlayCoordinator
     private static void VerifyDispatcherAccess() =>
         (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).VerifyAccess();
 
-    private async Task AnnounceSelectionAndOpenEditorAsync(CaptureSelectionCompletedEventArgs selection)
+    private Task AnnounceSelectionAndOpenEditorAsync(CaptureSelectionCompletedEventArgs selection)
+    {
+        // Native hotkey callbacks can run on the STA without a WPF synchronization context.
+        // Keep persistence continuations and all window/exclusion state on the owning dispatcher.
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(
+                Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher));
+            return AnnounceSelectionAndOpenEditorCoreAsync(selection);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    private async Task AnnounceSelectionAndOpenEditorCoreAsync(CaptureSelectionCompletedEventArgs selection)
     {
         _log.LogInformation(
             "Selected free region {Region} ({Width}x{Height}); opening standalone editor",
@@ -209,6 +244,7 @@ internal sealed class CaptureOverlayCoordinator
             editor.Committed += OnEditorCommitted;
             editor.Cancelled += OnEditorCancelled;
             editor.Closed += OnEditorClosed;
+            PrepareWindow(editor);
             editor.Show();
             _ = editor.Activate();
         }
@@ -218,6 +254,7 @@ internal sealed class CaptureOverlayCoordinator
             // recovery-export mode. An unexpected transition/window failure must still release
             // the single-session guard instead of leaving capture permanently wedged.
             _log.LogError(ex, "Could not complete the selection-to-editor transition");
+            TransitionFailed?.Invoke(ex);
             if (_activeEditor is { } failedEditor)
             {
                 failedEditor.Committed -= OnEditorCommitted;

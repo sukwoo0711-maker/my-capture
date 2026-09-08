@@ -102,7 +102,7 @@ public sealed class TextAnnotation : AnnotationItem
     [JsonIgnore]
     public override string DisplayName =>
         string.IsNullOrWhiteSpace(Text)
-            ? "텍스트"
+            ? UiText.Get("Text_258AD4B095A1")
             : Text.Length <= 12 ? Text : Text[..12] + "…";
 
     [JsonIgnore]

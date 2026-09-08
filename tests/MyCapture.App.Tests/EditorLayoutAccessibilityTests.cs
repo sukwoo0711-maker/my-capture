@@ -22,7 +22,7 @@ namespace MyCapture.App.Tests;
 /// icon control. These are visual-tree assertions rather than pixel checks, so they stay stable
 /// while catching regressions in the information architecture and automation surface.
 /// </summary>
-public sealed class EditorLayoutAccessibilityTests
+public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
 {
     [Fact]
     public void DefaultHierarchyIsTopBarBodyStatus_WithRailViewportInspectorColumns()

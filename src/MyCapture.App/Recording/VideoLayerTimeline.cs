@@ -8,40 +8,86 @@ using MyCapture.Core.Recording;
 
 namespace MyCapture.App.Recording;
 
-/// <summary>A compact two-track, music-editor-style view of non-destructive video layers.</summary>
+/// <summary>
+/// A multi-track, distinct-row timeline view of non-destructive video layers.
+/// Provides readable rows per layer, compact empty states, body move, and edge trimming.
+/// </summary>
 internal sealed class VideoLayerTimeline : FrameworkElement
 {
-    private const double LabelWidth = 78;
-    private const double TrackHeight = 34;
+    private const double LabelWidth = 82;
+    private const double LayerTrackHeight = 28;
+    private const double EmptyTrackHeight = 22;
+    private const double BarHeight = 20;
     private const double Gap = 4;
+    private const double PaddingTop = 4;
+    private const double PaddingBottom = 4;
+    private const double HandleZoneWidth = 10;
+    private const double MinBarWidth = 4;
+
     private readonly Brush _background;
     private readonly Brush _track;
     private readonly Brush _textLayer;
     private readonly Brush _frameLayer;
     private readonly Brush _foreground;
+    private readonly Brush _textSecondary;
     private readonly Brush _muted;
     private readonly Pen _gridPen;
     private readonly Pen _playheadPen;
     private readonly Typeface _typeface;
+
     private IReadOnlyList<TimedTextOverlay> _textLayers = [];
     private IReadOnlyList<FrameEditLayer> _frameLayers = [];
+    private int _textLayerCount;
+    private int _frameLayerCount;
     private double _durationMs = 1;
     private double _playheadMs;
     private Guid? _selectedId;
-    private bool _dragging;
-    private bool _startHandle;
-    private double _dragStartMs;
-    private double _dragEndMs;
 
+    private bool _dragging;
+    private DragAction _dragAction = DragAction.None;
+    private double _dragInitialStartMs;
+    private double _dragInitialEndMs;
+    private double _dragStartMouseX;
+    private Guid _dragTargetId;
+    private bool _dragTargetIsText;
+
+    internal event EventHandler? LayerSelected;
+    internal event EventHandler? LayerTimingChanged;
+    internal event EventHandler? LayerTimingInteractionStarted;
+    internal event EventHandler? LayerTimingInteractionCompleted;
     internal event EventHandler? TextTimingChanged;
     internal event EventHandler? TextLayerSelected;
-    internal Guid? SelectedTextId => _selectedId;
 
-    internal void SelectText(Guid? id)
+    internal Guid? SelectedId => _selectedId;
+    internal Guid? SelectedLayerId => _selectedId;
+    internal Guid? SelectedTextId => _selectedId;
+    internal bool IsDragging => _dragging;
+
+    internal Rect SelectedBarBounds
     {
+        get
+        {
+            for (int i = 0; i < _textLayers.Count; i++)
+            {
+                if (_textLayers[i].Id == _selectedId) { return GetTextBarRect(i, ActualWidth); }
+            }
+            for (int i = 0; i < _frameLayers.Count; i++)
+            {
+                if (_frameLayers[i].Id == _selectedId) { return GetFrameBarRect(i, ActualWidth); }
+            }
+            return Rect.Empty;
+        }
+    }
+
+    internal void SelectLayer(Guid? id)
+    {
+        bool changed = _selectedId != id;
         _selectedId = id;
+        if (changed && !SelectedBarBounds.IsEmpty) { BringIntoView(SelectedBarBounds); }
         InvalidateVisual();
     }
+
+    internal void SelectText(Guid? id) => SelectLayer(id);
 
     internal VideoLayerTimeline()
     {
@@ -50,20 +96,22 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         _textLayer = ResolveBrush("Timeline.TextLayer", Color.FromRgb(0x3B, 0x82, 0xF6));
         _frameLayer = ResolveBrush("Timeline.FrameLayer", Color.FromRgb(0x9B, 0x7E, 0xDE));
         _foreground = ResolveBrush("Text.Badge", Colors.White);
+        _textSecondary = ResolveBrush("Text.Secondary", Color.FromRgb(0xC4, 0xCF, 0xDC));
         _muted = ResolveBrush("Text.Muted", Color.FromRgb(0x8E, 0x9C, 0xAF));
         _gridPen = FrozenPen(ResolveBrush("Timeline.Grid", Color.FromRgb(0x2B, 0x3A, 0x50)), 1);
         _playheadPen = FrozenPen(ResolveBrush("Timeline.Playhead", Color.FromRgb(0x7D, 0xD7, 0xF8)), 2);
+
         FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");
         _typeface = new Typeface(uiFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
 
-        Height = (TrackHeight * 2) + Gap;
+        Height = ComputeDesiredHeight();
         MinWidth = 240;
         SnapsToDevicePixels = true;
         Focusable = true;
         Cursor = Cursors.Hand;
-        ToolTip = "텍스트 막대의 양 끝을 드래그해 표시 시간을 조절합니다. 위/아래: 레이어 선택 · 좌/우: 시작 시간 · Shift+좌/우: 끝 시간 · Ctrl: 0.01초 단위";
-        AutomationProperties.SetName(this, "영상 레이어 타임라인");
+        ToolTip = UiText.Get("Text_D6FD14107836");
+        AutomationProperties.SetName(this, UiText.Get("Text_9D6831D1954E"));
         AutomationProperties.SetHelpText(this, (string)ToolTip);
     }
 
@@ -78,15 +126,69 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         IReadOnlyList<TimedTextOverlay> textLayers,
         IReadOnlyList<FrameEditLayer> frameLayers)
     {
-        _textLayers = textLayers ?? [];
-        _frameLayers = frameLayers ?? [];
-        AutomationProperties.SetHelpText(
-            this,
-            $"텍스트 레이어 {_textLayers.Count}개, 프레임 레이어 {_frameLayers.Count}개. {(string)ToolTip}");
-        if (!_textLayers.Any(layer => layer.Id == _selectedId))
+        IReadOnlyList<TimedTextOverlay> nextTextLayers = textLayers ?? [];
+        IReadOnlyList<FrameEditLayer> nextFrameLayers = frameLayers ?? [];
+
+        double nextHeight = ComputeDesiredHeight(nextTextLayers.Count, nextFrameLayers.Count);
+        bool geometryChanged = _textLayerCount != nextTextLayers.Count
+            || _frameLayerCount != nextFrameLayers.Count
+            || Math.Abs(Height - nextHeight) > 0.001;
+
+        _textLayers = [.. nextTextLayers];
+        _frameLayers = [.. nextFrameLayers];
+        _textLayerCount = nextTextLayers.Count;
+        _frameLayerCount = nextFrameLayers.Count;
+
+        if (geometryChanged)
         {
-            _selectedId = _textLayers.FirstOrDefault()?.Id;
+            Height = nextHeight;
+            AutomationProperties.SetHelpText(
+                this,
+                UiText.Format("Text_060B5907DA2C", _textLayers.Count, _frameLayers.Count, (string)ToolTip));
+            InvalidateMeasure();
         }
+
+        bool hasSelected = false;
+        if (_selectedId.HasValue)
+        {
+            for (int i = 0; i < _textLayers.Count; i++)
+            {
+                if (_textLayers[i].Id == _selectedId.Value)
+                {
+                    hasSelected = true;
+                    break;
+                }
+            }
+
+            if (!hasSelected)
+            {
+                for (int i = 0; i < _frameLayers.Count; i++)
+                {
+                    if (_frameLayers[i].Id == _selectedId.Value)
+                    {
+                        hasSelected = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!hasSelected)
+        {
+            if (_textLayers.Count > 0)
+            {
+                _selectedId = _textLayers[0].Id;
+            }
+            else if (_frameLayers.Count > 0)
+            {
+                _selectedId = _frameLayers[0].Id;
+            }
+            else
+            {
+                _selectedId = null;
+            }
+        }
+
         InvalidateVisual();
     }
 
@@ -104,6 +206,15 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         InvalidateVisual();
     }
 
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        double height = ComputeDesiredHeight();
+        double width = double.IsInfinity(availableSize.Width)
+            ? MinWidth
+            : Math.Max(MinWidth, availableSize.Width);
+        return new Size(width, height);
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
@@ -119,32 +230,190 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         {
             dc.DrawRoundedRectangle(null, _playheadPen, new Rect(1, 1, width - 2, height - 2), 6, 6);
         }
-        DrawTrack(dc, 0, "T  텍스트", _textLayers.Select(layer =>
-            new LayerSpan(layer.StartMs, layer.EndMs, OneLine(layer.Text))).ToList(), _textLayer, hatch: false);
-        DrawTrack(dc, TrackHeight + Gap, "F  프레임", _frameLayers.Select(layer =>
-            new LayerSpan(layer.StartMs, layer.EndMs, layer.Name)).ToList(), _frameLayer, hatch: true);
 
-        double timelineWidth = width - LabelWidth;
+        double timelineWidth = Math.Max(1, width - LabelWidth);
+        double currentTop = PaddingTop;
+
+        // Draw Text Rows
+        if (_textLayers.Count == 0)
+        {
+            DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_541F62E38579"), UiText.Get("Text_49931F796C95"), timelineWidth);
+            currentTop += EmptyTrackHeight + Gap;
+        }
+        else
+        {
+            for (int index = 0; index < _textLayers.Count; index++)
+            {
+                TimedTextOverlay layer = _textLayers[index];
+                string rowLabel = _textLayers.Count == 1 ? UiText.Get("Text_541F62E38579") : UiText.Format("Text_AD80E1DD716A", index + 1);
+                DrawLayerRow(
+                    dc,
+                    currentTop,
+                    LayerTrackHeight,
+                    rowLabel,
+                    layer.StartMs,
+                    layer.EndMs,
+                    OneLine(layer.Text),
+                    layer.Id,
+                    _textLayer,
+                    hatch: false,
+                    timelineWidth);
+                currentTop += LayerTrackHeight + Gap;
+            }
+        }
+
+        // Draw Frame Rows
+        if (_frameLayers.Count == 0)
+        {
+            DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_01EC445E93F5"), UiText.Get("Text_986A825EE823"), timelineWidth);
+            currentTop += EmptyTrackHeight + Gap;
+        }
+        else
+        {
+            for (int index = 0; index < _frameLayers.Count; index++)
+            {
+                FrameEditLayer layer = _frameLayers[index];
+                string rowLabel = _frameLayers.Count == 1 ? UiText.Get("Text_01EC445E93F5") : UiText.Format("Text_F085C7366DEB", index + 1);
+                DrawLayerRow(
+                    dc,
+                    currentTop,
+                    LayerTrackHeight,
+                    rowLabel,
+                    layer.StartMs,
+                    layer.EndMs,
+                    layer.Name,
+                    layer.Id,
+                    _frameLayer,
+                    hatch: true,
+                    timelineWidth);
+                currentTop += LayerTrackHeight + Gap;
+            }
+        }
+
+        // Playhead
         double playheadX = LabelWidth + ((_playheadMs / _durationMs) * timelineWidth);
         dc.DrawLine(_playheadPen, new Point(playheadX, 0), new Point(playheadX, height));
-        for (int index = 0; index < _textLayers.Count; index++)
+    }
+
+    private void DrawEmptyTrack(
+        DrawingContext dc,
+        double top,
+        double height,
+        string label,
+        string placeholder,
+        double timelineWidth)
+    {
+        dc.DrawRectangle(_track, null, new Rect(LabelWidth, top, timelineWidth, height));
+        dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + height));
+        DrawText(dc, label, 8, top + ((height - 14) / 2.0), _textSecondary, 10.5, LabelWidth - 12);
+        DrawText(dc, placeholder, LabelWidth + 12, top + ((height - 14) / 2.0), _muted, 10, timelineWidth - 24);
+    }
+
+    private void DrawLayerRow(
+        DrawingContext dc,
+        double top,
+        double height,
+        string rowLabel,
+        double startMs,
+        double endMs,
+        string itemLabel,
+        Guid layerId,
+        Brush layerBrush,
+        bool hatch,
+        double timelineWidth)
+    {
+        dc.DrawRectangle(_track, null, new Rect(LabelWidth, top, timelineWidth, height));
+        dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + height));
+        DrawText(dc, rowLabel, 8, top + ((height - 14) / 2.0), _textSecondary, 10.5, LabelWidth - 12);
+
+        double left = LabelWidth + (Math.Clamp(startMs / _durationMs, 0, 1) * timelineWidth);
+        double right = LabelWidth + (Math.Clamp(endMs / _durationMs, 0, 1) * timelineWidth);
+        double barTop = top + ((height - BarHeight) / 2.0);
+        double barWidth = Math.Max(MinBarWidth, right - left);
+        var bar = new Rect(left, barTop, barWidth, BarHeight);
+
+        dc.DrawRoundedRectangle(layerBrush, null, bar, 3, 3);
+        if (hatch && bar.Width >= 8)
         {
-            Rect bar = TextBar(index);
-            bool selected = _textLayers[index].Id == _selectedId;
-            var pen = selected ? _playheadPen : _gridPen;
-            dc.DrawRoundedRectangle(null, pen, bar, 3, 3);
-            dc.DrawRectangle(_foreground, null, new Rect(bar.Left, bar.Top + 3, Math.Min(4, bar.Width / 2), bar.Height - 6));
-            dc.DrawRectangle(_foreground, null, new Rect(bar.Right - Math.Min(4, bar.Width / 2), bar.Top + 3, Math.Min(4, bar.Width / 2), bar.Height - 6));
+            for (double x = bar.Left - bar.Height; x < bar.Right; x += 10)
+            {
+                dc.DrawLine(
+                    _gridPen,
+                    new Point(Math.Max(bar.Left, x), bar.Bottom - Math.Max(0, bar.Left - x)),
+                    new Point(Math.Min(bar.Right, x + bar.Height), bar.Top + Math.Max(0, x + bar.Height - bar.Right)));
+            }
+        }
+
+        if (bar.Width >= 36)
+        {
+            DrawText(dc, itemLabel, bar.Left + 6, bar.Top + ((bar.Height - 14) / 2.0), _foreground, 10, bar.Width - 12);
+        }
+
+        bool selected = layerId == _selectedId;
+        Pen pen = selected ? _playheadPen : _gridPen;
+        dc.DrawRoundedRectangle(null, pen, bar, 3, 3);
+
+        double handleWidth = Math.Min(4, bar.Width / 3.0);
+        if (handleWidth >= 2)
+        {
+            dc.DrawRectangle(_foreground, null, new Rect(bar.Left, bar.Top + 3, handleWidth, bar.Height - 6));
+            dc.DrawRectangle(_foreground, null, new Rect(bar.Right - handleWidth, bar.Top + 3, handleWidth, bar.Height - 6));
         }
     }
 
-    private Rect TextBar(int index)
+    private static double ComputeDesiredHeight(int textCount, int frameCount)
     {
+        return PaddingTop + GetTextSectionHeight(textCount) + Gap + GetFrameSectionHeight(frameCount) + PaddingBottom;
+    }
+
+    private static double GetTextSectionHeight(int count) =>
+        count == 0
+            ? EmptyTrackHeight
+            : (count * LayerTrackHeight) + ((count - 1) * Gap);
+
+    private static double GetFrameSectionHeight(int count) =>
+        count == 0
+            ? EmptyTrackHeight
+            : (count * LayerTrackHeight) + ((count - 1) * Gap);
+
+    private double ComputeDesiredHeight() =>
+        ComputeDesiredHeight(_textLayers.Count, _frameLayers.Count);
+
+    private double GetTextSectionHeight() => GetTextSectionHeight(_textLayers.Count);
+
+    private double GetFrameSectionHeight() => GetFrameSectionHeight(_frameLayers.Count);
+
+    private Rect GetTextBarRect(int index, double actualWidth)
+    {
+        if (index < 0 || index >= _textLayers.Count)
+        {
+            return Rect.Empty;
+        }
+
         TimedTextOverlay layer = _textLayers[index];
-        double width = Math.Max(1, ActualWidth - LabelWidth);
-        double left = LabelWidth + Math.Clamp(layer.StartMs / _durationMs, 0, 1) * width;
-        double right = LabelWidth + Math.Clamp(layer.EndMs / _durationMs, 0, 1) * width;
-        return new Rect(left, 5 + ((index % 2) * 4), Math.Max(3, right - left), 20);
+        double top = PaddingTop + (index * (LayerTrackHeight + Gap));
+        double barTop = top + ((LayerTrackHeight - BarHeight) / 2.0);
+        double timelineWidth = Math.Max(1, actualWidth - LabelWidth);
+        double left = LabelWidth + (Math.Clamp(layer.StartMs / _durationMs, 0, 1) * timelineWidth);
+        double right = LabelWidth + (Math.Clamp(layer.EndMs / _durationMs, 0, 1) * timelineWidth);
+        return new Rect(left, barTop, Math.Max(MinBarWidth, right - left), BarHeight);
+    }
+
+    private Rect GetFrameBarRect(int index, double actualWidth)
+    {
+        if (index < 0 || index >= _frameLayers.Count)
+        {
+            return Rect.Empty;
+        }
+
+        FrameEditLayer layer = _frameLayers[index];
+        double frameSectionTop = PaddingTop + GetTextSectionHeight() + Gap;
+        double top = frameSectionTop + (index * (LayerTrackHeight + Gap));
+        double barTop = top + ((LayerTrackHeight - BarHeight) / 2.0);
+        double timelineWidth = Math.Max(1, actualWidth - LabelWidth);
+        double left = LabelWidth + (Math.Clamp(layer.StartMs / _durationMs, 0, 1) * timelineWidth);
+        double right = LabelWidth + (Math.Clamp(layer.EndMs / _durationMs, 0, 1) * timelineWidth);
+        return new Rect(left, barTop, Math.Max(MinBarWidth, right - left), BarHeight);
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new TimelineAutomationPeer(this);
@@ -168,47 +437,264 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         protected override bool IsControlElementCore() => true;
     }
 
+    private bool HitTestBar(Point point, out bool isText, out int index, out Rect barRect)
+    {
+        double width = ActualWidth;
+        for (int i = _frameLayers.Count - 1; i >= 0; i--)
+        {
+            Rect bar = GetFrameBarRect(i, width);
+            Rect hit = bar;
+            hit.Inflate(4, 3);
+            if (hit.Contains(point))
+            {
+                isText = false;
+                index = i;
+                barRect = bar;
+                return true;
+            }
+        }
+
+        for (int i = _textLayers.Count - 1; i >= 0; i--)
+        {
+            Rect bar = GetTextBarRect(i, width);
+            Rect hit = bar;
+            hit.Inflate(4, 3);
+            if (hit.Contains(point))
+            {
+                isText = true;
+                index = i;
+                barRect = bar;
+                return true;
+            }
+        }
+
+        isText = false;
+        index = -1;
+        barRect = Rect.Empty;
+        return false;
+    }
+
+    private bool HitTestRow(Point point, out bool isText, out int index)
+    {
+        double width = ActualWidth;
+        if (point.X < 0 || point.X > width)
+        {
+            isText = false;
+            index = -1;
+            return false;
+        }
+
+        if (_textLayers.Count > 0)
+        {
+            for (int i = 0; i < _textLayers.Count; i++)
+            {
+                double top = PaddingTop + (i * (LayerTrackHeight + Gap));
+                if (point.Y >= top && point.Y <= top + LayerTrackHeight)
+                {
+                    isText = true;
+                    index = i;
+                    return true;
+                }
+            }
+        }
+
+        if (_frameLayers.Count > 0)
+        {
+            double frameSectionTop = PaddingTop + GetTextSectionHeight() + Gap;
+            for (int i = 0; i < _frameLayers.Count; i++)
+            {
+                double top = frameSectionTop + (i * (LayerTrackHeight + Gap));
+                if (point.Y >= top && point.Y <= top + LayerTrackHeight)
+                {
+                    isText = false;
+                    index = i;
+                    return true;
+                }
+            }
+        }
+
+        isText = false;
+        index = -1;
+        return false;
+    }
+
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
         Point point = e.GetPosition(this);
-        for (int index = _textLayers.Count - 1; index >= 0; index--)
+
+        if (HitTestBar(point, out bool isText, out int index, out Rect bar))
         {
-            Rect bar = TextBar(index);
-            Rect hit = bar;
-            hit.Inflate(8, 3);
-            if (!hit.Contains(point))
+            _ = Focus();
+            Guid layerId = isText ? _textLayers[index].Id : _frameLayers[index].Id;
+            double startMs = isText ? _textLayers[index].StartMs : _frameLayers[index].StartMs;
+            double endMs = isText ? _textLayers[index].EndMs : _frameLayers[index].EndMs;
+
+            _selectedId = layerId;
+            NotifyLayerSelected();
+
+            double handleZone = Math.Min(HandleZoneWidth, bar.Width / 3.0);
+            if (point.X <= bar.Left + handleZone)
             {
-                continue;
+                _dragAction = DragAction.TrimStart;
+                Cursor = Cursors.SizeWE;
+            }
+            else if (point.X >= bar.Right - handleZone)
+            {
+                _dragAction = DragAction.TrimEnd;
+                Cursor = Cursors.SizeWE;
+            }
+            else
+            {
+                _dragAction = DragAction.MoveBody;
+                Cursor = Cursors.SizeAll;
             }
 
-            _ = Focus();
-            TimedTextOverlay layer = _textLayers[index];
-            _selectedId = layer.Id;
-            TextLayerSelected?.Invoke(this, EventArgs.Empty);
-            _startHandle = Math.Abs(point.X - bar.Left) <= Math.Abs(point.X - bar.Right);
-            if (Math.Min(Math.Abs(point.X - bar.Left), Math.Abs(point.X - bar.Right)) <= 12)
+            _dragInitialStartMs = startMs;
+            LayerTimingInteractionStarted?.Invoke(this, EventArgs.Empty);
+            _dragInitialEndMs = endMs;
+            _dragStartMouseX = point.X;
+            _dragTargetId = layerId;
+            _dragTargetIsText = isText;
+            _dragging = CaptureMouse();
+            if (!_dragging)
             {
-                _dragStartMs = layer.StartMs;
-                _dragEndMs = layer.EndMs;
-                _dragging = CaptureMouse();
-                Cursor = Cursors.SizeWE;
+                _dragAction = DragAction.None;
+                Cursor = Cursors.Hand;
             }
 
             InvalidateVisual();
             e.Handled = true;
-            break;
+            return;
+        }
+
+        if (HitTestRow(point, out bool rowIsText, out int rowIndex))
+        {
+            _ = Focus();
+            Guid layerId = rowIsText ? _textLayers[rowIndex].Id : _frameLayers[rowIndex].Id;
+            _selectedId = layerId;
+            NotifyLayerSelected();
+            InvalidateVisual();
+            e.Handled = true;
         }
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+        Point point = e.GetPosition(this);
+
         if (_dragging)
         {
-            double target = (e.GetPosition(this).X - LabelWidth) / Math.Max(1, ActualWidth - LabelWidth) * _durationMs;
-            ResizeSelected(target);
+            double timelineWidth = Math.Max(1, ActualWidth - LabelWidth);
+            double deltaX = point.X - _dragStartMouseX;
+            double deltaMs = (deltaX / timelineWidth) * _durationMs;
+            double currentMouseTimeMs = Math.Clamp(((point.X - LabelWidth) / timelineWidth) * _durationMs, 0, _durationMs);
+
+            if (_dragTargetIsText)
+            {
+                TimedTextOverlay? target = null;
+                for (int i = 0; i < _textLayers.Count; i++)
+                {
+                    if (_textLayers[i].Id == _dragTargetId)
+                    {
+                        target = _textLayers[i];
+                        break;
+                    }
+                }
+
+                if (target is not null)
+                {
+                    ApplyDrag(target.StartMs, target.EndMs, out double newStart, out double newEnd, deltaMs, currentMouseTimeMs);
+                    if (Math.Abs(target.StartMs - newStart) > 0.01 || Math.Abs(target.EndMs - newEnd) > 0.01)
+                    {
+                        target.StartMs = newStart;
+                        target.EndMs = newEnd;
+                        NotifyTimingChanged();
+                        AutomationProperties.SetName(this, UiText.Format("Text_10D733234378", target.StartMs / 1000, target.EndMs / 1000));
+                        InvalidateVisual();
+                    }
+                }
+            }
+            else
+            {
+                FrameEditLayer? target = null;
+                for (int i = 0; i < _frameLayers.Count; i++)
+                {
+                    if (_frameLayers[i].Id == _dragTargetId)
+                    {
+                        target = _frameLayers[i];
+                        break;
+                    }
+                }
+
+                if (target is not null)
+                {
+                    ApplyDrag(target.StartMs, target.EndMs, out double newStart, out double newEnd, deltaMs, currentMouseTimeMs);
+                    if (Math.Abs(target.StartMs - newStart) > 0.01 || Math.Abs(target.EndMs - newEnd) > 0.01)
+                    {
+                        target.StartMs = newStart;
+                        target.EndMs = newEnd;
+                        NotifyTimingChanged();
+                        AutomationProperties.SetName(this, UiText.Format("Text_A89C81DCC2C9", target.StartMs / 1000, target.EndMs / 1000));
+                        InvalidateVisual();
+                    }
+                }
+            }
+
             e.Handled = true;
+            return;
+        }
+
+        if (HitTestBar(point, out _, out _, out Rect hoverBar))
+        {
+            double handleZone = Math.Min(HandleZoneWidth, hoverBar.Width / 3.0);
+            if (point.X <= hoverBar.Left + handleZone || point.X >= hoverBar.Right - handleZone)
+            {
+                Cursor = Cursors.SizeWE;
+            }
+            else
+            {
+                Cursor = Cursors.SizeAll;
+            }
+        }
+        else
+        {
+            Cursor = Cursors.Hand;
+        }
+    }
+
+    private void ApplyDrag(
+        double currentStart,
+        double currentEnd,
+        out double newStart,
+        out double newEnd,
+        double deltaMs,
+        double mouseTimeMs)
+    {
+        switch (_dragAction)
+        {
+            case DragAction.TrimStart:
+                (newStart, newEnd) = TextLayerTiming.Resize(
+                    _dragInitialStartMs, _dragInitialEndMs, _durationMs, startHandle: true, targetMs: mouseTimeMs);
+                break;
+
+            case DragAction.TrimEnd:
+                (newStart, newEnd) = TextLayerTiming.Resize(
+                    _dragInitialStartMs, _dragInitialEndMs, _durationMs, startHandle: false, targetMs: mouseTimeMs);
+                break;
+
+            case DragAction.MoveBody:
+                double duration = _dragInitialEndMs - _dragInitialStartMs;
+                double maxStart = Math.Max(0, _durationMs - duration);
+                newStart = Math.Clamp(_dragInitialStartMs + deltaMs, 0, maxStart);
+                newEnd = Math.Min(_durationMs, newStart + duration);
+                break;
+
+            default:
+                newStart = currentStart;
+                newEnd = currentEnd;
+                break;
         }
     }
 
@@ -218,101 +704,183 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         if (_dragging)
         {
             _dragging = false;
+            _dragAction = DragAction.None;
             ReleaseMouseCapture();
             Cursor = Cursors.Hand;
+            NotifyTimingGestureCompleted();
             e.Handled = true;
         }
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
-        _dragging = false;
-        Cursor = Cursors.Hand;
+        if (_dragging)
+        {
+            _dragging = false;
+            _dragAction = DragAction.None;
+            Cursor = Cursors.Hand;
+            NotifyTimingGestureCompleted();
+        }
+
         base.OnLostMouseCapture(e);
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (!_dragging)
+        {
+            Cursor = Cursors.Hand;
+        }
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        TimedTextOverlay? selected = _textLayers.FirstOrDefault(layer => layer.Id == _selectedId);
-        if (e.Key == Key.Escape && _dragging && selected is not null)
-        {
-            selected.StartMs = _dragStartMs;
-            selected.EndMs = _dragEndMs;
-            ReleaseMouseCapture();
-            TextTimingChanged?.Invoke(this, EventArgs.Empty);
-            InvalidateVisual();
-            e.Handled = true;
-        }
-        else if (e.Key is Key.Up or Key.Down && _textLayers.Count > 0)
-        {
-            int index = Math.Max(0, _textLayers.ToList().FindIndex(layer => layer.Id == _selectedId));
-            index = (index + (e.Key == Key.Up ? _textLayers.Count - 1 : 1)) % _textLayers.Count;
-            _selectedId = _textLayers[index].Id;
-            TextLayerSelected?.Invoke(this, EventArgs.Empty);
-            InvalidateVisual();
-            e.Handled = true;
-        }
-        else if (e.Key is Key.Left or Key.Right && selected is not null)
-        {
-            _startHandle = !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
-            double step = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? 10 : 100;
-            ResizeSelected((_startHandle ? selected.StartMs : selected.EndMs) + (e.Key == Key.Left ? -step : step));
-            e.Handled = true;
-        }
-    }
 
-    private void ResizeSelected(double target)
-    {
-        TimedTextOverlay? selected = _textLayers.FirstOrDefault(layer => layer.Id == _selectedId);
-        if (selected is null)
+        if (e.Key == Key.Escape && _dragging)
         {
-            return;
-        }
-
-        (selected.StartMs, selected.EndMs) = TextLayerTiming.Resize(
-            selected.StartMs, selected.EndMs, _durationMs, _startHandle, target);
-        TextTimingChanged?.Invoke(this, EventArgs.Empty);
-        AutomationProperties.SetName(this, $"텍스트 표시 시간: {selected.StartMs / 1000:0.00}초부터 {selected.EndMs / 1000:0.00}초까지");
-        InvalidateVisual();
-    }
-
-    private void DrawTrack(
-        DrawingContext dc,
-        double top,
-        string label,
-        IReadOnlyList<LayerSpan> layers,
-        Brush layerBrush,
-        bool hatch)
-    {
-        double timelineWidth = Math.Max(1, ActualWidth - LabelWidth);
-        dc.DrawRectangle(_track, null, new Rect(LabelWidth, top, timelineWidth, TrackHeight));
-        dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + TrackHeight));
-        DrawText(dc, label, 8, top + 8, _muted, 11, maxWidth: LabelWidth - 12);
-
-        for (int index = 0; index < layers.Count; index++)
-        {
-            LayerSpan layer = layers[index];
-            double left = LabelWidth + (Math.Clamp(layer.StartMs / _durationMs, 0, 1) * timelineWidth);
-            double right = LabelWidth + (Math.Clamp(layer.EndMs / _durationMs, 0, 1) * timelineWidth);
-            double barTop = top + 5 + ((index % 2) * 4);
-            var bar = new Rect(left, barTop, Math.Max(3, right - left), 20);
-            dc.DrawRoundedRectangle(layerBrush, null, bar, 3, 3);
-            if (hatch && bar.Width >= 8)
+            if (_dragTargetIsText)
             {
-                for (double x = bar.Left - bar.Height; x < bar.Right; x += 10)
+                for (int i = 0; i < _textLayers.Count; i++)
                 {
-                    dc.DrawLine(_gridPen,
-                        new Point(Math.Max(bar.Left, x), bar.Bottom - Math.Max(0, bar.Left - x)),
-                        new Point(Math.Min(bar.Right, x + bar.Height), bar.Top + Math.Max(0, x + bar.Height - bar.Right)));
+                    if (_textLayers[i].Id == _dragTargetId)
+                    {
+                        _textLayers[i].StartMs = _dragInitialStartMs;
+                        _textLayers[i].EndMs = _dragInitialEndMs;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _frameLayers.Count; i++)
+                {
+                    if (_frameLayers[i].Id == _dragTargetId)
+                    {
+                        _frameLayers[i].StartMs = _dragInitialStartMs;
+                        _frameLayers[i].EndMs = _dragInitialEndMs;
+                        break;
+                    }
                 }
             }
 
-            if (bar.Width >= 42)
+            _dragging = false;
+            _dragAction = DragAction.None;
+            ReleaseMouseCapture();
+            Cursor = Cursors.Hand;
+            NotifyTimingChanged();
+            NotifyTimingGestureCompleted();
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        int totalCount = _textLayers.Count + _frameLayers.Count;
+        if (e.Key is Key.Up or Key.Down && totalCount > 0)
+        {
+            int currentIndex = -1;
+            for (int i = 0; i < _textLayers.Count; i++)
             {
-                DrawText(dc, layer.Label, bar.Left + 5, bar.Top + 3, _foreground, 10, bar.Width - 10);
+                if (_textLayers[i].Id == _selectedId)
+                {
+                    currentIndex = i;
+                    break;
+                }
+            }
+
+            if (currentIndex < 0)
+            {
+                for (int i = 0; i < _frameLayers.Count; i++)
+                {
+                    if (_frameLayers[i].Id == _selectedId)
+                    {
+                        currentIndex = _textLayers.Count + i;
+                        break;
+                    }
+                }
+            }
+
+            if (currentIndex < 0)
+            {
+                currentIndex = 0;
+            }
+
+            int nextIndex = (currentIndex + (e.Key == Key.Up ? totalCount - 1 : 1)) % totalCount;
+            if (nextIndex < _textLayers.Count)
+            {
+                _selectedId = _textLayers[nextIndex].Id;
+            }
+            else
+            {
+                _selectedId = _frameLayers[nextIndex - _textLayers.Count].Id;
+            }
+
+            NotifyLayerSelected();
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key is Key.Left or Key.Right && _selectedId.HasValue)
+        {
+            LayerTimingInteractionStarted?.Invoke(this, EventArgs.Empty);
+            bool isStartHandle = !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+            double step = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? 10 : 100;
+            double delta = e.Key == Key.Left ? -step : step;
+
+            for (int i = 0; i < _textLayers.Count; i++)
+            {
+                if (_textLayers[i].Id == _selectedId.Value)
+                {
+                    TimedTextOverlay text = _textLayers[i];
+                    double target = (isStartHandle ? text.StartMs : text.EndMs) + delta;
+                    (text.StartMs, text.EndMs) = TextLayerTiming.Resize(
+                        text.StartMs, text.EndMs, _durationMs, isStartHandle, target);
+                    NotifyTimingChanged();
+                    NotifyTimingGestureCompleted();
+                    AutomationProperties.SetName(this, UiText.Format("Text_10D733234378", text.StartMs / 1000, text.EndMs / 1000));
+                    InvalidateVisual();
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            for (int i = 0; i < _frameLayers.Count; i++)
+            {
+                if (_frameLayers[i].Id == _selectedId.Value)
+                {
+                    FrameEditLayer frame = _frameLayers[i];
+                    double target = (isStartHandle ? frame.StartMs : frame.EndMs) + delta;
+                    (frame.StartMs, frame.EndMs) = TextLayerTiming.Resize(
+                        frame.StartMs, frame.EndMs, _durationMs, isStartHandle, target);
+                    NotifyTimingChanged();
+                    NotifyTimingGestureCompleted();
+                    AutomationProperties.SetName(this, UiText.Format("Text_A89C81DCC2C9", frame.StartMs / 1000, frame.EndMs / 1000));
+                    InvalidateVisual();
+                    e.Handled = true;
+                    return;
+                }
             }
         }
+    }
+
+    private void NotifyLayerSelected()
+    {
+        if (!SelectedBarBounds.IsEmpty) { BringIntoView(SelectedBarBounds); }
+        LayerSelected?.Invoke(this, EventArgs.Empty);
+        TextLayerSelected?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void NotifyTimingChanged()
+    {
+        LayerTimingChanged?.Invoke(this, EventArgs.Empty);
+        TextTimingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void NotifyTimingGestureCompleted()
+    {
+        LayerTimingInteractionCompleted?.Invoke(this, EventArgs.Empty);
     }
 
     private void DrawText(
@@ -324,6 +892,11 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         double size,
         double maxWidth)
     {
+        if (string.IsNullOrEmpty(text) || maxWidth <= 0)
+        {
+            return;
+        }
+
         var formatted = new FormattedText(
             text,
             CultureInfo.CurrentUICulture,
@@ -340,8 +913,17 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         dc.DrawText(formatted, new Point(x, y));
     }
 
-    private static string OneLine(string text) =>
-        (text ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ');
+    private static string OneLine(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        return text.IndexOf('\r') < 0 && text.IndexOf('\n') < 0
+            ? text
+            : text.Replace('\r', ' ').Replace('\n', ' ');
+    }
 
     private static SolidColorBrush Frozen(Color color)
     {
@@ -364,5 +946,11 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         return pen;
     }
 
-    private sealed record LayerSpan(double StartMs, double EndMs, string Label);
+    private enum DragAction
+    {
+        None,
+        TrimStart,
+        TrimEnd,
+        MoveBody,
+    }
 }

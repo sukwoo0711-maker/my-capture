@@ -16,7 +16,7 @@ namespace MyCapture.App.Tests;
 /// Verifies the shipped theme dictionaries load together and expose every resource used by the
 /// Focus Blue/graphite UI. Missing resources otherwise fail only when a screen is first shown.
 /// </summary>
-public sealed class ThemeResourceAvailabilityTests
+public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
 {
     private static readonly string[] IconKeys =
     [

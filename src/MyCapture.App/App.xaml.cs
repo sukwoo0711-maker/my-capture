@@ -80,6 +80,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        UiText.Configure(null);
 
         // Windows 11 is the supported baseline. The installer refuses older hosts, but the
         // portable ZIP does not run the installer, so the process enforces the floor itself
@@ -127,7 +128,7 @@ public partial class App : Application
         {
             _log.LogCritical(ex, "Could not initialize the resident shell");
             MessageBox.Show(
-                $"MyCapture를 시작할 수 없습니다.\n\n{ex.Message}",
+                UiText.Format("Text_CA6DE730BB6E", ex.Message),
                 "MyCapture",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -157,6 +158,7 @@ public partial class App : Application
         }
 
         _settings = _services.GetRequiredService<SettingsStore>().Load();
+        UiText.Configure(_settings.General.Language);
 
         _tray = _services.GetRequiredService<TrayIconService>();
         _hotkeys = _services.GetRequiredService<GlobalHotkeyService>();
@@ -240,6 +242,9 @@ public partial class App : Application
             RestoreTrayAfterCapture();
         };
         _overlay.CommitRequested = HandleCommitAsync;
+        _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
+        _overlay.TransitionFailed += exception =>
+            _tray?.ShowBalloon(UiText.Get("Text_B4B8EE7BE3D6"), exception.Message, TrayBalloonKind.Error);
 
         // Region video recording (Ctrl+Shift+X). Shares the capture engine and, on a
         // frame-image edit, the same persistence/commit path as still capture so recordings
@@ -291,11 +296,11 @@ public partial class App : Application
             HotkeyRegistrationFailure first = _hotkeys.Failures[0];
             string suffix = _hotkeys.Failures.Count == 1
                 ? string.Empty
-                : $" 외 {_hotkeys.Failures.Count - 1}개";
+                : UiText.Format("Text_646F2DBF1852", _hotkeys.Failures.Count - 1);
 
             _tray.ShowBalloon(
-                "단축키 충돌",
-                $"{first.Hotkey} 단축키를 등록할 수 없습니다{suffix}. 설정에서 변경해 주세요.",
+                UiText.Get("Text_5564316AA7EB"),
+                UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix),
                 TrayBalloonKind.Warning);
         }
     }
@@ -363,15 +368,15 @@ public partial class App : Application
             {
                 case PasteResult.NoSupportedContent:
                     _tray?.ShowBalloon(
-                        "화면에 고정할 수 없습니다",
-                        "클립보드에 이미지, 텍스트 또는 표가 없습니다.",
+                        UiText.Get("Text_5B8BBBA7AA27"),
+                        UiText.Get("Text_5260EE77B969"),
                         TrayBalloonKind.Information,
                         playSound: false);
                     break;
                 case PasteResult.ClipboardBusy:
                     _tray?.ShowBalloon(
-                        "클립보드를 사용할 수 없습니다",
-                        "다른 프로그램이 클립보드를 사용 중입니다. 잠시 후 다시 시도해 주세요.",
+                        UiText.Get("Text_C5B654A9AE39"),
+                        UiText.Get("Text_E68076415933"),
                         TrayBalloonKind.Warning,
                         playSound: false);
                     break;
@@ -383,7 +388,7 @@ public partial class App : Application
             // the tray. Report it and stay resident.
             _log?.LogError(ex, "Paste-to-screen failed");
             _tray?.ShowBalloon(
-                "화면 고정에 실패했습니다",
+                UiText.Get("Text_CE57D5CA2394"),
                 ex.Message,
                 TrayBalloonKind.Error,
                 playSound: false);
@@ -397,7 +402,7 @@ public partial class App : Application
     private void HandleCaptureRequested()
     {
         _log?.LogInformation("Region capture requested");
-        if (_overlay is null || _settings is null || !GuardStillCapture("영역 캡처"))
+        if (_overlay is null || _settings is null || !GuardStillCapture(UiText.Get("Text_096A13A757DB")))
         {
             return;
         }
@@ -415,7 +420,7 @@ public partial class App : Application
             _log?.LogError(ex, "Could not open the capture overlay");
             _tray?.SetState(TrayIconState.Error);
             _tray?.ShowBalloon(
-                "캡처를 시작할 수 없습니다",
+                UiText.Get("Text_70EECBC7C211"),
                 ex.Message,
                 TrayBalloonKind.Error);
         }
@@ -427,13 +432,13 @@ public partial class App : Application
     /// </summary>
     private void HandleCaptureFullScreen()
     {
-        if (_advancedCapture is null || !GuardStillCapture("전체 화면 캡처"))
+        if (_advancedCapture is null || !GuardStillCapture(UiText.Get("Text_254C836B9ED2")))
         {
             return;
         }
 
         _tray?.SetState(TrayIconState.Capturing);
-        ReportOutcome(_advancedCapture.CaptureFullScreen(), "전체 화면 캡처");
+        ReportOutcome(_advancedCapture.CaptureFullScreen(), UiText.Get("Text_254C836B9ED2"));
     }
 
     /// <summary>
@@ -442,13 +447,13 @@ public partial class App : Application
     /// </summary>
     private void HandleCaptureWindow()
     {
-        if (_advancedCapture is null || !GuardStillCapture("창 캡처"))
+        if (_advancedCapture is null || !GuardStillCapture(UiText.Get("Text_36458FABBDBB")))
         {
             return;
         }
 
         _tray?.SetState(TrayIconState.Capturing);
-        ReportOutcome(_advancedCapture.CaptureWindow(), "창 캡처");
+        ReportOutcome(_advancedCapture.CaptureWindow(), UiText.Get("Text_36458FABBDBB"));
     }
 
     /// <summary>
@@ -457,13 +462,13 @@ public partial class App : Application
     /// </summary>
     private void HandleRepeatLastRegion()
     {
-        if (_advancedCapture is null || !GuardStillCapture("이전 영역 반복 캡처"))
+        if (_advancedCapture is null || !GuardStillCapture(UiText.Get("Text_92E815063265")))
         {
             return;
         }
 
         _tray?.SetState(TrayIconState.Capturing);
-        ReportOutcome(_advancedCapture.RepeatLastRegion(), "이전 영역 반복 캡처");
+        ReportOutcome(_advancedCapture.RepeatLastRegion(), UiText.Get("Text_92E815063265"));
     }
 
     /// <summary>
@@ -479,7 +484,7 @@ public partial class App : Application
     /// </remarks>
     private void HandleDelayedCapture()
     {
-        if (_settings is null || !GuardStillCapture("지연 캡처"))
+        if (_settings is null || !GuardStillCapture(UiText.Get("Text_38476EDDA50B")))
         {
             return;
         }
@@ -524,8 +529,8 @@ public partial class App : Application
             countdown.Close();
             RestoreTrayAfterCapture();
             _tray?.ShowBalloon(
-                "지연 캡처 취소됨",
-                "지연 캡처를 취소했습니다.",
+                UiText.Get("Text_07E499DBBB2A"),
+                UiText.Get("Text_70534261ED6C"),
                 TrayBalloonKind.Information,
                 playSound: false);
         }
@@ -533,6 +538,12 @@ public partial class App : Application
         countdown.Elapsed += OnElapsed;
         countdown.Cancelled += OnCancelled;
         countdown.Closed += (_, _) => { if (_activeCountdown == countdown) { Cleanup(); RestoreTrayAfterCapture(); } };
+        if (_recorder?.RequiresCaptureExclusion == true && !CaptureWindowExclusion.TryApply(countdown))
+        {
+            countdown.Close();
+            _tray?.ShowBalloon(UiText.Get("Text_40F24016E78F"), UiText.Get("Text_773C24F0A693"), TrayBalloonKind.Error);
+            return;
+        }
         countdown.Show();
         countdown.Activate();
     }
@@ -567,14 +578,14 @@ public partial class App : Application
             {
             }
             _tray?.ShowBalloon(
-                "스크롤 캡처 취소 중",
-                "현재 프레임 처리가 끝나면 중단합니다.",
+                UiText.Get("Text_6EB131FB1810"),
+                UiText.Get("Text_F018AA1A2813"),
                 TrayBalloonKind.Information,
                 playSound: false);
             return;
         }
 
-        if (!GuardStillCapture("스크롤 캡처"))
+        if (!GuardStillCapture(UiText.Get("Text_4B4D91FFC215")))
         {
             return;
         }
@@ -586,8 +597,8 @@ public partial class App : Application
         if (window is null || window.ScrollBounds.IsEmpty)
         {
             ReportOutcome(
-                CaptureOutcome.NothingToCapture("스크롤 캡처할 창이 없습니다."),
-                "스크롤 캡처");
+                CaptureOutcome.NothingToCapture(UiText.Get("Text_A57954F341E2")),
+                UiText.Get("Text_4B4D91FFC215"));
             return;
         }
 
@@ -596,8 +607,8 @@ public partial class App : Application
         _tray?.SetScrollingCaptureActive(true);
         _tray?.SetState(TrayIconState.Busy);
         _tray?.ShowBalloon(
-            "스크롤 캡처 시작",
-            "취소하려면 트레이 메뉴에서 ‘스크롤 캡처 취소’를 선택하세요.",
+            UiText.Get("Text_6182AA2DFF8D"),
+            UiText.Get("Text_82B423E5AFB8"),
             TrayBalloonKind.Information,
             playSound: false);
 
@@ -627,19 +638,19 @@ public partial class App : Application
             _tray?.SetScrollingCaptureActive(false);
         }
 
-        ReportOutcome(outcome, "스크롤 캡처");
+        ReportOutcome(outcome, UiText.Get("Text_4B4D91FFC215"));
     }
 
     private bool GuardStillCapture(string mode)
     {
-        if (_recorder?.IsActive != true)
-        {
+        if (_overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)
+            return false;
+        if (_recorder?.IsActive != true || _recorder.CanCaptureStill)
             return true;
-        }
 
         _tray?.ShowBalloon(
             mode,
-            "녹화 중에는 스크린샷을 시작할 수 없습니다.",
+            UiText.Get("Text_90290F46A7D5"),
             TrayBalloonKind.Information,
             playSound: false);
         return false;
@@ -682,7 +693,7 @@ public partial class App : Application
                 RestoreTrayAfterCapture();
                 _tray?.ShowBalloon(
                     mode,
-                    string.IsNullOrEmpty(outcome.Message) ? "캡처할 대상이 없습니다." : outcome.Message,
+                    string.IsNullOrEmpty(outcome.Message) ? UiText.Get("Text_AD101D75FFAE") : outcome.Message,
                     TrayBalloonKind.Information,
                     playSound: false);
                 break;
@@ -690,7 +701,7 @@ public partial class App : Application
             case CaptureOutcomeKind.Failed:
                 _tray?.SetState(TrayIconState.Error);
                 _tray?.ShowBalloon(
-                    $"{mode} 실패",
+                    UiText.Format("Text_60E0184FCBE5", mode),
                     outcome.Message,
                     TrayBalloonKind.Error);
                 break;
@@ -762,7 +773,7 @@ public partial class App : Application
             _currentEditSession = null;
             _log?.LogError(ex, "Could not persist the captured original");
             _tray?.ShowBalloon(
-                "캡처를 저장할 수 없습니다",
+                UiText.Get("Text_4033027EAEDB"),
                 ex.Message,
                 TrayBalloonKind.Error);
         }
@@ -789,12 +800,12 @@ public partial class App : Application
             if (!copied)
             {
                 string message = _currentRecord is null
-                    ? "영역 캡처는 완료했지만 클립보드에 복사하지 못했습니다. 편집기에서 Ctrl+C로 다시 시도해 주세요."
-                    : "캡처는 기록에 저장했지만 클립보드에 복사하지 못했습니다. 편집기에서 Ctrl+C로 다시 시도해 주세요.";
+                    ? UiText.Get("Text_4048C8E18C61")
+                    : UiText.Get("Text_9E0860CEAEC2");
                 try
                 {
                     _tray?.ShowBalloon(
-                        "클립보드 복사 실패",
+                        UiText.Get("Text_422F61DDCB7C"),
                         message,
                         TrayBalloonKind.Warning,
                         playSound: false);
@@ -838,7 +849,7 @@ public partial class App : Application
         {
             _log?.LogError(ex, "Could not finalise the annotated capture");
             _tray?.ShowBalloon(
-                "저장에 실패했습니다",
+                UiText.Get("Text_C1A40373A077"),
                 ex.Message,
                 TrayBalloonKind.Error);
 
@@ -872,7 +883,7 @@ public partial class App : Application
     /// </summary>
     private void HandleRecordRegion()
     {
-        if (_recorder is null)
+        if (_recorder is null || (!_recorder.IsActive && (_overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)))
         {
             return;
         }
@@ -887,7 +898,7 @@ public partial class App : Application
             _log?.LogError(ex, "Could not start region recording");
             _tray?.SetState(TrayIconState.Error);
             _tray?.ShowBalloon(
-                "녹화를 시작할 수 없습니다",
+                UiText.Get("Text_48C3B6EBA637"),
                 ex.Message,
                 TrayBalloonKind.Error);
         }
@@ -917,7 +928,7 @@ public partial class App : Application
                     record = await _persistence.PersistOriginalAsync(
                         result.SelectedBitmap,
                         result.Frame.DpiScale,
-                        sourceWindowTitle: "녹화 프레임",
+                        sourceWindowTitle: UiText.Get("Text_8D723235CBF3"),
                         sourceMonitor: result.Frame.Monitor?.DeviceName ?? string.Empty);
                     editSession = _commit.BeginEditSession(record);
                 }
@@ -925,8 +936,8 @@ public partial class App : Application
                 {
                     _log?.LogError(ex, "Could not persist the original image from a recorded frame");
                     _tray?.ShowBalloon(
-                        "프레임 원본을 보관할 수 없습니다",
-                        "다른 이름으로 저장 또는 클립보드 복사로 복구할 수 있습니다.",
+                        UiText.Get("Text_EB29C2038682"),
+                        UiText.Get("Text_7C7E6C9D8CD7"),
                         TrayBalloonKind.Error);
                 }
             }
@@ -945,7 +956,7 @@ public partial class App : Application
             {
                 _log?.LogError(ex, "Could not commit an image edited from a recorded frame");
                 _tray?.ShowBalloon(
-                    "프레임 이미지를 저장할 수 없습니다",
+                    UiText.Get("Text_E87551A1A39F"),
                     ex.Message,
                     TrayBalloonKind.Error);
                 return false;
@@ -1263,6 +1274,13 @@ public partial class App : Application
             next => _settingsApply!.Apply(next),
             _services.GetRequiredService<ILogger<SettingsWindow>>());
 
+        window.CanExitForUpdate = () =>
+            _recorder?.IsActive != true && _overlay?.IsActive != true &&
+            _activeCountdown is null && _scrollCancellation is null &&
+            !_pasteToScreenInFlight && _currentEditSession is null &&
+            !Windows.OfType<Window>().Any(w => w is MyCapture.App.Recording.VideoEditorWindow or AnnotationEditorWindow);
+        window.ExitForUpdate = () => Shutdown(0);
+
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();
 
@@ -1392,6 +1410,20 @@ public partial class App : Application
                 OcrSelfTest.Run);
         }
 
+        int pinStorageIndex = FindSwitch(args, PinStoragePerformanceSelfTest.CommandLineSwitch);
+        if (pinStorageIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(args, pinStorageIndex, "mycapture-pin-storage-performance");
+            return RunSelfTest(outputDirectory, "pin-storage-performance-report.txt", PinStoragePerformanceSelfTest.Run);
+        }
+
+        int recordingPerformanceIndex = FindSwitch(args, RecordingPerformanceSelfTest.CommandLineSwitch);
+        if (recordingPerformanceIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(args, recordingPerformanceIndex, "mycapture-recording-performance");
+            return RunSelfTest(outputDirectory, "recording-performance-report.txt", RecordingPerformanceSelfTest.Run);
+        }
+
         int recordingIndex = FindSwitch(args, RecordingSelfTest.CommandLineSwitch);
         if (recordingIndex >= 0)
         {
@@ -1418,6 +1450,14 @@ public partial class App : Application
                 VideoEditorResponsivenessSelfTest.Run);
         }
 
+        int localizationIndex = FindSwitch(args, LocalizationSelfTest.CommandLineSwitch);
+        if (localizationIndex >= 0)
+        {
+            return RunSelfTest(
+                OutputDirectoryAfter(args, localizationIndex, "mycapture-localization-selftest"),
+                "localization-selftest-report.txt",
+                LocalizationSelfTest.Run);
+        }
         int settingsIndex = FindSwitch(args, SettingsSelfTest.CommandLineSwitch);
         if (settingsIndex >= 0)
         {
@@ -1573,7 +1613,7 @@ public partial class App : Application
         // keeps the tray alive so the queue and any remaining windows survive.
         _tray?.SetState(TrayIconState.Error);
         MessageBox.Show(
-            $"예기치 않은 오류가 발생했습니다.\n\n{e.Exception.Message}",
+            UiText.Format("Text_6A4B9316D8C2", e.Exception.Message),
             "MyCapture",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);

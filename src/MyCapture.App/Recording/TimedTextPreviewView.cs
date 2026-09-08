@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using MyCapture.Core.Recording;
 
 namespace MyCapture.App.Recording;
@@ -7,10 +8,18 @@ namespace MyCapture.App.Recording;
 /// <summary>Letterbox-aware preview surface that uses the exact final-output text compositor.</summary>
 internal sealed class TimedTextPreviewView : FrameworkElement
 {
+    private sealed record CachedFrame(string Base64, BitmapSource? Bitmap, long LastUse);
+    private long _cacheClock;
+    internal long InactiveCacheBudgetBytes { get; set; } = 32 * 1024 * 1024;
+    internal int DecodeAttempts { get; private set; }
+    internal long InactiveCachedBytes => _decodedFrameCache.Where(p => !_frameLayers.Any(l => l.Id == p.Key && l.IsActiveAt(_sourceTimeMs))).Sum(p => BitmapBytes(p.Value.Bitmap));
+    private static long BitmapBytes(BitmapSource? bitmap) => bitmap is null ? 0 : (long)bitmap.PixelWidth * bitmap.PixelHeight * ((bitmap.Format.BitsPerPixel + 7) / 8);
+
+    private readonly Dictionary<Guid, CachedFrame> _decodedFrameCache = new();
     private IReadOnlyList<TimedTextOverlay> _overlays = [];
     private IReadOnlyList<FrameEditLayer> _frameLayers = [];
-    private IReadOnlyDictionary<Guid, System.Windows.Media.Imaging.BitmapSource> _frameLayerBitmaps =
-        new Dictionary<Guid, System.Windows.Media.Imaging.BitmapSource>();
+    private IReadOnlyDictionary<Guid, BitmapSource> _frameLayerBitmaps =
+        new Dictionary<Guid, BitmapSource>();
     private double _sourceTimeMs;
     private int _canvasWidth = 1;
     private int _canvasHeight = 1;
@@ -43,11 +52,54 @@ internal sealed class TimedTextPreviewView : FrameworkElement
 
     internal void SetFrameLayers(IReadOnlyList<FrameEditLayer> layers)
     {
+        VideoLayerResourceBudget.Validate(layers);
         _frameLayers = layers ?? [];
-        _frameLayerBitmaps = FrameEditLayerRenderer.Decode(_frameLayers);
+
+        RefreshDecodedFrames();
         InvalidateVisual();
     }
 
+    private void RefreshDecodedFrames()
+    {
+        var current = _frameLayers.Take(VideoEditDocument.MaximumFrameLayerCount)
+            .GroupBy(layer => layer.Id).ToDictionary(group => group.Key, group => group.First());
+        foreach (Guid id in _decodedFrameCache.Keys.ToArray())
+        {
+            if (!current.TryGetValue(id, out FrameEditLayer? layer)
+                || _decodedFrameCache[id].Base64 != layer.OverlayPngBase64)
+            {
+                _decodedFrameCache.Remove(id);
+            }
+        }
+
+        var active = new Dictionary<Guid, BitmapSource>();
+        foreach (FrameEditLayer layer in current.Values)
+        {
+            if (!layer.IsActiveAt(_sourceTimeMs)) { continue; }
+            if (!_decodedFrameCache.TryGetValue(layer.Id, out CachedFrame? cached))
+            {
+                DecodeAttempts++;
+                FrameEditLayerRenderer.Decode([layer]).TryGetValue(layer.Id, out BitmapSource? bitmap);
+                cached = new CachedFrame(layer.OverlayPngBase64, bitmap, ++_cacheClock);
+            }
+
+            _decodedFrameCache[layer.Id] = cached with { LastUse = ++_cacheClock };
+            if (cached.Bitmap is { } decoded) { active[layer.Id] = decoded; }
+        }
+
+        // Active layers are required for correctness. Only inactive retention has a byte budget;
+        // never decode unseen inactive entries just to decide whether to retain them.
+        long retained = 0;
+        foreach (var pair in _decodedFrameCache.OrderByDescending(p => p.Value.LastUse).ToArray())
+        {
+            if (current[pair.Key].IsActiveAt(_sourceTimeMs)) { continue; }
+            long bytes = BitmapBytes(pair.Value.Bitmap);
+            if (retained + bytes > InactiveCacheBudgetBytes) { _decodedFrameCache.Remove(pair.Key); }
+            else { retained += bytes; }
+        }
+
+        _frameLayerBitmaps = active;
+    }
     internal void SetSourceTime(double sourceTimeMs)
     {
         double next = double.IsFinite(sourceTimeMs) ? Math.Max(0, sourceTimeMs) : 0;
@@ -87,6 +139,7 @@ internal sealed class TimedTextPreviewView : FrameworkElement
         _sourceTimeMs = next;
         if (activeSetChanged)
         {
+            RefreshDecodedFrames();
             InvalidateVisual();
         }
     }

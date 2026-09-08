@@ -79,9 +79,9 @@ public sealed class PolylineAnnotation : AnnotationItem
     public override string DisplayName =>
         (HeadAtStart, HeadAtEnd) switch
         {
-            (false, false) => "선",
-            (true, true) => "양방향 화살표",
-            _ => "화살표",
+            (false, false) => UiText.Get("Text_CA8A8225E428"),
+            (true, true) => UiText.Get("Text_388CC5AD1AE8"),
+            _ => UiText.Get("Text_2785CE58DF74"),
         };
 
     [JsonIgnore]

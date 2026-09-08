@@ -105,7 +105,7 @@ internal sealed class AdvancedCaptureService
             WindowUnderCursor? window = _environment.WindowAt(_environment.CursorPosition);
             if (window is null || window.ScreenBounds.IsEmpty)
             {
-                return CaptureOutcome.NothingToCapture("커서 아래에 캡처할 창이 없습니다.");
+                return CaptureOutcome.NothingToCapture(UiText.Get("Text_4B4B0D333A67"));
             }
 
             FrozenFrame frame = _environment.CaptureScreenRegion(window.ScreenBounds);
@@ -124,7 +124,7 @@ internal sealed class AdvancedCaptureService
     {
         if (width < 1 || height < 1)
         {
-            return CaptureOutcome.NothingToCapture("고정 크기 캡처의 크기가 올바르지 않습니다.");
+            return CaptureOutcome.NothingToCapture(UiText.Get("Text_24A509A94313"));
         }
 
         if (BusyOutcome() is { } busy)
@@ -139,12 +139,12 @@ internal sealed class AdvancedCaptureService
             RectD? placement = FixedRegionPlanner.PlaceAtCursor(width, height, cursor, frame.ScreenBounds);
             if (placement is null)
             {
-                return CaptureOutcome.NothingToCapture("고정 크기 캡처의 크기가 올바르지 않습니다.");
+                return CaptureOutcome.NothingToCapture(UiText.Get("Text_24A509A94313"));
             }
 
             RectD region = frame.ToBitmapSpace(placement.Value);
             return region.IsEmpty
-                ? CaptureOutcome.NothingToCapture("고정 크기 영역이 이 모니터 밖에 있습니다.")
+                ? CaptureOutcome.NothingToCapture(UiText.Get("Text_E2B271067CCF"))
                 : Open(new AdvancedSelection(frame, region, string.Empty));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -160,7 +160,7 @@ internal sealed class AdvancedCaptureService
         RegionHistoryEntry? entry = _lastRegions.LastEntry;
         if (entry is null)
         {
-            return CaptureOutcome.NothingToCapture("반복할 이전 영역이 없습니다.");
+            return CaptureOutcome.NothingToCapture(UiText.Get("Text_6F025107D313"));
         }
 
         if (BusyOutcome() is { } busy)
@@ -174,7 +174,7 @@ internal sealed class AdvancedCaptureService
             if (resolved is null || resolved.Value.IsEmpty)
             {
                 return CaptureOutcome.NothingToCapture(
-                    "이전 영역의 모니터가 연결되어 있지 않습니다. 새 영역을 선택해 주세요.");
+                    UiText.Get("Text_D5A4B6986227"));
             }
 
             FrozenFrame frame = _environment.CaptureScreenRegion(resolved.Value);
@@ -202,17 +202,17 @@ internal sealed class AdvancedCaptureService
         RectD region = screenRegion.Normalized().ToPixelBounds();
         if (region.IsEmpty)
         {
-            return CaptureOutcome.NothingToCapture("스크롤 캡처할 영역이 없습니다.");
+            return CaptureOutcome.NothingToCapture(UiText.Get("Text_A7937F29AF18"));
         }
 
         if (targetWindow == IntPtr.Zero)
         {
-            return CaptureOutcome.NothingToCapture("스크롤 캡처할 창이 없습니다.");
+            return CaptureOutcome.NothingToCapture(UiText.Get("Text_A57954F341E2"));
         }
 
         if (maxFrames < 2)
         {
-            return CaptureOutcome.NothingToCapture("스크롤 캡처에는 두 프레임 이상이 필요합니다.");
+            return CaptureOutcome.NothingToCapture(UiText.Get("Text_23A30AD1434C"));
         }
 
         if (BusyOutcome() is { } busy)
@@ -230,7 +230,7 @@ internal sealed class AdvancedCaptureService
             ScrollAppendResult seeded = stitcher.Append(seed);
             if (seeded.Kind == ScrollAppendKind.LimitReached)
             {
-                return CaptureOutcome.Failed("첫 화면이 스크롤 캡처 안전 한도를 초과합니다.");
+                return CaptureOutcome.Failed(UiText.Get("Text_9E479FEB720B"));
             }
 
             int verifiedTransitions = 0;
@@ -244,10 +244,10 @@ internal sealed class AdvancedCaptureService
                 if (!_scrollInput.ScrollDown(targetWindow, region.Center, notches: 3))
                 {
                     return verifiedTransitions == 0
-                        ? CaptureOutcome.Failed("대상 창에 스크롤 입력을 보낼 수 없습니다.")
+                        ? CaptureOutcome.Failed(UiText.Get("Text_B3B047802E13"))
                         : await OpenVerifiedPartialAsync(
                             stitcher,
-                            "스크롤 입력이 거부되어 검증된 부분까지만 열었습니다.",
+                            UiText.Get("Text_257BE22416F8"),
                             cancellation);
                 }
 
@@ -274,7 +274,7 @@ internal sealed class AdvancedCaptureService
                         if (verifiedTransitions == 0)
                         {
                             return CaptureOutcome.NothingToCapture(
-                                "추가로 스크롤할 콘텐츠를 찾지 못했습니다.");
+                                UiText.Get("Text_D613D66285DC"));
                         }
 
                         ended = true;
@@ -284,20 +284,20 @@ internal sealed class AdvancedCaptureService
                         if (verifiedTransitions == 0)
                         {
                             return CaptureOutcome.Failed(
-                                "스크롤 전후 화면의 겹치는 영역을 확인할 수 없어 캡처를 중단했습니다.");
+                                UiText.Get("Text_815E84CD61AB"));
                         }
 
-                        completionMessage = "화면 정합을 확인할 수 없어 검증된 부분까지만 열었습니다.";
+                        completionMessage = UiText.Get("Text_39B10B03FD99");
                         ended = true;
                         break;
 
                     case ScrollAppendKind.LimitReached:
                         if (verifiedTransitions == 0)
                         {
-                            return CaptureOutcome.Failed("스크롤 결과가 안전 크기 한도를 초과합니다.");
+                            return CaptureOutcome.Failed(UiText.Get("Text_E33E531B40C6"));
                         }
 
-                        completionMessage = "안전 크기 한도에 도달해 검증된 부분까지만 열었습니다.";
+                        completionMessage = UiText.Get("Text_45E6B157C051");
                         ended = true;
                         break;
 
@@ -313,12 +313,12 @@ internal sealed class AdvancedCaptureService
 
             if (verifiedTransitions == 0)
             {
-                return CaptureOutcome.NothingToCapture("추가로 스크롤할 콘텐츠를 찾지 못했습니다.");
+                return CaptureOutcome.NothingToCapture(UiText.Get("Text_D613D66285DC"));
             }
 
             if (!ended)
             {
-                completionMessage = $"최대 {maxFrames}프레임 안전 한도에 도달해 검증된 부분까지만 열었습니다.";
+                completionMessage = UiText.Format("Text_8C99A8AB9C4C", maxFrames);
             }
 
             cancellation.ThrowIfCancellationRequested();
@@ -326,7 +326,7 @@ internal sealed class AdvancedCaptureService
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
-            return CaptureOutcome.Cancelled("스크롤 캡처가 취소되었습니다.");
+            return CaptureOutcome.Cancelled(UiText.Get("Text_04B54A7BED01"));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -366,10 +366,10 @@ internal sealed class AdvancedCaptureService
     private CaptureOutcome Open(AdvancedSelection selection) =>
         _environment.OpenEditor(selection)
             ? CaptureOutcome.Completed()
-            : CaptureOutcome.Cancelled("이미 캡처가 진행 중입니다.");
+            : CaptureOutcome.Cancelled(UiText.Get("Text_F87FEA248BDD"));
 
     private CaptureOutcome? BusyOutcome() =>
         _environment.CanOpenEditor
             ? null
-            : CaptureOutcome.Cancelled("이미 캡처가 진행 중입니다.");
+            : CaptureOutcome.Cancelled(UiText.Get("Text_F87FEA248BDD"));
 }

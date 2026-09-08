@@ -50,6 +50,7 @@ internal sealed class PinWindow : Window
     private readonly string? _originalText;
     private readonly PinViewState _state;
     private readonly Func<PinSettings> _settings;
+    private readonly IPinDragInput _dragInput;
     private readonly Image _imageElement;
     private readonly Border _chrome;
     private readonly SolidColorBrush _chromeBrush;
@@ -73,7 +74,8 @@ internal sealed class PinWindow : Window
         PinViewState state,
         double initialLeft,
         double initialTop,
-        Func<PinSettings>? settings = null)
+        Func<PinSettings>? settings = null,
+        IPinDragInput? dragInput = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         _image = content.Image;
@@ -81,8 +83,9 @@ internal sealed class PinWindow : Window
         _originalText = content.OriginalText;
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _settings = settings ?? (static () => new PinSettings());
+        _dragInput = dragInput ?? NativePinDragInput.Instance;
 
-        Title = "MyCapture 화면 고정";
+        Title = UiText.Get("Text_03151E566E1D");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.Manual;
@@ -143,14 +146,14 @@ internal sealed class PinWindow : Window
         Content = _chrome;
 
         ToolTip = _originalText is null
-            ? "Ctrl+C: 이미지 복사 · Ctrl+더블클릭: 텍스트 복사 · 우클릭: 저장 · 드래그: 이동 · 휠: 확대/축소"
-            : "우클릭: 저장/원문 복사 · Ctrl+더블클릭: 원문 텍스트 복사 · Ctrl+C: 보이는 이미지 복사 · 드래그: 이동 · 휠: 확대/축소";
-        AutomationProperties.SetName(this, "MyCapture 화면 고정 창");
+            ? UiText.Get("Text_73D6AF7EE15B")
+            : UiText.Get("Text_338C1B26A06A");
+        AutomationProperties.SetName(this, UiText.Get("Text_85E926C7F694"));
         AutomationProperties.SetHelpText(
             this,
             _originalText is null
-                ? "고정된 화면 이미지입니다. Ctrl+C는 이미지를 복사하고 Ctrl+더블클릭은 텍스트를 복사합니다. 마우스 오른쪽 단추 메뉴나 Ctrl+S로 원본 PNG를 저장하고, Ctrl+Shift+S로 위치를 선택합니다. 드래그로 이동, 마우스 휠로 확대·축소, Ctrl+휠로 투명도 조절, Esc 또는 Delete로 닫습니다. 클릭 통과를 켜면 Shift+F3을 두 번 눌러 해제할 수 있습니다."
-                : "텍스트를 이미지로 렌더링한 화면 고정 창입니다. Ctrl+C는 보이는 이미지를 복사하고, Ctrl+더블클릭은 플로팅 생성 시 보존한 원문 텍스트를 복사합니다. 마우스 오른쪽 단추 메뉴에서도 원문 복사를 실행할 수 있습니다.");
+                ? UiText.Get("Text_E22E2C953A8B")
+                : UiText.Get("Text_55694B0252DB"));
 
         BuildContextMenu();
 
@@ -233,24 +236,24 @@ internal sealed class PinWindow : Window
                 string fileName = string.IsNullOrWhiteSpace(result.Path)
                     ? "PNG"
                     : System.IO.Path.GetFileName(result.Path);
-                ShowFeedback($"저장됨 · {fileName}");
+                ShowFeedback(UiText.Format("Text_E3F51EDC0F16", fileName));
                 break;
             case PinSaveStatus.Cancelled:
-                ShowFeedback("저장 취소됨");
+                ShowFeedback(UiText.Get("Text_F122632462DF"));
                 break;
             default:
-                ShowFeedback("저장 실패");
+                ShowFeedback(UiText.Get("Text_AE94EC51B2C2"));
                 break;
         }
     }
 
     /// <summary>Completes pin-local clipboard feedback after the asynchronous copy.</summary>
     internal void ReportCopyResult(bool copied) =>
-        ShowFeedback(copied ? "복사됨" : "복사 실패");
+        ShowFeedback(copied ? UiText.Get("Text_9693E1EB3EDB") : UiText.Get("Text_0642E2D15469"));
 
     /// <summary>Completes feedback for copying a rendered pin's retained source text.</summary>
     internal void ReportOriginalTextCopyResult(bool copied) =>
-        ShowFeedback(copied ? "텍스트 복사됨" : "텍스트 복사 실패");
+        ShowFeedback(copied ? UiText.Get("Text_5C9B3C62EC41") : UiText.Get("Text_BCC2F939B733"));
 
     /// <summary>Test hook: whether the Ctrl+click copy debounce timer is currently armed.</summary>
     internal bool IsCtrlClickTimerRunning => _ctrlClickTimer.IsEnabled;
@@ -279,7 +282,7 @@ internal sealed class PinWindow : Window
             WindowStyleFacade.SetClickThrough(_handle, enabled);
         }
 
-        ShowFeedback(enabled ? "클릭 통과 켜짐 · 해제: Shift+F3 두 번" : "클릭 통과 꺼짐");
+        ShowFeedback(enabled ? UiText.Get("Text_41216A109463") : UiText.Get("Text_FA24C3FC395F"));
     }
 
     /// <summary>Toggles click-through and returns the new state.</summary>
@@ -394,7 +397,7 @@ internal sealed class PinWindow : Window
     {
         base.OnMouseLeftButtonDown(e);
 
-        bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        bool ctrl = _dragInput.Modifiers.HasFlag(ModifierKeys.Control);
 
         if (ctrl)
         {
@@ -426,18 +429,27 @@ internal sealed class PinWindow : Window
             }
         }
 
-        _dragging = true;
-        // Use the input event's local anchor. Reading the live global cursor here can
-        // observe a later queued movement and cancel the first drag delta entirely.
-        Point anchor = e.GetPosition(this);
-        DpiScale dpi = VisualTreeHelper.GetDpi(this);
-        _dragAnchor = new Point(anchor.X * dpi.DpiScaleX, anchor.Y * dpi.DpiScaleY);
-        _dragDesktop = MonitorEnumerator.GetVirtualDesktopBounds();
-        _dragGrabMarginPx = GrabMarginDip * dpi.DpiScaleX;
-        _lastDragCursorX = int.MinValue;
-        _lastDragCursorY = int.MinValue;
-        _ = CaptureMouse();
-        Focus();
+        EndDrag();
+        try
+        {
+            // Capture can fail (for example while another native control owns input).
+            // Never leave a gesture active without ownership of subsequent input.
+            if (_dragInput.TryCapture(this))
+            {
+                Point anchor = _dragInput.LocalAnchor(e, this);
+                DpiScale dpi = VisualTreeHelper.GetDpi(this);
+                _dragAnchor = new Point(anchor.X * dpi.DpiScaleX, anchor.Y * dpi.DpiScaleY);
+                _dragDesktop = MonitorEnumerator.GetVirtualDesktopBounds();
+                _dragGrabMarginPx = GrabMarginDip * dpi.DpiScaleX;
+                _dragging = true;
+                Focus();
+            }
+        }
+        catch
+        {
+            EndDrag();
+            throw;
+        }
         e.Handled = true;
     }
 
@@ -449,7 +461,13 @@ internal sealed class PinWindow : Window
             return;
         }
 
-        (int cursorX, int cursorY) = WindowStyleFacade.GetCursorPosition();
+        if (!_dragInput.HasCapture(this) || !_dragInput.LeftButtonPressed(e))
+        {
+            EndDrag();
+            return;
+        }
+
+        (int cursorX, int cursorY) = _dragInput.CursorPosition;
         if (cursorX == _lastDragCursorX && cursorY == _lastDragCursorY)
         {
             return;
@@ -465,11 +483,24 @@ internal sealed class PinWindow : Window
         base.OnMouseLeftButtonUp(e);
         if (_dragging)
         {
-            _dragging = false;
-            _dragDesktop = null;
-            ReleaseMouseCapture();
+            EndDrag();
             e.Handled = true;
         }
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        EndDrag();
+        base.OnLostMouseCapture(e);
+    }
+
+    private void EndDrag()
+    {
+        _dragging = false;
+        _dragDesktop = null;
+        _lastDragCursorX = int.MinValue;
+        _lastDragCursorY = int.MinValue;
+        if (_dragInput.HasCapture(this)) _dragInput.Release(this);
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -484,7 +515,7 @@ internal sealed class PinWindow : Window
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
             double opacity = AdjustOpacity(OpacityStep * notches);
-            ShowFeedback($"투명도 {opacity * 100:0}%");
+            ShowFeedback(UiText.Format("Text_C740003A2150", opacity * 100));
         }
         else
         {
@@ -671,13 +702,13 @@ internal sealed class PinWindow : Window
 
     private void CopyImageToClipboard()
     {
-        ShowFeedback("복사 중…");
+        ShowFeedback(UiText.Get("Text_4C160257F02C"));
         CopyRequested?.Invoke(this, _image);
     }
 
     private void RequestOcr()
     {
-        ShowFeedback("텍스트 복사 중…");
+        ShowFeedback(UiText.Get("Text_15A871A266BE"));
         OcrRequested?.Invoke(this, _image);
     }
 
@@ -700,7 +731,7 @@ internal sealed class PinWindow : Window
             return;
         }
 
-        ShowFeedback("원문 텍스트 복사 중…");
+        ShowFeedback(UiText.Get("Text_BDB7C68F7452"));
         OriginalTextCopyRequested?.Invoke(this, _originalText);
     }
 
@@ -708,19 +739,19 @@ internal sealed class PinWindow : Window
     {
         if (_saveInProgress)
         {
-            ShowFeedback("저장 중…");
+            ShowFeedback(UiText.Get("Text_88DAAEEDFE4C"));
             return;
         }
 
         EventHandler<PinSaveRequestedEventArgs>? handler = SaveRequested;
         if (handler is null)
         {
-            ShowFeedback("저장 기능을 사용할 수 없음");
+            ShowFeedback(UiText.Get("Text_9A07C688760E"));
             return;
         }
 
         _saveInProgress = true;
-        ShowFeedback(mode == PinSaveMode.SaveAs ? "저장 위치 선택 중…" : "저장 중…");
+        ShowFeedback(mode == PinSaveMode.SaveAs ? UiText.Get("Text_B53B72EF2371") : UiText.Get("Text_88DAAEEDFE4C"));
         handler.Invoke(this, new PinSaveRequestedEventArgs(mode, _image));
     }
 
@@ -841,6 +872,9 @@ internal sealed class PinWindow : Window
 
     private void ShowFeedback(string text)
     {
+        // OCR/clipboard completions can arrive after Close detached the timer's stop handler.
+        // Never restart that timer or animate a window whose lifetime has ended.
+        if (_isClosed) return;
         _feedback.Text = text;
         _feedback.Visibility = Visibility.Visible;
         _feedback.BeginAnimation(UIElement.OpacityProperty, null);
@@ -897,59 +931,59 @@ internal sealed class PinWindow : Window
         var menu = new ContextMenu();
 
         menu.Items.Add(MenuItemFor(
-            "다른 이름으로 저장…",
+            UiText.Get("Text_A81F975C401F"),
             (_, _) => RequestSave(PinSaveMode.SaveAs),
-            "원본 해상도의 PNG 파일로 저장 위치를 선택합니다.",
+            UiText.Get("Text_78C743CC6F59"),
             "Icon.SaveAs",
             "Ctrl+Shift+S"));
         menu.Items.Add(MenuItemFor(
-            "빠른 저장",
+            UiText.Get("Text_DFC084A111D0"),
             (_, _) => RequestSave(PinSaveMode.QuickSave),
-            "설정된 빠른 저장 폴더에 원본 해상도의 PNG 파일로 저장합니다.",
+            UiText.Get("Text_8300472A5BE3"),
             "Icon.Save",
             "Ctrl+S"));
         menu.Items.Add(MenuItemFor(
-            "복사",
+            UiText.Get("Text_37B3D3B11B26"),
             (_, _) => CopyImageToClipboard(),
             iconResourceKey: "Icon.Copy",
             inputGestureText: "Ctrl+C"));
         if (_originalText is not null)
         {
             menu.Items.Add(MenuItemFor(
-                "원문 텍스트 복사",
+                UiText.Get("Text_976A6C92B870"),
                 (_, _) => RequestOriginalTextCopy(),
-                "플로팅 이미지를 만들 때 보존한 원문 텍스트를 복사합니다.",
+                UiText.Get("Text_BB7798D87E07"),
                 "Icon.Copy",
-                "Ctrl+더블클릭"));
+                UiText.Get("Text_C7011B8D345C")));
         }
         else
         {
-            menu.Items.Add(MenuItemFor("텍스트 복사", (_, _) => RequestOcr(), iconResourceKey: "Icon.Copy", inputGestureText: "Ctrl+더블클릭"));
+            menu.Items.Add(MenuItemFor(UiText.Get("Text_03A1596F1681"), (_, _) => RequestOcr(), iconResourceKey: "Icon.Copy", inputGestureText: UiText.Get("Text_C7011B8D345C")));
         }
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("100% (0)", (_, _) => ResetZoomCentered()));
-        menu.Items.Add(MenuItemFor("확대 (+)", (_, _) => ZoomCentered(1), iconResourceKey: "Icon.ZoomIn"));
-        menu.Items.Add(MenuItemFor("축소 (-)", (_, _) => ZoomCentered(-1), iconResourceKey: "Icon.ZoomOut"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Text_3063398CDECD"), (_, _) => ZoomCentered(1), iconResourceKey: "Icon.ZoomIn"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Text_D65A9E5A4C1A"), (_, _) => ZoomCentered(-1), iconResourceKey: "Icon.ZoomOut"));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MenuItemFor("더 투명하게 (Ctrl+휠)", (_, _) =>
+        menu.Items.Add(MenuItemFor(UiText.Get("Text_182650FB6543"), (_, _) =>
         {
             double opacity = AdjustOpacity(-OpacityStep);
-            ShowFeedback($"투명도 {opacity * 100:0}%");
+            ShowFeedback(UiText.Format("Text_C740003A2150", opacity * 100));
         }));
-        menu.Items.Add(MenuItemFor("더 불투명하게 (Ctrl+휠)", (_, _) =>
+        menu.Items.Add(MenuItemFor(UiText.Get("Text_D0113E3B1184"), (_, _) =>
         {
             double opacity = AdjustOpacity(OpacityStep);
-            ShowFeedback($"투명도 {opacity * 100:0}%");
+            ShowFeedback(UiText.Format("Text_C740003A2150", opacity * 100));
         }));
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor(
-            "클릭 통과 전환",
+            UiText.Get("Text_67FE4AF7D334"),
             (_, _) => ToggleClickThrough(),
-            "마우스 입력을 아래 창으로 통과시킵니다. 되돌리려면 Shift+F3을 두 번 누르세요.",
+            UiText.Get("Text_BE3D621D8A32"),
             "Icon.Select"));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MenuItemFor("닫기 (Esc)", (_, _) => Close(), iconResourceKey: "Icon.Close"));
-        menu.Items.Add(MenuItemFor("모두 닫기", (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Text_A925E80E33B3"), (_, _) => Close(), iconResourceKey: "Icon.Close"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
 
         ContextMenu = menu;
     }
@@ -1006,6 +1040,7 @@ internal sealed class PinWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _isClosed = true;
+        EndDrag();
         _feedbackTimer.Stop();
         _feedbackTimer.Tick -= OnFeedbackTimerTick;
         _ctrlClickTimer.Stop();

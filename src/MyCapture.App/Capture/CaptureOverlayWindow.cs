@@ -44,7 +44,7 @@ internal sealed class CaptureOverlayWindow : Window
 
     private void ConfigureWindowChrome(FrozenFrame frame)
     {
-        Title = "MyCapture — 자유 영역 선택";
+        Title = UiText.Get("Text_3816B940D53C");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.Manual;
@@ -70,7 +70,12 @@ internal sealed class CaptureOverlayWindow : Window
     internal event EventHandler? SelectionCancelled;
 
     private void OnSourceInitialized(object? sender, EventArgs e)
-        => PlacePhysicalBounds();
+    {
+        // EnsureHandle may create this HWND solely to apply recording exclusion.
+        // PlaceTopmost uses SWP_SHOWWINDOW, so never call it while still hidden.
+        // ContentRendered reasserts physical placement after the authorized Show.
+        if (IsVisible) PlacePhysicalBounds();
+    }
 
     private void PlacePhysicalBounds()
     {

@@ -37,20 +37,20 @@ public static class GalleryDateGrouping
         string heading;
         if (day == today)
         {
-            heading = "오늘";
+            heading = UiText.Get("Text_3BC6235E1D18");
         }
         else if (day == yesterday)
         {
-            heading = "어제";
+            heading = UiText.Get("Text_79C5ADA11647");
         }
         else if (day.Year == today.Year)
         {
             // Within the current year the year is noise; a month/day heading reads faster.
-            heading = day.ToString("M월 d일 (ddd)", CultureInfo.GetCultureInfo("ko-KR"));
+            heading = day.ToString(UiText.Get("Text_B8C3BBBF49E2"), UiText.Culture);
         }
         else
         {
-            heading = day.ToString("yyyy년 M월 d일", CultureInfo.GetCultureInfo("ko-KR"));
+            heading = day.ToString(UiText.Get("Text_083473DA3E8B"), UiText.Culture);
         }
 
         return new GalleryDateGroup(day, heading);

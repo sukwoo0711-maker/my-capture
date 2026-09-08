@@ -9,7 +9,7 @@ namespace MyCapture.Platform.Recording;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Reuses <see cref="ScreenCaptureEngine.CaptureRegion"/> — the same GDI
+/// Reuses <see cref="ScreenCaptureEngine.CreateSession"/> — the same GDI
 /// <c>BitBlt + CAPTUREBLT</c> path proven by the still-capture feature, including
 /// layered-window and cursor handling — rather than standing up a second, subtly
 /// different capture path with its own defects. At the recorder's default 30 fps and
@@ -24,12 +24,13 @@ namespace MyCapture.Platform.Recording;
 /// never changes mid-clip.
 /// </para>
 /// </remarks>
-public sealed class RegionFrameGrabber
+public sealed class RegionFrameGrabber : IDisposable
 {
     private readonly ScreenCaptureEngine _engine;
     private readonly bool _includeCursor;
     private RectD _region;
     private byte[] _buffer = [];
+    private ScreenCaptureEngine.CaptureSession? _session;
 
     public RegionFrameGrabber(ScreenCaptureEngine engine, bool includeCursor)
     {
@@ -49,6 +50,7 @@ public sealed class RegionFrameGrabber
     /// </summary>
     public void Open(RectD screenRegion)
     {
+        if (_session is not null) throw new InvalidOperationException("The previous capture session is still open.");
         RectD pixels = screenRegion.Normalized().ToPixelBounds();
         int width = Math.Max(2, (int)pixels.Width);
         int height = Math.Max(2, (int)pixels.Height);
@@ -72,7 +74,15 @@ public sealed class RegionFrameGrabber
     /// </remarks>
     public byte[] GrabInto()
     {
-        _engine.CaptureRegionInto(_region, _includeCursor, _buffer, Stride);
+        _session ??= _engine.CreateSession(_region, _includeCursor);
+        _session.CaptureInto(_buffer, Stride);
         return _buffer;
+    }
+
+    /// <summary>Releases native resources on the recording thread that captured frames.</summary>
+    public void Dispose()
+    {
+        _session?.Dispose();
+        _session = null;
     }
 }

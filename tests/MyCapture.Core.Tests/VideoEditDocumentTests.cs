@@ -9,6 +9,21 @@ namespace MyCapture.Core.Tests;
 public sealed class VideoEditDocumentTests
 {
     [Fact]
+    public void SpatialBounds_NormalizeRejectsNonfiniteAndPreservesLegacyAndClone()
+    {
+        var document = VideoEditDocument.CreateFor(320, 240, 1000);
+        document.TextOverlays.Add(new TimedTextOverlay { Text = "caption", StartMs = 0, EndMs = 1000, Bounds = new(-1, 0.9, 0.4, 0.5) });
+        document.FrameEditLayers.Add(new FrameEditLayer { StartMs = 0, EndMs = 1000, OverlayPngBase64 = "AA==", Bounds = new(double.NaN, 0, 1, 1) });
+        VideoEditDocument normalized = document.NormalizeFor(320, 240, 1000);
+        Assert.Equal(new VideoLayerBounds(0, 0.5, 0.4, 0.5), normalized.TextOverlays[0].Bounds);
+        Assert.Null(normalized.FrameEditLayers[0].Bounds);
+        VideoEditDocument clone = normalized.Clone();
+        clone.TextOverlays[0].Bounds = new(0.1, 0.1, 0.2, 0.2);
+        Assert.Equal(new VideoLayerBounds(0, 0.5, 0.4, 0.5), normalized.TextOverlays[0].Bounds);
+        Assert.Null(new VideoLayerBounds(0, 0, 0, 1).Normalize());
+    }
+
+    [Fact]
     public void LegacyCaptureRecordJson_DefaultsMediaKindToImage()
     {
         const string legacyJson = """

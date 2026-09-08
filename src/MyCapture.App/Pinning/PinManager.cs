@@ -405,7 +405,7 @@ internal sealed class PinManager
         {
             var unavailable = new PinSaveResult(
                 PinSaveStatus.Failed,
-                ErrorMessage: "저장 서비스를 사용할 수 없습니다.");
+                ErrorMessage: UiText.Get("Text_15A28DE50DBB"));
             if (sender is PinWindow unavailablePin && !unavailablePin.IsClosed)
             {
                 unavailablePin.ReportSaveResult(unavailable);
@@ -441,12 +441,12 @@ internal sealed class PinManager
         }
 
         string detail = string.IsNullOrWhiteSpace(result.ErrorMessage)
-            ? "파일을 저장할 수 없습니다. 저장 위치와 권한을 확인해 주세요."
+            ? UiText.Get("Text_B651C2B6BDA9")
             : result.ErrorMessage;
         _ = MessageBox.Show(
             pin,
-            $"고정 이미지를 저장하지 못했습니다.\n\n{detail}",
-            "고정 이미지 저장",
+            UiText.Format("Text_A862C01DBF76", detail),
+            UiText.Get("Text_A97A3B71F038"),
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
         return result;

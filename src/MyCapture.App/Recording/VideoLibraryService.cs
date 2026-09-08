@@ -125,8 +125,8 @@ internal sealed class VideoLibraryService
             DurationMs = 1,
             FrameRate = expectedFrameRate,
             DpiScale = 1,
-            SourceWindowTitle = "화면 녹화",
-            Title = "화면 녹화",
+            SourceWindowTitle = UiText.Get("Text_4F5AF20FAA6E"),
+            Title = UiText.Get("Text_4F5AF20FAA6E"),
         };
         record.RelativeDirectory = CaptureQueue.BuildRelativeDirectory(record.Id, record.CreatedAt);
 
@@ -336,6 +336,7 @@ internal sealed class VideoLibraryService
         try
         {
             EnsureNoUnresolvedFinalizeArtifacts(record, directory, Path.GetFileName(stagePath));
+            VideoLayerResourceBudget.Validate(editDocument.FrameEditLayers);
             VideoEditDocument normalized = editDocument.NormalizeFor(
                 record.Width,
                 record.Height,
@@ -471,7 +472,10 @@ internal sealed class VideoLibraryService
         {
             if (File.Exists(path))
             {
-                document = JsonSerializer.Deserialize<VideoEditDocument>(File.ReadAllText(path), JsonOptions);
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                VideoLayerResourceBudget.ValidateFileLength(stream.Length);
+                document = JsonSerializer.Deserialize<VideoEditDocument>(stream, JsonOptions);
+                VideoLayerResourceBudget.Validate(document?.FrameEditLayers);
             }
         }
         catch (JsonException ex)

@@ -13,6 +13,40 @@ namespace MyCapture.App.Tests;
 
 public sealed class VideoCompositionIntegrationTests
 {
+    [Fact]
+    public void ReopenedSpatialLayers_AppearInMp4AndGifAtSavedPosition() => RunSta(() =>
+    {
+        string root = NewRoot();
+        string source = Path.Combine(root, "source.mp4");
+        string mp4 = Path.Combine(root, "spatial.mp4");
+        string gif = Path.Combine(root, "spatial.gif");
+        try
+        {
+            RecordingResult recording = EncodeBlackClip(source, 160, 90, 10, 10);
+            var document = VideoEditDocument.CreateFor(160, 90, 1000);
+            document.TextOverlays.Add(new TimedTextOverlay { Text = "TEXT", StartMs = 200, EndMs = 800, Bounds = new(0.1, 0.6, 0.8, 0.3) });
+            document.FrameEditLayers.Add(new FrameEditLayer { StartMs = 200, EndMs = 800, OverlayPngBase64 = CreateRedOverlayPng(40, 40), Bounds = new(0.5, 0.1, 0.25, 0.25) });
+            document = System.Text.Json.JsonSerializer.Deserialize<VideoEditDocument>(System.Text.Json.JsonSerializer.Serialize(document))!.NormalizeFor(160, 90, 1000);
+            byte[] originalHash = SHA256.HashData(File.ReadAllBytes(source));
+            _ = TrimReencoder.Reencode(source, mp4, 0, 1000, recording,
+                options => new MediaFoundationVideoEncoder(options, NullLogger.Instance), NullLogger.Instance,
+                document.TextOverlays, document.FrameEditLayers);
+            BitmapSource active = VideoFrameRenderPipeline.RenderSingleFrame(mp4, 400, 160, 90);
+            Assert.True(CountBrightPixels(active) > 40);
+            Assert.True(CountRedPixels(active) > 80);
+            Assert.True(CountRedPixels(new CroppedBitmap(active, new System.Windows.Int32Rect(80, 9, 40, 24))) > 80,
+                "MP4 graphic did not retain its saved position");
+            Assert.Equal(0, CountRedPixels(VideoFrameRenderPipeline.RenderSingleFrame(mp4, 900, 160, 90)));
+            _ = AnimatedGifExporter.Export(recording, document, gif);
+            using var stream = File.OpenRead(gif);
+            var decoded = new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            Assert.Contains(decoded.Frames, frame => CountBrightPixels(frame) > 40 && CountRedPixels(frame) > 80);
+            Assert.Contains(decoded.Frames, frame => CountRedPixels(new CroppedBitmap(frame, new System.Windows.Int32Rect(80, 9, 40, 24))) > 80);
+            Assert.Equal(originalHash, SHA256.HashData(File.ReadAllBytes(source)));
+        }
+        finally { DeleteRoot(root); }
+    });
+
     private static readonly (byte B, byte G, byte R)[] IndexedColors =
     [
         (32, 32, 192),
@@ -619,26 +653,7 @@ public sealed class VideoCompositionIntegrationTests
         return result!;
     }
 
-    private static string NewRoot()
-    {
-        string root = Path.Combine(Path.GetTempPath(), "mycapture-compositor-" + Guid.NewGuid().ToString("N"));
-        // codeql[cs/path-injection] -- isolated GUID test workspace
-        Directory.CreateDirectory(root);
-        return root;
-    }
+    private static string NewRoot() => OwnedTestDirectory.Create("mycapture-compositor-");
 
-    private static void DeleteRoot(string root)
-    {
-        try
-        {
-            // codeql[cs/path-injection] -- isolated GUID test workspace
-            Directory.Delete(root, recursive: true);
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-    }
+    private static void DeleteRoot(string root) => OwnedTestDirectory.Delete(root);
 }

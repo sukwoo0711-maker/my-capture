@@ -13,7 +13,7 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
             (context ?? throw new ArgumentNullException(nameof(context))).Frame,
             context.CropRegion,
             context.OriginalBitmap,
-            "MyCapture — 다시 편집",
+            UiText.Get("Text_D9FC5F981274"),
             context.Document,
             context.AssetBitmaps,
             privacyRedactionService)

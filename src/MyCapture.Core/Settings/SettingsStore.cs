@@ -62,7 +62,7 @@ public sealed class SettingsStore
             bool existed = File.Exists(_paths.SettingsFile);
             if (existed)
             {
-                warnings.Add("설정 파일을 읽을 수 없어 기본값으로 시작했습니다.");
+                warnings.Add(UiText.Get("Text_2CD093B673E5"));
                 _log.LogWarning("Settings file exists but could not be parsed; using defaults");
             }
 
@@ -76,7 +76,7 @@ public sealed class SettingsStore
         {
             // ReadAllTextWithRecovery already validated the text, so reaching here
             // means the validator and the real parse disagree. Treat as corrupt.
-            warnings.Add("설정 파일이 손상되어 기본값으로 시작했습니다.");
+            warnings.Add(UiText.Get("Text_1E94B43DC922"));
             _log.LogWarning("Settings text passed validation but failed to deserialize; using defaults");
             settings = new AppSettings();
         }
@@ -134,7 +134,7 @@ public sealed class SettingsStore
                 s.Hotkeys.RecordRegion = new Hotkey(
                     HotkeyModifiers.Control | HotkeyModifiers.Shift,
                     Hotkey.VkX);
-                warnings.Add("녹화 단축키 기본값을 Ctrl+Shift+X로 변경했습니다.");
+                warnings.Add(UiText.Get("Text_E145645E75F3"));
             }
 
             s.SchemaVersion = 3;
@@ -159,7 +159,7 @@ public sealed class SettingsStore
         if (string.IsNullOrWhiteSpace(s.Export.FileNamePattern))
         {
             s.Export.FileNamePattern = "capture_{yyyyMMdd}_{HHmmss}";
-            warnings.Add("파일명 패턴이 비어 있어 기본값으로 되돌렸습니다.");
+            warnings.Add(UiText.Get("Text_55D025693B34"));
         }
 
         // --- Capture ---
@@ -173,7 +173,7 @@ public sealed class SettingsStore
         int recordingFps = (int)s.Recording.FrameRate;
         if (!SettingsRanges.RecordingFrameRates.Contains(recordingFps))
         {
-            warnings.Add($"FrameRate 값 {recordingFps}은(는) 지원하지 않아 30fps로 조정되었습니다.");
+            warnings.Add(UiText.Format("Text_6C10CBA5050D", recordingFps));
             s.Recording.FrameRate = RecordingFrameRate.Fps30;
         }
 
@@ -237,7 +237,7 @@ public sealed class SettingsStore
         if (!s.Hotkeys.Capture.IsAssigned)
         {
             s.Hotkeys.Capture = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
-            warnings.Add("캡처 단축키가 비어 있어 Ctrl+Shift+C로 되돌렸습니다.");
+            warnings.Add(UiText.Get("Text_CFACAAC223E9"));
         }
     }
 
@@ -246,7 +246,7 @@ public sealed class SettingsStore
         int clamped = Math.Clamp(value, min, max);
         if (clamped != value)
         {
-            warnings.Add($"{name} 값 {value}이(가) 허용 범위를 벗어나 {clamped}로 조정되었습니다.");
+            warnings.Add(UiText.Format("Text_4FC883F8F1CA", name, value, clamped));
         }
 
         return clamped;
@@ -257,7 +257,7 @@ public sealed class SettingsStore
         long clamped = Math.Clamp(value, min, max);
         if (clamped != value)
         {
-            warnings.Add($"{name} 값 {value}이(가) 허용 범위를 벗어나 {clamped}로 조정되었습니다.");
+            warnings.Add(UiText.Format("Text_4FC883F8F1CA", name, value, clamped));
         }
 
         return clamped;
@@ -272,7 +272,7 @@ public sealed class SettingsStore
 
         if (Math.Abs(clamped - value) > double.Epsilon)
         {
-            warnings.Add($"{name} 값 {value}이(가) 허용 범위를 벗어나 {clamped}로 조정되었습니다.");
+            warnings.Add(UiText.Format("Text_4FC883F8F1CA", name, value, clamped));
         }
 
         return clamped;

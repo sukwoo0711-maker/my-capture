@@ -74,6 +74,12 @@ internal sealed class RegionRecordingCoordinator
 
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
 
+    internal bool CanCaptureStill => !_finishing && !_completionInProgress
+        && (_controls?.CanCaptureStill == true || (_editor is not null && _controls is null && _selectionOverlay is null));
+
+    // Starting a new still and protecting a window during a stop transition are different decisions.
+    internal bool RequiresCaptureExclusion => _controls?.IsRecording == true;
+
     internal bool IsActive =>
         _selectionOverlay is not null
         || _controls is not null
@@ -237,8 +243,8 @@ internal sealed class RegionRecordingCoordinator
             _finishing = false;
             _log.LogError(ex, "Could not open recording controls or allocate the pending video");
             MessageBox.Show(
-                "녹화를 시작할 준비를 마치지 못했습니다. 저장 공간과 화면 녹화 설정을 확인해 주세요.\n\n" + ex.Message,
-                "MyCapture — 녹화 시작 실패",
+                UiText.Get("Text_188B0AF9BE23") + ex.Message,
+                UiText.Get("Text_25E15E06C2EA"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             EndSessionIfIdle();
@@ -263,9 +269,8 @@ internal sealed class RegionRecordingCoordinator
         _completionInProgress = false;
         _finishing = false;
         MessageBox.Show(
-            "녹화를 정상적으로 마무리하지 못했습니다. 완성되지 않은 임시 파일은 갤러리에 " +
-            "잘못 등록되지 않도록 정리했습니다.\n\n" + e.Exception.Message,
-            "MyCapture — 녹화 실패",
+            UiText.Get("Text_626745049C0B") + e.Exception.Message,
+            UiText.Get("Text_89CF3D468EC1"),
             MessageBoxButton.OK,
             MessageBoxImage.Error);
     }
@@ -326,7 +331,7 @@ internal sealed class RegionRecordingCoordinator
 
         _finishing = true;
         _completionInProgress = true;
-        (sender as RecordingControlWindow)?.ShowCompletionStatus("녹화 저장 중… 갤러리와 미리 보기를 준비합니다");
+        (sender as RecordingControlWindow)?.ShowCompletionStatus(UiText.Get("Text_331C366314D0"));
         VideoLibraryItem item;
         try
         {
@@ -344,9 +349,8 @@ internal sealed class RegionRecordingCoordinator
             _finishing = false;
             (sender as RecordingControlWindow)?.CompleteAndClose();
             MessageBox.Show(
-                "녹화 파일은 복구 표식과 함께 보존했지만 갤러리 등록을 완료하지 못했습니다. " +
-                "MyCapture를 다시 시작하면 복구를 시도합니다.\n\n" + ex.Message,
-                "MyCapture — 녹화 저장 실패",
+                UiText.Get("Text_C5AC44062ACA") + ex.Message,
+                UiText.Get("Text_87B145D16453"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             EndSessionIfIdle();
@@ -389,9 +393,8 @@ internal sealed class RegionRecordingCoordinator
             _log.LogError(ex, "The recording was saved, but its editor could not be opened");
             (sender as RecordingControlWindow)?.CompleteAndClose();
             MessageBox.Show(
-                "녹화는 갤러리에 안전하게 저장했지만 편집 창을 열지 못했습니다. " +
-                "갤러리에서 영상을 다시 열어 주세요.\n\n" + ex.Message,
-                "MyCapture — 편집기 열기 실패",
+                UiText.Get("Text_BA79DCE6BD5D") + ex.Message,
+                UiText.Get("Text_49020661A850"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             EndSessionIfIdle();

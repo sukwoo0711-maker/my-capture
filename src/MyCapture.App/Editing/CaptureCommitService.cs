@@ -320,8 +320,8 @@ internal sealed class CaptureCommitService
 
         var dialog = new SaveFileDialog
         {
-            Title = "다른 이름으로 저장",
-            Filter = "PNG 이미지|*.png",
+            Title = UiText.Get("Text_57950AFF46BC"),
+            Filter = UiText.Get("Text_4DCACB688866"),
             DefaultExt = ".png",
             AddExtension = true,
             OverwritePrompt = true,
@@ -339,8 +339,8 @@ internal sealed class CaptureCommitService
 
             e.Cancel = true;
             _ = System.Windows.MessageBox.Show(
-                "PNG 파일 이름(.png)을 선택해 주세요.",
-                "다른 이름으로 저장",
+                UiText.Get("Text_932DB1A4ED7F"),
+                UiText.Get("Text_57950AFF46BC"),
                 System.Windows.MessageBoxButton.OK,
                 System.Windows.MessageBoxImage.Information);
         };

@@ -110,7 +110,7 @@ public sealed class SettingsApplyService
             next.Hotkeys = previousHotkeys.DeepCloneHotkeys();
             foreach (HotkeyRegistrationFailure failure in hotkeyResult.Failures)
             {
-                messages.Add($"단축키 '{failure.Hotkey}'을(를) 등록할 수 없어 이전 값으로 되돌렸습니다.");
+                messages.Add(UiText.Format("Text_2B53D424B10E", failure.Hotkey));
             }
         }
 
@@ -119,7 +119,7 @@ public sealed class SettingsApplyService
         if (!startupResult.Succeeded)
         {
             next.General.LaunchAtLogin = _startup.IsEnabled();
-            messages.Add($"시작 프로그램 설정을 변경하지 못했습니다: {startupResult.Error}");
+            messages.Add(UiText.Format("Text_0FA1A9D03BE3", startupResult.Error));
         }
 
         // 4) Captures directory relocation is restart-required, not a live move.
@@ -145,9 +145,7 @@ public sealed class SettingsApplyService
 
             var failureMessages = new List<string>
             {
-                "설정을 저장하지 못했습니다. 저장 폴더가 읽기 전용이거나, 디스크 공간이 부족하거나, " +
-                "설정 파일 경로가 다른 항목과 충돌하는지 확인한 후 다시 시도해 주세요. " +
-                "변경 내용은 적용되지 않았으며 이전 설정이 그대로 유지됩니다.",
+                UiText.Get("Text_ABAB2010D671"),
             };
             failureMessages.AddRange(rollbackMessages);
 
@@ -175,15 +173,20 @@ public sealed class SettingsApplyService
                     ex,
                     "Queue limits applied but the index could not be saved; settings remain persisted");
                 messages.Add(
-                    "설정은 저장되었지만 캡처 목록 색인을 저장하지 못했습니다. " +
-                    "새 보관 한도는 이번 실행에 적용되었으며, 색인은 다음 저장 시 다시 기록됩니다.");
+                    UiText.Get("Text_6DDE7DF5BF97"));
             }
+        }
+
+        bool languageChanged = !string.Equals(previous.General.Language, next.General.Language, StringComparison.OrdinalIgnoreCase);
+        if (languageChanged)
+        {
+            messages.Add(UiText.Get("Settings.LanguageRestart"));
         }
 
         // Report the captures-root notice last so it reads after any partial-apply notes.
         if (capturesRootChanged)
         {
-            messages.Add("캡처 저장 폴더 변경은 다시 시작한 후에 적용됩니다. 기존 파일은 이동하거나 삭제하지 않습니다.");
+            messages.Add(UiText.Get("Text_D8538A946A6C"));
         }
 
         _log.LogInformation(
@@ -196,7 +199,7 @@ public sealed class SettingsApplyService
             Saved: true,
             HotkeysApplied: hotkeyResult.Applied,
             StartupApplied: startupResult.Succeeded,
-            RestartRequired: capturesRootChanged,
+            RestartRequired: capturesRootChanged || languageChanged,
             Messages: messages);
     }
 
@@ -221,14 +224,14 @@ public sealed class SettingsApplyService
                     "Could not restore the previous hotkey set after a failed save; {Count} chord(s) did not re-register",
                     restore.Failures.Count);
                 messages.Add(
-                    "이전 단축키를 복원하지 못했습니다. 일부 단축키가 동작하지 않을 수 있으니 프로그램을 다시 시작해 주세요.");
+                    UiText.Get("Text_F47CC25B5D11"));
             }
         }
         catch (Exception ex)
         {
             _log.LogCritical(ex, "Restoring the previous hotkey set threw after a failed save");
             messages.Add(
-                "이전 단축키를 복원하는 중 오류가 발생했습니다. 일부 단축키가 동작하지 않을 수 있으니 프로그램을 다시 시작해 주세요.");
+                UiText.Get("Text_B2B3E2E19B90"));
         }
 
         // Return the Run key to exactly the state the OS reported on entry. Only act when
@@ -245,7 +248,7 @@ public sealed class SettingsApplyService
                         startupWasEnabled,
                         restore.Error);
                     messages.Add(
-                        "시작 프로그램 설정을 이전 상태로 되돌리지 못했습니다. 설정에서 직접 확인해 주세요.");
+                        UiText.Get("Text_B64A6FFA1008"));
                 }
             }
         }
@@ -253,7 +256,7 @@ public sealed class SettingsApplyService
         {
             _log.LogCritical(ex, "Restoring launch-at-login threw after a failed save");
             messages.Add(
-                "시작 프로그램 설정을 이전 상태로 되돌리는 중 오류가 발생했습니다. 설정에서 직접 확인해 주세요.");
+                UiText.Get("Text_4E99F6190A6C"));
         }
 
         return messages;

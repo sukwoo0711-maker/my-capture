@@ -1,0 +1,2928 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data name="Settings.Language" xml:space="preserve">
+    <value>표시 언어</value>
+    <comment>Language selection</comment>
+  </data>
+  <data name="Settings.LanguageHint" xml:space="preserve">
+    <value>적용을 누르면 저장되며, 다음에 MyCapture를 시작할 때 모든 창과 메뉴에 적용됩니다. 진행 중인 작업을 종료하지 않습니다.</value>
+    <comment>Language selection</comment>
+  </data>
+  <data name="Settings.LanguageRestart" xml:space="preserve">
+    <value>표시 언어를 저장했습니다. 작업을 마친 뒤 MyCapture를 종료하고 다시 실행하면 새 언어가 적용됩니다.</value>
+    <comment>Language selection</comment>
+  </data>
+  <data name="Settings.LanguageSystem" xml:space="preserve">
+    <value>Windows 언어 따르기</value>
+    <comment>Language selection</comment>
+  </data>
+  <data name="Text_00480581AAB5" xml:space="preserve">
+    <value>설정(&amp;O)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_009548FC2109" xml:space="preserve">
+    <value>{0} × {1} px  ·  Ctrl+C 복사  ·  Ctrl+S 저장  ·  Esc 취소</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_01EC445E93F5" xml:space="preserve">
+    <value>F  프레임</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_0226F79FE6FB" xml:space="preserve">
+    <value>업데이트를 취소했습니다.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_03151E566E1D" xml:space="preserve">
+    <value>MyCapture 화면 고정</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_03A1596F1681" xml:space="preserve">
+    <value>텍스트 복사</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_0400CF56D074" xml:space="preserve">
+    <value>다시 편집 (Enter)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_04B54A7BED01" xml:space="preserve">
+    <value>스크롤 캡처가 취소되었습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_05184F5EA537" xml:space="preserve">
+    <value>업데이트하고 다시 시작</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_060B5907DA2C" xml:space="preserve">
+    <value>텍스트 레이어 {0}개, 프레임 레이어 {1}개. {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_0642E2D15469" xml:space="preserve">
+    <value>복사 실패</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_0669BC5BEA50" xml:space="preserve">
+    <value>{0}부터 {1}까지 {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_06B3E66B7B78" xml:space="preserve">
+    <value>영상에 남길 텍스트</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_06F58809C083" xml:space="preserve">
+    <value>저장이 완료되지 않았습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_071DBD0C6E2C" xml:space="preserve">
+    <value>굵은 점선 · 최소 6px</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_075F6F0A90DB" xml:space="preserve">
+    <value>이미지|*.png;*.jpg;*.jpeg;*.bmp;*.gif</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_078C44D5A66E" xml:space="preserve">
+    <value>다시 실행</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_07E499DBBB2A" xml:space="preserve">
+    <value>지연 캡처 취소됨</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_08269F2F1B3F" xml:space="preserve">
+    <value>텍스트 위치</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_083473DA3E8B" xml:space="preserve">
+    <value>yyyy년 M월 d일</value>
+    <comment>src\MyCapture.App\Gallery\GalleryDateGrouping.cs</comment>
+  </data>
+  <data name="Text_086F41200B47" xml:space="preserve">
+    <value>단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_096A13A757DB" xml:space="preserve">
+    <value>영역 캡처</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_0B201CC58BDD" xml:space="preserve">
+    <value>편집 완료 (Ctrl+Enter)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_0BDF6B210A31" xml:space="preserve">
+    <value>레이어를 드래그해 이동 · 모서리를 드래그해 크기 조절 · 방향키 이동 · Shift+방향키 크기 · Esc 취소</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerCanvas.cs</comment>
+  </data>
+  <data name="Text_0C2737643640" xml:space="preserve">
+    <value>내보내기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_0CC5375DCF91" xml:space="preserve">
+    <value>빠른 저장 폴더 선택</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_0D0920B35583" xml:space="preserve">
+    <value>애니메이션 GIF로 내보내기</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_0D3A337CA053" xml:space="preserve">
+    <value>이미지를 읽을 수 없음</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_0DA5C524F6BB" xml:space="preserve">
+    <value>저장 완료 · {0}프레임</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_0DED92FCE6B0" xml:space="preserve">
+    <value>주석 삭제</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_0DFC300AD94D" xml:space="preserve">
+    <value>전역 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_0E7B9C44075A" xml:space="preserve">
+    <value>클립 전체입니다. 굵은 눈금 한 구간이 아래에 확대됩니다. 선택 몸통을 끌면 이동하고 큰 양 끝을 끌면 확대 범위를 조정합니다.</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_0ECA3A448221" xml:space="preserve">
+    <value>{0}을(를) 선택했습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_0FA1A9D03BE3" xml:space="preserve">
+    <value>시작 프로그램 설정을 변경하지 못했습니다: {0}</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_1003CFC78E66" xml:space="preserve">
+    <value>다시 편집</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_10D733234378" xml:space="preserve">
+    <value>텍스트 표시 시간: {0:0.00}초부터 {1:0.00}초까지</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_1125C68F3C22" xml:space="preserve">
+    <value>다운로드 취소</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_1145FCF19412" xml:space="preserve">
+    <value>캡처 저장 폴더 찾아보기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_114E1105C3EE" xml:space="preserve">
+    <value>{0} 단축키를 등록할 수 없습니다{1}. 설정에서 변경해 주세요.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_115BCED49291" xml:space="preserve">
+    <value>설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_11C2E8E755E4" xml:space="preserve">
+    <value>확대</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_1218314DD9C8" xml:space="preserve">
+    <value>썸네일 긴 변(픽셀)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_1300F4BEEC76" xml:space="preserve">
+    <value>고정됨</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_13036A090EBA" xml:space="preserve">
+    <value>이미지와 동영상을 한곳에서 찾고 편집합니다. 동영상은 선택하거나 두 번 클릭하면 이 창 안에서 바로 재생됩니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_13A717215F51" xml:space="preserve">
+    <value>설정 저장 실패</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_151C77170A94" xml:space="preserve">
+    <value>색상 {0}</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_15A28DE50DBB" xml:space="preserve">
+    <value>저장 서비스를 사용할 수 없습니다.</value>
+    <comment>src\MyCapture.App\Pinning\PinManager.cs</comment>
+  </data>
+  <data name="Text_15A871A266BE" xml:space="preserve">
+    <value>텍스트 복사 중…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_162F0703007C" xml:space="preserve">
+    <value>세부 타임라인  |  시작 {0}  →  끝 {1}  |  범위 {2} · {3}프레임</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_16803FE760A3" xml:space="preserve">
+    <value>시간 텍스트 편집</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_16DBAB47AC29" xml:space="preserve">
+    <value>캡처 {0}</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_174531E69AB0" xml:space="preserve">
+    <value>파일명 패턴을 입력해 주세요.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_17543FEC3EBF" xml:space="preserve">
+    <value>자르기 모드입니다. 자홍색 시작/끝 삭제 핸들을 드래그하거나 방향키로 조정합니다. Tab은 조정할 핸들을 바꿉니다.</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_1764E00FE2EE" xml:space="preserve">
+    <value>설치 버전으로 전환하고 다시 시작</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_182650FB6543" xml:space="preserve">
+    <value>더 투명하게 (Ctrl+휠)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_1882C23FDDB1" xml:space="preserve">
+    <value>텍스트 종료 시간 초</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_188B0AF9BE23" xml:space="preserve">
+    <value>녹화를 시작할 준비를 마치지 못했습니다. 저장 공간과 화면 녹화 설정을 확인해 주세요.
+
+</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_18AB379A433A" xml:space="preserve">
+    <value>설치 파일 검증 중…</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_190A3BE20786" xml:space="preserve">
+    <value>화살표 도구 · 시작점에서 끝점으로 드래그하세요</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_195F0315EBCE" xml:space="preserve">
+    <value>설치 버전으로 전환합니다. 설치 위치: {0}{1}다운로드 후 설치한 앱을 다시 시작합니다. 현재 포터블 폴더와 그 안의 파일은 그대로 둡니다.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_199EB510DA51" xml:space="preserve">
+    <value>MyCapture — 캡처 편집</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
+  </data>
+  <data name="Text_19FE9B81012C" xml:space="preserve">
+    <value>최소 용량 · 480px / 5fps</value>
+    <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
+  </data>
+  <data name="Text_1A8F33AE9F00" xml:space="preserve">
+    <value>폴더나 바탕화면으로 드래그해 PNG 파일로 내보내기</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_1AEC9153DD98" xml:space="preserve">
+    <value>편집 표시가 없어 프레임 레이어를 추가하지 않았습니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_1BA9F7001237" xml:space="preserve">
+    <value>{0} 도구 ({1})</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_1C856E8BF798" xml:space="preserve">
+    <value>녹화 시작 카운트다운 시간(초)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_1C944F0E89C3" xml:space="preserve">
+    <value>공식 GitHub 저장소에서 최신 안정 버전을 확인합니다. 다운로드한 설치 파일의 SHA-256을 확인한 뒤 설치합니다.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_1D9A98A69018" xml:space="preserve">
+    <value>카운트다운 시간(초)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_1DC093CD4D48" xml:space="preserve">
+    <value>이 시스템에서 OCR을 사용할 수 없습니다. 언어 팩 설치가 필요할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_1DCD20923815" xml:space="preserve">
+    <value>영상 이미지 데이터가 너무 큽니다. 전체 레이어 데이터는 64MB 이하여야 합니다. 이미지 크기나 레이어 수를 줄여 주세요.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_1DFB8FE69D78" xml:space="preserve">
+    <value>GIF 변환 준비 중… {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_1E0DD4F46A0C" xml:space="preserve">
+    <value>내부 투명도 · 100%</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_1E8C10206F5B" xml:space="preserve">
+    <value>닫기</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_1E94B43DC922" xml:space="preserve">
+    <value>설정 파일이 손상되어 기본값으로 시작했습니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_1FBCF51E2FF5" xml:space="preserve">
+    <value>화면에 붙이기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_1FBF8C644D76" xml:space="preserve">
+    <value>올바른 단축키가 아닙니다 (예: Ctrl+Shift+C).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_1FC9ECE11C93" xml:space="preserve">
+    <value>아직 이미지나 동영상이 없습니다. 캡처하거나 녹화하면 여기에 표시됩니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
+  </data>
+  <data name="Text_200EEC5A1E57" xml:space="preserve">
+    <value>재생/일시정지</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_205C50A145BA" xml:space="preserve">
+    <value>기본값으로 재설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_205E8D74A1C2" xml:space="preserve">
+    <value>드래그해서 사각형을 그립니다.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_20CF6A996B4D" xml:space="preserve">
+    <value>인식된 텍스트를 클립보드에 복사합니다</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_21281475C002" xml:space="preserve">
+    <value>작게 · 640px / 10fps</value>
+    <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
+  </data>
+  <data name="Text_21AAACA9783A" xml:space="preserve">
+    <value>새 캡처는 이 PC에서 자동으로 색인합니다. 전체 {0}개 중 {1}개가 검색 가능합니다. 필요하면 지금 다시 색인할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_21C405702C2B" xml:space="preserve">
+    <value>이미지 레이어 추가</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2223CE0FF051" xml:space="preserve">
+    <value>재생 완료</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_228A9CF0DE4A" xml:space="preserve">
+    <value>구간을 줄이거나 레이어 시작/끝 시간을 0.1초 눈금에 가깝게 조정해 주세요.</value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_22A29FBD57AD" xml:space="preserve">
+    <value>형광펜 투명도</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_22B802C1B7FF" xml:space="preserve">
+    <value>편집 취소 (Esc)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_230D26DEB9AE" xml:space="preserve">
+    <value>텍스트를 입력한 뒤 Esc 또는 다른 곳을 클릭해 확정하세요</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_23A30AD1434C" xml:space="preserve">
+    <value>스크롤 캡처에는 두 프레임 이상이 필요합니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_2428B662D585" xml:space="preserve">
+    <value>점선</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_249DBB18BB08" xml:space="preserve">
+    <value>이 캡처를 삭제할까요?
+
+{0}
+삭제하면 되돌릴 수 없습니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_24A509A94313" xml:space="preserve">
+    <value>고정 크기 캡처의 크기가 올바르지 않습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_254C836B9ED2" xml:space="preserve">
+    <value>전체 화면 캡처</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_255C28FD0AC2" xml:space="preserve">
+    <value>녹화 시작</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_257BE22416F8" xml:space="preserve">
+    <value>스크롤 입력이 거부되어 검증된 부분까지만 열었습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_258AD4B095A1" xml:space="preserve">
+    <value>텍스트</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_25A15C7C4EFF" xml:space="preserve">
+    <value>시작(초)</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_25E15E06C2EA" xml:space="preserve">
+    <value>MyCapture — 녹화 시작 실패</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_2618DA07C831" xml:space="preserve">
+    <value>원본 이미지를 찾을 수 없어 편집할 수 없습니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_26FF7226E337" xml:space="preserve">
+    <value>텍스트 레이어 {0}개, 프레임 레이어 {1}개</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_271908EF0BBE" xml:space="preserve">
+    <value>녹화 드롭 {0} ({1:P1})</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2785CE58DF74" xml:space="preserve">
+    <value>화살표</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_27FD5EFB7773" xml:space="preserve">
+    <value>100%: 외곽선만 표시 · 0%: 선과 같은 색으로 완전히 채우기</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_284A54C660EC" xml:space="preserve">
+    <value>최대 저장 용량(GiB)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_295F3F963B4A" xml:space="preserve">
+    <value>라이브러리 이미지는 전용 캡처 폴더에 보관하며, 생성 후 7일이 지나면 오래된 순서대로 자동 삭제합니다. 핀 고정한 이미지와 편집 중인 이미지는 보관합니다. 동영상과 따로 내보내거나 저장한 파일에는 7일 자동 삭제를 적용하지 않습니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_29C79CAFC1D7" xml:space="preserve">
+    <value>원 레이어 추가</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2A0C70A93334" xml:space="preserve">
+    <value>MyCapture — 프레임 이미지 편집</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2AA27E2CEB7C" xml:space="preserve">
+    <value>지연 후 녹화</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_2AE708D62044" xml:space="preserve">
+    <value>시작점에서 끝점까지 드래그해 화살표를 그리세요.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_2B53D424B10E" xml:space="preserve">
+    <value>단축키 '{0}'을(를) 등록할 수 없어 이전 값으로 되돌렸습니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_2B7B1B697484" xml:space="preserve">
+    <value>이미지는 최대 8192px, 1600만 픽셀 이하여야 합니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
+  </data>
+  <data name="Text_2BEE8F5FACA0" xml:space="preserve">
+    <value>최신 버전을 사용하고 있습니다.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_2C20ADDA2018" xml:space="preserve">
+    <value>영역 캡처(&amp;R)	Ctrl+Shift+C</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_2C4E0E8262AF" xml:space="preserve">
+    <value>인식 결과를 캡처에 저장(캐시)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_2C6314D22377" xml:space="preserve">
+    <value>0.2 ~ 1.0 (1은 불투명).</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_2C64DDA4D878" xml:space="preserve">
+    <value>편집됨</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_2CD093B673E5" xml:space="preserve">
+    <value>설정 파일을 읽을 수 없어 기본값으로 시작했습니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_2CDB4215BF83" xml:space="preserve">
+    <value>영상 편집 파일이 72MB를 초과하여 열 수 없습니다. 원본 영상과 편집 파일은 변경되지 않았습니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_2D7399F90B4F" xml:space="preserve">
+    <value>쉼표로 구분해 우선순위대로 입력합니다. 예: ko-KR, en-US.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_2D8B0244F4F4" xml:space="preserve">
+    <value>변경 사항이 없어 현재 영상을 유지합니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2DC82774E99B" xml:space="preserve">
+    <value>영상 저장에 실패했습니다: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_2E447977E64D" xml:space="preserve">
+    <value>프레임 속도는 10, 15, 24, 30, 60 중 하나를 입력해 주세요.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_2F12FF262AAC" xml:space="preserve">
+    <value>30fps를 권장합니다. 저사양 환경은 10/15fps, 빠른 움직임은 60fps를 선택할 수 있으며 인코더가 밀리면 재생 속도를 지키도록 프레임을 조절합니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_3024E9CAD0E5" xml:space="preserve">
+    <value>파일 확정 중… 완료되면 자동으로 닫힙니다</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_302BAE127938" xml:space="preserve">
+    <value>이미지</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_3063398CDECD" xml:space="preserve">
+    <value>확대 (+)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_3084C5AA0845" xml:space="preserve">
+    <value>도형 선 종류</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_31527734190B" xml:space="preserve">
+    <value>동영상을 불러올 수 없습니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3185888F798A" xml:space="preserve">
+    <value>중괄호 안에 날짜 형식을 넣습니다. 예: capture_{yyyyMMdd}_{HHmmss}. 확장자는 자동으로 붙습니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_32512F9EA32E" xml:space="preserve">
+    <value>동영상 {0}</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_328D27BC4C06" xml:space="preserve">
+    <value>시작과 끝 시간을 초 단위 숫자로 입력해 주세요.</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_328D9EF717EC" xml:space="preserve">
+    <value>화면 고정 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_331C366314D0" xml:space="preserve">
+    <value>녹화 저장 중… 갤러리와 미리 보기를 준비합니다</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_33406FC582BE" xml:space="preserve">
+    <value>선택 도구</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_337B5BC36C27" xml:space="preserve">
+    <value>영역 기록 개수</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_338C1B26A06A" xml:space="preserve">
+    <value>우클릭: 저장/원문 복사 · Ctrl+더블클릭: 원문 텍스트 복사 · Ctrl+C: 보이는 이미지 복사 · 드래그: 이동 · 휠: 확대/축소</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_339D1C10FD24" xml:space="preserve">
+    <value>GIF는 최대 20초입니다. 시작/끝 지점을 줄여 주세요.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_33EFD44366A7" xml:space="preserve">
+    <value>화면 고정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_33F7635FDE36" xml:space="preserve">
+    <value>현재 프레임을 가져올 수 없습니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_35114A85CCCE" xml:space="preserve">
+    <value>{0}초 후 시작</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_35151C153089" xml:space="preserve">
+    <value>현재 녹화 시각 표시 (yyyy-MM-dd HH:mm:ss.fff). 마우스 왼쪽 버튼으로 드래그하여 이동하고 마우스 휠로 크기를 조절합니다.</value>
+    <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
+  </data>
+  <data name="Text_35383149904D" xml:space="preserve">
+    <value>영상 편집</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_35E5667BB610" xml:space="preserve">
+    <value>도형 내부 투명도 (퍼센트)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_35E85A6E99A5" xml:space="preserve">
+    <value>미리보기에서 이동/크기 조절 · 아래 레이어 막대에서 표시 시간 조절</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_36458FABBDBB" xml:space="preserve">
+    <value>창 캡처</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_36C416EAD2CE" xml:space="preserve">
+    <value>도구</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_3793EC0322DB" xml:space="preserve">
+    <value>더 보기 — 핀 고정, 내보내기, 텍스트 인식</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_37AD4F28D422" xml:space="preserve">
+    <value>MyCapture — 라이브러리</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_37B3D3B11B26" xml:space="preserve">
+    <value>복사</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_37DB9D0B1C8E" xml:space="preserve">
+    <value>연필</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_380199144757" xml:space="preserve">
+    <value>텍스트 표시 시간: {0}–{1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3816B940D53C" xml:space="preserve">
+    <value>MyCapture — 자유 영역 선택</value>
+    <comment>src\MyCapture.App\Capture\CaptureOverlayWindow.cs</comment>
+  </data>
+  <data name="Text_38476EDDA50B" xml:space="preserve">
+    <value>지연 캡처</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_3862727D2DCB" xml:space="preserve">
+    <value>허용 범위는 {0:0.###} ~ {1:0.###} GiB입니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_388CC5AD1AE8" xml:space="preserve">
+    <value>양방향 화살표</value>
+    <comment>src\MyCapture.Core\Annotations\PolylineAnnotation.cs</comment>
+  </data>
+  <data name="Text_38B12BA58C48" xml:space="preserve">
+    <value>녹화 중 · Esc 또는 정지로 종료</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_38FF9B0AA541" xml:space="preserve">
+    <value>지연 캡처(&amp;D)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_39B10B03FD99" xml:space="preserve">
+    <value>화면 정합을 확인할 수 없어 검증된 부분까지만 열었습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_39E626945336" xml:space="preserve">
+    <value>Windows OCR 언어 팩을 사용할 수 없어 현재 비활성화되어 있습니다.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_39EFEAD98C7D" xml:space="preserve">
+    <value>크게</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3B5DD12EE3D1" xml:space="preserve">
+    <value>민감정보 후보를 찾는 중… 이미지 밖으로 전송하지 않습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_3BC6235E1D18" xml:space="preserve">
+    <value>오늘</value>
+    <comment>src\MyCapture.App\Gallery\GalleryDateGrouping.cs</comment>
+  </data>
+  <data name="Text_3BF4FEA88C51" xml:space="preserve">
+    <value>이미지를 복사할 수 없습니다. 파일이 없거나 손상되었습니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_3D1E714B56CA" xml:space="preserve">
+    <value>클립보드 복사가 완료되지 않았습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_3DEFBAD62044" xml:space="preserve">
+    <value>작업을 안전하게 중단하고 임시 파일을 정리합니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3DF1B247086E" xml:space="preserve">
+    <value>프레임 표시 시간: {0}–{1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_3E409AB1A37C" xml:space="preserve">
+    <value>주석 편집기</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_4004AC930045" xml:space="preserve">
+    <value>텍스트 추가: {0}–{1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_4033027EAEDB" xml:space="preserve">
+    <value>캡처를 저장할 수 없습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_4048C8E18C61" xml:space="preserve">
+    <value>영역 캡처는 완료했지만 클립보드에 복사하지 못했습니다. 편집기에서 Ctrl+C로 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_40F24016E78F" xml:space="preserve">
+    <value>지연 캡처를 시작할 수 없습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_41216A109463" xml:space="preserve">
+    <value>클릭 통과 켜짐 · 해제: Shift+F3 두 번</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_41F81C272691" xml:space="preserve">
+    <value>위 선택 구간을 아래 전체 폭으로 확대</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_41FC07B1EA9B" xml:space="preserve">
+    <value>0초부터 {0:0.###}초 사이에서 끝이 시작보다 늦어야 합니다.</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_422F61DDCB7C" xml:space="preserve">
+    <value>클립보드 복사 실패</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_424D8C634E79" xml:space="preserve">
+    <value>전체 길이</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_425C77DFA926" xml:space="preserve">
+    <value>형광펜</value>
+    <comment>src\MyCapture.Core\Annotations\PenAnnotation.cs</comment>
+  </data>
+  <data name="Text_42A667BC71B0" xml:space="preserve">
+    <value>이미지 복사</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_42B9E5111FE2" xml:space="preserve">
+    <value>검증 정보 다운로드 중…</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_42DA25F8F77F" xml:space="preserve">
+    <value>업데이트 설치 또는 재시작을 확인하지 못했습니다. 이 창의 로그 경로를 확인하고 MyCapture를 다시 실행해 주세요.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_45E6B157C051" xml:space="preserve">
+    <value>안전 크기 한도에 도달해 검증된 부분까지만 열었습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_4601577BA0F6" xml:space="preserve">
+    <value>자르기</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_460404601E2D" xml:space="preserve">
+    <value>이미지 레이어 데이터의 헤더에 공백이 너무 많습니다. 이미지를 다시 추가해 주세요.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_4667ECA4EE5B" xml:space="preserve">
+    <value>전체 타임라인  |  시작 {0}  →  끝 {1}  |  굵은 눈금 {2}</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_475D185DC33B" xml:space="preserve">
+    <value>이미지를 불러올 수 없습니다.</value>
+    <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
+  </data>
+  <data name="Text_47E781C43156" xml:space="preserve">
+    <value>{0} 추가</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
+  </data>
+  <data name="Text_483B0F23F316" xml:space="preserve">
+    <value>미리보기 위치 이동에 실패했습니다: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_48C3B6EBA637" xml:space="preserve">
+    <value>녹화를 시작할 수 없습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_48D137437347" xml:space="preserve">
+    <value>세부 타임라인 축소 (Ctrl+Shift+-)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_48FA3D0E60A0" xml:space="preserve">
+    <value>MyCapture 지연 캡처</value>
+    <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
+  </data>
+  <data name="Text_49020661A850" xml:space="preserve">
+    <value>MyCapture — 편집기 열기 실패</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_49931F796C95" xml:space="preserve">
+    <value>텍스트 레이어 없음</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_4A376FDFB111" xml:space="preserve">
+    <value>{0} · 인식 중…</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_4A48782E904C" xml:space="preserve">
+    <value>사각형 도구</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_4AF6F7075C61" xml:space="preserve">
+    <value>이미지 추가를 취소했습니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_4B4B0D333A67" xml:space="preserve">
+    <value>커서 아래에 캡처할 창이 없습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_4B4D91FFC215" xml:space="preserve">
+    <value>스크롤 캡처</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_4B622E994DF4" xml:space="preserve">
+    <value>프레임 레이어, {0}부터 {1}까지, {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_4B8D541EBE6D" xml:space="preserve">
+    <value>검색</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_4BE214FF10B0" xml:space="preserve">
+    <value>마우스 커서 포함</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_4C160257F02C" xml:space="preserve">
+    <value>복사 중…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_4C27BFC6C0E5" xml:space="preserve">
+    <value>프레임 편집 · {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_4C561D57BFCE" xml:space="preserve">
+    <value>빠른 저장 폴더 찾아보기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_4D5F7094119C" xml:space="preserve">
+    <value>캡처 전문 색인 시작</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_4D6051F71010" xml:space="preserve">
+    <value>편집 상태</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_4D69B33A2FD7" xml:space="preserve">
+    <value>시작 프로그램 등록을 확인하지 못했습니다.</value>
+    <comment>src\MyCapture.Core\Settings\StartupRegistrationService.cs</comment>
+  </data>
+  <data name="Text_4DAE3A1EEAE4" xml:space="preserve">
+    <value>화면 영역 녹화 시작·중지</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_4DBA30197C0A" xml:space="preserve">
+    <value>스크롤 캡처(&amp;S)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_4DCACB688866" xml:space="preserve">
+    <value>PNG 이미지|*.png</value>
+    <comment>src\MyCapture.App\Editing\CaptureCommitService.cs</comment>
+  </data>
+  <data name="Text_4E7752D53B90" xml:space="preserve">
+    <value>변환 중…</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_4E8DBEEA67E4" xml:space="preserve">
+    <value>글꼴 이름</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_4E99F6190A6C" xml:space="preserve">
+    <value>시작 프로그램 설정을 이전 상태로 되돌리는 중 오류가 발생했습니다. 설정에서 직접 확인해 주세요.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_4F445554C9D0" xml:space="preserve">
+    <value>가장자리 핸들로 크기를 조정하거나 드래그해 이동하세요.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_4F51C0C8ADA8" xml:space="preserve">
+    <value>일시정지</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_4F5AF20FAA6E" xml:space="preserve">
+    <value>화면 녹화</value>
+    <comment>src\MyCapture.App\Recording\VideoLibraryService.cs</comment>
+  </data>
+  <data name="Text_4FC883F8F1CA" xml:space="preserve">
+    <value>{0} 값 {1}이(가) 허용 범위를 벗어나 {2}로 조정되었습니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_4FED89116C1F" xml:space="preserve">
+    <value>모든 고정 창 숨기기/보이기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_50EE4EA7C243" xml:space="preserve">
+    <value>캡처</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_512989791C19" xml:space="preserve">
+    <value>일반</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_514880F82297" xml:space="preserve">
+    <value>저장소</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_51F5EF959148" xml:space="preserve">
+    <value>이미지 파일을 준비할 수 없습니다. 잠시 후 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_5260EE77B969" xml:space="preserve">
+    <value>클립보드에 이미지, 텍스트 또는 표가 없습니다.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_528544494302" xml:space="preserve">
+    <value>동영상 저장 중… 갤러리 등록을 준비합니다</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_5321CB80BCA3" xml:space="preserve">
+    <value>채우기 투명도</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
+  </data>
+  <data name="Text_53A86A0A3347" xml:space="preserve">
+    <value>GIF 저장 완료 · {0:0.#}× · {1}프레임 · {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_53DCBAF22F42" xml:space="preserve">
+    <value>캡처 편집 창</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
+  </data>
+  <data name="Text_541F62E38579" xml:space="preserve">
+    <value>T  텍스트</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_542965B456C7" xml:space="preserve">
+    <value>녹화 종료 · 동영상 파일 변환 중…</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_5461D9E26042" xml:space="preserve">
+    <value>숫자를 입력해 주세요 (허용 범위 {0}).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_54A00B1A2FDB" xml:space="preserve">
+    <value>녹화 시계 표시 (드래그로 이동, 마우스 휠로 크기 조절)</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_5564316AA7EB" xml:space="preserve">
+    <value>단축키 충돌</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_55694B0252DB" xml:space="preserve">
+    <value>텍스트를 이미지로 렌더링한 화면 고정 창입니다. Ctrl+C는 보이는 이미지를 복사하고, Ctrl+더블클릭은 플로팅 생성 시 보존한 원문 텍스트를 복사합니다. 마우스 오른쪽 단추 메뉴에서도 원문 복사를 실행할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_55D025693B34" xml:space="preserve">
+    <value>파일명 패턴이 비어 있어 기본값으로 되돌렸습니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_5626DD9C2F6A" xml:space="preserve">
+    <value>{0} · 인식이 취소되었습니다.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_563638D54DBC" xml:space="preserve">
+    <value>주석을 클릭해 선택한 뒤 이동하거나 크기를 조정하세요.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_571C8E331C15" xml:space="preserve">
+    <value>정확한 프레임을 준비하는 중…</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_574815F8C801" xml:space="preserve">
+    <value>영역 캡처 · 클립보드 복사 · 편집</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_576701BE51C1" xml:space="preserve">
+    <value>프레임 레이어는 최대 {0}개까지 추가할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_57950AFF46BC" xml:space="preserve">
+    <value>다른 이름으로 저장</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_579BAB6C0833" xml:space="preserve">
+    <value>고정 해제</value>
+    <comment>src\MyCapture.App\Gallery\GalleryConverters.cs</comment>
+  </data>
+  <data name="Text_57B9B3F05935" xml:space="preserve">
+    <value>레이어 시간 경계를 포함한 GIF 프레임 수가 최대 {0}개를 초과합니다. </value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_5825293860A7" xml:space="preserve">
+    <value>저장 및 내보내기 (Ctrl+S · Ctrl+Shift+S)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_58726BF27E70" xml:space="preserve">
+    <value>검색 결과가 없습니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
+  </data>
+  <data name="Text_58B2C0573E72" xml:space="preserve">
+    <value>OCR 언어 팩이 설치되어 있지 않습니다</value>
+    <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
+  </data>
+  <data name="Text_59208AC2B48E" xml:space="preserve">
+    <value>제목, 창 이름, 인식된 텍스트 검색  ·  Ctrl+F</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_594449493143" xml:space="preserve">
+    <value>지원하는 프레임 속도는 10, 15, 24, 30, 60fps입니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_59ADEC0FB6E4" xml:space="preserve">
+    <value>타원</value>
+    <comment>src\MyCapture.Core\Annotations\ShapeAnnotation.cs</comment>
+  </data>
+  <data name="Text_59CC7803B118" xml:space="preserve">
+    <value>←/→ 크게 이동 · Ctrl/Shift+←/→ 1프레임 · Ctrl+T 텍스트 · G GIF</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_59D43391538F" xml:space="preserve">
+    <value>렌더링된 이미지 복사 (Ctrl+C)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_5A932820414F" xml:space="preserve">
+    <value>빠른 저장 폴더</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_5B59BB806FB5" xml:space="preserve">
+    <value>해상도와 프레임 수를 줄여 GIF 용량을 줄입니다. 원본보다 확대하지 않습니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_5B8BBBA7AA27" xml:space="preserve">
+    <value>화면에 고정할 수 없습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_5C2CD3EFE79B" xml:space="preserve">
+    <value>앱을 종료하고 업데이트를 설치합니다…</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_5C6A8668C3C0" xml:space="preserve">
+    <value>작은 글자 정확도를 높입니다. 1.0 ~ 4.0.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_5C9B3C62EC41" xml:space="preserve">
+    <value>텍스트 복사됨</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_5D27F0D47A0B" xml:space="preserve">
+    <value>주석을 삭제했습니다 · Ctrl+Z로 취소</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_5D92A3982F2F" xml:space="preserve">
+    <value>내부 투명도 · {0:0}%</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_5DBC2621FC1E" xml:space="preserve">
+    <value>고신뢰 민감정보 후보를 찾지 못했습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_5DD4908475B6" xml:space="preserve">
+    <value>선택한 파일을 이미지로 읽을 수 없습니다.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_5E3720825B85" xml:space="preserve">
+    <value>OCR 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_5E8959D18390" xml:space="preserve">
+    <value>더 보기</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_5F2733BE4219" xml:space="preserve">
+    <value>GIF 옵션</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_5F310F33AB12" xml:space="preserve">
+    <value>저장에 실패했습니다. 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_5FAE4DA04904" xml:space="preserve">
+    <value>작업 취소</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_5FB926229090" xml:space="preserve">
+    <value>저장</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_608AF5822E3A" xml:space="preserve">
+    <value>MyCapture — {0} · 캡처 {1:N0}개</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_60CBF2E08D0D" xml:space="preserve">
+    <value>MyCapture — 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_60E0184FCBE5" xml:space="preserve">
+    <value>{0} 실패</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_613230F07E18" xml:space="preserve">
+    <value>OCR을 다시 실행합니다</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_6139B6C3ED73" xml:space="preserve">
+    <value>삭제</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_6152EFC59724" xml:space="preserve">
+    <value>자르기 대기</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6182AA2DFF8D" xml:space="preserve">
+    <value>스크롤 캡처 시작</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_6235669450B0" xml:space="preserve">
+    <value>시간 텍스트 추가</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_626745049C0B" xml:space="preserve">
+    <value>녹화를 정상적으로 마무리하지 못했습니다. 완성되지 않은 임시 파일은 갤러리에 잘못 등록되지 않도록 정리했습니다.
+
+</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_628CA8F9904F" xml:space="preserve">
+    <value>확대 축소 단계</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_62AE4531CA74" xml:space="preserve">
+    <value>이미지 레이어의 크기가 너무 큽니다. 레이어 하나는 최대 8192px, 디코딩 메모리 64MB 이하여야 합니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_632459CEB61F" xml:space="preserve">
+    <value>텍스트 도구 · 이미지를 클릭해 입력하세요</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_63F240FA482C" xml:space="preserve">
+    <value>이 캡처는 이미 편집 중입니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_6421F1340C28" xml:space="preserve">
+    <value>영상 저장 중… {0}% ({1}/{2})</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_646F2DBF1852" xml:space="preserve">
+    <value> 외 {0}개</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_6474F56C528B" xml:space="preserve">
+    <value>선택한 텍스트 레이어를 삭제했습니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_64A5A9D59A21" xml:space="preserve">
+    <value>프레임 편집을 별도 레이어로 추가했습니다 · {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_651505CC0499" xml:space="preserve">
+    <value>초 후 캡처됩니다</value>
+    <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
+  </data>
+  <data name="Text_65BB6610ACA0" xml:space="preserve">
+    <value>전체 화면 캡처(&amp;F)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_66069CEAD9AE" xml:space="preserve">
+    <value>Tab으로 선택한 뒤 방향키로 이동합니다. Shift와 함께 누르면 10픽셀씩 이동합니다.</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_669D90D96A45" xml:space="preserve">
+    <value>예: Ctrl+Shift+C, F3, Shift+F3. 비워 두면 해당 명령에 단축키를 지정하지 않습니다. 캡처 단축키는 비워 둘 수 없습니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_66BA5DCDA810" xml:space="preserve">
+    <value>라이브러리 열기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_67781174A42E" xml:space="preserve">
+    <value>{0} 순서 변경</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_67CAE5B118A3" xml:space="preserve">
+    <value>색상을 {0}(으)로 바꿨습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_67FE4AF7D334" xml:space="preserve">
+    <value>클릭 통과 전환</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_684786FB2840" xml:space="preserve">
+    <value>연필 (P) — 자유롭게 그리기</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_68CAE75183FF" xml:space="preserve">
+    <value>둥근 점선</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_690A5972C5C2" xml:space="preserve">
+    <value>이미지를 추가할 수 없습니다: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6953A4195620" xml:space="preserve">
+    <value>두께</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
+  </data>
+  <data name="Text_695F77F44D69" xml:space="preserve">
+    <value>인식 결과를 캡처에 저장</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_69D1C5307298" xml:space="preserve">
+    <value>축소</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6A0F998C2819" xml:space="preserve">
+    <value>라이브러리</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_6A1C963D5BC5" xml:space="preserve">
+    <value>적용</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_6A4B9316D8C2" xml:space="preserve">
+    <value>예기치 않은 오류가 발생했습니다.
+
+{0}</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_6A72B554A7C2" xml:space="preserve">
+    <value>알 수 없는 오류</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6A8150B5786A" xml:space="preserve">
+    <value>녹화 시계</value>
+    <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
+  </data>
+  <data name="Text_6AE98E57E121" xml:space="preserve">
+    <value>민감정보 검색을 취소했습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_6B4EE4E6C8FF" xml:space="preserve">
+    <value>상단 선택 구간의 시작과 끝을 전체 폭으로 확대한 프레임 타임라인입니다. 클릭과 트림은 프레임에 맞춰지고 휠로 확대합니다.</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_6C0B9DD710AB" xml:space="preserve">
+    <value>위치</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_6C10CBA5050D" xml:space="preserve">
+    <value>FrameRate 값 {0}은(는) 지원하지 않아 30fps로 조정되었습니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_6C7D2ADB7EB3" xml:space="preserve">
+    <value>PNG 이미지의 크기가 너무 크거나 헤더가 손상되었습니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
+  </data>
+  <data name="Text_6CA53DEDFF4A" xml:space="preserve">
+    <value>타임라인 전체 보기 (확대 초기화)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_6D63E8966A24" xml:space="preserve">
+    <value>민감정보 검색에 실패했습니다 · 이미지는 편집기에 그대로 남아 있습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_6D74F9324ACB" xml:space="preserve">
+    <value>일반 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_6D9F1A20DDCC" xml:space="preserve">
+    <value>GIF 시간 해상도는 0.01초입니다. 0.01초보다 짧은 시간 텍스트 구간을 늘려 주세요.</value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_6DDE7DF5BF97" xml:space="preserve">
+    <value>설정은 저장되었지만 캡처 목록 색인을 저장하지 못했습니다. 새 보관 한도는 이번 실행에 적용되었으며, 색인은 다음 저장 시 다시 기록됩니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_6E86D1A85620" xml:space="preserve">
+    <value>재생 준비</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_6EAF5A406E0E" xml:space="preserve">
+    <value>복사됨 · </value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_6EB131FB1810" xml:space="preserve">
+    <value>스크롤 캡처 취소 중</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_6F025107D313" xml:space="preserve">
+    <value>반복할 이전 영역이 없습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_6F1D1FE90E37" xml:space="preserve">
+    <value>라이브러리 열기 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_6FF5C7B32202" xml:space="preserve">
+    <value>영역 녹화 시작 중지 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_70534261ED6C" xml:space="preserve">
+    <value>지연 캡처를 취소했습니다.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_70EC2D232B4F" xml:space="preserve">
+    <value>선 두께</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_70EECBC7C211" xml:space="preserve">
+    <value>캡처를 시작할 수 없습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_7116B7156511" xml:space="preserve">
+    <value>클릭 통과 전환 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_71FBF04B7201" xml:space="preserve">
+    <value>최대 보관 개수</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_72147902C22E" xml:space="preserve">
+    <value>파일명 패턴</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7245B7D87A08" xml:space="preserve">
+    <value>다시 인식</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_727333AB0740" xml:space="preserve">
+    <value>완료</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_728F6813B235" xml:space="preserve">
+    <value>여러 편집</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_729D79099D9B" xml:space="preserve">
+    <value>MyCapture — 녹화 시계</value>
+    <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
+  </data>
+  <data name="Text_72A13C33A79E" xml:space="preserve">
+    <value>녹화 준비 중 · Esc 또는 정지로 종료</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_72B6DBA8AAC5" xml:space="preserve">
+    <value>종료(&amp;X)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_733011719B1C" xml:space="preserve">
+    <value>이 동영상은 이미 편집 중입니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_73D6AF7EE15B" xml:space="preserve">
+    <value>Ctrl+C: 이미지 복사 · Ctrl+더블클릭: 텍스트 복사 · 우클릭: 저장 · 드래그: 이동 · 휠: 확대/축소</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_73FE4A51DAAE" xml:space="preserve">
+    <value>영역 선택 중</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_74C6AEBB2B6D" xml:space="preserve">
+    <value>녹화 정지</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_74EEFE6E43AE" xml:space="preserve">
+    <value>편집한 이미지를 클립보드에 복사 (Ctrl+C)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_75306DAE2E60" xml:space="preserve">
+    <value>영역 녹화 시작/중지</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7530A6E985BD" xml:space="preserve">
+    <value>GIF 배속</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_75425A6D9BE8" xml:space="preserve">
+    <value>클립보드에 복사하지 못했습니다. 잠시 후 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_756622E6954E" xml:space="preserve">
+    <value>Ctrl+Shift+C는 창 스냅 없이 드래그한 영역만 캡처하며, 마우스를 놓으면 바로 편집 창이 열립니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_764879D98E25" xml:space="preserve">
+    <value>저장 한도(GiB)에 숫자를 입력해 주세요.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_773C24F0A693" xml:space="preserve">
+    <value>카운트다운 창을 녹화에서 제외할 수 없습니다.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_784572D51B63" xml:space="preserve">
+    <value>라이브러리에서 삭제 (Delete)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_78666F37A521" xml:space="preserve">
+    <value>클립보드에 복사 중…</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_78C743CC6F59" xml:space="preserve">
+    <value>원본 해상도의 PNG 파일로 저장 위치를 선택합니다.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_78EFED021492" xml:space="preserve">
+    <value>녹화 시작 또는 정지</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_79188256BC8D" xml:space="preserve">
+    <value>MyCapture — 녹화 편집</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_7926541DAB63" xml:space="preserve">
+    <value>업데이트 위치: {0}{1}다운로드 후 이 위치의 앱을 업데이트하고 다시 시작합니다.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_798E080A9262" xml:space="preserve">
+    <value>드래그해 캡처할 영역을 선택하세요  ·  놓으면 편집 창이 열립니다  ·  Esc 취소</value>
+    <comment>src\MyCapture.App\Capture\CaptureOverlayView.cs</comment>
+  </data>
+  <data name="Text_79B3DB1CD566" xml:space="preserve">
+    <value>진행 중인 영상 저장 또는 GIF 내보내기 취소</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_79C5ADA11647" xml:space="preserve">
+    <value>어제</value>
+    <comment>src\MyCapture.App\Gallery\GalleryDateGrouping.cs</comment>
+  </data>
+  <data name="Text_7A3486B4FEBF" xml:space="preserve">
+    <value>텍스트를 입력해 주세요.</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_7A4300DB8119" xml:space="preserve">
+    <value>내보내기 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7A4FE9D482AD" xml:space="preserve">
+    <value>마지막 영역 다시 캡처</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7AF81E702151" xml:space="preserve">
+    <value>확대/축소 단계</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7C7E6C9D8CD7" xml:space="preserve">
+    <value>다른 이름으로 저장 또는 클립보드 복사로 복구할 수 있습니다.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_7C821231A673" xml:space="preserve">
+    <value>원본 이미지가 손상되어 편집할 수 없습니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_7CB3F50C1B9F" xml:space="preserve">
+    <value>라이브러리 재생</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_7CD1B787C3E6" xml:space="preserve">
+    <value>MyCapture — 텍스트 인식</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_7DDE1114417E" xml:space="preserve">
+    <value>자르기 완료</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_7DFFA4D81765" xml:space="preserve">
+    <value>선택한 주석 삭제 (Delete)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_7E6DD424D331" xml:space="preserve">
+    <value>동영상을 불러오는 중… {0}%</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_7F2ED132EA3B" xml:space="preserve">
+    <value>마지막 영역 다시 캡처 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_7F7A6F648B25" xml:space="preserve">
+    <value>취소 (Esc)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_80A33648EAF2" xml:space="preserve">
+    <value>핀 고정 전환</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_80FD8A8BF5F2" xml:space="preserve">
+    <value>10 ~ 5000개.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_815E84CD61AB" xml:space="preserve">
+    <value>스크롤 전후 화면의 겹치는 영역을 확인할 수 없어 캡처를 중단했습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_82B423E5AFB8" xml:space="preserve">
+    <value>취소하려면 트레이 메뉴에서 ‘스크롤 캡처 취소’를 선택하세요.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_8300472A5BE3" xml:space="preserve">
+    <value>설정된 빠른 저장 폴더에 원본 해상도의 PNG 파일로 저장합니다.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_831103D5C64B" xml:space="preserve">
+    <value>동영상을 불러오는 중…</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_83BBF1497B9D" xml:space="preserve">
+    <value>GIF 내보내기에 실패했습니다: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_845D771D4CCB" xml:space="preserve">
+    <value>[텍스트]  {0}–{1}  {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_84DD6E381DCA" xml:space="preserve">
+    <value>확인 필요</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_84EB14013BF5" xml:space="preserve">
+    <value>시작 지점 설정: {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_854582314EBD" xml:space="preserve">
+    <value>텍스트 인식 (OCR)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_85C1E3734392" xml:space="preserve">
+    <value>허용 범위 0 ~ 60초.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_85E926C7F694" xml:space="preserve">
+    <value>MyCapture 화면 고정 창</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_8739F6684453" xml:space="preserve">
+    <value>라이브러리(&amp;G)	Ctrl+Shift+Z</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_875917AFD6EF" xml:space="preserve">
+    <value>재생할 수 없음</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_875E3EA22A90" xml:space="preserve">
+    <value>GitHub 요청 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_8773C2A9C3EA" xml:space="preserve">
+    <value>아직 표시할 항목이 없습니다</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_878A28AF568C" xml:space="preserve">
+    <value>이전 영역 반복(&amp;L)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_87B0ACEF85A7" xml:space="preserve">
+    <value>편집</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_87B145D16453" xml:space="preserve">
+    <value>MyCapture — 녹화 저장 실패</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_8839D136ACA2" xml:space="preserve">
+    <value>지연 캡처 시간(초)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_884F73809F89" xml:space="preserve">
+    <value>다른 편집에서 이 캡처가 변경되었습니다. 현재 편집기를 닫고 다시 열어 주세요.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_88DAAEEDFE4C" xml:space="preserve">
+    <value>저장 중…</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_89CF3D468EC1" xml:space="preserve">
+    <value>MyCapture — 녹화 실패</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_89D4979D7596" xml:space="preserve">
+    <value>캡처 삭제</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_8A3ADCEB89EF" xml:space="preserve">
+    <value>선택 도구 (V) — 주석을 선택·이동·크기 조정</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8A98DFB08E97" xml:space="preserve">
+    <value>고정</value>
+    <comment>src\MyCapture.App\Gallery\GalleryConverters.cs</comment>
+  </data>
+  <data name="Text_8AA2E937C447" xml:space="preserve">
+    <value>이미지 위에서 자유롭게 그리세요.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8B22B7BBB0CD" xml:space="preserve">
+    <value>다시 실행했습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8B5C97A7F917" xml:space="preserve">
+    <value>라이브러리에서 재생 중</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_8BDB6F46B7FF" xml:space="preserve">
+    <value>빈 텍스트를 취소했습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8C99A8AB9C4C" xml:space="preserve">
+    <value>최대 {0}프레임 안전 한도에 도달해 검증된 부분까지만 열었습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_8D1A750C9351" xml:space="preserve">
+    <value>선택</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_8D1EFD1B2B84" xml:space="preserve">
+    <value>영상 편집 레이어 목록</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_8D723235CBF3" xml:space="preserve">
+    <value>녹화 프레임</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_8F2EA9820639" xml:space="preserve">
+    <value>아래</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_8F8C3D476B1D" xml:space="preserve">
+    <value>{0} 삭제</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_90290F46A7D5" xml:space="preserve">
+    <value>녹화 준비 또는 마무리 중입니다. 잠시 후 다시 캡처해 주세요.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_9098D098B1DA" xml:space="preserve">
+    <value>GIF는 최대 20초까지 내보낼 수 있습니다. 타임라인의 시작/끝 지점을 줄여 주세요.</value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_91390EADFAD4" xml:space="preserve">
+    <value>처음</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_9163C86EDB22" xml:space="preserve">
+    <value>선택한 시간 텍스트 삭제 (Delete)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_9165ADFF8EF8" xml:space="preserve">
+    <value>초기 불투명도</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_92675EB6DE53" xml:space="preserve">
+    <value>이미지 도구 · 이미지를 클릭해 파일을 선택하세요</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_92CDEF3C5BC0" xml:space="preserve">
+    <value>중지</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_92E815063265" xml:space="preserve">
+    <value>이전 영역 반복 캡처</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_92EBA2788912" xml:space="preserve">
+    <value>썸네일 긴 변 픽셀</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_93103CC109A3" xml:space="preserve">
+    <value>사각형 도구 · 이미지 위를 드래그하세요</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_931CB240652A" xml:space="preserve">
+    <value>주석 기본값 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_932DB1A4ED7F" xml:space="preserve">
+    <value>PNG 파일 이름(.png)을 선택해 주세요.</value>
+    <comment>src\MyCapture.App\Editing\CaptureCommitService.cs</comment>
+  </data>
+  <data name="Text_93B88ACD46F6" xml:space="preserve">
+    <value>영상 그래픽 레이어는 최대 100개입니다. 레이어를 줄여 주세요.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_93CBE1538A34" xml:space="preserve">
+    <value>설정 적용</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_93D363BDFEA5" xml:space="preserve">
+    <value>이미지 삽입 (I) — 파일을 선택</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_93EB8FA7F9BC" xml:space="preserve">
+    <value>부드러움과 성능의 균형</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_94A8B744467B" xml:space="preserve">
+    <value>허용 범위 1 ~ 10초.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_95B00006092B" xml:space="preserve">
+    <value>비워 두면 기본 위치를 사용합니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_963745AB00F4" xml:space="preserve">
+    <value>현재 사용자 계정에만 적용됩니다. 관리자 권한이 필요하지 않습니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9693E1EB3EDB" xml:space="preserve">
+    <value>복사됨</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_976A6C92B870" xml:space="preserve">
+    <value>원문 텍스트 복사</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_97B224926F71" xml:space="preserve">
+    <value>{0} {1} 변경</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_986A825EE823" xml:space="preserve">
+    <value>프레임 레이어 없음</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_98F1681CB686" xml:space="preserve">
+    <value>로그인 시 자동 시작</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9900FB36633B" xml:space="preserve">
+    <value>휠 한 칸당 배율 변화량. 0.02 ~ 0.5.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_991A1A1FF9ED" xml:space="preserve">
+    <value>현재 위치에 시간 텍스트 추가 (Ctrl+T)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_994DA3588A6B" xml:space="preserve">
+    <value>이미지를 클릭하면 삽입할 파일을 고를 수 있습니다.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_9984B98A4667" xml:space="preserve">
+    <value>영상 이미지 레이어의 메모리가 256MB를 초과합니다. 이미지 크기나 레이어 수를 줄인 뒤 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
+  </data>
+  <data name="Text_99851CC7E6A4" xml:space="preserve">
+    <value>실선</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_99A2B3E1BD9D" xml:space="preserve">
+    <value>캡처 저장 폴더</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_99B8BDC92E9D" xml:space="preserve">
+    <value>인식 전 확대 배율</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_99CBBE7CFB4C" xml:space="preserve">
+    <value>적용 (Ctrl+S)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9A07C688760E" xml:space="preserve">
+    <value>저장 기능을 사용할 수 없음</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_9A6259D8B7CF" xml:space="preserve">
+    <value>정수를 입력해 주세요 (허용 범위 {0}).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_9A9C87658130" xml:space="preserve">
+    <value>재생 또는 일시정지</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_9B59CBE34062" xml:space="preserve">
+    <value>모자이크 블록 크기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9C208B575A0D" xml:space="preserve">
+    <value>선호 언어(BCP-47)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9C4458907087" xml:space="preserve">
+    <value>이미지는 24MB 이하여야 합니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
+  </data>
+  <data name="Text_9C49B0923292" xml:space="preserve">
+    <value>초당 프레임(FPS)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9CD399964425" xml:space="preserve">
+    <value>연필 도구 · 자유롭게 그리세요</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_9D6831D1954E" xml:space="preserve">
+    <value>영상 레이어 타임라인</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_9DB22E7B0ADA" xml:space="preserve">
+    <value>최신 버전을 확인하는 중…</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_9DDB97F03D7D" xml:space="preserve">
+    <value>동영상 재생 위치</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_9DEC678AE6FF" xml:space="preserve">
+    <value>처리 중</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_9E0860CEAEC2" xml:space="preserve">
+    <value>캡처는 기록에 저장했지만 클립보드에 복사하지 못했습니다. 편집기에서 Ctrl+C로 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_9E479FEB720B" xml:space="preserve">
+    <value>첫 화면이 스크롤 캡처 안전 한도를 초과합니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_9E53B74AE062" xml:space="preserve">
+    <value>인식 상태</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_9E5A499FF162" xml:space="preserve">
+    <value>문자 인식(OCR)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_9E5B73EAD5B5" xml:space="preserve">
+    <value>선택 {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_9EA9BD59E20C" xml:space="preserve">
+    <value>업데이트</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_9F05CC6FEDE5" xml:space="preserve">
+    <value>영상 저장을 취소했습니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A00997F45D07" xml:space="preserve">
+    <value>플로팅 창을 클릭한 뒤 Ctrl+C를 누르면 이미지를 복사합니다. Ctrl+더블클릭은 원문 텍스트를 복사하며, 이미지에서는 로컬 OCR로 인식한 텍스트를 복사합니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_A31A72A338DD" xml:space="preserve">
+    <value>OCR로 이메일·전화번호·주민번호·카드·IP·비밀 키를 찾아 가립니다 (Ctrl+Shift+R)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_A35D0E14E844" xml:space="preserve">
+    <value>편집 도구 2행</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A492D3026996" xml:space="preserve">
+    <value>표준 · 960px / 10fps</value>
+    <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
+  </data>
+  <data name="Text_A4B69FAF0C11" xml:space="preserve">
+    <value>전체</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A51DCD82F2A1" xml:space="preserve">
+    <value>글꼴 크기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_A57954F341E2" xml:space="preserve">
+    <value>스크롤 캡처할 창이 없습니다.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_A5E52C2DDFC0" xml:space="preserve">
+    <value>이미지 도구</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_A600C689F4FB" xml:space="preserve">
+    <value>{0} · 인식된 텍스트가 없습니다. 이미지에 글자가 없거나 너무 작을 수 있습니다.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_A610CF019CF2" xml:space="preserve">
+    <value>텍스트 {0} · 프레임 {1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A6434B74B299" xml:space="preserve">
+    <value>끝(초)</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_A658DC1B9407" xml:space="preserve">
+    <value>시계</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_A7937F29AF18" xml:space="preserve">
+    <value>스크롤 캡처할 영역이 없습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_A79A9F93D479" xml:space="preserve">
+    <value>현재 프레임을 이미지로 편집 (E)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_A7C9AFB5B1AF" xml:space="preserve">
+    <value>텍스트 인식</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_A81F975C401F" xml:space="preserve">
+    <value>다른 이름으로 저장…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_A862C01DBF76" xml:space="preserve">
+    <value>고정 이미지를 저장하지 못했습니다.
+
+{0}</value>
+    <comment>src\MyCapture.App\Pinning\PinManager.cs</comment>
+  </data>
+  <data name="Text_A89C81DCC2C9" xml:space="preserve">
+    <value>프레임 표시 시간: {0:0.00}초부터 {1:0.00}초까지</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_A91B71C5A3C7" xml:space="preserve">
+    <value>2 ~ 128 (이미지 픽셀).</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_A925E80E33B3" xml:space="preserve">
+    <value>닫기 (Esc)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_A97A3B71F038" xml:space="preserve">
+    <value>고정 이미지 저장</value>
+    <comment>src\MyCapture.App\Pinning\PinImageSaveService.cs</comment>
+  </data>
+  <data name="Text_AA254F35F02E" xml:space="preserve">
+    <value>텍스트 인식에 실패했습니다.</value>
+    <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
+  </data>
+  <data name="Text_AA3D7105289A" xml:space="preserve">
+    <value>, 이미지</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_AA763F299972" xml:space="preserve">
+    <value>OCR 언어를 하나 이상 입력해 주세요 (예: ko-KR, en-US).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_AAED78A6EA00" xml:space="preserve">
+    <value>{0}개 이미지의 검색 색인을 최신 상태로 만들었습니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_AB71749112CF" xml:space="preserve">
+    <value>세부 프레임 타임라인</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_ABAB2010D671" xml:space="preserve">
+    <value>설정을 저장하지 못했습니다. 저장 폴더가 읽기 전용이거나, 디스크 공간이 부족하거나, 설정 파일 경로가 다른 항목과 충돌하는지 확인한 후 다시 시도해 주세요. 변경 내용은 적용되지 않았으며 이전 설정이 그대로 유지됩니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_ACE79917CCBE" xml:space="preserve">
+    <value>민감정보 빠른 가리기</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
+  </data>
+  <data name="Text_AD101D75FFAE" xml:space="preserve">
+    <value>캡처할 대상이 없습니다.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_AD80E1DD716A" xml:space="preserve">
+    <value>T  텍스트 {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_AD823133F009" xml:space="preserve">
+    <value>'{0}' 단축키가 중복되었습니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_AE614DABA128" xml:space="preserve">
+    <value>동영상 여는 중…</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_AE6C1447BA99" xml:space="preserve">
+    <value>지원 값: 10, 15, 24, 30, 60. 기본값은 30fps입니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_AE94EC51B2C2" xml:space="preserve">
+    <value>저장 실패</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_AEB8B9AA4E6F" xml:space="preserve">
+    <value>선택한 시간 텍스트 편집 (F2)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_AF588C59EB7B" xml:space="preserve">
+    <value>영역 캡처 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B007F71CC3B2" xml:space="preserve">
+    <value>GIF 내보내기를 취소했습니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_B09611FF35C1" xml:space="preserve">
+    <value>텍스트를 추가했습니다 · Ctrl+Z로 취소</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_B0B5252B194F" xml:space="preserve">
+    <value>현재 프레임을 준비할 수 없습니다: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_B0F8B4B6D520" xml:space="preserve">
+    <value>업데이트하지 못했습니다. 네트워크와 저장 공간을 확인한 뒤 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_B2B3E2E19B90" xml:space="preserve">
+    <value>이전 단축키를 복원하는 중 오류가 발생했습니다. 일부 단축키가 동작하지 않을 수 있으니 프로그램을 다시 시작해 주세요.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_B2FD5E226F6B" xml:space="preserve">
+    <value>이미지 삽입</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_B30298E33872" xml:space="preserve">
+    <value>전체 타임라인</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_B36A1FC25CCE" xml:space="preserve">
+    <value>포커스를 잃으면 캡처 취소</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B3711BAFCD9C" xml:space="preserve">
+    <value>텍스트 (T) — 클릭해 입력</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_B39342508541" xml:space="preserve">
+    <value>이전 프레임 (Ctrl/Shift+← 또는 ,)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_B3B047802E13" xml:space="preserve">
+    <value>대상 창에 스크롤 입력을 보낼 수 없습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_B3D3A625A748" xml:space="preserve">
+    <value>저장소 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B4B8EE7BE3D6" xml:space="preserve">
+    <value>캡처를 완료할 수 없습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_B53B72EF2371" xml:space="preserve">
+    <value>저장 위치 선택 중…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_B53D43740F41" xml:space="preserve">
+    <value>화면에 붙이기 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B62C5C65821E" xml:space="preserve">
+    <value>비워 두면 기본 위치를 사용합니다. 폴더를 바꾸면 다시 시작한 후에 적용되며, 기존 파일은 이동하거나 삭제하지 않습니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B64A6FFA1008" xml:space="preserve">
+    <value>시작 프로그램 설정을 이전 상태로 되돌리지 못했습니다. 설정에서 직접 확인해 주세요.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_B64CA1BE6711" xml:space="preserve">
+    <value>글꼴 이름을 입력해 주세요.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_B651C2B6BDA9" xml:space="preserve">
+    <value>파일을 저장할 수 없습니다. 저장 위치와 권한을 확인해 주세요.</value>
+    <comment>src\MyCapture.App\Pinning\PinManager.cs</comment>
+  </data>
+  <data name="Text_B659038CC17D" xml:space="preserve">
+    <value>사각형 (R) — 이미지 위를 드래그</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_B6AEB06C1E3E" xml:space="preserve">
+    <value>재생 준비 실패</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_B6D9CAB382C8" xml:space="preserve">
+    <value>항목 {0:N0}개</value>
+    <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
+  </data>
+  <data name="Text_B6DE798A150D" xml:space="preserve">
+    <value>플로팅 화면 복사</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B753165F6585" xml:space="preserve">
+    <value>다음 프레임 (Ctrl/Shift+→ 또는 .)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_B75AA3DC8AFB" xml:space="preserve">
+    <value>인식된 텍스트</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_B89071D80D8F" xml:space="preserve">
+    <value>변경 사항을 저장합니다. 단축키 Ctrl+S.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_B8C3BBBF49E2" xml:space="preserve">
+    <value>M월 d일 (ddd)</value>
+    <comment>src\MyCapture.App\Gallery\GalleryDateGrouping.cs</comment>
+  </data>
+  <data name="Text_B9D242426446" xml:space="preserve">
+    <value>선택 중 돋보기 표시</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BA0448903510" xml:space="preserve">
+    <value>값을 낮추면 선 색으로 내부를 채웁니다.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_BA79DCE6BD5D" xml:space="preserve">
+    <value>녹화는 갤러리에 안전하게 저장했지만 편집 창을 열지 못했습니다. 갤러리에서 영상을 다시 열어 주세요.
+
+</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_BB7798D87E07" xml:space="preserve">
+    <value>플로팅 이미지를 만들 때 보존한 원문 텍스트를 복사합니다.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_BBA2EFF5675C" xml:space="preserve">
+    <value>영상 양끝에 삭제 핸들을 표시하거나 자르기 모드를 끝냅니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_BC1D92BC8EFA" xml:space="preserve">
+    <value>녹화 초당 프레임</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BCA2A41F7456" xml:space="preserve">
+    <value>이 캡처를 편집할 수 없습니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_BCC2F939B733" xml:space="preserve">
+    <value>텍스트 복사 실패</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_BCEDE50E5248" xml:space="preserve">
+    <value>어디서든 같은 단축키로 캡처하고, 결과는 로컬 라이브러리에서 이어서 편집합니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BD975387F343" xml:space="preserve">
+    <value>다른 창으로 전환되면 캡처 취소</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BDA4A255187A" xml:space="preserve">
+    <value>작업 흐름과 저장 방식을 조정합니다</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_BDB7C68F7452" xml:space="preserve">
+    <value>원문 텍스트 복사 중…</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_BE08A8230E51" xml:space="preserve">
+    <value>검색되지 않는 캡처 {0}개</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_BE3D621D8A32" xml:space="preserve">
+    <value>마우스 입력을 아래 창으로 통과시킵니다. 되돌리려면 Shift+F3을 두 번 누르세요.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_BE4215610EBC" xml:space="preserve">
+    <value>자르기 모드 · 자홍색 삭제 핸들을 드래그하세요 · Tab/←/→로 키보드 조정</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_BE876433993A" xml:space="preserve">
+    <value>취소</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_BEE32B2A6B1A" xml:space="preserve">
+    <value>프레임 편집</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_BF0FF22A113E" xml:space="preserve">
+    <value>OCR 사용 가능</value>
+    <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
+  </data>
+  <data name="Text_BFA39DD9B85B" xml:space="preserve">
+    <value>녹화</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C0C699C12863" xml:space="preserve">
+    <value>삭제 핸들 조정 중</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C11734267E6B" xml:space="preserve">
+    <value>동영상</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_C1767C4F1218" xml:space="preserve">
+    <value>녹화 파일 처리 중</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_C19FD6787279" xml:space="preserve">
+    <value>원</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C1A40373A077" xml:space="preserve">
+    <value>저장에 실패했습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_C1BE53C8ADAF" xml:space="preserve">
+    <value>녹화 드롭 없음</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C2A254402263" xml:space="preserve">
+    <value>창 캡처 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C2F4730D02E8" xml:space="preserve">
+    <value>드래그해 이동하세요.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_C315173385E0" xml:space="preserve">
+    <value>빠른 저장 폴더 경로</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C4043E16721A" xml:space="preserve">
+    <value>녹화 시계 (드래그로 이동, 마우스 휠로 크기 조절)</value>
+    <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
+  </data>
+  <data name="Text_C4656CD904CA" xml:space="preserve">
+    <value>다시 캡처에 사용할 이전 선택 영역 개수. 1 ~ 200.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C48278DA0670" xml:space="preserve">
+    <value>업데이트 파일의 안전성을 확인할 수 없습니다. 설치하지 않았습니다.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_C4DFF18A59CA" xml:space="preserve">
+    <value>GIF 만드는 중… {0}% ({1}/{2})</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C5176D8C3041" xml:space="preserve">
+    <value>세부 타임라인 확대 (Ctrl+Shift+=)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C51C3FDBF019" xml:space="preserve">
+    <value>색인 중… {0}/{1}</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_C5364F392040" xml:space="preserve">
+    <value>지금 색인</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_C536D125279E" xml:space="preserve">
+    <value>찾아보기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_C5AC44062ACA" xml:space="preserve">
+    <value>녹화 파일은 복구 표식과 함께 보존했지만 갤러리 등록을 완료하지 못했습니다. MyCapture를 다시 시작하면 복구를 시도합니다.
+
+</value>
+    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
+  </data>
+  <data name="Text_C5B654A9AE39" xml:space="preserve">
+    <value>클립보드를 사용할 수 없습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_C61A081610C9" xml:space="preserve">
+    <value>실행 취소 (Ctrl+Z)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_C68C66E8758A" xml:space="preserve">
+    <value>다운로드와 검증이 완료되었습니다. 작업을 저장한 뒤 설치해 주세요.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_C7000F39A0DF" xml:space="preserve">
+    <value>자르기 범위 적용 · 유지 {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_C7011B8D345C" xml:space="preserve">
+    <value>Ctrl+더블클릭</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_C740003A2150" xml:space="preserve">
+    <value>투명도 {0:0}%</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_C750845B7AA3" xml:space="preserve">
+    <value>MyCapture — 영역 녹화</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_C7E7E4FA07DA" xml:space="preserve">
+    <value>{0}을(를) 추가했습니다 · Ctrl+Z로 취소</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_C8FFDDF126A8" xml:space="preserve">
+    <value>아직 검색되지 않는 캡처의 텍스트를 인식해 전문 검색에 포함합니다</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_CA6DE730BB6E" xml:space="preserve">
+    <value>MyCapture를 시작할 수 없습니다.
+
+{0}</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_CA8A8225E428" xml:space="preserve">
+    <value>선</value>
+    <comment>src\MyCapture.Core\Annotations\PolylineAnnotation.cs</comment>
+  </data>
+  <data name="Text_CC2687CDFC63" xml:space="preserve">
+    <value>작업을 취소하고 임시 파일을 정리하는 중…</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_CDC04935B675" xml:space="preserve">
+    <value>'{0}'은(는) 올바른 언어 태그가 아닙니다 (예: ko-KR, en-US).</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_CE2F7B272674" xml:space="preserve">
+    <value>설치 파일 다운로드 중… {0:F0}%</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_CE57D5CA2394" xml:space="preserve">
+    <value>화면 고정에 실패했습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_CE706412FA75" xml:space="preserve">
+    <value>실행 취소</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_CEFF481585C2" xml:space="preserve">
+    <value>연필 도구</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_CF32FE576AE7" xml:space="preserve">
+    <value>허용 범위는 {0}입니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_CFACAAC223E9" xml:space="preserve">
+    <value>캡처 단축키가 비어 있어 Ctrl+Shift+C로 되돌렸습니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_CFC4974E7244" xml:space="preserve">
+    <value>0.5배속부터 4배속 사이에서 GIF 재생 속도를 선택합니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_CFC51550591E" xml:space="preserve">
+    <value>설정 범주</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_CFD6A8C2BFA5" xml:space="preserve">
+    <value>선택 구간을 GIF로 내보내기 (G)</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D0113E3B1184" xml:space="preserve">
+    <value>더 불투명하게 (Ctrl+휠)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_D0FD12A01E4A" xml:space="preserve">
+    <value>민감정보 검색이 끝난 뒤 저장해 주세요 · 취소하려면 Esc</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D116685C040E" xml:space="preserve">
+    <value>자유 영역 캡처</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_D1357BFAAF9A" xml:space="preserve">
+    <value>파일명 패턴이 유효한 파일 이름을 만들지 못합니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_D18267AE0420" xml:space="preserve">
+    <value>애니메이션 GIF (*.gif)|*.gif</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D1ACE701CBFE" xml:space="preserve">
+    <value>캡처 단축키는 비워 둘 수 없습니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_D1B87ACB2D22" xml:space="preserve">
+    <value>색상</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D1E229E81B83" xml:space="preserve">
+    <value>녹화 시계 표시</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_D1F0DAEAA780" xml:space="preserve">
+    <value>캡처 창을 녹화 영상에서 제외할 수 없어 캡처를 중단했습니다.</value>
+    <comment>src\MyCapture.App\Capture\CaptureOverlayCoordinator.cs</comment>
+  </data>
+  <data name="Text_D1F6E7772569" xml:space="preserve">
+    <value>{0} · 언어 {1} · {2}줄 · {3:0}ms</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_D2ABBB3968D3" xml:space="preserve">
+    <value>녹화, 캡처 또는 편집을 마치고 설정을 적용한 뒤 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_D2E201C9D452" xml:space="preserve">
+    <value>프레임</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D3F7F6C952A8" xml:space="preserve">
+    <value>GIF 재생 배속</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D41AD4FCB417" xml:space="preserve">
+    <value>가운데</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_D43A776C5E28" xml:space="preserve">
+    <value>재생</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_D44617983641" xml:space="preserve">
+    <value>GIF로 내보내기</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_D53ABD064C5E" xml:space="preserve">
+    <value>화살표 (A) — 시작점에서 끝점으로 드래그</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D5A4B6986227" xml:space="preserve">
+    <value>이전 영역의 모니터가 연결되어 있지 않습니다. 새 영역을 선택해 주세요.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_D5A82B3B1F83" xml:space="preserve">
+    <value>화살표 도구</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D5D43E09190C" xml:space="preserve">
+    <value>프레임 {0}/{1} · {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D613D66285DC" xml:space="preserve">
+    <value>추가로 스크롤할 콘텐츠를 찾지 못했습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_D6580A6EEFB2" xml:space="preserve">
+    <value>이 시스템에서 OCR 언어 팩을 사용할 수 없습니다.</value>
+    <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
+  </data>
+  <data name="Text_D65A9E5A4C1A" xml:space="preserve">
+    <value>축소 (-)</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_D6E142D9293C" xml:space="preserve">
+    <value>모든 고정 창 숨기기 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_D6FD14107836" xml:space="preserve">
+    <value>레이어 막대의 가운데를 드래그해 이동하거나 양 끝을 드래그해 길이를 조절합니다. 위/아래: 레이어 선택 · 좌/우: 시작 시간 · Shift+좌/우: 끝 시간 · Ctrl: 0.01초 단위 · Esc: 취소</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_D7231656D075" xml:space="preserve">
+    <value>선택한 프레임 레이어를 삭제했습니다</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D75A61C65264" xml:space="preserve">
+    <value>Esc로 취소</value>
+    <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
+  </data>
+  <data name="Text_D7FF669E0B69" xml:space="preserve">
+    <value>선호 OCR 언어</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_D8538A946A6C" xml:space="preserve">
+    <value>캡처 저장 폴더 변경은 다시 시작한 후에 적용됩니다. 기존 파일은 이동하거나 삭제하지 않습니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_D8A09D5BCDCB" xml:space="preserve">
+    <value>{0} / {1}  ·  프레임 {2}/{3}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D8A23CD47E7A" xml:space="preserve">
+    <value>모든 값을 기본값으로 되돌립니다. 적용을 누르기 전에는 취소로 되돌릴 수 있습니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_D8A75FF54AF8" xml:space="preserve">
+    <value>GIF 배속과 화질 설정</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D8F5F6738520" xml:space="preserve">
+    <value>사각형 레이어 추가</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D8F8A6B5650D" xml:space="preserve">
+    <value>이미지를 추가했습니다 · Ctrl+Z로 취소</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_D9378793F9FE" xml:space="preserve">
+    <value>영상 타임라인 및 레이어 도구</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_D9483E35CD83" xml:space="preserve">
+    <value>확대 + 또는 마우스 휠로 프레임 눈금 표시</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_D9F974C95F68" xml:space="preserve">
+    <value>텍스트 저장</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_D9FC5F981274" xml:space="preserve">
+    <value>MyCapture — 다시 편집</value>
+    <comment>src\MyCapture.App\Gallery\GalleryEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DA09CBABFC1E" xml:space="preserve">
+    <value>동영상을 불러오는 중… 0%</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DA9B79FCBFC8" xml:space="preserve">
+    <value>GIF 화질 및 용량</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DAB3F35F5BD0" xml:space="preserve">
+    <value>텍스트 도구</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DAF93C3AA95D" xml:space="preserve">
+    <value>실행을 취소했습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DB39E24CEA42" xml:space="preserve">
+    <value>지연 캡처 카운트다운</value>
+    <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
+  </data>
+  <data name="Text_DBAF1D995258" xml:space="preserve">
+    <value>선 두께를 {0:0}px로 바꿨습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DC0760235344" xml:space="preserve">
+    <value>사각형</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DC710AA11970" xml:space="preserve">
+    <value>유지할 영상의 시작으로</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DC9F5ED04461" xml:space="preserve">
+    <value>이미지 파일|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|모든 파일|*.*</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DCA8CAFD9D0D" xml:space="preserve">
+    <value>레이어</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DD2EFE395A75" xml:space="preserve">
+    <value>빠른 작업 흐름</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_DD9DFB5B4BE3" xml:space="preserve">
+    <value>동영상을 재생할 수 없습니다: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_DDB4DA1FC0AE" xml:space="preserve">
+    <value>{0} 이동/크기 변경</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_DFB3664A9A08" xml:space="preserve">
+    <value>, 동영상 {0}</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_DFC084A111D0" xml:space="preserve">
+    <value>빠른 저장</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_DFCA22AB9F61" xml:space="preserve">
+    <value>유지할 영상의 끝으로</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E04C819FB554" xml:space="preserve">
+    <value>MyCapture는 Windows 11 이상에서만 실행됩니다.</value>
+    <comment>src\MyCapture.App\Diagnostics\HostRequirementGate.cs</comment>
+  </data>
+  <data name="Text_E0B58D1CFED1" xml:space="preserve">
+    <value>선 종류</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_E0BEBB354D8F" xml:space="preserve">
+    <value>위</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_E11F2F71F169" xml:space="preserve">
+    <value>폴더나 바탕화면으로 드래그해 MP4 파일로 내보내기</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_E145645E75F3" xml:space="preserve">
+    <value>녹화 단축키 기본값을 Ctrl+Shift+X로 변경했습니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
+  <data name="Text_E166B75FADF4" xml:space="preserve">
+    <value>뒤로 크게 이동</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E1C96EF1EA0F" xml:space="preserve">
+    <value>녹화 취소</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_E1E40E743D3B" xml:space="preserve">
+    <value>이미지 레이어가 너무 큽니다. 이미지 크기를 줄여 주세요.</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
+  </data>
+  <data name="Text_E20E28D53DCE" xml:space="preserve">
+    <value>이 캡처를 저장하는 중입니다. 완료된 뒤 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_E22E2C953A8B" xml:space="preserve">
+    <value>고정된 화면 이미지입니다. Ctrl+C는 이미지를 복사하고 Ctrl+더블클릭은 텍스트를 복사합니다. 마우스 오른쪽 단추 메뉴나 Ctrl+S로 원본 PNG를 저장하고, Ctrl+Shift+S로 위치를 선택합니다. 드래그로 이동, 마우스 휠로 확대·축소, Ctrl+휠로 투명도 조절, Esc 또는 Delete로 닫습니다. 클릭 통과를 켜면 Shift+F3을 두 번 눌러 해제할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_E2395EBF6C65" xml:space="preserve">
+    <value>화면에 현재 날짜/시간 시계를 표시합니다. 드래그하여 이동하고 마우스 휠로 크기를 조절할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_E285D4BC2FA3" xml:space="preserve">
+    <value>현재 버전 {0}</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_E2B271067CCF" xml:space="preserve">
+    <value>고정 크기 영역이 이 모니터 밖에 있습니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_E3348500E6DB" xml:space="preserve">
+    <value>트림한 영상 저장</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E33E531B40C6" xml:space="preserve">
+    <value>스크롤 결과가 안전 크기 한도를 초과합니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_E395E2567985" xml:space="preserve">
+    <value>빠른 가리기</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_E3B50B06C736" xml:space="preserve">
+    <value>프레임 레이어를 만들 수 없습니다: </value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E3F51EDC0F16" xml:space="preserve">
+    <value>저장됨 · {0}</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_E414AD855B8D" xml:space="preserve">
+    <value>펜</value>
+    <comment>src\MyCapture.Core\Annotations\PenAnnotation.cs</comment>
+  </data>
+  <data name="Text_E485D788C2BE" xml:space="preserve">
+    <value>, 고정됨</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_E5CAF7CFC916" xml:space="preserve">
+    <value>앞으로 크게 이동</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E5F541120733" xml:space="preserve">
+    <value>텍스트 인식 결과 창</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_E657405F6B2D" xml:space="preserve">
+    <value>모두 닫기</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_E68076415933" xml:space="preserve">
+    <value>다른 프로그램이 클립보드를 사용 중입니다. 잠시 후 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_E68817537C75" xml:space="preserve">
+    <value>민감정보 후보 {0}개를 가렸습니다 · 검토 후 Ctrl+Z로 한 번에 취소할 수 있습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_E6A0E3D10B47" xml:space="preserve">
+    <value>주석 기본값</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_E75BE1B916FD" xml:space="preserve">
+    <value>원본 영상 위에 합성되는 투명 프레임 편집 레이어</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E7770F293C4C" xml:space="preserve">
+    <value>전체 화면 캡처 단축키</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_E77D23C3D35B" xml:space="preserve">
+    <value>텍스트 수정: {0}–{1}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_E7A732EAE7D5" xml:space="preserve">
+    <value>녹화 영역 테두리 (드래그로 이동)</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_E87551A1A39F" xml:space="preserve">
+    <value>프레임 이미지를 저장할 수 없습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_E8B876F98CD8" xml:space="preserve">
+    <value>스크롤 캡처 취소(&amp;S)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_E8DF95164C87" xml:space="preserve">
+    <value>이미지를 클릭한 뒤 텍스트를 입력하세요.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_E9059CA2B6E3" xml:space="preserve">
+    <value>영상 레이어 및 GIF 도구</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_EA1FBABE64F3" xml:space="preserve">
+    <value>창 캡처(&amp;W)</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_EA33C8FF45A0" xml:space="preserve">
+    <value>저장 메뉴</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_EB29C2038682" xml:space="preserve">
+    <value>프레임 원본을 보관할 수 없습니다</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_EB9AB8D7D13C" xml:space="preserve">
+    <value>로컬 OCR 결과에서 민감정보 후보를 찾아 편집 가능한 검정 사각형으로 추가합니다.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_EB9E222E4C18" xml:space="preserve">
+    <value>시간 텍스트는 최대 {0}개까지 추가할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_EBC9F14582AD" xml:space="preserve">
+    <value>라이브러리 안에서 동영상을 열 수 없습니다: </value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_EC38F786B534" xml:space="preserve">
+    <value>라이브러리 재생 패널 닫기</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
+  </data>
+  <data name="Text_EC43594BD44D" xml:space="preserve">
+    <value>[프레임]  {0}–{1}  {2}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_EC7FF66E22C9" xml:space="preserve">
+    <value>동영상 파일을 찾을 수 없습니다.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_EC81AD6B5A75" xml:space="preserve">
+    <value>캡처를 저장하는 중입니다. 완료된 뒤 다시 시도해 주세요.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_EE36971D5C4B" xml:space="preserve">
+    <value>Windows OCR 언어 팩을 사용할 수 없어 빠른 가리기를 실행할 수 없습니다</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_EEA09781BBD7" xml:space="preserve">
+    <value>텍스트는 지정한 구간에만 보이며 MP4와 GIF에 영구 합성됩니다. Ctrl+Enter로 저장할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_EF7DD8DA5437" xml:space="preserve">
+    <value>입력을 확인해 주세요</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_EF83F428AA11" xml:space="preserve">
+    <value>녹화 편집 창</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_EFA9B778C037" xml:space="preserve">
+    <value>끝 지점 설정: {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_F018AA1A2813" xml:space="preserve">
+    <value>현재 프레임 처리가 끝나면 중단합니다.</value>
+    <comment>src\MyCapture.App\App.xaml.cs</comment>
+  </data>
+  <data name="Text_F04B7153934A" xml:space="preserve">
+    <value>캡처 저장 폴더 선택</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_F085C7366DEB" xml:space="preserve">
+    <value>F  프레임 {0}</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
+  </data>
+  <data name="Text_F09A6C5A6A10" xml:space="preserve">
+    <value>이미지를 준비할 수 없습니다.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultPresenter.cs</comment>
+  </data>
+  <data name="Text_F0C27AB1BA08" xml:space="preserve">
+    <value>더블클릭으로 고정 창 닫기</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F0CFD62F0971" xml:space="preserve">
+    <value>녹화 영상에 마우스 커서 포함</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F11BA21FB824" xml:space="preserve">
+    <value>녹화 경과 시간</value>
+    <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
+  </data>
+  <data name="Text_F122632462DF" xml:space="preserve">
+    <value>저장 취소됨</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_F1A864DCBEC4" xml:space="preserve">
+    <value> · 고정 항목 보호로 저장 한도를 일시 초과했습니다</value>
+    <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
+  </data>
+  <data name="Text_F1C1BB1D5771" xml:space="preserve">
+    <value>녹화 시작 전 카운트다운</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F2315240D532" xml:space="preserve">
+    <value>자르기 버튼을 누르면 영상 양끝의 삭제 범위를 조정할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
+  </data>
+  <data name="Text_F296CB19F0A2" xml:space="preserve">
+    <value>준비됨</value>
+    <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
+  </data>
+  <data name="Text_F2F36C2D52F6" xml:space="preserve">
+    <value>GIF 시간 해상도는 0.01초입니다. 프레임 레이어 표시 구간을 0.01초 이상으로 늘려 주세요.</value>
+    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
+  </data>
+  <data name="Text_F371688B8EE8" xml:space="preserve">
+    <value>이 PC에 Windows OCR 언어 팩이 없어 텍스트 인식과 캡처 전문 검색을 사용할 수 없습니다. 설정 → 시간 및 언어 → 언어 및 지역에서 언어의 [언어 기능]에 '광학 문자 인식(OCR)'을 추가한 뒤 다시 시도하세요. 인터넷 연결 없이도 캡처·주석·녹화 등 나머지 기능은 정상 동작합니다.</value>
+    <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
+  </data>
+  <data name="Text_F3C7FE27A258" xml:space="preserve">
+    <value>Windows에 로그인하면 MyCapture를 자동으로 실행합니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F457141C336A" xml:space="preserve">
+    <value>다시 실행 (Ctrl+Y)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_F47CC25B5D11" xml:space="preserve">
+    <value>이전 단축키를 복원하지 못했습니다. 일부 단축키가 동작하지 않을 수 있으니 프로그램을 다시 시작해 주세요.</value>
+    <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
+  </data>
+  <data name="Text_F5416FA54E13" xml:space="preserve">
+    <value>캡처 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F554B87B81B3" xml:space="preserve">
+    <value>연필 획을 추가했습니다 · 계속 그릴 수 있습니다 · Ctrl+Z로 취소</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_F5BF49635D43" xml:space="preserve">
+    <value>환경 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F6249F8FCEAE" xml:space="preserve">
+    <value>{0} 점 변경</value>
+    <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
+  </data>
+  <data name="Text_F64AB9FE8BCD" xml:space="preserve">
+    <value>올바른 폴더 경로가 아닙니다.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
+  </data>
+  <data name="Text_F6C3295E346E" xml:space="preserve">
+    <value>캡처 저장 폴더 경로</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_F6C51786B910" xml:space="preserve">
+    <value>인식 가능한 언어: {0}. 모든 처리는 이 PC에서 오프라인으로 수행됩니다.</value>
+    <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
+  </data>
+  <data name="Text_F73E8EBF6CE0" xml:space="preserve">
+    <value>인식된 텍스트입니다. Ctrl+A로 전체 선택, Ctrl+C로 복사할 수 있습니다.</value>
+    <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
+  </data>
+  <data name="Text_F87FEA248BDD" xml:space="preserve">
+    <value>이미 캡처가 진행 중입니다.</value>
+    <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
+  </data>
+  <data name="Text_F91180061AA3" xml:space="preserve">
+    <value>설치하고 다시 시작</value>
+    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+  </data>
+  <data name="Text_FA22CDFB3221" xml:space="preserve">
+    <value>끝</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_FA24C3FC395F" xml:space="preserve">
+    <value>클릭 통과 꺼짐</value>
+    <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Text_FA2ADD387F12" xml:space="preserve">
+    <value>PNG 이미지 (*.png)|*.png</value>
+    <comment>src\MyCapture.App\Pinning\PinImageSaveService.cs</comment>
+  </data>
+  <data name="Text_FA339B8FA77F" xml:space="preserve">
+    <value>단축키 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FA5045A86267" xml:space="preserve">
+    <value>형광펜 투명도(알파)</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FA67EC449E04" xml:space="preserve">
+    <value>영상 레이어 위치 및 크기 편집</value>
+    <comment>src\MyCapture.App\Recording\VideoLayerCanvas.cs</comment>
+  </data>
+  <data name="Text_FAC754F72C25" xml:space="preserve">
+    <value>주석 텍스트 입력</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_FACB0016A977" xml:space="preserve">
+    <value>동영상 미리보기를 읽을 수 없음</value>
+    <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
+  </data>
+  <data name="Text_FADDD953571F" xml:space="preserve">
+    <value>녹화 설정</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FAE3A646286D" xml:space="preserve">
+    <value>입력 오류 요약</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FB0A09B025D3" xml:space="preserve">
+    <value>동영상을 열 수 없습니다: </value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_FB68C3A34978" xml:space="preserve">
+    <value>OCR 엔진을 만들 수 없습니다.</value>
+    <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
+  </data>
+  <data name="Text_FC05BD860043" xml:space="preserve">
+    <value>최대 저장 용량 기가바이트</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FD6443988325" xml:space="preserve">
+    <value>재생 중 · 텍스트 미리보기 활성</value>
+    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
+  </data>
+  <data name="Text_FE872AF40869" xml:space="preserve">
+    <value>텍스트 시작 시간 초</value>
+    <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
+  </data>
+  <data name="Text_FEAA5199651D" xml:space="preserve">
+    <value>캡처, 보관, 내보내기와 편집 기본값을 한곳에서 관리합니다.</value>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
+  </data>
+  <data name="Text_FEFD9D67E873" xml:space="preserve">
+    <value>선택 도구 · 주석을 클릭해 선택하세요</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+</root>

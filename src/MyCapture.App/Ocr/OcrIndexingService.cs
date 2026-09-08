@@ -171,7 +171,8 @@ public sealed class OcrIndexingService
                                 recordId,
                                 result.Text,
                                 result.LanguageTag,
-                                requestedContentRevision)
+                                requestedContentRevision,
+                                cancellationToken)
                             .ConfigureAwait(false);
                         if (cached)
                         {
@@ -187,7 +188,8 @@ public sealed class OcrIndexingService
                                 recordId,
                                 string.Empty,
                                 result.LanguageTag,
-                                requestedContentRevision)
+                                requestedContentRevision,
+                                cancellationToken)
                             .ConfigureAwait(false);
                         if (cached)
                         {
@@ -238,12 +240,13 @@ public sealed class OcrIndexingService
         Guid id,
         string text,
         string? languageTag,
-        long expectedContentRevision)
+        long expectedContentRevision,
+        CancellationToken cancellationToken)
     {
         if (_mutationDispatcher is null || _mutationDispatcher.CheckAccess())
         {
             BeforeCacheOcrForTest?.Invoke();
-            return _gallery.CacheOcr(id, text, languageTag, expectedContentRevision);
+            return await _gallery.CacheOcrAsync(id, text, languageTag, expectedContentRevision, cancellationToken);
         }
 
         // Recognition deliberately finishes off-thread. Queue records and their observable
@@ -253,10 +256,11 @@ public sealed class OcrIndexingService
                 () =>
                 {
                     BeforeCacheOcrForTest?.Invoke();
-                    return _gallery.CacheOcr(id, text, languageTag, expectedContentRevision);
+                    return _gallery.CacheOcrAsync(id, text, languageTag, expectedContentRevision, cancellationToken);
                 },
                 DispatcherPriority.Background)
             .Task
+            .Unwrap()
             .ConfigureAwait(false);
     }
 

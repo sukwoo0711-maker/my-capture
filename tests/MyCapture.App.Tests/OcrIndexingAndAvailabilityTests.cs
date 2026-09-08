@@ -22,7 +22,7 @@ namespace MyCapture.App.Tests;
 /// the language-pack availability advisory (so the dependency is never silent) and the
 /// batch indexing service's control-flow outcomes (so a missing engine degrades cleanly).
 /// </summary>
-public sealed class OcrIndexingAndAvailabilityTests
+public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
 {
     // ---- OcrAvailability advisory ----
 

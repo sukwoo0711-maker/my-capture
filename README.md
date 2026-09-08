@@ -20,7 +20,7 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, �
 - 캡처 수와 저장 용량을 함께 제한하는 로컬 큐, 이미지의 7일 자동 보관 정리, 썸네일, 빠른 저장 폴더 설정
 - 시스템 애니메이션 설정을 존중하는 짧고 일관된 전환과 키보드·스크린 리더 접근성
 
-녹화는 화면 설명·편집·GIF 워크플로에 집중하며 마이크/시스템 오디오는 의도적으로 포함하지 않습니다. UI는 한국어 중심입니다. 구현 범위와 검증 기록은 [`docs/`](docs/)에서 확인할 수 있습니다.
+녹화는 화면 설명·편집·GIF 워크플로에 집중하며 마이크/시스템 오디오는 의도적으로 포함하지 않습니다. 설정에서 한국어·영어 또는 Windows 표시 언어 따르기를 선택할 수 있으며, 저장한 선택은 다음 앱 시작부터 적용됩니다. 구현 범위와 검증 기록은 [`docs/`](docs/)에서 확인할 수 있습니다.
 
 ## 기본 단축키
 
@@ -53,7 +53,7 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, �
 
 캡처 저장 폴더와 빠른 저장 폴더는 설정에서 변경할 수 있습니다. 라이브러리 이미지는 생성 후 7일이 지나면 오래된 순서대로 자동 삭제하며, 핀 고정하거나 편집 중인 이미지는 보관합니다. 동영상에는 7일 만료를 적용하지 않습니다. 따로 내보낸 파일은 관리 큐 정리 대상이 아닙니다. 개수·용량 제한은 별도로 적용됩니다.
 
-1.7.1 변경 사항과 검증 상태는 [릴리스 노트](docs/releases/1.7.1-release-notes.md)와 [검증 기록](docs/releases/1.7.1-validation.md)에 기록합니다. 1.7.0 기록은 [릴리스 노트](docs/releases/1.7.0-release-notes.md)와 [검증 기록](docs/releases/1.7.0-validation.md)에 남아 있습니다.
+1.8.0의 변경 사항과 검증 절차는 [릴리스 노트](docs/releases/1.8.0-release-notes.md)와 [검증 문서](docs/releases/1.8.0-validation.md)에서 확인할 수 있습니다. 이전 1.7.1 기록은 [릴리스 노트](docs/releases/1.7.1-release-notes.md)와 [검증 기록](docs/releases/1.7.1-validation.md)에 남아 있습니다.
 
 ## 소스에서 빌드
 
@@ -121,4 +121,4 @@ MyCapture 자체 코드는 [MIT License](LICENSE)로 공개됩니다. 배포 패
 
 ---
 
-**English summary:** MyCapture is a Windows 11 screenshot, pin, enhanced local OCR, OCR-assisted privacy-redaction, unified image/video gallery, annotation, cross-monitor region-recording, timed-text video editing, and GIF-export app. Release binaries are self-contained and work without a preinstalled .NET runtime; the included bootstrap script can install the repository-pinned .NET 10 SDK for source builds without admin rights. The current UI is Korean-first, recording intentionally has no audio, and distributed binaries are not Authenticode-signed.
+**English summary:** MyCapture is a Windows 11 screenshot, pin, enhanced local OCR, OCR-assisted privacy-redaction, unified image/video gallery, annotation, cross-monitor region-recording, timed-text video editing, and GIF-export app. Release binaries are self-contained and work without a preinstalled .NET runtime; the included bootstrap script can install the repository-pinned .NET 10 SDK for source builds without admin rights. Choose Korean, English, or the Windows display language in Settings; the saved choice applies on the next app start. Recording intentionally has no audio, and distributed binaries are not Authenticode-signed.

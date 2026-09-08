@@ -27,7 +27,7 @@ public sealed class BoolToVisibilityConverter : IValueConverter
 public sealed class PinLabelConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is true ? "고정 해제" : "고정";
+        value is true ? UiText.Get("Text_579BAB6C0833") : UiText.Get("Text_8A98DFB08E97");
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();

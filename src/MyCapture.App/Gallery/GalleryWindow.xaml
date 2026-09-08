@@ -1,10 +1,11 @@
 <Window x:Class="MyCapture.App.Gallery.GalleryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:loc="clr-namespace:MyCapture.App.Localization"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:gallery="clr-namespace:MyCapture.App.Gallery"
         x:ClassModifier="internal"
         Style="{StaticResource Window.Standard}"
-        Title="MyCapture — 라이브러리"
+        Title="{loc:Text Text_37AD4F28D422}"
         Width="1120" Height="760"
         MinWidth="980" MinHeight="560"
         WindowStartupLocation="CenterScreen"
@@ -90,7 +91,7 @@
                                     Background="{StaticResource Surface.BadgeStrong}"
                                     IsHitTestVisible="False"
                                     Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="동영상" Foreground="{StaticResource Text.Badge}"
+                                <TextBlock Text="{loc:Text Text_C11734267E6B}" Foreground="{StaticResource Text.Badge}"
                                            FontSize="{StaticResource FontSize.Caption}"
                                            FontWeight="SemiBold" />
                             </Border>
@@ -99,7 +100,7 @@
                                     Background="{StaticResource Surface.BadgeStrong}"
                                     IsHitTestVisible="False"
                                     Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="이미지" Foreground="{StaticResource Text.Badge}"
+                                <TextBlock Text="{loc:Text Text_302BAE127938}" Foreground="{StaticResource Text.Badge}"
                                            FontSize="{StaticResource FontSize.Caption}"
                                            FontWeight="SemiBold" />
                             </Border>
@@ -110,7 +111,7 @@
                                 <Border Padding="8,4" CornerRadius="6"
                                         Background="{StaticResource Accent.Default}"
                                         Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="고정됨" FontSize="{StaticResource FontSize.Caption}"
+                                    <TextBlock Text="{loc:Text Text_1300F4BEEC76}" FontSize="{StaticResource FontSize.Caption}"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource Text.OnAccent}" />
                                 </Border>
@@ -121,7 +122,7 @@
                                     BorderBrush="{StaticResource Border.Subtle}"
                                     BorderThickness="1"
                                     Visibility="{Binding HasAnnotations, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="편집됨" FontSize="{StaticResource FontSize.Caption}"
+                                <TextBlock Text="{loc:Text Text_2C64DDA4D878}" FontSize="{StaticResource FontSize.Caption}"
                                            Foreground="{StaticResource Text.Secondary}" />
                             </Border>
                         </Grid>
@@ -159,13 +160,13 @@
 
                         <Button Grid.Column="0" Style="{StaticResource Button.Primary}"
                                 Content="{Binding ActionLabel}" MinHeight="34"
-                                ToolTip="다시 편집 (Enter)"
-                                AutomationProperties.Name="다시 편집"
+                                ToolTip="{loc:Text Text_0400CF56D074}"
+                                AutomationProperties.Name="{loc:Text Text_1003CFC78E66}"
                                 Click="OnEditClick" />
 
                         <Button Grid.Column="1" Style="{StaticResource Gallery.IconButton}"
-                                ToolTip="렌더링된 이미지 복사 (Ctrl+C)"
-                                AutomationProperties.Name="이미지 복사"
+                                ToolTip="{loc:Text Text_59D43391538F}"
+                                AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
                                 Click="OnCopyClick"
                                 Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
                             <Path Data="{StaticResource Icon.Copy}" Width="20" Height="20"
@@ -177,8 +178,8 @@
                         </Button>
 
                         <Button Grid.Column="2" Style="{StaticResource Gallery.IconButton}"
-                                ToolTip="라이브러리에서 삭제 (Delete)"
-                                AutomationProperties.Name="캡처 삭제"
+                                ToolTip="{loc:Text Text_784572D51B63}"
+                                AutomationProperties.Name="{loc:Text Text_89D4979D7596}"
                                 Click="OnDeleteClick">
                             <Path Data="{StaticResource Icon.Delete}" Width="20" Height="20"
                                   Stretch="None"
@@ -190,8 +191,8 @@
 
                         <Button Grid.Column="3"
                                 Style="{StaticResource Gallery.IconButton}"
-                                ToolTip="더 보기 — 핀 고정, 내보내기, 텍스트 인식"
-                                AutomationProperties.Name="더 보기"
+                                ToolTip="{loc:Text Text_3793EC0322DB}"
+                                AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
                                 Click="OnMoreClick">
                             <Path Data="{StaticResource Icon.More}" Width="20" Height="20"
                                   Stretch="None"
@@ -209,12 +210,12 @@
                                                                    RelativeSource={RelativeSource Self}}">
                                     <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
                                               CommandParameter="{Binding}"
-                                              AutomationProperties.Name="핀 고정 전환"
+                                              AutomationProperties.Name="{loc:Text Text_80A33648EAF2}"
                                               InputGestureText="P"
                                               Click="OnPinMenuClick" />
-                                    <MenuItem Header="텍스트 인식 (OCR)"
+                                    <MenuItem Header="{loc:Text Text_854582314EBD}"
                                               CommandParameter="{Binding}"
-                                              AutomationProperties.Name="텍스트 인식 (OCR)"
+                                              AutomationProperties.Name="{loc:Text Text_854582314EBD}"
                                               InputGestureText="T"
                                               Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
                                               Click="OnOcrMenuClick">
@@ -227,16 +228,16 @@
                                                   StrokeLineJoin="Round" Fill="Transparent" />
                                         </MenuItem.Icon>
                                     </MenuItem>
-                                    <MenuItem Header="GIF로 내보내기"
+                                    <MenuItem Header="{loc:Text Text_D44617983641}"
                                               CommandParameter="{Binding}"
-                                              AutomationProperties.Name="GIF로 내보내기"
+                                              AutomationProperties.Name="{loc:Text Text_D44617983641}"
                                               InputGestureText="G"
                                               Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
                                               Click="OnGifMenuClick" />
                                     <Separator />
-                                    <MenuItem Header="삭제"
+                                    <MenuItem Header="{loc:Text Text_6139B6C3ED73}"
                                               CommandParameter="{Binding}"
-                                              AutomationProperties.Name="삭제"
+                                              AutomationProperties.Name="{loc:Text Text_6139B6C3ED73}"
                                               InputGestureText="Delete"
                                               Foreground="{StaticResource State.DangerHover}"
                                               Click="OnDeleteMenuClick">
@@ -393,8 +394,8 @@
                 <Image Style="{StaticResource Brand.AppIcon}" Margin="0,1,12,0"
                        AutomationProperties.Name="MyCapture" />
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="라이브러리" Style="{StaticResource Text.Display}" />
-                    <TextBlock Text="이미지와 동영상을 한곳에서 찾고 편집합니다. 동영상은 선택하거나 두 번 클릭하면 이 창 안에서 바로 재생됩니다."
+                    <TextBlock Text="{loc:Text Text_6A0F998C2819}" Style="{StaticResource Text.Display}" />
+                    <TextBlock Text="{loc:Text Text_13036A090EBA}"
                                Style="{StaticResource Text.MutedBlock}" Margin="0,5,0,0" MaxWidth="620"
                                HorizontalAlignment="Left" />
                 </StackPanel>
@@ -424,10 +425,10 @@
                          Background="Transparent"
                          BorderThickness="0"
                          Padding="10,9"
-                         AutomationProperties.Name="검색"
+                         AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
                          TextChanged="OnSearchTextChanged" />
                 <TextBlock Grid.Column="1" IsHitTestVisible="False"
-                           Text="제목, 창 이름, 인식된 텍스트 검색  ·  Ctrl+F"
+                           Text="{loc:Text Text_59208AC2B48E}"
                            Foreground="{StaticResource Text.Muted}"
                            Margin="12,10"
                            VerticalAlignment="Center">
@@ -471,10 +472,10 @@
                 </StackPanel>
                 <Button x:Name="OcrIndexButton" Grid.Column="1"
                         Style="{StaticResource Button.Primary}"
-                        Content="지금 색인" MinHeight="34"
+                        Content="{loc:Text Text_C5364F392040}" MinHeight="34"
                         VerticalAlignment="Center" Margin="14,0,0,0"
-                        ToolTip="아직 검색되지 않는 캡처의 텍스트를 인식해 전문 검색에 포함합니다"
-                        AutomationProperties.Name="캡처 전문 색인 시작"
+                        ToolTip="{loc:Text Text_C8FFDDF126A8}"
+                        AutomationProperties.Name="{loc:Text Text_4D5F7094119C}"
                         Click="OnOcrIndexClick" />
             </Grid>
         </Border>
@@ -494,7 +495,7 @@
                     Style="{StaticResource Card}" Padding="42,30"
                     Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel MaxWidth="380">
-                    <TextBlock Text="아직 표시할 항목이 없습니다"
+                    <TextBlock Text="{loc:Text Text_8773C2A9C3EA}"
                                Style="{StaticResource Text.Title}"
                                HorizontalAlignment="Center" />
                     <TextBlock x:Name="EmptyStateLabel"
@@ -517,15 +518,15 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock Text="라이브러리 재생" Style="{StaticResource Text.Section}" />
-                            <TextBlock x:Name="InlineVideoTitle" Text="동영상"
+                            <TextBlock Text="{loc:Text Text_7CB3F50C1B9F}" Style="{StaticResource Text.Section}" />
+                            <TextBlock x:Name="InlineVideoTitle" Text="{loc:Text Text_C11734267E6B}"
                                        Style="{StaticResource Text.MutedBlock}"
                                        Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
-                        <Button Grid.Column="1" Content="닫기"
+                        <Button Grid.Column="1" Content="{loc:Text Text_1E8C10206F5B}"
                                 Style="{StaticResource Button.Ghost}"
                                 Click="OnInlineCloseClick"
-                                AutomationProperties.Name="라이브러리 재생 패널 닫기" />
+                                AutomationProperties.Name="{loc:Text Text_EC38F786B534}" />
                     </Grid>
 
                     <Border Height="202" Background="Black" CornerRadius="8"
@@ -545,18 +546,18 @@
                             Minimum="0" Maximum="1" Value="0"
                             IsMoveToPointEnabled="True"
                             ValueChanged="OnInlineSeekChanged"
-                            AutomationProperties.Name="동영상 재생 위치" />
+                            AutomationProperties.Name="{loc:Text Text_9DDB97F03D7D}" />
                     <Grid Margin="0,7,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Button x:Name="InlinePlayButton" Content="재생"
+                        <Button x:Name="InlinePlayButton" Content="{loc:Text Text_D43A776C5E28}"
                                 Style="{StaticResource Button.Primary}"
                                 MinWidth="76" Click="OnInlinePlayClick" />
                         <TextBlock x:Name="InlinePlaybackStatus" Grid.Column="1"
-                                   Text="재생 준비"
+                                   Text="{loc:Text Text_6E86D1A85620}"
                                    Style="{StaticResource Text.MutedBlock}"
                                    VerticalAlignment="Center" Margin="10,0" />
                         <TextBlock x:Name="InlineTimeLabel" Grid.Column="2"

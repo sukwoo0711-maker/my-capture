@@ -279,14 +279,14 @@ internal sealed class AnnotationEditorControl : Grid
             case Key.Z when ctrl:
                 if (_controller.PerformUndo())
                 {
-                    SetStatus("실행을 취소했습니다");
+                    SetStatus(UiText.Get("Text_DAF93C3AA95D"));
                 }
 
                 return true;
             case Key.Y when ctrl:
                 if (_controller.PerformRedo())
                 {
-                    SetStatus("다시 실행했습니다");
+                    SetStatus(UiText.Get("Text_8B22B7BBB0CD"));
                 }
 
                 return true;
@@ -397,11 +397,11 @@ internal sealed class AnnotationEditorControl : Grid
         {
             if (toolBeforeCommit == EditorTool.Pen)
             {
-                SetStatus("연필 획을 추가했습니다 · 계속 그릴 수 있습니다 · Ctrl+Z로 취소");
+                SetStatus(UiText.Get("Text_F554B87B81B3"));
             }
             else if (_controller.Selected is { } selected)
             {
-                SetStatus($"{selected.DisplayName}을(를) 추가했습니다 · Ctrl+Z로 취소");
+                SetStatus(UiText.Format("Text_C7E7E4FA07DA", selected.DisplayName));
             }
         }
     }
@@ -456,13 +456,13 @@ internal sealed class AnnotationEditorControl : Grid
             TextWrapping = TextWrapping.Wrap,
             Padding = new Thickness(2),
         };
-        AutomationName(textBox, "주석 텍스트 입력");
+        AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
 
         Canvas.SetLeft(textBox, box.Left);
         Canvas.SetTop(textBox, box.Top);
         _overlayCanvas.Children.Add(textBox);
         _activeTextBox = textBox;
-        SetStatus("텍스트를 입력한 뒤 Esc 또는 다른 곳을 클릭해 확정하세요");
+        SetStatus(UiText.Get("Text_230D26DEB9AE"));
 
         textBox.LostKeyboardFocus += (_, _) => CommitActiveText();
         _ = textBox.Focus();
@@ -483,7 +483,7 @@ internal sealed class AnnotationEditorControl : Grid
         _overlayCanvas.Children.Remove(box);
         bool hadText = !string.IsNullOrEmpty(box.Text);
         _controller.CommitTextEdit(annotation, box.Text ?? string.Empty);
-        SetStatus(hadText ? "텍스트를 추가했습니다 · Ctrl+Z로 취소" : "빈 텍스트를 취소했습니다");
+        SetStatus(hadText ? UiText.Get("Text_B09611FF35C1") : UiText.Get("Text_8BDB6F46B7FF"));
         UpdateInspector();
     }
 
@@ -493,8 +493,8 @@ internal sealed class AnnotationEditorControl : Grid
     {
         var dialog = new OpenFileDialog
         {
-            Title = "이미지 삽입",
-            Filter = "이미지 파일|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|모든 파일|*.*",
+            Title = UiText.Get("Text_B2FD5E226F6B"),
+            Filter = UiText.Get("Text_DC9F5ED04461"),
             CheckFileExists = true,
         };
 
@@ -508,7 +508,7 @@ internal sealed class AnnotationEditorControl : Grid
         if (loaded is null)
         {
             MessageBox.Show(
-                "선택한 파일을 이미지로 읽을 수 없습니다.",
+                UiText.Get("Text_5DD4908475B6"),
                 "MyCapture",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -537,7 +537,7 @@ internal sealed class AnnotationEditorControl : Grid
         var rect = new RectD(image.X - (width / 2), image.Y - (height / 2), width, height);
         _controller.AddImageAnnotation(loaded.Value.AssetFileName, sourceWidth, sourceHeight, rect);
         SyncToolButtons();
-        SetStatus("이미지를 추가했습니다 · Ctrl+Z로 취소");
+        SetStatus(UiText.Get("Text_D8F8A6B5650D"));
     }
 
     // ---- Layout construction -------------------------------------------------------
@@ -574,7 +574,7 @@ internal sealed class AnnotationEditorControl : Grid
         };
         var document = new TextBlock
         {
-            Text = "주석 편집기",
+            Text = UiText.Get("Text_3E409AB1A37C"),
             Foreground = Brush("Text.Primary", Colors.White),
             FontWeight = FontWeights.SemiBold,
             FontSize = 14,
@@ -584,18 +584,18 @@ internal sealed class AnnotationEditorControl : Grid
         left.Children.Add(document);
         left.Children.Add(Separator());
 
-        _undoButton = IconButton("실행 취소", "실행 취소 (Ctrl+Z)", "Icon.Undo", FallbackUndo, () =>
+        _undoButton = IconButton(UiText.Get("Text_CE706412FA75"), UiText.Get("Text_C61A081610C9"), "Icon.Undo", FallbackUndo, () =>
         {
             if (_controller.PerformUndo())
             {
-                SetStatus("실행을 취소했습니다");
+                SetStatus(UiText.Get("Text_DAF93C3AA95D"));
             }
         });
-        _redoButton = IconButton("다시 실행", "다시 실행 (Ctrl+Y)", "Icon.Redo", FallbackRedo, () =>
+        _redoButton = IconButton(UiText.Get("Text_078C44D5A66E"), UiText.Get("Text_F457141C336A"), "Icon.Redo", FallbackRedo, () =>
         {
             if (_controller.PerformRedo())
             {
-                SetStatus("다시 실행했습니다");
+                SetStatus(UiText.Get("Text_8B22B7BBB0CD"));
             }
         });
         left.Children.Add(_undoButton);
@@ -603,8 +603,8 @@ internal sealed class AnnotationEditorControl : Grid
         left.Children.Add(Separator());
 
         _redactButton = TextButton(
-            "빠른 가리기",
-            "OCR로 이메일·전화번호·주민번호·카드·IP·비밀 키를 찾아 가립니다 (Ctrl+Shift+R)",
+            UiText.Get("Text_E395E2567985"),
+            UiText.Get("Text_A31A72A338DD"),
             "Button.Secondary",
             () => _ = ApplyPrivacyRedactionsAsync());
         _redactButton.MinWidth = 92;
@@ -612,8 +612,8 @@ internal sealed class AnnotationEditorControl : Grid
         AutomationProperties.SetHelpText(
             _redactButton,
             _redactButton.IsEnabled
-                ? "로컬 OCR 결과에서 민감정보 후보를 찾아 편집 가능한 검정 사각형으로 추가합니다."
-                : "Windows OCR 언어 팩을 사용할 수 없어 현재 비활성화되어 있습니다.");
+                ? UiText.Get("Text_EB9AB8D7D13C")
+                : UiText.Get("Text_39E626945336"));
         left.Children.Add(_redactButton);
         Grid.SetColumn(left, 0);
         grid.Children.Add(left);
@@ -627,15 +627,15 @@ internal sealed class AnnotationEditorControl : Grid
         right.Children.Add(BuildSaveOverflowMenu());
         right.Children.Add(Separator());
 
-        Button cancel = TextButton("취소", "편집 취소 (Esc)", "Button.GhostCompact", Cancel);
+        Button cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("Text_22B802C1B7FF"), "Button.GhostCompact", Cancel);
         Button copy = IconTextButton(
-            "복사", "편집한 이미지를 클립보드에 복사 (Ctrl+C)", "Icon.Copy", FallbackCopy,
+            UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_74EEFE6E43AE"), "Icon.Copy", FallbackCopy,
             () => Commit(EditorCommitAction.CopyToClipboard));
         copy.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
         copy.MinWidth = 76;
 
         Button done = IconTextButton(
-            "완료", "편집 완료 (Ctrl+Enter)", "Icon.Check", FallbackCheck,
+            UiText.Get("Text_727333AB0740"), UiText.Get("Text_0B201CC58BDD"), "Icon.Check", FallbackCheck,
             () => Commit(EditorCommitAction.Done));
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         done.MinWidth = 78;
@@ -663,21 +663,21 @@ internal sealed class AnnotationEditorControl : Grid
 
         var quickSave = new MenuItem
         {
-            Header = "빠른 저장",
+            Header = UiText.Get("Text_DFC084A111D0"),
             InputGestureText = "Ctrl+S",
             Icon = BuildIcon("Icon.Save", FallbackSave, 16),
         };
         quickSave.Click += (_, _) => Commit(EditorCommitAction.QuickSave);
-        AutomationName(quickSave, "빠른 저장");
+        AutomationName(quickSave, UiText.Get("Text_DFC084A111D0"));
 
         var saveAs = new MenuItem
         {
-            Header = "다른 이름으로 저장",
+            Header = UiText.Get("Text_57950AFF46BC"),
             InputGestureText = "Ctrl+Shift+S",
             Icon = BuildIcon("Icon.SaveAs", FallbackSaveAs, 16),
         };
         saveAs.Click += (_, _) => Commit(EditorCommitAction.SaveAs);
-        AutomationName(saveAs, "다른 이름으로 저장");
+        AutomationName(saveAs, UiText.Get("Text_57950AFF46BC"));
 
         menu.Items.Add(quickSave);
         menu.Items.Add(saveAs);
@@ -690,7 +690,7 @@ internal sealed class AnnotationEditorControl : Grid
         content.Children.Add(BuildIcon("Icon.Save", FallbackSave, 16));
         content.Children.Add(new TextBlock
         {
-            Text = "저장",
+            Text = UiText.Get("Text_5FB926229090"),
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(6, 0, 4, 0),
@@ -700,13 +700,13 @@ internal sealed class AnnotationEditorControl : Grid
         var button = new Button
         {
             Content = content,
-            ToolTip = "저장 및 내보내기 (Ctrl+S · Ctrl+Shift+S)",
+            ToolTip = UiText.Get("Text_5825293860A7"),
             MinWidth = 78,
             Margin = new Thickness(2, 0, 2, 0),
             ContextMenu = menu,
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
-        AutomationName(button, "저장 메뉴");
+        AutomationName(button, UiText.Get("Text_EA33C8FF45A0"));
         button.Click += (_, _) =>
         {
             menu.PlacementTarget = button;
@@ -749,12 +749,12 @@ internal sealed class AnnotationEditorControl : Grid
             Orientation = Orientation.Vertical,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        AddToolButton(stack, EditorTool.Select, "선택", "V", "선택 도구 (V) — 주석을 선택·이동·크기 조정", "Icon.Select", FallbackSelect);
-        AddToolButton(stack, EditorTool.Rectangle, "사각형", "R", "사각형 (R) — 이미지 위를 드래그", "Icon.Rectangle", FallbackRectangle);
-        AddToolButton(stack, EditorTool.Arrow, "화살표", "A", "화살표 (A) — 시작점에서 끝점으로 드래그", "Icon.Arrow", FallbackArrow);
-        AddToolButton(stack, EditorTool.Pen, "연필", "P", "연필 (P) — 자유롭게 그리기", "Icon.Pen", FallbackPen);
-        AddToolButton(stack, EditorTool.Text, "텍스트", "T", "텍스트 (T) — 클릭해 입력", "Icon.Text", FallbackText);
-        AddToolButton(stack, EditorTool.Image, "이미지", "I", "이미지 삽입 (I) — 파일을 선택", "Icon.Image", FallbackImage);
+        AddToolButton(stack, EditorTool.Select, UiText.Get("Text_8D1A750C9351"), "V", UiText.Get("Text_8A3ADCEB89EF"), "Icon.Select", FallbackSelect);
+        AddToolButton(stack, EditorTool.Rectangle, UiText.Get("Text_DC0760235344"), "R", UiText.Get("Text_B659038CC17D"), "Icon.Rectangle", FallbackRectangle);
+        AddToolButton(stack, EditorTool.Arrow, UiText.Get("Text_2785CE58DF74"), "A", UiText.Get("Text_D53ABD064C5E"), "Icon.Arrow", FallbackArrow);
+        AddToolButton(stack, EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), "P", UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen);
+        AddToolButton(stack, EditorTool.Text, UiText.Get("Text_258AD4B095A1"), "T", UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText);
+        AddToolButton(stack, EditorTool.Image, UiText.Get("Text_302BAE127938"), "I", UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage);
 
         var panel = new Border { Child = stack };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
@@ -787,7 +787,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         _inspectorTitle = new TextBlock
         {
-            Text = "선택 도구",
+            Text = UiText.Get("Text_33406FC582BE"),
             Foreground = Brush("Text.Primary", Colors.White),
             FontWeight = FontWeights.SemiBold,
             FontSize = 16,
@@ -812,7 +812,7 @@ internal sealed class AnnotationEditorControl : Grid
         _shapeStyleSection = BuildShapeStyleSection();
         stack.Children.Add(_shapeStyleSection);
 
-        _deleteButton = TextButton("주석 삭제", "선택한 주석 삭제 (Delete)", "Button.Danger", DeleteSelected);
+        _deleteButton = TextButton(UiText.Get("Text_0DED92FCE6B0"), UiText.Get("Text_7DFFA4D81765"), "Button.Danger", DeleteSelected);
         _deleteButton.HorizontalAlignment = HorizontalAlignment.Stretch;
         _deleteButton.HorizontalContentAlignment = HorizontalAlignment.Center;
         _deleteButton.Margin = new Thickness(0, 16, 0, 0);
@@ -838,7 +838,7 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement BuildColorSection()
     {
         var panel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel("색상"));
+        panel.Children.Add(SectionLabel(UiText.Get("Text_D1B87ACB2D22")));
 
         _swatchPanel = new WrapPanel
         {
@@ -866,16 +866,16 @@ internal sealed class AnnotationEditorControl : Grid
                 Height = 40,
                 Margin = new Thickness(0, 0, 8, 8),
                 Padding = new Thickness(0),
-                ToolTip = $"색상 {swatchColor.ToHex()}",
+                ToolTip = UiText.Format("Text_151C77170A94", swatchColor.ToHex()),
                 BorderThickness = new Thickness(1),
                 BorderBrush = Brush("Border.Subtle", Colors.Gray),
                 Background = swatchColor.ToBrush(),
             };
-            AutomationName(swatchButton, $"색상 {swatchColor.ToHex()}");
+            AutomationName(swatchButton, UiText.Format("Text_151C77170A94", swatchColor.ToHex()));
             swatchButton.Click += (_, _) =>
             {
                 _controller.ApplyStrokeColor(swatchColor);
-                SetStatus($"색상을 {swatchColor.ToHex()}(으)로 바꿨습니다");
+                SetStatus(UiText.Format("Text_67CAE5B118A3", swatchColor.ToHex()));
             };
             _swatchPanel.Children.Add(swatchButton);
         }
@@ -887,7 +887,7 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement BuildThicknessSection()
     {
         var panel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel("선 두께"));
+        panel.Children.Add(SectionLabel(UiText.Get("Text_70EC2D232B4F")));
 
         _thicknessSlider = new Slider
         {
@@ -896,11 +896,11 @@ internal sealed class AnnotationEditorControl : Grid
             Value = _controller.StrokeThickness,
             Margin = new Thickness(0, 4, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "선 두께",
+            ToolTip = UiText.Get("Text_70EC2D232B4F"),
             SmallChange = 1,
             LargeChange = 2,
         };
-        AutomationName(_thicknessSlider, "선 두께");
+        AutomationName(_thicknessSlider, UiText.Get("Text_70EC2D232B4F"));
         _thicknessSlider.ValueChanged += (_, args) =>
         {
             if (_syncingInspector)
@@ -911,7 +911,7 @@ internal sealed class AnnotationEditorControl : Grid
             _controller.ApplyStrokeThickness(args.NewValue);
             if (_controller.Selected is not null)
             {
-                SetStatus($"선 두께를 {args.NewValue:0}px로 바꿨습니다");
+                SetStatus(UiText.Format("Text_DBAF1D995258", args.NewValue));
             }
         };
         panel.Children.Add(_thicknessSlider);
@@ -921,21 +921,21 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement BuildShapeStyleSection()
     {
         var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel("선 종류"));
+        panel.Children.Add(SectionLabel(UiText.Get("Text_E0B58D1CFED1")));
         _strokeStyleComboBox = new ComboBox { MinHeight = 32, Margin = new Thickness(0, 4, 0, 0) };
         foreach ((AnnotationStrokeStyle style, string label) in new[]
         {
-            (AnnotationStrokeStyle.Solid, "실선"),
-            (AnnotationStrokeStyle.Dashed, "점선"),
-            (AnnotationStrokeStyle.Dotted, "둥근 점선"),
-            (AnnotationStrokeStyle.ThickDashed, "굵은 점선 · 최소 6px"),
+            (AnnotationStrokeStyle.Solid, UiText.Get("Text_99851CC7E6A4")),
+            (AnnotationStrokeStyle.Dashed, UiText.Get("Text_2428B662D585")),
+            (AnnotationStrokeStyle.Dotted, UiText.Get("Text_68CAE75183FF")),
+            (AnnotationStrokeStyle.ThickDashed, UiText.Get("Text_071DBD0C6E2C")),
         })
         {
             _strokeStyleComboBox.Items.Add(new ComboBoxItem { Content = label, Tag = style });
         }
 
         _strokeStyleComboBox.SelectedIndex = 0;
-        AutomationName(_strokeStyleComboBox, "도형 선 종류");
+        AutomationName(_strokeStyleComboBox, UiText.Get("Text_3084C5AA0845"));
         _strokeStyleComboBox.SelectionChanged += (_, _) =>
         {
             if (!_syncingInspector && _strokeStyleComboBox.SelectedItem is ComboBoxItem { Tag: AnnotationStrokeStyle style })
@@ -945,7 +945,7 @@ internal sealed class AnnotationEditorControl : Grid
             }
         };
         panel.Children.Add(_strokeStyleComboBox);
-        _fillTransparencyLabel = SectionLabel("내부 투명도 · 100%");
+        _fillTransparencyLabel = SectionLabel(UiText.Get("Text_1E0DD4F46A0C"));
         _fillTransparencyLabel.Margin = new Thickness(0, 16, 0, 4);
         panel.Children.Add(_fillTransparencyLabel);
         _fillTransparencySlider = new Slider
@@ -957,13 +957,13 @@ internal sealed class AnnotationEditorControl : Grid
             LargeChange = 10,
             TickFrequency = 1,
             IsSnapToTickEnabled = true,
-            ToolTip = "100%: 외곽선만 표시 · 0%: 선과 같은 색으로 완전히 채우기",
+            ToolTip = UiText.Get("Text_27FD5EFB7773"),
         };
-        AutomationName(_fillTransparencySlider, "도형 내부 투명도 (퍼센트)");
+        AutomationName(_fillTransparencySlider, UiText.Get("Text_35E5667BB610"));
         AutomationProperties.SetHelpText(_fillTransparencySlider, (string)_fillTransparencySlider.ToolTip);
         _fillTransparencySlider.ValueChanged += (_, args) =>
         {
-            _fillTransparencyLabel.Text = $"내부 투명도 · {args.NewValue:0}%";
+            _fillTransparencyLabel.Text = UiText.Format("Text_5D92A3982F2F", args.NewValue);
             if (!_syncingInspector)
             {
                 _controller.ApplyFillTransparency(args.NewValue);
@@ -972,7 +972,7 @@ internal sealed class AnnotationEditorControl : Grid
         panel.Children.Add(_fillTransparencySlider);
         panel.Children.Add(new TextBlock
         {
-            Text = "값을 낮추면 선 색으로 내부를 채웁니다.",
+            Text = UiText.Get("Text_BA0448903510"),
             TextWrapping = TextWrapping.Wrap,
             Foreground = Brush("Text.Secondary", Colors.LightGray),
             FontSize = 12,
@@ -996,13 +996,13 @@ internal sealed class AnnotationEditorControl : Grid
             VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationProperties.SetLiveSetting(_statusText, AutomationLiveSetting.Polite);
-        AutomationName(_statusText, "편집 상태");
+        AutomationName(_statusText, UiText.Get("Text_4D6051F71010"));
         Grid.SetColumn(_statusText, 0);
         grid.Children.Add(_statusText);
 
         var dimensions = new TextBlock
         {
-            Text = $"{_canvasWidth} × {_canvasHeight} px  ·  Ctrl+C 복사  ·  Ctrl+S 저장  ·  Esc 취소",
+            Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight),
             Foreground = Brush("Text.Muted", Colors.Gray),
             FontFamily = FontFamilyResource("Font.Mono", "Consolas"),
             FontSize = 12,
@@ -1041,7 +1041,7 @@ internal sealed class AnnotationEditorControl : Grid
             ToolTip = tooltip,
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");
-        AutomationName(button, $"{label} 도구 ({shortcut})");
+        AutomationName(button, UiText.Format("Text_1BA9F7001237", label, shortcut));
         button.Click += (_, _) => SelectTool(tool);
         _toolButtons[tool] = button;
         parent.Children.Add(button);
@@ -1238,7 +1238,7 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.DeleteSelected();
         if (had)
         {
-            SetStatus("주석을 삭제했습니다 · Ctrl+Z로 취소");
+            SetStatus(UiText.Get("Text_5D27F0D47A0B"));
         }
     }
 
@@ -1249,7 +1249,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         if (_controller.Selected is { } selected)
         {
-            SetStatus($"{selected.DisplayName}을(를) 선택했습니다");
+            SetStatus(UiText.Format("Text_0ECA3A448221", selected.DisplayName));
         }
     }
 
@@ -1292,8 +1292,8 @@ internal sealed class AnnotationEditorControl : Grid
         {
             _inspectorTitle.Text = selected.DisplayName;
             _inspectorInstruction.Text = selected.SupportsResize
-                ? "가장자리 핸들로 크기를 조정하거나 드래그해 이동하세요."
-                : "드래그해 이동하세요.";
+                ? UiText.Get("Text_4F445554C9D0")
+                : UiText.Get("Text_C2F4730D02E8");
         }
         else
         {
@@ -1372,34 +1372,34 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static string ToolName(EditorTool tool) => tool switch
     {
-        EditorTool.Select => "선택 도구",
-        EditorTool.Rectangle => "사각형 도구",
-        EditorTool.Arrow => "화살표 도구",
-        EditorTool.Pen => "연필 도구",
-        EditorTool.Text => "텍스트 도구",
-        EditorTool.Image => "이미지 도구",
-        _ => "도구",
+        EditorTool.Select => UiText.Get("Text_33406FC582BE"),
+        EditorTool.Rectangle => UiText.Get("Text_4A48782E904C"),
+        EditorTool.Arrow => UiText.Get("Text_D5A82B3B1F83"),
+        EditorTool.Pen => UiText.Get("Text_CEFF481585C2"),
+        EditorTool.Text => UiText.Get("Text_DAB3F35F5BD0"),
+        EditorTool.Image => UiText.Get("Text_A5E52C2DDFC0"),
+        _ => UiText.Get("Text_36C416EAD2CE"),
     };
 
     private static string ToolInstruction(EditorTool tool) => tool switch
     {
-        EditorTool.Select => "주석을 클릭해 선택한 뒤 이동하거나 크기를 조정하세요.",
-        EditorTool.Rectangle => "드래그해서 사각형을 그립니다.",
-        EditorTool.Arrow => "시작점에서 끝점까지 드래그해 화살표를 그리세요.",
-        EditorTool.Pen => "이미지 위에서 자유롭게 그리세요.",
-        EditorTool.Text => "이미지를 클릭한 뒤 텍스트를 입력하세요.",
-        EditorTool.Image => "이미지를 클릭하면 삽입할 파일을 고를 수 있습니다.",
+        EditorTool.Select => UiText.Get("Text_563638D54DBC"),
+        EditorTool.Rectangle => UiText.Get("Text_205E8D74A1C2"),
+        EditorTool.Arrow => UiText.Get("Text_2AE708D62044"),
+        EditorTool.Pen => UiText.Get("Text_8AA2E937C447"),
+        EditorTool.Text => UiText.Get("Text_E8DF95164C87"),
+        EditorTool.Image => UiText.Get("Text_994DA3588A6B"),
         _ => string.Empty,
     };
 
     private static string ToolStatus(EditorTool tool) => tool switch
     {
-        EditorTool.Select => "선택 도구 · 주석을 클릭해 선택하세요",
-        EditorTool.Rectangle => "사각형 도구 · 이미지 위를 드래그하세요",
-        EditorTool.Arrow => "화살표 도구 · 시작점에서 끝점으로 드래그하세요",
-        EditorTool.Pen => "연필 도구 · 자유롭게 그리세요",
-        EditorTool.Text => "텍스트 도구 · 이미지를 클릭해 입력하세요",
-        EditorTool.Image => "이미지 도구 · 이미지를 클릭해 파일을 선택하세요",
+        EditorTool.Select => UiText.Get("Text_FEFD9D67E873"),
+        EditorTool.Rectangle => UiText.Get("Text_93103CC109A3"),
+        EditorTool.Arrow => UiText.Get("Text_190A3BE20786"),
+        EditorTool.Pen => UiText.Get("Text_9CD399964425"),
+        EditorTool.Text => UiText.Get("Text_632459CEB61F"),
+        EditorTool.Image => UiText.Get("Text_92675EB6DE53"),
         _ => string.Empty,
     };
 
@@ -1432,7 +1432,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         if (_privacyRedactionService is null || !_privacyRedactionService.IsAvailable)
         {
-            SetStatus("Windows OCR 언어 팩을 사용할 수 없어 빠른 가리기를 실행할 수 없습니다");
+            SetStatus(UiText.Get("Text_EE36971D5C4B"));
             return;
         }
 
@@ -1442,7 +1442,7 @@ internal sealed class AnnotationEditorControl : Grid
         _redactionCts?.Dispose();
         _redactionCts = new CancellationTokenSource();
         CancellationTokenSource operation = _redactionCts;
-        SetStatus("민감정보 후보를 찾는 중… 이미지 밖으로 전송하지 않습니다");
+        SetStatus(UiText.Get("Text_3B5DD12EE3D1"));
 
         try
         {
@@ -1458,19 +1458,19 @@ internal sealed class AnnotationEditorControl : Grid
             {
                 case PrivacyRedactionStatus.Success:
                     int count = _controller.AddPrivacyRedactions(result.Regions);
-                    SetStatus($"민감정보 후보 {count}개를 가렸습니다 · 검토 후 Ctrl+Z로 한 번에 취소할 수 있습니다");
+                    SetStatus(UiText.Format("Text_E68817537C75", count));
                     break;
                 case PrivacyRedactionStatus.NoMatches:
-                    SetStatus("고신뢰 민감정보 후보를 찾지 못했습니다");
+                    SetStatus(UiText.Get("Text_5DBC2621FC1E"));
                     break;
                 case PrivacyRedactionStatus.Unavailable:
-                    SetStatus("Windows OCR 언어 팩을 사용할 수 없어 빠른 가리기를 실행할 수 없습니다");
+                    SetStatus(UiText.Get("Text_EE36971D5C4B"));
                     break;
                 case PrivacyRedactionStatus.Failed:
-                    SetStatus("민감정보 검색에 실패했습니다 · 이미지는 편집기에 그대로 남아 있습니다");
+                    SetStatus(UiText.Get("Text_6D63E8966A24"));
                     break;
                 case PrivacyRedactionStatus.Cancelled:
-                    SetStatus("민감정보 검색을 취소했습니다");
+                    SetStatus(UiText.Get("Text_6AE98E57E121"));
                     break;
             }
         }
@@ -1532,7 +1532,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         if (_redactionInProgress)
         {
-            SetStatus("민감정보 검색이 끝난 뒤 저장해 주세요 · 취소하려면 Esc");
+            SetStatus(UiText.Get("Text_D0FD12A01E4A"));
             return;
         }
 
@@ -1562,7 +1562,7 @@ internal sealed class AnnotationEditorControl : Grid
         // resolves. This guarantees Ctrl+C means copy-then-close, never close-then-copy.
         _commitInProgress = true;
         IsHitTestVisible = false;
-        SetStatus(action == EditorCommitAction.CopyToClipboard ? "클립보드에 복사 중…" : "저장 중…");
+        SetStatus(action == EditorCommitAction.CopyToClipboard ? UiText.Get("Text_78666F37A521") : UiText.Get("Text_88DAAEEDFE4C"));
         bool shouldClose;
         try
         {
@@ -1583,8 +1583,8 @@ internal sealed class AnnotationEditorControl : Grid
             _commitInProgress = false;
             IsHitTestVisible = true;
             SetStatus(action == EditorCommitAction.CopyToClipboard
-                ? "클립보드 복사가 완료되지 않았습니다"
-                : "저장이 완료되지 않았습니다");
+                ? UiText.Get("Text_3D1E714B56CA")
+                : UiText.Get("Text_06F58809C083"));
         }
     }
 

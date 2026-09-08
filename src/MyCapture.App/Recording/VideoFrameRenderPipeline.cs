@@ -253,7 +253,7 @@ internal static class VideoFrameRenderPipeline
         return buffer;
     }
 
-    private static BitmapSource RenderFrame(
+    internal static BitmapSource RenderFrame(
         ImageSource source,
         int width,
         int height,
@@ -297,6 +297,7 @@ internal static class VideoFrameRenderPipeline
 
     private static void Validate(VideoFrameRenderRequest request)
     {
+        VideoLayerResourceBudget.Validate(request.FrameEditLayers);
         if (string.IsNullOrWhiteSpace(request.SourcePath) || !File.Exists(request.SourcePath))
         {
             throw new FileNotFoundException("The source video is unavailable.", request.SourcePath);
@@ -379,6 +380,7 @@ internal static class FrameEditLayerRenderer
         IReadOnlyList<FrameEditLayer> layers)
     {
         ArgumentNullException.ThrowIfNull(layers);
+        VideoLayerResourceBudget.Validate(layers);
         var decoded = new Dictionary<Guid, BitmapSource>();
         foreach (FrameEditLayer layer in layers)
         {
@@ -392,6 +394,7 @@ internal static class FrameEditLayerRenderer
             try
             {
                 byte[] bytes = Convert.FromBase64String(layer.OverlayPngBase64);
+                if (!HasSafePngDimensions(bytes)) { continue; }
                 using var stream = new MemoryStream(bytes, writable: false);
                 var decoder = new PngBitmapDecoder(
                     stream,
@@ -417,6 +420,18 @@ internal static class FrameEditLayerRenderer
         return decoded;
     }
 
+    // PNG's IHDR precedes compressed pixels, so reject expansion bombs before WIC allocates them.
+    internal static bool HasSafePngDimensions(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < 33 || !bytes[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 })
+            || !bytes.Slice(12, 4).SequenceEqual("IHDR"u8)) { return false; }
+        uint width = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.Slice(16, 4));
+        uint height = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.Slice(20, 4));
+        ulong decodedBytesPerPixel = bytes[24] == 16 ? 8UL : 4UL;
+        return width is > 0 and <= 8192 && height is > 0 and <= 8192
+            && (ulong)width * height * decodedBytesPerPixel <= 64 * 1024 * 1024;
+    }
+
     internal static void Draw(
         DrawingContext dc,
         IReadOnlyList<FrameEditLayer> layers,
@@ -430,18 +445,56 @@ internal static class FrameEditLayerRenderer
         {
             if (layer.IsActiveAt(sourceTimeMs) && bitmaps.TryGetValue(layer.Id, out BitmapSource? bitmap))
             {
-                dc.DrawImage(bitmap, new Rect(0, 0, width, height));
+                dc.DrawImage(bitmap, GetBounds(layer.Bounds, width, height));
             }
         }
     }
+
+    internal static Rect GetBounds(VideoLayerBounds? bounds, double width, double height) =>
+        bounds?.Normalize() is { } b
+            ? new Rect(b.X * width, b.Y * height, b.Width * width, b.Height * height)
+            : new Rect(0, 0, width, height);
 }
 
 /// <summary>Shared WYSIWYG text compositor used by preview, MP4 render and GIF export.</summary>
 internal static class TimedTextOverlayRenderer
 {
+    private static readonly Typeface OverlayTypeface = new(
+        new FontFamily("Malgun Gothic"),
+        FontStyles.Normal,
+        FontWeights.SemiBold,
+        FontStretches.Normal);
+
+    private static readonly SolidColorBrush OverlayBackground = CreateOverlayBackground();
+
+    private static SolidColorBrush CreateOverlayBackground()
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(0xC8, 0x08, 0x08, 0x08));
+        brush.Freeze();
+        return brush;
+    }
+
     internal static IReadOnlyList<TimedTextOverlay> ActiveAt(
         IReadOnlyList<TimedTextOverlay> overlays,
-        double sourceTimeMs) => overlays.Where(overlay => overlay.IsActiveAt(sourceTimeMs)).ToList();
+        double sourceTimeMs)
+    {
+        if (overlays is null || overlays.Count == 0)
+        {
+            return [];
+        }
+
+        var active = new List<TimedTextOverlay>();
+        for (int index = 0; index < overlays.Count; index++)
+        {
+            TimedTextOverlay overlay = overlays[index];
+            if (overlay is not null && overlay.IsActiveAt(sourceTimeMs))
+            {
+                active.Add(overlay);
+            }
+        }
+
+        return active;
+    }
 
     internal static void Draw(
         DrawingContext dc,
@@ -449,7 +502,8 @@ internal static class TimedTextOverlayRenderer
         double sourceTimeMs,
         double width,
         double height,
-        double pixelsPerDip)
+        double pixelsPerDip,
+        IDictionary<Guid, Rect>? bounds = null)
     {
         ArgumentNullException.ThrowIfNull(dc);
         IReadOnlyList<TimedTextOverlay> active = ActiveAt(overlays, sourceTimeMs);
@@ -463,30 +517,37 @@ internal static class TimedTextOverlayRenderer
         double verticalMargin = Math.Max(14, height * 0.05);
         double paddingX = Math.Max(10, fontSize * 0.45);
         double paddingY = Math.Max(6, fontSize * 0.24);
-        var typeface = new Typeface(new FontFamily("Malgun Gothic"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
-        var foreground = Brushes.White;
-        var background = new SolidColorBrush(Color.FromArgb(0xC8, 0x08, 0x08, 0x08));
-        background.Freeze();
+
+        double maxBoxWidth = Math.Max(1, width - (horizontalMargin * 2));
+        double maxTextWidth = Math.Max(1, maxBoxWidth - (paddingX * 2));
+        double maxBoxHeight = Math.Min(height, Math.Max(height * 0.4, (fontSize * 1.4) + (paddingY * 2)));
+        double maxTextHeight = Math.Max(fontSize * 1.4, maxBoxHeight - (paddingY * 2));
+        double dip = Math.Max(1, pixelsPerDip);
 
         var placementOffsets = new Dictionary<VideoTextPlacement, double>();
         foreach (TimedTextOverlay overlay in active)
         {
+            if (string.IsNullOrWhiteSpace(overlay.Text))
+            {
+                continue;
+            }
+
             var text = new FormattedText(
                 overlay.Text,
                 CultureInfo.CurrentUICulture,
                 FlowDirection.LeftToRight,
-                typeface,
+                OverlayTypeface,
                 fontSize,
-                foreground,
-                Math.Max(1, pixelsPerDip))
+                Brushes.White,
+                dip)
             {
                 TextAlignment = TextAlignment.Center,
-                MaxTextWidth = Math.Max(1, width - (horizontalMargin * 2) - (paddingX * 2)),
-                MaxTextHeight = Math.Max(fontSize * 1.4, height * 0.35),
+                MaxTextWidth = maxTextWidth,
+                MaxTextHeight = maxTextHeight,
             };
 
-            double boxWidth = Math.Min(width - (horizontalMargin * 2), text.Width + (paddingX * 2));
-            double boxHeight = Math.Min(height * 0.4, text.Height + (paddingY * 2));
+            double boxWidth = Math.Max(1, Math.Min(maxBoxWidth, text.Width + (paddingX * 2)));
+            double boxHeight = Math.Max(1, Math.Min(maxBoxHeight, text.Height + (paddingY * 2)));
             placementOffsets.TryGetValue(overlay.Placement, out double offset);
             double x = (width - boxWidth) / 2;
             double y = overlay.Placement switch
@@ -498,9 +559,36 @@ internal static class TimedTextOverlayRenderer
             y = Math.Clamp(y, 0, Math.Max(0, height - boxHeight));
 
             var box = new Rect(x, y, boxWidth, boxHeight);
-            dc.DrawRoundedRectangle(background, null, box, paddingY, paddingY);
-            dc.DrawText(text, new Point(x + paddingX, y + paddingY));
+            Rect destination = overlay.Bounds is null
+                ? box
+                : FrameEditLayerRenderer.GetBounds(overlay.Bounds, width, height);
+            if (bounds is not null)
+            {
+                bounds[overlay.Id] = destination;
+            }
+
+            dc.PushTransform(new MatrixTransform(
+                destination.Width / box.Width, 0, 0, destination.Height / box.Height,
+                destination.X - (box.X * destination.Width / box.Width),
+                destination.Y - (box.Y * destination.Height / box.Height)));
+            dc.DrawRoundedRectangle(OverlayBackground, null, box, paddingY, paddingY);
+
+            double glyphOriginX = x + ((boxWidth - text.MaxTextWidth) / 2);
+            double glyphOriginY = y + ((boxHeight - text.Height) / 2);
+            dc.DrawText(text, new Point(glyphOriginX, glyphOriginY));
+            dc.Pop();
+
             placementOffsets[overlay.Placement] = offset + boxHeight + Math.Max(6, height * 0.01);
         }
+    }
+
+    internal static IReadOnlyDictionary<Guid, Rect> GetBounds(
+        IReadOnlyList<TimedTextOverlay> overlays, double time, double width, double height)
+    {
+        var result = new Dictionary<Guid, Rect>();
+        var visual = new DrawingVisual();
+        using DrawingContext dc = visual.RenderOpen();
+        Draw(dc, overlays, time, width, height, 1, result);
+        return result;
     }
 }
