@@ -23,7 +23,7 @@ internal static class LocalizationSelfTest
 
     internal static int Run(string outputDirectory)
     {
-        Directory.CreateDirectory(outputDirectory);
+        outputDirectory = DiagnosticOutputPaths.Create(outputDirectory);
         var report = new StringBuilder();
         try
         {
@@ -79,8 +79,8 @@ internal static class LocalizationSelfTest
 
             foreach (int width in new[] { 760, 920 })
             {
-                var recording = new RecordingResult(Path.Combine(outputDirectory, "layout-probe.mp4"), 2000, 30, 60, 320, 240);
-                var video = new VideoEditorWindow(recording, AppPaths.CreateForRoot(Path.Combine(outputDirectory, "isolated")), NullLoggerFactory.Instance);
+                var recording = new RecordingResult(DiagnosticOutputPaths.Child(outputDirectory, "layout-probe.mp4"), 2000, 30, 60, 320, 240);
+                var video = new VideoEditorWindow(recording, AppPaths.CreateForRoot(DiagnosticOutputPaths.Child(outputDirectory, "isolated")), NullLoggerFactory.Instance);
                 try
                 {
                     Show(video, width, width == 760 ? 555 : 680);
@@ -114,7 +114,7 @@ internal static class LocalizationSelfTest
             report.AppendLine(ex.ToString());
             return 2;
         }
-        finally { File.WriteAllText(Path.Combine(outputDirectory, "localization-selftest-report.txt"), report.ToString()); }
+        finally { File.WriteAllText(DiagnosticOutputPaths.Child(outputDirectory, "localization-selftest-report.txt"), report.ToString()); }
 
         void Check(bool condition, string description)
         {
@@ -128,7 +128,7 @@ internal static class LocalizationSelfTest
             bitmap.Render(content);
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using var stream = File.Create(Path.Combine(outputDirectory, name));
+            using var stream = File.Create(DiagnosticOutputPaths.Child(outputDirectory, name));
             encoder.Save(stream);
         }
     }
