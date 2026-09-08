@@ -50,6 +50,7 @@ internal sealed class PinWindow : Window
     private readonly string? _originalText;
     private readonly PinViewState _state;
     private readonly Func<PinSettings> _settings;
+    private readonly IPinDragInput _dragInput;
     private readonly Image _imageElement;
     private readonly Border _chrome;
     private readonly SolidColorBrush _chromeBrush;
@@ -73,7 +74,8 @@ internal sealed class PinWindow : Window
         PinViewState state,
         double initialLeft,
         double initialTop,
-        Func<PinSettings>? settings = null)
+        Func<PinSettings>? settings = null,
+        IPinDragInput? dragInput = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         _image = content.Image;
@@ -81,6 +83,7 @@ internal sealed class PinWindow : Window
         _originalText = content.OriginalText;
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _settings = settings ?? (static () => new PinSettings());
+        _dragInput = dragInput ?? NativePinDragInput.Instance;
 
         Title = "MyCapture 화면 고정";
         WindowStyle = WindowStyle.None;
@@ -394,7 +397,7 @@ internal sealed class PinWindow : Window
     {
         base.OnMouseLeftButtonDown(e);
 
-        bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        bool ctrl = _dragInput.Modifiers.HasFlag(ModifierKeys.Control);
 
         if (ctrl)
         {
@@ -426,18 +429,27 @@ internal sealed class PinWindow : Window
             }
         }
 
-        _dragging = true;
-        // Use the input event's local anchor. Reading the live global cursor here can
-        // observe a later queued movement and cancel the first drag delta entirely.
-        Point anchor = e.GetPosition(this);
-        DpiScale dpi = VisualTreeHelper.GetDpi(this);
-        _dragAnchor = new Point(anchor.X * dpi.DpiScaleX, anchor.Y * dpi.DpiScaleY);
-        _dragDesktop = MonitorEnumerator.GetVirtualDesktopBounds();
-        _dragGrabMarginPx = GrabMarginDip * dpi.DpiScaleX;
-        _lastDragCursorX = int.MinValue;
-        _lastDragCursorY = int.MinValue;
-        _ = CaptureMouse();
-        Focus();
+        EndDrag();
+        try
+        {
+            // Capture can fail (for example while another native control owns input).
+            // Never leave a gesture active without ownership of subsequent input.
+            if (_dragInput.TryCapture(this))
+            {
+                Point anchor = _dragInput.LocalAnchor(e, this);
+                DpiScale dpi = VisualTreeHelper.GetDpi(this);
+                _dragAnchor = new Point(anchor.X * dpi.DpiScaleX, anchor.Y * dpi.DpiScaleY);
+                _dragDesktop = MonitorEnumerator.GetVirtualDesktopBounds();
+                _dragGrabMarginPx = GrabMarginDip * dpi.DpiScaleX;
+                _dragging = true;
+                Focus();
+            }
+        }
+        catch
+        {
+            EndDrag();
+            throw;
+        }
         e.Handled = true;
     }
 
@@ -449,7 +461,13 @@ internal sealed class PinWindow : Window
             return;
         }
 
-        (int cursorX, int cursorY) = WindowStyleFacade.GetCursorPosition();
+        if (!_dragInput.HasCapture(this) || !_dragInput.LeftButtonPressed(e))
+        {
+            EndDrag();
+            return;
+        }
+
+        (int cursorX, int cursorY) = _dragInput.CursorPosition;
         if (cursorX == _lastDragCursorX && cursorY == _lastDragCursorY)
         {
             return;
@@ -465,11 +483,24 @@ internal sealed class PinWindow : Window
         base.OnMouseLeftButtonUp(e);
         if (_dragging)
         {
-            _dragging = false;
-            _dragDesktop = null;
-            ReleaseMouseCapture();
+            EndDrag();
             e.Handled = true;
         }
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        EndDrag();
+        base.OnLostMouseCapture(e);
+    }
+
+    private void EndDrag()
+    {
+        _dragging = false;
+        _dragDesktop = null;
+        _lastDragCursorX = int.MinValue;
+        _lastDragCursorY = int.MinValue;
+        if (_dragInput.HasCapture(this)) _dragInput.Release(this);
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -1006,6 +1037,7 @@ internal sealed class PinWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _isClosed = true;
+        EndDrag();
         _feedbackTimer.Stop();
         _feedbackTimer.Tick -= OnFeedbackTimerTick;
         _ctrlClickTimer.Stop();
