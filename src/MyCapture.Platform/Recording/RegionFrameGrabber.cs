@@ -9,7 +9,7 @@ namespace MyCapture.Platform.Recording;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Reuses <see cref="ScreenCaptureEngine.CaptureRegion"/> — the same GDI
+/// Reuses <see cref="ScreenCaptureEngine.CreateSession"/> — the same GDI
 /// <c>BitBlt + CAPTUREBLT</c> path proven by the still-capture feature, including
 /// layered-window and cursor handling — rather than standing up a second, subtly
 /// different capture path with its own defects. At the recorder's default 30 fps and

@@ -1408,6 +1408,13 @@ public partial class App : Application
                 OcrSelfTest.Run);
         }
 
+        int recordingPerformanceIndex = FindSwitch(args, RecordingPerformanceSelfTest.CommandLineSwitch);
+        if (recordingPerformanceIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(args, recordingPerformanceIndex, "mycapture-recording-performance");
+            return RunSelfTest(outputDirectory, "recording-performance-report.txt", RecordingPerformanceSelfTest.Run);
+        }
+
         int recordingIndex = FindSwitch(args, RecordingSelfTest.CommandLineSwitch);
         if (recordingIndex >= 0)
         {
