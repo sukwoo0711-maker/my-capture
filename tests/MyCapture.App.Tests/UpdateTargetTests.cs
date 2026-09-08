@@ -69,10 +69,9 @@ public sealed class UpdateTargetTests
 
     private sealed class OwnedFixture : IDisposable
     {
-        internal string Root { get; } = Path.Combine(Path.GetTempPath(), "mycapture-owned-" + Guid.NewGuid().ToString("N"));
+        internal string Root { get; } = OwnedTestDirectory.Create("mycapture-owned-");
         internal OwnedFixture()
         {
-            Directory.CreateDirectory(Root);
             var files = new[] { "MyCapture.exe", "MyCapture.dll" }.Select(name =>
             {
                 byte[] bytes = [1, 2, 3];
@@ -84,7 +83,7 @@ public sealed class UpdateTargetTests
         public void Dispose()
         {
             foreach (string file in new[] { "MyCapture.exe", "MyCapture.dll", "install-manifest.json" }) File.Delete(Path.Combine(Root, file));
-            Directory.Delete(Root, false);
+            OwnedTestDirectory.Delete(Root);
         }
     }
 }

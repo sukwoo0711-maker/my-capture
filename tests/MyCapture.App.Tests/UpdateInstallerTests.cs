@@ -47,6 +47,7 @@ public sealed class UpdateInstallerTests
             Assert.True(info.CreateNoWindow);
             Assert.Equal(ProcessWindowStyle.Hidden, info.WindowStyle);
             Assert.Empty(info.Arguments);
+            Assert.Equal(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"), info.FileName);
             Assert.Equal(Path.Combine(fixture.Directory, "update-helper.ps1"), info.ArgumentList[6]);
             Assert.Equal(Path.Combine(fixture.Directory, "update-session.json"), info.ArgumentList[8]);
             Assert.False(exited);
@@ -73,11 +74,10 @@ public sealed class UpdateInstallerTests
 
     internal sealed class PackageFixture : IDisposable
     {
-        internal string Directory { get; } = Path.Combine(Path.GetTempPath(), "mycapture updater ' & tests " + Guid.NewGuid().ToString("N"));
+        internal string Directory { get; } = OwnedTestDirectory.Create("mycapture updater ' & tests ");
         internal VerifiedUpdatePackage Package { get; }
         internal PackageFixture()
         {
-            System.IO.Directory.CreateDirectory(Directory);
             byte[] data = [1, 2, 3, 4];
             string installer = Path.Combine(Directory, "MyCapture-1.8.0-win-x64-setup.exe");
             File.WriteAllBytes(installer, data);
@@ -85,6 +85,6 @@ public sealed class UpdateInstallerTests
             Package = new VerifiedUpdatePackage(new UpdateVersion(1, 8, 0), installer, hash, hash, data.Length,
                 Directory, "Release", "", new Uri("https://github.com/sukwoo0711-maker/my-capture/releases/tag/v1.8.0"), DateTimeOffset.UtcNow);
         }
-        public void Dispose() { Package.Cleanup(); if (System.IO.Directory.Exists(Directory)) System.IO.Directory.Delete(Directory, false); }
+        public void Dispose() { Package.Cleanup(); OwnedTestDirectory.Delete(Directory); }
     }
 }

@@ -17,6 +17,42 @@ namespace MyCapture.App.Tests;
 public sealed class GitHubUpdateServiceTests
 {
     [Fact]
+    public async Task DownloadAndStage_RejectsLinkedAncestorBeforeCreatingOrDownloading()
+    {
+        string root = CreateTempStagingDir();
+        string target = CreateTempStagingDir();
+        string link = Path.Combine(root, "linked");
+        try
+        {
+            UpdatePathsTests.CreateJunction(link, target);
+            using var httpClient = CreateMockClient(_ => throw new InvalidOperationException("No request expected."));
+            using var service = new GitHubUpdateService(httpClient);
+            var result = await service.DownloadAndStageAsync(CreateValidPackage(new UpdateVersion(1, 8, 0)),
+                Path.Combine(link, "new", "staging"));
+            Assert.Equal(UpdateErrorKind.StagingError, result.ErrorKind);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(target));
+        }
+        finally
+        {
+            if (Directory.Exists(link)) Directory.Delete(link);
+            DeleteDirectory(root);
+            DeleteDirectory(target);
+        }
+    }
+
+    [Theory]
+    [InlineData("relative-staging")]
+    [InlineData(@"C:\")]
+    [InlineData(@"\\?\C:\staging")]
+    public async Task DownloadAndStage_RejectsUnsafeRootBeforeDownloading(string root)
+    {
+        using var httpClient = CreateMockClient(_ => throw new InvalidOperationException("No request expected."));
+        using var service = new GitHubUpdateService(httpClient);
+        var result = await service.DownloadAndStageAsync(CreateValidPackage(new UpdateVersion(1, 8, 0)), root);
+        Assert.Equal(UpdateErrorKind.StagingError, result.ErrorKind);
+    }
+
+    [Fact]
     public async Task CheckForUpdate_WhenUpToDate_ReturnsAlreadyUpToDate()
     {
         var current = new UpdateVersion(1, 8, 0);
@@ -796,27 +832,9 @@ public sealed class GitHubUpdateServiceTests
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private static string CreateTempStagingDir()
-    {
-        string path = Path.Combine(Path.GetTempPath(), "mycapture-updater-tests-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(path);
-        return path;
-    }
+    private static string CreateTempStagingDir() => OwnedTestDirectory.Create("mycapture-updater-tests-");
 
-    private static void DeleteDirectory(string path)
-    {
-        try
-        {
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, recursive: true);
-            }
-        }
-        catch
-        {
-        }
-    }
-
+    private static void DeleteDirectory(string path) => OwnedTestDirectory.Delete(path);
     [Fact]
     public async Task CheckForUpdate_UnknownLengthApiPayloadIsStillBounded()
     {

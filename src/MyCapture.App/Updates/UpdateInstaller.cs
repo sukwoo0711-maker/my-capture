@@ -19,9 +19,9 @@ internal sealed class UpdateInstaller
         ArgumentNullException.ThrowIfNull(package);
         target ??= UpdateTarget.Resolve(AppContext.BaseDirectory, UpdateTarget.DefaultRoot);
         await target.ValidateAsync(cancellationToken);
-        string session = package.StagingDirectory;
-        string expectedName = $"MyCapture-{package.Version}-win-x64-setup.exe";
-        if (!string.Equals(Path.Combine(session, expectedName), package.InstallerPath, StringComparison.OrdinalIgnoreCase))
+        string session = UpdatePaths.CanonicalRoot(package.StagingDirectory);
+        string expectedName = UpdatePaths.InstallerName(package.Version);
+        if (!string.Equals(UpdatePaths.Child(session, expectedName), package.InstallerPath, StringComparison.OrdinalIgnoreCase))
             throw new IOException("Installer is outside its update session.");
         AssertNoReparsePoints(package.InstallerPath);
         // Keep the verified file read-locked through process creation and the exit decision.
@@ -32,8 +32,8 @@ internal sealed class UpdateInstaller
                 package.ExpectedSha256, StringComparison.OrdinalIgnoreCase))
             throw new IOException("Installer integrity changed after download.");
 
-        string scriptPath = Path.Combine(session, "update-helper.ps1");
-        string configPath = Path.Combine(session, "update-session.json");
+        string scriptPath = UpdatePaths.Child(session, "update-helper.ps1");
+        string configPath = UpdatePaths.Child(session, "update-session.json");
         using Stream resource = typeof(UpdateInstaller).Assembly.GetManifestResourceStream("MyCapture.UpdateHelper.ps1")
             ?? throw new IOException("Updater helper resource is missing.");
         await using (var script = new FileStream(scriptPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -58,7 +58,7 @@ internal sealed class UpdateInstaller
         cancellationToken.ThrowIfCancellationRequested();
         // This callback and exit run on the UI dispatcher, with no intervening await.
         if (!canExit()) return false;
-        var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+        var info = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,
             "WindowsPowerShell", "v1.0", "powershell.exe"))
         {
             UseShellExecute = false,

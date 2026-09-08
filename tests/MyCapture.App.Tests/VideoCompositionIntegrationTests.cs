@@ -653,26 +653,7 @@ public sealed class VideoCompositionIntegrationTests
         return result!;
     }
 
-    private static string NewRoot()
-    {
-        string root = Path.Combine(Path.GetTempPath(), "mycapture-compositor-" + Guid.NewGuid().ToString("N"));
-        // codeql[cs/path-injection] -- isolated GUID test workspace
-        Directory.CreateDirectory(root);
-        return root;
-    }
+    private static string NewRoot() => OwnedTestDirectory.Create("mycapture-compositor-");
 
-    private static void DeleteRoot(string root)
-    {
-        try
-        {
-            // codeql[cs/path-injection] -- isolated GUID test workspace
-            Directory.Delete(root, recursive: true);
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-    }
+    private static void DeleteRoot(string root) => OwnedTestDirectory.Delete(root);
 }

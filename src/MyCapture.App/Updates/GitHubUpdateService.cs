@@ -265,56 +265,40 @@ public sealed class GitHubUpdateService : IUpdateService
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(_options.DownloadTimeout);
 
-        string canonicalStagingRoot = Path.GetFullPath(stagingRoot);
+        string fullSessionDir;
+        string tempInstallerPath;
+        string finalInstallerPath;
+        string checksumFilePath;
         try
         {
-            if (Directory.Exists(canonicalStagingRoot) &&
-                (new DirectoryInfo(canonicalStagingRoot).Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, "Staging root directory must not be a reparse point.");
-            }
+            string canonicalStagingRoot = UpdatePaths.CanonicalRoot(stagingRoot);
             Directory.CreateDirectory(canonicalStagingRoot);
             UpdateInstaller.AssertNoReparsePoints(canonicalStagingRoot);
-        }
-        catch (Exception ex)
-        {
-            return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, $"Unable to access or create staging root directory: {ex.Message}");
-        }
-
-        string sessionDirName = $"update-{package.Version.ToNormalizedString()}-{Guid.NewGuid():N}";
-        string sessionDirectory = Path.Combine(canonicalStagingRoot, sessionDirName);
-        string fullSessionDir = Path.GetFullPath(sessionDirectory);
-
-        string requiredPrefix = canonicalStagingRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                                + Path.DirectorySeparatorChar;
-        if (!fullSessionDir.StartsWith(requiredPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, "Staging directory traversal was detected and blocked.");
-        }
-
-        try
-        {
+            // No remote asset name or version text participates in filesystem paths.
+            fullSessionDir = UpdatePaths.Child(canonicalStagingRoot, $"update-{Guid.NewGuid():N}");
+            if (Directory.Exists(fullSessionDir) || File.Exists(fullSessionDir))
+                throw new IOException("Update session already exists.");
             Directory.CreateDirectory(fullSessionDir);
-            if ((new DirectoryInfo(fullSessionDir).Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, "Created session directory was detected as a reparse point.");
-            }
+            UpdateInstaller.AssertNoReparsePoints(fullSessionDir);
+            string installerName = UpdatePaths.InstallerName(package.Version);
+            tempInstallerPath = UpdatePaths.Child(fullSessionDir, installerName + ".downloading");
+            finalInstallerPath = UpdatePaths.Child(fullSessionDir, installerName);
+            checksumFilePath = UpdatePaths.Child(fullSessionDir, "SHA256SUMS.txt");
         }
         catch (Exception ex)
         {
-            return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, $"Failed to create update session directory: {ex.Message}");
+            return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, $"Unable to create a safe staging directory: {ex.Message}");
         }
-
-        string tempInstallerPath = Path.Combine(fullSessionDir, $"{package.SetupAssetName}.downloading");
-        string finalInstallerPath = Path.Combine(fullSessionDir, package.SetupAssetName);
-        string checksumFilePath = Path.Combine(fullSessionDir, "SHA256SUMS.txt");
 
         try
         {
             // 1. Download and parse SHA256SUMS.txt (byte bounded)
             progress?.Report(UpdateProgress.DownloadingChecksums());
             string checksumContent = await DownloadChecksumFileContentAsync(package.ChecksumDownloadUrl, cts.Token).ConfigureAwait(false);
-            await File.WriteAllTextAsync(checksumFilePath, checksumContent, cts.Token).ConfigureAwait(false);
+            UpdateInstaller.AssertNoReparsePoints(fullSessionDir);
+            await using (var checksumStream = new FileStream(checksumFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            await using (var writer = new StreamWriter(checksumStream))
+                await writer.WriteAsync(checksumContent.AsMemory(), cts.Token).ConfigureAwait(false);
 
             var checksumFile = Sha256ChecksumFile.Parse(checksumContent);
             if (!checksumFile.TryGetChecksum(package.SetupAssetName, out string? expectedSha256))
@@ -332,10 +316,11 @@ public sealed class GitHubUpdateService : IUpdateService
                 cts.Token).ConfigureAwait(false);
 
             // 3. Move verified installer to final file name
-            File.Move(tempInstallerPath, finalInstallerPath, overwrite: true);
+            UpdateInstaller.AssertNoReparsePoints(tempInstallerPath);
+            File.Move(tempInstallerPath, finalInstallerPath);
 
             progress?.Report(UpdateProgress.Ready(bytesReceived));
-            _logger?.LogInformation("Successfully verified and staged update: {Path}", finalInstallerPath);
+            _logger?.LogInformation("Successfully verified and staged update ({Bytes} bytes).", bytesReceived);
 
             var verifiedPackage = new VerifiedUpdatePackage(
                 version: package.Version,
@@ -502,6 +487,7 @@ public sealed class GitHubUpdateService : IUpdateService
         await using Stream networkStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 
         // Async sequential file IO without WriteThrough per chunk
+        UpdatePaths.AssertExistingAncestors(destinationPath);
         await using var fileStream = new FileStream(
             destinationPath,
             FileMode.CreateNew,
