@@ -817,6 +817,24 @@ public sealed class GitHubUpdateServiceTests
         }
     }
 
+    [Fact]
+    public async Task CheckForUpdate_UnknownLengthApiPayloadIsStillBounded()
+    {
+        using var client = CreateMockClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new UnknownLengthContent(new byte[1024 * 1024 + 1])
+        });
+        using var service = new GitHubUpdateService(client);
+        var result = await service.CheckForUpdateAsync(new UpdateVersion(1, 7, 0));
+        Assert.Equal(UpdateErrorKind.PayloadTooLarge, result.ErrorKind);
+    }
+
+    private sealed class UnknownLengthContent(byte[] bytes) : HttpContent
+    {
+        protected override bool TryComputeLength(out long length) { length = 0; return false; }
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) => stream.WriteAsync(bytes).AsTask();
+        protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(new MemoryStream(bytes));
+    }
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;

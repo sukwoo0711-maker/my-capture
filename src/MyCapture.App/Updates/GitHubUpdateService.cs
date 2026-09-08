@@ -128,7 +128,7 @@ public sealed class GitHubUpdateService : IUpdateService
 
             if (response.Content.Headers.ContentLength > MaxApiByteLimit)
             {
-                return UpdateCheckResult.Failed(UpdateErrorKind.InvalidReleaseData, $"Release metadata declared size exceeds limit of {MaxApiByteLimit} bytes.", currentVersion);
+                return UpdateCheckResult.Failed(UpdateErrorKind.PayloadTooLarge, $"Release metadata declared size exceeds limit of {MaxApiByteLimit} bytes.", currentVersion);
             }
 
             await using Stream rawStream = await response.Content.ReadAsStreamAsync(cts.Token).ConfigureAwait(false);
@@ -274,6 +274,7 @@ public sealed class GitHubUpdateService : IUpdateService
                 return StagedUpdateResult.Failed(UpdateErrorKind.StagingError, "Staging root directory must not be a reparse point.");
             }
             Directory.CreateDirectory(canonicalStagingRoot);
+            UpdateInstaller.AssertNoReparsePoints(canonicalStagingRoot);
         }
         catch (Exception ex)
         {
@@ -739,6 +740,7 @@ public sealed class GitHubUpdateService : IUpdateService
                 return;
             }
 
+            UpdateInstaller.AssertNoReparsePoints(sessionDirectory);
             var dirInfo = new DirectoryInfo(sessionDirectory);
             if ((dirInfo.Attributes & FileAttributes.ReparsePoint) != 0)
             {

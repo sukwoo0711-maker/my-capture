@@ -50,9 +50,12 @@ internal sealed partial class SettingsWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        InitializeUpdates();
 
         _draft = new SettingsDraft(_currentSettings());
         _draft.ErrorsChanged += (_, _) => RefreshErrorSummary();
+        _draft.PropertyChanged += (_, _) => _settingsEdited = true;
+        _settingsEdited = false;
         DataContext = _draft;
 
         // ApplyCommand / CancelCommand back the Ctrl+S and Esc key bindings. They are added in
@@ -115,6 +118,8 @@ internal sealed partial class SettingsWindow : Window
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
     internal void CloseForExit()
     {
+        _updates.Cancel();
+        if (!_installingUpdate) _stagedUpdate?.Cleanup();
         _allowClose = true;
         Close();
     }
@@ -125,6 +130,7 @@ internal sealed partial class SettingsWindow : Window
         if (!_allowClose)
         {
             e.Cancel = true;
+            _updates.Cancel();
             CancelToTray();
             return;
         }
@@ -136,6 +142,8 @@ internal sealed partial class SettingsWindow : Window
     {
         _draft = new SettingsDraft(_currentSettings());
         _draft.ErrorsChanged += (_, _) => RefreshErrorSummary();
+        _draft.PropertyChanged += (_, _) => _settingsEdited = true;
+        _settingsEdited = false;
         DataContext = _draft;
         RefreshErrorSummary();
     }
@@ -198,12 +206,14 @@ internal sealed partial class SettingsWindow : Window
         }
         else
         {
+            _updates.Cancel();
             CancelToTray(); // Clean apply with nothing to report: hide back to the tray.
         }
     }
 
     private void CancelToTray()
     {
+        _updates.Cancel();
         // Discard edits by dropping the draft, then hide.
         ReloadDraft();
         Hide();

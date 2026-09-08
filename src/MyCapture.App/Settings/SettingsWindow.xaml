@@ -677,6 +677,18 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
+            <TabItem x:Name="UpdateTab">
+                <StackPanel Margin="20">
+                    <TextBlock x:Name="UpdateVersionLabel" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Text.Primary}" />
+                    <TextBlock x:Name="UpdateDescription" TextWrapping="Wrap" Margin="0,12,0,20" Foreground="{StaticResource Text.Primary}" />
+                    <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap" Margin="0,0,0,12" Foreground="{StaticResource Text.Primary}" AutomationProperties.LiveSetting="Polite" />
+                    <ProgressBar x:Name="UpdateDownloadProgress" Height="8" Minimum="0" Maximum="100" Margin="0,0,0,20" />
+                    <WrapPanel>
+                        <Button x:Name="UpdateAction" Style="{StaticResource Button.Primary}" Click="OnUpdateAction" MinWidth="140" />
+                        <Button x:Name="UpdateCancel" Style="{StaticResource Button.Secondary}" Click="OnUpdateCancel" IsEnabled="False" Margin="8,0,0,0" MinWidth="120" />
+                    </WrapPanel>
+                </StackPanel>
+            </TabItem>
         </TabControl>
 
         <!-- ===================== Error summary ===================== -->

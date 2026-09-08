@@ -42,6 +42,7 @@ $script:BackupRoot = $null
 $script:InstallRootFull = $null
 $script:OldInstallMoved = $false
 $script:NewInstallCommitted = $false
+$script:UpdateSession = $null
 
 function Get-DefaultLogPath {
     $base = $null
@@ -426,6 +427,10 @@ function Stop-InstalledApplication {
         }
         catch { $process.Dispose() }
     }
+    if ($script:UpdateSession -and $matches.Count -gt 0) {
+        foreach ($match in $matches) { $match.Dispose() }
+        Throw-InstallerError $ExitProcessStop 'MyCapture is running again; update will not stop it or discard work.'
+    }
     foreach ($process in $matches) {
         try {
             Write-InstallLog 'INFO' "Stopping running MyCapture process $($process.Id)."
@@ -559,6 +564,42 @@ try {
     $ManifestPath = Resolve-ExistingFile $ManifestPath 'Installer manifest'
     $manifest = Read-And-ValidateManifest $ManifestPath
 
+    # The updater passes a fixed per-session JSON path through inherited environment, never a shell command.
+    if (-not [string]::IsNullOrWhiteSpace($env:MYCAPTURE_UPDATE_SESSION)) {
+        $sessionPath = [IO.Path]::GetFullPath($env:MYCAPTURE_UPDATE_SESSION)
+        $sessionDirectory = Split-Path -Parent $sessionPath
+        $localData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+        $expectedUpdateInstallRoot = Join-Path $localData 'Programs\MyCapture'
+        $updateRoot = Join-Path $localData 'MyCapture\Updates'
+        # Direct callers may update an explicit custom root without shell integration. The
+        # session root is derived from that validated argument, never trusted from environment JSON.
+        if (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
+            if (-not $NoShellIntegration) { Throw-InstallerError $ExitUnsafePath 'Custom updater roots require explicit NoShellIntegration.' }
+            $expectedUpdateInstallRoot = Get-SafeInstallRoot $InstallRoot $manifest
+            $updateRoot = Join-Path (Split-Path -Parent $expectedUpdateInstallRoot) '.MyCapture.updates'
+        }
+        if (-not [string]::Equals((Split-Path -Parent $sessionDirectory), $updateRoot, [StringComparison]::OrdinalIgnoreCase) -or
+            (Split-Path -Leaf $sessionDirectory) -notmatch '^update-\d+\.\d+\.\d+-[a-f0-9]{32}$' -or
+            (Split-Path -Leaf $sessionPath) -cne 'update-session.json') { Throw-InstallerError $ExitUnsafePath 'Invalid updater session path.' }
+        $linkCheck = $sessionPath
+        while ($linkCheck) {
+            if (([IO.File]::GetAttributes($linkCheck) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { Throw-InstallerError $ExitUnsafePath 'Updater session contains a reparse point.' }
+            $linkCheck = [IO.Path]::GetDirectoryName($linkCheck)
+        }
+        $update = Get-Content -LiteralPath $sessionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($update.Token -notmatch '^[a-f0-9]{32}$' -or $update.Version -ne $manifest.Version -or
+            -not [string]::Equals([string]$update.InstallRoot, $expectedUpdateInstallRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            Throw-InstallerError $ExitIntegrity 'Updater session does not match this package.'
+        }
+
+        $script:UpdateReceipt = Join-Path $sessionDirectory 'install-result.json'
+        if (Test-Path -LiteralPath $script:UpdateReceipt) { Throw-InstallerError $ExitUnsafePath 'Updater receipt already exists.' }
+        $script:UpdateSession = $update
+        $script:QuietMode = $true
+        $InstallRoot = [string]$update.InstallRoot
+        $parentProcess = Get-Process -Id ([int]$update.ParentId) -ErrorAction SilentlyContinue
+        if ($parentProcess) { $parentProcess.Dispose(); Throw-InstallerError $ExitProcessStop 'Updater parent is still running.' }
+    }
     Assert-SupportedHost $manifest
     Assert-BootstrapIntegrity $manifest
     if ((Get-Item -LiteralPath $PayloadPath).Length -ne [long]$manifest.Payload.Bytes -or -not (Test-HashEquals $PayloadPath ([string]$manifest.Payload.Sha256))) {
@@ -648,4 +689,18 @@ finally {
     if ($script:Mutex) { $script:Mutex.Dispose() }
 }
 
+if ($script:UpdateSession) {
+    try {
+        $receipt = [ordered]@{ Token = $script:UpdateSession.Token; Version = $script:UpdateSession.Version; ExitCode = $exitCode; InstallRoot = $script:InstallRootFull; LogPath = $script:LogFile }
+        $temporaryReceipt = $script:UpdateReceipt + '.tmp'
+        $receiptStream = [IO.File]::Open($temporaryReceipt, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try {
+            $receiptBytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($receipt | ConvertTo-Json))
+            $receiptStream.Write($receiptBytes, 0, $receiptBytes.Length)
+        }
+        finally { $receiptStream.Dispose() }
+        [IO.File]::Move($temporaryReceipt, $script:UpdateReceipt)
+    }
+    catch { Write-InstallLog 'ERROR' ('Could not write updater receipt: ' + $_.Exception.Message) }
+}
 exit $exitCode

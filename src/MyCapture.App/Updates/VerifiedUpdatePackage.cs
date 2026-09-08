@@ -93,13 +93,14 @@ public sealed class VerifiedUpdatePackage
                 return;
             }
 
+            UpdateInstaller.AssertNoReparsePoints(StagingDirectory);
             var dirInfo = new DirectoryInfo(StagingDirectory);
             if ((dirInfo.Attributes & FileAttributes.ReparsePoint) != 0)
             {
                 return;
             }
 
-            string[] exactOwnedFiles = [InstallerPath, ChecksumPath];
+            string[] exactOwnedFiles = [InstallerPath, ChecksumPath, Path.Combine(StagingDirectory, "update-helper.ps1"), Path.Combine(StagingDirectory, "update-session.json")];
             foreach (string filePath in exactOwnedFiles)
             {
                 try

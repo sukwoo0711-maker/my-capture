@@ -78,6 +78,28 @@ function Invoke-Installer(
     return [int]$LASTEXITCODE
 }
 
+function Invoke-UpdaterInstaller([string]$TargetRoot, [string[]]$ExtraArguments) {
+    $sessions = Join-Path (Split-Path -Parent $TargetRoot) '.MyCapture.updates'
+    $sessionDirectory = Join-Path $sessions ('update-' + $Version + '-' + [guid]::NewGuid().ToString('N'))
+    [IO.Directory]::CreateDirectory($sessionDirectory) | Out-Null
+    $sessionFile = Join-Path $sessionDirectory 'update-session.json'
+    $token = [guid]::NewGuid().ToString('N')
+    @{ Token = $token; Version = $Version; InstallRoot = $TargetRoot; ParentId = [int]::MaxValue } |
+        ConvertTo-Json | Set-Content -LiteralPath $sessionFile -Encoding UTF8
+    $previousSession = $env:MYCAPTURE_UPDATE_SESSION
+    try {
+        $env:MYCAPTURE_UPDATE_SESSION = $sessionFile
+        $code = Invoke-Installer $TargetRoot $payload $manifestPath $ExtraArguments
+    }
+    finally { $env:MYCAPTURE_UPDATE_SESSION = $previousSession }
+    $receipt = Get-Content -LiteralPath (Join-Path $sessionDirectory 'install-result.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-Equal $token $receipt.Token 'Installer receipt token changed.'
+    Assert-Equal $Version $receipt.Version 'Installer receipt version changed.'
+    Assert-Equal $TargetRoot $receipt.InstallRoot 'Installer receipt target changed.'
+    Assert-Equal $code $receipt.ExitCode 'Installer receipt does not report the child exit code.'
+    Write-Pass 'updater-receipt' "exit=$code with exact session, version, and isolated custom target" | Out-Host
+    return $code
+}
 function Invoke-Uninstaller([string]$ScriptPath, [string]$LogPath) {
     $arguments = @(
         '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
@@ -295,7 +317,7 @@ try {
     Write-Pass 'installer-mutex' 'exit=18'
 
     # Install to a Unicode path, then prove both injected failure points restore the old tree.
-    $code = Invoke-Installer $installRoot $payload $manifestPath @()
+    $code = Invoke-UpdaterInstaller $installRoot @()
     Assert-Equal 0 $code 'Initial Unicode-path install failed.'
     Assert-True (Test-Path -LiteralPath (Join-Path $installRoot 'MyCapture.exe')) 'Installed executable missing.'
     $rollbackSentinel = Join-Path $installRoot 'rollback-sentinel.bin'
@@ -304,7 +326,7 @@ try {
     Write-Pass 'unicode-install' "exit=0 root=$installRoot"
 
     foreach ($fault in @('AfterBackup', 'AfterCommit')) {
-        $code = Invoke-Installer $installRoot $payload $manifestPath @('-TestFault', $fault)
+        $code = Invoke-UpdaterInstaller $installRoot @('-TestFault', $fault)
         Assert-Equal 17 $code "$fault should use commit/rollback exit 17."
         Assert-True (Test-Path -LiteralPath $rollbackSentinel -PathType Leaf) "$fault did not restore the previous installation."
         Assert-Equal $rollbackHash (Get-Sha256 $rollbackSentinel) "$fault changed the previous installation sentinel."
