@@ -67,7 +67,7 @@ public sealed class RecordingCaptureLifecycleTests
         uint before = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
         for (int sessionIndex = 0; sessionIndex < 8; sessionIndex++)
         {
-            var session = fixture.Engine.CreateSession(fixture.Region, includeCursor);
+            using var session = fixture.Engine.CreateSession(fixture.Region, includeCursor);
             byte[] actual = new byte[expected.Length];
             Assert.Throws<ArgumentException>(() => session.CaptureInto(new byte[1], 1280));
             session.CaptureInto(actual, 1280);
@@ -78,7 +78,9 @@ public sealed class RecordingCaptureLifecycleTests
             Assert.Throws<ObjectDisposedException>(() => session.CaptureInto(actual, 1280));
         }
         uint after = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
-        Assert.InRange((long)after - before, -2, 2);
+        // This counter includes every WPF/test resource in the process. Other objects can be
+        // finalized during this workload; decreases are valid, but the growth limit is unchanged.
+        Assert.True((long)after - before <= 2, $"Process GDI resources grew from {before} to {after}.");
     });
 
     [Fact]
