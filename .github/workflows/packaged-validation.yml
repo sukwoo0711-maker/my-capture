@@ -103,7 +103,7 @@ jobs:
             [pscustomobject]@{ Path = $_; Bytes = $file.Length; Sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
           })
           $sums = @(Get-Content "$releaseRoot/SHA256SUMS.txt")
-          $expectedSums = @($assets | Where-Object { $_.Path -in @($assetNames[0], $assetNames[1], 'release-manifest.json') } | ForEach-Object { "$($_.Sha256)  $($_.Path)" })
+          $expectedSums = @($assets | Where-Object { $_.Path -in @($assetNames[0], $assetNames[1], 'release-manifest.json') } | ForEach-Object { "$($_.Sha256.ToUpperInvariant())  $($_.Path)" })
           if ($sums.Count -ne 3 -or @(Compare-Object $expectedSums $sums -CaseSensitive).Count -ne 0) { throw 'Release checksum mismatch.' }
           $runs = @(Get-ChildItem artifacts/validation/hosted/packaged-self-tests -Directory)
           if ($runs.Count -ne 1) { throw 'Expected exactly one packaged validation run.' }
