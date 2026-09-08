@@ -16,6 +16,32 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class GitHubUpdateServiceTests
 {
+    [Theory]
+    [InlineData(1, 8, 0)]
+    [InlineData(21, 10, 345)]
+    public async Task DownloadedSessionPassesActualInstallerPathGuard(int major, int minor, int patch)
+    {
+        string root = CreateTempStagingDir();
+        try
+        {
+            var version = new UpdateVersion(major, minor, patch);
+            byte[] bytes = [1, 2, 3, 4];
+            string name = UpdatePaths.InstallerName(version);
+            using var client = CreateMockClient(request => request.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS.txt", StringComparison.Ordinal)
+                ? CreateStringResponse(HttpStatusCode.OK, $"{ComputeSha256(bytes)}  {name}\n")
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
+            using var service = new GitHubUpdateService(client);
+            var result = await service.DownloadAndStageAsync(CreateValidPackage(version, bytes.Length), root);
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            var package = Assert.IsType<VerifiedUpdatePackage>(result.VerifiedPackage);
+            await InstallerSessionContract.AssertAcceptedAsync(root, Path.Combine(package.StagingDirectory, "update-session.json"));
+            package.Cleanup();
+            Assert.True(Directory.Exists(root));
+            Assert.False(Directory.Exists(package.StagingDirectory));
+        }
+        finally { DeleteDirectory(root); }
+    }
+
     [Fact]
     public async Task DownloadAndStage_RejectsLinkedAncestorBeforeCreatingOrDownloading()
     {

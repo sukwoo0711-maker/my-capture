@@ -6,6 +6,13 @@ namespace MyCapture.App.Updates;
 /// <summary>Canonical paths for locally named, single-session update files.</summary>
 internal static class UpdatePaths
 {
+    internal static string SessionName(UpdateVersion version)
+    {
+        _ = InstallerName(version); // Apply the same stable numeric version policy.
+        return string.Create(CultureInfo.InvariantCulture,
+            $"update-{version.Major}.{version.Minor}.{version.Patch}-{Guid.NewGuid():N}");
+    }
+
     internal static string InstallerName(UpdateVersion version)
     {
         if (version.IsPrerelease || version.Major < 0 || version.Minor < 0 || version.Patch < 0)

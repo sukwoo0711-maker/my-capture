@@ -275,7 +275,7 @@ public sealed class GitHubUpdateService : IUpdateService
             Directory.CreateDirectory(canonicalStagingRoot);
             UpdateInstaller.AssertNoReparsePoints(canonicalStagingRoot);
             // No remote asset name or version text participates in filesystem paths.
-            fullSessionDir = UpdatePaths.Child(canonicalStagingRoot, $"update-{Guid.NewGuid():N}");
+            fullSessionDir = UpdatePaths.Child(canonicalStagingRoot, UpdatePaths.SessionName(package.Version));
             if (Directory.Exists(fullSessionDir) || File.Exists(fullSessionDir))
                 throw new IOException("Update session already exists.");
             Directory.CreateDirectory(fullSessionDir);
