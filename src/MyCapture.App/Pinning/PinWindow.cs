@@ -872,6 +872,9 @@ internal sealed class PinWindow : Window
 
     private void ShowFeedback(string text)
     {
+        // OCR/clipboard completions can arrive after Close detached the timer's stop handler.
+        // Never restart that timer or animate a window whose lifetime has ended.
+        if (_isClosed) return;
         _feedback.Text = text;
         _feedback.Visibility = Visibility.Visible;
         _feedback.BeginAnimation(UIElement.OpacityProperty, null);
