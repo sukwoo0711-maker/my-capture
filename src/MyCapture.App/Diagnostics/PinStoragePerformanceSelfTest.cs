@@ -27,8 +27,7 @@ internal static class PinStoragePerformanceSelfTest
 
     internal static int Run(string outputDirectory)
     {
-        outputDirectory = Path.GetFullPath(outputDirectory);
-        Directory.CreateDirectory(outputDirectory);
+        outputDirectory = DiagnosticOutputPaths.Create(outputDirectory);
         var results = new List<object>();
         var failures = new List<string>();
         SynchronizationContext? previous = SynchronizationContext.Current;
@@ -40,14 +39,14 @@ internal static class PinStoragePerformanceSelfTest
         }
         catch (Exception ex) { failures.Add(ex.ToString()); }
         finally { SynchronizationContext.SetSynchronizationContext(previous); }
-        File.WriteAllText(Path.Combine(outputDirectory, "pin-storage-performance.json"), JsonSerializer.Serialize(new
+        File.WriteAllText(DiagnosticOutputPaths.Child(outputDirectory, "pin-storage-performance.json"), JsonSerializer.Serialize(new
         {
             Utc = DateTimeOffset.UtcNow, Os = Environment.OSVersion.ToString(), LogicalProcessors = Environment.ProcessorCount,
             CpuNormalization = "process CPU / measured wall time / logical processors * 100",
             Limits = "Synthetic input invokes actual WPF drag overrides with native HWND movement and per-gesture display cache; excludes OS input queue and physical mouse latency. Idle is the diagnostic host, not fully initialized tray app. Source images and queue are synthetic. No performance improvement is inferred from these current-source measurements.",
             Results = results, Failures = failures,
         }, new JsonSerializerOptions { WriteIndented = true }));
-        File.WriteAllText(Path.Combine(outputDirectory, "pin-storage-performance-report.txt"),
+        File.WriteAllText(DiagnosticOutputPaths.Child(outputDirectory, "pin-storage-performance-report.txt"),
             (failures.Count == 0 ? "RESULT: PASS" : "RESULT: FAIL") + Environment.NewLine + string.Join(Environment.NewLine, failures));
         return failures.Count == 0 ? 0 : 1;
     }
@@ -150,7 +149,7 @@ internal static class PinStoragePerformanceSelfTest
 
     private static void MeasureStorage(string outputDirectory, List<object> results, List<string> failures)
     {
-        AppPaths paths = AppPaths.CreateForRoot(Path.Combine(outputDirectory, "synthetic-queue-" + Guid.NewGuid().ToString("N")));
+        AppPaths paths = AppPaths.CreateForRoot(DiagnosticOutputPaths.Child(outputDirectory, "synthetic-queue-" + Guid.NewGuid().ToString("N")));
         var settings = new QueueSettings { MaxItems = 2000 };
         var queue = new CaptureQueue(paths, settings, NullLogger<CaptureQueue>.Instance);
         queue.Load();
@@ -224,7 +223,7 @@ internal static class PinStoragePerformanceSelfTest
         }
         foreach (bool text in new[] { true, false })
         {
-            string path = Path.Combine(outputDirectory, text ? "synthetic-text.png" : "synthetic-blank.png");
+            string path = DiagnosticOutputPaths.Child(outputDirectory, text ? "synthetic-text.png" : "synthetic-blank.png");
             ImageCodec.SavePng(SyntheticImage(720, 360, text), path);
             var wall = new double[6];
             var engine = new double[6];

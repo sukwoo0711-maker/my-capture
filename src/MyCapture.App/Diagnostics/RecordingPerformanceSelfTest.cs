@@ -25,8 +25,7 @@ internal static class RecordingPerformanceSelfTest
 
     internal static int Run(string outputDirectory)
     {
-        outputDirectory = Path.GetFullPath(outputDirectory);
-        Directory.CreateDirectory(outputDirectory);
+        outputDirectory = DiagnosticOutputPaths.Create(outputDirectory);
         var measurements = new List<object>();
         var failures = new List<string>();
         var engine = new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance);
@@ -51,10 +50,10 @@ internal static class RecordingPerformanceSelfTest
                 }
                 var region = new RectD(fixtureBounds.Left + 10, fixtureBounds.Top + 10, width, height);
                 measurements.Add(CompareCapturePaths(engine, region));
-                measurements.Add(Record(engine, region, Path.Combine(outputDirectory, $"sustained-{width}.mp4"), null, failures));
+                measurements.Add(Record(engine, region, DiagnosticOutputPaths.Child(outputDirectory, $"sustained-{width}.mp4"), null, failures));
             }
             var concurrentRegion = new RectD(fixtureBounds.Left + 10, fixtureBounds.Top + 10, 320, 240);
-            measurements.Add(Record(engine, concurrentRegion, Path.Combine(outputDirectory, "concurrent.mp4"),
+            measurements.Add(Record(engine, concurrentRegion, DiagnosticOutputPaths.Child(outputDirectory, "concurrent.mp4"),
                 recorder => ConcurrentWindows(engine, concurrentRegion, recorder, failures), failures));
         }
         catch (Exception ex)
@@ -65,7 +64,7 @@ internal static class RecordingPerformanceSelfTest
         {
             fixture.Close();
         }
-        File.WriteAllText(Path.Combine(outputDirectory, "recording-performance.json"), JsonSerializer.Serialize(new
+        File.WriteAllText(DiagnosticOutputPaths.Child(outputDirectory, "recording-performance.json"), JsonSerializer.Serialize(new
         {
             Utc = DateTimeOffset.UtcNow,
             Os = Environment.OSVersion.ToString(),
@@ -77,7 +76,7 @@ internal static class RecordingPerformanceSelfTest
             Measurements = measurements,
             Failures = failures,
         }, new JsonSerializerOptions { WriteIndented = true }));
-        File.WriteAllText(Path.Combine(outputDirectory, "recording-performance-report.txt"),
+        File.WriteAllText(DiagnosticOutputPaths.Child(outputDirectory, "recording-performance-report.txt"),
             (failures.Count == 0 ? "RESULT: PASS" : "RESULT: FAIL") + Environment.NewLine + string.Join(Environment.NewLine, failures));
         return failures.Count == 0 ? 0 : 1;
     }
@@ -131,6 +130,7 @@ internal static class RecordingPerformanceSelfTest
     private static object Record(ScreenCaptureEngine engine, RectD region, string path,
         Func<RegionRecorder, List<Phase>>? concurrentWork, List<string> failures)
     {
+        string metadataPath = DiagnosticOutputPaths.Child(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".json");
         using var recorder = new RegionRecorder(new RegionFrameGrabber(engine, false),
             options => new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance), NullLogger.Instance);
         using Process process = Process.GetCurrentProcess();
@@ -140,7 +140,7 @@ internal static class RecordingPerformanceSelfTest
         if (!recorder.IsReady)
         {
             RecordingResult startupResult = AwaitWithDispatcher(Task.Run(recorder.Stop));
-            File.WriteAllText(path + ".json", JsonSerializer.Serialize(startupResult, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(metadataPath, JsonSerializer.Serialize(startupResult, new JsonSerializerOptions { WriteIndented = true }));
             throw new InvalidOperationException("Recorder did not become ready within 15 seconds.");
         }
         TimeSpan cpuBefore = process.TotalProcessorTime;
@@ -153,7 +153,7 @@ internal static class RecordingPerformanceSelfTest
         double cpuMs = (process.TotalProcessorTime - cpuBefore).TotalMilliseconds;
         long allocations = GC.GetTotalAllocatedBytes(precise: true) - allocationsBefore;
         RecordingResult result = AwaitWithDispatcher(Task.Run(recorder.Stop));
-        File.WriteAllText(path + ".json", JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(metadataPath, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
         AwaitWithDispatcher(Task.Run(() =>
         {
         using var reader = new MediaFoundationVideoFrameReader(path);
