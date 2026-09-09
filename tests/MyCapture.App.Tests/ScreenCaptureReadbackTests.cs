@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Interop;
@@ -94,7 +95,8 @@ public sealed class ScreenCaptureReadbackTests
     [InlineData(true)]
     public void CaptureCore_DeselectsAndCleansResources_WithCursorOption(bool includeCursor) => StaTestHost.Run(() =>
     {
-        using var fixture = new SyntheticCaptureFixture();
+        using var fixture = new NativeCaptureFixture();
+        WaitForFixturePresentation(fixture);
         _ = fixture.Engine.CaptureRegion(fixture.Region, includeCursor);
         using Process process = Process.GetCurrentProcess();
         uint before = GetGuiResources(process.Handle, 0);
@@ -108,7 +110,7 @@ public sealed class ScreenCaptureReadbackTests
             {
                 byte[] pixel = new byte[4];
                 bitmap.CopyPixels(new System.Windows.Int32Rect(0, 0, 1, 1), pixel, 4, 0);
-                Assert.Equal(new byte[] { 166, 90, 18 }, pixel[..3]);
+                Assert.Equal(fixture.ExpectedBgr, pixel[..3]);
             }
         }
         uint after = GetGuiResources(process.Handle, 0);
@@ -118,7 +120,8 @@ public sealed class ScreenCaptureReadbackTests
     [Fact]
     public void CaptureRegion_OnMtaWorker_ReturnsFrozenPixelsToStaOwner() => StaTestHost.Run(() =>
     {
-        using var fixture = new SyntheticCaptureFixture();
+        using var fixture = new NativeCaptureFixture();
+        WaitForFixturePresentation(fixture);
         Task<(BitmapSource Bitmap, byte[] Reference)> capture = Task.Run(() =>
         {
             Assert.Equal(ApartmentState.MTA, Thread.CurrentThread.GetApartmentState());
@@ -136,9 +139,8 @@ public sealed class ScreenCaptureReadbackTests
         Assert.Equal(PixelFormats.Bgr32, bitmap.Format);
         byte[] actual = new byte[320 * 240 * 4];
         new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0).CopyPixels(actual, 320 * 4, 0);
-        // Compare the actual desktop to the established readback path. A WPF test
-        // window can still display its white backing surface after Show; assuming
-        // its brush has reached the compositor made both STA and MTA checks fail.
+        // Compare the actual desktop to the established readback path after the
+        // fixture's solid bitmap has reached the compositor.
         Assert.Equal(capture.Result.Reference, actual);
     });
 
@@ -168,13 +170,81 @@ public sealed class ScreenCaptureReadbackTests
         Assert.Equal(new RectD(1, 2, 2, 3), frame.ToBitmapSpace(new RectD(-12, -15, 2, 3)));
     });
 
+    private static void WaitForFixturePresentation(NativeCaptureFixture fixture)
+    {
+        byte[] pixels = new byte[320 * 240 * 4];
+        long deadline = Stopwatch.GetTimestamp() + 5 * Stopwatch.Frequency;
+        do
+        {
+            // Use the established recording readback as the readiness oracle,
+            // independently of the new WriteableBitmap conversion under test.
+            fixture.Engine.CaptureRegionInto(fixture.Region, false, pixels, 320 * 4);
+            bool ready = true;
+            for (int offset = 0; offset < pixels.Length; offset += 4)
+            {
+                if (pixels[offset] != fixture.ExpectedBgr[0] ||
+                    pixels[offset + 1] != fixture.ExpectedBgr[1] ||
+                    pixels[offset + 2] != fixture.ExpectedBgr[2])
+                {
+                    ready = false;
+                    break;
+                }
+            }
+            if (ready) return;
+            // Pump the owner dispatcher only while its presented pixels are not
+            // ready. Creating a window alone does not synchronize with composition.
+            SyntheticCaptureFixture.Pump(10);
+        } while (Stopwatch.GetTimestamp() < deadline);
+
+        Assert.Fail($"The capture fixture did not present its solid background within five seconds; first BGR pixel was {pixels[0]},{pixels[1]},{pixels[2]}.");
+    }
+
+    private sealed class NativeCaptureFixture : IDisposable
+    {
+        private readonly IntPtr _window;
+        private readonly NativeSurface _surface;
+        internal ScreenCaptureEngine Engine { get; } = new(NullLogger<ScreenCaptureEngine>.Instance);
+        internal RectD Region { get; }
+        internal byte[] ExpectedBgr { get; } = [166, 90, 18];
+
+        internal NativeCaptureFixture()
+        {
+            // An explicit bitmap avoids both themed stock-brush colors and a WPF
+            // renderer associated with an earlier STA.
+            _surface = new NativeSurface(340, 260, solid: true);
+            // Topmost tool window, no activation; owned and destroyed by this STA.
+            _window = CreateWindowEx(0x08000088, "STATIC", "Capture readback fixture",
+                0x9000000E, 100, 100, 340, 260, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+            try
+            {
+                Assert.NotEqual(IntPtr.Zero, _window);
+                SendMessage(_window, 0x0172, IntPtr.Zero, _surface.Bitmap); // STM_SETIMAGE / IMAGE_BITMAP
+                Assert.True(UpdateWindow(_window));
+                Assert.True(NativeMethods.GetWindowRect(_window, out NativeMethods.RECT bounds));
+                Region = new RectD(bounds.Left + 10, bounds.Top + 10, 320, 240);
+            }
+            catch
+            {
+                DestroyWindow(_window);
+                _surface.Dispose();
+                throw;
+            }
+        }
+
+        public void Dispose()
+        {
+            try { Assert.True(DestroyWindow(_window)); }
+            finally { _surface.Dispose(); }
+        }
+    }
+
     private sealed class NativeSurface : IDisposable
     {
         internal IntPtr Dc { get; private set; }
         internal IntPtr Bitmap { get; private set; }
         internal byte[] ExpectedPixels { get; }
 
-        internal NativeSurface(int width, int height)
+        internal NativeSurface(int width, int height, bool solid = false)
         {
             ExpectedPixels = new byte[width * height * 4];
             IntPtr desktop = NativeMethods.GetDesktopWindow();
@@ -194,9 +264,9 @@ public sealed class ScreenCaptureReadbackTests
                     for (int y = 0; y < height; y++)
                     for (int x = 0; x < width; x++)
                     {
-                        byte r = (byte)(17 + x * 11);
-                        byte g = (byte)(29 + y * 23);
-                        byte b = (byte)(43 + x * 3 + y * 5);
+                        byte r = solid ? (byte)18 : (byte)(17 + x * 11);
+                        byte g = solid ? (byte)90 : (byte)(29 + y * 23);
+                        byte b = solid ? (byte)166 : (byte)(43 + x * 3 + y * 5);
                         Assert.True(SetPixelV(Dc, x, y, (uint)(r | g << 8 | b << 16)));
                         int offset = (y * width + x) * 4;
                         ExpectedPixels[offset] = b;
@@ -235,4 +305,18 @@ public sealed class ScreenCaptureReadbackTests
     [DllImport("user32.dll")]
     private static extern uint GetGuiResources(IntPtr process, uint flags);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateWindowEx(uint extendedStyle, string className, string title, uint style,
+        int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UpdateWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 }
