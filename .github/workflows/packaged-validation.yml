@@ -97,6 +97,7 @@ jobs:
             Invoke-CheckedTest .\build\tests\update-helper-tests.ps1
             Invoke-CheckedTest .\build\tests\update-preservation-tests.ps1
             Invoke-CheckedTest .\build\tests\update-restart-preflight-tests.ps1
+            Invoke-CheckedTest .\build\tests\update-restart-acceptance.ps1 @('-ArtifactRoot', "artifacts/release/$env:PACKAGE_VERSION", '-ExpectedSourceCommit', $env:EXPECTED_SOURCE_SHA, '-DotNetPath', (Get-Command dotnet).Source, '-Execute')
           }
           finally { Stop-Transcript | Out-Null }
 
@@ -170,5 +171,12 @@ jobs:
             artifacts/validation/hosted/*.json
             artifacts/validation/hosted/*.log
             artifacts/validation/hosted/packaged-self-tests/**/*report.txt
+            artifacts/validation/update-restart/*/acceptance-result.json
+            artifacts/validation/update-restart/*/verified-install-result.json
+            artifacts/validation/update-restart/*/restart-process.json
+            artifacts/validation/update-restart/*/seed-install.log
+            artifacts/validation/update-restart/*/restart.stdout.txt
+            artifacts/validation/update-restart/*/restart.stderr.txt
+            artifacts/validation/update-restart/*/temporary/**/ux-review-selftest-report.txt
           if-no-files-found: warn
           retention-days: 14
