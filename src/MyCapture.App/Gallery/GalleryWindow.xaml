@@ -493,8 +493,8 @@
         <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,10" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
             <TextBlock Text="{Binding SelectionText}" VerticalAlignment="Center" Margin="8,0,14,0" />
             <Button Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource Button.Secondary}" Click="OnDeleteSelectedClick" />
-            <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0" DataContext="{Binding SingleSelectedTile}" Click="OnReducedExportClick" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}" />
-            <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0" DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}" />
+            <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0" DataContext="{Binding SingleSelectedTile}" Click="OnReducedExportClick" Visibility="{Binding DataContext.CanReduceSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+            <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0" DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick" Visibility="{Binding DataContext.CanGifSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
         </StackPanel>
         <Grid Grid.Row="4">
             <Grid.ColumnDefinitions>
