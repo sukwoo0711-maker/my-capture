@@ -116,6 +116,49 @@ public sealed class ScreenCaptureReadbackTests
     });
 
     [Fact]
+    public void CaptureRegion_OnMtaWorker_ReturnsFrozenPixelsToStaOwner() => StaTestHost.Run(() =>
+    {
+        using var fixture = new SyntheticCaptureFixture();
+        Task<(BitmapSource Bitmap, byte[] Reference)> capture = Task.Run(() =>
+        {
+            Assert.Equal(ApartmentState.MTA, Thread.CurrentThread.GetApartmentState());
+            byte[] legacy = new byte[320 * 240 * 4];
+            fixture.Engine.CaptureRegionInto(fixture.Region, false, legacy, 320 * 4);
+            return (fixture.Engine.CaptureRegion(fixture.Region, includeCursor: false), legacy);
+        });
+        // Keep the owner window responsive while the worker captures it, matching
+        // the production coordinator's await rather than blocking its dispatcher.
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!capture.IsCompleted && DateTime.UtcNow < deadline) SyntheticCaptureFixture.Pump(10);
+        Assert.True(capture.IsCompletedSuccessfully, capture.Exception?.ToString());
+        BitmapSource bitmap = capture.Result.Bitmap;
+        Assert.True(bitmap.IsFrozen);
+        Assert.Equal(PixelFormats.Bgr32, bitmap.Format);
+        byte[] actual = new byte[320 * 240 * 4];
+        new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0).CopyPixels(actual, 320 * 4, 0);
+        // Compare the actual desktop to the established readback path. A WPF test
+        // window can still display its white backing surface after Show; assuming
+        // its brush has reached the compositor made both STA and MTA checks fail.
+        Assert.Equal(capture.Result.Reference, actual);
+    });
+
+    [Fact]
+    public void NativePattern_CreatedAndReadOnMta_PreservesColorsOnSta() => StaTestHost.Run(() =>
+    {
+        Task<(BitmapSource Bitmap, byte[] Expected)> capture = Task.Run(() =>
+        {
+            Assert.Equal(ApartmentState.MTA, Thread.CurrentThread.GetApartmentState());
+            using var surface = new NativeSurface(17, 7);
+            return (ScreenCaptureEngine.ToBitmapSource(surface.Dc, surface.Bitmap, 17, 7), surface.ExpectedPixels);
+        });
+        Assert.True(capture.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(capture.Result.Bitmap.IsFrozen);
+        byte[] actual = new byte[17 * 7 * 4];
+        new FormatConvertedBitmap(capture.Result.Bitmap, PixelFormats.Bgra32, null, 0).CopyPixels(actual, 17 * 4, 0);
+        Assert.Equal(capture.Result.Expected, actual);
+    });
+
+    [Fact]
     public void NegativeScreenOrigin_RemainsMetadataRatherThanReadbackOffset() => StaTestHost.Run(() =>
     {
         using var surface = new NativeSurface(3, 5);
@@ -191,4 +234,5 @@ public sealed class ScreenCaptureReadbackTests
 
     [DllImport("user32.dll")]
     private static extern uint GetGuiResources(IntPtr process, uint flags);
+
 }
