@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using MyCapture.App.Themes;
@@ -212,6 +213,11 @@ internal sealed class VideoExportDialog : Window
             _status.Text = gif ? UiText.Format("MediaExport_GifResult", _result.ResultBytes)
                 : UiText.Format("MediaExport_Result", _result.BaselineBytes, _result.ResultBytes, _result.ActualReduction)
                     + Environment.NewLine + UiText.Get(_result.TargetReached ? "MediaExport_Ready" : "MediaExport_Unmet");
+            VideoExportCalculation ready = _result;
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                if (!_closed && !_working && ReferenceEquals(_result, ready)) _preview.BringIntoView();
+            }));
         }
         catch (OperationCanceledException)
         {

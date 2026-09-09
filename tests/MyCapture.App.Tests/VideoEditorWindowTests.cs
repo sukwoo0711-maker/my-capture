@@ -236,6 +236,9 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             editor.Width = 1200;
             editor.Height = 900;
             editor.UpdateLayout();
+            // SizeChanged updates the compact timeline budget after the first arrange.
+            // Observe the rendered layout after that normal dispatcher layout pass.
+            editor.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
             // Windows may cap a requested 900px window to the CI desktop's work area.
             // Assert how the actual available space is allocated, not the requested size.
             double availableHeightGrowth = layout.ActualHeight - compactLayoutHeight;
@@ -245,7 +248,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             // all remaining height to the preview.
             double timelineGrowth = timelineTools.ActualHeight - compactTimelineHeight;
             Assert.True(preview.ActualHeight >= compactPreviewHeight + availableHeightGrowth - timelineGrowth - 0.5,
-                $"larger window left spare height outside preview/timeline: available growth={availableHeightGrowth:0.0}");
+                $"larger window left spare height outside preview/timeline: available growth={availableHeightGrowth:0.0}, preview growth={preview.ActualHeight - compactPreviewHeight:0.0}, timeline growth={timelineGrowth:0.0}");
             Grid viewport = Descendants(preview).OfType<Grid>().Single(grid => grid.Name == "VideoPreviewViewport");
             Assert.True(viewport.ActualHeight >= 112);
             Assert.InRange(viewport.TranslatePoint(new Point(0, viewport.ActualHeight), preview).Y, 0, preview.ActualHeight + 0.5);
