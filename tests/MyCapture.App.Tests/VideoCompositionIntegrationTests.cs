@@ -1,8 +1,10 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
 using MyCapture.Core.Recording;
@@ -13,6 +15,138 @@ namespace MyCapture.App.Tests;
 
 public sealed class VideoCompositionIntegrationTests
 {
+    [Theory]
+    [InlineData(2)]
+    [InlineData(200)]
+    public void GifResultPreviewOwnsOnlyDetachedFirstFrameAfterSourceDeletion(int frameCount) => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            const int width = 16, height = 12, stride = width * 4;
+            byte[] blue = Enumerable.Range(0, width * height).SelectMany(_ => new byte[] { 255, 0, 0, 255 }).ToArray();
+            byte[] red = Enumerable.Range(0, width * height).SelectMany(_ => new byte[] { 0, 0, 255, 255 }).ToArray();
+            BitmapSource first = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, blue, stride);
+            BitmapSource later = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, red, stride);
+            string path = Path.Combine(root, "many-frames.gif");
+            using (var output = File.Create(path))
+            using (var writer = new AnimatedGifWriter(output, width, height, 10))
+            {
+                writer.AddFrame(first);
+                for (int i = 1; i < frameCount; i++) writer.AddFrame(later);
+                writer.Complete();
+            }
+            using (var input = File.OpenRead(path))
+                Assert.Equal(frameCount, new GifBitmapDecoder(input, BitmapCreateOptions.DelayCreation, BitmapCacheOption.OnDemand).Frames.Count);
+            BitmapSource preview = VideoExportDialog.CreateGifPreview(path);
+            Assert.True(preview.IsFrozen);
+            Assert.False(preview is BitmapFrame, "The preview must not retain a decoder-backed BitmapFrame");
+            File.Delete(path); // No cached frame or live stream may require the export stage.
+            byte[] copied = Task.Run(() =>
+            {
+                byte[] pixels = new byte[stride * height];
+                preview.CopyPixels(pixels, stride, 0);
+                return pixels;
+            }).GetAwaiter().GetResult();
+            Assert.Equal(blue, copied);
+        }
+        finally { DeleteRoot(root); }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExportDialogDiscardsCancelledOrOutdatedCalculationAndCanRetry(bool close) => RunSta(() =>
+    {
+        string root = NewRoot();
+        VideoExportDialog? dialog = null;
+        try
+        {
+            string source = Path.Combine(root, "dialog-source.mp4");
+            RecordingResult recording = EncodeIndexedClip(source, 320, 180, 10, IndexedColors);
+            byte[] originalHash = SHA256.HashData(File.ReadAllBytes(source));
+            Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
+            dialog = new VideoExportDialog(recording, VideoEditDocument.CreateFor(320, 180, recording.DurationMs), NullLoggerFactory.Instance, false);
+            Assert.False(dialog.CanExport);
+            Task pending = dialog.CalculateAsync();
+            Assert.True(dialog.CalculateAsync().IsCompleted, "A second request must not start another calculation");
+            if (close) dialog.Close();
+            else dialog.TargetReductionPercent = 50;
+            PumpTask(pending);
+            Assert.False(dialog.CanExport, "Cancelled or stale output must not become saveable");
+            if (!close)
+            {
+                PumpTask(dialog.CalculateAsync());
+                Assert.True(dialog.CanExport, "The current settings must be calculable after cancellation");
+                dialog.TargetReductionPercent = 75;
+                Assert.False(dialog.CanExport, "Changing settings invalidates the previous measured result immediately");
+            }
+            Assert.Equal(originalHash, SHA256.HashData(File.ReadAllBytes(source)));
+        }
+        finally { dialog?.Close(); DeleteRoot(root); }
+    });
+
+    private static void PumpTask(Task task)
+    {
+        Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
+        var frame = new DispatcherFrame();
+        var timeout = new DispatcherTimer(DispatcherPriority.Send) { Interval = TimeSpan.FromSeconds(20) };
+        timeout.Tick += (_, _) => frame.Continue = false;
+        _ = task.ContinueWith(_ => dispatcher.BeginInvoke(new Action(() => frame.Continue = false)), TaskScheduler.Default);
+        timeout.Start();
+        try { Dispatcher.PushFrame(frame); }
+        finally { timeout.Stop(); }
+        Assert.True(task.IsCompleted, "The video export did not drain within 20 seconds");
+        task.GetAwaiter().GetResult();
+    }
+
+    [Fact]
+    public void PercentageExport_EncodesSameEditsAtRequestedBitrateAndPreservesSource() => RunSta(() =>
+    {
+        string root = NewRoot();
+        string source = Path.Combine(root, "percentage-source.mp4");
+        try
+        {
+            RecordingResult recording = EncodeIndexedClip(source, 320, 180, 10, IndexedColors);
+            byte[] originalHash = SHA256.HashData(File.ReadAllBytes(source));
+            var document = VideoEditDocument.CreateFor(320, 180, 1000);
+            document.TrimInMs = 200;
+            document.TrimOutMs = 800;
+            document.TextOverlays.Add(new TimedTextOverlay { Text = "TEXT", StartMs = 200, EndMs = 800, Bounds = new(0.1, 0.6, 0.8, 0.3) });
+            document.FrameEditLayers.Add(new FrameEditLayer { StartMs = 200, EndMs = 800, OverlayPngBase64 = CreateRedOverlayPng(40, 40), Bounds = new(0.5, 0.1, 0.25, 0.25) });
+            var requests = new List<VideoEncoderOptions>();
+            using var calculation = VideoExportCalculation.Calculate(75, 600, 1_000_000, (path, bitrate, baseline, token) =>
+            {
+                int frames = TrimReencoder.Reencode(source, path, 200, 800, recording,
+                    options => { requests.Add(options); return new MediaFoundationVideoEncoder(options, NullLogger.Instance); },
+                    NullLogger.Instance, document.TextOverlays, document.FrameEditLayers, cancellationToken: token, bitrateBitsPerSecond: bitrate);
+                Assert.Equal(6, frames);
+                var info = VideoFrameRenderPipeline.Probe(path);
+                Assert.Equal(320, info.Width);
+                Assert.Equal(180, info.Height);
+                Assert.InRange(info.DurationMs, 599, 601);
+                BitmapSource frame = VideoFrameRenderPipeline.RenderSingleFrame(path, 200, 320, 180);
+                Assert.True(CountBrightPixels(frame) > 40, "Caption missing from MP4 pass");
+                Assert.True(CountRedPixels(new CroppedBitmap(frame, new System.Windows.Int32Rect(160, 18, 80, 45))) > 80,
+                    "Spatial layer missing from MP4 pass");
+            }, CancellationToken.None);
+            Assert.Equal(2, requests.Count);
+            Assert.Equal(1_000_000, requests[0].BitrateBitsPerSecond);
+            Assert.InRange(requests[1].BitrateBitsPerSecond, 64_000, 999_999);
+            Assert.All(requests, request => { Assert.Equal(320, request.Width); Assert.Equal(180, request.Height); Assert.Equal(10, request.Fps); });
+            Assert.True(calculation.ResultBytes <= calculation.BaselineBytes);
+            Assert.Equal(calculation.ResultBytes, new FileInfo(calculation.ResultPath).Length);
+            calculation.SaveCopy(Path.Combine(root, "smaller.mp4"), source, CancellationToken.None);
+            using var gif = VideoExportCalculation.CalculateGif(path => AnimatedGifExporter.Export(recording, document, path), CancellationToken.None);
+            using var stream = File.OpenRead(gif.ResultPath);
+            var decoded = new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            Assert.Contains(decoded.Frames, frame => CountBrightPixels(frame) > 40 && CountRedPixels(frame) > 80);
+            Assert.Equal(originalHash, SHA256.HashData(File.ReadAllBytes(source)));
+        }
+        finally { DeleteRoot(root); }
+    });
+
     [Fact]
     public void ReopenedSpatialLayers_AppearInMp4AndGifAtSavedPosition() => RunSta(() =>
     {

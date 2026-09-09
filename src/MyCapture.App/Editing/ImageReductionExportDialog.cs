@@ -6,6 +6,8 @@ using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using MyCapture.App.Gallery;
+using MyCapture.App.Recording;
+using MyCapture.App.Themes;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Imaging;
 
@@ -19,9 +21,9 @@ internal sealed class ImageReductionExportDialog : Window
     private readonly TextBlock _targetText = new();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, MinHeight = 100 };
     private readonly Image _imagePreview = new() { MaxWidth = 480, Height = 220, Stretch = System.Windows.Media.Stretch.Uniform, Margin = new Thickness(0, 10, 0, 10) };
-    private readonly Button _preview = new() { Content = UiText.Get("ExportReduction_Preview") };
-    private readonly Button _save = new() { Content = UiText.Get("ExportReduction_Save"), IsEnabled = false };
-    private readonly Button _drag = new() { Content = UiText.Get("ExportReduction_Drag"), IsEnabled = false };
+    private readonly Button _preview;
+    private readonly Button _save;
+    private readonly Button _drag;
     private byte[]? _original;
     private ImageExportResult? _result;
     private OwnedImageExportStage? _stage;
@@ -35,14 +37,26 @@ internal sealed class ImageReductionExportDialog : Window
         _image = image.IsFrozen ? image : image.Clone();
         if (!_image.IsFrozen) _image.Freeze();
         _suggestedPath = suggestedPngPath;
+        StandardWindowTheme.Apply(this);
         Title = UiText.Get("ExportReduction_Title");
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         Width = 560;
-        SizeToContent = SizeToContent.Height;
-        ResizeMode = ResizeMode.NoResize;
+        Height = 620;
+        MinWidth = 460;
+        MinHeight = 400;
+        MaxHeight = Math.Max(400, SystemParameters.WorkArea.Height - 24);
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        var panel = new StackPanel { Margin = new Thickness(24) };
+        _preview = MediaExportVisuals.Button(this, UiText.Get("ExportReduction_Preview"), "MediaExport_Options");
+        _save = MediaExportVisuals.Button(this, UiText.Get("ExportReduction_Save"), "MediaExport_ArrowExport", true);
+        _drag = MediaExportVisuals.Button(this, UiText.Get("ExportReduction_Drag"));
+        _save.IsEnabled = _drag.IsEnabled = false;
+        _preview.HorizontalAlignment = HorizontalAlignment.Left;
+        var root = new Grid { Margin = new Thickness(20, 12, 20, 16) };
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var panel = new StackPanel();
+        root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         panel.Children.Add(new TextBlock { Text = UiText.Get("ExportReduction_Description"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18) });
         panel.Children.Add(_targetText);
         panel.Children.Add(_target);
@@ -52,15 +66,16 @@ internal sealed class ImageReductionExportDialog : Window
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         actions.Children.Add(_drag);
         actions.Children.Add(_save);
-        var cancel = new Button { Content = UiText.Get("ExportReduction_Cancel"), IsCancel = true };
+        var cancel = MediaExportVisuals.Button(this, UiText.Get("ExportReduction_Cancel"));
+        cancel.IsCancel = true;
         actions.Children.Add(cancel);
-        panel.Children.Add(actions);
-        Content = panel;
+        Grid.SetRow(actions, 1);
+        root.Children.Add(actions);
+        Content = root;
         foreach (Button button in new[] { _preview, _drag, _save, cancel })
         {
             button.Margin = new Thickness(4, 10, 4, 10);
             button.Padding = new Thickness(12, 7, 12, 7);
-            AutomationProperties.SetName(button, button.Content.ToString());
         }
         AutomationProperties.SetName(_target, UiText.Get("ExportReduction_TargetLabel"));
         _target.ValueChanged += (_, _) =>

@@ -69,6 +69,18 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     internal ScreenCaptureEngine Engine => _captureEngine;
 
+    internal bool CanRetake => !_disposed && _activeEditor is not null &&
+        _preparation is null && !_isOpeningEditor;
+
+    /// <summary>Closes only the capture-owned editor; its already persisted original remains in the library.</summary>
+    internal void CloseEditorForRetake()
+    {
+        VerifyDispatcherAccess();
+        if (!CanRetake) return;
+        _openingEditorCts?.Cancel();
+        _activeEditor?.Close();
+    }
+
     /// <summary>Used only by the explicit advanced “capture window” command.</summary>
     internal WindowCandidateService WindowCandidates => _windowCandidates;
 

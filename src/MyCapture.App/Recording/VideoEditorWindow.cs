@@ -65,8 +65,6 @@ internal sealed class VideoEditorWindow : Window
     private readonly TextBlock _loadingLabel;
     private readonly Border _loadingOverlay;
     private readonly ListBox _overlayList;
-    private ComboBox _gifSpeedComboBox = null!;
-    private ComboBox _gifQualityComboBox = null!;
     private Button _trimButton = null!;
     private Button _addTextButton = null!;
     private Button _editTextButton = null!;
@@ -349,16 +347,32 @@ internal sealed class VideoEditorWindow : Window
     {
         var root = new Grid { Margin = new Thickness(12, 8, 12, 8) };
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(3, GridUnitType.Star), MinHeight = 112 }); // preview
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MaxHeight = 240 }); // fit the timeline contents; spare space belongs to preview
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MaxHeight = 250 }); // fit the timeline contents; spare space belongs to preview
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // controls
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // status
 
-        var previewStack = new Grid();
+        var previewStack = new Grid { Name = "VideoPreviewViewport", MinHeight = 112, ClipToBounds = true };
         previewStack.Children.Add(_media);
         previewStack.Children.Add(_overlayPreview);
         previewStack.Children.Add(_layerCanvas);
         previewStack.Children.Add(_loadingOverlay);
 
+        var workspace = new Grid();
+        workspace.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        workspace.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 112 });
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        var exports = new StackPanel { Orientation = Orientation.Horizontal };
+        Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"));
+        saveEdits.Click += (_, _) => CommitTrim();
+        Button export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_ExportFormats"), "MediaExport_ArrowExport", true);
+        export.Click += (_, _) => OpenExport();
+        _editControls.Add(saveEdits); _editControls.Add(export);
+        exports.Children.Add(saveEdits); exports.Children.Add(export);
+        DockPanel.SetDock(exports, Dock.Right); header.Children.Add(exports);
+        FrameworkElement tools = BuildOverlayLane();
+        header.Children.Add(tools);
+        workspace.Children.Add(header);
+        Grid.SetRow(previewStack, 1); workspace.Children.Add(previewStack);
         var preview = new Border
         {
             Background = TryBrush("Surface.Canvas", Colors.Black),
@@ -366,7 +380,7 @@ internal sealed class VideoEditorWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             Padding = new Thickness(8),
-            Child = previewStack,
+            Child = workspace,
         };
         Grid.SetRow(preview, 0);
         root.Children.Add(preview);
@@ -376,6 +390,7 @@ internal sealed class VideoEditorWindow : Window
         {
             Name = "VideoTimelineToolsScroll",
             Content = timeline,
+            MaxHeight = 250,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Padding = new Thickness(0, 0, 8, 0),
@@ -393,7 +408,6 @@ internal sealed class VideoEditorWindow : Window
         root.Children.Add(timelineScroll);
 
         var controls = new StackPanel();
-        controls.Children.Add(BuildOverlayLane());
         controls.Children.Add(BuildControlRow());
         RefreshOverlayList();
         Grid.SetRow(controls, 2);
@@ -406,6 +420,30 @@ internal sealed class VideoEditorWindow : Window
         };
         Grid.SetRow(statusBar, 3);
         root.Children.Add(statusBar);
+
+        void FitTimelineToAvailableHeight()
+        {
+            if (root.ActualHeight <= 0) return;
+            // The command rows share the preview card, but must never take space
+            // from its visible media viewport. Compact windows scroll the timeline;
+            // larger windows retain enough height for both time strips and layer tracks.
+            double requiredPreview = previewStack.MinHeight + header.DesiredSize.Height
+                + preview.Padding.Top + preview.Padding.Bottom + preview.BorderThickness.Top + preview.BorderThickness.Bottom;
+            double available = root.ActualHeight - controls.DesiredSize.Height - statusBar.DesiredSize.Height - requiredPreview;
+            double maximum = Math.Clamp(Math.Floor(available), 100, 250);
+            if (Math.Abs(root.RowDefinitions[1].MaxHeight - maximum) > 0.5)
+            {
+                root.RowDefinitions[1].MaxHeight = maximum;
+                // Bound the ScrollViewer itself so its internal viewport scrolls,
+                // instead of arranging full content height outside a clipped Grid cell.
+                timelineScroll.MaxHeight = maximum;
+            }
+        }
+        root.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+        header.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+        tools.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+        controls.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+        statusBar.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
 
         return root;
     }
@@ -433,9 +471,16 @@ internal sealed class VideoEditorWindow : Window
         Grid.SetRow(_positionLabel, 1);
         timeline.Children.Add(_positionLabel);
 
-        _layerTimeline.Margin = new Thickness(0, 8, 0, 0);
-        Grid.SetRow(_layerTimeline, 2);
-        timeline.Children.Add(_layerTimeline);
+        var layerScroll = new ScrollViewer
+        {
+            Content = _layerTimeline, MaxHeight = 72, Margin = new Thickness(0, 8, 0, 0),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Focusable = false,
+        };
+        AutomationProperties.SetName(layerScroll, UiText.Get("Text_D9378793F9FE"));
+        Grid.SetRow(layerScroll, 2);
+        timeline.Children.Add(layerScroll);
 
 
         RefreshOverlayList();
@@ -446,7 +491,7 @@ internal sealed class VideoEditorWindow : Window
 
     private FrameworkElement BuildOverlayLane()
     {
-        var lane = new Grid { Margin = new Thickness(0, 4, 0, 0) };
+        var lane = new Grid();
         lane.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -472,68 +517,27 @@ internal sealed class VideoEditorWindow : Window
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0),
         };
         _addTextButton = MakeIconButton("Icon.Text", UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_991A1A1FF9ED"), "Button.Secondary", AddTextOverlay);
-        _editTextButton = MakeIconButton("Icon.Edit", UiText.Get("Text_87B0ACEF85A7"), UiText.Get("Text_AEB8B9AA4E6F"), "Button.Ghost", EditSelectedOverlay);
-        _deleteTextButton = MakeIconButton("Icon.Delete", UiText.Get("Text_6139B6C3ED73"), UiText.Get("Text_9163C86EDB22"), "Button.Ghost", DeleteSelectedOverlay);
+        _editTextButton = MakeTransportIcon("Icon.Edit", UiText.Get("Text_AEB8B9AA4E6F"), "Button.Ghost", EditSelectedOverlay);
+        _deleteTextButton = MakeTransportIcon("Icon.Delete", UiText.Get("Text_9163C86EDB22"), "Button.Ghost", DeleteSelectedOverlay);
         actions.Children.Add(_addTextButton);
         actions.Children.Add(MakeButton(UiText.Get("Text_DC0760235344"), UiText.Get("Text_D8F5F6738520"), "Button.Secondary", () => AddShapeLayer(false)));
         actions.Children.Add(MakeButton(UiText.Get("Text_C19FD6787279"), UiText.Get("Text_29C79CAFC1D7"), "Button.Secondary", () => AddShapeLayer(true)));
         actions.Children.Add(MakeButton(UiText.Get("Text_302BAE127938"), UiText.Get("Text_21C405702C2B"), "Button.Secondary", AddImageLayer));
         actions.Children.Add(_editTextButton);
         actions.Children.Add(_deleteTextButton);
-        var gifSettings = new StackPanel { Margin = new Thickness(6) };
-        gifSettings.Children.Add(new TextBlock
+        foreach (Button action in actions.Children.OfType<Button>())
         {
-            Text = UiText.Get("Text_7530A6E985BD"),
-            Foreground = TryBrush("Text.Secondary", Colors.LightGray),
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(6, 0, 6, 0),
-        });
-        _gifSpeedComboBox = new ComboBox
-        {
-            Width = 72,
-            MinHeight = 32,
-            SelectedValuePath = nameof(ComboBoxItem.Tag),
-            Margin = new Thickness(0, 0, 6, 0),
-        };
-        foreach (double speed in new[] { 0.5, 1.0, 1.5, 2.0, 3.0, 4.0 })
-        {
-            _gifSpeedComboBox.Items.Add(new ComboBoxItem
+            if (double.IsNaN(action.Width))
             {
-                Content = string.Create(CultureInfo.InvariantCulture, $"{speed:0.#}×"),
-                Tag = speed,
-            });
+                action.MinWidth = 52;
+                action.Padding = new Thickness(10, 5, 10, 5);
+            }
+            action.MinHeight = 36;
+            action.Margin = new Thickness(0, 0, 4, 0);
         }
-
-        _gifSpeedComboBox.SelectedIndex = 1;
-        AutomationProperties.SetName(_gifSpeedComboBox, UiText.Get("Text_D3F7F6C952A8"));
-        AutomationProperties.SetHelpText(_gifSpeedComboBox, UiText.Get("Text_CFC4974E7244"));
-        gifSettings.Children.Add(_gifSpeedComboBox);
-        _gifQualityComboBox = new ComboBox
-        {
-            Width = 210,
-            MinHeight = 32,
-            Margin = new Thickness(0, 0, 6, 0),
-            ToolTip = UiText.Get("Text_5B59BB806FB5"),
-        };
-        foreach (GifExportQuality quality in new[] { GifExportQuality.Standard, GifExportQuality.Compact, GifExportQuality.Smallest })
-        {
-            _gifQualityComboBox.Items.Add(new ComboBoxItem { Content = quality.Label, Tag = quality });
-        }
-
-        _gifQualityComboBox.SelectedIndex = 0;
-        AutomationProperties.SetName(_gifQualityComboBox, UiText.Get("Text_DA9B79FCBFC8"));
-        gifSettings.Children.Add(_gifQualityComboBox);
-        var gifMenu = new ContextMenu();
-        gifMenu.Items.Add(new MenuItem { Header = gifSettings, StaysOpenOnClick = true });
-        Button gifOptions = MakeButton(UiText.Get("Text_5F2733BE4219"), UiText.Get("Text_D8A75FF54AF8"), "Button.Ghost", () => gifMenu.IsOpen = true);
-        gifOptions.ContextMenu = gifMenu;
-        gifMenu.PlacementTarget = gifOptions;
-        gifMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
-        actions.Children.Add(gifOptions);
-        actions.Children.Add(MakeIconButton("Icon.Export", "GIF", UiText.Get("Text_CFD6A8C2BFA5"), "Button.Ghost", ExportGif));
         Grid.SetRow(actions, 1);
         Grid.SetColumnSpan(actions, 2);
         lane.Children.Add(actions);
@@ -554,26 +558,22 @@ internal sealed class VideoEditorWindow : Window
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        transport.Children.Add(MakeIconButton("Icon.First", UiText.Get("Text_91390EADFAD4"), UiText.Get("Text_DC710AA11970"), "Button.Ghost", () => Seek(_timeline.InMs)));
-        transport.Children.Add(MakeIconButton("Icon.Rewind", UiText.Get("Text_39EFEAD98C7D"), UiText.Get("Text_E166B75FADF4"), "Button.Ghost", () => StepCoarse(-1)));
-        transport.Children.Add(MakeIconButton("Icon.Play", UiText.Get("Text_200EEC5A1E57"), UiText.Get("Text_9A9C87658130"), "Button.Secondary", TogglePlay));
-        transport.Children.Add(MakeIconButton("Icon.FastForward", UiText.Get("Text_39EFEAD98C7D"), UiText.Get("Text_E5CAF7CFC916"), "Button.Ghost", () => StepCoarse(1)));
-        transport.Children.Add(MakeIconButton("Icon.Last", UiText.Get("Text_FA22CDFB3221"), UiText.Get("Text_DFCA22AB9F61"), "Button.Ghost", () => Seek(_timeline.OutMs)));
+        transport.Children.Add(MakeTransportIcon("Icon.First", UiText.Get("Text_DC710AA11970"), "Button.Ghost", () => Seek(_timeline.InMs)));
+        transport.Children.Add(MakeTransportIcon("Icon.Rewind", UiText.Get("Text_E166B75FADF4"), "Button.Ghost", () => StepCoarse(-1)));
+        transport.Children.Add(MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Secondary", TogglePlay));
+        transport.Children.Add(MakeTransportIcon("Icon.FastForward", UiText.Get("Text_E5CAF7CFC916"), "Button.Ghost", () => StepCoarse(1)));
+        transport.Children.Add(MakeTransportIcon("Icon.Last", UiText.Get("Text_DFCA22AB9F61"), "Button.Ghost", () => Seek(_timeline.OutMs)));
         transport.Children.Add(Spacer(10));
-        transport.Children.Add(MakeIconButton("Icon.StepBack", UiText.Get("Text_D2E201C9D452"), UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
-        transport.Children.Add(MakeIconButton("Icon.StepForward", UiText.Get("Text_D2E201C9D452"), UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
+        transport.Children.Add(MakeTransportIcon("Icon.StepBack", UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
+        transport.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
         Grid.SetRow(transport, 0);
         controls.Children.Add(transport);
 
-        var precisionAndEdit = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 0),
-        };
-        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.ZoomOut", UiText.Get("Text_69D1C5307298"), UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
-        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.ZoomIn", UiText.Get("Text_11C2E8E755E4"), UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
-        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.FitAll", UiText.Get("Text_A4B69FAF0C11"), UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
+        var precisionAndEdit = transport;
+        precisionAndEdit.Children.Add(Spacer(12));
+        precisionAndEdit.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
+        precisionAndEdit.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
+        precisionAndEdit.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
         precisionAndEdit.Children.Add(Spacer(6));
         _trimButton = MakeCompactButton(
             UiText.Get("Text_4601577BA0F6"),
@@ -584,7 +584,7 @@ internal sealed class VideoEditorWindow : Window
         precisionAndEdit.Children.Add(Spacer(6));
         precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"), UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame));
         precisionAndEdit.Children.Add(Spacer(6));
-        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.Save", UiText.Get("Text_5FB926229090"), UiText.Get("Text_E3348500E6DB"), "Button.Primary", CommitTrim));
+
         _cancelOperationButton = new Button
         {
             Content = UiText.Get("Text_5FAE4DA04904"),
@@ -597,9 +597,9 @@ internal sealed class VideoEditorWindow : Window
         AutomationProperties.SetName(_cancelOperationButton, UiText.Get("Text_79B3DB1CD566"));
         AutomationProperties.SetHelpText(_cancelOperationButton, UiText.Get("Text_3DEFBAD62044"));
         _cancelOperationButton.Click += (_, _) => _operationCts?.Cancel();
-        precisionAndEdit.Children.Add(_cancelOperationButton);
-        Grid.SetRow(precisionAndEdit, 1);
-        controls.Children.Add(precisionAndEdit);
+        _cancelOperationButton.HorizontalAlignment = HorizontalAlignment.Center;
+        Grid.SetRow(_cancelOperationButton, 1);
+        controls.Children.Add(_cancelOperationButton);
 
         _controlRows = controls;
         return controls;
@@ -1571,112 +1571,38 @@ internal sealed class VideoEditorWindow : Window
         return Path.Combine(dir, stem + "_edited.mp4");
     }
 
-    private async void ExportGif()
+    private void ExportGif() => OpenExport(gif: true);
+
+    private VideoExportDialog? _exportDialog;
+
+    private void OpenExport(bool gif = false)
     {
-        if (!_mediaReady || _operationRunning)
-        {
-            return;
-        }
-
-        if (!TryValidateLayerResources(_editDocument.FrameEditLayers)) { return; }
-        VideoEditDocument document = BuildCurrentDocument();
-        double playbackSpeed = SelectedGifSpeed();
-        GifExportQuality quality = (_gifQualityComboBox.SelectedItem as ComboBoxItem)?.Tag as GifExportQuality
-            ?? GifExportQuality.Standard;
-        if (document.TrimOutMs - document.TrimInMs > AnimatedGifExporter.MaximumDurationMs + 0.5)
-        {
-            _statusLabel.Text = UiText.Get("Text_339D1C10FD24");
-            _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
-            return;
-        }
-
-        var dialog = new SaveFileDialog
-        {
-            Title = UiText.Get("Text_0D0920B35583"),
-            Filter = UiText.Get("Text_D18267AE0420"),
-            DefaultExt = ".gif",
-            AddExtension = true,
-            OverwritePrompt = true,
-            FileName = $"MyCapture_{DateTimeOffset.Now:yyyyMMdd_HHmmss}.gif",
-        };
-        if (dialog.ShowDialog(this) != true)
-        {
-            return;
-        }
-
-        var operation = new CancellationTokenSource();
-        _operationCts = operation;
-        CancellationToken cancellationToken = operation.Token;
-        SetOperationRunning(true);
-        _statusLabel.Text = UiText.Format("Text_1DFB8FE69D78", quality.Label);
-        _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
-        var progress = new Progress<VideoFrameRenderProgress>(value =>
-        {
-            int percent = value.TotalFrames <= 0
-                ? 0
-                : (int)Math.Round(value.CompletedFrames * 100.0 / value.TotalFrames);
-            _statusLabel.Text = UiText.Format("Text_C4DFF18A59CA", percent, value.CompletedFrames, value.TotalFrames);
-        });
-
+        if (_exportDialog is not null || !IsVisible || !_mediaReady || _operationRunning
+            || !TryValidateLayerResources(_editDocument.FrameEditLayers)) return;
+        PausePlayback();
         try
         {
-            int frames = await StaThreadTask.RunAsync(
-                () => AnimatedGifExporter.Export(
-                    _recording,
-                    document,
-                    dialog.FileName,
-                    progress,
-                    cancellationToken,
-                    playbackSpeed,
-                    quality),
-                "MyCapture GIF exporter");
-            _statusLabel.Text = UiText.Format("Text_53A86A0A3347", playbackSpeed, frames, Path.GetFileName(dialog.FileName));
-            _statusLabel.Foreground = TryBrush("State.Success", Colors.LightGreen);
+            _exportDialog = new VideoExportDialog(_recording, BuildCurrentDocument(), _loggerFactory, gif) { Owner = this };
+            _ = _exportDialog.ShowDialog();
         }
-        catch (OperationCanceledException)
+        catch (Exception error)
         {
-            _statusLabel.Text = UiText.Get("Text_B007F71CC3B2");
+            _log.LogError(error, "Could not open video export");
+            _statusLabel.Text = UiText.Format("MediaExport_Error", error.Message);
         }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "GIF export failed");
-            _statusLabel.Text = UiText.Get("Text_83BBF1497B9D") + ex.Message;
-            _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
-        }
-        finally
-        {
-            bool closeAfterCancellation = _closeRequested;
-            ReleaseOperationCts(operation);
-            if (IsLoaded)
-            {
-                SetOperationRunning(false);
-                if (closeAfterCancellation)
-                {
-                    _closeRequested = false;
-                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(Close));
-                }
-            }
-        }
+        finally { _exportDialog = null; }
     }
-
     private void SetOperationRunning(bool running)
     {
         if (running) { PausePlayback(); }
         _operationRunning = running;
         SetEditControlsEnabled(!running && _mediaReady);
         _overlayList.IsEnabled = !running && _mediaReady;
-        _gifSpeedComboBox.IsEnabled = !running && _mediaReady;
-        _gifQualityComboBox.IsEnabled = !running && _mediaReady;
         _layerTimeline.IsEnabled = !running && _mediaReady;
         _layerCanvas.IsEnabled = !running && _mediaReady;
         _cancelOperationButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         _cancelOperationButton.IsEnabled = running;
     }
-
-    private double SelectedGifSpeed() =>
-        _gifSpeedComboBox.SelectedItem is ComboBoxItem { Tag: double speed }
-            ? speed
-            : 1.0;
 
     internal static bool DocumentsEquivalent(VideoEditDocument left, VideoEditDocument right)
     {
@@ -2003,6 +1929,15 @@ internal sealed class VideoEditorWindow : Window
         return button;
     }
 
+    private Button MakeTransportIcon(string iconKey, string automationName, string styleKey, Action onClick)
+    {
+        Button button = MakeButton(BuildIconLabel(iconKey, string.Empty), automationName, styleKey, onClick);
+        button.Width = button.MinWidth = button.MinHeight = 36;
+        button.Padding = new Thickness(4);
+        button.Margin = new Thickness(0, 0, 4, 0);
+        return button;
+    }
+
     private static StackPanel BuildIconLabel(string iconKey, string label)
     {
         var glyph = new System.Windows.Shapes.Path
@@ -2027,7 +1962,7 @@ internal sealed class VideoEditorWindow : Window
 
         var content = new StackPanel { Orientation = Orientation.Horizontal };
         content.Children.Add(glyph);
-        content.Children.Add(new TextBlock
+        if (!string.IsNullOrEmpty(label)) content.Children.Add(new TextBlock
         {
             Text = label,
             Margin = new Thickness(4, 0, 0, 0),

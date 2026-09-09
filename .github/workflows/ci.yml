@@ -34,3 +34,25 @@ jobs:
       - name: Build and test
         shell: powershell
         run: .\build\build.ps1 -Configuration Release -Test
+
+      - name: Require hosted file-symlink regression pass
+        shell: powershell
+        run: |
+          $testName = 'MyCapture.App.Tests.GalleryBatchDragTests.FinalSourceSymlinkIsRejected_AndExternalTargetIsPreserved'
+          $resultPattern = '^\s*(Passed|Skipped|Failed)\s+' + [regex]::Escape($testName) + '\s+\[[^\]]+\]\s*$'
+          $results = @(Select-String -LiteralPath 'build/logs/test.log' -Pattern $resultPattern -CaseSensitive -ErrorAction Stop)
+          if ($results.Count -ne 1 -or $results[0].Line -cnotmatch '^\s*Passed\s+') {
+              throw "Required hosted regression did not record exactly one Passed result: $testName"
+          }
+          Write-Host $results[0].Line
+
+      - name: Upload source build and test logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ci-source-test-logs-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            build/logs/build.log
+            build/logs/test.log
+          if-no-files-found: warn
+          retention-days: 14

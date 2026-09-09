@@ -2933,7 +2933,7 @@ This cannot be undone.</value>
   <data name="ExportReduction_Save" xml:space="preserve"><value>Save As…</value></data>
   <data name="ExportReduction_Drag" xml:space="preserve"><value>Drag to a folder</value></data>
   <data name="ExportReduction_Cancel" xml:space="preserve"><value>Close</value></data>
-  <data name="ExportReduction_Description" xml:space="preserve"><value>Original PNG is the default. Choose a size reduction target and calculate the result. Opaque images may use JPEG; pixel dimensions stay unchanged.</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>The baseline is the current edited image encoded as PNG, which may differ from the imported file size. Choose a reduction target and calculate the result. Opaque images may use JPEG; pixel dimensions stay unchanged.</value></data>
   <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>Target file-size reduction</value></data>
   <data name="ExportReduction_UpdateRequired" xml:space="preserve"><value>Calculate the result to check the actual file size.</value></data>
   <data name="ExportReduction_Original" xml:space="preserve"><value>Original quality · 0% reduction target</value></data>
@@ -2946,4 +2946,52 @@ Actual reduction {2}% · {3}</value></data>
   <data name="ExportReduction_Ready" xml:space="preserve"><value>Ready. Save the image or drag the button into a folder.</value></data>
   <data name="ExportReduction_Error" xml:space="preserve"><value>Export failed: {0}</value></data>
   <data name="ExportReduction_Extension" xml:space="preserve"><value>Save this result with the {0} extension.</value></data>
+  <data name="ShellRetake_ReadyTitle" xml:space="preserve"><value>{0} is ready</value></data>
+  <data name="ShellRetake_ReadyMessage" xml:space="preserve"><value>Press {0} to capture your screen. Open settings and the library from the tray icon.</value></data>
+  <data name="ShellRetake_ReadyWithoutShortcut" xml:space="preserve"><value>Start a capture from the tray icon, or assign a capture shortcut in settings.</value></data>
+  <data name="LibrarySelection_Count" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="LibrarySelection_Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="LibrarySelection_Reduce" xml:space="preserve"><value>Reduce image size</value></data>
+  <data name="LibrarySelection_Gif" xml:space="preserve"><value>Export GIF</value></data>
+  <data name="LibrarySelection_SelectDay" xml:space="preserve"><value>Select displayed items from this day</value></data>
+  <data name="LibrarySelection_ClearHint" xml:space="preserve"><value>Clear entire library</value></data>
+  <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>Delete all {0} items from the entire library, including pinned items and videos, regardless of search? Items added after this confirmation will remain.</value></data>
+  <data name="LibrarySelection_DeleteConfirm" xml:space="preserve"><value>Delete the {0} selected items?</value></data>
+  <data name="LibrarySelection_Removed" xml:space="preserve"><value>Removed {0} items from the library; {1} unavailable or in-use items retained</value></data>
+  <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>Could not save the deletion. Check the library and try again.</value></data>
+  <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>{0} removed items still have files awaiting cleanup. No disk space recovery is confirmed for those items.</value></data>
+  <data name="MediaExport_SourceProtected" xml:space="preserve"><value>Choose another file name to preserve the original video.</value></data>
+  <data name="MediaExport_Extension" xml:space="preserve"><value>Use the {0} file extension.</value></data>
+  <data name="MediaExport_Title" xml:space="preserve"><value>Export video</value></data>
+  <data name="MediaExport_Summary" xml:space="preserve"><value>{0} × {1} · {2} fps · selected interval {3:N1} s</value></data>
+  <data name="MediaExport_Format" xml:space="preserve"><value>File format</value></data>
+  <data name="MediaExport_Baseline" xml:space="preserve"><value>The baseline is a standard MP4 of the current edits and selected interval. It may differ from the original file size.</value></data>
+  <data name="MediaExport_TargetLabel" xml:space="preserve"><value>Target file size reduction</value></data>
+  <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>Resolution and frame rate stay unchanged. The reduction is a target; calculate to see the actual size. Quality may decrease.</value></data>
+  <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF supports up to 20 seconds and 200 frames. Choose the maximum long edge and frame rate. Audio is not included.</value></data>
+  <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF size and frame rate</value></data>
+  <data name="MediaExport_Speed" xml:space="preserve"><value>Playback speed</value></data>
+  <data name="MediaExport_Calculate" xml:space="preserve"><value>Calculate result</value></data>
+  <data name="MediaExport_Close" xml:space="preserve"><value>Close</value></data>
+  <data name="MediaExport_SaveAs" xml:space="preserve"><value>Save as</value></data>
+  <data name="MediaExport_Target" xml:space="preserve"><value>Target size reduction: {0}%</value></data>
+  <data name="MediaExport_TrimGif" xml:space="preserve"><value>Trim the selected interval to 20 seconds or less to export GIF.</value></data>
+  <data name="MediaExport_CalculateHint" xml:space="preserve"><value>Choose settings, then calculate the result. The original stays unchanged.</value></data>
+  <data name="MediaExport_Working" xml:space="preserve"><value>Calculating the result…</value></data>
+  <data name="MediaExport_Progress" xml:space="preserve"><value>{0} · {1:N0}/{2:N0} frames</value></data>
+  <data name="MediaExport_BaselinePhase" xml:space="preserve"><value>Calculating standard MP4</value></data>
+  <data name="MediaExport_ReducedPhase" xml:space="preserve"><value>Calculating smaller MP4</value></data>
+  <data name="MediaExport_GifPhase" xml:space="preserve"><value>Calculating GIF</value></data>
+  <data name="MediaExport_GifResult" xml:space="preserve"><value>GIF size: {0:N0} bytes</value></data>
+  <data name="MediaExport_Result" xml:space="preserve"><value>Standard MP4: {0:N0} bytes → result: {1:N0} bytes ({2:N1}% actual reduction)</value></data>
+  <data name="MediaExport_Ready" xml:space="preserve"><value>The result is ready to save as a new file.</value></data>
+  <data name="MediaExport_Unmet" xml:space="preserve"><value>The target was not reached. Save the measured result or change the target.</value></data>
+  <data name="MediaExport_Cancelled" xml:space="preserve"><value>Cancelled. You can calculate again.</value></data>
+  <data name="MediaExport_Error" xml:space="preserve"><value>Could not export: {0}</value></data>
+  <data name="MediaExport_Saved" xml:space="preserve"><value>Saved: {0}</value></data>
+  <data name="MediaExport_Cancel" xml:space="preserve"><value>Cancel operation</value></data>
+  <data name="MediaExport_SaveEdits" xml:space="preserve"><value>Save edits</value></data>
+  <data name="MediaExport_ExportFormats" xml:space="preserve"><value>Export · MP4 / GIF</value></data>
+  <data name="MediaExport_Workspace" xml:space="preserve"><value>Video editor</value></data>
+  <data name="MediaExport_ResultPreview" xml:space="preserve"><value>Sample frame from the calculated file</value></data>
 </root>

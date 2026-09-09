@@ -12,6 +12,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Use the exact product markup in isolated theme fixtures, with its static
+         dependencies present at parse time and without a process-wide Application. -->
+    <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Tokens.xaml" LogicalName="ThemeFixture.Tokens.xaml" />
+    <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Symbols.xaml" LogicalName="ThemeFixture.Symbols.xaml" />
+    <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Controls.xaml" LogicalName="ThemeFixture.Controls.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

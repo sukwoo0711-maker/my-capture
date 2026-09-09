@@ -34,7 +34,7 @@ public sealed class GalleryVideoTests : KoreanCaptionTest
     [Fact]
     public void VideoDragExport_PrefersEditedRenderAndUsesMp4Extension()
     {
-        string root = NewRoot();
+        string root = OwnedTestDirectory.Create("MyCapture-drag-video-");
         string staging = Path.Combine(root, "drag-stage");
         try
         {
@@ -72,7 +72,7 @@ public sealed class GalleryVideoTests : KoreanCaptionTest
         }
         finally
         {
-            DeleteRoot(root);
+            OwnedTestDirectory.Delete(root);
         }
     }
 

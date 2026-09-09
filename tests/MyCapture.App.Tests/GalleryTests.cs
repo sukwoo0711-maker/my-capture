@@ -703,7 +703,7 @@ public sealed class GalleryTests : KoreanCaptionTest
     {
         RunSta(() =>
         {
-            string root = NewRoot();
+            string root = OwnedTestDirectory.Create("MyCapture-drag-export-");
             try
             {
                 AppPaths paths = AppPaths.CreateForRoot(root);
@@ -737,7 +737,7 @@ public sealed class GalleryTests : KoreanCaptionTest
             }
             finally
             {
-                DeleteRoot(root);
+                OwnedTestDirectory.Delete(root);
             }
         });
     }

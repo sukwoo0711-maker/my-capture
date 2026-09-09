@@ -5,9 +5,8 @@ using MyCapture.Core.Queue;
 namespace MyCapture.App.Gallery;
 
 /// <summary>
-/// Stages flattened images as normal PNG files for shell drag/drop. Videos are already normal
-/// MP4 files, so they are exposed read-only under a queue eviction lease instead of being copied
-/// synchronously on the UI thread.
+/// Stages shell-ready PNG/MP4 copies. Batch disk work runs off the owner thread while eviction
+/// leases protect the records; unpublished batches are removed as soon as their gesture ends.
 /// </summary>
 internal sealed class GalleryDragExportService
 {
@@ -24,7 +23,9 @@ internal sealed class GalleryDragExportService
         Func<DateTimeOffset>? clock = null)
     {
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
-        _stagingRoot = stagingRoot ?? Path.Combine(Path.GetTempPath(), "MyCapture", "DragExports");
+        _stagingRoot = stagingRoot is null
+            ? GalleryExportFiles.Child(GalleryExportFiles.Child(Path.GetTempPath(), "MyCapture"), "DragExports")
+            : Path.GetFullPath(stagingRoot);
         _clock = clock ?? (() => DateTimeOffset.Now);
     }
 
@@ -45,6 +46,11 @@ internal sealed class GalleryDragExportService
     internal string PrepareExport(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
+        return StageSource(ResolveSource(record), record.IsVideo, _clock(), CancellationToken.None);
+    }
+
+    private string ResolveSource(CaptureRecord record)
+    {
         string sourcePath;
         if (record.IsVideo)
         {
@@ -57,33 +63,41 @@ internal sealed class GalleryDragExportService
         {
             sourcePath = _queue.GetFilePath(record, CaptureFileNames.Rendered);
         }
+        return sourcePath;
+    }
+
+    private string StageSource(string sourcePath, bool isVideo, DateTimeOffset timestamp, CancellationToken cancellationToken,
+        bool stageVideo = false, string? uniqueSuffix = null)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!File.Exists(sourcePath))
         {
             throw new FileNotFoundException("The gallery media is unavailable.", sourcePath);
         }
 
-        if (record.IsVideo)
+        if (isVideo && !stageVideo)
         {
+            GalleryExportFiles.ValidateSource(sourcePath);
             return Path.GetFullPath(sourcePath);
         }
 
-        Directory.CreateDirectory(_stagingRoot);
-        CleanupExpiredBestEffort(_clock() - DefaultRetention);
+        if (uniqueSuffix is null) CleanupExpiredBestEffort(_clock() - DefaultRetention);
 
-        string baseName = BuildBaseFileName(_clock(), record.MediaKind);
-        string stem = Path.GetFileNameWithoutExtension(baseName);
+        string baseName = BuildBaseFileName(timestamp, isVideo ? CaptureMediaKind.Video : CaptureMediaKind.Image);
+        string stem = Path.GetFileNameWithoutExtension(baseName) + uniqueSuffix;
         string extension = Path.GetExtension(baseName);
+        baseName = stem + extension;
 
         for (int sequence = 1; sequence <= 9_999; sequence++)
         {
             string fileName = sequence == 1
                 ? baseName
                 : $"{stem}-{sequence:00}{extension}";
-            string destination = Path.Combine(_stagingRoot, fileName);
+            string destination = GalleryExportFiles.Child(_stagingRoot, fileName);
 
             try
             {
-                CopyWithoutOverwrite(sourcePath, destination);
+                GalleryExportFiles.Copy(sourcePath, destination, cancellationToken);
                 return destination;
             }
             catch (IOException) when (File.Exists(destination))
@@ -98,8 +112,13 @@ internal sealed class GalleryDragExportService
     internal static DataObject CreateFileDropData(string filePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        return CreateFileDropData([filePath]);
+    }
+
+    internal static DataObject CreateFileDropData(IReadOnlyList<string> filePaths)
+    {
         var data = new DataObject();
-        data.SetData(DataFormats.FileDrop, new[] { Path.GetFullPath(filePath) });
+        data.SetData(DataFormats.FileDrop, filePaths.Select(Path.GetFullPath).ToArray());
 
         // CFSTR_PREFERREDDROPEFFECT/DROPEFFECT_COPY tells Explorer and the desktop that the queue
         // file must be copied, never moved away from MyCapture's staging area.
@@ -107,6 +126,58 @@ internal sealed class GalleryDragExportService
             PreferredDropEffectFormat,
             new MemoryStream(BitConverter.GetBytes((int)DragDropEffects.Copy), writable: false));
         return data;
+    }
+
+    /// <summary>Resolve immutable paths and acquire leases on the owner before disk-only staging.</summary>
+    internal async Task<PreparedDrag> PrepareBatchAsync(IReadOnlyList<CaptureRecord> records, CancellationToken cancellationToken)
+    {
+        var leases = new List<IDisposable>();
+        var paths = new List<string>();
+        try
+        {
+            var plans = records.Select(record =>
+            {
+                if (_queue.Find(record.Id) != record) throw new InvalidOperationException("Capture is no longer available.");
+                leases.Add(_queue.AcquireEvictionLease(record.Id));
+                return (Source: ResolveSource(record), Video: record.IsVideo, Timestamp: _clock());
+            }).ToArray();
+            string batchId = Guid.NewGuid().ToString("N");
+            DateTimeOffset cutoff = _clock() - DefaultRetention;
+            await Task.Run(() =>
+            {
+                CleanupExpiredBestEffort(cutoff);
+                for (int index = 0; index < plans.Length; index++)
+                {
+                    var plan = plans[index];
+                    paths.Add(StageSource(plan.Source, plan.Video, plan.Timestamp,
+                        cancellationToken, stageVideo: true, uniqueSuffix: $"-{batchId}-{index + 1}"));
+                    StagedFileForTest?.Invoke(paths.Count);
+                }
+            }, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return new PreparedDrag(paths.ToArray(), leases);
+        }
+        catch
+        {
+            await Task.Run(() => { foreach (string path in paths) GalleryExportFiles.DeleteBestEffort(path); });
+            foreach (IDisposable lease in leases) lease.Dispose();
+            throw;
+        }
+    }
+
+    internal Action<int>? StagedFileForTest { get; set; }
+
+    internal sealed class PreparedDrag(string[] paths, List<IDisposable> leases) : IDisposable
+    {
+        private bool _published;
+        internal IReadOnlyList<string> Paths { get; } = paths;
+        internal void MarkPublished() => _published = true;
+        public void Dispose()
+        {
+            if (!_published) foreach (string path in paths) GalleryExportFiles.DeleteBestEffort(path);
+            foreach (IDisposable lease in leases) lease.Dispose();
+            leases.Clear();
+        }
     }
 
     internal DragDropEffects BeginDrag(DependencyObject dragSource, CaptureRecord record)
@@ -118,86 +189,5 @@ internal sealed class GalleryDragExportService
         return DragDrop.DoDragDrop(dragSource, data, DragDropEffects.Copy);
     }
 
-    internal void CleanupExpiredBestEffort(DateTimeOffset cutoff)
-    {
-        try
-        {
-            if (!Directory.Exists(_stagingRoot))
-            {
-                return;
-            }
-
-            // The root is the application's private drag-export directory (or an internal test
-            // seam); the fixed allow-list pattern below cannot select an arbitrary user path.
-            // codeql[cs/path-injection]
-            foreach (string file in Directory.EnumerateFiles(_stagingRoot, "MyCapture_*.*"))
-            {
-                try
-                {
-                    string extension = Path.GetExtension(file);
-                    if (!extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
-                        && !extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    if (File.GetLastWriteTimeUtc(file) < cutoff.UtcDateTime)
-                    {
-                        File.Delete(file);
-                    }
-                }
-                catch (IOException)
-                {
-                    // A shell drop may still have the file open; retain it for the next cleanup.
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    // Best-effort temporary-file housekeeping must never block gallery use.
-                }
-            }
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-    }
-
-    private static void CopyWithoutOverwrite(string sourcePath, string destination)
-    {
-        bool destinationCreated = false;
-        try
-        {
-            using FileStream source = new(
-                sourcePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
-            using FileStream target = new(
-                destination,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.Read);
-            destinationCreated = true;
-            source.CopyTo(target);
-            target.Flush(flushToDisk: true);
-        }
-        catch
-        {
-            if (destinationCreated)
-            {
-                try
-                {
-                    File.Delete(destination);
-                }
-                catch
-                {
-                    // Preserve the original exception; cleanup is strictly secondary.
-                }
-            }
-
-            throw;
-        }
-    }
+    internal void CleanupExpiredBestEffort(DateTimeOffset cutoff) => GalleryExportFiles.Cleanup(_stagingRoot, cutoff);
 }

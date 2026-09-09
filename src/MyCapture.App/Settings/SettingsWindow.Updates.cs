@@ -23,7 +23,7 @@ internal sealed partial class SettingsWindow
     private void InitializeUpdates()
     {
         UpdateTab.Header = UpdateStrings.Title;
-        UpdateVersionLabel.Text = UpdateStrings.Current(CurrentUpdateVersion);
+        UpdateVersionLabel.Text = MyCapture.Core.Platform.AppIdentity.Label + " · " + UpdateStrings.Current(CurrentUpdateVersion);
         UpdateCancel.Content = UpdateStrings.Cancel;
         AutomationProperties.SetName(UpdateCancel, UpdateStrings.Cancel);
         try

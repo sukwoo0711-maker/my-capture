@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Recording;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
@@ -106,6 +107,9 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             Assert.True(status.TranslatePoint(new Point(0, status.ActualHeight), layout).Y <= layout.ActualHeight + 0.5,
                 "compact video editor clipped the processing status");
             Assert.Equal(ScrollBarVisibility.Disabled, timelineTools.HorizontalScrollBarVisibility);
+            Assert.True(timelineTools.ActualHeight <= layout.RowDefinitions[1].ActualHeight + 0.5,
+                "timeline was arranged outside its Grid row instead of constraining the scroll viewport");
+            Assert.InRange(timelineTools.ViewportHeight, 0, timelineTools.ActualHeight + 0.5);
             var layerTracks = Descendants(layout).OfType<VideoLayerTimeline>().Single();
             layerTracks.SelectLayer(initialEdits.TextOverlays[0].Id);
             editor.UpdateLayout();
@@ -236,17 +240,57 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             editor.Width = 1200;
             editor.Height = 900;
             editor.UpdateLayout();
+            string beforeSettle = $"layout={layout.ActualHeight}, preview={preview.ActualHeight}, timeline={timelineTools.ActualHeight}, timeline maximum={layout.RowDefinitions[1].MaxHeight}";
+            // SizeChanged updates the compact timeline budget after the first arrange.
+            // Observe the rendered layout after that normal dispatcher layout pass.
+            editor.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+            string? layoutEvidence = Environment.GetEnvironmentVariable("MYCAPTURE_LOCALIZATION_EVIDENCE");
+            if (!string.IsNullOrWhiteSpace(layoutEvidence))
+            {
+                string folder = DiagnosticOutputPaths.Create(layoutEvidence);
+                File.WriteAllText(DiagnosticOutputPaths.Child(folder, "video-resize-layout.txt"),
+                    $"Compact: layout={compactLayoutHeight}, preview={compactPreviewHeight}, timeline={compactTimelineHeight}\n"
+                    + $"After first arrange: {beforeSettle}\n"
+                    + $"After dispatcher layout: layout={layout.ActualHeight}, preview={preview.ActualHeight}, timeline={timelineTools.ActualHeight}, timeline maximum={layout.RowDefinitions[1].MaxHeight}\n");
+            }
             // Windows may cap a requested 900px window to the CI desktop's work area.
             // Assert how the actual available space is allocated, not the requested size.
             double availableHeightGrowth = layout.ActualHeight - compactLayoutHeight;
             Assert.True(availableHeightGrowth > 0, "the native host did not provide any additional layout height");
-            Assert.True(preview.ActualHeight >= compactPreviewHeight + availableHeightGrowth - 0.5,
-                $"larger window left spare height outside preview: available growth={availableHeightGrowth:0.0}, preview growth={preview.ActualHeight - compactPreviewHeight:0.0}");
-            Assert.Equal(compactTimelineHeight, timelineTools.ActualHeight, 1);
-            Button gifOptions = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, "GIF 옵션"));
-            gifOptions.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Assert.True(gifOptions.ContextMenu.IsOpen);
-            gifOptions.ContextMenu.IsOpen = false;
+            // Compact windows reserve the actual media viewport and scroll the timeline.
+            // A larger window first restores the timeline's normal budget, then gives
+            // all remaining height to the preview.
+            double timelineGrowth = timelineTools.ActualHeight - compactTimelineHeight;
+            Assert.True(timelineTools.ActualHeight <= layout.RowDefinitions[1].ActualHeight + 0.5,
+                "expanded timeline was arranged outside its Grid row");
+            Assert.True(preview.ActualHeight >= compactPreviewHeight + availableHeightGrowth - timelineGrowth - 0.5,
+                $"larger window left spare height outside preview/timeline: available growth={availableHeightGrowth:0.0}, preview growth={preview.ActualHeight - compactPreviewHeight:0.0}, timeline growth={timelineGrowth:0.0}");
+            Grid viewport = Descendants(preview).OfType<Grid>().Single(grid => grid.Name == "VideoPreviewViewport");
+            Assert.True(viewport.ActualHeight >= 112);
+            Assert.InRange(viewport.TranslatePoint(new Point(0, viewport.ActualHeight), preview).Y, 0, preview.ActualHeight + 0.5);
+            Button export = Descendants(layout).OfType<Button>().Single(button =>
+                System.Windows.Automation.AutomationProperties.GetName(button) == "내보내기 · MP4 / GIF");
+            Assert.True(export.IsVisible && export.IsEnabled);
+            Exception? exportFailure = null;
+            editor.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                VideoExportDialog? dialog = editor.OwnedWindows.OfType<VideoExportDialog>().SingleOrDefault();
+                try
+                {
+                    Assert.NotNull(dialog);
+                    ComboBox format = Descendants(dialog).OfType<ComboBox>().Single(combo => combo.Items.Contains("MP4"));
+                    Assert.Equal("GIF", format.SelectedItem);
+                    Button save = Descendants(dialog).OfType<Button>().Single(button =>
+                        System.Windows.Automation.AutomationProperties.GetName(button) == "다른 이름으로 저장");
+                    Assert.False(save.IsEnabled, "GIF shortcut must open settings before any calculation/save");
+                    typeof(VideoEditorWindow).GetMethod("ExportGif", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(editor, null);
+                    Assert.Single(editor.OwnedWindows.OfType<VideoExportDialog>());
+                }
+                catch (Exception error) { exportFailure = error; }
+                finally { dialog?.Close(); }
+            }));
+            typeof(VideoEditorWindow).GetMethod("ExportGif", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(editor, null);
+            Assert.Null(exportFailure);
             editor.Close();
         }
         finally
