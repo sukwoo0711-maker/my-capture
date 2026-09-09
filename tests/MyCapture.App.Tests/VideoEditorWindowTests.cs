@@ -107,6 +107,9 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             Assert.True(status.TranslatePoint(new Point(0, status.ActualHeight), layout).Y <= layout.ActualHeight + 0.5,
                 "compact video editor clipped the processing status");
             Assert.Equal(ScrollBarVisibility.Disabled, timelineTools.HorizontalScrollBarVisibility);
+            Assert.True(timelineTools.ActualHeight <= layout.RowDefinitions[1].ActualHeight + 0.5,
+                "timeline was arranged outside its Grid row instead of constraining the scroll viewport");
+            Assert.InRange(timelineTools.ViewportHeight, 0, timelineTools.ActualHeight + 0.5);
             var layerTracks = Descendants(layout).OfType<VideoLayerTimeline>().Single();
             layerTracks.SelectLayer(initialEdits.TextOverlays[0].Id);
             editor.UpdateLayout();
@@ -258,6 +261,8 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             // A larger window first restores the timeline's normal budget, then gives
             // all remaining height to the preview.
             double timelineGrowth = timelineTools.ActualHeight - compactTimelineHeight;
+            Assert.True(timelineTools.ActualHeight <= layout.RowDefinitions[1].ActualHeight + 0.5,
+                "expanded timeline was arranged outside its Grid row");
             Assert.True(preview.ActualHeight >= compactPreviewHeight + availableHeightGrowth - timelineGrowth - 0.5,
                 $"larger window left spare height outside preview/timeline: available growth={availableHeightGrowth:0.0}, preview growth={preview.ActualHeight - compactPreviewHeight:0.0}, timeline growth={timelineGrowth:0.0}");
             Grid viewport = Descendants(preview).OfType<Grid>().Single(grid => grid.Name == "VideoPreviewViewport");

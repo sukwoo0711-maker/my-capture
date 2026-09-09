@@ -347,7 +347,7 @@ internal sealed class VideoEditorWindow : Window
     {
         var root = new Grid { Margin = new Thickness(12, 8, 12, 8) };
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(3, GridUnitType.Star), MinHeight = 112 }); // preview
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MaxHeight = 240 }); // fit the timeline contents; spare space belongs to preview
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MaxHeight = 250 }); // fit the timeline contents; spare space belongs to preview
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // controls
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // status
 
@@ -359,7 +359,6 @@ internal sealed class VideoEditorWindow : Window
 
         var workspace = new Grid();
         workspace.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        workspace.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         workspace.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 112 });
         var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
         var exports = new StackPanel { Orientation = Orientation.Horizontal };
@@ -370,13 +369,10 @@ internal sealed class VideoEditorWindow : Window
         _editControls.Add(saveEdits); _editControls.Add(export);
         exports.Children.Add(saveEdits); exports.Children.Add(export);
         DockPanel.SetDock(exports, Dock.Right); header.Children.Add(exports);
-        header.Children.Add(new TextBlock { Text = UiText.Get("MediaExport_Workspace"), FontSize = 17,
-            FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis });
-        workspace.Children.Add(header);
         FrameworkElement tools = BuildOverlayLane();
-        Grid.SetRow(tools, 1); workspace.Children.Add(tools);
-        Grid.SetRow(previewStack, 2); workspace.Children.Add(previewStack);
+        header.Children.Add(tools);
+        workspace.Children.Add(header);
+        Grid.SetRow(previewStack, 1); workspace.Children.Add(previewStack);
         var preview = new Border
         {
             Background = TryBrush("Surface.Canvas", Colors.Black),
@@ -394,6 +390,7 @@ internal sealed class VideoEditorWindow : Window
         {
             Name = "VideoTimelineToolsScroll",
             Content = timeline,
+            MaxHeight = 250,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Padding = new Thickness(0, 0, 8, 0),
@@ -429,13 +426,18 @@ internal sealed class VideoEditorWindow : Window
             if (root.ActualHeight <= 0) return;
             // The command rows share the preview card, but must never take space
             // from its visible media viewport. Compact windows scroll the timeline;
-            // larger windows retain its normal 240-DIP budget.
-            double requiredPreview = previewStack.MinHeight + header.DesiredSize.Height + tools.DesiredSize.Height
+            // larger windows retain enough height for both time strips and layer tracks.
+            double requiredPreview = previewStack.MinHeight + header.DesiredSize.Height
                 + preview.Padding.Top + preview.Padding.Bottom + preview.BorderThickness.Top + preview.BorderThickness.Bottom;
             double available = root.ActualHeight - controls.DesiredSize.Height - statusBar.DesiredSize.Height - requiredPreview;
-            double maximum = Math.Clamp(Math.Floor(available), 100, 240);
+            double maximum = Math.Clamp(Math.Floor(available), 100, 250);
             if (Math.Abs(root.RowDefinitions[1].MaxHeight - maximum) > 0.5)
+            {
                 root.RowDefinitions[1].MaxHeight = maximum;
+                // Bound the ScrollViewer itself so its internal viewport scrolls,
+                // instead of arranging full content height outside a clipped Grid cell.
+                timelineScroll.MaxHeight = maximum;
+            }
         }
         root.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
         header.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
@@ -489,7 +491,7 @@ internal sealed class VideoEditorWindow : Window
 
     private FrameworkElement BuildOverlayLane()
     {
-        var lane = new Grid { Margin = new Thickness(0, 4, 0, 0) };
+        var lane = new Grid();
         lane.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -515,17 +517,27 @@ internal sealed class VideoEditorWindow : Window
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0),
         };
         _addTextButton = MakeIconButton("Icon.Text", UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_991A1A1FF9ED"), "Button.Secondary", AddTextOverlay);
-        _editTextButton = MakeIconButton("Icon.Edit", UiText.Get("Text_87B0ACEF85A7"), UiText.Get("Text_AEB8B9AA4E6F"), "Button.Ghost", EditSelectedOverlay);
-        _deleteTextButton = MakeIconButton("Icon.Delete", UiText.Get("Text_6139B6C3ED73"), UiText.Get("Text_9163C86EDB22"), "Button.Ghost", DeleteSelectedOverlay);
+        _editTextButton = MakeTransportIcon("Icon.Edit", UiText.Get("Text_AEB8B9AA4E6F"), "Button.Ghost", EditSelectedOverlay);
+        _deleteTextButton = MakeTransportIcon("Icon.Delete", UiText.Get("Text_9163C86EDB22"), "Button.Ghost", DeleteSelectedOverlay);
         actions.Children.Add(_addTextButton);
         actions.Children.Add(MakeButton(UiText.Get("Text_DC0760235344"), UiText.Get("Text_D8F5F6738520"), "Button.Secondary", () => AddShapeLayer(false)));
         actions.Children.Add(MakeButton(UiText.Get("Text_C19FD6787279"), UiText.Get("Text_29C79CAFC1D7"), "Button.Secondary", () => AddShapeLayer(true)));
         actions.Children.Add(MakeButton(UiText.Get("Text_302BAE127938"), UiText.Get("Text_21C405702C2B"), "Button.Secondary", AddImageLayer));
         actions.Children.Add(_editTextButton);
         actions.Children.Add(_deleteTextButton);
+        foreach (Button action in actions.Children.OfType<Button>())
+        {
+            if (double.IsNaN(action.Width))
+            {
+                action.MinWidth = 52;
+                action.Padding = new Thickness(10, 5, 10, 5);
+            }
+            action.MinHeight = 36;
+            action.Margin = new Thickness(0, 0, 4, 0);
+        }
         Grid.SetRow(actions, 1);
         Grid.SetColumnSpan(actions, 2);
         lane.Children.Add(actions);
@@ -546,26 +558,22 @@ internal sealed class VideoEditorWindow : Window
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        transport.Children.Add(MakeIconButton("Icon.First", UiText.Get("Text_91390EADFAD4"), UiText.Get("Text_DC710AA11970"), "Button.Ghost", () => Seek(_timeline.InMs)));
-        transport.Children.Add(MakeIconButton("Icon.Rewind", UiText.Get("Text_39EFEAD98C7D"), UiText.Get("Text_E166B75FADF4"), "Button.Ghost", () => StepCoarse(-1)));
-        transport.Children.Add(MakeIconButton("Icon.Play", UiText.Get("Text_200EEC5A1E57"), UiText.Get("Text_9A9C87658130"), "Button.Secondary", TogglePlay));
-        transport.Children.Add(MakeIconButton("Icon.FastForward", UiText.Get("Text_39EFEAD98C7D"), UiText.Get("Text_E5CAF7CFC916"), "Button.Ghost", () => StepCoarse(1)));
-        transport.Children.Add(MakeIconButton("Icon.Last", UiText.Get("Text_FA22CDFB3221"), UiText.Get("Text_DFCA22AB9F61"), "Button.Ghost", () => Seek(_timeline.OutMs)));
+        transport.Children.Add(MakeTransportIcon("Icon.First", UiText.Get("Text_DC710AA11970"), "Button.Ghost", () => Seek(_timeline.InMs)));
+        transport.Children.Add(MakeTransportIcon("Icon.Rewind", UiText.Get("Text_E166B75FADF4"), "Button.Ghost", () => StepCoarse(-1)));
+        transport.Children.Add(MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Secondary", TogglePlay));
+        transport.Children.Add(MakeTransportIcon("Icon.FastForward", UiText.Get("Text_E5CAF7CFC916"), "Button.Ghost", () => StepCoarse(1)));
+        transport.Children.Add(MakeTransportIcon("Icon.Last", UiText.Get("Text_DFCA22AB9F61"), "Button.Ghost", () => Seek(_timeline.OutMs)));
         transport.Children.Add(Spacer(10));
-        transport.Children.Add(MakeIconButton("Icon.StepBack", UiText.Get("Text_D2E201C9D452"), UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
-        transport.Children.Add(MakeIconButton("Icon.StepForward", UiText.Get("Text_D2E201C9D452"), UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
+        transport.Children.Add(MakeTransportIcon("Icon.StepBack", UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
+        transport.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
         Grid.SetRow(transport, 0);
         controls.Children.Add(transport);
 
-        var precisionAndEdit = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 0),
-        };
-        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.ZoomOut", UiText.Get("Text_69D1C5307298"), UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
-        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.ZoomIn", UiText.Get("Text_11C2E8E755E4"), UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
-        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.FitAll", UiText.Get("Text_A4B69FAF0C11"), UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
+        var precisionAndEdit = transport;
+        precisionAndEdit.Children.Add(Spacer(12));
+        precisionAndEdit.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
+        precisionAndEdit.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
+        precisionAndEdit.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
         precisionAndEdit.Children.Add(Spacer(6));
         _trimButton = MakeCompactButton(
             UiText.Get("Text_4601577BA0F6"),
@@ -589,9 +597,9 @@ internal sealed class VideoEditorWindow : Window
         AutomationProperties.SetName(_cancelOperationButton, UiText.Get("Text_79B3DB1CD566"));
         AutomationProperties.SetHelpText(_cancelOperationButton, UiText.Get("Text_3DEFBAD62044"));
         _cancelOperationButton.Click += (_, _) => _operationCts?.Cancel();
-        precisionAndEdit.Children.Add(_cancelOperationButton);
-        Grid.SetRow(precisionAndEdit, 1);
-        controls.Children.Add(precisionAndEdit);
+        _cancelOperationButton.HorizontalAlignment = HorizontalAlignment.Center;
+        Grid.SetRow(_cancelOperationButton, 1);
+        controls.Children.Add(_cancelOperationButton);
 
         _controlRows = controls;
         return controls;
@@ -1921,6 +1929,15 @@ internal sealed class VideoEditorWindow : Window
         return button;
     }
 
+    private Button MakeTransportIcon(string iconKey, string automationName, string styleKey, Action onClick)
+    {
+        Button button = MakeButton(BuildIconLabel(iconKey, string.Empty), automationName, styleKey, onClick);
+        button.Width = button.MinWidth = button.MinHeight = 36;
+        button.Padding = new Thickness(4);
+        button.Margin = new Thickness(0, 0, 4, 0);
+        return button;
+    }
+
     private static StackPanel BuildIconLabel(string iconKey, string label)
     {
         var glyph = new System.Windows.Shapes.Path
@@ -1945,7 +1962,7 @@ internal sealed class VideoEditorWindow : Window
 
         var content = new StackPanel { Orientation = Orientation.Horizontal };
         content.Children.Add(glyph);
-        content.Children.Add(new TextBlock
+        if (!string.IsNullOrEmpty(label)) content.Children.Add(new TextBlock
         {
             Text = label,
             Margin = new Thickness(4, 0, 0, 0),

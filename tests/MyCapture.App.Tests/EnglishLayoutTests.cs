@@ -65,6 +65,10 @@ public sealed class EnglishLayoutTests
             Grid viewport = Descendants(preview).OfType<Grid>().Single(grid => grid.Name == "VideoPreviewViewport");
             Assert.True(viewport.ActualHeight >= 112, "The actual video viewport must retain usable height");
             Assert.InRange(viewport.TranslatePoint(new Point(0, viewport.ActualHeight), preview).Y, 0, preview.ActualHeight + 0.5);
+            ScrollViewer timeline = Assert.Single(layout.Children.OfType<ScrollViewer>());
+            Assert.True(timeline.ActualHeight <= layout.RowDefinitions[1].ActualHeight + 0.5,
+                "Timeline contents must scroll within the space allocated by the window");
+            Assert.InRange(timeline.ViewportHeight, 0, timeline.ActualHeight + 0.5);
             var client = (FrameworkElement)VisualTreeHelper.GetParent(layout);
             var statusText = Assert.IsType<TextBlock>(status.Child);
             Assert.True(statusText.ActualHeight >= statusText.DesiredSize.Height - 0.5);
@@ -72,7 +76,7 @@ public sealed class EnglishLayoutTests
             var connector = Assert.Single(Descendants(layout).OfType<TimelineRenderSurface>(), surface => !surface.IsHitTestVisible);
             Assert.True(connector.ActualHeight >= 18, "Connector hint must reserve a complete text line");
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
-            foreach (string caption in new[] { "Text", "Rectangle", "Circle", "Image", "Edit", "Delete", "Save edits", "Export · MP4 / GIF" })
+            foreach (string caption in new[] { "Text", "Rectangle", "Circle", "Image", "Save edits", "Export · MP4 / GIF" })
             {
                 Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);
@@ -82,6 +86,20 @@ public sealed class EnglishLayoutTests
                 Assert.True(button.IsVisible && top.X >= 0 && bottom.X <= layout.ActualWidth + 0.5 && bottom.Y <= layout.ActualHeight + 0.5, caption);
                 foreach (TextBlock text in Descendants(button).OfType<TextBlock>())
                     Assert.True(text.ActualWidth + text.Margin.Left + text.Margin.Right + 0.5 >= text.DesiredSize.Width, $"Clipped {caption}");
+            }
+            foreach (string key in new[]
+            {
+                "Text_AEB8B9AA4E6F", "Text_9163C86EDB22", // selected layer edit/delete
+                "Text_DC710AA11970", "Text_E166B75FADF4", "Text_9A9C87658130", "Text_E5CAF7CFC916", "Text_DFCA22AB9F61", // transport
+                "Text_B39342508541", "Text_B753165F6585", "Text_48D137437347", "Text_C5176D8C3041", "Text_6CA53DEDFF4A", // frames and zoom
+            })
+            {
+                Button action = Assert.Single(buttons, button => AutomationProperties.GetName(button) == UiText.Get(key));
+                Assert.NotNull(action.ToolTip);
+                Assert.True(action.IsVisible && action.ActualWidth >= 36 && action.ActualHeight >= 36);
+                Point bottom = action.TranslatePoint(new Point(action.ActualWidth, action.ActualHeight), layout);
+                Assert.InRange(bottom.X, 0, layout.ActualWidth + 0.5);
+                Assert.InRange(bottom.Y, 0, layout.ActualHeight + 0.5);
             }
             var bitmap = new RenderTargetBitmap((int)layout.ActualWidth, (int)layout.ActualHeight, 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(layout);
