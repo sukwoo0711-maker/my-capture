@@ -53,7 +53,7 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, �
 
 캡처 저장 폴더와 빠른 저장 폴더는 설정에서 변경할 수 있습니다. 라이브러리 이미지는 생성 후 7일이 지나면 오래된 순서대로 자동 삭제하며, 핀 고정하거나 편집 중인 이미지는 보관합니다. 동영상에는 7일 만료를 적용하지 않습니다. 따로 내보낸 파일은 관리 큐 정리 대상이 아닙니다. 개수·용량 제한은 별도로 적용됩니다.
 
-1.8.0의 변경 사항과 검증 절차는 [릴리스 노트](docs/releases/1.8.0-release-notes.md)와 [검증 문서](docs/releases/1.8.0-validation.md)에서 확인할 수 있습니다. 이전 1.7.1 기록은 [릴리스 노트](docs/releases/1.7.1-release-notes.md)와 [검증 기록](docs/releases/1.7.1-validation.md)에 남아 있습니다.
+1.8.1의 변경 사항과 검증 절차는 [릴리스 노트](docs/releases/1.8.1-release-notes.md)와 [검증 문서](docs/releases/1.8.1-validation.md)에서 확인할 수 있습니다. 이전 [1.8.0 릴리스 노트](docs/releases/1.8.0-release-notes.md)와 [검증 문서](docs/releases/1.8.0-validation.md), [1.7.1 릴리스 노트](docs/releases/1.7.1-release-notes.md)와 [검증 기록](docs/releases/1.7.1-validation.md)도 보존합니다.
 
 ## 소스에서 빌드
 
