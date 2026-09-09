@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Recording;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
@@ -236,9 +237,19 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             editor.Width = 1200;
             editor.Height = 900;
             editor.UpdateLayout();
+            string beforeSettle = $"layout={layout.ActualHeight}, preview={preview.ActualHeight}, timeline={timelineTools.ActualHeight}, timeline maximum={layout.RowDefinitions[1].MaxHeight}";
             // SizeChanged updates the compact timeline budget after the first arrange.
             // Observe the rendered layout after that normal dispatcher layout pass.
             editor.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+            string? layoutEvidence = Environment.GetEnvironmentVariable("MYCAPTURE_LOCALIZATION_EVIDENCE");
+            if (!string.IsNullOrWhiteSpace(layoutEvidence))
+            {
+                string folder = DiagnosticOutputPaths.Create(layoutEvidence);
+                File.WriteAllText(DiagnosticOutputPaths.Child(folder, "video-resize-layout.txt"),
+                    $"Compact: layout={compactLayoutHeight}, preview={compactPreviewHeight}, timeline={compactTimelineHeight}\n"
+                    + $"After first arrange: {beforeSettle}\n"
+                    + $"After dispatcher layout: layout={layout.ActualHeight}, preview={preview.ActualHeight}, timeline={timelineTools.ActualHeight}, timeline maximum={layout.RowDefinitions[1].MaxHeight}\n");
+            }
             // Windows may cap a requested 900px window to the CI desktop's work area.
             // Assert how the actual available space is allocated, not the requested size.
             double availableHeightGrowth = layout.ActualHeight - compactLayoutHeight;
