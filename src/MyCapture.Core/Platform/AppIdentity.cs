@@ -14,6 +14,8 @@ public static class AppIdentity
     {
         if (string.IsNullOrWhiteSpace(context) || context == "MyCapture") return Label;
         if (context == Label || context.StartsWith(Label + " — ", StringComparison.Ordinal)) return context;
+        const string legacyPrefix = "MyCapture — ";
+        if (context.StartsWith(legacyPrefix, StringComparison.Ordinal)) context = context[legacyPrefix.Length..];
         return Label + " — " + context;
     }
 }

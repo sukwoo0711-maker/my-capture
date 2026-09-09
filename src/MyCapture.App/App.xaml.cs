@@ -438,11 +438,9 @@ public partial class App : Application
 
         try
         {
-            if (_overlay.CanRetake)
-            {
-                _overlay.CloseEditorForRetake();
-            }
-            if (!GuardStillCapture(UiText.Get("Text_096A13A757DB"))) return;
+            if (!TryPrepareCapture(_overlay.CanRetake,
+                allowRetake => GuardStillCapture(UiText.Get("Text_096A13A757DB"), allowRetake),
+                _overlay.CloseEditorForRetake)) return;
             _tray?.SetState(TrayIconState.Capturing);
             // Start reserves the session immediately; full-desktop acquisition runs off the UI
             // thread and reports asynchronous failures through TransitionFailed on this dispatcher.
@@ -677,9 +675,19 @@ public partial class App : Application
         ReportOutcome(outcome, UiText.Get("Text_4B4D91FFC215"));
     }
 
-    private bool GuardStillCapture(string mode)
+    /// <summary>Check non-editor blockers before discarding edits, then respect an editor close veto.</summary>
+    internal static bool TryPrepareCapture(bool canRetake, Func<bool, bool> guard, Action closeEditor)
     {
-        if (_overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)
+        if (!guard(canRetake)) return false;
+        if (!canRetake) return true;
+        closeEditor();
+        return guard(false);
+    }
+
+    private bool GuardStillCapture(string mode, bool allowRetake = false)
+    {
+        if ((_overlay?.IsActive == true && !(allowRetake && _overlay.CanRetake)) ||
+            _activeCountdown is not null || _scrollCancellation is not null)
             return false;
         if (_recorder?.IsActive != true || _recorder.CanCaptureStill)
             return true;
