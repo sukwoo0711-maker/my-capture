@@ -79,8 +79,8 @@ internal static class SettingsSelfTest
             Check(report, "Autostart starts disabled", !startup.IsEnabled());
             StartupApplyResult enabled = startup.Apply(desiredEnabled: true);
             Check(report, "Autostart enable succeeds", enabled.Succeeded && startup.IsEnabled());
-            Check(report, "Autostart command is quoted",
-                fake.Get(StartupRegistrationService.RunValueName) == "\"C:\\Apps\\MyCapture\\MyCapture.exe\"");
+            Check(report, "Autostart command is quoted and runs in background",
+                fake.Get(StartupRegistrationService.RunValueName) == "\"C:\\Apps\\MyCapture\\MyCapture.exe\" --background");
             StartupApplyResult disabled = startup.Apply(desiredEnabled: false);
             Check(report, "Autostart disable succeeds", disabled.Succeeded && !startup.IsEnabled());
 
