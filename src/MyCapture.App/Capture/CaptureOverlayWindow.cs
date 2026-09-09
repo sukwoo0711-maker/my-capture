@@ -12,26 +12,45 @@ namespace MyCapture.App.Capture;
 /// </summary>
 internal sealed class CaptureOverlayWindow : Window
 {
-    private readonly FrozenFrame _frame;
+    private FrozenFrame? _frame;
+    private readonly RectD _screenBounds;
     private readonly CaptureOverlayView _view;
     private readonly bool _abortOnFocusLoss;
     private bool _completed;
     private bool _placingPhysicalBounds;
+    private RectD? _pendingSelection;
 
     internal CaptureOverlayWindow(
         FrozenFrame frame,
         bool abortOnFocusLoss,
         bool showMagnifier = true)
+        : this(frame.ScreenBounds, abortOnFocusLoss, showMagnifier, frame)
     {
-        _frame = frame ?? throw new ArgumentNullException(nameof(frame));
+    }
+
+    internal CaptureOverlayWindow(
+        RectD screenBounds,
+        bool abortOnFocusLoss,
+        bool showMagnifier,
+        FrozenFrame? frame = null)
+    {
+        _screenBounds = screenBounds.ToPixelBounds();
+        if (_screenBounds.IsEmpty)
+        {
+            throw new ArgumentException("A non-empty virtual-desktop rectangle is required.", nameof(screenBounds));
+        }
+
+        _frame = frame;
         _abortOnFocusLoss = abortOnFocusLoss;
-        _view = new CaptureOverlayView(frame, showMagnifier);
+        _view = frame is null
+            ? new CaptureOverlayView(_screenBounds, frame: null, showMagnifier)
+            : new CaptureOverlayView(frame, showMagnifier);
 
         // Frozen pixels and selection geometry must appear immediately and exactly; a reveal
         // transform here would expose the live desktop for a frame and make edge selection feel
         // imprecise. All normal application windows still use the shared entrance motion.
         FluidMotion.SetWindowEntrance(this, false);
-        ConfigureWindowChrome(frame);
+        ConfigureWindowChrome(_screenBounds);
         Content = _view;
 
         _view.SelectionConfirmed += OnSelectionConfirmed;
@@ -42,7 +61,7 @@ internal sealed class CaptureOverlayWindow : Window
         Deactivated += OnDeactivated;
     }
 
-    private void ConfigureWindowChrome(FrozenFrame frame)
+    private void ConfigureWindowChrome(RectD screenBounds)
     {
         Title = UiText.Get("Text_3816B940D53C");
         WindowStyle = WindowStyle.None;
@@ -56,12 +75,29 @@ internal sealed class CaptureOverlayWindow : Window
         // applies the exact physical-pixel rectangle with SetWindowPos; this initial placement
         // prevents WPF from choosing the primary monitor's DPI for a negative-origin desktop.
         MonitorInfo anchor = MonitorEnumerator.GetFromPoint(
-            new PointD(frame.ScreenBounds.Left, frame.ScreenBounds.Top));
+            new PointD(screenBounds.Left, screenBounds.Top));
         double scale = anchor.ScaleFactor > 0 ? anchor.ScaleFactor : 1.0;
-        Left = frame.ScreenBounds.Left / scale;
-        Top = frame.ScreenBounds.Top / scale;
-        Width = Math.Max(1, frame.PixelWidth / scale);
-        Height = Math.Max(1, frame.PixelHeight / scale);
+        Left = screenBounds.Left / scale;
+        Top = screenBounds.Top / scale;
+        Width = Math.Max(1, screenBounds.Width / scale);
+        Height = Math.Max(1, screenBounds.Height / scale);
+    }
+
+    internal void AttachFrame(FrozenFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        _frame = frame;
+        _view.AttachFrame(frame);
+        if (IsVisible)
+        {
+            PlacePhysicalBounds();
+        }
+
+        if (_pendingSelection is RectD pending)
+        {
+            _pendingSelection = null;
+            CompleteSelection(pending);
+        }
     }
 
     /// <summary>Raised after a valid drag is cropped and the overlay has been hidden.</summary>
@@ -90,7 +126,7 @@ internal sealed class CaptureOverlayWindow : Window
         {
             if (hwnd != IntPtr.Zero)
             {
-                PhysicalWindowPositioner.PlaceTopmost(hwnd, _frame.ScreenBounds);
+                PhysicalWindowPositioner.PlaceTopmost(hwnd, _frame?.ScreenBounds ?? _screenBounds);
             }
         }
         finally
@@ -123,8 +159,25 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
 
+        if (_frame is null)
+        {
+            _pendingSelection = e.BitmapRegion;
+            return;
+        }
+
+        CompleteSelection(e.BitmapRegion);
+    }
+
+    private void CompleteSelection(RectD bitmapRegion)
+    {
+        if (_completed)
+        {
+            return;
+        }
+
         _completed = true;
-        System.Windows.Media.Imaging.BitmapSource crop = ScreenCaptureEngine.Crop(_frame, e.BitmapRegion);
+        FrozenFrame frame = _frame ?? throw new InvalidOperationException("A frozen capture frame is required.");
+        System.Windows.Media.Imaging.BitmapSource crop = ScreenCaptureEngine.Crop(frame, bitmapRegion);
 
         // Remove the dimmed overlay before the normal editor window is created. The original
         // frozen frame and cropped physical pixels are retained; the desktop is never recaptured.
@@ -133,7 +186,7 @@ internal sealed class CaptureOverlayWindow : Window
         {
             SelectionCompleted?.Invoke(
                 this,
-                new CaptureSelectionCompletedEventArgs(_frame, e.BitmapRegion, crop));
+                new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop));
         }
         finally
         {

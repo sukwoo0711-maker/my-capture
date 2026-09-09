@@ -45,14 +45,17 @@ public sealed class CaptureEditorFlowTests
     [Fact]
     public void ManualSelector_HasNoWindowCandidateConstructorOrTabInstructions()
     {
-        ConstructorInfo constructor = Assert.Single(
-            typeof(CaptureOverlayView).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
-        Type[] parameterTypes = constructor.GetParameters().Select(parameter => parameter.ParameterType).ToArray();
-
-        Assert.Equal([typeof(FrozenFrame), typeof(bool)], parameterTypes);
+        ConstructorInfo[] constructors = typeof(CaptureOverlayView).GetConstructors(
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.Contains(
+            constructors,
+            constructor => constructor.GetParameters().Select(parameter => parameter.ParameterType)
+                .SequenceEqual([typeof(FrozenFrame), typeof(bool)]));
         Assert.DoesNotContain("Tab", CaptureOverlayView.InstructionText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("창 선택", CaptureOverlayView.InstructionText, StringComparison.Ordinal);
-        Assert.DoesNotContain(parameterTypes, type => type.Name.Contains("WindowCandidate", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            constructors.SelectMany(constructor => constructor.GetParameters()),
+            parameter => parameter.ParameterType.Name.Contains("WindowCandidate", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -17,6 +17,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private readonly ILogger<CaptureOverlayCoordinator> _log;
     private readonly Dispatcher _dispatcher;
     private readonly Func<bool, FrozenFrame> _acquireFrame;
+    private readonly Func<RectD> _desktopBounds;
     private CapturePreparation? _preparation;
     private bool _disposed;
     private CaptureOverlayWindow? _activeOverlay;
@@ -28,12 +29,14 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         ScreenCaptureEngine captureEngine,
         WindowCandidateService windowCandidates,
         ILogger<CaptureOverlayCoordinator> log,
-        Func<bool, FrozenFrame>? acquireFrame = null)
+        Func<bool, FrozenFrame>? acquireFrame = null,
+        Func<RectD>? desktopBounds = null)
     {
         _captureEngine = captureEngine ?? throw new ArgumentNullException(nameof(captureEngine));
         _windowCandidates = windowCandidates ?? throw new ArgumentNullException(nameof(windowCandidates));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _acquireFrame = acquireFrame ?? captureEngine.CaptureVirtualDesktop;
+        _desktopBounds = desktopBounds ?? MonitorEnumerator.GetVirtualDesktopBounds;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _dispatcher.ShutdownStarted += OnDispatcherShutdownStarted;
     }
@@ -86,15 +89,25 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         }
 
         // Reserve the session synchronously, including when WM_HOTKEY has no WPF context.
-        // Each accepted request acquires one fresh frame before any selector UI is created.
+        // Show the selector immediately when it can be excluded from capture, then attach
+        // one fresh frozen frame. Otherwise acquire first so the overlay is not photographed.
         var preparation = new CapturePreparation();
         _preparation = preparation;
         _log.LogInformation("Capture frame acquisition requested");
-        LastPreparationForTest = AcquireAndShowAsync(preparation, includeCursor, abortOnFocusLoss, showMagnifier);
+        try
+        {
+            ShowOverlay(_desktopBounds(), abortOnFocusLoss, showMagnifier, preparation.Elapsed, frame: null);
+        }
+        catch
+        {
+            _preparation = null;
+            throw;
+        }
+
+        LastPreparationForTest = AcquireAndShowAsync(preparation, includeCursor);
     }
 
-    private async Task AcquireAndShowAsync(
-        CapturePreparation preparation, bool includeCursor, bool abortOnFocusLoss, bool showMagnifier)
+    private async Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor)
     {
         FrozenFrame? frame = null;
         Exception? failure = null;
@@ -122,7 +135,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         try
         {
             await _dispatcher.InvokeAsync(() =>
-                CompletePreparation(preparation, frame, failure, abortOnFocusLoss, showMagnifier)).Task.ConfigureAwait(false);
+                CompletePreparation(preparation, frame, failure)).Task.ConfigureAwait(false);
         }
         catch (TaskCanceledException) when (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
         {
@@ -137,7 +150,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     }
 
     private void CompletePreparation(
-        CapturePreparation preparation, FrozenFrame? frame, Exception? failure, bool abortOnFocusLoss, bool showMagnifier)
+        CapturePreparation preparation, FrozenFrame? frame, Exception? failure)
     {
         VerifyDispatcherAccess();
         if (!ReferenceEquals(_preparation, preparation)) return;
@@ -145,12 +158,26 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         {
             if (_disposed || preparation.Cancelled) return;
             if (failure is not null) throw failure;
-            ShowOverlay(frame ?? throw new InvalidOperationException("Capture acquisition returned no frame."),
-                abortOnFocusLoss, showMagnifier, preparation.Elapsed);
+            FrozenFrame acquired = frame ?? throw new InvalidOperationException("Capture acquisition returned no frame.");
+            if (_activeOverlay is { } overlay)
+            {
+                overlay.AttachFrame(acquired);
+                if (!overlay.IsVisible)
+                {
+                    PrepareWindow(overlay);
+                    overlay.Show();
+                    _ = overlay.Activate();
+                }
+
+                return;
+            }
+
+            ShowOverlay(acquired.ScreenBounds, abortOnFocusLoss: false, showMagnifier: false, preparation.Elapsed, acquired);
         }
         catch (Exception ex)
         {
             _log.LogError(ex, "Could not prepare the capture overlay");
+            _activeOverlay?.Close();
             TransitionFailed?.Invoke(ex);
         }
         finally
@@ -160,10 +187,16 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         }
     }
 
-    private void ShowOverlay(FrozenFrame frame, bool abortOnFocusLoss, bool showMagnifier, Stopwatch elapsed)
+    private void ShowOverlay(
+        RectD screenBounds,
+        bool abortOnFocusLoss,
+        bool showMagnifier,
+        Stopwatch elapsed,
+        FrozenFrame? frame)
     {
-
-        var overlay = new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier);
+        var overlay = frame is null
+            ? new CaptureOverlayWindow(screenBounds, abortOnFocusLoss, showMagnifier)
+            : new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier);
         _activeOverlay = overlay;
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
         overlay.Closed += OnOverlayClosed;
@@ -176,13 +209,21 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
         _log.LogInformation(
             "Opening free-region selector across virtual desktop ({Width}x{Height})",
-            frame.PixelWidth,
-            frame.PixelHeight);
+            (int)screenBounds.Width,
+            (int)screenBounds.Height);
 
         try
         {
-            PrepareWindow(overlay);
-            overlay.Show();
+            bool excluded = ApplyCaptureExclusion(overlay);
+            if (RequiresCaptureExclusion?.Invoke() == true && !excluded)
+            {
+                throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
+            }
+
+            if (excluded || frame is not null)
+            {
+                overlay.Show();
+            }
         }
         catch
         {

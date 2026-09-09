@@ -1,0 +1,33 @@
+name: Release assets
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-assets-${{ github.event.release.tag_name }}
+  cancel-in-progress: true
+
+jobs:
+  verify-required-assets:
+    name: Verify six required GitHub release assets
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: powershell
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify published assets
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\build\verify-github-release.ps1 -Tag '${{ github.event.release.tag_name }}' -Repository '${{ github.repository }}'

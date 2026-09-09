@@ -25,7 +25,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     internal static string InstructionText => UiText.Get("Text_798E080A9262");
 
-    private readonly FrozenFrame _frame;
+    private FrozenFrame? _frame;
+    private readonly RectD _screenBounds;
     private readonly bool _showMagnifier;
     private readonly Brush _dimmerBrush;
     private readonly Brush _selectionBrush;
@@ -46,8 +47,19 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private bool _ended;
 
     internal CaptureOverlayView(FrozenFrame frame, bool showMagnifier = true)
+        : this(frame.ScreenBounds, frame, showMagnifier)
     {
-        _frame = frame ?? throw new ArgumentNullException(nameof(frame));
+    }
+
+    internal CaptureOverlayView(RectD screenBounds, FrozenFrame? frame = null, bool showMagnifier = true)
+    {
+        _screenBounds = screenBounds.ToPixelBounds();
+        if (_screenBounds.IsEmpty)
+        {
+            throw new ArgumentException("A non-empty virtual-desktop rectangle is required.", nameof(screenBounds));
+        }
+
+        _frame = frame;
         _showMagnifier = showMagnifier;
 
         Focusable = true;
@@ -69,6 +81,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _uiTypeface = new Typeface(uiFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
         _monoTypeface = new Typeface(monoFont, FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
     }
+
+    internal FrozenFrame? Frame => _frame;
 
     internal event EventHandler<RegionSelectionEventArgs>? SelectionConfirmed;
 
@@ -97,7 +111,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
             return;
         }
 
-        drawingContext.DrawImage(_frame.Bitmap, new Rect(0, 0, ActualWidth, ActualHeight));
+        if (_frame?.Bitmap is { } bitmap)
+        {
+            drawingContext.DrawImage(bitmap, new Rect(0, 0, ActualWidth, ActualHeight));
+        }
 
         if (_selection is RectD focused)
         {
@@ -408,8 +425,24 @@ internal sealed class CaptureOverlayView : FrameworkElement
         CancelRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    internal void AttachFrame(FrozenFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        _frame = frame;
+        _magnifierCrop = null;
+        _magnifierCropX = -1;
+        _magnifierCropY = -1;
+        InvalidateVisual();
+    }
+
     private void UpdateMagnifier()
     {
+        if (_frame is null)
+        {
+            _magnifierCrop = null;
+            return;
+        }
+
         int centerX = Math.Clamp((int)Math.Floor(_cursorPixel.X), 0, _frame.PixelWidth - 1);
         int centerY = Math.Clamp((int)Math.Floor(_cursorPixel.Y), 0, _frame.PixelHeight - 1);
         int half = MagnifierSourcePixels / 2;
@@ -445,11 +478,15 @@ internal sealed class CaptureOverlayView : FrameworkElement
             brush,
             VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
-    private RectD FrameBounds => new(0, 0, _frame.PixelWidth, _frame.PixelHeight);
+    private int PixelWidth => _frame?.PixelWidth ?? Math.Max(1, (int)_screenBounds.Width);
 
-    private double DipPerPixelX => ActualWidth / _frame.PixelWidth;
+    private int PixelHeight => _frame?.PixelHeight ?? Math.Max(1, (int)_screenBounds.Height);
 
-    private double DipPerPixelY => ActualHeight / _frame.PixelHeight;
+    private RectD FrameBounds => new(0, 0, PixelWidth, PixelHeight);
+
+    private double DipPerPixelX => ActualWidth / PixelWidth;
+
+    private double DipPerPixelY => ActualHeight / PixelHeight;
 
     private PointD ToPixelPoint(Point dipPoint) => new(
         dipPoint.X / Math.Max(double.Epsilon, DipPerPixelX),
@@ -466,12 +503,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
         pixelRect.Normalized().Height * DipPerPixelY);
 
     private PointD ClampSamplePoint(PointD point) => new(
-        Math.Clamp(point.X, 0, Math.Max(0, _frame.PixelWidth - 1)),
-        Math.Clamp(point.Y, 0, Math.Max(0, _frame.PixelHeight - 1)));
+        Math.Clamp(point.X, 0, Math.Max(0, PixelWidth - 1)),
+        Math.Clamp(point.Y, 0, Math.Max(0, PixelHeight - 1)));
 
     private PointD ClampEdgePoint(PointD point) => new(
-        Math.Clamp(point.X, 0, _frame.PixelWidth),
-        Math.Clamp(point.Y, 0, _frame.PixelHeight));
+        Math.Clamp(point.X, 0, PixelWidth),
+        Math.Clamp(point.Y, 0, PixelHeight));
 
     private enum InteractionMode
     {

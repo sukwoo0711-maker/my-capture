@@ -6,7 +6,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Keeps the 1.8.1 stable version and its Windows binary version aligned across MSBuild, packaging
+/// Keeps the 1.8.2 stable version and its Windows binary version aligned across MSBuild, packaging
 /// and installer validation.
 /// </summary>
 public sealed class ReleaseVersionContractTests
@@ -34,19 +34,19 @@ public sealed class ReleaseVersionContractTests
         Path.Combine(RepositoryRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));
 
     [Fact]
-    public void BuildDefaults_AreTheStableOnePointEightPatchOneBinaryVersion()
+    public void BuildDefaults_AreTheStableOnePointEightPatchTwoBinaryVersion()
     {
         XDocument props = XDocument.Parse(Read("Directory.Build.props"));
         XDocument manifest = XDocument.Parse(Read("src/MyCapture.App/app.manifest"));
 
-        Assert.Equal("1.8.1", Assert.Single(props.Descendants("Version")).Value);
-        Assert.Equal("1.8.1.0", Assert.Single(props.Descendants("FileVersion")).Value);
-        Assert.Equal("1.8.1.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
+        Assert.Equal("1.8.2", Assert.Single(props.Descendants("Version")).Value);
+        Assert.Equal("1.8.2.0", Assert.Single(props.Descendants("FileVersion")).Value);
+        Assert.Equal("1.8.2.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
 
         XElement identity = Assert.Single(
             manifest.Descendants(),
             element => element.Name.LocalName == "assemblyIdentity");
-        Assert.Equal("1.8.1.0", identity.Attribute("version")?.Value);
+        Assert.Equal("1.8.2.0", identity.Attribute("version")?.Value);
     }
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class ReleaseVersionContractTests
 
         // The shipping default is the GA version. A release candidate must never be the default
         // again, otherwise an operator who forgets -Version publishes a prerelease by accident.
-        Assert.Contains("[string]$Version = '1.8.1'", package, StringComparison.Ordinal);
-        Assert.Contains("[string]$Version = '1.8.1',", hostile, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '1.8.2'", package, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '1.8.2',", hostile, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", package, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", hostile, StringComparison.Ordinal);
 
@@ -201,6 +201,46 @@ public sealed class ReleaseVersionContractTests
         }
 
         Assert.Contains("Include=\"xunit\" Version=\"2.9.3\"", packages, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PublishedGitHubReleases_MustIncludeTheSixRequiredAssets()
+    {
+        string required = Read("build/required-release-assets.ps1");
+        string verify = Read("build/verify-github-release.ps1");
+        string publish = Read("build/publish-github-release.ps1");
+        string workflow = Read(".github/workflows/release-assets.yml");
+        string packaged = Read(".github/workflows/packaged-validation.yml");
+
+        foreach (string name in new[]
+                 {
+                     "MyCapture-$Version-win-x64-setup.exe",
+                     "MyCapture-$Version-win-x64-portable.zip",
+                     "installer-manifest.json",
+                     "release-manifest.json",
+                     "SHA256SUMS.txt",
+                     "README-OFFLINE.txt",
+                 })
+        {
+            Assert.Contains(name, required, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("Get-RequiredReleaseAssetNames", verify, StringComparison.Ordinal);
+        Assert.Contains("isDraft", verify, StringComparison.Ordinal);
+        Assert.Contains("missing required assets", verify, StringComparison.Ordinal);
+        Assert.Contains("Refusing to publish", publish, StringComparison.Ordinal);
+        Assert.Contains("verify-github-release.ps1", publish, StringComparison.Ordinal);
+
+        Assert.Contains("release:", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains("types: [published]", workflow, StringComparison.Ordinal);
+        Assert.Contains("verify-github-release.ps1", workflow, StringComparison.Ordinal);
+        Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.DoesNotContain(": write", workflow, StringComparison.Ordinal);
+        Assert.Contains("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", workflow, StringComparison.Ordinal);
+
+        Assert.Contains("MyCapture-${{ env.PACKAGE_VERSION }}-win-x64-setup.exe", packaged, StringComparison.Ordinal);
+        Assert.Contains("SHA256SUMS.txt", packaged, StringComparison.Ordinal);
+        Assert.Contains("release-manifest.json", packaged, StringComparison.Ordinal);
     }
 
     [Fact]
