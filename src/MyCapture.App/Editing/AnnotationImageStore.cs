@@ -1,5 +1,7 @@
 using System.IO;
 using System.Windows.Media.Imaging;
+using MyCapture.Core.Annotations;
+using MyCapture.Core.Undo;
 
 namespace MyCapture.App.Editing;
 
@@ -61,6 +63,21 @@ internal sealed class AnnotationImageStore
 
     internal BitmapSource? Get(string assetFileName) =>
         _decoded.TryGetValue(assetFileName, out BitmapSource? bitmap) ? bitmap : null;
+
+    /// <summary>Release assets that no live annotation or reversible command can restore.</summary>
+    internal void PruneToReachable(AnnotationDocument document, UndoStack history)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(history);
+        var reachable = new HashSet<string>(document.Items.OfType<ImageAnnotation>()
+            .Select(item => item.AssetFileName), StringComparer.OrdinalIgnoreCase);
+        reachable.UnionWith(history.ReferencedImageAssets);
+        foreach (string name in _decoded.Keys.Where(name => !reachable.Contains(name)).ToArray())
+        {
+            _decoded.Remove(name);
+            _sources.Remove(name);
+        }
+    }
 
     /// <summary>
     /// Registers already-decoded pixels under their canonical asset names, for re-editing a

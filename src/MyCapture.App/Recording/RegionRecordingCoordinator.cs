@@ -165,11 +165,9 @@ internal sealed class RegionRecordingCoordinator
             overlay.Closed += OnSelectionClosed;
             overlay.ContentRendered += (_, _) => _log.LogInformation(
                 "Recording selector first rendered after {Elapsed:0.0}ms", preparation.Elapsed.Elapsed.TotalMilliseconds);
-            if (ExcludeSelectionWindow(overlay))
-            {
-                overlay.Show();
-                _ = overlay.Activate();
-            }
+            // Prepare exclusion while hidden; an opaque window without its capture frame
+            // would visibly black out the desktop for the entire acquisition interval.
+            _ = ExcludeSelectionWindow(overlay);
             LastSelectionPreparation = PrepareSelectionAsync(preparation, overlay);
         }
         catch

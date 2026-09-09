@@ -87,6 +87,7 @@ internal sealed class CaptureOverlayWindow : Window
     internal void AttachFrame(FrozenFrame frame)
     {
         ArgumentNullException.ThrowIfNull(frame);
+        if (_completed) return;
         _frame = frame;
         _view.AttachFrame(frame);
         if (IsVisible)
@@ -235,7 +236,11 @@ internal sealed class CaptureOverlayWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        _view.EndPointerInteraction();
+        _completed = true;
+        _view.ReleaseResources();
+        _frame = null;
+        _pendingSelection = null;
+        Content = null;
         GeometrySelectionCompleted = null;
         _view.SelectionConfirmed -= OnSelectionConfirmed;
         _view.CancelRequested -= OnCancelRequested;

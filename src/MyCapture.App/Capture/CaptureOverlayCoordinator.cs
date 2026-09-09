@@ -89,8 +89,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         }
 
         // Reserve the session synchronously, including when WM_HOTKEY has no WPF context.
-        // Show the selector immediately when it can be excluded from capture, then attach
-        // one fresh frozen frame. Otherwise acquire first so the overlay is not photographed.
+        // Create its HWND for capture exclusion, but keep the opaque selector hidden until
+        // its frozen background is ready. Showing a frameless window blacks out the desktop.
         var preparation = new CapturePreparation();
         _preparation = preparation;
         _log.LogInformation("Capture frame acquisition requested");
@@ -220,7 +220,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
             }
 
-            if (excluded || frame is not null)
+            if (frame is not null)
             {
                 overlay.Show();
             }
@@ -230,7 +230,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             overlay.Close();
             throw;
         }
-        _ = overlay.Activate();
+        if (overlay.IsVisible) _ = overlay.Activate();
     }
 
     internal bool StartWithSelection(FrozenFrame frame, RectD region) =>

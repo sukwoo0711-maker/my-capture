@@ -73,6 +73,11 @@ public sealed class UndoStack
 
     public int RedoCount => _redo.Count;
 
+    /// <summary>Assets reachable through undo, redo, or an unfinished composite operation.</summary>
+    public IEnumerable<string> ReferencedImageAssets => _undo.Concat(_redo)
+        .Concat(_batch ?? [])
+        .SelectMany(command => command.ReferencedImageAssets);
+
     public string? NextUndoDescription => _undo.Count > 0 ? _undo[^1].Description : null;
 
     public string? NextRedoDescription => _redo.Count > 0 ? _redo[^1].Description : null;

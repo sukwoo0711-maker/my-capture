@@ -45,7 +45,7 @@ public sealed class RecordingSelectionPreparationTests
             coordinator.Toggle();
             Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
             Assert.NotNull(overlay);
-            Assert.Equal(excluded, overlay.IsVisible);
+            Assert.False(overlay.IsVisible);
             bool responsive = false;
             _ = Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => responsive = true));
             PumpUntil(() => responsive);

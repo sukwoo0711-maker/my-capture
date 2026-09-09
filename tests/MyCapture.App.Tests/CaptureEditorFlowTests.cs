@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Input;
@@ -87,7 +88,10 @@ public sealed class CaptureEditorFlowTests
             Assert.NotNull(requested);
             Assert.Same(requested, completed);
             Assert.Equal(EditorCommitAction.CopyToClipboard, requested!.Action);
-            Assert.Same(frame, requested.Frame);
+            Assert.Equal(frame.ScreenBounds, requested.Frame.ScreenBounds);
+            Assert.Equal(frame.Monitor, requested.Frame.Monitor);
+            Assert.Equal(frame.DpiScale, requested.Frame.DpiScale);
+            Assert.Equal(frame.ElapsedMilliseconds, requested.Frame.ElapsedMilliseconds);
             Assert.Equal(sourceRegion, requested.BitmapRegion);
             Assert.Same(selectedBitmap, requested.SelectedBitmap);
 
@@ -144,6 +148,40 @@ public sealed class CaptureEditorFlowTests
                 host.Close();
             }
         });
+    }
+
+    [Fact]
+    public void OpenEditor_DoesNotKeepDesktopPixelsAlive() => RunSta(() =>
+    {
+        (AnnotationEditorControl editor, WeakReference<BitmapSource> desktop) = CreateDetachedEditor();
+        // Collection is a test probe only; production does not force GC or trim working sets.
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.False(desktop.TryGetTarget(out _));
+        Assert.Equal(30, editor.DisplayedBitmap.PixelWidth);
+        GC.KeepAlive(editor);
+    });
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (AnnotationEditorControl Editor, WeakReference<BitmapSource> Desktop) CreateDetachedEditor()
+    {
+        BitmapSource desktop = Solid(800, 600, 0x22);
+        var bounds = new RectD(-800, 100, 800, 600);
+        var monitor = new MyCapture.Platform.Display.MonitorInfo("display", bounds, bounds, 144, false);
+        var frame = new FrozenFrame(desktop, bounds, monitor, 12.5);
+        var editor = new AnnotationEditorControl(frame, new RectD(14, 18, 30, 20), Solid(30, 20, 0x88));
+        editor.CommitRequested = result =>
+        {
+            Assert.Equal(bounds, result.Frame.ScreenBounds);
+            Assert.Same(monitor, result.Frame.Monitor);
+            Assert.Equal(1.5, result.Frame.DpiScale);
+            Assert.Equal(12.5, result.Frame.ElapsedMilliseconds);
+            Assert.Equal(new RectD(14, 18, 30, 20), result.BitmapRegion);
+            return Task.FromResult(false);
+        };
+        Assert.True(editor.HandleShortcut(Key.C, ModifierKeys.Control));
+        return (editor, new WeakReference<BitmapSource>(desktop));
     }
 
     private static BitmapSource Solid(int width, int height, byte value)

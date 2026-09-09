@@ -38,6 +38,20 @@ internal sealed class AnnotationEditingResult
         IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
         IReadOnlyDictionary<string, string> imageAssetSources,
         bool reduceExport = false)
+        : this(AnnotationSourceMetadata.FromFrame(frame), bitmapRegion, selectedBitmap, document,
+            action, imageAssetBitmaps, imageAssetSources, reduceExport)
+    {
+    }
+
+    internal AnnotationEditingResult(
+        AnnotationSourceMetadata frame,
+        RectD bitmapRegion,
+        BitmapSource selectedBitmap,
+        AnnotationDocument document,
+        EditorCommitAction action,
+        IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
+        IReadOnlyDictionary<string, string> imageAssetSources,
+        bool reduceExport = false)
     {
         Frame = frame ?? throw new ArgumentNullException(nameof(frame));
         BitmapRegion = bitmapRegion;
@@ -49,8 +63,8 @@ internal sealed class AnnotationEditingResult
         ReduceExport = reduceExport;
     }
 
-    /// <summary>The frozen monitor frame the selection was cropped from.</summary>
-    internal FrozenFrame Frame { get; }
+    /// <summary>Source-frame provenance, without retaining the desktop bitmap.</summary>
+    internal AnnotationSourceMetadata Frame { get; }
 
     /// <summary>The selection rectangle in frozen-frame physical pixels.</summary>
     internal RectD BitmapRegion { get; }
