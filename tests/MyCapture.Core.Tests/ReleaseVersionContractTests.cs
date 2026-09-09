@@ -226,7 +226,9 @@ public sealed class ReleaseVersionContractTests
         }
 
         Assert.Contains("Get-RequiredReleaseAssetNames", verify, StringComparison.Ordinal);
-        Assert.Contains("isDraft", verify, StringComparison.Ordinal);
+        Assert.Contains("releases/tags/", verify, StringComparison.Ordinal);
+        Assert.Contains("NO_COLOR", verify, StringComparison.Ordinal);
+        Assert.Contains(".draft", verify, StringComparison.Ordinal);
         Assert.Contains("missing required assets", verify, StringComparison.Ordinal);
         Assert.Contains("Refusing to publish", publish, StringComparison.Ordinal);
         Assert.Contains("verify-github-release.ps1", publish, StringComparison.Ordinal);

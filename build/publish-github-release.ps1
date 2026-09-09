@@ -33,8 +33,14 @@ if (-not (Test-Path -LiteralPath $NotesFile -PathType Leaf)) {
     throw "Release notes file was not found: $NotesFile"
 }
 
-$existing = gh release view $tag --repo $Repository --json tagName 2>$null
-if ($LASTEXITCODE -eq 0 -and $existing) {
+$env:NO_COLOR = '1'
+$env:GH_FORCE_TTY = '0'
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+gh api "repos/$Repository/releases/tags/$tag" --jq '.tag_name' | Out-Null
+$releaseExists = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $previousPreference
+if ($releaseExists) {
     throw "Release $tag already exists. Refusing to overwrite it."
 }
 
