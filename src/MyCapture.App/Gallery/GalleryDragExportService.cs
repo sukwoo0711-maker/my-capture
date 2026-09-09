@@ -23,7 +23,9 @@ internal sealed class GalleryDragExportService
         Func<DateTimeOffset>? clock = null)
     {
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
-        _stagingRoot = Path.GetFullPath(stagingRoot ?? Path.Combine(Path.GetTempPath(), "MyCapture", "DragExports"));
+        _stagingRoot = stagingRoot is null
+            ? GalleryExportFiles.Child(GalleryExportFiles.Child(Path.GetTempPath(), "MyCapture"), "DragExports")
+            : Path.GetFullPath(stagingRoot);
         _clock = clock ?? (() => DateTimeOffset.Now);
     }
 
@@ -91,7 +93,7 @@ internal sealed class GalleryDragExportService
             string fileName = sequence == 1
                 ? baseName
                 : $"{stem}-{sequence:00}{extension}";
-            string destination = Path.Combine(_stagingRoot, fileName);
+            string destination = GalleryExportFiles.Child(_stagingRoot, fileName);
 
             try
             {

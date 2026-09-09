@@ -12,6 +12,29 @@ internal static class GalleryExportFiles
     private const uint OpenExisting = 3, CreateNew = 1;
     private const uint OpenReparsePoint = 0x00200000, BackupSemantics = 0x02000000;
 
+    internal static string Child(string parent, string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name is "." or ".." ||
+            name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains('/') || name.Contains('\\') ||
+            name.EndsWith('.') || name.EndsWith(' '))
+            throw new IOException("Drag export names must be a single unambiguous path component.");
+        return WithinRoot(parent, Path.Combine(parent, name));
+    }
+
+    internal static string WithinRoot(string root, string candidate)
+    {
+        string prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        if (!Path.EndsInDirectorySeparator(prefix)) prefix += Path.DirectorySeparatorChar;
+        string full = Path.GetFullPath(candidate);
+        // Extended Windows paths retain dot segments through GetFullPath.
+        if (full.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar])
+            .Any(segment => segment is "." or ".."))
+            throw new IOException("Drag export paths cannot contain unresolved traversal components.");
+        if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Drag export path escaped its owning directory.");
+        return full;
+    }
+
     internal static void Copy(string sourcePath, string destination, CancellationToken cancellationToken)
     {
         // Pin every existing directory without sharing writes or deletes. This blocks both
@@ -77,7 +100,7 @@ internal static class GalleryExportFiles
                 string extension = Path.GetExtension(file);
                 if (extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
                     || extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase))
-                    DeleteBestEffort(file, cutoff);
+                    DeleteBestEffort(WithinRoot(root, file), cutoff);
             }
         }
         catch (IOException) { }
@@ -135,7 +158,7 @@ internal static class GalleryExportFiles
                 foreach (string segment in full[current.Length..].Split(
                     [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries))
                 {
-                    current = Path.Combine(current, segment);
+                    current = Child(current, segment);
                     if (create && !Directory.Exists(current)) Directory.CreateDirectory(current);
                     lease.Pin(current);
                 }

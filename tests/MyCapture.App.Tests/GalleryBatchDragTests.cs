@@ -61,9 +61,11 @@ public sealed class GalleryBatchDragTests
             var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
             var record = new CaptureRecord { Id = Guid.NewGuid() };
             queue.Add(record);
-            var service = new GalleryDragExportService(queue, Path.Combine(root, "staging"));
+            string staging = Path.Combine(root, "staging");
+            var service = new GalleryDragExportService(queue, staging);
+            Assert.Equal(staging, service.StagingRoot);
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.PrepareBatchAsync([record], new CancellationToken(true)));
-            Assert.False(Directory.Exists(service.StagingRoot));
+            Assert.False(Directory.Exists(staging));
             Assert.True(queue.Remove(record.Id));
         }
         finally { OwnedTestDirectory.Delete(root); }
@@ -78,10 +80,12 @@ public sealed class GalleryBatchDragTests
             var queue = NewQueue(root);
             CaptureRecord[] records = [Add(queue, 2_000_000), Add(queue, 20)];
             using var cancellation = new CancellationTokenSource();
-            var service = new GalleryDragExportService(queue, Path.Combine(root, "staging"))
+            string staging = Path.Combine(root, "staging");
+            var service = new GalleryDragExportService(queue, staging)
             { StagedFileForTest = count => { if (count == 1) cancellation.Cancel(); } };
+            Assert.Equal(staging, service.StagingRoot);
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.PrepareBatchAsync(records, cancellation.Token));
-            Assert.Empty(Directory.EnumerateFiles(service.StagingRoot));
+            Assert.Empty(Directory.EnumerateFiles(staging));
             Assert.All(records, record => Assert.True(File.Exists(queue.GetFilePath(record, CaptureFileNames.Rendered))));
             Assert.All(records, record => Assert.True(queue.Remove(record.Id)));
         }
@@ -96,13 +100,15 @@ public sealed class GalleryBatchDragTests
         {
             var queue = NewQueue(root);
             CaptureRecord record = Add(queue);
-            var service = new GalleryDragExportService(queue, Path.Combine(root, "staging"));
+            string staging = Path.Combine(root, "staging");
+            var service = new GalleryDragExportService(queue, staging);
+            Assert.Equal(staging, service.StagingRoot);
             using (GalleryDragExportService.PreparedDrag unused = await service.PrepareBatchAsync([record], CancellationToken.None))
                 Assert.Single(unused.Paths);
-            Assert.Empty(Directory.EnumerateFiles(service.StagingRoot));
+            Assert.Empty(Directory.EnumerateFiles(staging));
             using (GalleryDragExportService.PreparedDrag published = await service.PrepareBatchAsync([record], CancellationToken.None))
                 published.MarkPublished();
-            string retained = Assert.Single(Directory.EnumerateFiles(service.StagingRoot));
+            string retained = Assert.Single(Directory.EnumerateFiles(staging));
             service.CleanupExpiredBestEffort(DateTimeOffset.UtcNow.AddDays(-2));
             Assert.True(File.Exists(retained));
             File.SetLastWriteTimeUtc(retained, DateTime.UtcNow.AddDays(-3));
@@ -127,10 +133,12 @@ public sealed class GalleryBatchDragTests
             File.WriteAllText(target, "unrelated file");
             File.Delete(link);
             File.CreateSymbolicLink(link, target);
-            var service = new GalleryDragExportService(queue, Path.Combine(root, "staging"));
+            string staging = Path.Combine(root, "staging");
+            var service = new GalleryDragExportService(queue, staging);
+            Assert.Equal(staging, service.StagingRoot);
             await Assert.ThrowsAsync<IOException>(() => service.PrepareBatchAsync([record], CancellationToken.None));
             Assert.Equal("unrelated file", File.ReadAllText(target));
-            Assert.Empty(Directory.EnumerateFiles(service.StagingRoot));
+            Assert.Empty(Directory.EnumerateFiles(staging));
             Assert.True(queue.Remove(record.Id));
         }
         finally
@@ -156,10 +164,12 @@ public sealed class GalleryBatchDragTests
             File.WriteAllText(keep, "unrelated");
             UpdatePathsTests.CreateJunction(link, targetRoot);
             Assert.Throws<IOException>(() => GalleryExportFiles.ValidateSource(link));
-            var service = new GalleryDragExportService(queue, Path.Combine(root, "staging"));
+            string staging = Path.Combine(root, "staging");
+            var service = new GalleryDragExportService(queue, staging);
+            Assert.Equal(staging, service.StagingRoot);
             await Assert.ThrowsAsync<FileNotFoundException>(() => service.PrepareBatchAsync([record], CancellationToken.None));
             Assert.Equal("unrelated", File.ReadAllText(keep));
-            Assert.False(Directory.Exists(service.StagingRoot));
+            Assert.False(Directory.Exists(staging));
         }
         finally
         {
@@ -182,7 +192,8 @@ public sealed class GalleryBatchDragTests
             string sourceParent = link;
             string target = Path.Combine(targetRoot, CaptureFileNames.Rendered);
             File.WriteAllText(target, "external bytes");
-            var service = new GalleryDragExportService(queue, Path.Combine(root, "staging"))
+            string staging = Path.Combine(root, "staging");
+            var service = new GalleryDragExportService(queue, staging)
             {
                 StagedFileForTest = count =>
                 {
@@ -191,8 +202,9 @@ public sealed class GalleryBatchDragTests
                     UpdatePathsTests.CreateJunction(sourceParent, targetRoot);
                 },
             };
+            Assert.Equal(staging, service.StagingRoot);
             await Assert.ThrowsAsync<IOException>(() => service.PrepareBatchAsync(records, CancellationToken.None));
-            Assert.Empty(Directory.EnumerateFiles(service.StagingRoot));
+            Assert.Empty(Directory.EnumerateFiles(staging));
             Assert.Equal("external bytes", File.ReadAllText(target));
         }
         finally
@@ -258,6 +270,35 @@ public sealed class GalleryBatchDragTests
 
     private static CaptureQueue NewQueue(string root) =>
         new(AppPaths.CreateForRoot(root), new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+
+    [Fact]
+    public void ExportPathBoundaries_RejectTraversalSiblingPrefixAndAmbiguousChildNames()
+    {
+        string root = OwnedTestDirectory.Create("MyCapture-drag-path-boundary-");
+        try
+        {
+            Assert.Throws<IOException>(() => GalleryExportFiles.WithinRoot(root, root + "-sibling\\capture.png"));
+            Assert.Throws<IOException>(() => GalleryExportFiles.WithinRoot(root, Path.Combine(root, "..", "capture.png")));
+            Assert.Throws<IOException>(() => GalleryExportFiles.WithinRoot(root, root));
+            string extendedRoot = @"\\?\" + root;
+            Assert.Throws<IOException>(() => GalleryExportFiles.WithinRoot(extendedRoot, extendedRoot + @"\..\capture.png"));
+            foreach (string name in new[] { "..", "../capture.png", "sub\\capture.png", "C:\\capture.png", "capture.png:stream", "capture.png.", "capture.png " })
+                Assert.Throws<IOException>(() => GalleryExportFiles.Child(root, name));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(root));
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    }
+
+    [Theory]
+    [InlineData(@"C:\exports", @"C:\exports\capture.png")]
+    [InlineData(@"\\server\share\exports", @"\\server\share\exports\capture.png")]
+    [InlineData(@"\\?\C:\exports", @"\\?\C:\exports\capture.png")]
+    [InlineData(@"\\?\UNC\server\share\exports", @"\\?\UNC\server\share\exports\capture.png")]
+    public void ExportChild_PreservesLocalUncAndExtendedPathForms(string root, string expected)
+    {
+        // A path-format contract only; no UNC network resource is contacted.
+        Assert.Equal(expected, GalleryExportFiles.Child(root, "capture.png"));
+    }
 
     [Fact]
     public void DirectoryLease_BlocksInPlaceReparseWrites_WhileChildCopyAndCleanupStillWork()
