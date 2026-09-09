@@ -243,10 +243,29 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             Assert.True(preview.ActualHeight >= compactPreviewHeight + availableHeightGrowth - 0.5,
                 $"larger window left spare height outside preview: available growth={availableHeightGrowth:0.0}, preview growth={preview.ActualHeight - compactPreviewHeight:0.0}");
             Assert.Equal(compactTimelineHeight, timelineTools.ActualHeight, 1);
-            Button gifOptions = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, "GIF 옵션"));
-            gifOptions.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Assert.True(gifOptions.ContextMenu.IsOpen);
-            gifOptions.ContextMenu.IsOpen = false;
+            Button export = Descendants(layout).OfType<Button>().Single(button =>
+                System.Windows.Automation.AutomationProperties.GetName(button) == "내보내기 · MP4 / GIF");
+            Assert.True(export.IsVisible && export.IsEnabled);
+            Exception? exportFailure = null;
+            editor.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                VideoExportDialog? dialog = editor.OwnedWindows.OfType<VideoExportDialog>().SingleOrDefault();
+                try
+                {
+                    Assert.NotNull(dialog);
+                    ComboBox format = Descendants(dialog).OfType<ComboBox>().Single(combo => combo.Items.Contains("MP4"));
+                    Assert.Equal("GIF", format.SelectedItem);
+                    Button save = Descendants(dialog).OfType<Button>().Single(button =>
+                        System.Windows.Automation.AutomationProperties.GetName(button) == "다른 이름으로 저장");
+                    Assert.False(save.IsEnabled, "GIF shortcut must open settings before any calculation/save");
+                    typeof(VideoEditorWindow).GetMethod("ExportGif", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(editor, null);
+                    Assert.Single(editor.OwnedWindows.OfType<VideoExportDialog>());
+                }
+                catch (Exception error) { exportFailure = error; }
+                finally { dialog?.Close(); }
+            }));
+            typeof(VideoEditorWindow).GetMethod("ExportGif", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(editor, null);
+            Assert.Null(exportFailure);
             editor.Close();
         }
         finally

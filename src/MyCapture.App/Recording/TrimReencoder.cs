@@ -22,7 +22,8 @@ internal static class TrimReencoder
         IReadOnlyList<TimedTextOverlay>? textOverlays = null,
         IReadOnlyList<FrameEditLayer>? frameEditLayers = null,
         IProgress<VideoFrameRenderProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int? bitrateBitsPerSecond = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -34,7 +35,9 @@ internal static class TrimReencoder
         int fps = Math.Max(1, recording.Fps);
         int width = recording.Width;
         int height = recording.Height;
-        int bitrate = VideoEncoderOptions.DeriveBitrate(width, height, fps);
+        int bitrate = bitrateBitsPerSecond ?? VideoEncoderOptions.DeriveBitrate(width, height, fps);
+        if (bitrate is < 64_000 or > 24_000_000)
+            throw new ArgumentOutOfRangeException(nameof(bitrateBitsPerSecond));
         var options = new VideoEncoderOptions(outputPath, width, height, fps, bitrate);
         using IVideoEncoder encoder = encoderFactory(options);
 

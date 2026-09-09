@@ -65,8 +65,6 @@ internal sealed class VideoEditorWindow : Window
     private readonly TextBlock _loadingLabel;
     private readonly Border _loadingOverlay;
     private readonly ListBox _overlayList;
-    private ComboBox _gifSpeedComboBox = null!;
-    private ComboBox _gifQualityComboBox = null!;
     private Button _trimButton = null!;
     private Button _addTextButton = null!;
     private Button _editTextButton = null!;
@@ -359,6 +357,26 @@ internal sealed class VideoEditorWindow : Window
         previewStack.Children.Add(_layerCanvas);
         previewStack.Children.Add(_loadingOverlay);
 
+        var workspace = new Grid();
+        workspace.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        workspace.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        workspace.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 112 });
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        var exports = new StackPanel { Orientation = Orientation.Horizontal };
+        Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"));
+        saveEdits.Click += (_, _) => CommitTrim();
+        Button export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_ExportFormats"), "MediaExport_ArrowExport", true);
+        export.Click += (_, _) => OpenExport();
+        _editControls.Add(saveEdits); _editControls.Add(export);
+        exports.Children.Add(saveEdits); exports.Children.Add(export);
+        DockPanel.SetDock(exports, Dock.Right); header.Children.Add(exports);
+        header.Children.Add(new TextBlock { Text = UiText.Get("MediaExport_Workspace"), FontSize = 17,
+            FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis });
+        workspace.Children.Add(header);
+        FrameworkElement tools = BuildOverlayLane();
+        Grid.SetRow(tools, 1); workspace.Children.Add(tools);
+        Grid.SetRow(previewStack, 2); workspace.Children.Add(previewStack);
         var preview = new Border
         {
             Background = TryBrush("Surface.Canvas", Colors.Black),
@@ -366,7 +384,7 @@ internal sealed class VideoEditorWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             Padding = new Thickness(8),
-            Child = previewStack,
+            Child = workspace,
         };
         Grid.SetRow(preview, 0);
         root.Children.Add(preview);
@@ -393,7 +411,6 @@ internal sealed class VideoEditorWindow : Window
         root.Children.Add(timelineScroll);
 
         var controls = new StackPanel();
-        controls.Children.Add(BuildOverlayLane());
         controls.Children.Add(BuildControlRow());
         RefreshOverlayList();
         Grid.SetRow(controls, 2);
@@ -433,9 +450,16 @@ internal sealed class VideoEditorWindow : Window
         Grid.SetRow(_positionLabel, 1);
         timeline.Children.Add(_positionLabel);
 
-        _layerTimeline.Margin = new Thickness(0, 8, 0, 0);
-        Grid.SetRow(_layerTimeline, 2);
-        timeline.Children.Add(_layerTimeline);
+        var layerScroll = new ScrollViewer
+        {
+            Content = _layerTimeline, MaxHeight = 72, Margin = new Thickness(0, 8, 0, 0),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Focusable = false,
+        };
+        AutomationProperties.SetName(layerScroll, UiText.Get("Text_D9378793F9FE"));
+        Grid.SetRow(layerScroll, 2);
+        timeline.Children.Add(layerScroll);
 
 
         RefreshOverlayList();
@@ -483,57 +507,6 @@ internal sealed class VideoEditorWindow : Window
         actions.Children.Add(MakeButton(UiText.Get("Text_302BAE127938"), UiText.Get("Text_21C405702C2B"), "Button.Secondary", AddImageLayer));
         actions.Children.Add(_editTextButton);
         actions.Children.Add(_deleteTextButton);
-        var gifSettings = new StackPanel { Margin = new Thickness(6) };
-        gifSettings.Children.Add(new TextBlock
-        {
-            Text = UiText.Get("Text_7530A6E985BD"),
-            Foreground = TryBrush("Text.Secondary", Colors.LightGray),
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(6, 0, 6, 0),
-        });
-        _gifSpeedComboBox = new ComboBox
-        {
-            Width = 72,
-            MinHeight = 32,
-            SelectedValuePath = nameof(ComboBoxItem.Tag),
-            Margin = new Thickness(0, 0, 6, 0),
-        };
-        foreach (double speed in new[] { 0.5, 1.0, 1.5, 2.0, 3.0, 4.0 })
-        {
-            _gifSpeedComboBox.Items.Add(new ComboBoxItem
-            {
-                Content = string.Create(CultureInfo.InvariantCulture, $"{speed:0.#}×"),
-                Tag = speed,
-            });
-        }
-
-        _gifSpeedComboBox.SelectedIndex = 1;
-        AutomationProperties.SetName(_gifSpeedComboBox, UiText.Get("Text_D3F7F6C952A8"));
-        AutomationProperties.SetHelpText(_gifSpeedComboBox, UiText.Get("Text_CFC4974E7244"));
-        gifSettings.Children.Add(_gifSpeedComboBox);
-        _gifQualityComboBox = new ComboBox
-        {
-            Width = 210,
-            MinHeight = 32,
-            Margin = new Thickness(0, 0, 6, 0),
-            ToolTip = UiText.Get("Text_5B59BB806FB5"),
-        };
-        foreach (GifExportQuality quality in new[] { GifExportQuality.Standard, GifExportQuality.Compact, GifExportQuality.Smallest })
-        {
-            _gifQualityComboBox.Items.Add(new ComboBoxItem { Content = quality.Label, Tag = quality });
-        }
-
-        _gifQualityComboBox.SelectedIndex = 0;
-        AutomationProperties.SetName(_gifQualityComboBox, UiText.Get("Text_DA9B79FCBFC8"));
-        gifSettings.Children.Add(_gifQualityComboBox);
-        var gifMenu = new ContextMenu();
-        gifMenu.Items.Add(new MenuItem { Header = gifSettings, StaysOpenOnClick = true });
-        Button gifOptions = MakeButton(UiText.Get("Text_5F2733BE4219"), UiText.Get("Text_D8A75FF54AF8"), "Button.Ghost", () => gifMenu.IsOpen = true);
-        gifOptions.ContextMenu = gifMenu;
-        gifMenu.PlacementTarget = gifOptions;
-        gifMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
-        actions.Children.Add(gifOptions);
-        actions.Children.Add(MakeIconButton("Icon.Export", "GIF", UiText.Get("Text_CFD6A8C2BFA5"), "Button.Ghost", ExportGif));
         Grid.SetRow(actions, 1);
         Grid.SetColumnSpan(actions, 2);
         lane.Children.Add(actions);
@@ -584,7 +557,7 @@ internal sealed class VideoEditorWindow : Window
         precisionAndEdit.Children.Add(Spacer(6));
         precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"), UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame));
         precisionAndEdit.Children.Add(Spacer(6));
-        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.Save", UiText.Get("Text_5FB926229090"), UiText.Get("Text_E3348500E6DB"), "Button.Primary", CommitTrim));
+
         _cancelOperationButton = new Button
         {
             Content = UiText.Get("Text_5FAE4DA04904"),
@@ -1571,112 +1544,38 @@ internal sealed class VideoEditorWindow : Window
         return Path.Combine(dir, stem + "_edited.mp4");
     }
 
-    private async void ExportGif()
+    private void ExportGif() => OpenExport(gif: true);
+
+    private VideoExportDialog? _exportDialog;
+
+    private void OpenExport(bool gif = false)
     {
-        if (!_mediaReady || _operationRunning)
-        {
-            return;
-        }
-
-        if (!TryValidateLayerResources(_editDocument.FrameEditLayers)) { return; }
-        VideoEditDocument document = BuildCurrentDocument();
-        double playbackSpeed = SelectedGifSpeed();
-        GifExportQuality quality = (_gifQualityComboBox.SelectedItem as ComboBoxItem)?.Tag as GifExportQuality
-            ?? GifExportQuality.Standard;
-        if (document.TrimOutMs - document.TrimInMs > AnimatedGifExporter.MaximumDurationMs + 0.5)
-        {
-            _statusLabel.Text = UiText.Get("Text_339D1C10FD24");
-            _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
-            return;
-        }
-
-        var dialog = new SaveFileDialog
-        {
-            Title = UiText.Get("Text_0D0920B35583"),
-            Filter = UiText.Get("Text_D18267AE0420"),
-            DefaultExt = ".gif",
-            AddExtension = true,
-            OverwritePrompt = true,
-            FileName = $"MyCapture_{DateTimeOffset.Now:yyyyMMdd_HHmmss}.gif",
-        };
-        if (dialog.ShowDialog(this) != true)
-        {
-            return;
-        }
-
-        var operation = new CancellationTokenSource();
-        _operationCts = operation;
-        CancellationToken cancellationToken = operation.Token;
-        SetOperationRunning(true);
-        _statusLabel.Text = UiText.Format("Text_1DFB8FE69D78", quality.Label);
-        _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
-        var progress = new Progress<VideoFrameRenderProgress>(value =>
-        {
-            int percent = value.TotalFrames <= 0
-                ? 0
-                : (int)Math.Round(value.CompletedFrames * 100.0 / value.TotalFrames);
-            _statusLabel.Text = UiText.Format("Text_C4DFF18A59CA", percent, value.CompletedFrames, value.TotalFrames);
-        });
-
+        if (_exportDialog is not null || !IsVisible || !_mediaReady || _operationRunning
+            || !TryValidateLayerResources(_editDocument.FrameEditLayers)) return;
+        PausePlayback();
         try
         {
-            int frames = await StaThreadTask.RunAsync(
-                () => AnimatedGifExporter.Export(
-                    _recording,
-                    document,
-                    dialog.FileName,
-                    progress,
-                    cancellationToken,
-                    playbackSpeed,
-                    quality),
-                "MyCapture GIF exporter");
-            _statusLabel.Text = UiText.Format("Text_53A86A0A3347", playbackSpeed, frames, Path.GetFileName(dialog.FileName));
-            _statusLabel.Foreground = TryBrush("State.Success", Colors.LightGreen);
+            _exportDialog = new VideoExportDialog(_recording, BuildCurrentDocument(), _loggerFactory, gif) { Owner = this };
+            _ = _exportDialog.ShowDialog();
         }
-        catch (OperationCanceledException)
+        catch (Exception error)
         {
-            _statusLabel.Text = UiText.Get("Text_B007F71CC3B2");
+            _log.LogError(error, "Could not open video export");
+            _statusLabel.Text = UiText.Format("MediaExport_Error", error.Message);
         }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "GIF export failed");
-            _statusLabel.Text = UiText.Get("Text_83BBF1497B9D") + ex.Message;
-            _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
-        }
-        finally
-        {
-            bool closeAfterCancellation = _closeRequested;
-            ReleaseOperationCts(operation);
-            if (IsLoaded)
-            {
-                SetOperationRunning(false);
-                if (closeAfterCancellation)
-                {
-                    _closeRequested = false;
-                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(Close));
-                }
-            }
-        }
+        finally { _exportDialog = null; }
     }
-
     private void SetOperationRunning(bool running)
     {
         if (running) { PausePlayback(); }
         _operationRunning = running;
         SetEditControlsEnabled(!running && _mediaReady);
         _overlayList.IsEnabled = !running && _mediaReady;
-        _gifSpeedComboBox.IsEnabled = !running && _mediaReady;
-        _gifQualityComboBox.IsEnabled = !running && _mediaReady;
         _layerTimeline.IsEnabled = !running && _mediaReady;
         _layerCanvas.IsEnabled = !running && _mediaReady;
         _cancelOperationButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         _cancelOperationButton.IsEnabled = running;
     }
-
-    private double SelectedGifSpeed() =>
-        _gifSpeedComboBox.SelectedItem is ComboBoxItem { Tag: double speed }
-            ? speed
-            : 1.0;
 
     internal static bool DocumentsEquivalent(VideoEditDocument left, VideoEditDocument right)
     {

@@ -2,8 +2,10 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Xml.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Recording;
@@ -16,6 +18,23 @@ namespace MyCapture.App.Tests;
 
 public sealed class EnglishLayoutTests
 {
+    [Fact]
+    public void ExportButtonUsesRealFilledThemeGeometry() => StaTestHost.Run(() =>
+    {
+        var window = new Window();
+        LoadWindowTheme(window);
+        var button = MediaExportVisuals.Button(window, "Export", "MediaExport_ArrowExport", true);
+        window.Content = button;
+        button.Measure(new Size(300, 80));
+        button.Arrange(new Rect(0, 0, 300, 80));
+        var path = Assert.Single(Descendants(button).OfType<System.Windows.Shapes.Path>());
+        Assert.NotNull(path.Data);
+        Assert.NotNull(path.Fill);
+        Assert.Null(path.Stroke);
+        Assert.Equal(20, path.Width);
+        Assert.Same(window.FindResource("Button.Primary"), button.Style);
+    });
+
     [Theory]
     [InlineData(760, 555)]
     [InlineData(920, 680)]
@@ -27,13 +46,7 @@ public sealed class EnglishLayoutTests
         var window = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
         try
         {
-            foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-            {
-                window.Resources.MergedDictionaries.Add(new ResourceDictionary
-                {
-                    Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml"),
-                });
-            }
+            LoadWindowTheme(window);
             window.FontSize = (double)window.FindResource("FontSize.Body");
             window.Width = width;
             window.Height = height;
@@ -56,7 +69,7 @@ public sealed class EnglishLayoutTests
             var connector = Assert.Single(Descendants(layout).OfType<TimelineRenderSurface>(), surface => !surface.IsHitTestVisible);
             Assert.True(connector.ActualHeight >= 18, "Connector hint must reserve a complete text line");
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
-            foreach (string caption in new[] { "Text", "Rectangle", "Circle", "Image", "Edit", "Delete", "GIF options", "GIF" })
+            foreach (string caption in new[] { "Text", "Rectangle", "Circle", "Image", "Edit", "Delete", "Save edits", "Export · MP4 / GIF" })
             {
                 Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);
@@ -85,6 +98,31 @@ public sealed class EnglishLayoutTests
             finally { OwnedTestDirectory.Delete(root); }
         }
     });
+
+    private static void LoadWindowTheme(Window window)
+    {
+        // Compiled Controls BAML prefetches StaticResource values at Source load time.
+        // App.xaml supplies them through Application.Resources; attaching dictionaries
+        // to a standalone Window afterwards cannot repair an already captured UnsetValue.
+        // Parse the exact embedded product markup together, in the production order,
+        // so these multi-STA tests retain real templates without a global Application.
+        XElement? combined = null;
+        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+        {
+            using Stream source = typeof(EnglishLayoutTests).Assembly.GetManifestResourceStream($"ThemeFixture.{name}.xaml")!;
+            XElement dictionary = XDocument.Load(source).Root!;
+            combined ??= new XElement(dictionary.Name);
+            foreach (XAttribute declaration in dictionary.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
+            {
+                string value = declaration.Value;
+                if (value.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal) && !value.Contains(";assembly=", StringComparison.Ordinal))
+                    value += ";assembly=MyCapture";
+                combined.SetAttributeValue(declaration.Name, value);
+            }
+            foreach (XElement entry in dictionary.Elements()) combined.Add(new XElement(entry));
+        }
+        window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined!.ToString(SaveOptions.DisableFormatting)));
+    }
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
     {
