@@ -57,4 +57,25 @@ public sealed class GallerySelectionTests
         Assert.False(gesture.CanStart(first, true, true));
         Assert.True(gesture.CanStart(second, true, true));
     }
+
+    [Fact]
+    public void ArrowNavigation_UsesAdjacentVisualRowsAndClampsColumnAcrossPartialDateGroups()
+    {
+        GalleryItemViewModel[] tiles = Enumerable.Range(0, 9).Select(_ => new GalleryItemViewModel(
+            new MyCapture.Core.Queue.CaptureRecord { Id = Guid.NewGuid() }, _ => "unused", 20)).ToArray();
+        GalleryRow[] rows = [new GalleryHeaderRow("Today"), new GalleryTileRow(tiles[..3]),
+            new GalleryTileRow([tiles[3]]), new GalleryHeaderRow("Yesterday"),
+            new GalleryTileRow(tiles[4..7]), new GalleryTileRow(tiles[7..9])];
+        Assert.Same(tiles[3], GallerySelectionNavigation.FindNeighbor(rows, tiles[2], true, 1));
+        Assert.Same(tiles[4], GallerySelectionNavigation.FindNeighbor(rows, tiles[3], true, 1));
+        Assert.Same(tiles[3], GallerySelectionNavigation.FindNeighbor(rows, tiles[6], true, -1));
+        Assert.Same(tiles[8], GallerySelectionNavigation.FindNeighbor(rows, tiles[6], true, 1));
+        Assert.Same(tiles[5], GallerySelectionNavigation.FindNeighbor(rows, tiles[8], true, -1));
+        Assert.Same(tiles[4], GallerySelectionNavigation.FindNeighbor(rows, tiles[3], false, 1));
+        Assert.Same(tiles[3], GallerySelectionNavigation.FindNeighbor(rows, tiles[4], false, -1));
+        var selection = new GallerySelection(); selection.SetVisible(tiles.Select(tile => tile.Id));
+        selection.Select(tiles[2].Id);
+        selection.Select(GallerySelectionNavigation.FindNeighbor(rows, tiles[2], true, 1)!.Id, shift: true);
+        Assert.Equal(tiles[2..4].Select(tile => tile.Id), selection.SelectedIds);
+    }
 }

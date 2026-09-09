@@ -10,6 +10,28 @@ namespace MyCapture.Core.Tests;
 public sealed class CaptureQueueBatchRemovalTests
 {
     [Fact]
+    public async Task AdmissionWait_RechecksNewLeaseAndBusyState_BeforeRemovingAnyRecord()
+    {
+        using var workspace = new TempWorkspace();
+        var queue = new CaptureQueue(workspace.Paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+        var first = new CaptureRecord { Id = Guid.NewGuid() };
+        var second = new CaptureRecord { Id = Guid.NewGuid() };
+        queue.Add(first); queue.Add(second);
+        var reservations = new List<CaptureWriteReservation>();
+        for (int i = 0; i < 8; i++) reservations.Add(await queue.ReservePublicationAsync());
+        bool busy = false;
+        Task<CaptureBatchRemovalResult> pending = queue.RemoveManyAsync([first.Id, second.Id], _ => !busy);
+        Assert.False(pending.IsCompleted);
+        using IDisposable lease = queue.AcquireEvictionLease(first.Id);
+        busy = true;
+        foreach (CaptureWriteReservation reservation in reservations) reservation.Dispose();
+        CaptureBatchRemovalResult result = await pending;
+        Assert.Equal(0, result.RemovedCount);
+        Assert.Equal(2, queue.Count);
+        Assert.False(File.Exists(workspace.Paths.IndexFile));
+    }
+
+    [Fact]
     public async Task Batch_RemovesPinsAndVideos_OneResetOneWrite_AndRetainsLeasedOrBusy()
     {
         using var workspace = new TempWorkspace();

@@ -2961,5 +2961,3 @@ Actual reduction {2}% · {3}</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>Could not save the deletion. Check the library and try again.</value></data>
   <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>{0} removed items still have files awaiting cleanup. No disk space recovery is confirmed for those items.</value></data>
 </root>
-
-

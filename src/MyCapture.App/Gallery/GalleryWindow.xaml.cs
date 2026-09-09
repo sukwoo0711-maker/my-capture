@@ -404,6 +404,7 @@ internal sealed partial class GalleryWindow : Window
             // Release WPF capture before OLE takes ownership. Leases span the complete OLE loop.
             _dragArmed = false;
             if (Mouse.Captured == this) Mouse.Capture(null);
+            prepared.MarkPublished();
             DragDrop.DoDragDrop(this, GalleryDragExportService.CreateFileDropData(prepared.Paths), DragDropEffects.Copy);
         }
         catch (OperationCanceledException) { }
@@ -458,6 +459,7 @@ internal sealed partial class GalleryWindow : Window
 
     private async void OnTileKeyDown(object sender, KeyEventArgs e)
     {
+        if (IsInsideButton(e.OriginalSource)) return;
         GalleryItemViewModel? tile = ResolveTileFromTree(e.OriginalSource) ?? _viewModel.SingleSelectedTile;
         if (tile is null)
         {
@@ -475,12 +477,10 @@ internal sealed partial class GalleryWindow : Window
             case Key.Right:
             case Key.Up:
             case Key.Down:
-                GalleryItemViewModel[] visible = _viewModel.Groups.SelectMany(g => g.Items).ToArray();
-                int step = e.Key switch { Key.Left => -1, Key.Right => 1, Key.Up => -_viewModel.ColumnCount, _ => _viewModel.ColumnCount };
-                int index = Array.IndexOf(visible, tile);
-                if (index >= 0 && visible.Length > 0)
+                GalleryItemViewModel? next = GallerySelectionNavigation.FindNeighbor(_viewModel.Rows, tile,
+                    e.Key is Key.Up or Key.Down, e.Key is Key.Left or Key.Up ? -1 : 1);
+                if (next is not null)
                 {
-                    GalleryItemViewModel next = visible[Math.Clamp(index + step, 0, visible.Length - 1)];
                     _viewModel.Select(next.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
                     GalleryTileRow? row = _viewModel.Rows.OfType<GalleryTileRow>().FirstOrDefault(r => r.Tiles.Contains(next));
                     if (row is not null)

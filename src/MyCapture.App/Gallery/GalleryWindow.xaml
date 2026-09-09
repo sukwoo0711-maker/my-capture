@@ -337,7 +337,7 @@
         <DataTemplate x:Key="Gallery.TileRowTemplate" DataType="{x:Type gallery:GalleryTileRow}">
             <ListBox Style="{StaticResource Gallery.TileRowList}"
                      ItemsSource="{Binding Tiles}"
-                     KeyDown="OnTileKeyDown"
+                     PreviewKeyDown="OnTileKeyDown"
                      PreviewMouseLeftButtonDown="OnTileMouseLeftButtonDown"
                      MouseDoubleClick="OnTileDoubleClick" />
         </DataTemplate>
@@ -587,4 +587,3 @@
         </Grid>
     </Grid>
 </Window>
-
