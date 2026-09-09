@@ -93,7 +93,7 @@ internal static class UxReviewSelfTest
         int failures = 0;
         try
         {
-            for (int index = 0; index < 6; index++)
+            for (int index = 0; index < 80; index++)
             {
                 var record = new CaptureRecord
                 {
@@ -123,6 +123,7 @@ internal static class UxReviewSelfTest
                 _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance)));
             var region = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
             windows.Add(("annotation", new AnnotationEditorWindow(new FrozenFrame(sample, region, null, 0), region, sample)));
+            windows.Add(("image-export", new ImageReductionExportDialog(sample, Path.Combine(paths.QuickSaveRoot, "review.png"))));
             RecordingResult recording = CreateFixtureVideo(Path.Combine(paths.DataRoot, "synthetic.mp4"), sample);
             var document = VideoEditDocument.CreateFor(recording.Width, recording.Height, recording.DurationMs);
             document.TextOverlays.Add(new TimedTextOverlay { Text = "텍스트 표시 구간 · 드래그로 조절", StartMs = 300, EndMs = 2200 });
@@ -175,6 +176,24 @@ internal static class UxReviewSelfTest
                     window.ShowActivated = false;
                     window.Show();
                     Pump(TimeSpan.FromMilliseconds(name == "video" ? 1800 : 180));
+                    if (window is GalleryWindow)
+                    {
+                        ListBox rows = Descendants(window).OfType<ListBox>().Single(list => list.Name == "RowsList");
+                        ScrollViewer scroll = Descendants(rows).OfType<ScrollViewer>().First();
+                        ListBox inner = Descendants(rows).OfType<ListBox>().First(list => !ReferenceEquals(list, rows));
+                        bool nestedScrollRemoved = !Descendants(inner).OfType<ScrollViewer>().Any();
+                        bool virtualized = rows.ItemContainerGenerator.ContainerFromIndex(rows.Items.Count - 1) is null;
+                        double before = scroll.VerticalOffset;
+                        inner.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120)
+                        { RoutedEvent = Mouse.MouseWheelEvent });
+                        Pump(TimeSpan.FromMilliseconds(180));
+                        double delta = scroll.VerticalOffset - before;
+                        bool wheelMoved = SystemParameters.WheelScrollLines == 0 || delta > 0;
+                        bool pixels = VirtualizingPanel.GetScrollUnit(rows) == ScrollUnit.Pixel;
+                        report.AppendLine($"Gallery wheel from tile: delta={delta:0.##} DIP; moved={wheelMoved}; no nested viewer={nestedScrollRemoved}; pixel scrolling={pixels}; offscreen rows virtualized={virtualized}");
+                        if (!wheelMoved || !nestedScrollRemoved || !pixels || !virtualized) failures++;
+                        scroll.ScrollToTop();
+                    }
                     if (window is PinWindow floating)
                     {
                         IntPtr handle = new WindowInteropHelper(floating).Handle;
@@ -206,8 +225,8 @@ internal static class UxReviewSelfTest
                     double normalHeight = window.Height;
                     foreach (bool compact in new[] { false, true })
                     {
-                        window.Width = compact ? Math.Max(window.MinWidth, name == "pin-code" ? normalWidth : 780) : normalWidth;
-                        window.Height = compact ? Math.Max(window.MinHeight, name == "pin-code" ? normalHeight : 560) : normalHeight;
+                        window.Width = compact ? Math.Max(window.MinWidth, name is "pin-code" or "image-export" ? normalWidth : 780) : normalWidth;
+                        window.Height = compact ? Math.Max(window.MinHeight, name is "pin-code" or "image-export" ? normalHeight : 560) : normalHeight;
                         window.UpdateLayout();
                         Pump(TimeSpan.FromMilliseconds(100));
                         string label = name + (compact ? "-compact" : "-normal");

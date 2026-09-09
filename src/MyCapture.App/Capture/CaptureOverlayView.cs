@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 
 namespace MyCapture.App.Capture;
 
@@ -45,6 +46,50 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private int _magnifierCropY = -1;
     private string _sampleLabel = "#000000";
     private bool _ended;
+    private readonly CapturePrecisionPointer _precisionPointer = new();
+    private readonly byte[] _samplePixel = new byte[4];
+    private PointD? _lastSample;
+    private bool _pointerInitialized;
+    internal Func<PointD> ReadCursor { get; set; } = CursorLocator.GetPosition;
+    internal Func<PointD, bool> PlaceCursor { get; set; } = CursorLocator.TrySetPosition;
+
+    internal void InitializePointer()
+    {
+        if (_ended) return;
+        _precisionPointer.Reset();
+        UpdatePointer();
+    }
+
+    internal void EndPointerInteraction()
+    {
+        _precisionPointer.Reset();
+        if (ReferenceEquals(Mouse.Captured, this)) Mouse.Capture(null);
+    }
+
+    private PointD UpdatePointer()
+    {
+        bool active = IsVisible && Window.GetWindow(this)?.IsActive == true;
+        return UpdatePointer(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift), active);
+    }
+
+    internal PointD UpdatePointer(bool precision, bool active)
+    {
+        if (_ended) return ClampEdgePoint(_cursorPixel);
+        PointD actual = ReadCursor();
+        PointD target = _precisionPointer.Update(actual,
+            active && precision, _screenBounds);
+        if (target != actual && (!active || !PlaceCursor(target)))
+        {
+            _precisionPointer.Reset();
+            target = actual;
+        }
+        PointD local = target.Offset(-_screenBounds.Left, -_screenBounds.Top);
+        _cursorPixel = ClampSamplePoint(local);
+        _pointerInitialized = true;
+        if (_showMagnifier) UpdateMagnifier();
+        InvalidateVisual();
+        return ClampEdgePoint(local);
+    }
 
     internal CaptureOverlayView(FrozenFrame frame, bool showMagnifier = true)
         : this(frame.ScreenBounds, frame, showMagnifier)
@@ -127,7 +172,42 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
 
         DrawInstructions(drawingContext);
+        DrawPointerFeedback(drawingContext);
         DrawMagnifier(drawingContext);
+    }
+
+    private void DrawPointerFeedback(DrawingContext dc)
+    {
+        if (!_pointerInitialized || _ended) return;
+        void Target(PointD pixel, bool anchor)
+        {
+            Point p = ToDipPoint(pixel);
+            var outer = new Pen(Brushes.Black, 4);
+            var inner = new Pen(anchor ? _selectionBrush : Brushes.White, 1.5);
+            foreach (Pen pen in new[] { outer, inner })
+            {
+                dc.DrawLine(pen, new Point(p.X - 11, p.Y), new Point(p.X + 11, p.Y));
+                dc.DrawLine(pen, new Point(p.X, p.Y - 11), new Point(p.X, p.Y + 11));
+                if (anchor) dc.DrawEllipse(null, pen, p, 5, 5);
+            }
+            if (anchor)
+            {
+                FormattedText text = CreateText(UiText.Get("CaptureSelectionStart"), _uiTypeface, 11, _primaryTextBrush);
+                double x = Math.Clamp(p.X + 15, 4, Math.Max(4, ActualWidth - text.Width - 12));
+                double y = Math.Clamp(p.Y + 12, 4, Math.Max(4, ActualHeight - text.Height - 8));
+                dc.DrawRoundedRectangle(_chromeBrush, null, new Rect(x - 4, y - 2, text.Width + 8, text.Height + 4), 4, 4);
+                dc.DrawText(text, new Point(x, y));
+            }
+        }
+        Target(_cursorPixel, false);
+        if (_interaction == InteractionMode.Create) Target(_dragAnchor, true);
+        if (_precisionPointer.IsPrecision)
+        {
+            FormattedText text = CreateText(UiText.Get("CapturePrecisionActive"), _uiTypeface, 12, _primaryTextBrush);
+            dc.DrawRoundedRectangle(_chromeBrush, new Pen(_selectionBrush, 1),
+                new Rect(16, 64, text.Width + 20, text.Height + 12), 6, 6);
+            dc.DrawText(text, new Point(26, 70));
+        }
     }
 
     private void DrawDimmer(DrawingContext dc, RectD pixelRect)
@@ -254,12 +334,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        PointD rawPixel = ToPixelPoint(e.GetPosition(this));
-        _cursorPixel = ClampSamplePoint(rawPixel);
-        if (_showMagnifier)
-        {
-            UpdateMagnifier();
-        }
+        if (_ended) return;
+        PointD rawPixel = UpdatePointer();
 
         if (_interaction == InteractionMode.Create)
         {
@@ -279,7 +355,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
 
         Focus();
-        PointD rawPoint = ToPixelPoint(e.GetPosition(this));
+        PointD rawPoint = UpdatePointer();
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
         _dragAnchor = point;
@@ -298,7 +374,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             return;
         }
 
-        PointD rawPoint = ToPixelPoint(e.GetPosition(this));
+        PointD rawPoint = UpdatePointer();
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
         _selection = ResolveCompletedDrag(_dragAnchor, point, FrameBounds);
@@ -330,6 +406,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 RequestCancel();
                 e.Handled = true;
                 return;
+            case Key.LeftShift:
+            case Key.RightShift:
+                UpdatePointer();
+                return;
             case Key.Enter:
                 ConfirmSelection();
                 e.Handled = true;
@@ -346,6 +426,24 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 NudgeSelection(e.Key, Keyboard.Modifiers);
                 e.Handled = true;
                 return;
+        }
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+        if (!_ended && e.Key is Key.LeftShift or Key.RightShift) UpdatePointer();
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        _precisionPointer.Reset();
+        if (_interaction == InteractionMode.Create && !_ended)
+        {
+            _interaction = InteractionMode.None;
+            _selection = null;
+            InvalidateVisual();
         }
     }
 
@@ -411,6 +509,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
 
         _ended = true;
+        EndPointerInteraction();
         SelectionConfirmed?.Invoke(this, new RegionSelectionEventArgs(pixels));
     }
 
@@ -422,6 +521,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
 
         _ended = true;
+        EndPointerInteraction();
         CancelRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -432,6 +532,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _magnifierCrop = null;
         _magnifierCropX = -1;
         _magnifierCropY = -1;
+        _lastSample = null;
         InvalidateVisual();
     }
 
@@ -445,6 +546,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
         int centerX = Math.Clamp((int)Math.Floor(_cursorPixel.X), 0, _frame.PixelWidth - 1);
         int centerY = Math.Clamp((int)Math.Floor(_cursorPixel.Y), 0, _frame.PixelHeight - 1);
+        PointD sample = new(centerX, centerY);
+        if (_magnifierCrop is not null && _lastSample == sample) return;
+        _lastSample = sample;
         int half = MagnifierSourcePixels / 2;
         int x = Math.Clamp(centerX - half, 0, Math.Max(0, _frame.PixelWidth - MagnifierSourcePixels));
         int y = Math.Clamp(centerY - half, 0, Math.Max(0, _frame.PixelHeight - MagnifierSourcePixels));
@@ -460,7 +564,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _magnifierCropY = y;
         }
 
-        var pixel = new byte[4];
+        byte[] pixel = _samplePixel;
         _frame.Bitmap.CopyPixels(new Int32Rect(centerX, centerY, 1, 1), pixel, 4, 0);
         _sampleLabel = $"#{pixel[2]:X2}{pixel[1]:X2}{pixel[0]:X2}";
     }

@@ -58,6 +58,8 @@ internal sealed class CaptureCommitService
     /// </summary>
     internal Func<string, string?>? SaveAsPrompt { get; set; }
 
+    internal Func<BitmapSource, string, bool>? ReducedExportPrompt { get; set; }
+
     /// <summary>
     /// Returns whether the record is inside the staged finalisation window. Gallery callers use
     /// this to avoid reading, deleting, or re-editing an older generation while its replacement
@@ -131,7 +133,9 @@ internal sealed class CaptureCommitService
             case EditorCommitAction.SaveAs:
                 // Choose the destination before persisting so a cancel keeps the editor open
                 // with no side effects the user did not ask for.
-                bool exported = await ImageExportTransaction.RunAsync(async () =>
+                bool exported = result.ReduceExport
+                    ? ShowReducedExport(flattened)
+                    : await ImageExportTransaction.RunAsync(async () =>
                 {
                     string? chosen = ResolveSaveAsPath();
                     if (chosen is null)
@@ -212,6 +216,17 @@ internal sealed class CaptureCommitService
         }
 
         return copied;
+    }
+
+    private bool ShowReducedExport(BitmapSource flattened)
+    {
+        string directory = ResolveQuickSaveDirectory();
+        string stem = QuickSaveNaming.BuildStem(_settings().Export.FileNamePattern, DateTimeOffset.Now);
+        string suggested = QuickSaveNaming.ResolvePath(directory, stem, ".png");
+        return ReducedExportPrompt is not null
+            ? ReducedExportPrompt(flattened, suggested)
+            : ImageReductionExportDialog.Show(System.Windows.Application.Current?.Windows
+                .OfType<System.Windows.Window>().FirstOrDefault(window => window.IsActive), flattened, suggested);
     }
 
     private static BitmapSource Flatten(

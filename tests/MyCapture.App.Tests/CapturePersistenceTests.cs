@@ -604,6 +604,51 @@ public sealed class CaptureCommitServiceTests
         }
     });
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReducedExport_OnlySuccessfulExportCommitsLosslessQueueImage(bool accepted) => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            int copies = 0;
+            var (commit, queue, record, _, _) = Build(root, _ =>
+            {
+                copies++;
+                return Task.FromResult(true);
+            });
+            long revision = record.ContentRevision;
+            AnnotationEditingResult original = MakeResult(EditorCommitAction.SaveAs);
+            var reduced = new AnnotationEditingResult(original.Frame, original.BitmapRegion,
+                original.SelectedBitmap, original.Document, original.Action,
+                original.ImageAssetBitmaps, original.ImageAssetSources, reduceExport: true);
+            commit.SaveAsPrompt = _ => throw new InvalidOperationException("Default Save As must not run.");
+            int prompts = 0;
+            commit.ReducedExportPrompt = (bitmap, suggested) =>
+            {
+                prompts++;
+                Assert.True(bitmap.IsFrozen);
+                Assert.Equal(48, bitmap.PixelWidth);
+                Assert.Equal(".png", Path.GetExtension(suggested));
+                return accepted;
+            };
+
+            bool close = commit.CommitAsync(record, reduced).GetAwaiter().GetResult();
+
+            Assert.Equal(accepted, close);
+            Assert.Equal(1, prompts);
+            Assert.Equal(accepted ? 1 : 0, copies);
+            Assert.Equal(accepted ? revision + 1 : revision, record.ContentRevision);
+            using var stream = File.OpenRead(queue.GetFilePath(record, CaptureFileNames.Rendered));
+            BitmapDecoder decoded = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+            Assert.IsType<PngBitmapDecoder>(decoded);
+            Assert.Equal(48, decoded.Frames[0].PixelWidth);
+            Assert.Equal(32, decoded.Frames[0].PixelHeight);
+        }
+        finally { DeleteRoot(root); }
+    });
+
     [Fact]
     public void SaveAs_AcceptedSavesToChosenPathAndCloses() => RunSta(() =>
     {

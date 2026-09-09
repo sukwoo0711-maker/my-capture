@@ -192,6 +192,10 @@ internal static partial class NativeMethods
     internal static partial bool GetCursorPos(out POINT lpPoint);
 
     [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool SetCursorPos(int x, int y);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
     internal static partial IntPtr CopyIcon(IntPtr hIcon);
 
     [StructLayout(LayoutKind.Sequential)]

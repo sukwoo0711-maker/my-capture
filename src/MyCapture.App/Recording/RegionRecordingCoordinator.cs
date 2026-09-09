@@ -1,5 +1,7 @@
 using System.IO;
 using System.Windows;
+using System.Diagnostics;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
@@ -41,6 +43,19 @@ internal sealed class RegionRecordingCoordinator
     // recording from 0. This flag closes that race deterministically.
     private bool _finishing;
     private bool _completionInProgress;
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
+    private SelectionPreparation? _selectionPreparation;
+    internal Func<FrozenFrame>? AcquireSelectionFrame { get; set; }
+    internal Func<RectD> SelectionDesktopBounds { get; set; } = MonitorEnumerator.GetVirtualDesktopBounds;
+    internal Func<Window, bool> ExcludeSelectionWindow { get; set; } = CaptureWindowExclusion.TryApply;
+    internal Task LastSelectionPreparation { get; private set; } = Task.CompletedTask;
+    internal event Action<Exception>? SelectionPreparationFailed;
+
+    private sealed class SelectionPreparation
+    {
+        internal volatile bool Cancelled;
+        internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();
+    }
 
     internal RegionRecordingCoordinator(
         ScreenCaptureEngine captureEngine,
@@ -81,7 +96,8 @@ internal sealed class RegionRecordingCoordinator
     internal bool RequiresCaptureExclusion => _controls?.IsRecording == true;
 
     internal bool IsActive =>
-        _selectionOverlay is not null
+        _selectionPreparation is not null
+        || _selectionOverlay is not null
         || _controls is not null
         || _editor is not null
         || _writeSession is not null
@@ -93,7 +109,7 @@ internal sealed class RegionRecordingCoordinator
     /// </summary>
     internal void Toggle()
     {
-        Application.Current.Dispatcher.VerifyAccess();
+        _dispatcher.VerifyAccess();
 
         // A stop→finalise→editor transition is in flight: ignore re-triggers so a second
         // hotkey press can never start a brand-new recording from 0 mid-transition.
@@ -137,22 +153,87 @@ internal sealed class RegionRecordingCoordinator
 
     private void StartRegionSelection()
     {
-        FrozenFrame frame = _captureEngine.CaptureVirtualDesktop(includeCursor: false);
+        var preparation = new SelectionPreparation();
+        _selectionPreparation = preparation;
+        CaptureOverlayWindow? overlay = null;
+        try
+        {
+            overlay = new CaptureOverlayWindow(SelectionDesktopBounds(), abortOnFocusLoss: false, showMagnifier: true);
+            _selectionOverlay = overlay;
+            overlay.GeometrySelectionCompleted = OpenControls;
+            overlay.SelectionCancelled += OnSelectionCancelled;
+            overlay.Closed += OnSelectionClosed;
+            overlay.ContentRendered += (_, _) => _log.LogInformation(
+                "Recording selector first rendered after {Elapsed:0.0}ms", preparation.Elapsed.Elapsed.TotalMilliseconds);
+            if (ExcludeSelectionWindow(overlay))
+            {
+                overlay.Show();
+                _ = overlay.Activate();
+            }
+            LastSelectionPreparation = PrepareSelectionAsync(preparation, overlay);
+        }
+        catch
+        {
+            _selectionPreparation = null;
+            overlay?.Close();
+            throw;
+        }
+    }
 
-        // Reuse the exact capture region selector. Recording selects an area the same
-        // way capture does, so muscle memory transfers.
-        var overlay = new CaptureOverlayWindow(frame, abortOnFocusLoss: false, showMagnifier: true);
-        _selectionOverlay = overlay;
-        overlay.SelectionCompleted += OnRegionChosen;
-        overlay.SelectionCancelled += OnSelectionCancelled;
-        overlay.Closed += OnSelectionClosed;
+    private async Task PrepareSelectionAsync(SelectionPreparation preparation, CaptureOverlayWindow overlay)
+    {
+        FrozenFrame? frame = null;
+        Exception? failure = null;
+        try
+        {
+            frame = await Task.Run(() =>
+            {
+                if (preparation.Cancelled) throw new OperationCanceledException();
+                FrozenFrame acquired = AcquireSelectionFrame?.Invoke() ?? _captureEngine.CaptureVirtualDesktop(false);
+                if (!acquired.Bitmap.IsFrozen) throw new InvalidOperationException("Selection frame must be frozen.");
+                return acquired;
+            }).ConfigureAwait(false);
+        }
+        catch (Exception ex) { failure = ex; }
+        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return;
+        try
+        {
+            await _dispatcher.InvokeAsync(() =>
+            {
+                if (!ReferenceEquals(_selectionPreparation, preparation)) return;
+                try
+                {
+                    if (preparation.Cancelled || !ReferenceEquals(_selectionOverlay, overlay)) return;
+                    if (failure is not null) throw failure;
+                    overlay.AttachFrame(frame!);
+                    if (!overlay.IsVisible) { overlay.Show(); _ = overlay.Activate(); }
+                    _log.LogInformation("Recording selection frame attached after {Elapsed:0.0}ms",
+                        preparation.Elapsed.Elapsed.TotalMilliseconds);
+                }
+                catch (Exception ex)
+                {
+                    overlay.Close();
+                    _log.LogError(ex, "Recording selection preparation failed");
+                    if (SelectionPreparationFailed is { } reportFailure) reportFailure(ex);
+                    else MessageBox.Show(UiText.Get("Text_188B0AF9BE23") + ex.Message,
+                        UiText.Get("Text_25E15E06C2EA"), MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                finally
+                {
+                    _selectionPreparation = null;
+                    EndSessionIfIdle();
+                }
+            }).Task.ConfigureAwait(false);
+        }
+        catch (TaskCanceledException) when (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) { }
+        catch (Exception ex) { _log.LogError(ex, "Recording selection dispatcher transition failed"); }
+    }
 
-        _log.LogInformation(
-            "Recording region selector opened across virtual desktop ({Width}x{Height})",
-            frame.PixelWidth,
-            frame.PixelHeight);
-        overlay.Show();
-        _ = overlay.Activate();
+    internal void CancelRegionSelection()
+    {
+        _dispatcher.VerifyAccess();
+        if (_selectionPreparation is { } preparation) preparation.Cancelled = true;
+        _selectionOverlay?.Close();
     }
 
     private void OnSelectionCancelled(object? sender, EventArgs e) =>
@@ -162,7 +243,8 @@ internal sealed class RegionRecordingCoordinator
     {
         if (sender is CaptureOverlayWindow overlay)
         {
-            overlay.SelectionCompleted -= OnRegionChosen;
+            if (_selectionPreparation is { } preparation) preparation.Cancelled = true;
+            overlay.GeometrySelectionCompleted = null;
             overlay.SelectionCancelled -= OnSelectionCancelled;
             overlay.Closed -= OnSelectionClosed;
             if (ReferenceEquals(_selectionOverlay, overlay))
@@ -172,19 +254,6 @@ internal sealed class RegionRecordingCoordinator
         }
 
         EndSessionIfIdle();
-    }
-
-    private void OnRegionChosen(object? sender, CaptureSelectionCompletedEventArgs e)
-    {
-        // The overlay reports the region in bitmap space of the virtual-desktop frame; convert
-        // back to virtual-desktop screen pixels the recorder captures from.
-        RectD screenRegion = new(
-            e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
-            e.Frame.ScreenBounds.Top + e.BitmapRegion.Top,
-            e.BitmapRegion.Width,
-            e.BitmapRegion.Height);
-
-        OpenControls(screenRegion);
     }
 
     private void OpenControls(RectD screenRegion)

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Threading;
 using MyCapture.Core.Queue;
 
 namespace MyCapture.App.Gallery;
@@ -30,6 +31,17 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     private readonly Dictionary<Guid, GalleryItemViewModel> _tileCache = [];
     private readonly LinkedList<Guid> _thumbnailRecency = new();
     private bool _thumbnailLoadingEnabled = true;
+    private GalleryThumbnailLoader? _thumbnailLoader;
+    private Dispatcher? _thumbnailDispatcher;
+
+    internal void EnableAsyncThumbnailLoading(Dispatcher dispatcher, GalleryThumbnailLoader? loader = null)
+    {
+        dispatcher.VerifyAccess();
+        _thumbnailDispatcher = dispatcher;
+        _thumbnailLoader = loader ?? new GalleryThumbnailLoader();
+        foreach (GalleryItemViewModel tile in _tileCache.Values)
+            tile.ConfigureAsyncLoading(_thumbnailLoader, dispatcher);
+    }
     internal const long ThumbnailCacheBudgetBytes = 16L * 1024 * 1024;
     internal long CachedThumbnailBytes => _tileCache.Values.Sum(tile => tile.CachedThumbnailBytes);
 
@@ -45,7 +57,9 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     {
         _thumbnailRecency.Remove(tile.Id);
         _thumbnailRecency.AddLast(tile.Id);
-        long retained = CachedThumbnailBytes;
+        // Only the bounded decoded LRU participates in this hot path, not every queue tile.
+        long retained = _thumbnailRecency.Sum(id => _tileCache.TryGetValue(id, out var cached)
+            ? cached.CachedThumbnailBytes : 0);
         while (_thumbnailRecency.First is { } oldest
             && (_thumbnailRecency.Count > 64 || retained > ThumbnailCacheBudgetBytes))
         {
@@ -167,6 +181,7 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
             // so restoring the search term does not re-decode it.
             if (_controller.Find(stale) is null)
             {
+                _tileCache[stale].SetThumbnailLoadingEnabled(false);
                 _tileCache.Remove(stale);
                 _thumbnailRecency.Remove(stale);
             }
@@ -205,6 +220,14 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     {
         IReadOnlyList<GalleryRow> built = GalleryRowBuilder.Build(_groups, _columnCount);
 
+        if (_rows.Count == built.Count && _rows.Zip(built).All(pair =>
+            (pair.First, pair.Second) switch
+            {
+                (GalleryHeaderRow a, GalleryHeaderRow b) => a.Heading == b.Heading,
+                (GalleryTileRow a, GalleryTileRow b) => a.Tiles.SequenceEqual(b.Tiles),
+                _ => false,
+            })) return;
+
         _rows.Clear();
         foreach (GalleryRow row in built)
         {
@@ -223,6 +246,8 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
         }
 
         var tile = new GalleryItemViewModel(record, _thumbnailPathResolver, _decodePixelWidth);
+        if (_thumbnailLoader is not null && _thumbnailDispatcher is not null)
+            tile.ConfigureAsyncLoading(_thumbnailLoader, _thumbnailDispatcher);
         tile.SetThumbnailLoadingEnabled(_thumbnailLoadingEnabled);
         tile.ThumbnailAccessed = OnThumbnailAccessed;
         _tileCache[record.Id] = tile;

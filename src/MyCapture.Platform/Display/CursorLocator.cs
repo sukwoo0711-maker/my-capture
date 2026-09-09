@@ -11,6 +11,10 @@ namespace MyCapture.Platform.Display;
 /// </remarks>
 public static class CursorLocator
 {
+    /// <summary>Moves the pointer in physical desktop pixels without changing system mouse settings.</summary>
+    public static bool TrySetPosition(PointD position) =>
+        NativeMethods.SetCursorPos(checked((int)Math.Round(position.X)), checked((int)Math.Round(position.Y)));
+
     public static PointD GetPosition()
     {
         if (NativeMethods.GetCursorPos(out NativeMethods.POINT pt))
