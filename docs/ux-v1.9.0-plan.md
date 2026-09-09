@@ -1,6 +1,6 @@
 # MyCapture 1.9.0 UX completion
 
-Status: in progress. Lead: Astra (`/root`). Baseline: clean `00827d3fd4ba1d89945b3342db045ba7e68f11ae`, after the verified 1.8.4 release. Earlier 1.8.1 work is already merged; do not republish it or overwrite later fixes.
+Status: locally verified; hosted verification and release in progress. Lead: Astra (`/root`). Baseline: clean `00827d3fd4ba1d89945b3342db045ba7e68f11ae`, after the verified 1.8.4 release. Earlier 1.8.1 work is already merged; do not republish it or overwrite later fixes.
 
 ## Outcome and boundaries
 
@@ -47,3 +47,4 @@ Only one native capture/window diagnostic runs on the workstation at a time. Syn
 - `/root/theme_review` is preparing an ignored first-native-capture diagnostic with separate cold/prewarmed processes. It may not run until the native lease and final integrated DLL are supplied. No GDI readback before the cold first capture, and no desktop pixels persisted to disk.
 - Latest verified public release remains v1.8.4. The currently running standard installation is file version 1.7.0.0 (observed process 8628); it has not been stopped, upgraded or used as a synthetic fixture.
 - Final product integration: library `0ecaea7`, video `a58f289`, and hosted updater acceptance workflow `37857bb` are included. Independent final library/video delta review accepted the real directory-sharing contract and viewport/icon fixes. Lead inspected final English compact/Korean default/GIF-result PNGs and native drag completion/hash evidence. All owned native fixtures are closed. The full Release suite and cold diagnostic are next, followed by exact-head CI, merge and release 1.9.0; no publication has occurred yet.
+- Local verification complete at clean `4bd3bd049b5e0982031ffa53db201b7d2ab3aa5c`: Release build has 0 warnings/errors; full tests have 1,062 passed, 1 explicit local file-symlink capability skip, 0 failed. Hosted execution of that skipped case remains mandatory. Independent fresh cold/prewarmed diagnostics completed six actual captures, color checks and lifecycle checks with exit 0. First rendered-overlay observations were 267.002/240.982 ms, with substantial repeat variance; this does not establish universal smoothness or physical hotkey latency. Detailed measurements and the initial fixture-only failure are retained in the validation record. All diagnostic processes exited; native lease is free. Next gates are exact-head CI/CodeQL, protected squash integration, clean-main package/update acceptance and public asset verification.
