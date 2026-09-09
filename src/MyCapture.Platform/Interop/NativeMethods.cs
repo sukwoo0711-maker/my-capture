@@ -265,6 +265,14 @@ internal static partial class NativeMethods
     internal const int NOTIFYICON_CALLBACK_MESSAGE = WM_APP + 42;
 
     internal const int WM_LBUTTONUP = 0x0202;
+    internal const int WM_LBUTTONDBLCLK = 0x0203;
+
+    [LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial IntPtr FindWindow(string? className, string windowName);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool AllowSetForegroundWindow(uint processId);
     internal const int WM_RBUTTONUP = 0x0205;
     internal const int WM_CONTEXTMENU = 0x007B;
     internal const int NIN_SELECT = WM_USER;

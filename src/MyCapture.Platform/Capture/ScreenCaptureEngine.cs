@@ -404,8 +404,15 @@ public sealed class ScreenCaptureEngine
         int h = Math.Max(1, (int)clamped.Height);
 
         var cropped = new CroppedBitmap(frame.Bitmap, new Int32Rect(x, y, w, h));
-        cropped.Freeze();
-        return cropped;
+        // CroppedBitmap retains its Source, including every unselected desktop pixel.
+        // Materialize only the selection so a small pin cannot keep an entire desktop alive.
+        int stride = checked((w * cropped.Format.BitsPerPixel + 7) / 8);
+        var pixels = new byte[checked(stride * h)];
+        cropped.CopyPixels(pixels, stride, 0);
+        BitmapSource detached = BitmapSource.Create(w, h, cropped.DpiX, cropped.DpiY,
+            cropped.Format, cropped.Palette, pixels, stride);
+        detached.Freeze();
+        return detached;
     }
 
     private void DrawCursor(IntPtr targetDc, int originX, int originY, int width, int height)

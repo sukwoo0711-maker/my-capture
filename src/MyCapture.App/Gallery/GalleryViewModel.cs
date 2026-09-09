@@ -17,8 +17,8 @@ namespace MyCapture.App.Gallery;
 /// behaviour is unit-testable without a window.
 /// </para>
 /// <para>
-/// Tiles are cached by id across a rebuild so a re-decode is only paid once per capture and a
-/// search that removes then restores an item keeps its already-decoded thumbnail.
+/// Tiles are cached by id across a rebuild. Decoded thumbnails have a separate memory and
+/// count budget, and are released when the gallery is hidden.
 /// </para>
 /// </remarks>
 public sealed class GalleryViewModel : INotifyPropertyChanged
@@ -28,6 +28,37 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     private readonly Func<DateTimeOffset> _clock;
     private readonly int _decodePixelWidth;
     private readonly Dictionary<Guid, GalleryItemViewModel> _tileCache = [];
+    private readonly LinkedList<Guid> _thumbnailRecency = new();
+    private bool _thumbnailLoadingEnabled = true;
+    internal const long ThumbnailCacheBudgetBytes = 16L * 1024 * 1024;
+    internal long CachedThumbnailBytes => _tileCache.Values.Sum(tile => tile.CachedThumbnailBytes);
+
+    internal void SetThumbnailLoadingEnabled(bool enabled)
+    {
+        _thumbnailLoadingEnabled = enabled;
+        if (!enabled) _thumbnailRecency.Clear();
+        foreach (GalleryItemViewModel tile in _tileCache.Values)
+            tile.SetThumbnailLoadingEnabled(enabled);
+    }
+
+    private void OnThumbnailAccessed(GalleryItemViewModel tile)
+    {
+        _thumbnailRecency.Remove(tile.Id);
+        _thumbnailRecency.AddLast(tile.Id);
+        long retained = CachedThumbnailBytes;
+        while (_thumbnailRecency.First is { } oldest
+            && (_thumbnailRecency.Count > 64 || retained > ThumbnailCacheBudgetBytes))
+        {
+            _thumbnailRecency.RemoveFirst();
+            if (_tileCache.TryGetValue(oldest.Value, out GalleryItemViewModel? stale))
+            {
+                retained -= stale.CachedThumbnailBytes;
+                // Realized images retain their own source until recycled. Avoid raising a
+                // binding notification here, which would immediately decode an evicted tile.
+                stale.ReleaseThumbnail();
+            }
+        }
+    }
 
     private string _searchQuery = string.Empty;
     private int _columnCount = GalleryRowBuilder.MinColumns;
@@ -137,6 +168,7 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
             if (_controller.Find(stale) is null)
             {
                 _tileCache.Remove(stale);
+                _thumbnailRecency.Remove(stale);
             }
         }
 
@@ -191,6 +223,8 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
         }
 
         var tile = new GalleryItemViewModel(record, _thumbnailPathResolver, _decodePixelWidth);
+        tile.SetThumbnailLoadingEnabled(_thumbnailLoadingEnabled);
+        tile.ThumbnailAccessed = OnThumbnailAccessed;
         _tileCache[record.Id] = tile;
         return tile;
     }

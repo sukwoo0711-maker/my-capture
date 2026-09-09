@@ -33,7 +33,7 @@ internal static class ShellSelfTest
             });
 
             using var window = new NativeMessageWindow();
-            report.AppendLine($"Message-only HWND: 0x{window.Handle.ToInt64():X}");
+            report.AppendLine($"Hidden top-level HWND: 0x{window.Handle.ToInt64():X}");
             report.AppendLine($"TaskbarCreated message: 0x{window.TaskbarCreatedMessage:X}");
 
             string assetsRoot = Path.Combine(AppContext.BaseDirectory, "Assets");

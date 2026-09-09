@@ -491,16 +491,25 @@ function Assert-StagedApplication {
 }
 
 function Stop-InstalledApplication {
-    param([string]$ExecutablePath)
+    param([string]$ExecutablePath, $Processes = $null)
     $target = [IO.Path]::GetFullPath($ExecutablePath)
     $matches = New-Object System.Collections.Generic.List[Diagnostics.Process]
-    foreach ($process in [Diagnostics.Process]::GetProcessesByName('MyCapture')) {
+    $otherCopyRunning = $false
+    if ($null -eq $Processes) { $Processes = [Diagnostics.Process]::GetProcessesByName('MyCapture') }
+    foreach ($process in $Processes) {
         try {
             $candidate = [IO.Path]::GetFullPath($process.MainModule.FileName)
             if ([string]::Equals($candidate, $target, [StringComparison]::OrdinalIgnoreCase)) { $matches.Add($process) }
-            else { $process.Dispose() }
+            else { $otherCopyRunning = $true; $process.Dispose() }
         }
         catch { $process.Dispose() }
+    }
+    # Installed and portable builds share the resident-instance gate. Leaving another
+    # copy running would make this installation's shortcut activate the old build.
+    # Do not terminate an unrelated portable session (it may contain unsaved edits).
+    if ($otherCopyRunning) {
+        foreach ($match in $matches) { $match.Dispose() }
+        Throw-InstallerError $ExitProcessStop 'Another copy of MyCapture (for example the portable version) is running. Exit it from its tray menu, then run setup again. No installed files were replaced.'
     }
     if ($script:UpdateSession -and $matches.Count -gt 0) {
         foreach ($match in $matches) { $match.Dispose() }
@@ -765,6 +774,13 @@ try {
     $summary += " Log: $($script:LogFile)"
     Write-InstallLog 'INFO' $summary
     Show-ResultMessage $true $summary
+    if (-not $Quiet -and -not $VerifyOnly -and -not $NoShellIntegration -and -not $script:UpdateSession) {
+        try {
+            Start-Process -FilePath (Join-Path $script:InstallRootFull 'MyCapture.exe') -WorkingDirectory $script:InstallRootFull -WindowStyle Hidden | Out-Null
+            Write-InstallLog 'INFO' 'Launched MyCapture after successful interactive installation.'
+        }
+        catch { Add-InstallWarning "Installation succeeded, but MyCapture could not start. Open MyCapture from the Start Menu. $($_.Exception.Message)" }
+    }
 }
 catch {
     $exitCode = Get-InstallerExitCode $_

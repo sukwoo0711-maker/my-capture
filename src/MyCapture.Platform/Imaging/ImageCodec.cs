@@ -246,7 +246,8 @@ public static class ImageCodec
     /// <remarks>
     /// Used by the gallery. Decoding 300 full-resolution 4K PNGs to draw 320px tiles
     /// would consume gigabytes; <c>DecodePixelWidth</c> lets the decoder do the
-    /// downscale and never materialise the full frame.
+    /// downscale and never materialise the full frame. The requested size bounds the long
+    /// edge and never enlarges an already-small image.
     /// </remarks>
     public static BitmapSource? TryLoadScaled(string path, int decodePixelWidth)
     {
@@ -257,11 +258,24 @@ public static class ImageCodec
 
         try
         {
+            using var stream = new FileStream(Path.GetFullPath(path), FileMode.Open, FileAccess.Read, FileShare.Read);
+            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+            BitmapFrame frame = decoder.Frames[0];
+            int longEdge = Math.Max(1, decodePixelWidth);
+            int width = frame.PixelWidth;
+            int height = frame.PixelHeight;
+            stream.Position = 0;
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.DecodePixelWidth = Math.Max(1, decodePixelWidth);
-            bitmap.UriSource = new Uri(Path.GetFullPath(path), UriKind.Absolute);
+            // The caller supplies a long-edge bound. Width-only decoding expands narrow
+            // scrolling thumbnails into huge images and also upscales small sources.
+            if (Math.Max(width, height) > longEdge)
+            {
+                if (width >= height) bitmap.DecodePixelWidth = longEdge;
+                else bitmap.DecodePixelHeight = longEdge;
+            }
+            bitmap.StreamSource = stream;
             bitmap.EndInit();
             bitmap.Freeze();
             return bitmap;

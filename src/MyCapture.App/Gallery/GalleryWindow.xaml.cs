@@ -100,6 +100,8 @@ internal sealed partial class GalleryWindow : Window
 
         InitializeComponent();
         DataContext = _viewModel;
+        _viewModel.SetThumbnailLoadingEnabled(false);
+        IsVisibleChanged += (_, _) => _viewModel.SetThumbnailLoadingEnabled(IsVisible);
         _inlinePlaybackTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
             Interval = TimeSpan.FromMilliseconds(200),

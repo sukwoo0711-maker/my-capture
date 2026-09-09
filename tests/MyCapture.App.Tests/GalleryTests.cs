@@ -28,6 +28,43 @@ namespace MyCapture.App.Tests;
 /// </remarks>
 public sealed class GalleryTests : KoreanCaptionTest
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ThumbnailCache_IsBounded_AndHideReleasesSourcesUntilReopened(bool checkBrokenOnly) => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            CaptureQueue queue = NewQueue(paths, new QueueSettings());
+            for (int i = 0; i < 70; i++) AddSyntheticRecord(queue, DateTimeOffset.Now.AddMinutes(-i));
+            string imagePath = Path.Combine(root, "cache-fixture.png");
+            MyCapture.Platform.Imaging.ImageCodec.SavePng(Solid(512, 512), imagePath);
+            var vm = new GalleryViewModel(NewController(queue), _ => imagePath, 512);
+            GalleryItemViewModel[] tiles = vm.Groups.SelectMany(g => g.Items).ToArray();
+            foreach (GalleryItemViewModel tile in tiles)
+            {
+                if (checkBrokenOnly) Assert.False(tile.IsBroken);
+                else Assert.NotNull(tile.Thumbnail);
+                Assert.InRange(vm.CachedThumbnailBytes, 1, GalleryViewModel.ThumbnailCacheBudgetBytes);
+            }
+            Assert.Equal(0, tiles[0].CachedThumbnailBytes);
+            var image = new Image();
+            image.SetBinding(Image.SourceProperty, new System.Windows.Data.Binding(nameof(GalleryItemViewModel.Thumbnail))
+            { Source = tiles[^1] });
+            Assert.NotNull(image.Source);
+            vm.SetThumbnailLoadingEnabled(false);
+            Assert.Equal(0, vm.CachedThumbnailBytes);
+            Assert.Null(image.Source);
+            Assert.All(tiles, tile => Assert.Null(tile.Thumbnail));
+            vm.SetThumbnailLoadingEnabled(true);
+            Assert.NotNull(image.Source);
+            Assert.NotNull(tiles[0].Thumbnail);
+        }
+        finally { DeleteRoot(root); }
+    });
+
     private static void RunSta(Action action)
     {
         Exception? failure = null;

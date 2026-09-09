@@ -55,6 +55,15 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, �
 
 1.8.2의 변경 사항과 검증 절차는 [릴리스 노트](docs/releases/1.8.2-release-notes.md)와 [검증 문서](docs/releases/1.8.2-validation.md)에서 확인할 수 있습니다. 이전 [1.8.1](docs/releases/1.8.1-release-notes.md), [1.8.0](docs/releases/1.8.0-release-notes.md), [1.7.1](docs/releases/1.7.1-release-notes.md) 기록도 보존합니다.
 
+### 1.8.3 실행 및 배포 형식 안내
+
+- 일반 실행과 바로가기 더블클릭은 라이브러리 창을 엽니다. 로그인 자동 실행은 `--background`로 트레이에만 상주합니다.
+- 설치형과 포터블 ZIP의 앱·런타임 파일은 동일합니다. 설치형은 `%LOCALAPPDATA%\Programs\MyCapture`에 설치하고 시작 메뉴, 제거 프로그램, `install-manifest.json` 소유권 기록을 추가합니다.
+- 포터블은 ZIP 전체를 별도 폴더에 풀고 `MyCapture.exe`를 실행하세요. EXE만 옮기면 DLL과 Assets가 없어 실행할 수 없습니다. 두 형식의 기본 사용자 데이터는 `%APPDATA%\MyCapture`입니다.
+- 설치 전 다른 위치의 포터블/설치형을 트레이 메뉴에서 종료하세요. 두 복사본은 한 Windows 세션에서 동시에 상주하지 않습니다.
+- 포터블의 앱 내 업데이트는 일반 설치형으로 전환합니다. 포터블 유지 시 새 ZIP을 별도 폴더에 풀어 실행하세요. 기존 폴더와 사용자 파일은 자동 삭제하지 않습니다.
+- [1.8.3 수정 내역](docs/releases/1.8.3-release-notes.md)과 [검증 기록](docs/releases/1.8.3-validation.md)을 확인하세요.
+
 ## 소스에서 빌드
 
 배포본 실행과 달리 **소스 빌드에는 .NET 10 SDK가 필요**합니다. 이 저장소의 [`global.json`](global.json)은 검증한 SDK `10.0.400`을 기준으로 하고, 같은 .NET 10 계열의 더 최신 호환 feature band로 안전하게 roll-forward합니다. 런타임만 설치된 환경은 빌드할 수 없습니다.

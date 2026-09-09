@@ -81,4 +81,25 @@ public sealed class ImageCodecPathTests
         Assert.Null(ImageCodec.TryLoad("   "));
         Assert.Null(ImageCodec.TryLoadScaled("nope-missing.png", 100));
     });
+
+    [Theory]
+    [InlineData(16, 320, 320, 16, 320)]
+    [InlineData(40, 800, 320, 16, 320)]
+    [InlineData(800, 40, 320, 320, 16)]
+    [InlineData(8, 8, 320, 8, 8)]
+    public void ScaledLoad_BoundsLongEdgeWithoutUpscaling(int width, int height, int bound,
+        int expectedWidth, int expectedHeight) => RunSta(() =>
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mc-scaled-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string path = WriteTempPng(dir, "portrait.png", width, height);
+            BitmapSource loaded = Assert.IsAssignableFrom<BitmapSource>(ImageCodec.TryLoadScaled(path, bound));
+            Assert.Equal(expectedWidth, loaded.PixelWidth);
+            Assert.Equal(expectedHeight, loaded.PixelHeight);
+            Assert.True(loaded.IsFrozen);
+            File.Delete(path); // Decoder must not keep the source locked.
+        }
+        finally { Directory.Delete(dir, true); }
+    });
 }

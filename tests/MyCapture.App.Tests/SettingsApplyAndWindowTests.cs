@@ -171,7 +171,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
 
                 Assert.True(result.StartupApplied);
                 Assert.True(startup.IsEnabled());
-                Assert.Equal("\"C:\\Apps\\MyCapture.exe\"", fakeRun.GetValue(StartupRegistrationService.RunValueName));
+                Assert.Equal("\"C:\\Apps\\MyCapture.exe\" --background", fakeRun.GetValue(StartupRegistrationService.RunValueName));
             }
             finally
             {
@@ -361,7 +361,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
                 // Exact prior state restored: still enabled, Run key points at this exe.
                 Assert.True(startup.IsEnabled());
                 Assert.Equal(
-                    "\"C:\\Apps\\MyCapture.exe\"",
+                    "\"C:\\Apps\\MyCapture.exe\" --background",
                     fakeRun.GetValue(StartupRegistrationService.RunValueName));
             }
             finally

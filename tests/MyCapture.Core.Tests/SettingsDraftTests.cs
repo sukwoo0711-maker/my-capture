@@ -405,11 +405,11 @@ public sealed class StartupRegistrationServiceTests
         new(store, exe ?? Exe);
 
     [Fact]
-    public void ExpectedCommand_IsExactlyQuotedExecutablePath()
+    public void ExpectedCommand_QuotesExecutableAndRequestsBackgroundLaunch()
     {
         var store = new FakeRunKeyStore();
         StartupRegistrationService service = Create(store);
-        Assert.Equal("\"" + Exe + "\"", service.ExpectedCommand);
+        Assert.Equal("\"" + Exe + "\" --background", service.ExpectedCommand);
     }
 
     [Fact]
@@ -417,7 +417,18 @@ public sealed class StartupRegistrationServiceTests
     {
         var store = new FakeRunKeyStore();
         Create(store).Enable();
-        Assert.Equal("\"" + Exe + "\"", store.GetValue(StartupRegistrationService.RunValueName));
+        Assert.Equal("\"" + Exe + "\" --background", store.GetValue(StartupRegistrationService.RunValueName));
+    }
+
+    [Fact]
+    public void ReconcileOnStartup_MigratesLegacyForegroundCommand()
+    {
+        var store = new FakeRunKeyStore();
+        store.SetValue(StartupRegistrationService.RunValueName, "\"" + Exe + "\"");
+        StartupRegistrationService service = Create(store);
+        Assert.True(service.ReconcileOnStartup(true));
+        Assert.Equal(service.ExpectedCommand, store.GetValue(StartupRegistrationService.RunValueName));
+        Assert.False(service.ReconcileOnStartup(true));
     }
 
     [Fact]
@@ -484,7 +495,7 @@ public sealed class StartupRegistrationServiceTests
 
         Assert.True(rewritten);
         Assert.True(service.IsEnabled());
-        Assert.Equal("\"" + Exe + "\"", store.GetValue(StartupRegistrationService.RunValueName));
+        Assert.Equal("\"" + Exe + "\" --background", store.GetValue(StartupRegistrationService.RunValueName));
     }
 
     [Fact]
