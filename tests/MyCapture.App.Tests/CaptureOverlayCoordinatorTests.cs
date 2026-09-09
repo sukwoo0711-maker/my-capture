@@ -23,6 +23,7 @@ public sealed class CaptureOverlayCoordinatorTests
         int calls = 0;
         int closed = 0;
         int windows = 0;
+        System.Windows.Window? pendingOverlay = null;
         using var coordinator = Coordinator(includeCursor =>
         {
             Assert.NotEqual(ownerThread, Environment.CurrentManagedThreadId);
@@ -34,7 +35,7 @@ public sealed class CaptureOverlayCoordinatorTests
         });
         coordinator.OverlayClosed += (_, _) => { Assert.Equal(ownerThread, Environment.CurrentManagedThreadId); closed++; };
         coordinator.RequiresCaptureExclusion = () => true;
-        coordinator.ApplyCaptureExclusion = _ => { windows++; return true; };
+        coordinator.ApplyCaptureExclusion = window => { windows++; pendingOverlay = window; return true; };
         try
         {
             // Native WM_HOTKEY does not guarantee a WPF synchronization context.
@@ -43,6 +44,8 @@ public sealed class CaptureOverlayCoordinatorTests
             Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
             Assert.True(coordinator.IsActive);
             Assert.Equal(1, windows);
+            Assert.NotNull(pendingOverlay);
+            Assert.False(pendingOverlay.IsVisible); // No black placeholder while acquisition is pending.
             bool dispatched = false;
             _ = Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => dispatched = true));
             PumpUntil(() => dispatched);

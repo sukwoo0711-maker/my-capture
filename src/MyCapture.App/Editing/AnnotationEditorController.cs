@@ -730,6 +730,8 @@ internal enum ResizeHandle
 /// </remarks>
 internal sealed class AlreadyAddedCommand : IUndoableCommand
 {
+    public IEnumerable<string> ReferencedImageAssets =>
+        _item is ImageAnnotation image ? [image.AssetFileName] : [];
     private readonly AnnotationDocument _document;
     private readonly AnnotationItem _item;
     private int _index;

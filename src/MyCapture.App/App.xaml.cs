@@ -1337,6 +1337,13 @@ public partial class App : Application
 
     private bool TryRunSelfTest(string[] args)
     {
+        int capturePerformanceIndex = FindSwitch(args, CapturePerformanceSelfTest.CommandLineSwitch);
+        if (capturePerformanceIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(args, capturePerformanceIndex, "mycapture-capture-performance");
+            return RunSelfTest(outputDirectory, "capture-performance-report.txt", CapturePerformanceSelfTest.Run);
+        }
+
         int uxIndex = FindSwitch(args, UxReviewSelfTest.CommandLineSwitch);
         if (uxIndex >= 0)
         {

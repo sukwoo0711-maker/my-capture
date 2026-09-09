@@ -1,3 +1,6 @@
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+
 namespace MyCapture.App.Threading;
 
 /// <summary>
@@ -18,14 +21,36 @@ internal static class StaThreadTask
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
+            T result = default!;
+            Exception? failure = null;
             try
             {
-                completion.TrySetResult(action());
+                result = action();
+                if (result is BitmapSource bitmap && !bitmap.IsFrozen)
+                    throw new InvalidOperationException("STA operations must return frozen bitmaps.");
             }
             catch (Exception ex)
             {
-                completion.TrySetException(ex);
+                failure = ex;
             }
+
+            try
+            {
+                // Imaging can lazily create a Dispatcher/MediaContext even without a
+                // message loop. Thread exit alone does not run their shutdown callbacks.
+                // Inspect only this worker; never create a dispatcher just for cleanup.
+                Dispatcher? dispatcher = Dispatcher.FromThread(Thread.CurrentThread);
+                if (dispatcher is { HasShutdownFinished: false }) dispatcher.InvokeShutdown();
+            }
+            catch (Exception cleanupFailure)
+            {
+                failure = failure is null ? cleanupFailure : new AggregateException(
+                    "The STA operation and dispatcher cleanup both failed.", failure, cleanupFailure);
+            }
+
+            // Consumers cannot start another operation before native WPF teardown completes.
+            if (failure is null) completion.TrySetResult(result);
+            else completion.TrySetException(failure);
         })
         {
             IsBackground = true,

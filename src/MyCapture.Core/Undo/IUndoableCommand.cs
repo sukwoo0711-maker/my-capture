@@ -21,6 +21,12 @@ public interface IUndoableCommand
     void Undo();
 
     /// <summary>
+    /// Image assets this command may restore, including states absent from the live document.
+    /// Commands that can restore images must report their asset names here.
+    /// </summary>
+    IEnumerable<string> ReferencedImageAssets => [];
+
+    /// <summary>
     /// Attempts to absorb <paramref name="next"/> into this command.
     /// </summary>
     /// <remarks>

@@ -45,7 +45,7 @@ internal sealed class AnnotationEditorControl : Grid
     // Normal editor startup now targets a comfortable width above this threshold.
     private const double InspectorCompactWidth = 860;
 
-    private readonly FrozenFrame _frame;
+    private readonly AnnotationSourceMetadata _frame;
     private readonly RectD _cropRegion;
     private readonly BitmapSource _selectedBitmap;
     private readonly AnnotationImageStore _imageStore = new();
@@ -117,7 +117,7 @@ internal sealed class AnnotationEditorControl : Grid
         IReadOnlyDictionary<string, BitmapSource>? initialAssets,
         IPrivacyRedactionService? privacyRedactionService = null)
     {
-        _frame = frame ?? throw new ArgumentNullException(nameof(frame));
+        _frame = AnnotationSourceMetadata.FromFrame(frame);
         _cropRegion = bitmapRegion.Normalized();
         _selectedBitmap = selectedBitmap ?? throw new ArgumentNullException(nameof(selectedBitmap));
         _privacyRedactionService = privacyRedactionService;
@@ -135,6 +135,7 @@ internal sealed class AnnotationEditorControl : Grid
         AnnotationDocument document = initialDocument ?? AnnotationDocument.CreateFor(_canvasWidth, _canvasHeight);
         var undo = new UndoStack();
         _controller = new AnnotationEditorController(document, undo);
+        _imageStore.PruneToReachable(document, undo);
         var renderer = new AnnotationRenderer(_imageStore);
 
         var visualRegion = new RectD(0, 0, _canvasWidth, _canvasHeight);
@@ -1259,6 +1260,7 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void OnHistoryChanged()
     {
+        _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         RefreshHistoryButtons();
         UpdateInspector();
     }

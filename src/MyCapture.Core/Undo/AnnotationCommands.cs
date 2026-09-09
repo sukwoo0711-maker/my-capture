@@ -20,6 +20,8 @@ public sealed class CompositeCommand : IUndoableCommand
 
     public string Description { get; }
 
+    public IEnumerable<string> ReferencedImageAssets => _commands.SelectMany(command => command.ReferencedImageAssets);
+
     public void Execute()
     {
         // Forward order: later commands may depend on earlier ones having run.
@@ -55,6 +57,8 @@ public sealed class AddAnnotationCommand : IUndoableCommand
     }
 
     public string Description => UiText.Format("Text_47E781C43156", _item.DisplayName);
+
+    public IEnumerable<string> ReferencedImageAssets => AnnotationCommandAssets.For(_item);
 
     public void Execute()
     {
@@ -92,6 +96,8 @@ public sealed class RemoveAnnotationCommand : IUndoableCommand
 
     public string Description => UiText.Format("Text_8F8C3D476B1D", _item.DisplayName);
 
+    public IEnumerable<string> ReferencedImageAssets => AnnotationCommandAssets.For(_item);
+
     public void Execute()
     {
         _index = _document.IndexOf(_item);
@@ -111,6 +117,7 @@ public sealed class RemoveAnnotationCommand : IUndoableCommand
 /// </remarks>
 public sealed class TransformAnnotationCommand : IUndoableCommand
 {
+    public IEnumerable<string> ReferencedImageAssets => AnnotationCommandAssets.For(_item);
     private readonly AnnotationItem _item;
     private readonly RectD _before;
     private RectD _after;
@@ -154,6 +161,20 @@ public sealed class TransformAnnotationCommand : IUndoableCommand
 public sealed class PropertyChangeCommand<TItem, TValue> : IUndoableCommand
     where TItem : AnnotationItem
 {
+    public IEnumerable<string> ReferencedImageAssets
+    {
+        get
+        {
+            foreach (string name in AnnotationCommandAssets.For(_item)) yield return name;
+            // A string property may be the image asset name. Conservatively retain both
+            // values, even when another string property is edited, rather than drop undo pixels.
+            if (_item is ImageAnnotation)
+            {
+                if (_before is string before) yield return before;
+                if (_after is string after) yield return after;
+            }
+        }
+    }
     private readonly TItem _item;
     private readonly Action<TItem, TValue> _setter;
     private readonly TValue _before;
@@ -199,6 +220,7 @@ public sealed class PropertyChangeCommand<TItem, TValue> : IUndoableCommand
 /// </summary>
 public sealed class ReorderAnnotationCommand : IUndoableCommand
 {
+    public IEnumerable<string> ReferencedImageAssets => AnnotationCommandAssets.For(_item);
     private readonly AnnotationDocument _document;
     private readonly AnnotationItem _item;
     private readonly int _fromIndex;
@@ -243,6 +265,7 @@ public sealed class ReorderAnnotationCommand : IUndoableCommand
 /// </remarks>
 public sealed class ReplacePointsCommand : IUndoableCommand
 {
+    public IEnumerable<string> ReferencedImageAssets => AnnotationCommandAssets.For(_item);
     private readonly AnnotationItem _item;
     private readonly List<PointD> _before;
     private List<PointD> _after;
@@ -289,4 +312,10 @@ public sealed class ReplacePointsCommand : IUndoableCommand
                     $"{_item.GetType().Name} does not carry an editable point list.");
         }
     }
+}
+
+internal static class AnnotationCommandAssets
+{
+    internal static IEnumerable<string> For(AnnotationItem item) =>
+        item is ImageAnnotation image ? [image.AssetFileName] : [];
 }
