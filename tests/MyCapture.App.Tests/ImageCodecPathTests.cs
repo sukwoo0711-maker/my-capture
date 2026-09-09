@@ -90,7 +90,7 @@ public sealed class ImageCodecPathTests
     public void ScaledLoad_BoundsLongEdgeWithoutUpscaling(int width, int height, int bound,
         int expectedWidth, int expectedHeight) => RunSta(() =>
     {
-        string dir = Path.Combine(Path.GetTempPath(), "mc-scaled-" + Guid.NewGuid().ToString("N"));
+        string dir = OwnedTestDirectory.Create("mc-scaled-");
         try
         {
             string path = WriteTempPng(dir, "portrait.png", width, height);
@@ -98,8 +98,9 @@ public sealed class ImageCodecPathTests
             Assert.Equal(expectedWidth, loaded.PixelWidth);
             Assert.Equal(expectedHeight, loaded.PixelHeight);
             Assert.True(loaded.IsFrozen);
-            File.Delete(path); // Decoder must not keep the source locked.
+            // Exclusive reopen proves that the decoder released its input handle.
+            using var unlocked = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None);
         }
-        finally { Directory.Delete(dir, true); }
+        finally { OwnedTestDirectory.Delete(dir); }
     });
 }
