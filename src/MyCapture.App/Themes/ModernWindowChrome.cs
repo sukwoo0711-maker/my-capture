@@ -64,6 +64,7 @@ public static class ModernWindowChrome
 
     private static void Apply(Window window)
     {
+        WindowIdentity.Attach(window);
         if (!OperatingSystem.IsWindows()
             || !WindowsSupportPolicy.IsSupportedHost(Environment.OSVersion.Version))
         {

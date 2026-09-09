@@ -26,6 +26,7 @@ namespace MyCapture.App;
 
 public partial class App : Application
 {
+    private readonly ResidentReadyNotification _readyNotification = new();
     /// <summary>Per-Windows-session ownership gate for the resident process.</summary>
     private const string SingleInstanceMutexName =
         @"Local\MyCapture.SingleInstance.{6F2A1C34-9B7E-4D51-8A0C-3E5D7B912F48}";
@@ -121,6 +122,11 @@ public partial class App : Application
         }
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+        EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent,
+            new RoutedEventHandler((sender, _) =>
+            {
+                if (sender is Window window) MyCapture.App.Themes.WindowIdentity.Attach(window);
+            }));
 
         try
         {
@@ -141,8 +147,6 @@ public partial class App : Application
             Shutdown(2);
             return;
         }
-
-        StartCapturePrewarm();
 
         // Optional deterministic UI smoke: a normal first-instance launch with --settings
         // opens the settings window immediately. Used by the packaged UI smoke path; it does
@@ -173,6 +177,9 @@ public partial class App : Application
         _tray = _services.GetRequiredService<TrayIconService>();
         _hotkeys = _services.GetRequiredService<GlobalHotkeyService>();
         _overlay = _services.GetRequiredService<CaptureOverlayCoordinator>();
+        // Begin the one-pixel GDI/WPF warm-up before library loading and OCR setup,
+        // giving first capture a head start without blocking shell initialization.
+        StartCapturePrewarm();
 
         // Advanced capture: a bounded last-region history feeds repeat-last-region, and the
         // service converges full-screen / window / repeat / scrolling onto the shared editor
@@ -313,6 +320,18 @@ public partial class App : Application
                 UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix),
                 TrayBalloonKind.Warning);
         }
+        else
+        {
+            try
+            {
+                _readyNotification.Notify(true, _settings.Hotkeys.Capture,
+                    (title, message) => _tray.ShowBalloon(title, message, TrayBalloonKind.Information, playSound: false));
+            }
+            catch (Exception ex)
+            {
+                _log?.LogWarning(ex, "Could not show resident-ready notification");
+            }
+        }
     }
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
@@ -412,13 +431,18 @@ public partial class App : Application
     private void HandleCaptureRequested()
     {
         _log?.LogInformation("Region capture requested");
-        if (_overlay is null || _settings is null || !GuardStillCapture(UiText.Get("Text_096A13A757DB")))
+        if (_overlay is null || _settings is null)
         {
             return;
         }
 
         try
         {
+            if (_overlay.CanRetake)
+            {
+                _overlay.CloseEditorForRetake();
+            }
+            if (!GuardStillCapture(UiText.Get("Text_096A13A757DB"))) return;
             _tray?.SetState(TrayIconState.Capturing);
             // Start reserves the session immediately; full-desktop acquisition runs off the UI
             // thread and reports asynchronous failures through TransitionFailed on this dispatcher.

@@ -414,7 +414,8 @@ public sealed class TrayIconService : IDisposable
             _ => UiText.Get("Text_F296CB19F0A2"),
         };
 
-        return Truncate(UiText.Format("Text_608AF5822E3A", status, _captureCount), 127);
+        return Truncate(MyCapture.Core.Platform.AppIdentity.Label + "\n" +
+            UiText.Format("Text_608AF5822E3A", status, _captureCount), 127);
     }
 
     private IntPtr LoadIcon(string path)

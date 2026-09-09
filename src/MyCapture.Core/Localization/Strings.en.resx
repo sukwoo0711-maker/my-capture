@@ -2946,4 +2946,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="ExportReduction_Ready" xml:space="preserve"><value>Ready. Save the image or drag the button into a folder.</value></data>
   <data name="ExportReduction_Error" xml:space="preserve"><value>Export failed: {0}</value></data>
   <data name="ExportReduction_Extension" xml:space="preserve"><value>Save this result with the {0} extension.</value></data>
+  <data name="ShellRetake_ReadyTitle" xml:space="preserve"><value>{0} is ready</value></data>
+  <data name="ShellRetake_ReadyMessage" xml:space="preserve"><value>Press {0} to capture your screen. Open settings and the library from the tray icon.</value></data>
+  <data name="ShellRetake_ReadyWithoutShortcut" xml:space="preserve"><value>Start a capture from the tray icon, or assign a capture shortcut in settings.</value></data>
 </root>
