@@ -12,6 +12,24 @@ namespace MyCapture.App.Tests;
 
 public sealed class ScreenCaptureReadbackTests
 {
+    [Fact]
+    public void Crop_OwnsOnlySelectedPixels_AndDoesNotDependOnSource() => StaTestHost.Run(() =>
+    {
+        var source = new WriteableBitmap(8, 6, 120, 120, PixelFormats.Bgra32, null);
+        byte[] original = Enumerable.Range(0, 8 * 6 * 4).Select(i => (byte)i).ToArray();
+        source.WritePixels(new System.Windows.Int32Rect(0, 0, 8, 6), original, 32, 0);
+        var frame = new FrozenFrame(source, new RectD(0, 0, 8, 6), null, 0);
+        BitmapSource crop = ScreenCaptureEngine.Crop(frame, new RectD(2, 1, 3, 2));
+        Assert.False(crop is CroppedBitmap);
+        Assert.True(crop.IsFrozen);
+        Assert.Equal(120, crop.DpiX);
+        byte[] expected = original.Skip(40).Take(12).Concat(original.Skip(72).Take(12)).ToArray();
+        source.WritePixels(new System.Windows.Int32Rect(0, 0, 8, 6), new byte[original.Length], 32, 0);
+        byte[] actual = new byte[24];
+        crop.CopyPixels(actual, 12, 0);
+        Assert.Equal(expected, actual);
+    });
+
     [Theory]
     [InlineData(1, 1)]
     [InlineData(3, 5)]

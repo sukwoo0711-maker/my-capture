@@ -32,6 +32,25 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     private BitmapSource? _thumbnail;
     private bool _isBroken;
     private bool _thumbnailRequested;
+    private bool _thumbnailLoadingEnabled = true;
+    internal Action<GalleryItemViewModel>? ThumbnailAccessed { get; set; }
+    internal long CachedThumbnailBytes => _thumbnail is null ? 0
+        : (long)_thumbnail.PixelWidth * _thumbnail.PixelHeight * ((_thumbnail.Format.BitsPerPixel + 7) / 8);
+
+    internal void ReleaseThumbnail()
+    {
+        _thumbnail = null;
+        _thumbnailRequested = false;
+        _isBroken = false;
+    }
+
+    internal void SetThumbnailLoadingEnabled(bool enabled)
+    {
+        _thumbnailLoadingEnabled = enabled;
+        if (!enabled) ReleaseThumbnail();
+        Raise(nameof(Thumbnail));
+        Raise(nameof(IsBroken));
+    }
 
     public GalleryItemViewModel(
         CaptureRecord record,
@@ -105,7 +124,9 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     {
         get
         {
+            bool wasCached = _thumbnail is not null;
             EnsureThumbnail();
+            if (wasCached && _thumbnail is not null) ThumbnailAccessed?.Invoke(this);
             return _thumbnail;
         }
     }
@@ -153,7 +174,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     private void EnsureThumbnail()
     {
-        if (_thumbnailRequested)
+        if (!_thumbnailLoadingEnabled || _thumbnailRequested)
         {
             return;
         }
@@ -169,6 +190,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         }
 
         _thumbnail = decoded;
+        ThumbnailAccessed?.Invoke(this);
     }
 
     private BitmapSource? SafeLoad(string path)

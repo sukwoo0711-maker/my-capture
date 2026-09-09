@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -120,10 +121,13 @@ internal static class RecordingSelfTest
         List<string> failures,
         string label)
     {
+        using var firstWrittenFrame = new ManualResetEventSlim();
         var grabber = new RegionFrameGrabber(engine, settings.IncludeCursor);
         var recorder = new RegionRecorder(
             grabber,
-            options => new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance),
+            options => new FirstFrameObserver(
+                new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance),
+                firstWrittenFrame),
             NullLogger.Instance);
 
         try
@@ -135,8 +139,29 @@ internal static class RecordingSelfTest
                 return null;
             }
 
+            // Start() returns before encoder initialization, and IsReady becomes true before
+            // the first capture/WriteSample. Cold codec work can exceed this entire sample.
+            // Start the measured interval only after a real frame was successfully written.
+            var startup = Stopwatch.StartNew();
+            while (!firstWrittenFrame.Wait(50) && recorder.IsRecording
+                && startup.Elapsed < TimeSpan.FromSeconds(15))
+            {
+            }
+            if (!firstWrittenFrame.IsSet)
+            {
+                failures.Add($"{label}: no successfully encoded frame within startup deadline");
+                // Stop also surfaces an encoder failure and joins the capture thread before
+                // the observer's event is disposed.
+                _ = recorder.Stop();
+                return null;
+            }
+            report.AppendLine($"{label}: first encoded frame after {startup.Elapsed.TotalMilliseconds:0}ms; sampling {recordMs}ms");
             Thread.Sleep(recordMs);
             RecordingResult result = recorder.Stop();
+            if (result.EmittedFrames < 2)
+            {
+                failures.Add($"{label}: timed recording produced fewer than two frames");
+            }
 
             if (recorder.IsRecording)
             {
@@ -168,6 +193,19 @@ internal static class RecordingSelfTest
         {
             recorder.Dispose();
         }
+    }
+
+    private sealed class FirstFrameObserver(IVideoEncoder inner, ManualResetEventSlim firstWrittenFrame) : IVideoEncoder
+    {
+        public int Width => inner.Width;
+        public int Height => inner.Height;
+        public void WriteFrame(in EncoderFrame frame)
+        {
+            inner.WriteFrame(frame);
+            firstWrittenFrame.Set();
+        }
+        public void Complete() => inner.Complete();
+        public void Dispose() => inner.Dispose();
     }
 
     private static (bool Opened, int Width, int Height, double DurationMs) Probe(string path)

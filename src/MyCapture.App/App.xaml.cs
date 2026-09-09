@@ -39,7 +39,7 @@ public partial class App : Application
 
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _activationSignal;
-    private CancellationTokenSource? _activationCancellation;
+    private RegisteredWaitHandle? _activationWait;
     private ServiceProvider? _services;
     private ILogger<App>? _log;
     private TrayIconService? _tray;
@@ -101,6 +101,9 @@ public partial class App : Application
             return;
         }
 
+        // Publish the signal before claiming ownership: a second launch can queue
+        // activation even while the first process is loading a large library.
+        _activationSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName);
         _singleInstanceMutex = new Mutex(
             initiallyOwned: true,
             SingleInstanceMutexName,
@@ -108,25 +111,28 @@ public partial class App : Application
 
         if (!isFirstInstance)
         {
-            SignalResidentInstance();
+            if (FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) < 0)
+            {
+                NativeMessageWindow.AllowResidentForegroundActivation();
+                _activationSignal.Set();
+            }
             Shutdown(0);
             return;
         }
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
 
-        _services = BuildServiceProvider();
-        _log = _services.GetRequiredService<ILogger<App>>();
-        _log.LogInformation("MyCapture starting up");
-
         try
         {
+            _services = BuildServiceProvider();
+            _log = _services.GetRequiredService<ILogger<App>>();
+            _log.LogInformation("MyCapture starting up");
             InitializeShell();
             StartActivationListener();
         }
         catch (Exception ex)
         {
-            _log.LogCritical(ex, "Could not initialize the resident shell");
+            _log?.LogCritical(ex, "Could not initialize the resident shell");
             MessageBox.Show(
                 UiText.Format("Text_CA6DE730BB6E", ex.Message),
                 "MyCapture",
@@ -144,6 +150,10 @@ public partial class App : Application
         if (FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0)
         {
             _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
+        }
+        else if (FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) < 0)
+        {
+            _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
         }
     }
 
@@ -1314,44 +1324,15 @@ public partial class App : Application
 
     private void StartActivationListener()
     {
-        _activationSignal = new EventWaitHandle(
-            initialState: false,
-            EventResetMode.AutoReset,
-            ActivationEventName);
-        _activationCancellation = new CancellationTokenSource();
-
-        EventWaitHandle activationSignal = _activationSignal;
-        CancellationToken cancellationToken = _activationCancellation.Token;
-
-        _ = Task.Run(() =>
+        _activationWait = ThreadPool.RegisterWaitForSingleObject(_activationSignal!, (_, _) =>
         {
-            WaitHandle[] handles = [activationSignal, cancellationToken.WaitHandle];
-            while (WaitHandle.WaitAny(handles) == 0)
+            if (!Dispatcher.HasShutdownStarted)
             {
                 _ = Dispatcher.BeginInvoke(
                     DispatcherPriority.Normal,
                     new Action(HandleGalleryRequested));
             }
-        });
-    }
-
-    private static void SignalResidentInstance()
-    {
-        // The mutex is acquired before the activation event is created, leaving a
-        // very small startup race. Retry briefly instead of showing a false failure.
-        for (int attempt = 0; attempt < 80; attempt++)
-        {
-            try
-            {
-                using EventWaitHandle signal = EventWaitHandle.OpenExisting(ActivationEventName);
-                _ = signal.Set();
-                return;
-            }
-            catch (WaitHandleCannotBeOpenedException)
-            {
-                Thread.Sleep(25);
-            }
-        }
+        }, null, Timeout.Infinite, executeOnlyOnce: false);
     }
 
     private bool TryRunSelfTest(string[] args)
@@ -1685,9 +1666,7 @@ public partial class App : Application
             _log?.LogWarning(ex, "Could not save the capture index on exit");
         }
 
-        _activationCancellation?.Cancel();
-        _activationSignal?.Set();
-        _activationCancellation?.Dispose();
+        _activationWait?.Unregister(null);
         _activationSignal?.Dispose();
 
         // Cancel any in-flight scrolling capture. The handler disposes the token source.

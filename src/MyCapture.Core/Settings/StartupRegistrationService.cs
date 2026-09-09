@@ -41,8 +41,8 @@ public sealed record StartupApplyResult(bool Succeeded, bool DesiredEnabled, str
 /// </summary>
 /// <remarks>
 /// <para>
-/// The value stored is the executable path, quoted exactly once, so a path containing
-/// spaces survives the shell's argument parsing. <see cref="IsEnabled"/> is not a naive
+/// The value stored is the executable path, quoted exactly once, followed by --background,
+/// so logon stays quiet and spaces survive shell parsing. <see cref="IsEnabled"/> is not a naive
 /// "does the value exist" check: it confirms the stored command points at the same
 /// normalised executable this build runs from, so a stale entry left by a previous
 /// install location is treated as "not enabled by this build" and reconciled.
@@ -57,6 +57,7 @@ public sealed class StartupRegistrationService
 {
     /// <summary>The Run value name. Stable across versions so an upgrade updates in place.</summary>
     public const string RunValueName = "MyCapture";
+    public const string BackgroundSwitch = "--background";
 
     private readonly IRunKeyStore _store;
     private readonly string _executablePath;
@@ -68,8 +69,8 @@ public sealed class StartupRegistrationService
         _executablePath = executablePath;
     }
 
-    /// <summary>The exact command written to the Run key when enabled: the quoted path.</summary>
-    public string ExpectedCommand => Quote(_executablePath);
+    /// <summary>The quoted executable path followed by the quiet logon switch.</summary>
+    public string ExpectedCommand => Quote(_executablePath) + " " + BackgroundSwitch;
 
     /// <summary>
     /// True only when the Run value exists and its command resolves to the same
@@ -145,7 +146,7 @@ public sealed class StartupRegistrationService
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(current) || !PathsEqual(Unquote(current), _executablePath))
+            if (!string.Equals(current?.Trim(), ExpectedCommand, StringComparison.OrdinalIgnoreCase))
             {
                 Enable();
                 return true;

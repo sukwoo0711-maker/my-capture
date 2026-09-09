@@ -1,6 +1,7 @@
 using System.IO;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.Platform.Interop;
 
@@ -45,6 +46,7 @@ public sealed class TrayIconService : IDisposable
     private readonly TrayIconAssets _assets;
     private readonly ILogger<TrayIconService> _log;
     private readonly Dictionary<TrayIconState, IntPtr> _icons = [];
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private TrayIconState _state;
     private int _captureCount;
     private bool _initialized;
@@ -255,17 +257,26 @@ public sealed class TrayIconService : IDisposable
             case NativeMethods.NIN_SELECT:
             case NativeMethods.NIN_KEYSELECT:
             case NativeMethods.WM_LBUTTONUP:
+            case NativeMethods.WM_LBUTTONDBLCLK:
                 e.Handled = true;
-                GalleryRequested?.Invoke(this, EventArgs.Empty);
+                // Explorer can deliver callbacks synchronously. Never open WPF windows
+                // or run a nested native menu loop on its SendMessage call stack.
+                QueueShellAction(() => GalleryRequested?.Invoke(this, EventArgs.Empty));
                 break;
 
             case NativeMethods.WM_CONTEXTMENU:
             case NativeMethods.WM_RBUTTONUP:
                 e.Handled = true;
-                ShowContextMenu(_usesVersion4 ? PointFromPackedValue(e.WParam) : null);
+                NativeMethods.POINT? anchor = _usesVersion4 ? PointFromPackedValue(e.WParam) : null;
+                QueueShellAction(() => ShowContextMenu(anchor));
                 break;
         }
     }
+
+    private void QueueShellAction(Action action) => _dispatcher.BeginInvoke(new Action(() =>
+    {
+        if (!_disposed) { action(); }
+    }));
 
     private void ShowContextMenu(NativeMethods.POINT? shellAnchor)
     {

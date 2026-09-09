@@ -4,7 +4,7 @@ using MyCapture.Platform.Interop;
 namespace MyCapture.Platform.Shell;
 
 /// <summary>
-/// A message-only Win32 window that gives background services a stable HWND without
+/// A hidden top-level Win32 window that gives background services a stable HWND without
 /// ever putting a window in Alt+Tab or on the taskbar.
 /// </summary>
 /// <remarks>
@@ -15,14 +15,16 @@ namespace MyCapture.Platform.Shell;
 /// </remarks>
 public sealed class NativeMessageWindow : IDisposable
 {
+    private const string WindowName = "MyCapture.NativeMessageWindow";
     private readonly HwndSource _source;
     private bool _disposed;
 
     public NativeMessageWindow()
     {
-        var parameters = new HwndSourceParameters("MyCapture.NativeMessageWindow")
+        var parameters = new HwndSourceParameters(WindowName)
         {
-            ParentWindow = NativeMethods.HWND_MESSAGE,
+            // Message-only windows never receive Explorer's TaskbarCreated broadcast.
+            ParentWindow = IntPtr.Zero,
             WindowStyle = 0,
             ExtendedWindowStyle = 0,
             Width = 0,
@@ -35,6 +37,7 @@ public sealed class NativeMessageWindow : IDisposable
         TaskbarCreatedMessage = NativeMethods.RegisterWindowMessage("TaskbarCreated");
         if (TaskbarCreatedMessage == 0)
         {
+            _source.Dispose();
             throw new System.ComponentModel.Win32Exception(
                 System.Runtime.InteropServices.Marshal.GetLastWin32Error(),
                 "Explorer restart notification could not be registered.");
@@ -43,6 +46,17 @@ public sealed class NativeMessageWindow : IDisposable
 
     /// <summary>The native handle used by RegisterHotKey and Shell_NotifyIcon.</summary>
     public IntPtr Handle => _source.Handle;
+
+    /// <summary>Transfers the launching process's foreground permission to the resident only.</summary>
+    public static void AllowResidentForegroundActivation()
+    {
+        IntPtr window = NativeMethods.FindWindow(null, WindowName);
+        if (window != IntPtr.Zero)
+        {
+            _ = NativeMethods.GetWindowThreadProcessId(window, out uint processId);
+            if (processId != 0) _ = NativeMethods.AllowSetForegroundWindow(processId);
+        }
+    }
 
     /// <summary>The process-wide registered message Explorer broadcasts after restart.</summary>
     public uint TaskbarCreatedMessage { get; }
