@@ -240,9 +240,15 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             // Assert how the actual available space is allocated, not the requested size.
             double availableHeightGrowth = layout.ActualHeight - compactLayoutHeight;
             Assert.True(availableHeightGrowth > 0, "the native host did not provide any additional layout height");
-            Assert.True(preview.ActualHeight >= compactPreviewHeight + availableHeightGrowth - 0.5,
-                $"larger window left spare height outside preview: available growth={availableHeightGrowth:0.0}, preview growth={preview.ActualHeight - compactPreviewHeight:0.0}");
-            Assert.Equal(compactTimelineHeight, timelineTools.ActualHeight, 1);
+            // Compact windows reserve the actual media viewport and scroll the timeline.
+            // A larger window first restores the timeline's normal budget, then gives
+            // all remaining height to the preview.
+            double timelineGrowth = timelineTools.ActualHeight - compactTimelineHeight;
+            Assert.True(preview.ActualHeight >= compactPreviewHeight + availableHeightGrowth - timelineGrowth - 0.5,
+                $"larger window left spare height outside preview/timeline: available growth={availableHeightGrowth:0.0}");
+            Grid viewport = Descendants(preview).OfType<Grid>().Single(grid => grid.Name == "VideoPreviewViewport");
+            Assert.True(viewport.ActualHeight >= 112);
+            Assert.InRange(viewport.TranslatePoint(new Point(0, viewport.ActualHeight), preview).Y, 0, preview.ActualHeight + 0.5);
             Button export = Descendants(layout).OfType<Button>().Single(button =>
                 System.Windows.Automation.AutomationProperties.GetName(button) == "내보내기 · MP4 / GIF");
             Assert.True(export.IsVisible && export.IsEnabled);

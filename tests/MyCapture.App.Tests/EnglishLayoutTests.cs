@@ -62,6 +62,9 @@ public sealed class EnglishLayoutTests
             Border preview = layout.Children.OfType<Border>().Single(b => Grid.GetRow(b) == 0);
             Border status = layout.Children.OfType<Border>().Single(b => Grid.GetRow(b) == 3);
             Assert.True(preview.ActualHeight >= 112);
+            Grid viewport = Descendants(preview).OfType<Grid>().Single(grid => grid.Name == "VideoPreviewViewport");
+            Assert.True(viewport.ActualHeight >= 112, "The actual video viewport must retain usable height");
+            Assert.InRange(viewport.TranslatePoint(new Point(0, viewport.ActualHeight), preview).Y, 0, preview.ActualHeight + 0.5);
             var client = (FrameworkElement)VisualTreeHelper.GetParent(layout);
             var statusText = Assert.IsType<TextBlock>(status.Child);
             Assert.True(statusText.ActualHeight >= statusText.DesiredSize.Height - 0.5);

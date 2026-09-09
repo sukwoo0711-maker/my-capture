@@ -190,9 +190,7 @@ internal sealed class VideoExportDialog : Window
                 BitmapSource frame;
                 if (gif)
                 {
-                    using var stream = File.OpenRead(calculated.ResultPath);
-                    var decoder = new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-                    frame = decoder.Frames[0];
+                    frame = CreateGifPreview(calculated.ResultPath);
                 }
                 else
                 {
@@ -281,5 +279,24 @@ internal sealed class VideoExportDialog : Window
         _cancel.Content = UiText.Get(working ? "MediaExport_Cancel" : "MediaExport_Close");
         AutomationProperties.SetName(_cancel, (string)_cancel.Content);
         _cancel.ToolTip = _cancel.Content;
+    }
+
+    internal static BitmapSource CreateGifPreview(string path)
+    {
+        using var stream = File.OpenRead(path);
+        // OnLoad caches every GIF frame. Decode only the first frame on demand and
+        // copy its pixels into a standalone bitmap; a returned BitmapFrameDecode
+        // would retain the decoder and all of its frame wrappers and native state.
+        var decoder = new GifBitmapDecoder(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.OnDemand);
+        BitmapSource first = decoder.Frames[0];
+        if (first.Format != PixelFormats.Bgra32)
+            first = new FormatConvertedBitmap(first, PixelFormats.Bgra32, null, 0);
+        int stride = checked(first.PixelWidth * 4);
+        byte[] pixels = new byte[checked(stride * first.PixelHeight)];
+        first.CopyPixels(pixels, stride, 0);
+        BitmapSource result = BitmapSource.Create(first.PixelWidth, first.PixelHeight, 96, 96,
+            PixelFormats.Bgra32, null, pixels, stride);
+        result.Freeze();
+        return result;
     }
 }

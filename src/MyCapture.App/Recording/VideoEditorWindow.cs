@@ -351,7 +351,7 @@ internal sealed class VideoEditorWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // controls
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // status
 
-        var previewStack = new Grid();
+        var previewStack = new Grid { Name = "VideoPreviewViewport", MinHeight = 112, ClipToBounds = true };
         previewStack.Children.Add(_media);
         previewStack.Children.Add(_overlayPreview);
         previewStack.Children.Add(_layerCanvas);
@@ -423,6 +423,25 @@ internal sealed class VideoEditorWindow : Window
         };
         Grid.SetRow(statusBar, 3);
         root.Children.Add(statusBar);
+
+        void FitTimelineToAvailableHeight()
+        {
+            if (root.ActualHeight <= 0) return;
+            // The command rows share the preview card, but must never take space
+            // from its visible media viewport. Compact windows scroll the timeline;
+            // larger windows retain its normal 240-DIP budget.
+            double requiredPreview = previewStack.MinHeight + header.DesiredSize.Height + tools.DesiredSize.Height
+                + preview.Padding.Top + preview.Padding.Bottom + preview.BorderThickness.Top + preview.BorderThickness.Bottom;
+            double available = root.ActualHeight - controls.DesiredSize.Height - statusBar.DesiredSize.Height - requiredPreview;
+            double maximum = Math.Clamp(Math.Floor(available), 100, 240);
+            if (Math.Abs(root.RowDefinitions[1].MaxHeight - maximum) > 0.5)
+                root.RowDefinitions[1].MaxHeight = maximum;
+        }
+        root.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+        header.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+        tools.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+        controls.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+        statusBar.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
 
         return root;
     }

@@ -16,6 +16,44 @@ namespace MyCapture.App.Tests;
 public sealed class VideoCompositionIntegrationTests
 {
     [Theory]
+    [InlineData(2)]
+    [InlineData(200)]
+    public void GifResultPreviewOwnsOnlyDetachedFirstFrameAfterSourceDeletion(int frameCount) => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            const int width = 16, height = 12, stride = width * 4;
+            byte[] blue = Enumerable.Range(0, width * height).SelectMany(_ => new byte[] { 255, 0, 0, 255 }).ToArray();
+            byte[] red = Enumerable.Range(0, width * height).SelectMany(_ => new byte[] { 0, 0, 255, 255 }).ToArray();
+            BitmapSource first = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, blue, stride);
+            BitmapSource later = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, red, stride);
+            string path = Path.Combine(root, "many-frames.gif");
+            using (var output = File.Create(path))
+            using (var writer = new AnimatedGifWriter(output, width, height, 10))
+            {
+                writer.AddFrame(first);
+                for (int i = 1; i < frameCount; i++) writer.AddFrame(later);
+                writer.Complete();
+            }
+            using (var input = File.OpenRead(path))
+                Assert.Equal(frameCount, new GifBitmapDecoder(input, BitmapCreateOptions.DelayCreation, BitmapCacheOption.OnDemand).Frames.Count);
+            BitmapSource preview = VideoExportDialog.CreateGifPreview(path);
+            Assert.True(preview.IsFrozen);
+            Assert.False(preview is BitmapFrame, "The preview must not retain a decoder-backed BitmapFrame");
+            File.Delete(path); // No cached frame or live stream may require the export stage.
+            byte[] copied = Task.Run(() =>
+            {
+                byte[] pixels = new byte[stride * height];
+                preview.CopyPixels(pixels, stride, 0);
+                return pixels;
+            }).GetAwaiter().GetResult();
+            Assert.Equal(blue, copied);
+        }
+        finally { DeleteRoot(root); }
+    });
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void ExportDialogDiscardsCancelledOrOutdatedCalculationAndCanRetry(bool close) => RunSta(() =>
