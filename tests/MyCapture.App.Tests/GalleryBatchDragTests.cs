@@ -258,6 +258,32 @@ public sealed class GalleryBatchDragTests
     private static CaptureQueue NewQueue(string root) =>
         new(AppPaths.CreateForRoot(root), new QueueSettings(), NullLogger<CaptureQueue>.Instance);
 
+    [Fact]
+    public async Task LongStagingPath_CopiesAndCleansWithoutDependingOnProcessLongPathManifest()
+    {
+        string root = OwnedTestDirectory.Create("MyCapture-batch-long-path-");
+        try
+        {
+            var queue = NewQueue(root);
+            CaptureRecord record = Add(queue);
+            string staging = Path.Combine(root, new string('a', 90), new string('b', 90), new string('c', 90));
+            var service = new GalleryDragExportService(queue, staging);
+            string staged;
+            using (GalleryDragExportService.PreparedDrag batch = await service.PrepareBatchAsync([record], CancellationToken.None))
+            {
+                staged = Assert.Single(batch.Paths);
+                Assert.True(staged.Length > 320);
+                Assert.Equal(File.ReadAllBytes(queue.GetFilePath(record, CaptureFileNames.Rendered)), File.ReadAllBytes(staged));
+                batch.MarkPublished();
+            }
+            File.SetLastWriteTimeUtc(staged, DateTime.UtcNow.AddDays(-3));
+            service.CleanupExpiredBestEffort(DateTimeOffset.UtcNow.AddDays(-2));
+            Assert.False(File.Exists(staged));
+            Assert.True(File.Exists(queue.GetFilePath(record, CaptureFileNames.Rendered)));
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    }
+
     private static CaptureRecord Add(CaptureQueue queue, int size = 200)
     {
         var record = new CaptureRecord { Id = Guid.NewGuid() };

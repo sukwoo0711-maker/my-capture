@@ -86,7 +86,7 @@ internal static class GalleryExportFiles
 
     private static SafeFileHandle OpenRegularFile(string path, uint access, uint disposition)
     {
-        SafeFileHandle handle = CreateFileW(path, access, 3 /* read/write, never delete */, IntPtr.Zero,
+        SafeFileHandle handle = CreateFileW(NativePath(path), access, 3 /* read/write, never delete */, IntPtr.Zero,
             disposition, OpenReparsePoint, IntPtr.Zero);
         try
         {
@@ -108,6 +108,15 @@ internal static class GalleryExportFiles
 
     private static IOException NativeError(string message) =>
         new(message, new Win32Exception(Marshal.GetLastWin32Error()));
+
+    private static string NativePath(string path)
+    {
+        string full = Path.GetFullPath(path);
+        if (full.StartsWith(@"\\?\", StringComparison.Ordinal)) return full;
+        return full.StartsWith(@"\\", StringComparison.Ordinal)
+            ? @"\\?\UNC\" + full[2..]
+            : @"\\?\" + full;
+    }
 
     private sealed class DirectoryLease : IDisposable
     {
@@ -137,7 +146,7 @@ internal static class GalleryExportFiles
 
         private void Pin(string path)
         {
-            SafeFileHandle handle = CreateFileW(path, ReadAttributes, 3, IntPtr.Zero, OpenExisting,
+            SafeFileHandle handle = CreateFileW(NativePath(path), ReadAttributes, 3, IntPtr.Zero, OpenExisting,
                 OpenReparsePoint | BackupSemantics, IntPtr.Zero);
             try
             {
