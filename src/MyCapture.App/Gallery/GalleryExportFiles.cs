@@ -8,14 +8,14 @@ namespace MyCapture.App.Gallery;
 /// <summary>Opens drag-export files without following links or allowing parent replacement.</summary>
 internal static class GalleryExportFiles
 {
-    private const uint ReadAttributes = 0x80, DeleteAccess = 0x10000;
+    private const uint ListDirectory = 0x1, ReadAttributes = 0x80, DeleteAccess = 0x10000;
     private const uint OpenExisting = 3, CreateNew = 1;
     private const uint OpenReparsePoint = 0x00200000, BackupSemantics = 0x02000000;
 
     internal static void Copy(string sourcePath, string destination, CancellationToken cancellationToken)
     {
-        // Pin every existing directory without FILE_SHARE_DELETE. Checking path attributes only
-        // before Task.Run leaves a window in which a source or staging parent can be swapped.
+        // Pin every existing directory without sharing writes or deletes. This blocks both
+        // parent replacement and an in-place reparse change while the copy is in progress.
         using DirectoryLease sourceParents = DirectoryLease.Open(Path.GetDirectoryName(sourcePath)!, create: false);
         using DirectoryLease destinationParents = DirectoryLease.Open(Path.GetDirectoryName(destination)!, create: true);
         bool created = false;
@@ -118,7 +118,7 @@ internal static class GalleryExportFiles
             : @"\\?\" + full;
     }
 
-    private sealed class DirectoryLease : IDisposable
+    internal sealed class DirectoryLease : IDisposable
     {
         private readonly List<SafeFileHandle> _handles = [];
 
@@ -146,7 +146,9 @@ internal static class GalleryExportFiles
 
         private void Pin(string path)
         {
-            SafeFileHandle handle = CreateFileW(NativePath(path), ReadAttributes, 3, IntPtr.Zero, OpenExisting,
+            // An attributes-only handle does not enforce sharing restrictions. Requesting
+            // directory read access makes the no-write/no-delete share contract effective.
+            SafeFileHandle handle = CreateFileW(NativePath(path), ReadAttributes | ListDirectory, 1 /* share read only */, IntPtr.Zero, OpenExisting,
                 OpenReparsePoint | BackupSemantics, IntPtr.Zero);
             try
             {

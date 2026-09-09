@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.IO;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Gallery;
@@ -257,6 +258,46 @@ public sealed class GalleryBatchDragTests
 
     private static CaptureQueue NewQueue(string root) =>
         new(AppPaths.CreateForRoot(root), new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+
+    [Fact]
+    public void DirectoryLease_BlocksInPlaceReparseWrites_WhileChildCopyAndCleanupStillWork()
+    {
+        string root = OwnedTestDirectory.Create("MyCapture-drag-directory-pin-");
+        string targetRoot = OwnedTestDirectory.Create("MyCapture-drag-directory-target-");
+        string staging = Path.Combine(root, "staging");
+        try
+        {
+            Directory.CreateDirectory(staging);
+            string source = Path.Combine(root, "source.png");
+            string copy = Path.Combine(staging, "MyCapture_copy.png");
+            File.WriteAllText(source, "original bytes");
+            using (GalleryExportFiles.DirectoryLease lease = GalleryExportFiles.DirectoryLease.Open(staging, create: false))
+            {
+                // Pinning a directory must not deny ordinary writes to its children.
+                GalleryExportFiles.Copy(source, copy, CancellationToken.None);
+                Assert.Equal("original bytes", File.ReadAllText(copy));
+                GalleryExportFiles.DeleteBestEffort(copy);
+                Assert.Empty(Directory.EnumerateFileSystemEntries(staging));
+
+                // This native helper opens the existing empty directory with GENERIC_WRITE,
+                // then issues FSCTL_SET_REPARSE_POINT. No rename or directory swap is used.
+                Win32Exception denied = Assert.Throws<Win32Exception>(() => UpdatePathsTests.CreateJunction(staging, targetRoot));
+                Assert.Equal(32 /* ERROR_SHARING_VIOLATION */, denied.NativeErrorCode);
+                Assert.False(File.GetAttributes(staging).HasFlag(FileAttributes.ReparsePoint));
+            }
+            // Prove the same filesystem and native request permit the operation after release.
+            UpdatePathsTests.CreateJunction(staging, targetRoot);
+            Assert.True(File.GetAttributes(staging).HasFlag(FileAttributes.ReparsePoint));
+            Assert.Equal("original bytes", File.ReadAllText(source));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(targetRoot));
+        }
+        finally
+        {
+            if (Directory.Exists(staging) && File.GetAttributes(staging).HasFlag(FileAttributes.ReparsePoint))
+                Directory.Delete(staging);
+            OwnedTestDirectory.Delete(root); OwnedTestDirectory.Delete(targetRoot);
+        }
+    }
 
     [Fact]
     public async Task LongStagingPath_CopiesAndCleansWithoutDependingOnProcessLongPathManifest()
