@@ -84,12 +84,19 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           Start-Transcript -Path artifacts/validation/hosted/installer-update-tests.log | Out-Null
+          function Invoke-CheckedTest([string]$Path, [string[]]$TestArguments = @()) {
+            # Negative-case harnesses intentionally run failing child commands. Give
+            # each harness its own host so its internal LASTEXITCODE cannot leak into
+            # the Actions wrapper after all assertions have passed.
+            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $Path @TestArguments
+            if ($LASTEXITCODE -ne 0) { throw "Validation failed ($LASTEXITCODE): $Path" }
+          }
           try {
-            .\build\tests\installer-resident-tests.ps1
-            .\build\tests\installer-hostile-tests.ps1 -Version $env:PACKAGE_VERSION -ArtifactRoot "artifacts/release/$env:PACKAGE_VERSION"
-            .\build\tests\update-helper-tests.ps1
-            .\build\tests\update-preservation-tests.ps1
-            .\build\tests\update-restart-preflight-tests.ps1
+            Invoke-CheckedTest .\build\tests\installer-resident-tests.ps1
+            Invoke-CheckedTest .\build\tests\installer-hostile-tests.ps1 @('-Version', $env:PACKAGE_VERSION, '-ArtifactRoot', "artifacts/release/$env:PACKAGE_VERSION")
+            Invoke-CheckedTest .\build\tests\update-helper-tests.ps1
+            Invoke-CheckedTest .\build\tests\update-preservation-tests.ps1
+            Invoke-CheckedTest .\build\tests\update-restart-preflight-tests.ps1
           }
           finally { Stop-Transcript | Out-Null }
 
