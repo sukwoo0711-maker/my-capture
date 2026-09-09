@@ -62,9 +62,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _primaryTextBrush = ResourceBrush("Text.Primary", Brushes.White);
         _mutedTextBrush = ResourceBrush("Text.Secondary", Brushes.LightGray);
 
-        FontFamily uiFont = Application.Current.TryFindResource("Font.Ui") as FontFamily
+        FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");
-        FontFamily monoFont = Application.Current.TryFindResource("Font.Mono") as FontFamily
+        FontFamily monoFont = Application.Current?.TryFindResource("Font.Mono") as FontFamily
             ?? new FontFamily("Consolas");
         _uiTypeface = new Typeface(uiFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
         _monoTypeface = new Typeface(monoFont, FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
@@ -433,7 +433,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     }
 
     private Brush ResourceBrush(string key, Brush fallback) =>
-        Application.Current.TryFindResource(key) as Brush ?? fallback;
+        Application.Current?.TryFindResource(key) as Brush ?? fallback;
 
     private FormattedText CreateText(string text, Typeface typeface, double size, Brush brush) =>
         new(

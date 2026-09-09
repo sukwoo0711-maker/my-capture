@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
@@ -9,11 +10,15 @@ using MyCapture.Platform.Display;
 
 namespace MyCapture.App.Capture;
 
-internal sealed class CaptureOverlayCoordinator
+internal sealed class CaptureOverlayCoordinator : IDisposable
 {
     private readonly ScreenCaptureEngine _captureEngine;
     private readonly WindowCandidateService _windowCandidates;
     private readonly ILogger<CaptureOverlayCoordinator> _log;
+    private readonly Dispatcher _dispatcher;
+    private readonly Func<bool, FrozenFrame> _acquireFrame;
+    private CapturePreparation? _preparation;
+    private bool _disposed;
     private CaptureOverlayWindow? _activeOverlay;
     private AnnotationEditorWindow? _activeEditor;
     private bool _isOpeningEditor;
@@ -22,11 +27,15 @@ internal sealed class CaptureOverlayCoordinator
     internal CaptureOverlayCoordinator(
         ScreenCaptureEngine captureEngine,
         WindowCandidateService windowCandidates,
-        ILogger<CaptureOverlayCoordinator> log)
+        ILogger<CaptureOverlayCoordinator> log,
+        Func<bool, FrozenFrame>? acquireFrame = null)
     {
         _captureEngine = captureEngine ?? throw new ArgumentNullException(nameof(captureEngine));
         _windowCandidates = windowCandidates ?? throw new ArgumentNullException(nameof(windowCandidates));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _acquireFrame = acquireFrame ?? captureEngine.CaptureVirtualDesktop;
+        _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+        _dispatcher.ShutdownStarted += OnDispatcherShutdownStarted;
     }
 
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
@@ -49,9 +58,11 @@ internal sealed class CaptureOverlayCoordinator
 
     internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested { get; set; }
 
-    internal bool IsActive => _activeOverlay is not null || _activeEditor is not null || _isOpeningEditor;
+    internal bool IsActive => !_disposed &&
+        (_preparation is not null || _activeOverlay is not null || _activeEditor is not null || _isOpeningEditor);
 
     internal Task LastTransitionForTest { get; private set; } = Task.CompletedTask;
+    internal Task LastPreparationForTest { get; private set; } = Task.CompletedTask;
 
     internal ScreenCaptureEngine Engine => _captureEngine;
 
@@ -61,10 +72,11 @@ internal sealed class CaptureOverlayCoordinator
     internal void Start(bool includeCursor, bool abortOnFocusLoss, bool showMagnifier)
     {
         VerifyDispatcherAccess();
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (_isOpeningEditor)
+        if (_preparation is not null || _isOpeningEditor)
         {
-            _log.LogInformation("Capture ignored while the previous selection is being persisted");
+            _log.LogInformation("Capture ignored while a frame or selection is being prepared");
             return;
         }
 
@@ -73,14 +85,94 @@ internal sealed class CaptureOverlayCoordinator
             return;
         }
 
-        // Freeze the whole physical-pixel virtual desktop before showing UI. A free drag may
-        // begin on one monitor and end on another, including displays with a negative origin.
-        FrozenFrame frame = _captureEngine.CaptureVirtualDesktop(includeCursor);
+        // Reserve the session synchronously, including when WM_HOTKEY has no WPF context.
+        // Each accepted request acquires one fresh frame before any selector UI is created.
+        var preparation = new CapturePreparation();
+        _preparation = preparation;
+        _log.LogInformation("Capture frame acquisition requested");
+        LastPreparationForTest = AcquireAndShowAsync(preparation, includeCursor, abortOnFocusLoss, showMagnifier);
+    }
+
+    private async Task AcquireAndShowAsync(
+        CapturePreparation preparation, bool includeCursor, bool abortOnFocusLoss, bool showMagnifier)
+    {
+        FrozenFrame? frame = null;
+        Exception? failure = null;
+        try
+        {
+            frame = await Task.Run(() =>
+            {
+                if (preparation.Cancelled) throw new OperationCanceledException();
+                FrozenFrame acquired = _acquireFrame(includeCursor);
+                if (!acquired.Bitmap.IsFrozen)
+                    throw new InvalidOperationException("Capture acquisition must return a frozen bitmap.");
+                return acquired;
+            }).ConfigureAwait(false);
+            _log.LogInformation("Capture frame acquired after {Elapsed:0.0}ms (acquisition {Acquisition:0.0}ms)",
+                preparation.Elapsed.Elapsed.TotalMilliseconds, frame.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
+
+        // Explicit dispatch also covers native hotkey callbacks without SynchronizationContext.
+        // An aborted dispatcher operation is observed; shutdown never waits for native BitBlt.
+        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return;
+        try
+        {
+            await _dispatcher.InvokeAsync(() =>
+                CompletePreparation(preparation, frame, failure, abortOnFocusLoss, showMagnifier)).Task.ConfigureAwait(false);
+        }
+        catch (TaskCanceledException) when (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
+        {
+            // Shutdown invalidates the preparation before any late window can be shown.
+        }
+        catch (Exception ex)
+        {
+            // A feedback subscriber must not turn a fire-and-observed transition into an
+            // unobserved task failure. Session cleanup runs in CompletePreparation's finally.
+            _log.LogError(ex, "Capture preparation dispatcher transition failed");
+        }
+    }
+
+    private void CompletePreparation(
+        CapturePreparation preparation, FrozenFrame? frame, Exception? failure, bool abortOnFocusLoss, bool showMagnifier)
+    {
+        VerifyDispatcherAccess();
+        if (!ReferenceEquals(_preparation, preparation)) return;
+        try
+        {
+            if (_disposed || preparation.Cancelled) return;
+            if (failure is not null) throw failure;
+            ShowOverlay(frame ?? throw new InvalidOperationException("Capture acquisition returned no frame."),
+                abortOnFocusLoss, showMagnifier, preparation.Elapsed);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not prepare the capture overlay");
+            TransitionFailed?.Invoke(ex);
+        }
+        finally
+        {
+            _preparation = null;
+            EndSessionIfIdle();
+        }
+    }
+
+    private void ShowOverlay(FrozenFrame frame, bool abortOnFocusLoss, bool showMagnifier, Stopwatch elapsed)
+    {
 
         var overlay = new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier);
         _activeOverlay = overlay;
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
         overlay.Closed += OnOverlayClosed;
+        overlay.ContentRendered += OnFirstRendered;
+        void OnFirstRendered(object? sender, EventArgs args)
+        {
+            overlay.ContentRendered -= OnFirstRendered;
+            _log.LogInformation("Capture overlay first rendered after {Elapsed:0.0}ms", elapsed.Elapsed.TotalMilliseconds);
+        }
 
         _log.LogInformation(
             "Opening free-region selector across virtual desktop ({Width}x{Height})",
@@ -118,8 +210,9 @@ internal sealed class CaptureOverlayCoordinator
     {
         ArgumentNullException.ThrowIfNull(frame);
         VerifyDispatcherAccess();
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (_isOpeningEditor)
+        if (_preparation is not null || _isOpeningEditor)
         {
             _log.LogInformation("Advanced capture ignored while the previous selection is being persisted");
             return false;
@@ -153,6 +246,7 @@ internal sealed class CaptureOverlayCoordinator
     internal void Cancel()
     {
         VerifyDispatcherAccess();
+        if (_preparation is { } preparation) preparation.Cancelled = true;
         _openingEditorCts?.Cancel();
         if (_activeOverlay is not null)
         {
@@ -162,6 +256,24 @@ internal sealed class CaptureOverlayCoordinator
         {
             _activeEditor?.Close();
         }
+    }
+
+    public void Dispose()
+    {
+        VerifyDispatcherAccess();
+        if (_disposed) return;
+        _disposed = true;
+        _dispatcher.ShutdownStarted -= OnDispatcherShutdownStarted;
+        Cancel();
+        _preparation = null;
+    }
+
+    private void OnDispatcherShutdownStarted(object? sender, EventArgs e) => Dispose();
+
+    private sealed class CapturePreparation
+    {
+        internal volatile bool Cancelled;
+        internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();
     }
 
     private bool ActivateCurrent()
@@ -187,8 +299,7 @@ internal sealed class CaptureOverlayCoordinator
         await LastTransitionForTest;
     }
 
-    private static void VerifyDispatcherAccess() =>
-        (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).VerifyAccess();
+    private void VerifyDispatcherAccess() => _dispatcher.VerifyAccess();
 
     private Task AnnounceSelectionAndOpenEditorAsync(CaptureSelectionCompletedEventArgs selection)
     {
@@ -330,7 +441,7 @@ internal sealed class CaptureOverlayCoordinator
 
     private void EndSessionIfIdle()
     {
-        if (_activeOverlay is null && _activeEditor is null && !_isOpeningEditor)
+        if (!_disposed && _preparation is null && _activeOverlay is null && _activeEditor is null && !_isOpeningEditor)
         {
             OverlayClosed?.Invoke(this, EventArgs.Empty);
         }

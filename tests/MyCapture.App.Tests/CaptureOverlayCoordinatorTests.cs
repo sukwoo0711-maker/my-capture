@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -13,6 +14,175 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureOverlayCoordinatorTests
 {
+    [Fact]
+    public void PreparingFrame_LeavesDispatcherResponsiveAndReservesOneSessionUntilCancelledCaptureDrains() => RunSta(() =>
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        int ownerThread = Environment.CurrentManagedThreadId;
+        int calls = 0;
+        int closed = 0;
+        int windows = 0;
+        using var coordinator = Coordinator(includeCursor =>
+        {
+            Assert.NotEqual(ownerThread, Environment.CurrentManagedThreadId);
+            Assert.True(includeCursor);
+            Interlocked.Increment(ref calls);
+            entered.Set();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
+            return Frame();
+        });
+        coordinator.OverlayClosed += (_, _) => { Assert.Equal(ownerThread, Environment.CurrentManagedThreadId); closed++; };
+        coordinator.RequiresCaptureExclusion = () => true;
+        coordinator.ApplyCaptureExclusion = _ => { windows++; return true; };
+        try
+        {
+            // Native WM_HOTKEY does not guarantee a WPF synchronization context.
+            SynchronizationContext.SetSynchronizationContext(null);
+            coordinator.Start(true, false, false);
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            Assert.True(coordinator.IsActive);
+            bool dispatched = false;
+            _ = Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => dispatched = true));
+            PumpUntil(() => dispatched);
+            Assert.False(coordinator.LastPreparationForTest.IsCompleted);
+            coordinator.Start(false, true, true);
+            Assert.False(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8)));
+            coordinator.Cancel();
+            Assert.True(coordinator.IsActive); // Native work still owns the only acquisition slot.
+            coordinator.Start(false, true, true);
+            Assert.Equal(1, calls);
+            Assert.Equal(0, closed);
+        }
+        finally
+        {
+            release.Set();
+            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        }
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        Assert.False(coordinator.IsActive);
+        Assert.Equal(0, windows);
+        Assert.Equal(1, closed);
+    });
+
+    [Fact]
+    public void AcquisitionFailure_IsReportedOnOwnerDispatcherAndNextHotkeyCanShowFreshFrame() => RunSta(() =>
+    {
+        int ownerThread = Environment.CurrentManagedThreadId;
+        int calls = 0;
+        int failures = 0;
+        int closed = 0;
+        System.Windows.Window? shown = null;
+        using var coordinator = Coordinator(_ =>
+        {
+            if (Interlocked.Increment(ref calls) == 1) throw new IOException("synthetic acquisition failure");
+            return Frame();
+        });
+        coordinator.TransitionFailed += error =>
+        {
+            Assert.Equal(ownerThread, Environment.CurrentManagedThreadId);
+            Assert.IsType<IOException>(error);
+            failures++;
+        };
+        coordinator.OverlayClosed += (_, _) => closed++;
+        coordinator.RequiresCaptureExclusion = () => true;
+        coordinator.ApplyCaptureExclusion = window =>
+        {
+            Assert.Equal(ownerThread, Environment.CurrentManagedThreadId);
+            Assert.False(window.IsVisible);
+            shown = window;
+            return true;
+        };
+        SynchronizationContext.SetSynchronizationContext(null);
+        coordinator.Start(false, false, false);
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        Assert.Equal(1, failures);
+        Assert.Equal(1, closed);
+        Assert.False(coordinator.IsActive);
+        coordinator.Start(false, false, false);
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        Assert.Equal(2, calls);
+        Assert.True(coordinator.IsActive);
+        Assert.NotNull(shown);
+        Assert.True(shown.IsVisible);
+        coordinator.Cancel();
+        Assert.False(coordinator.IsActive);
+        Assert.Equal(2, closed);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DisposeOrDispatcherShutdown_DiscardsLateFrameWithoutWindowOrFailure(bool shutdown) => RunSta(() =>
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        int windows = 0;
+        int failures = 0;
+        using var coordinator = Coordinator(_ =>
+        {
+            entered.Set();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
+            return Frame();
+        });
+        coordinator.RequiresCaptureExclusion = () => true;
+        coordinator.ApplyCaptureExclusion = _ => { windows++; return true; };
+        coordinator.TransitionFailed += _ => failures++;
+        coordinator.Start(false, false, false);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        if (shutdown) Dispatcher.CurrentDispatcher.InvokeShutdown();
+        else coordinator.Dispose();
+        Assert.False(coordinator.IsActive);
+        Assert.Throws<ObjectDisposedException>(() => coordinator.Start(false, false, false));
+        release.Set();
+        if (shutdown) Assert.True(coordinator.LastPreparationForTest.Wait(TimeSpan.FromSeconds(5)));
+        else PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        Assert.Equal(0, windows);
+        Assert.Equal(0, failures);
+    });
+
+    [Fact]
+    public void PreparationRechecksRecordingExclusionBeforeShowingOverlay() => RunSta(() =>
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        bool requiresExclusion = false;
+        System.Windows.Window? rejected = null;
+        int failures = 0;
+        int closed = 0;
+        using var coordinator = Coordinator(_ =>
+        {
+            entered.Set();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
+            return Frame();
+        });
+        coordinator.RequiresCaptureExclusion = () => requiresExclusion;
+        coordinator.ApplyCaptureExclusion = window => { rejected = window; Assert.False(window.IsVisible); return false; };
+        coordinator.TransitionFailed += _ => failures++;
+        coordinator.OverlayClosed += (_, _) => closed++;
+        coordinator.Start(false, false, false);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        requiresExclusion = true;
+        release.Set();
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        Assert.NotNull(rejected);
+        Assert.False(rejected.IsVisible);
+        Assert.False(coordinator.IsActive);
+        Assert.Equal(1, failures);
+        Assert.Equal(1, closed);
+    });
+
+    private static CaptureOverlayCoordinator Coordinator(Func<bool, FrozenFrame> acquire) => new(
+        new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
+        new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
+        NullLogger<CaptureOverlayCoordinator>.Instance, acquire);
+
+    private static FrozenFrame Frame() => new(Solid(32, 20), new RectD(0, 0, 32, 20), null, 0);
+
     [Fact]
     public void PendingPersistence_RejectsSecondCaptureAndCanBeCancelled() => RunSta(() =>
     {
