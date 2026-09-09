@@ -235,6 +235,11 @@
                                               Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
                                               Click="OnGifMenuClick" />
                                     <Separator />
+                                    <MenuItem Header="{loc:Text ExportReduction_Title}"
+                                              CommandParameter="{Binding}"
+                                              AutomationProperties.Name="{loc:Text ExportReduction_Title}"
+                                              Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
+                                              Click="OnReducedExportClick" />
                                     <MenuItem Header="{loc:Text Text_6139B6C3ED73}"
                                               CommandParameter="{Binding}"
                                               AutomationProperties.Name="{loc:Text Text_6139B6C3ED73}"
@@ -259,6 +264,16 @@
         </DataTemplate>
 
         <Style x:Key="Gallery.TileRowList" TargetType="ListBox">
+            <!-- Rows have no independent scrolling surface: wheel input reaches RowsList. -->
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBox">
+                        <Border Background="{TemplateBinding Background}">
+                            <ItemsPresenter />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
@@ -364,6 +379,7 @@
             <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
             <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True" />
             <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling" />
+            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
             <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="Contained" />
             <Setter Property="ItemContainerStyle" Value="{StaticResource Gallery.RowContainer}" />
             <Setter Property="ItemsPanel">

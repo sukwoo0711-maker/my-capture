@@ -36,7 +36,8 @@ internal sealed class AnnotationEditingResult
         AnnotationDocument document,
         EditorCommitAction action,
         IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
-        IReadOnlyDictionary<string, string> imageAssetSources)
+        IReadOnlyDictionary<string, string> imageAssetSources,
+        bool reduceExport = false)
     {
         Frame = frame ?? throw new ArgumentNullException(nameof(frame));
         BitmapRegion = bitmapRegion;
@@ -45,6 +46,7 @@ internal sealed class AnnotationEditingResult
         Action = action;
         ImageAssetBitmaps = imageAssetBitmaps ?? throw new ArgumentNullException(nameof(imageAssetBitmaps));
         ImageAssetSources = imageAssetSources ?? throw new ArgumentNullException(nameof(imageAssetSources));
+        ReduceExport = reduceExport;
     }
 
     /// <summary>The frozen monitor frame the selection was cropped from.</summary>
@@ -61,6 +63,8 @@ internal sealed class AnnotationEditingResult
 
     /// <summary>What the user asked the editor to do on commit.</summary>
     internal EditorCommitAction Action { get; }
+
+    internal bool ReduceExport { get; }
 
     /// <summary>
     /// The decoded, frozen bitmap for each <see cref="ImageAnnotation.AssetFileName"/> used

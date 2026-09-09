@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using MyCapture.Core.Queue;
 using MyCapture.Platform.Imaging;
 
@@ -33,12 +34,28 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     private bool _isBroken;
     private bool _thumbnailRequested;
     private bool _thumbnailLoadingEnabled = true;
+    private GalleryThumbnailLoader? _loader;
+    private Dispatcher? _dispatcher;
+    private CancellationTokenSource? _loadCancellation;
+    private int _generation;
+    internal Task PendingThumbnailLoad { get; private set; } = Task.CompletedTask;
+
+    internal void ConfigureAsyncLoading(GalleryThumbnailLoader loader, Dispatcher dispatcher)
+    {
+        ReleaseThumbnail();
+        _loader = loader;
+        _dispatcher = dispatcher;
+    }
     internal Action<GalleryItemViewModel>? ThumbnailAccessed { get; set; }
     internal long CachedThumbnailBytes => _thumbnail is null ? 0
         : (long)_thumbnail.PixelWidth * _thumbnail.PixelHeight * ((_thumbnail.Format.BitsPerPixel + 7) / 8);
 
     internal void ReleaseThumbnail()
     {
+        _generation++;
+        _loadCancellation?.Cancel();
+        _loadCancellation?.Dispose();
+        _loadCancellation = null;
         _thumbnail = null;
         _thumbnailRequested = false;
         _isBroken = false;
@@ -145,9 +162,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     /// </summary>
     public void RefreshThumbnail()
     {
-        _thumbnailRequested = false;
-        _thumbnail = null;
-        _isBroken = false;
+        ReleaseThumbnail();
         EnsureThumbnail();
         Raise(nameof(Thumbnail));
         Raise(nameof(IsBroken));
@@ -182,6 +197,13 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         _thumbnailRequested = true;
 
         string path = _thumbnailPathResolver(Record);
+        if (_loader is not null && _dispatcher is not null)
+        {
+            var cancellation = new CancellationTokenSource();
+            _loadCancellation = cancellation;
+            PendingThumbnailLoad = LoadAndPublishAsync(path, _generation, cancellation.Token);
+            return;
+        }
         BitmapSource? decoded = SafeLoad(path);
         if (decoded is null)
         {
@@ -191,6 +213,36 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
         _thumbnail = decoded;
         ThumbnailAccessed?.Invoke(this);
+    }
+
+    private async Task LoadAndPublishAsync(string path, int generation, CancellationToken cancellationToken)
+    {
+        BitmapSource? decoded;
+        try
+        {
+            decoded = await _loader!.LoadAsync(path, _decodePixelWidth, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { return; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or NotSupportedException or ArgumentException or InvalidOperationException)
+        {
+            decoded = null;
+        }
+        Dispatcher dispatcher = _dispatcher!;
+        if (dispatcher.HasShutdownStarted || cancellationToken.IsCancellationRequested) return;
+        try
+        {
+            await dispatcher.InvokeAsync(() =>
+            {
+                if (generation != _generation || !_thumbnailLoadingEnabled || cancellationToken.IsCancellationRequested) return;
+                _thumbnail = decoded;
+                _isBroken = decoded is null;
+                if (decoded is not null) ThumbnailAccessed?.Invoke(this);
+                Raise(nameof(Thumbnail));
+                Raise(nameof(IsBroken));
+            }, DispatcherPriority.Background);
+        }
+        catch (TaskCanceledException) { }
     }
 
     private BitmapSource? SafeLoad(string path)

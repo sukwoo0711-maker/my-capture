@@ -53,6 +53,8 @@ internal sealed partial class GalleryWindow : Window
     private readonly ILogger _log;
 
     private bool _allowClose;
+    private int _visibilityGeneration;
+    private bool _imagePreparationInProgress;
     private Point _dragStart;
     private GalleryItemViewModel? _dragTile;
     private bool _dragArmed;
@@ -99,9 +101,14 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
-        DataContext = _viewModel;
+        _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
-        IsVisibleChanged += (_, _) => _viewModel.SetThumbnailLoadingEnabled(IsVisible);
+        DataContext = _viewModel;
+        IsVisibleChanged += (_, _) =>
+        {
+            _visibilityGeneration++;
+            _viewModel.SetThumbnailLoadingEnabled(IsVisible);
+        };
         _inlinePlaybackTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
             Interval = TimeSpan.FromMilliseconds(200),
@@ -906,8 +913,46 @@ internal sealed partial class GalleryWindow : Window
         _ocrPresenter.ShowRecognized(RequestFactory, context, OnFresh);
     }
 
-    private void OpenReedit(GalleryItemViewModel tile)
+    private async void OnReducedExportClick(object sender, RoutedEventArgs e)
     {
+        GalleryItemViewModel? tile = ResolveTileFromCommand(sender);
+        CaptureRecord? record = tile is null ? null : _controller.Find(tile.Id);
+        if (_imagePreparationInProgress || record is null || !record.IsImage || !EnsureRecordReady(record.Id)
+            || !_openEditors.Add(record.Id)) return;
+        _imagePreparationInProgress = true;
+        int visibilityGeneration = _visibilityGeneration;
+        try
+        {
+            using CaptureEditSession session = _commitService.BeginEditSession(record);
+            string path = _queue.GetFilePath(record, CaptureFileNames.Rendered);
+            BitmapSource? image = await Task.Run(() => ImageCodec.TryLoad(path));
+            if (!IsVisible || visibilityGeneration != _visibilityGeneration) return;
+            if (_controller.Find(record.Id) is null || _commitService.IsRecordBusy(record.Id)
+                || record.ContentRevision != session.ExpectedContentRevision)
+            {
+                ShowStatus(UiText.Get("GalleryImageChanged"));
+                return;
+            }
+            if (image is null)
+            {
+                ShowStatus(UiText.Get("Text_BCA2A41F7456"));
+                return;
+            }
+            _ = ImageReductionExportDialog.Show(this, image,
+                Path.Combine(_paths.QuickSaveRoot, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)));
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not prepare reduced export for {Id}", record.Id);
+            if (IsVisible && visibilityGeneration == _visibilityGeneration)
+                ShowStatus(UiText.Format("ExportReduction_Error", ex.Message));
+        }
+        finally { _imagePreparationInProgress = false; _openEditors.Remove(record.Id); }
+    }
+
+    private async void OpenReedit(GalleryItemViewModel tile)
+    {
+        if (_imagePreparationInProgress) return;
         if (!EnsureRecordReady(tile.Id))
         {
             return;
@@ -931,11 +976,25 @@ internal sealed partial class GalleryWindow : Window
             return;
         }
 
-        using CaptureEditSession editSession = _commitService.BeginEditSession(record);
+        _imagePreparationInProgress = true;
+        int visibilityGeneration = _visibilityGeneration;
         try
         {
-
-            GalleryReeditContext? context = _reeditLoader.TryLoad(record, out GalleryReeditLoader.LoadFailure failure);
+            using CaptureEditSession editSession = _commitService.BeginEditSession(record);
+            var loaded = await Task.Run(() =>
+            {
+                GalleryReeditContext? result = _reeditLoader.TryLoad(record, out GalleryReeditLoader.LoadFailure loadFailure);
+                return (Context: result, Failure: loadFailure);
+            });
+            if (!IsVisible || visibilityGeneration != _visibilityGeneration) return;
+            if (_controller.Find(record.Id) is null || _commitService.IsRecordBusy(record.Id)
+                || record.ContentRevision != editSession.ExpectedContentRevision)
+            {
+                ShowStatus(UiText.Get("GalleryImageChanged"));
+                return;
+            }
+            GalleryReeditContext? context = loaded.Context;
+            GalleryReeditLoader.LoadFailure failure = loaded.Failure;
             if (context is null)
             {
                 ShowStatus(failure switch
@@ -952,8 +1011,15 @@ internal sealed partial class GalleryWindow : Window
             editor.Committed += (_, _) => OnReeditCommitted(tile.Id);
             _ = editor.ShowDialog();
         }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not open image editor for {Id}", record.Id);
+            if (IsVisible && visibilityGeneration == _visibilityGeneration)
+                ShowStatus(UiText.Get("Text_BCA2A41F7456"));
+        }
         finally
         {
+            _imagePreparationInProgress = false;
             _openEditors.Remove(record.Id);
         }
     }

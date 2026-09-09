@@ -1426,7 +1426,7 @@
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_798E080A9262" xml:space="preserve">
-    <value>드래그해 캡처할 영역을 선택하세요  ·  놓으면 편집 창이 열립니다  ·  Esc 취소</value>
+    <value>드래그해 캡처할 영역을 선택하세요  ·  Shift 정밀 이동  ·  놓으면 확정  ·  Esc 취소</value>
     <comment>src\MyCapture.App\Capture\CaptureOverlayView.cs</comment>
   </data>
   <data name="Text_79B3DB1CD566" xml:space="preserve">
@@ -2925,4 +2925,25 @@
     <value>선택 도구 · 주석을 클릭해 선택하세요</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
+  <data name="GalleryImageChanged" xml:space="preserve"><value>이미지가 로딩 중 변경되었습니다. 다시 열어 주세요.</value></data>
+  <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · 픽셀 정밀 이동</value></data>
+  <data name="CaptureSelectionStart" xml:space="preserve"><value>시작점</value></data>
+  <data name="ExportReduction_Title" xml:space="preserve"><value>용량 줄여 내보내기…</value></data>
+  <data name="ExportReduction_Preview" xml:space="preserve"><value>결과 계산</value></data>
+  <data name="ExportReduction_Save" xml:space="preserve"><value>다른 이름으로 저장…</value></data>
+  <data name="ExportReduction_Drag" xml:space="preserve"><value>폴더로 드래그</value></data>
+  <data name="ExportReduction_Cancel" xml:space="preserve"><value>닫기</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>기본은 원본 PNG입니다. 절감 목표를 선택하고 결과를 계산하세요. 불투명 이미지는 JPEG로 변환할 수 있으며 픽셀 크기는 유지됩니다.</value></data>
+  <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>목표 용량 절감률</value></data>
+  <data name="ExportReduction_UpdateRequired" xml:space="preserve"><value>결과 계산을 눌러 실제 용량을 확인하세요.</value></data>
+  <data name="ExportReduction_Original" xml:space="preserve"><value>원본 품질 · 0% 절감 목표</value></data>
+  <data name="ExportReduction_Target" xml:space="preserve"><value>목표: 원본 PNG보다 {0}% 작은 용량</value></data>
+  <data name="ExportReduction_Working" xml:space="preserve"><value>이미지 용량을 계산하고 있습니다…</value></data>
+  <data name="ExportReduction_Result" xml:space="preserve"><value>원본 {0}바이트 → 결과 {1}바이트
+실제 절감률 {2}% · {3}</value></data>
+  <data name="ExportReduction_Transparent" xml:space="preserve"><value>투명 배경을 보존하기 위해 원본 PNG를 유지했습니다. JPEG 절감은 적용하지 않았습니다.</value></data>
+  <data name="ExportReduction_Unmet" xml:space="preserve"><value>픽셀 크기를 유지하면서 목표 용량에 도달하지 못했습니다. 표시된 실제 결과로 내보냅니다.</value></data>
+  <data name="ExportReduction_Ready" xml:space="preserve"><value>계산 완료. 저장하거나 버튼을 폴더로 드래그하세요.</value></data>
+  <data name="ExportReduction_Error" xml:space="preserve"><value>내보내기 실패: {0}</value></data>
+  <data name="ExportReduction_Extension" xml:space="preserve"><value>이 결과는 {0} 확장자로 저장해야 합니다.</value></data>
 </root>

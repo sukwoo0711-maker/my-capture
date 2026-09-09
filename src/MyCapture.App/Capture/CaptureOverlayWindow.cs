@@ -59,6 +59,7 @@ internal sealed class CaptureOverlayWindow : Window
         ContentRendered += OnContentRendered;
         DpiChanged += OnDpiChanged;
         Deactivated += OnDeactivated;
+        Activated += OnActivated;
     }
 
     private void ConfigureWindowChrome(RectD screenBounds)
@@ -104,6 +105,8 @@ internal sealed class CaptureOverlayWindow : Window
     internal event EventHandler<CaptureSelectionCompletedEventArgs>? SelectionCompleted;
 
     internal event EventHandler? SelectionCancelled;
+    /// <summary>Recording needs geometry only; it must not allocate a cropped screenshot.</summary>
+    internal Action<RectD>? GeometrySelectionCompleted { get; set; }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -142,7 +145,10 @@ internal sealed class CaptureOverlayWindow : Window
         PlacePhysicalBounds();
         _view.Focus();
         _ = Activate();
+        _view.InitializePointer();
     }
+
+    private void OnActivated(object? sender, EventArgs e) => _view.InitializePointer();
 
     private void OnDpiChanged(object? sender, DpiChangedEventArgs e)
     {
@@ -159,7 +165,7 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
 
-        if (_frame is null)
+        if (_frame is null && GeometrySelectionCompleted is null)
         {
             _pendingSelection = e.BitmapRegion;
             return;
@@ -168,7 +174,7 @@ internal sealed class CaptureOverlayWindow : Window
         CompleteSelection(e.BitmapRegion);
     }
 
-    private void CompleteSelection(RectD bitmapRegion)
+    internal void CompleteSelection(RectD bitmapRegion)
     {
         if (_completed)
         {
@@ -176,6 +182,16 @@ internal sealed class CaptureOverlayWindow : Window
         }
 
         _completed = true;
+        _view.EndPointerInteraction();
+        if (GeometrySelectionCompleted is { } geometryCompleted)
+        {
+            RectD screenRegion = new(_screenBounds.Left + bitmapRegion.Left,
+                _screenBounds.Top + bitmapRegion.Top, bitmapRegion.Width, bitmapRegion.Height);
+            Hide();
+            try { geometryCompleted(screenRegion); }
+            finally { Close(); }
+            return;
+        }
         FrozenFrame frame = _frame ?? throw new InvalidOperationException("A frozen capture frame is required.");
         System.Windows.Media.Imaging.BitmapSource crop = ScreenCaptureEngine.Crop(frame, bitmapRegion);
 
@@ -198,6 +214,7 @@ internal sealed class CaptureOverlayWindow : Window
 
     private void OnDeactivated(object? sender, EventArgs e)
     {
+        _view.EndPointerInteraction();
         if (_abortOnFocusLoss && IsVisible && !_completed)
         {
             Cancel();
@@ -218,11 +235,14 @@ internal sealed class CaptureOverlayWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _view.EndPointerInteraction();
+        GeometrySelectionCompleted = null;
         _view.SelectionConfirmed -= OnSelectionConfirmed;
         _view.CancelRequested -= OnCancelRequested;
         SourceInitialized -= OnSourceInitialized;
         ContentRendered -= OnContentRendered;
         Deactivated -= OnDeactivated;
+        Activated -= OnActivated;
         DpiChanged -= OnDpiChanged;
         base.OnClosed(e);
     }

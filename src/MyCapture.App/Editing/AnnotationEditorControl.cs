@@ -681,6 +681,10 @@ internal sealed class AnnotationEditorControl : Grid
 
         menu.Items.Add(quickSave);
         menu.Items.Add(saveAs);
+        var reduceExport = new MenuItem { Header = UiText.Get("ExportReduction_Title") };
+        AutomationName(reduceExport, UiText.Get("ExportReduction_Title"));
+        reduceExport.Click += (_, _) => Commit(EditorCommitAction.SaveAs, reduceExport: true);
+        menu.Items.Add(reduceExport);
 
         var content = new StackPanel
         {
@@ -1523,7 +1527,7 @@ internal sealed class AnnotationEditorControl : Grid
 
     // ---- Commit / cancel -----------------------------------------------------------
 
-    private async void Commit(EditorCommitAction action)
+    private async void Commit(EditorCommitAction action, bool reduceExport = false)
     {
         if (_completed || _commitInProgress)
         {
@@ -1556,7 +1560,8 @@ internal sealed class AnnotationEditorControl : Grid
             document,
             action,
             _imageStore.DecodedFor(usedAssets),
-            _imageStore.SourcesFor(usedAssets));
+            _imageStore.SourcesFor(usedAssets),
+            reduceExport);
 
         // Keep the editor alive while background PNG encoding or clipboard contention
         // resolves. This guarantees Ctrl+C means copy-then-close, never close-then-copy.

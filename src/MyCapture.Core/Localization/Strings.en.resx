@@ -1426,7 +1426,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_798E080A9262" xml:space="preserve">
-    <value>Drag to select a region  ·  Release to open the editor  ·  Esc to cancel</value>
+    <value>Drag to select a region  ·  Hold Shift for precision  ·  Release to confirm  ·  Esc to cancel</value>
     <comment>src\MyCapture.App\Capture\CaptureOverlayView.cs</comment>
   </data>
   <data name="Text_79B3DB1CD566" xml:space="preserve">
@@ -2925,4 +2925,25 @@ This cannot be undone.</value>
     <value>Selection tool · Click an annotation to select it</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
+  <data name="GalleryImageChanged" xml:space="preserve"><value>The image changed while loading. Please open it again.</value></data>
+  <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · Pixel precision</value></data>
+  <data name="CaptureSelectionStart" xml:space="preserve"><value>Start</value></data>
+  <data name="ExportReduction_Title" xml:space="preserve"><value>Export a smaller image…</value></data>
+  <data name="ExportReduction_Preview" xml:space="preserve"><value>Calculate result</value></data>
+  <data name="ExportReduction_Save" xml:space="preserve"><value>Save As…</value></data>
+  <data name="ExportReduction_Drag" xml:space="preserve"><value>Drag to a folder</value></data>
+  <data name="ExportReduction_Cancel" xml:space="preserve"><value>Close</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>Original PNG is the default. Choose a size reduction target and calculate the result. Opaque images may use JPEG; pixel dimensions stay unchanged.</value></data>
+  <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>Target file-size reduction</value></data>
+  <data name="ExportReduction_UpdateRequired" xml:space="preserve"><value>Calculate the result to check the actual file size.</value></data>
+  <data name="ExportReduction_Original" xml:space="preserve"><value>Original quality · 0% reduction target</value></data>
+  <data name="ExportReduction_Target" xml:space="preserve"><value>Target: {0}% smaller than the original PNG</value></data>
+  <data name="ExportReduction_Working" xml:space="preserve"><value>Calculating image size…</value></data>
+  <data name="ExportReduction_Result" xml:space="preserve"><value>Original {0} bytes → result {1} bytes
+Actual reduction {2}% · {3}</value></data>
+  <data name="ExportReduction_Transparent" xml:space="preserve"><value>Kept the original PNG to preserve transparency. JPEG reduction was not applied.</value></data>
+  <data name="ExportReduction_Unmet" xml:space="preserve"><value>The target could not be reached while preserving pixel dimensions. Export uses the actual result shown.</value></data>
+  <data name="ExportReduction_Ready" xml:space="preserve"><value>Ready. Save the image or drag the button into a folder.</value></data>
+  <data name="ExportReduction_Error" xml:space="preserve"><value>Export failed: {0}</value></data>
+  <data name="ExportReduction_Extension" xml:space="preserve"><value>Save this result with the {0} extension.</value></data>
 </root>
