@@ -42,6 +42,7 @@ public sealed class CaptureOverlayCoordinatorTests
             coordinator.Start(true, false, false);
             Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
             Assert.True(coordinator.IsActive);
+            Assert.Equal(1, windows);
             bool dispatched = false;
             _ = Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => dispatched = true));
             PumpUntil(() => dispatched);
@@ -61,7 +62,7 @@ public sealed class CaptureOverlayCoordinatorTests
         }
         Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
         Assert.False(coordinator.IsActive);
-        Assert.Equal(0, windows);
+        Assert.Equal(1, windows);
         Assert.Equal(1, closed);
     });
 
@@ -140,7 +141,7 @@ public sealed class CaptureOverlayCoordinatorTests
         if (shutdown) Assert.True(coordinator.LastPreparationForTest.Wait(TimeSpan.FromSeconds(5)));
         else PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
         Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
-        Assert.Equal(0, windows);
+        Assert.Equal(1, windows);
         Assert.Equal(0, failures);
     });
 
@@ -179,7 +180,9 @@ public sealed class CaptureOverlayCoordinatorTests
     private static CaptureOverlayCoordinator Coordinator(Func<bool, FrozenFrame> acquire) => new(
         new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
         new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
-        NullLogger<CaptureOverlayCoordinator>.Instance, acquire);
+        NullLogger<CaptureOverlayCoordinator>.Instance,
+        acquire,
+        static () => new RectD(0, 0, 32, 20));
 
     private static FrozenFrame Frame() => new(Solid(32, 20), new RectD(0, 0, 32, 20), null, 0);
 
