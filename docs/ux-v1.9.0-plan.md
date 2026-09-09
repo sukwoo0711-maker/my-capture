@@ -17,11 +17,14 @@ Out of scope: unrelated repository changes, replacing existing capture/recording
 The lead owns this status record, integration, acceptance, version metadata, commits/push coordination and release. Implementation and independent review use separate people/contexts. Independent writers use exclusive worktrees and path boundaries; no worker creates child agents or changes remote state.
 
 - `update_completion`: shell startup, actual-version identity, capture-editor retake; exclusive `shell-retake-v1.9.0` worktree.
-- Antigravity Analyze: current library drag/group/selection/delete contracts, read only.
-- `video_completion`: video-editor design and external asset research, read only initially.
-- Library and media implementations follow acceptance of their contracts. Shared localized resource additions use distinct key prefixes; the lead resolves append-only resource merges.
+- Antigravity Analyze: completed library contract audit at the baseline (run `fd3db9d1-aabb-4658-b54b-dc724d32403a`); no edits. The lead rejected its proposed `Copy | Move` allowed effects because live queue video files must not be moved by the shell. Multi-file drag retains copy-only semantics and requires gesture verification.
+- `resume_audit`: library selection, gestures, date headers, visible time, batch removal; exclusive `library-selection-v1.9.0` worktree.
+- `video_completion`: accepted video design/research followed by media export implementation; exclusive `video-export-v1.9.0` worktree. No Gallery/App/capture edits.
+- Shared localized resource additions use `ShellRetake_*`, `LibrarySelection_*` and `MediaExport_*` prefixes. The lead resolves append-only resource merges. Only the shell writer may modify App.xaml.cs; library changes needing that hook must first agree a narrow contract.
 
-Shared identity: `ApplicationIdentity.Version`, `ApplicationIdentity.Label`, `ApplicationIdentity.FormatWindowTitle(context)` and a WPF title attachment. Version is derived from compiled metadata. Contextual titles remain identifiable.
+Shared identity: `MyCapture.Core.Platform.AppIdentity.Version`, `.Label`, `.FormatWindowTitle(context)` and `WindowIdentity.Attach(Window)`. Version is derived from compiled metadata. Contextual titles remain identifiable.
+
+Media contract: persistent Export action, MP4/GIF format settings, current timeline and compositor retained, actual same-interval/same-edits standard-encode size as reduction baseline. Percentage calculation is explicit and cancelable; measured result may miss its target and must report that honestly. GIF retains its established 20-second/200-frame/960px limits. Selected Fluent Regular 20 SVGs must be pinned, licensed and visibly used as filled WPF geometry. The existing local stroke icon family is not reattributed.
 
 ## Verification and release gates
 
@@ -32,5 +35,5 @@ Only one native capture/window diagnostic runs on the workstation at a time. Syn
 ## Progress
 
 - Prepared: verified current main and public release v1.8.4, created isolated integration/shell worktrees, accepted title API boundary.
-- In progress: shell implementation; independent library analysis; video design research.
+- In progress: three isolated writers under accepted independent path contracts. Shell writer has the sole native-window fixture lease for focused retake/title tests; other writers must request it before such tests.
 - Pending: remaining implementation, independent review, integrated verification, push/merge and release 1.9.0.
