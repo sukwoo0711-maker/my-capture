@@ -410,6 +410,8 @@ public partial class App : Application
         try
         {
             _tray?.SetState(TrayIconState.Capturing);
+            // Start reserves the session immediately; full-desktop acquisition runs off the UI
+            // thread and reports asynchronous failures through TransitionFailed on this dispatcher.
             _overlay.Start(
                 _settings.Capture.IncludeCursor,
                 _settings.Capture.AbortOnFocusLoss,
@@ -1623,6 +1625,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Invalidate pending frame acquisition before tearing down tray/persistence services.
+        // Native capture cannot be interrupted, but its late result must never open a window.
+        _overlay?.Dispose();
         _historyMaintenance?.Stop();
         _indexingCancellation.Cancel();
         _log?.LogInformation(

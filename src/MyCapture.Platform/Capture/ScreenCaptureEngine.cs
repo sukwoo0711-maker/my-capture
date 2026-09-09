@@ -479,8 +479,13 @@ public sealed class ScreenCaptureEngine
     /// extra internal copy. Reading the DIB bits directly is both cheaper and
     /// predictable about ownership.
     /// </remarks>
-    private static BitmapSource ToBitmapSource(IntPtr memoryDc, IntPtr bitmapHandle, int width, int height)
+    internal static BitmapSource ToBitmapSource(IntPtr memoryDc, IntPtr bitmapHandle, int width, int height)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        int stride = checked(width * 4);
+        _ = checked(stride * height);
+
         var info = new NativeMethods.BITMAPINFO
         {
             bmiHeader = new NativeMethods.BITMAPINFOHEADER
@@ -498,32 +503,39 @@ public sealed class ScreenCaptureEngine
             },
         };
 
-        int stride = width * 4;
-        int byteCount = stride * height;
-        byte[] buffer = new byte[byteCount];
-
-        unsafe
+        // Desktop alpha is undefined. Bgr32 deliberately ignores that byte, keeping
+        // captures opaque without a second pass over the pixels.
+        var bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, palette: null);
+        bitmap.Lock();
+        try
         {
-            fixed (byte* pinned = buffer)
+            // GetDIBits has no destination-stride parameter. A 32-bit BI_RGB DIB
+            // has DWORD-aligned rows of exactly width * 4 bytes; accepting a larger
+            // WPF stride would silently place subsequent rows at the wrong offsets.
+            if (bitmap.BackBuffer == IntPtr.Zero || bitmap.BackBufferStride != stride)
             {
-                int scanLines = NativeMethods.GetDIBits(
-                    memoryDc, bitmapHandle, 0, (uint)height, (IntPtr)pinned, ref info,
-                    NativeMethods.DIB_RGB_COLORS);
-
-                if (scanLines != height)
-                {
-                    throw new InvalidOperationException(
-                        $"GetDIBits returned {scanLines} of {height} scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
-                }
+                throw new InvalidOperationException("The WPF back buffer does not match the requested DIB layout.");
             }
+
+            // CaptureRegionCore has already deselected bitmapHandle. WPF owns this
+            // pointer: use it only while locked, and never free or retain it.
+            int scanLines = NativeMethods.GetDIBits(
+                memoryDc, bitmapHandle, 0, (uint)height, bitmap.BackBuffer, ref info,
+                NativeMethods.DIB_RGB_COLORS);
+            if (scanLines != height)
+            {
+                throw new InvalidOperationException(
+                    $"GetDIBits returned {scanLines} of {height} scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
+            }
+
+            bitmap.AddDirtyRect(new Int32Rect(0, 0, width, height));
+        }
+        finally
+        {
+            bitmap.Unlock();
         }
 
-        // The desktop has no meaningful alpha, and BitBlt leaves the alpha byte
-        // undefined. Declaring Bgr32 rather than Bgra32 avoids interpreting that
-        // garbage as transparency, which shows up as a capture that looks correct in
-        // one viewer and semi-transparent in another.
-        var bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, palette: null);
-        bitmap.WritePixels(new Int32Rect(0, 0, width, height), buffer, stride, 0);
+        // Publish only a complete, unlocked frame; failed readbacks stay local.
         bitmap.Freeze();
 
         return bitmap;
