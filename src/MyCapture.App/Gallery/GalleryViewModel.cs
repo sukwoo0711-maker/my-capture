@@ -77,6 +77,34 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     private string _searchQuery = string.Empty;
     private int _columnCount = GalleryRowBuilder.MinColumns;
 
+    public GallerySelection Selection { get; } = new();
+    public IReadOnlyList<GalleryItemViewModel> SelectedTiles => Selection.SelectedIds
+        .Select(FindTile).OfType<GalleryItemViewModel>().ToArray();
+    public bool HasSelection => Selection.SelectedIds.Count > 0;
+    public string SelectionText => UiText.Format("LibrarySelection_Count", Selection.SelectedIds.Count);
+    public GalleryItemViewModel? SingleSelectedTile => SelectedTiles.Count == 1 ? SelectedTiles[0] : null;
+    public bool CanReduceSelected => SingleSelectedTile?.IsImage == true;
+    public bool CanGifSelected => SingleSelectedTile?.IsVideo == true;
+
+    public void Select(Guid id, bool control = false, bool shift = false)
+    {
+        Selection.Select(id, control, shift);
+        PublishSelection();
+    }
+
+    public void SelectDay(string heading, bool control)
+    {
+        Selection.SelectGroup(_groups.Where(g => g.Heading == heading).SelectMany(g => g.Items).Select(t => t.Id), control);
+        PublishSelection();
+    }
+
+    private void PublishSelection()
+    {
+        foreach (GalleryItemViewModel tile in _tileCache.Values) tile.IsSelected = Selection.Contains(tile.Id);
+        Raise(nameof(SelectedTiles)); Raise(nameof(HasSelection)); Raise(nameof(SelectionText));
+        Raise(nameof(SingleSelectedTile)); Raise(nameof(CanReduceSelected)); Raise(nameof(CanGifSelected));
+    }
+
     public GalleryViewModel(
         GalleryController controller,
         Func<CaptureRecord, string> thumbnailPathResolver,
@@ -188,6 +216,9 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
         }
 
         RebuildRows();
+
+        Selection.SetVisible(_groups.SelectMany(g => g.Items).Select(t => t.Id));
+        PublishSelection();
 
         Raise(nameof(IsEmpty));
         Raise(nameof(QueueIsEmpty));

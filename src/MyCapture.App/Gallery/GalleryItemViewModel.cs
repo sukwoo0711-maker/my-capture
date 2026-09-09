@@ -85,6 +85,13 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public Guid Id => Record.Id;
 
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set { if (_isSelected != value) { _isSelected = value; Raise(); } }
+    }
+
     public bool IsPinned => Record.IsPinned;
 
     public bool HasAnnotations => Record.HasAnnotations;

@@ -58,6 +58,11 @@ internal sealed partial class GalleryWindow : Window
     private Point _dragStart;
     private GalleryItemViewModel? _dragTile;
     private bool _dragArmed;
+    private bool _collapseOnRelease;
+    private bool _dragPreparing;
+    private bool _deleteInProgress;
+    private readonly GalleryDragGesture _dragGesture = new();
+    private CancellationTokenSource? _dragCancellation;
     private bool _ocrIndexingRunning;
     private CancellationTokenSource? _ocrIndexingCts;
     private readonly HashSet<Guid> _openEditors = [];
@@ -104,9 +109,14 @@ internal sealed partial class GalleryWindow : Window
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
         DataContext = _viewModel;
+        PreviewMouseLeftButtonUp += OnDragButtonUp;
+        PreviewMouseMove += OnTileMouseMove;
+        LostMouseCapture += (_, _) => { if (Mouse.Captured != this) ResetDragGesture(); };
+        PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) ResetDragGesture(); };
         IsVisibleChanged += (_, _) =>
         {
             _visibilityGeneration++;
+            if (!IsVisible) ResetDragGesture();
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
         };
         _inlinePlaybackTimer = new DispatcherTimer(DispatcherPriority.Render)
@@ -328,6 +338,7 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnTileMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_dragPreparing) { e.Handled = true; return; }
         ResetDragGesture();
         if (IsInsideButton(e.OriginalSource)
             || ResolveTileFromTree(e.OriginalSource) is not GalleryItemViewModel tile)
@@ -337,12 +348,27 @@ internal sealed partial class GalleryWindow : Window
 
         _dragStart = e.GetPosition(this);
         _dragTile = tile;
+        bool control = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        _collapseOnRelease = !control && !shift && tile.IsSelected;
+        if (!_collapseOnRelease) _viewModel.Select(tile.Id, control, shift);
+        if (sender is ListBox list && list.ItemContainerGenerator.ContainerFromItem(tile) is ListBoxItem item) item.Focus();
+        e.Handled = true; // Inner single-row ListBox must never collapse the shared selection.
+        if (!tile.IsSelected) return;
+        if (e.ClickCount == 2)
+        {
+            _collapseOnRelease = false;
+            if (tile.IsVideo) PrepareInlineVideo(tile, autoPlay: true); else OpenReedit(tile);
+            return;
+        }
+        if (!Mouse.Capture(this, CaptureMode.SubTree)) { ResetDragGesture(); return; }
+        _dragGesture.Arm();
         _dragArmed = true;
     }
 
-    private void OnTileMouseMove(object sender, MouseEventArgs e)
+    private async void OnTileMouseMove(object sender, MouseEventArgs e)
     {
-        if (!_dragArmed)
+        if (!_dragArmed || _dragPreparing)
         {
             return;
         }
@@ -360,25 +386,57 @@ internal sealed partial class GalleryWindow : Window
             return;
         }
 
-        GalleryItemViewModel? tile = _dragTile;
-        ResetDragGesture();
-        CaptureRecord? record = tile is null ? null : _controller.Find(tile.Id);
-        if (record is null || !EnsureRecordReady(record.Id))
-        {
-            return;
-        }
-
+        CaptureRecord[] records = _viewModel.SelectedTiles.Select(t => t.Record).ToArray();
+        long[] revisions = records.Select(r => r.ContentRevision).ToArray();
+        if (records.Length == 0 || records.Any(r => !EnsureRecordReady(r.Id))) { ResetDragGesture(); return; }
+        _collapseOnRelease = false;
+        _dragPreparing = true;
+        int generation = _dragGesture.Generation;
+        var cancellation = new CancellationTokenSource();
+        _dragCancellation = cancellation;
+        e.Handled = true;
         try
         {
-            DependencyObject source = sender as DependencyObject ?? this;
-            _ = _dragExport.BeginDrag(source, record);
+            using GalleryDragExportService.PreparedDrag prepared = await _dragExport.PrepareBatchAsync(records, cancellation.Token);
+            if (!_dragGesture.CanStart(generation, Mouse.LeftButton == MouseButtonState.Pressed, IsVisible)
+                || records.Where((r, i) => _controller.Find(r.Id) != r || r.ContentRevision != revisions[i]
+                    || !EnsureRecordReady(r.Id)).Any()) return;
+            // Release WPF capture before OLE takes ownership. Leases span the complete OLE loop.
+            _dragArmed = false;
+            if (Mouse.Captured == this) Mouse.Capture(null);
+            DragDrop.DoDragDrop(this, GalleryDragExportService.CreateFileDropData(prepared.Paths), DragDropEffects.Copy);
         }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _log.LogWarning(ex, "Could not stage capture {Id} for shell drag export", record.Id);
+            _log.LogWarning(ex, "Could not stage selected captures for shell drag export");
             ShowStatus(UiText.Get("Text_51F5EF959148"));
         }
+        finally
+        {
+            _dragPreparing = false;
+            if (ReferenceEquals(_dragCancellation, cancellation)) _dragCancellation = null;
+            cancellation.Dispose();
+            ResetDragGesture();
+        }
+    }
 
+    private void OnDragButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_dragArmed && !_dragPreparing && _dragTile is { } tile)
+        {
+            if (_collapseOnRelease) _viewModel.Select(tile.Id);
+            if (_viewModel.SingleSelectedTile?.IsVideo == true) PrepareInlineVideo(tile, autoPlay: false);
+            else CloseInlinePlayer();
+        }
+        ResetDragGesture();
+    }
+
+    private void OnDayClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: GalleryHeaderRow row })
+            _viewModel.SelectDay(row.Heading, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
+        CloseInlinePlayer();
         e.Handled = true;
     }
 
@@ -400,13 +458,39 @@ internal sealed partial class GalleryWindow : Window
 
     private async void OnTileKeyDown(object sender, KeyEventArgs e)
     {
-        if (sender is not ListBox list || list.SelectedItem is not GalleryItemViewModel tile)
+        GalleryItemViewModel? tile = ResolveTileFromTree(e.OriginalSource) ?? _viewModel.SingleSelectedTile;
+        if (tile is null)
         {
             return;
         }
 
         switch (e.Key)
         {
+            case Key.A when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
+                _viewModel.Selection.SelectGroup(_viewModel.Groups.SelectMany(g => g.Items).Select(t => t.Id), false);
+                _viewModel.Refresh();
+                e.Handled = true;
+                break;
+            case Key.Left:
+            case Key.Right:
+            case Key.Up:
+            case Key.Down:
+                GalleryItemViewModel[] visible = _viewModel.Groups.SelectMany(g => g.Items).ToArray();
+                int step = e.Key switch { Key.Left => -1, Key.Right => 1, Key.Up => -_viewModel.ColumnCount, _ => _viewModel.ColumnCount };
+                int index = Array.IndexOf(visible, tile);
+                if (index >= 0 && visible.Length > 0)
+                {
+                    GalleryItemViewModel next = visible[Math.Clamp(index + step, 0, visible.Length - 1)];
+                    _viewModel.Select(next.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+                    GalleryTileRow? row = _viewModel.Rows.OfType<GalleryTileRow>().FirstOrDefault(r => r.Tiles.Contains(next));
+                    if (row is not null)
+                    {
+                        RowsList.ScrollIntoView(row);
+                        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusTile(RowsList, next)));
+                    }
+                }
+                e.Handled = true;
+                break;
             case Key.Enter:
                 if (tile.IsVideo)
                 {
@@ -419,10 +503,13 @@ internal sealed partial class GalleryWindow : Window
                 e.Handled = true;
                 break;
             case Key.Delete:
-                ConfirmAndDelete(tile);
+                ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
                 e.Handled = true;
                 break;
             case Key.Space:
+                _viewModel.Select(tile.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+                e.Handled = true;
+                break;
             case Key.P:
                 TogglePin(tile);
                 e.Handled = true;
@@ -772,34 +859,41 @@ internal sealed partial class GalleryWindow : Window
 
     private void ConfirmAndDelete(GalleryItemViewModel tile)
     {
-        if (!EnsureRecordReady(tile.Id))
+        ConfirmDeleteMany([tile.Id], false);
+    }
+
+    private void OnDeleteSelectedClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
+    private void OnClearLibraryClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_controller.Records.Select(r => r.Id).ToArray(), true);
+
+    private async void ConfirmDeleteMany(IEnumerable<Guid> ids, bool entireLibrary)
+    {
+        if (_deleteInProgress) return;
+        Guid[] targets = ids.Distinct().ToArray();
+        if (targets.Length == 0) return;
+        _deleteInProgress = true;
+        try
         {
-            return;
+            string prompt = UiText.Format(entireLibrary ? "LibrarySelection_ClearConfirm" : "LibrarySelection_DeleteConfirm", targets.Length);
+            if (MessageBox.Show(this, prompt, UiText.Get("LibrarySelection_Delete"), MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+            CloseInlinePlayer(); // MediaElement must release its source before directory cleanup.
+            foreach (Guid id in targets) _viewModel.FindTile(id)?.SetThumbnailLoadingEnabled(false);
+            CaptureBatchRemovalResult result = await _queue.RemoveManyAsync(targets,
+                id => !_commitService.IsRecordBusy(id) && !_videoLibrary.IsBusy(id));
+            string status = UiText.Format("LibrarySelection_Removed", result.RemovedCount, targets.Length - result.RemovedCount);
+            if (result.CleanupPendingCount > 0) status += "\n" + UiText.Format("LibrarySelection_CleanupPending", result.CleanupPendingCount);
+            ShowStatus(status);
         }
-
-        MessageBoxResult answer = MessageBox.Show(
-            this,
-            UiText.Format("Text_249DBB18BB08", tile.ContextLabel),
-            UiText.Get("Text_89D4979D7596"),
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning,
-            MessageBoxResult.Cancel);
-
-        if (answer != MessageBoxResult.OK)
+        catch (Exception ex)
         {
-            return;
+            _log.LogWarning(ex, "Could not durably remove selected library entries");
+            ShowStatus(UiText.Get("LibrarySelection_DeleteFailed"));
         }
-
-        // MessageBox runs a nested dispatcher: finalisation can become busy while the prompt is
-        // open, so the pre-dialog readiness check must be repeated immediately before deletion.
-        if (!EnsureRecordReady(tile.Id))
+        finally
         {
-            return;
-        }
-
-        if (_controller.Delete(tile.Id))
-        {
+            _deleteInProgress = false;
             _viewModel.Refresh();
+            _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             RaiseCaptureChanged();
         }
     }
@@ -1131,6 +1225,10 @@ internal sealed partial class GalleryWindow : Window
     {
         _dragArmed = false;
         _dragTile = null;
+        _collapseOnRelease = false;
+        _dragGesture.Cancel();
+        _dragCancellation?.Cancel();
+        if (Mouse.Captured == this) Mouse.Capture(null);
     }
 
     private static bool IsInsideButton(object? source)
@@ -1145,6 +1243,15 @@ internal sealed partial class GalleryWindow : Window
             }
         }
 
+        return false;
+    }
+
+    private static bool FocusTile(DependencyObject parent, GalleryItemViewModel tile)
+    {
+        if (parent is ListBoxItem { DataContext: GalleryItemViewModel candidate } item && candidate == tile)
+            return item.Focus();
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            if (FocusTile(VisualTreeHelper.GetChild(parent, i), tile)) return true;
         return false;
     }
 

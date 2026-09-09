@@ -45,6 +45,11 @@ internal sealed class GalleryDragExportService
     internal string PrepareExport(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
+        return StageSource(ResolveSource(record), record.IsVideo, _clock(), CancellationToken.None);
+    }
+
+    private string ResolveSource(CaptureRecord record)
+    {
         string sourcePath;
         if (record.IsVideo)
         {
@@ -57,22 +62,30 @@ internal sealed class GalleryDragExportService
         {
             sourcePath = _queue.GetFilePath(record, CaptureFileNames.Rendered);
         }
+        return sourcePath;
+    }
+
+    private string StageSource(string sourcePath, bool isVideo, DateTimeOffset timestamp, CancellationToken cancellationToken,
+        bool stageVideo = false, string? uniqueSuffix = null)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!File.Exists(sourcePath))
         {
             throw new FileNotFoundException("The gallery media is unavailable.", sourcePath);
         }
 
-        if (record.IsVideo)
+        if (isVideo && !stageVideo)
         {
             return Path.GetFullPath(sourcePath);
         }
 
         Directory.CreateDirectory(_stagingRoot);
-        CleanupExpiredBestEffort(_clock() - DefaultRetention);
+        if (uniqueSuffix is null) CleanupExpiredBestEffort(_clock() - DefaultRetention);
 
-        string baseName = BuildBaseFileName(_clock(), record.MediaKind);
-        string stem = Path.GetFileNameWithoutExtension(baseName);
+        string baseName = BuildBaseFileName(timestamp, isVideo ? CaptureMediaKind.Video : CaptureMediaKind.Image);
+        string stem = Path.GetFileNameWithoutExtension(baseName) + uniqueSuffix;
         string extension = Path.GetExtension(baseName);
+        baseName = stem + extension;
 
         for (int sequence = 1; sequence <= 9_999; sequence++)
         {
@@ -83,7 +96,7 @@ internal sealed class GalleryDragExportService
 
             try
             {
-                CopyWithoutOverwrite(sourcePath, destination);
+                CopyWithoutOverwrite(sourcePath, destination, cancellationToken);
                 return destination;
             }
             catch (IOException) when (File.Exists(destination))
@@ -98,8 +111,13 @@ internal sealed class GalleryDragExportService
     internal static DataObject CreateFileDropData(string filePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        return CreateFileDropData([filePath]);
+    }
+
+    internal static DataObject CreateFileDropData(IReadOnlyList<string> filePaths)
+    {
         var data = new DataObject();
-        data.SetData(DataFormats.FileDrop, new[] { Path.GetFullPath(filePath) });
+        data.SetData(DataFormats.FileDrop, filePaths.Select(Path.GetFullPath).ToArray());
 
         // CFSTR_PREFERREDDROPEFFECT/DROPEFFECT_COPY tells Explorer and the desktop that the queue
         // file must be copied, never moved away from MyCapture's staging area.
@@ -107,6 +125,46 @@ internal sealed class GalleryDragExportService
             PreferredDropEffectFormat,
             new MemoryStream(BitConverter.GetBytes((int)DragDropEffects.Copy), writable: false));
         return data;
+    }
+
+    /// <summary>Resolve immutable paths and acquire leases on the owner before disk-only staging.</summary>
+    internal async Task<PreparedDrag> PrepareBatchAsync(IReadOnlyList<CaptureRecord> records, CancellationToken cancellationToken)
+    {
+        var leases = new List<IDisposable>();
+        try
+        {
+            var plans = records.Select(record =>
+            {
+                if (_queue.Find(record.Id) != record) throw new InvalidOperationException("Capture is no longer available.");
+                leases.Add(_queue.AcquireEvictionLease(record.Id));
+                return (Source: ResolveSource(record), Video: record.IsVideo, Timestamp: _clock());
+            }).ToArray();
+            string batchId = Guid.NewGuid().ToString("N");
+            DateTimeOffset cutoff = _clock() - DefaultRetention;
+            string[] paths = await Task.Run(() =>
+            {
+                CleanupExpiredBestEffort(cutoff);
+                return plans.Select((plan, index) => StageSource(plan.Source, plan.Video, plan.Timestamp,
+                    cancellationToken, stageVideo: true, uniqueSuffix: $"-{batchId}-{index + 1}")).ToArray();
+            }, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return new PreparedDrag(paths, leases);
+        }
+        catch
+        {
+            foreach (IDisposable lease in leases) lease.Dispose();
+            throw;
+        }
+    }
+
+    internal sealed class PreparedDrag(string[] paths, List<IDisposable> leases) : IDisposable
+    {
+        internal IReadOnlyList<string> Paths { get; } = paths;
+        public void Dispose()
+        {
+            foreach (IDisposable lease in leases) lease.Dispose();
+            leases.Clear();
+        }
     }
 
     internal DragDropEffects BeginDrag(DependencyObject dragSource, CaptureRecord record)
@@ -164,7 +222,7 @@ internal sealed class GalleryDragExportService
         }
     }
 
-    private static void CopyWithoutOverwrite(string sourcePath, string destination)
+    private static void CopyWithoutOverwrite(string sourcePath, string destination, CancellationToken cancellationToken)
     {
         bool destinationCreated = false;
         try
@@ -180,7 +238,14 @@ internal sealed class GalleryDragExportService
                 FileAccess.Write,
                 FileShare.Read);
             destinationCreated = true;
-            source.CopyTo(target);
+            byte[] buffer = new byte[81920];
+            int count;
+            while ((count = source.Read(buffer)) > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                target.Write(buffer, 0, count);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
             target.Flush(flushToDisk: true);
         }
         catch

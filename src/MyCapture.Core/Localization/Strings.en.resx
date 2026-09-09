@@ -2949,4 +2949,17 @@ Actual reduction {2}% · {3}</value></data>
   <data name="ShellRetake_ReadyTitle" xml:space="preserve"><value>{0} is ready</value></data>
   <data name="ShellRetake_ReadyMessage" xml:space="preserve"><value>Press {0} to capture your screen. Open settings and the library from the tray icon.</value></data>
   <data name="ShellRetake_ReadyWithoutShortcut" xml:space="preserve"><value>Start a capture from the tray icon, or assign a capture shortcut in settings.</value></data>
+  <data name="LibrarySelection_Count" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="LibrarySelection_Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="LibrarySelection_Reduce" xml:space="preserve"><value>Reduce image size</value></data>
+  <data name="LibrarySelection_Gif" xml:space="preserve"><value>Export GIF</value></data>
+  <data name="LibrarySelection_SelectDay" xml:space="preserve"><value>Select displayed items from this day</value></data>
+  <data name="LibrarySelection_ClearHint" xml:space="preserve"><value>Clear entire library</value></data>
+  <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>Delete all {0} items from the entire library, including pinned items and videos, regardless of search? Items added after this confirmation will remain.</value></data>
+  <data name="LibrarySelection_DeleteConfirm" xml:space="preserve"><value>Delete the {0} selected items?</value></data>
+  <data name="LibrarySelection_Removed" xml:space="preserve"><value>Removed {0} items from the library; {1} unavailable or in-use items retained</value></data>
+  <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>Could not save the deletion. Check the library and try again.</value></data>
+  <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>{0} removed items still have files awaiting cleanup. No disk space recovery is confirmed for those items.</value></data>
 </root>
+
+

@@ -23,6 +23,8 @@ internal sealed class CaptureIndexFile
 /// </summary>
 public sealed record CaptureEvictedEventArgs(CaptureRecord Record, string Reason);
 
+public sealed record CaptureBatchRemovalResult(int RemovedCount, int CleanupPendingCount);
+
 /// <summary>
 /// The persistent capture queue.
 /// </summary>
@@ -58,7 +60,7 @@ public sealed class CaptureQueue
 
     private readonly AppPaths _paths;
     private readonly ILogger<CaptureQueue> _log;
-    private readonly ObservableCollection<CaptureRecord> _records = [];
+    private readonly BatchRecordCollection _records = [];
     private readonly Lock _writeGate = new();
     private readonly SemaphoreSlim _publicationSlots = new(8, 8);
     private Task _publicationTail = Task.CompletedTask;
@@ -291,6 +293,91 @@ public sealed class CaptureQueue
         return true;
     }
 
+    /// <summary>
+    /// Owner-context batch removal with one collection reset and one durable index write.
+    /// Admission precedes readiness/lease validation. Manual removal includes pins and videos.
+    /// Only this API delivers Evicted on the disk worker, after index durability; handlers must
+    /// not touch UI. The existing synchronous Remove contract is unchanged.
+    /// </summary>
+    public async Task<CaptureBatchRemovalResult> RemoveManyAsync(IEnumerable<Guid> ids, Func<Guid, bool>? canRemove = null,
+        CancellationToken cancellationToken = default)
+    {
+        Guid[] requested = ids.Distinct().ToArray();
+        using CaptureWriteReservation reservation = await ReservePublicationAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        List<CaptureRecord> removed;
+        lock (_evictionLeaseGate)
+        {
+            removed = _records.Where(r => requested.Contains(r.Id)
+                && !_evictionLeaseCounts.ContainsKey(r.Id) && (canRemove?.Invoke(r.Id) ?? true)).ToList();
+            if (removed.Count == 0) return new(0, 0);
+            _records.ReplaceWith(_records.Except(removed).ToArray());
+            _totalBytes = Math.Max(0, _totalBytes - removed.Sum(r => r.TotalBytes));
+            UpdatePinPressureFlag();
+        }
+        Task publication;
+        int cleanupPending = 0;
+        lock (_writeGate)
+        {
+            string json = JsonSerializer.Serialize(new CaptureIndexFile { Records = [.. _records] }, SerializerOptions);
+            publication = EnqueuePublication(reservation, [(_paths.IndexFile, json)], () =>
+            {
+                foreach (CaptureRecord record in removed)
+                {
+                    try
+                    {
+                        // Revalidate ownership/reparse boundaries immediately before the handler.
+                        if (!TryResolveDirectory(record, out _)) { cleanupPending++; continue; }
+                        Evicted?.Invoke(this, new CaptureEvictedEventArgs(record, "manual-batch"));
+                        if (!TryResolveDirectory(record, out string directory) || Directory.Exists(directory)) cleanupPending++;
+                    }
+                    catch (Exception ex)
+                    {
+                        cleanupPending++;
+                        _log.LogWarning(ex, "Could not clean up removed capture {Id}", record.Id);
+                    }
+                }
+            });
+        }
+        try { await publication; }
+        catch (Exception originalFailure)
+        {
+            // Restore only this operation's missing records. Adds/edits that happened while
+            // disk was pending survive; a corrective FIFO snapshot follows any newer saves.
+            CaptureRecord[] restore = removed.Where(r => Find(r.Id) is null).ToArray();
+            _records.ReplaceWith(_records.Concat(restore).OrderByDescending(r => r.CreatedAt).ToArray());
+            _totalBytes += restore.Sum(r => r.TotalBytes);
+            UpdatePinPressureFlag();
+            Task correction;
+            lock (_writeGate)
+            {
+                string json = JsonSerializer.Serialize(new CaptureIndexFile { Records = [.. _records] }, SerializerOptions);
+                correction = EnqueuePublication(null, [(_paths.IndexFile, json)]);
+            }
+            try { await correction; }
+            catch (Exception correctionFailure)
+            {
+                throw new AggregateException("Batch deletion and its corrective index write both failed; files were retained.",
+                    originalFailure, correctionFailure);
+            }
+            throw;
+        }
+        return new(removed.Count, cleanupPending);
+    }
+
+    private sealed class BatchRecordCollection : ObservableCollection<CaptureRecord>
+    {
+        internal void ReplaceWith(IReadOnlyList<CaptureRecord> records)
+        {
+            Items.Clear();
+            foreach (CaptureRecord record in records) Items.Add(record);
+            OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(Count)));
+            OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs("Item[]"));
+            OnCollectionChanged(new System.Collections.Specialized.NotifyCollectionChangedEventArgs(
+                System.Collections.Specialized.NotifyCollectionChangedAction.Reset));
+        }
+    }
+
     public CaptureRecord? Find(Guid id) => _records.FirstOrDefault(r => r.Id == id);
 
     public bool TogglePin(Guid id)
@@ -419,7 +506,8 @@ public sealed class CaptureQueue
 
     // Called only under _writeGate, after immutable serialization. A failed predecessor does
     // not poison later writes: each caller observes its own failure, and recovery may publish next.
-    private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, string Content)[] files)
+    private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, string Content)[] files,
+        Action? afterDurableWrite = null)
     {
         // Synchronous owner saves bypass the async pool: slots can belong to awaiters whose
         // continuations still need that owner thread. Waiting for those slots here deadlocks.
@@ -433,6 +521,7 @@ public sealed class CaptureQueue
                     BeforePublicationWriteForTest?.Invoke(path, content);
                     AtomicFile.WriteAllText(path, content);
                 }
+                afterDurableWrite?.Invoke();
             }
             finally { reservation?.Complete(); }
         }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
