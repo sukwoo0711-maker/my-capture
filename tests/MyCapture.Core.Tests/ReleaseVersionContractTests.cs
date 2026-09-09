@@ -255,7 +255,16 @@ public sealed class ReleaseVersionContractTests
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Where(line => line.TrimStart().StartsWith("uses:", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(2, actions.Length);
+        Assert.Equal(3, actions.Length);
+        Assert.Equal(
+            new[]
+            {
+                "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
+                "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+            },
+            actions.Select(action => action.Trim()["uses:".Length..]
+                .Split([' ', '#'], StringSplitOptions.RemoveEmptyEntries)[0]).ToArray());
         foreach (string action in actions)
         {
             int at = action.IndexOf('@');
@@ -267,6 +276,7 @@ public sealed class ReleaseVersionContractTests
 
         Assert.DoesNotContain("uses: actions/checkout@v", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("uses: actions/setup-dotnet@v", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("uses: actions/upload-artifact@v", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain(": write", workflow, StringComparison.Ordinal);
         Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
