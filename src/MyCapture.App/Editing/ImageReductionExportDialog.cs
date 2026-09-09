@@ -24,7 +24,7 @@ internal sealed class ImageReductionExportDialog : Window
     private readonly Button _drag = new() { Content = UiText.Get("ExportReduction_Drag"), IsEnabled = false };
     private byte[]? _original;
     private ImageExportResult? _result;
-    private string? _stagedPath;
+    private OwnedImageExportStage? _stage;
     private CancellationTokenSource? _previewCancellation;
     private bool _working;
     private bool _closed;
@@ -130,19 +130,19 @@ internal sealed class ImageReductionExportDialog : Window
             // A single worker per dialog; changing the slider cancels between encoder calls.
             ImageExportResult result = await Task.Run(() => ImageExportEncoder.Encode(_image, original, target, cancellation.Token));
             cancellation.Token.ThrowIfCancellationRequested();
-            (string staged, BitmapSource preview) = await Task.Run(() =>
+            (OwnedImageExportStage staged, BitmapSource preview) = await Task.Run(() =>
             {
                 BitmapSource imagePreview = CreatePreview(result, _image.PixelWidth, _image.PixelHeight);
                 cancellation.Token.ThrowIfCancellationRequested();
-                return (Stage(result), imagePreview);
+                return (OwnedImageExportStage.Create(result), imagePreview);
             });
             if (_closed || cancellation.IsCancellationRequested)
             {
-                TryDelete(staged);
+                staged.Dispose();
                 return;
             }
             DeleteUnconsumedStage();
-            _stagedPath = staged;
+            _stage = staged;
             _result = result;
             _imagePreview.Source = preview;
             _status.Text = UiText.Format("ExportReduction_Result", original.LongLength.ToString("N0"), result.Bytes.LongLength.ToString("N0"), result.ActualReductionPercent.ToString("F1"), result.Extension)
@@ -208,55 +208,40 @@ internal sealed class ImageReductionExportDialog : Window
 
     private void OnDragMove(object sender, MouseEventArgs e)
     {
-        if (_dragStart is not Point start || e.LeftButton != MouseButtonState.Pressed || _stagedPath is null) return;
+        if (_dragStart is not Point start || e.LeftButton != MouseButtonState.Pressed || _stage is null) return;
         Point current = e.GetPosition(_drag);
         if (Math.Abs(current.X - start.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(current.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         _dragStart = null;
+        OwnedImageExportStage stage = _stage;
+        ImageExportResult? result = _result;
+        // OLE pumps dispatcher messages. Hold ownership locally so a close/target change
+        // cannot dispose the file while the shell is reading it or null the post-drop handle.
+        _stage = null;
+        bool copied = false;
         try
         {
-            DragDropEffects effect = DragDrop.DoDragDrop(_drag, GalleryDragExportService.CreateFileDropData(_stagedPath), DragDropEffects.Copy);
+            DragDropEffects effect = DragDrop.DoDragDrop(_drag, GalleryDragExportService.CreateFileDropData(stage.FilePath), DragDropEffects.Copy);
             if (effect == DragDropEffects.Copy)
             {
                 // Explorer may finish reading after DoDragDrop returns. Retain successful
                 // staging files for the normal two-day shell handoff window.
-                _stagedPath = null;
-                DialogResult = true;
+                stage.RetainForShell();
+                copied = true;
+                if (!_closed) DialogResult = true;
             }
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or InvalidOperationException)
         {
-            _status.Text = UiText.Format("ExportReduction_Error", ex.Message);
+            if (!_closed) _status.Text = UiText.Format("ExportReduction_Error", ex.Message);
         }
-    }
-
-    private static string Stage(ImageExportResult result)
-    {
-        string directory = Path.Combine(Path.GetTempPath(), "MyCapture", "ReducedDragExports");
-        Directory.CreateDirectory(directory);
-        foreach (string file in Directory.EnumerateFiles(directory, "MyCapture_*.*"))
+        finally
         {
-            try
+            if (!copied)
             {
-                if (File.GetLastWriteTimeUtc(file) < DateTime.UtcNow.AddDays(-2)) TryDelete(file);
+                if (!_closed && ReferenceEquals(_result, result) && _stage is null) _stage = stage;
+                else stage.Dispose();
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-        }
-        string path = Path.Combine(directory, $"MyCapture_{Guid.NewGuid():N}{result.Extension}");
-        bool created = false;
-        try
-        {
-            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
-            created = true;
-            stream.Write(result.Bytes);
-            stream.Flush(true);
-            return path;
-        }
-        catch
-        {
-            if (created) TryDelete(path);
-            throw;
         }
     }
 
@@ -279,14 +264,7 @@ internal sealed class ImageReductionExportDialog : Window
 
     private void DeleteUnconsumedStage()
     {
-        if (_stagedPath is not null) TryDelete(_stagedPath);
-        _stagedPath = null;
-    }
-
-    private static void TryDelete(string path)
-    {
-        try { File.Delete(path); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        _stage?.Dispose();
+        _stage = null;
     }
 }
