@@ -82,6 +82,8 @@ internal sealed class AnnotationEditorController
     internal double StrokeThickness { get; set; } = 3;
     internal AnnotationStrokeStyle StrokeStyle { get; private set; }
     internal double FillTransparency { get; private set; } = 100;
+    internal double DefaultFontSize { get; set; } = 18;
+    internal string DefaultFontFamily { get; set; } = "Malgun Gothic";
 
     internal bool CanUndo => _undo.CanUndo;
 
@@ -250,7 +252,8 @@ internal sealed class AnnotationEditorController
         {
             Rect = new RectD(topLeft.X, topLeft.Y, defaultBoxWidth, defaultBoxHeight),
             Foreground = StrokeColor,
-            FontSize = 18,
+            FontSize = DefaultFontSize,
+            FontFamily = DefaultFontFamily,
             Text = string.Empty,
         };
 

@@ -69,10 +69,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     internal ScreenCaptureEngine Engine => _captureEngine;
 
-    internal bool CanRetake => !_disposed && _activeEditor is not null &&
+    internal bool CanRetake => !_disposed && _activeEditor is not null && !_activeEditor.Editor.IsCommitInProgress &&
         _preparation is null && !_isOpeningEditor;
 
-    /// <summary>Closes only the capture-owned editor; its already persisted original remains in the library.</summary>
+    /// <summary>Closes only the capture-owned draft editor before replacing the selection.</summary>
     internal void CloseEditorForRetake()
     {
         VerifyDispatcherAccess();
@@ -125,6 +125,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         Exception? failure = null;
         try
         {
+            // Let WPF process close/menu-dismiss layout and DWM remove their last presented
+            // pixels. The reserved preparation coalesces hotkeys throughout this short wait.
+            await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle).Task.ConfigureAwait(false);
+            await Task.Delay(100).ConfigureAwait(false);
             frame = await Task.Run(() =>
             {
                 if (preparation.Cancelled) throw new OperationCanceledException();

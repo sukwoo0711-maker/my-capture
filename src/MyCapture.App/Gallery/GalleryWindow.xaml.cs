@@ -1021,7 +1021,7 @@ internal sealed partial class GalleryWindow : Window
             string path = _queue.GetFilePath(record, CaptureFileNames.Rendered);
             BitmapSource? image = await Task.Run(() => ImageCodec.TryLoad(path));
             if (!IsVisible || visibilityGeneration != _visibilityGeneration) return;
-            if (_controller.Find(record.Id) is null || _commitService.IsRecordBusy(record.Id)
+            if (!ReferenceEquals(_controller.Find(record.Id), record) || _commitService.IsRecordBeingWritten(record.Id)
                 || record.ContentRevision != session.ExpectedContentRevision)
             {
                 ShowStatus(UiText.Get("GalleryImageChanged"));
@@ -1081,7 +1081,7 @@ internal sealed partial class GalleryWindow : Window
                 return (Context: result, Failure: loadFailure);
             });
             if (!IsVisible || visibilityGeneration != _visibilityGeneration) return;
-            if (_controller.Find(record.Id) is null || _commitService.IsRecordBusy(record.Id)
+            if (!ReferenceEquals(_controller.Find(record.Id), record) || _commitService.IsRecordBeingWritten(record.Id)
                 || record.ContentRevision != editSession.ExpectedContentRevision)
             {
                 ShowStatus(UiText.Get("GalleryImageChanged"));

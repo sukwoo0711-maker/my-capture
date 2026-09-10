@@ -101,6 +101,9 @@ public static class AppSettingsClone
 
     private static AnnotationDefaults Clone(AnnotationDefaults s) => new()
     {
+        LastTool = s.LastTool,
+        StrokeStyle = s.StrokeStyle,
+        FillTransparency = s.FillTransparency,
         StrokeColor = s.StrokeColor,
         StrokeThickness = s.StrokeThickness,
         TextColor = s.TextColor,

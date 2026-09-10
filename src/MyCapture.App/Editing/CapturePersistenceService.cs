@@ -107,19 +107,28 @@ internal sealed class CapturePersistenceService
     {
         ArgumentNullException.ThrowIfNull(original);
 
-        CaptureRecord record = CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor);
-        long bytes = await StaThreadTask.RunAsync(
-            () => WriteOriginalFiles(record, original),
-            "MyCapture original persistence");
-        using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync();
+        CaptureRecord record = CreatePendingRecord(original, dpiScale, sourceWindowTitle, sourceMonitor);
+        return await PersistPendingOriginalAsync(record, original);
+    }
+
+    internal static CaptureRecord CreatePendingRecord(BitmapSource original, double dpiScale,
+        string sourceWindowTitle, string sourceMonitor) => CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor);
+
+    internal async Task<CaptureRecord> PersistPendingOriginalAsync(CaptureRecord record, BitmapSource original)
+    {
         using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
-        _busyRecords.TryAdd(record.Id, 0);
+        if (!_busyRecords.TryAdd(record.Id, 0)) throw new InvalidOperationException("The capture is already being written.");
         try
         {
+            long bytes = await StaThreadTask.RunAsync(
+                () => WriteOriginalFiles(record, original),
+                "MyCapture original persistence");
+            using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync();
             PrepareOriginalPublication(record, bytes);
             BeforeRecordMetadataCommit?.Invoke(record.Id);
             await _queue.PublishRecordAsync(record, reservation);
             FinishOriginalPublication(record, bytes);
+            ClearBlocked(record.Id, BlockReason.PendingOriginal);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -134,6 +143,8 @@ internal sealed class CapturePersistenceService
         _busyRecords.ContainsKey(recordId)
         || IsBlocked(recordId)
         || _activeEditSessions.ContainsKey(recordId);
+
+    internal bool IsWriteInProgress(Guid recordId) => _busyRecords.ContainsKey(recordId) || IsBlocked(recordId);
 
     internal IDisposable AcquireEditLease(Guid recordId)
     {
@@ -249,7 +260,15 @@ internal sealed class CapturePersistenceService
 
     private void PrepareOriginalPublication(CaptureRecord record, long bytes)
     {
+        CaptureRecord? existing = _queue.Find(record.Id);
+        if (existing is not null && !ReferenceEquals(existing, record))
+            throw new InvalidOperationException("A different capture already owns this draft identity.");
         record.HasAnnotations = false;
+        if (existing is not null)
+        {
+            _queue.UpdateByteCount(record.Id, bytes);
+            return;
+        }
         record.TotalBytes = bytes;
         // Metadata precedes the index. The small recovery metadata cost is not tracked.
         _queue.Add(record);

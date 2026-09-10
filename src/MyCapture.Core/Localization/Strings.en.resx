@@ -2994,4 +2994,11 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_ExportFormats" xml:space="preserve"><value>Export · MP4 / GIF</value></data>
   <data name="MediaExport_Workspace" xml:space="preserve"><value>Video editor</value></data>
   <data name="MediaExport_ResultPreview" xml:space="preserve"><value>Sample frame from the calculated file</value></data>
+<data name="Shell.Close" xml:space="preserve"><value>Close</value></data>
+<data name="Shell.Help" xml:space="preserve"><value>How to use MyCapture</value></data>
+<data name="Shell.HelpText" xml:space="preserve"><value>Capture a region / retake: use your configured capture shortcut
+Drag to select a region, then edit shapes and text.
+Confirm or save to add the capture to the gallery. Cancelled or replaced drafts are not saved.
+Hold Shift for precise pixel selection.
+Open Gallery, Settings, or Language from the tray menu.</value></data>
 </root>

@@ -930,4 +930,100 @@ public sealed class CaptureCommitServiceTests
             DeleteRoot(root);
         }
     });
+
+    [Fact]
+    public void GalleryOwnEditLease_DoesNotCountAsConcurrentWriter() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var (commit, _, record, _, _) = Build(root);
+            using CaptureEditSession session = commit.BeginEditSession(record);
+            Assert.True(commit.IsRecordBusy(record.Id));
+            Assert.False(commit.IsRecordBeingWritten(record.Id));
+            Assert.Equal(record.ContentRevision, session.ExpectedContentRevision);
+        }
+        finally { DeleteRoot(root); }
+    });
+
+    [Fact]
+    public void PendingPublicationFailure_RetriesSameIdentityWithoutDuplicateBytes() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var settings = new QueueSettings();
+            var queue = new CaptureQueue(paths, settings, NullLogger<CaptureQueue>.Instance);
+            var persistence = new CapturePersistenceService(queue, paths, () => settings,
+                NullLogger<CapturePersistenceService>.Instance);
+            BitmapSource image = Solid(48, 32);
+            CaptureRecord draft = CapturePersistenceService.CreatePendingRecord(image, 1, "window", "monitor");
+            Assert.Empty(queue.Records);
+            Assert.False(Directory.Exists(queue.GetDirectory(draft)));
+            persistence.BeforeRecordMetadataCommit = _ => throw new IOException("synthetic publication failure");
+            Assert.Throws<IOException>(() => persistence.PersistPendingOriginalAsync(draft, image).GetAwaiter().GetResult());
+            Assert.Single(queue.Records);
+            persistence.BeforeRecordMetadataCommit = null;
+            Assert.Same(draft, persistence.PersistPendingOriginalAsync(draft, image).GetAwaiter().GetResult());
+            Assert.Single(queue.Records);
+            Assert.Equal(draft.Id, queue.Records[0].Id);
+            Assert.Equal(draft.TotalBytes, queue.TotalBytes);
+            Assert.False(persistence.IsBusy(draft.Id));
+        }
+        finally { DeleteRoot(root); }
+    });
+
+    [Fact]
+    public void FirstConfirmedCommit_AdvancesCreatedSessionBeforeClipboardRetry() => RunSta(() =>
+    {
+        string root = NewRoot();
+        CaptureEditSession? session = null;
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var settings = new AppSettings();
+            var queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
+            var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue,
+                NullLogger<CapturePersistenceService>.Instance);
+            int copies = 0;
+            var commit = new CaptureCommitService(persistence, () => settings, () => paths,
+                NullLogger<CaptureCommitService>.Instance, _ => Task.FromResult(++copies > 1));
+            AnnotationEditingResult result = MakeResult(EditorCommitAction.Done);
+            CaptureRecord draft = CapturePersistenceService.CreatePendingRecord(result.SelectedBitmap, 1, "", "");
+            int creates = 0;
+            async Task<(CaptureRecord, CaptureEditSession?)> Create()
+            {
+                creates++;
+                await persistence.PersistPendingOriginalAsync(draft, result.SelectedBitmap);
+                session = commit.BeginEditSession(draft);
+                return (draft, session);
+            }
+            Assert.False(commit.CommitAsync(null, result, createRecordAsync: Create).GetAwaiter().GetResult());
+            Assert.NotNull(session);
+            Assert.Equal(draft.ContentRevision, session.ExpectedContentRevision);
+            Assert.True(commit.CommitAsync(draft, result, session, Create).GetAwaiter().GetResult());
+            Assert.Equal(1, creates);
+            Assert.Single(queue.Records);
+            Assert.Equal(draft.ContentRevision, session.ExpectedContentRevision);
+        }
+        finally { session?.Dispose(); DeleteRoot(root); }
+    });
+
+    [Fact]
+    public void EditorOptions_SurviveCloneSettingsDraftAndSerializedRestart()
+    {
+        var settings = new AppSettings();
+        settings.Annotation.LastTool = "Arrow";
+        settings.Annotation.StrokeStyle = AnnotationStrokeStyle.Dotted;
+        settings.Annotation.FillTransparency = 42;
+        settings.Annotation.StrokeThickness = 7;
+        var draft = new SettingsDraft(settings.DeepClone());
+        AppSettings restored = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(
+            System.Text.Json.JsonSerializer.Serialize(draft.ToAppSettings()))!;
+        Assert.Equal("Arrow", restored.Annotation.LastTool);
+        Assert.Equal(AnnotationStrokeStyle.Dotted, restored.Annotation.StrokeStyle);
+        Assert.Equal(42, restored.Annotation.FillTransparency);
+        Assert.Equal(7, restored.Annotation.StrokeThickness);
+    }
 }

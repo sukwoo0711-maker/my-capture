@@ -239,6 +239,22 @@ public partial class App : Application
         // window, but never cache the text — a pin has no backing capture record.
         _pins.OcrRequested += OnPinOcrRequested;
 
+        _shellPresenter = new ThemedShellPresenter(() => _overlay?.IsActive == true || _recorder?.IsActive == true);
+        _tray.NotificationPresenter = _shellPresenter.ShowNotification;
+        _tray.MenuPresenter = () => _shellPresenter.ShowMenu(new (string, Action)[]
+        {
+            (UiText.Get("Text_2C20ADDA2018"), HandleCaptureRequested),
+            (UiText.Get("Text_EA1FBABE64F3"), HandleCaptureWindow),
+            (UiText.Get("Text_65BB6610ACA0"), HandleCaptureFullScreen),
+            (_scrollCancellation is not null ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"), HandleScrollingCapture),
+            (UiText.Get("Text_878A28AF568C"), HandleRepeatLastRegion),
+            (UiText.Get("Text_38FF9B0AA541"), HandleDelayedCapture),
+            (UiText.Get("Text_8739F6684453"), HandleGalleryRequested),
+            (UiText.Get("Text_00480581AAB5"), HandleSettingsRequested),
+            (UiText.Get("Text_72B6DBA8AAC5"), () => Shutdown(0)),
+        }, _settings!.General.Language, ChangeTrayLanguage);
+        AnnotationEditorPreferences.Read = () => _settings!.Annotation;
+        AnnotationEditorPreferences.Write = RememberEditorPreferences;
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
         _tray.CaptureWindowRequested += (_, _) => HandleCaptureWindow();
         _tray.CaptureFullScreenRequested += (_, _) => HandleCaptureFullScreen();
@@ -256,6 +272,7 @@ public partial class App : Application
             _currentEditSession?.Dispose();
             _currentRecord = null;
             _currentEditSession = null;
+            _pendingRecord = null;
             RestoreTrayAfterCapture();
         };
         _overlay.CommitRequested = HandleCommitAsync;
@@ -426,6 +443,45 @@ public partial class App : Application
         {
             _pasteToScreenInFlight = false;
         }
+    }
+
+    private ThemedShellPresenter? _shellPresenter;
+    private System.Windows.Threading.DispatcherTimer? _preferenceSaveTimer;
+
+    private void ChangeTrayLanguage(string language)
+    {
+        if (_settings is null || _services is null) return;
+        AppSettings next = _settings.DeepClone();
+        next.General.Language = language;
+        try
+        {
+            _services.GetRequiredService<SettingsStore>().Save(next);
+            _settings = next;
+            UiText.Configure(language);
+            _tray?.SetCaptureCount(_queue?.Count ?? 0);
+            _shellPresenter?.ShowNotification("Language", UiText.Get("Settings.LanguageRestart"), TrayBalloonKind.Information);
+        }
+        catch (Exception ex) { _log?.LogWarning(ex, "Could not save tray language"); }
+    }
+
+    private void RememberEditorPreferences(AnnotationDefaults value)
+    {
+        if (_settings is null) return;
+        _settings.Annotation = value;
+        if (_preferenceSaveTimer is null)
+        {
+            _preferenceSaveTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _preferenceSaveTimer.Tick += (_, _) => FlushEditorPreferences();
+        }
+        _preferenceSaveTimer.Stop();
+        _preferenceSaveTimer.Start();
+    }
+
+    private void FlushEditorPreferences()
+    {
+        _preferenceSaveTimer?.Stop();
+        try { if (_settings is not null) _services?.GetRequiredService<SettingsStore>().Save(_settings); }
+        catch (Exception ex) { _log?.LogWarning(ex, "Could not save editor preferences"); }
     }
 
     private void HandleCaptureRequested()
@@ -686,6 +742,7 @@ public partial class App : Application
 
     private bool GuardStillCapture(string mode, bool allowRetake = false)
     {
+        _shellPresenter?.DismissForCapture();
         if ((_overlay?.IsActive == true && !(allowRetake && _overlay.CanRetake)) ||
             _activeCountdown is not null || _scrollCancellation is not null)
             return false;
@@ -752,6 +809,8 @@ public partial class App : Application
         }
     }
 
+    private CaptureRecord? _pendingRecord;
+
     private async Task OnCaptureSelectionCompletedAsync(CaptureSelectionCompletedEventArgs e)
     {
         _log?.LogInformation(
@@ -759,29 +818,14 @@ public partial class App : Application
             e.SelectedBitmap.PixelWidth,
             e.SelectedBitmap.PixelHeight);
 
-        // Persist the untouched selection before editing continues so the capture survives a
-        // crash or abandon, while encoding and disk flushes run off the UI dispatcher.
-        if (_persistence is null)
-        {
-            return;
-        }
-
-        // Start the exact-PNG clipboard work as soon as the explicit region is frozen. It is
-        // safe to run beside persistence because SelectedBitmap is frozen, and awaiting both
-        // below keeps transition latency near the slower operation instead of their sum.
+        // Selection is a draft: identity/provenance only, no queue, journal, or disk writes.
+        _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
+            e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty);
         Task<bool>? automaticClipboardCopy = e.CopyToClipboardImmediately && _commit is not null
             ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap)
             : null;
-
         try
         {
-            _currentRecord = await _persistence.PersistOriginalAsync(
-                e.SelectedBitmap,
-                e.Frame.DpiScale,
-                sourceWindowTitle: e.SourceTitle,
-                sourceMonitor: e.Frame.Monitor?.DeviceName ?? string.Empty);
-            _currentEditSession = _commit?.BeginEditSession(_currentRecord);
-
             // Repeat history is intentionally limited to explicit manual region selections.
             // Advanced full/window/scroll captures carry RecordForRepeat=false because their
             // synthetic frame coordinates are not a reusable screen rectangle.
@@ -881,7 +925,15 @@ public partial class App : Application
 
         try
         {
-            bool shouldClose = await _commit.CommitAsync(_currentRecord, result, _currentEditSession);
+            bool shouldClose = await _commit.CommitAsync(_currentRecord, result, _currentEditSession, async () =>
+            {
+                if (_currentRecord is not null) return (_currentRecord, _currentEditSession);
+                if (_persistence is null || _pendingRecord is null)
+                    throw new InvalidOperationException("Capture draft persistence is unavailable.");
+                _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, result.SelectedBitmap);
+                _currentEditSession = _commit.BeginEditSession(_currentRecord);
+                return (_currentRecord, _currentEditSession);
+            });
             if (shouldClose)
             {
                 _tray?.SetCaptureCount(_queue?.Count ?? 0);
@@ -1645,6 +1697,10 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        AnnotationEditorPreferences.Read = null;
+        AnnotationEditorPreferences.Write = null;
+        _shellPresenter?.Dispose();
         // Invalidate pending frame acquisition before tearing down tray/persistence services.
         // Native capture cannot be interrupted, but its late result must never open a window.
         _overlay?.Dispose();
