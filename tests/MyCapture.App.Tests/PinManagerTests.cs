@@ -11,6 +11,7 @@ using MyCapture.App.Pinning;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -191,14 +192,21 @@ public sealed class PinManagerTests : KoreanCaptionTest
         RunSta(() =>
         {
             PinManager manager = NewManager();
-            PinWindow pin = manager.PinImage(SolidImage(64, 48));
+            double scale = MonitorEnumerator.GetFromCursor().ScaleFactor;
+            scale = scale <= 0 ? 1.0 : scale;
+            try
+            {
+                PinWindow pin = manager.PinImage(SolidImage(64, 48));
 
-            // A tiny image fits at 1:1, so the state size equals the image size in DIP.
-            Assert.Equal(1.0, pin.State.Zoom, 6);
-            Assert.Equal(64, pin.State.WidthDip, 3);
-            Assert.Equal(48, pin.State.HeightDip, 3);
-
-            manager.CloseAll();
+                // A 1:1 image preserves physical pixels; DIP size depends on monitor scaling.
+                Assert.Equal(1.0, pin.State.Zoom, 6);
+                Assert.Equal(64, pin.State.WidthDip * scale, 3);
+                Assert.Equal(48, pin.State.HeightDip * scale, 3);
+            }
+            finally
+            {
+                manager.CloseAll();
+            }
         });
     }
 
