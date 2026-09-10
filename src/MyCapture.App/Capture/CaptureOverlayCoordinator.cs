@@ -125,9 +125,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         Exception? failure = null;
         try
         {
-            // Let WPF process close/menu-dismiss layout and DWM remove their last presented
-            // pixels. The reserved preparation coalesces hotkeys throughout this short wait.
-            await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle).Task.ConfigureAwait(false);
+            // Allow close/menu-dismiss presentation to settle without waiting for dispatcher
+            // idle, which continuous input can starve. Preparation still coalesces hotkeys.
             await Task.Delay(100).ConfigureAwait(false);
             frame = await Task.Run(() =>
             {
