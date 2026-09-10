@@ -13,6 +13,7 @@ using MyCapture.App.Ocr;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Undo;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Capture;
 
 namespace MyCapture.App.Editing;
@@ -38,6 +39,8 @@ namespace MyCapture.App.Editing;
 /// </remarks>
 internal sealed class AnnotationEditorControl : Grid
 {
+    private EditorTool _preferredTool = EditorTool.Rectangle;
+    private bool _preferencesReady;
     private const double ToolRailWidth = 52;
     private const double InspectorWidth = 232;
 
@@ -135,6 +138,14 @@ internal sealed class AnnotationEditorControl : Grid
         AnnotationDocument document = initialDocument ?? AnnotationDocument.CreateFor(_canvasWidth, _canvasHeight);
         var undo = new UndoStack();
         _controller = new AnnotationEditorController(document, undo);
+        AnnotationDefaults defaults = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
+        _controller.StrokeColor = defaults.StrokeColor;
+        _controller.StrokeThickness = double.IsFinite(defaults.StrokeThickness) ? Math.Clamp(defaults.StrokeThickness, 1, 24) : 3;
+        _controller.ApplyStrokeStyle(Enum.IsDefined(defaults.StrokeStyle) ? defaults.StrokeStyle : AnnotationStrokeStyle.Solid);
+        _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
+        _controller.DefaultFontSize = double.IsFinite(defaults.FontSize) ? Math.Clamp(defaults.FontSize, 8, 200) : 18;
+        _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
+        if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool;
         _imageStore.PruneToReachable(document, undo);
         var renderer = new AnnotationRenderer(_imageStore);
 
@@ -174,7 +185,8 @@ internal sealed class AnnotationEditorControl : Grid
             _redactionCts = null;
         };
 
-        SelectTool(EditorTool.Rectangle);
+        SelectTool(_preferredTool);
+        _preferencesReady = true;
         RefreshHistoryButtons();
         UpdateInspector();
     }
@@ -880,6 +892,7 @@ internal sealed class AnnotationEditorControl : Grid
             swatchButton.Click += (_, _) =>
             {
                 _controller.ApplyStrokeColor(swatchColor);
+                RememberPreferences();
                 SetStatus(UiText.Format("Text_67CAE5B118A3", swatchColor.ToHex()));
             };
             _swatchPanel.Children.Add(swatchButton);
@@ -914,6 +927,7 @@ internal sealed class AnnotationEditorControl : Grid
             }
 
             _controller.ApplyStrokeThickness(args.NewValue);
+            RememberPreferences();
             if (_controller.Selected is not null)
             {
                 SetStatus(UiText.Format("Text_DBAF1D995258", args.NewValue));
@@ -946,6 +960,7 @@ internal sealed class AnnotationEditorControl : Grid
             if (!_syncingInspector && _strokeStyleComboBox.SelectedItem is ComboBoxItem { Tag: AnnotationStrokeStyle style })
             {
                 _controller.ApplyStrokeStyle(style);
+                RememberPreferences();
                 UpdateInspector();
             }
         };
@@ -972,6 +987,7 @@ internal sealed class AnnotationEditorControl : Grid
             if (!_syncingInspector)
             {
                 _controller.ApplyFillTransparency(args.NewValue);
+                RememberPreferences();
             }
         };
         panel.Children.Add(_fillTransparencySlider);
@@ -1223,10 +1239,27 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         _controller.Tool = tool;
+        if (tool != EditorTool.Select) _preferredTool = tool;
+        RememberPreferences();
         SyncToolButtons();
         Cursor = tool == EditorTool.Select ? Cursors.Arrow : Cursors.Cross;
         UpdateInspector();
         SetStatus(ToolStatus(tool));
+    }
+
+    private void RememberPreferences()
+    {
+        if (!_preferencesReady || AnnotationEditorPreferences.Write is null) return;
+        AnnotationDefaults previous = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
+        AnnotationEditorPreferences.Write(new AnnotationDefaults
+        {
+            LastTool = _preferredTool.ToString(), StrokeColor = _controller.StrokeColor,
+            StrokeThickness = _controller.StrokeThickness, StrokeStyle = _controller.StrokeStyle,
+            FillTransparency = _controller.FillTransparency, FontSize = _controller.DefaultFontSize,
+            FontFamily = _controller.DefaultFontFamily, TextColor = previous.TextColor,
+            MosaicBlockSize = previous.MosaicBlockSize, HighlighterAlpha = previous.HighlighterAlpha,
+            RecentColors = [.. previous.RecentColors],
+        });
     }
 
     private void SyncToolButtons()

@@ -80,6 +80,9 @@ public sealed class TrayIconService : IDisposable
 
     public int CaptureCount => _captureCount;
 
+    public Action<string, string, TrayBalloonKind>? NotificationPresenter { get; set; }
+    public Action? MenuPresenter { get; set; }
+
     public void Initialize()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -165,6 +168,11 @@ public sealed class TrayIconService : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         EnsureInitialized();
 
+        if (NotificationPresenter is { } presenter)
+        {
+            QueueShellAction(() => presenter(title, message, kind));
+            return;
+        }
         NativeMethods.NOTIFYICONDATA data = CreateData();
         data.uFlags = NativeMethods.NIF_INFO;
         data.szInfoTitle = Truncate(title, 63);
@@ -280,6 +288,12 @@ public sealed class TrayIconService : IDisposable
 
     private void ShowContextMenu(NativeMethods.POINT? shellAnchor)
     {
+        if (MenuPresenter is { } presenter)
+        {
+            _ = NativeMethods.SetForegroundWindow(_window.Handle);
+            presenter();
+            return;
+        }
         IntPtr menu = NativeMethods.CreatePopupMenu();
         if (menu == IntPtr.Zero)
         {

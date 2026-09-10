@@ -88,6 +88,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _cacheResults;
 
     // ----- Annotation -----
+    private string _lastAnnotationTool = "Rectangle";
+    private MyCapture.Core.Annotations.AnnotationStrokeStyle _annotationStrokeStyle;
+    private double _annotationFillTransparency = 100;
     private string _strokeThickness = string.Empty;
     private string _fontSize = string.Empty;
     private string _fontFamily = string.Empty;
@@ -402,6 +405,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _upscaleFactor = Dbl(s.Ocr.UpscaleFactor);
         _cacheResults = s.Ocr.CacheResults;
 
+        _lastAnnotationTool = s.Annotation.LastTool;
+        _annotationStrokeStyle = s.Annotation.StrokeStyle;
+        _annotationFillTransparency = s.Annotation.FillTransparency;
         _strokeThickness = Dbl(s.Annotation.StrokeThickness);
         _fontSize = Dbl(s.Annotation.FontSize);
         _fontFamily = s.Annotation.FontFamily;
@@ -514,6 +520,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             },
             Annotation =
             {
+                LastTool = _lastAnnotationTool,
+                StrokeStyle = _annotationStrokeStyle,
+                FillTransparency = _annotationFillTransparency,
                 StrokeColor = _preservedStrokeColor,
                 StrokeThickness = ParseDouble(_strokeThickness),
                 TextColor = _preservedTextColor,

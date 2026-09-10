@@ -215,6 +215,9 @@ public sealed class PinSettings
 
 public sealed class AnnotationDefaults
 {
+    public string LastTool { get; set; } = "Rectangle";
+    public MyCapture.Core.Annotations.AnnotationStrokeStyle StrokeStyle { get; set; }
+    public double FillTransparency { get; set; } = 100;
     public ColorRgba StrokeColor { get; set; } = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
 
     public double StrokeThickness { get; set; } = 3;

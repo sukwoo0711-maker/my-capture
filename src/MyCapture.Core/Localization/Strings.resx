@@ -2994,4 +2994,11 @@
   <data name="MediaExport_ExportFormats" xml:space="preserve"><value>내보내기 · MP4 / GIF</value></data>
   <data name="MediaExport_Workspace" xml:space="preserve"><value>영상 편집</value></data>
   <data name="MediaExport_ResultPreview" xml:space="preserve"><value>계산된 파일의 샘플 프레임</value></data>
+<data name="Shell.Close" xml:space="preserve"><value>닫기</value></data>
+<data name="Shell.Help" xml:space="preserve"><value>사용 방법</value></data>
+<data name="Shell.HelpText" xml:space="preserve"><value>영역 캡처 / 다시 캡처: 설정에 지정된 캡처 단축키
+드래그로 영역을 정한 뒤 도형과 텍스트를 편집하세요.
+확인 또는 저장을 눌러야 갤러리에 추가됩니다. 취소하거나 다시 캡처한 초안은 저장되지 않습니다.
+Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
+트레이에서 갤러리, 설정, Language를 선택할 수 있습니다.</value></data>
 </root>

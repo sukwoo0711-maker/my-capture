@@ -67,6 +67,8 @@ internal sealed class CaptureCommitService
     /// </summary>
     internal bool IsRecordBusy(Guid recordId) => _persistence.IsBusy(recordId);
 
+    internal bool IsRecordBeingWritten(Guid recordId) => _persistence.IsWriteInProgress(recordId);
+
     internal CaptureEditSession BeginEditSession(CaptureRecord record) =>
         new(record, _persistence.AcquireEditLease(record.Id));
 
@@ -114,7 +116,8 @@ internal sealed class CaptureCommitService
     internal async Task<bool> CommitAsync(
         CaptureRecord? record,
         AnnotationEditingResult result,
-        CaptureEditSession? editSession = null)
+        CaptureEditSession? editSession = null,
+        Func<Task<(CaptureRecord Record, CaptureEditSession? Session)>>? createRecordAsync = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         if (record is not null && editSession is not null && editSession.RecordId != record.Id)
@@ -158,12 +161,12 @@ internal sealed class CaptureCommitService
                 }
 
                 await PersistFinalIfAvailableAsync(
-                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
                 return await CopyEditedImageAsync(flattened, "Save As");
 
             case EditorCommitAction.QuickSave:
                 await PersistFinalIfAvailableAsync(
-                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
                 bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened));
                 if (!quickSaved)
                 {
@@ -179,7 +182,7 @@ internal sealed class CaptureCommitService
 
             case EditorCommitAction.CopyToClipboard:
                 await PersistFinalIfAvailableAsync(
-                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
                 bool clipboardCopied = await _copyImageAsync(flattened);
                 if (!clipboardCopied)
                 {
@@ -193,14 +196,14 @@ internal sealed class CaptureCommitService
 
             case EditorCommitAction.Done:
             default:
-                if (record is null)
+                if (record is null && createRecordAsync is null)
                 {
                     _log.LogWarning("Cannot finish editing without a queue record; waiting for an explicit export or copy");
                     return false;
                 }
 
                 await PersistFinalIfAvailableAsync(
-                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession);
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
                 return await CopyEditedImageAsync(flattened, "Done");
         }
     }
@@ -245,8 +248,10 @@ internal sealed class CaptureCommitService
         BitmapSource flattened,
         AnnotationDocument snapshot,
         IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
-        CaptureEditSession? editSession)
+        CaptureEditSession? editSession,
+        Func<Task<(CaptureRecord Record, CaptureEditSession? Session)>>? createRecordAsync)
     {
+        if (record is null && createRecordAsync is not null) (record, editSession) = await createRecordAsync();
         if (record is null)
         {
             _log.LogWarning("Queue persistence is unavailable; running {Action} in recovery-export mode", action);
