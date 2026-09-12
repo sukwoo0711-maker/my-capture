@@ -1,4 +1,5 @@
 using MyCapture.Core.GitHub;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
