@@ -57,6 +57,7 @@ public sealed record Hotkey
     public const uint VkZ = 0x5A;
     public const uint VkF1 = 0x70;
     public const uint VkF3 = 0x72;
+    public const uint VkF4 = 0x73;
 
     public override string ToString()
     {

@@ -2,7 +2,10 @@ using System.Collections;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using MyCapture.Core.GitHub;
 using MyCapture.Core.Recording;
+using MyCapture.Core.Storage;
+using MyCapture.Core.Themes;
 
 namespace MyCapture.Core.Settings;
 
@@ -63,12 +66,16 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _captureWindowHotkey = string.Empty;
     private string _captureFullScreenHotkey = string.Empty;
     private string _recordRegionHotkey = string.Empty;
+    private string _uploadGitHubImageHotkey = string.Empty;
 
     // ----- Storage -----
     private string _maxItems = string.Empty;
     private string _maxGiB = string.Empty;
     private string _thumbnailLongEdge = string.Empty;
     private string _capturesDirectoryOverride = string.Empty;
+    private string _imageRetentionHours = string.Empty;
+    private string _gitHubIssueUrl = GitHubIssueImageUrl.DefaultIssueUrl;
+    private string _theme = AppThemeNames.Midnight;
 
     // ----- Export -----
     private string _quickSaveDirectoryOverride = string.Empty;
@@ -232,6 +239,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _recordRegionHotkey, value)) ValidateAllHotkeys(); }
     }
 
+    public string UploadGitHubImageHotkey
+    {
+        get => _uploadGitHubImageHotkey;
+        set { if (Set(ref _uploadGitHubImageHotkey, value)) ValidateAllHotkeys(); }
+    }
+
     // ================= Storage =================
 
     public string MaxItems
@@ -256,6 +269,24 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _capturesDirectoryOverride;
         set { if (Set(ref _capturesDirectoryOverride, value)) ValidateOptionalDirectory(value, nameof(CapturesDirectoryOverride)); }
+    }
+
+    public string ImageRetentionHours
+    {
+        get => _imageRetentionHours;
+        set { if (Set(ref _imageRetentionHours, value)) ValidateInt(value, SettingsRanges.ImageRetentionHours); }
+    }
+
+    public string GitHubIssueUrl
+    {
+        get => _gitHubIssueUrl;
+        set { if (Set(ref _gitHubIssueUrl, value)) ValidateGitHubIssueUrl(value); }
+    }
+
+    public string Theme
+    {
+        get => _theme;
+        set => Set(ref _theme, AppThemeNames.ToSetting(AppThemeNames.Parse(value)));
     }
 
     // ================= Export =================
@@ -385,13 +416,23 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _captureWindowHotkey = s.Hotkeys.CaptureWindow.ToString();
         _captureFullScreenHotkey = s.Hotkeys.CaptureFullScreen.ToString();
         _recordRegionHotkey = s.Hotkeys.RecordRegion.ToString();
+        _uploadGitHubImageHotkey = s.Hotkeys.UploadGitHubImage.ToString();
 
         _maxItems = Int(s.Queue.MaxItems);
         _maxGiB = Gib(s.Queue.MaxBytes);
         _thumbnailLongEdge = Int(s.Queue.ThumbnailLongEdge);
-        _capturesDirectoryOverride = s.Queue.CapturesDirectoryOverride;
+        _capturesDirectoryOverride = DisplayDirectory(
+            s.Queue.CapturesDirectoryOverride,
+            AppPaths.CreateDefault().CapturesRoot);
+        _imageRetentionHours = Int(s.Queue.ImageRetentionHours);
 
-        _quickSaveDirectoryOverride = s.Export.QuickSaveDirectoryOverride;
+        _quickSaveDirectoryOverride = DisplayDirectory(
+            s.Export.QuickSaveDirectoryOverride,
+            AppPaths.CreateDefault().QuickSaveRoot);
+        _gitHubIssueUrl = GitHubIssueImageUrl.TryNormalize(s.GitHub.IssueUrl, out string issueUrl)
+            ? issueUrl
+            : GitHubIssueImageUrl.DefaultIssueUrl;
+        _theme = AppThemeNames.ToSetting(AppThemeNames.Parse(s.General.Theme));
         _copyToClipboardOnQuickSave = s.Export.CopyToClipboardOnQuickSave;
         _fileNamePattern = s.Export.FileNamePattern;
 
@@ -457,6 +498,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 NotifyOnQuickSave = _notifyOnQuickSave,
                 PlayCaptureSound = _playCaptureSound,
                 Language = _language,
+                Theme = AppThemeNames.ToSetting(AppThemeNames.Parse(_theme)),
                 IsFirstRun = _preservedIsFirstRun,
             },
             Capture =
@@ -489,17 +531,29 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 CaptureWindow = ParseHotkey(_captureWindowHotkey),
                 CaptureFullScreen = ParseHotkey(_captureFullScreenHotkey),
                 RecordRegion = ParseHotkey(_recordRegionHotkey),
+                UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
             },
             Queue =
             {
                 MaxItems = ParseInt(_maxItems),
                 MaxBytes = (long)Math.Round(ParseDouble(_maxGiB) * SettingsRanges.BytesPerGiB),
                 ThumbnailLongEdge = ParseInt(_thumbnailLongEdge),
-                CapturesDirectoryOverride = _capturesDirectoryOverride.Trim(),
+                CapturesDirectoryOverride = PersistDirectory(
+                    _capturesDirectoryOverride,
+                    AppPaths.CreateDefault().CapturesRoot),
+                ImageRetentionHours = ParseInt(_imageRetentionHours),
+            },
+            GitHub =
+            {
+                IssueUrl = GitHubIssueImageUrl.TryNormalize(_gitHubIssueUrl, out string issueUrl)
+                    ? issueUrl
+                    : GitHubIssueImageUrl.DefaultIssueUrl,
             },
             Export =
             {
-                QuickSaveDirectoryOverride = _quickSaveDirectoryOverride.Trim(),
+                QuickSaveDirectoryOverride = PersistDirectory(
+                    _quickSaveDirectoryOverride,
+                    AppPaths.CreateDefault().QuickSaveRoot),
                 CopyToClipboardOnQuickSave = _copyToClipboardOnQuickSave,
                 FileNamePattern = _fileNamePattern.Trim(),
                 PreserveTransparency = _preservedPreserveTransparency,
@@ -551,6 +605,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         CaptureWindow = ParseHotkey(_captureWindowHotkey),
         CaptureFullScreen = ParseHotkey(_captureFullScreenHotkey),
         RecordRegion = ParseHotkey(_recordRegionHotkey),
+        UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
+        OpenLibrary = ParseHotkey(_openLibraryHotkey),
     };
 
     // ================= INotifyDataErrorInfo =================
@@ -586,8 +642,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ValidateInt(_maxItems, SettingsRanges.MaxItems, nameof(MaxItems));
         ValidateMaxGiB(_maxGiB);
         ValidateInt(_thumbnailLongEdge, SettingsRanges.ThumbnailLongEdge, nameof(ThumbnailLongEdge));
+        ValidateInt(_imageRetentionHours, SettingsRanges.ImageRetentionHours, nameof(ImageRetentionHours));
         ValidateOptionalDirectory(_capturesDirectoryOverride, nameof(CapturesDirectoryOverride));
         ValidateOptionalDirectory(_quickSaveDirectoryOverride, nameof(QuickSaveDirectoryOverride));
+        ValidateGitHubIssueUrl(_gitHubIssueUrl);
         ValidateFileNamePattern(_fileNamePattern);
         ValidateDouble(_initialOpacity, SettingsRanges.InitialOpacity, nameof(InitialOpacity));
         ValidateDouble(_zoomStep, SettingsRanges.ZoomStep, nameof(ZoomStep));
@@ -701,6 +759,45 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ClearError(nameof(PreferredLanguages));
     }
 
+    private void ValidateGitHubIssueUrl(string value)
+    {
+        SetErrorState(
+            nameof(GitHubIssueUrl),
+            GitHubIssueImageUrl.TryNormalize(value, out _),
+            UiText.Get("Settings.GitHubIssueUrlInvalid"));
+    }
+
+    private static string DisplayDirectory(string stored, string fallback) =>
+        string.IsNullOrWhiteSpace(stored) ? fallback : stored.Trim();
+
+    private static string PersistDirectory(string displayed, string fallback)
+    {
+        string trimmed = displayed?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            if (string.Equals(Path.GetFullPath(trimmed), Path.GetFullPath(fallback), StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Empty;
+            }
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+        catch (PathTooLongException)
+        {
+        }
+
+        return trimmed;
+    }
+
     private void ValidateOptionalDirectory(string value, string property)
     {
         string trimmed = value?.Trim() ?? string.Empty;
@@ -744,6 +841,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             (nameof(CaptureWindowHotkey), _captureWindowHotkey),
             (nameof(CaptureFullScreenHotkey), _captureFullScreenHotkey),
             (nameof(RecordRegionHotkey), _recordRegionHotkey),
+            (nameof(UploadGitHubImageHotkey), _uploadGitHubImageHotkey),
         ];
 
         var parsed = new Dictionary<string, Hotkey>(fields.Length);

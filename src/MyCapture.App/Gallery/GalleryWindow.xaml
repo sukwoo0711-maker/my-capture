@@ -41,7 +41,14 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="{Binding TimeCaption}" Margin="3,0,3,7" Foreground="{StaticResource Text.Secondary}" FontFamily="{StaticResource Font.Mono}" />
+                    <Grid Grid.Row="0" Margin="3,0,3,7">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding TimeCaption}" Foreground="{StaticResource Text.Secondary}" FontFamily="{StaticResource Font.Mono}" />
+                        <TextBlock Grid.Column="1" Text="{Binding RetentionCaption}" Foreground="{StaticResource Text.Muted}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource FontSize.Caption}" />
+                    </Grid>
                     <!-- Capture time is always above the image. -->
                     <Border Grid.Row="1"
                             Background="{StaticResource Surface.Sunken}"
@@ -146,20 +153,29 @@
 
                     </Grid>
 
-                    <!-- Primary editor followed by Copy, Trash, and More (including pin). -->
+                    <!-- Visible Float / Copy / Edit, then delete and overflow. -->
                     <Grid Grid.Row="3">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="0" Style="{StaticResource Button.Primary}"
-                                Content="{Binding ActionLabel}" MinHeight="34"
-                                ToolTip="{loc:Text Text_0400CF56D074}"
-                                AutomationProperties.Name="{loc:Text Text_1003CFC78E66}"
-                                Click="OnEditClick" />
+                        <Button Grid.Column="0" Style="{StaticResource Gallery.IconButton}"
+                                Margin="0"
+                                ToolTip="{loc:Text Gallery.FloatHint}"
+                                AutomationProperties.Name="{loc:Text Gallery.Float}"
+                                Click="OnFloatClick"
+                                Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
+                            <Path Data="{StaticResource Icon.Pin}" Width="20" Height="20"
+                                  Stretch="None"
+                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round" Fill="Transparent" />
+                        </Button>
 
                         <Button Grid.Column="1" Style="{StaticResource Gallery.IconButton}"
                                 ToolTip="{loc:Text Text_59D43391538F}"
@@ -174,7 +190,13 @@
                                   StrokeLineJoin="Round" Fill="Transparent" />
                         </Button>
 
-                        <Button Grid.Column="2" Style="{StaticResource Gallery.IconButton}"
+                        <Button Grid.Column="2" Style="{StaticResource Button.Primary}"
+                                Content="{Binding ActionLabel}" MinHeight="34"
+                                ToolTip="{loc:Text Text_0400CF56D074}"
+                                AutomationProperties.Name="{loc:Text Text_1003CFC78E66}"
+                                Click="OnEditClick" />
+
+                        <Button Grid.Column="3" Style="{StaticResource Gallery.IconButton}"
                                 ToolTip="{loc:Text Text_784572D51B63}"
                                 AutomationProperties.Name="{loc:Text Text_89D4979D7596}"
                                 Click="OnDeleteClick">
@@ -186,7 +208,7 @@
                                   StrokeLineJoin="Round" Fill="Transparent" />
                         </Button>
 
-                        <Button Grid.Column="3"
+                        <Button Grid.Column="4"
                                 Style="{StaticResource Gallery.IconButton}"
                                 ToolTip="{loc:Text Text_3793EC0322DB}"
                                 AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
@@ -395,7 +417,7 @@
         </Grid.RowDefinitions>
 
         <!-- Title only; the English all-caps eyebrow is removed. -->
-        <Grid Grid.Row="0" Margin="2,0,2,18">
+        <Grid Grid.Row="0" Margin="2,0,2,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

@@ -176,6 +176,7 @@ internal sealed class VideoEditorWindow : Window
         _layerCanvas.InteractionStarted += (_, _) => BeginLayerInteraction();
         _layerCanvas.BoundsChanged += (_, _) => _overlayPreview.InvalidateVisual();
         _layerCanvas.InteractionCompleted += (_, _) => CompleteLayerInteraction();
+        _layerCanvas.LayerActivated += (_, _) => EditSelectedOverlay();
         _previewEngine = new MediaElementPreviewEngine(_media);
         _previewSeeks = new PreviewSeekCoordinator(_previewEngine, recording.Fps);
         _previewSeeks.PreviewPresented += OnPreviewPresented;
@@ -506,11 +507,11 @@ internal sealed class VideoEditorWindow : Window
             Margin = new Thickness(0, 0, 10, 0),
         };
         Grid.SetColumn(label, 0);
-        label.Visibility = Visibility.Collapsed;
+        label.Text = UiText.Get("Video.Layers");
         lane.Children.Add(label);
 
         Grid.SetColumn(_overlayList, 1);
-        _overlayList.Visibility = Visibility.Collapsed;
+        _overlayList.MaxHeight = 72;
         lane.Children.Add(_overlayList);
 
         var actions = new WrapPanel
@@ -581,6 +582,16 @@ internal sealed class VideoEditorWindow : Window
             "Button.Ghost",
             ToggleTrimMode);
         precisionAndEdit.Children.Add(_trimButton);
+        precisionAndEdit.Children.Add(MakeCompactButton(
+            UiText.Get("Video.MarkIn"),
+            UiText.Get("Video.MarkIn"),
+            "Button.Ghost",
+            SetInHere));
+        precisionAndEdit.Children.Add(MakeCompactButton(
+            UiText.Get("Video.MarkOut"),
+            UiText.Get("Video.MarkOut"),
+            "Button.Ghost",
+            SetOutHere));
         precisionAndEdit.Children.Add(Spacer(6));
         precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"), UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame));
         precisionAndEdit.Children.Add(Spacer(6));
@@ -657,8 +668,8 @@ internal sealed class VideoEditorWindow : Window
         _timeline.SetIn(_editDocument.TrimInMs);
         _timeline.SetOut(_editDocument.TrimOutMs);
         _timeline.SetPlayhead(_editDocument.TrimInMs);
-        _timeline.SetTrimMode(false);
-        _trimButton.Content = UiText.Get("Text_4601577BA0F6");
+        _timeline.SetTrimMode(true);
+        _trimButton.Content = UiText.Get("Text_7DDE1114417E");
         _overlayPreview.SetOverlays(_editDocument.TextOverlays);
         _overlayPreview.SetFrameLayers(_editDocument.FrameEditLayers);
         _layerCanvas.SetDocument(_editDocument);

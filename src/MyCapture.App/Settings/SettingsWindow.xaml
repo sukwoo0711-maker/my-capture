@@ -254,6 +254,15 @@
                             <ComboBoxItem Tag="en-US" Content="English" />
                         </ComboBox>
                         <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.LanguageHint}" />
+
+                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.Theme}" Margin="0,12,0,0" />
+                        <ComboBox x:Name="ThemeSelector" SelectedValue="{Binding Theme}" SelectedValuePath="Tag"
+                                  AutomationProperties.Name="{loc:Text Settings.Theme}" MinWidth="220" HorizontalAlignment="Left" Margin="0,4,0,4">
+                            <ComboBoxItem Tag="midnight" Content="{loc:Text Settings.ThemeMidnight}" />
+                            <ComboBoxItem Tag="daylight" Content="{loc:Text Settings.ThemeDaylight}" />
+                            <ComboBoxItem Tag="high-contrast" Content="{loc:Text Settings.ThemeHighContrast}" />
+                        </ComboBox>
+                        <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.ThemeHint}" />
                         <CheckBox x:Name="LaunchAtLoginCheck"
                                   Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text Text_98F1681CB686}"
@@ -473,6 +482,13 @@
                                      AutomationProperties.Name="{loc:Text Text_6FF5C7B32202}"
                                      Text="{Binding RecordRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.UploadGitHubHotkey}" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="240" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="{loc:Text Settings.UploadGitHubHotkey}"
+                                     Text="{Binding UploadGitHubImageHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -508,6 +524,22 @@
                             <TextBox Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
                                      AutomationProperties.Name="{loc:Text Text_92EBA2788912}"
                                      Text="{Binding ThumbnailLongEdge, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.RetentionHours}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.RetentionHoursHint}" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="{loc:Text Settings.RetentionHours}"
+                                     Text="{Binding ImageRetentionHours, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.GitHubIssueUrl}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.GitHubIssueUrlHint}" />
+                            <TextBox Style="{StaticResource Settings.TextBox}"
+                                     AutomationProperties.Name="{loc:Text Settings.GitHubIssueUrl}"
+                                     Text="{Binding GitHubIssueUrl, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">

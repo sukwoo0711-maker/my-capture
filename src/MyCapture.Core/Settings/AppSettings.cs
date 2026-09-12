@@ -45,6 +45,8 @@ public sealed class AppSettings
 
     public OcrSettings Ocr { get; set; } = new();
 
+    public GitHubSettings GitHub { get; set; } = new();
+
     public GeneralSettings General { get; set; } = new();
 }
 
@@ -98,6 +100,12 @@ public sealed class HotkeySettings
     public Hotkey RecordRegion { get; set; } = new(
         HotkeyModifiers.Control | HotkeyModifiers.Shift,
         Hotkey.VkX);
+
+    /// <summary>
+    /// Uploads the clipboard image to the configured GitHub issue and copies the
+    /// resulting user-attachments URL.
+    /// </summary>
+    public Hotkey UploadGitHubImage { get; set; } = new(HotkeyModifiers.None, Hotkey.VkF4);
 }
 
 public sealed class QueueSettings
@@ -126,6 +134,12 @@ public sealed class QueueSettings
     /// Long edge of the generated gallery thumbnail, in pixels.
     /// </summary>
     public int ThumbnailLongEdge { get; set; } = 320;
+
+    /// <summary>
+    /// Hours after creation before an unpinned library image is expired.
+    /// Default is 168 (7 days), matching the previous hard-coded policy.
+    /// </summary>
+    public int ImageRetentionHours { get; set; } = MyCapture.Core.Queue.CaptureRetention.DefaultImageRetentionHours;
 }
 
 public sealed class ExportSettings
@@ -278,6 +292,19 @@ public sealed class GeneralSettings
     /// <summary>UI language tag. Empty follows the OS.</summary>
     public string Language { get; set; } = string.Empty;
 
+    /// <summary>Chrome palette id: midnight, daylight, or high-contrast.</summary>
+    public string Theme { get; set; } = MyCapture.Core.Themes.AppThemeNames.Midnight;
+
     [JsonIgnore]
     public bool IsFirstRun { get; set; }
+}
+
+/// <summary>GitHub issue used as a clipboard-image host for F4.</summary>
+public sealed class GitHubSettings
+{
+    /// <summary>
+    /// Issue URL opened by F4. Empty is treated as
+    /// <see cref="MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl"/>.
+    /// </summary>
+    public string IssueUrl { get; set; } = MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl;
 }

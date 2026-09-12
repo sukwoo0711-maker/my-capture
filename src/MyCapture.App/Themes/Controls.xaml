@@ -1,9 +1,9 @@
 <!--
   MyCapture shared control styles.
 
-  Direction (warm-yellow-charcoal-ux.md):
-    * Warm charcoal hierarchy with one friendly yellow action/focus accent.
-    * Yellow fills always pair with Text.OnAccent dark ink, including checks and glyphs.
+  Direction (Focus Portal):
+    * Quiet graphite hierarchy with one cyan action/focus accent.
+    * Accent fills always pair with Text.OnAccent dark ink, including checks and glyphs.
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
       shown by recolouring the fixed chrome border and revealing an inset ring with no layout
       footprint, so keyboard navigation never shifts neighbouring content.

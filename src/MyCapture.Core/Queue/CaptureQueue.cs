@@ -148,8 +148,9 @@ public sealed class CaptureQueue
             return 0;
         }
 
+        TimeSpan ttl = CaptureRetention.TimeToLive(_limits);
         CaptureRecord[] expired = _records
-            .Where(record => record.IsImage && record.CreatedAt <= now.AddDays(-7)
+            .Where(record => record.IsImage && record.CreatedAt <= now - ttl
                              && !record.IsPinned && !IsEvictionLeased(record.Id))
             .OrderBy(record => record.CreatedAt)
             .ToArray();

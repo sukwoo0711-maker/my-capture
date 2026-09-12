@@ -34,6 +34,7 @@ public static class AppSettingsClone
             Pin = Clone(source.Pin),
             Annotation = Clone(source.Annotation),
             Ocr = Clone(source.Ocr),
+            GitHub = Clone(source.GitHub),
             General = Clone(source.General),
         };
     }
@@ -51,6 +52,7 @@ public static class AppSettingsClone
         CaptureWindow = s.CaptureWindow,
         CaptureFullScreen = s.CaptureFullScreen,
         RecordRegion = s.RecordRegion,
+        UploadGitHubImage = s.UploadGitHubImage,
     };
 
     private static QueueSettings Clone(QueueSettings s) => new()
@@ -59,6 +61,7 @@ public static class AppSettingsClone
         MaxBytes = s.MaxBytes,
         CapturesDirectoryOverride = s.CapturesDirectoryOverride,
         ThumbnailLongEdge = s.ThumbnailLongEdge,
+        ImageRetentionHours = s.ImageRetentionHours,
     };
 
     private static ExportSettings Clone(ExportSettings s) => new()
@@ -127,6 +130,12 @@ public static class AppSettingsClone
         NotifyOnQuickSave = s.NotifyOnQuickSave,
         PlayCaptureSound = s.PlayCaptureSound,
         Language = s.Language,
+        Theme = s.Theme,
         IsFirstRun = s.IsFirstRun,
+    };
+
+    private static GitHubSettings Clone(GitHubSettings s) => new()
+    {
+        IssueUrl = s.IssueUrl,
     };
 }

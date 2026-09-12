@@ -38,6 +38,12 @@ public static class PinGeometry
     /// </summary>
     public const double InitialFitFraction = 0.8;
 
+    /// <summary>Horizontal cascade step so stacked floats stay distinguishable.</summary>
+    public const double CascadeOffsetXDip = 36.0;
+
+    /// <summary>Vertical cascade step. Ten copies never share the same top-left.</summary>
+    public const double CascadeOffsetYDip = 32.0;
+
     /// <summary>
     /// The initial on-screen placement of a pin: its DIP size and top-left position.
     /// </summary>
@@ -108,6 +114,62 @@ public static class PinGeometry
             left, top, width, height, workLeftDip, workTopDip, workWidthDip, workHeightDip);
 
         return new Placement(left, top, width, height, zoom);
+    }
+
+    /// <summary>
+    /// Same as <see cref="InitialPlacement"/>, then offsets by <paramref name="openPinCount"/>
+    /// so repeated paste-to-screen never fully overlaps. The cascade wraps inside the
+    /// working area after a 4×3 tile of offsets.
+    /// </summary>
+    public static Placement CascadedPlacement(
+        double imageWidthDip,
+        double imageHeightDip,
+        double workLeftDip,
+        double workTopDip,
+        double workWidthDip,
+        double workHeightDip,
+        double cursorXDip,
+        double cursorYDip,
+        int openPinCount)
+    {
+        Placement basePlacement = InitialPlacement(
+            imageWidthDip,
+            imageHeightDip,
+            workLeftDip,
+            workTopDip,
+            workWidthDip,
+            workHeightDip,
+            cursorXDip,
+            cursorYDip);
+
+        int index = Math.Max(0, openPinCount);
+        int column = index % 4;
+        int row = (index / 4) % 3;
+        double left = basePlacement.Left + (column * CascadeOffsetXDip) + (row * 8.0);
+        double top = basePlacement.Top + (column * CascadeOffsetYDip) + (row * CascadeOffsetYDip);
+
+        (left, top) = ClampTopLeftIntoWork(
+            left,
+            top,
+            basePlacement.Width,
+            basePlacement.Height,
+            workLeftDip,
+            workTopDip,
+            workWidthDip,
+            workHeightDip);
+
+        if (Math.Abs(left - basePlacement.Left) < 1.0 && Math.Abs(top - basePlacement.Top) < 1.0 && index > 0)
+        {
+            // Work area was too tight to honour the cascade; keep a 1-pixel identity
+            // break so stacked clones never share an identical top-left.
+            left = Math.Min(basePlacement.Left + CascadeOffsetXDip, workLeftDip + Math.Max(0, workWidthDip - basePlacement.Width));
+            top = Math.Min(basePlacement.Top + CascadeOffsetYDip, workTopDip + Math.Max(0, workHeightDip - basePlacement.Height));
+            (left, top) = ClampTopLeftIntoWork(
+                left, top, basePlacement.Width, basePlacement.Height,
+                workLeftDip, workTopDip, workWidthDip, workHeightDip);
+        }
+
+        return basePlacement with { Left = left, Top = top };
     }
 
     /// <summary>

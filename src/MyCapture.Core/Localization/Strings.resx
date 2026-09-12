@@ -3001,4 +3001,36 @@
 확인 또는 저장을 눌러야 갤러리에 추가됩니다. 취소하거나 다시 캡처한 초안은 저장되지 않습니다.
 Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
 트레이에서 갤러리, 설정, Language를 선택할 수 있습니다.</value></data>
+  <data name="Settings.Theme" xml:space="preserve"><value>테마</value></data>
+  <data name="Settings.ThemeHint" xml:space="preserve"><value>적용하면 바로 색이 바뀝니다. 이미 열린 창은 다시 열면 새 테마를 완전히 반영합니다.</value></data>
+  <data name="Settings.ThemeMidnight" xml:space="preserve"><value>미드나잇 (기본)</value></data>
+  <data name="Settings.ThemeDaylight" xml:space="preserve"><value>데이라이트</value></data>
+  <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>고대비</value></data>
+  <data name="Settings.GitHubIssueUrl" xml:space="preserve"><value>GitHub 이슈 URL</value></data>
+  <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F4가 클립보드 이미지를 붙여 넣을 이슈입니다. 본인이 쓸 수 있는 이슈를 지정하세요. 빈 값은 안전한 기본 주소로 채웁니다.</value></data>
+  <data name="Settings.GitHubIssueUrlInvalid" xml:space="preserve"><value>https://github.com/소유자/저장소/issues/번호 또는 /issues/new 형식이어야 합니다.</value></data>
+  <data name="Settings.RetentionHours" xml:space="preserve"><value>라이브러리 이미지 보관(시간)</value></data>
+  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>고정하지 않은 이미지가 자동 삭제되기까지의 시간입니다. 기본값은 168시간(7일)입니다. 동영상과 고정 항목은 제외됩니다.</value></data>
+  <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>클립보드 이미지를 GitHub URL로</value></data>
+  <data name="Gallery.Float" xml:space="preserve"><value>띄우기</value></data>
+  <data name="Gallery.FloatHint" xml:space="preserve"><value>이 캡처를 화면에 떠 있는 창으로 고정합니다.</value></data>
+  <data name="Gallery.RetentionDays" xml:space="preserve"><value>d-{0}</value></data>
+  <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>d-{0} {1}h</value></data>
+  <data name="Gallery.RetentionHours" xml:space="preserve"><value>{0}h</value></data>
+  <data name="Gallery.RetentionHoursMinutes" xml:space="preserve"><value>{0}h {1}m</value></data>
+  <data name="Gallery.RetentionMinutes" xml:space="preserve"><value>{0}m</value></data>
+  <data name="Gallery.RetentionKept" xml:space="preserve"><value>보관</value></data>
+  <data name="Gallery.RetentionVideo" xml:space="preserve"><value>만료 없음</value></data>
+  <data name="Gallery.RetentionExpired" xml:space="preserve"><value>d-0</value></data>
+  <data name="Gallery.FloatFailed" xml:space="preserve"><value>이 이미지를 띄우지 못했습니다.</value></data>
+  <data name="GitHub.NeedImage" xml:space="preserve"><value>먼저 이미지를 복사한 뒤 F4를 누르세요.</value></data>
+  <data name="GitHub.Opening" xml:space="preserve"><value>GitHub 이슈를 열고 이미지를 붙이는 중…</value></data>
+  <data name="GitHub.Done" xml:space="preserve"><value>첨부 URL을 클립보드에 복사했습니다.</value></data>
+  <data name="GitHub.Failed" xml:space="preserve"><value>GitHub에서 이미지 URL을 가져오지 못했습니다. 이슈 Write 칸에 직접 붙인 뒤 URL이 생기면 다시 시도하세요.</value></data>
+  <data name="GitHub.InvalidUrl" xml:space="preserve"><value>설정에 올바른 GitHub 이슈 URL이 필요합니다.</value></data>
+  <data name="GitHub.Busy" xml:space="preserve"><value>이미 GitHub 업로드가 진행 중입니다.</value></data>
+  <data name="Video.MarkIn" xml:space="preserve"><value>In</value></data>
+  <data name="Video.MarkOut" xml:space="preserve"><value>Out</value></data>
+  <data name="Video.Layers" xml:space="preserve"><value>레이어</value></data>
+  <data name="Video.EditTextHint" xml:space="preserve"><value>미리보기에서 텍스트를 두 번 눌러 편집합니다.</value></data>
 </root>

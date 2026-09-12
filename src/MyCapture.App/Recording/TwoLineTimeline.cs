@@ -341,12 +341,12 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             double trimOutPx = OverviewMsToPx(_trim.OutMs, width);
             double leftPx = OverviewMsToPx(_viewport.ViewStartMs, width);
             double rightPx = OverviewMsToPx(_viewport.ViewEndMs, width);
-            if (_trimModeEnabled && Math.Abs(x - trimInPx) <= EdgeGrab + TrimHandleWidth / 2)
+            if (Math.Abs(x - trimInPx) <= EdgeGrab + TrimHandleWidth / 2)
             {
                 _activeTrimHandle = TrimHandle.In;
                 _drag = DragMode.TrimIn;
             }
-            else if (_trimModeEnabled && Math.Abs(x - trimOutPx) <= EdgeGrab + TrimHandleWidth / 2)
+            else if (Math.Abs(x - trimOutPx) <= EdgeGrab + TrimHandleWidth / 2)
             {
                 _activeTrimHandle = TrimHandle.Out;
                 _drag = DragMode.TrimOut;
@@ -378,12 +378,12 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             bool outVisible = IsVisibleInDetail(_trim.OutMs);
             double inPx = _viewport.MsToPx(_trim.InMs, width);
             double outPx = _viewport.MsToPx(_trim.OutMs, width);
-            if (_trimModeEnabled && inVisible && Math.Abs(x - inPx) <= EdgeGrab + TrimHandleWidth / 2)
+            if (inVisible && Math.Abs(x - inPx) <= EdgeGrab + TrimHandleWidth / 2)
             {
                 _activeTrimHandle = TrimHandle.In;
                 _drag = DragMode.TrimIn;
             }
-            else if (_trimModeEnabled && outVisible && Math.Abs(x - outPx) <= EdgeGrab + TrimHandleWidth / 2)
+            else if (outVisible && Math.Abs(x - outPx) <= EdgeGrab + TrimHandleWidth / 2)
             {
                 _activeTrimHandle = TrimHandle.Out;
                 _drag = DragMode.TrimOut;
@@ -527,16 +527,13 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         if (ReferenceEquals(strip, _overview))
         {
-            if (_trimModeEnabled)
+            double trimIn = OverviewMsToPx(_trim.InMs, width);
+            double trimOut = OverviewMsToPx(_trim.OutMs, width);
+            if (Math.Abs(x - trimIn) <= EdgeGrab + TrimHandleWidth / 2
+                || Math.Abs(x - trimOut) <= EdgeGrab + TrimHandleWidth / 2)
             {
-                double trimIn = OverviewMsToPx(_trim.InMs, width);
-                double trimOut = OverviewMsToPx(_trim.OutMs, width);
-                if (Math.Abs(x - trimIn) <= EdgeGrab + TrimHandleWidth / 2
-                    || Math.Abs(x - trimOut) <= EdgeGrab + TrimHandleWidth / 2)
-                {
-                    strip.Cursor = Cursors.SizeWE;
-                    return;
-                }
+                strip.Cursor = Cursors.SizeWE;
+                return;
             }
 
             double left = OverviewMsToPx(_viewport.ViewStartMs, width);
@@ -549,11 +546,10 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             return;
         }
 
-        bool onTrim = _trimModeEnabled
-            && ((IsVisibleInDetail(_trim.InMs)
+        bool onTrim = (IsVisibleInDetail(_trim.InMs)
                  && Math.Abs(x - _viewport.MsToPx(_trim.InMs, width)) <= EdgeGrab)
                 || (IsVisibleInDetail(_trim.OutMs)
-                    && Math.Abs(x - _viewport.MsToPx(_trim.OutMs, width)) <= EdgeGrab));
+                    && Math.Abs(x - _viewport.MsToPx(_trim.OutMs, width)) <= EdgeGrab);
         strip.Cursor = onTrim ? Cursors.SizeWE : Cursors.Cross;
     }
 
@@ -797,13 +793,10 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                         _textPrimary, 12, semiBold: true, _surfaceScrim, centered: true);
                 }
 
-                if (_trimModeEnabled)
-                {
-                    DrawDeletionRange(dc, 0, trimInX, height);
-                    DrawDeletionRange(dc, trimOutX, width, height);
-                    DrawTrimHandle(dc, trimInX, height, TrimHandle.In);
-                    DrawTrimHandle(dc, trimOutX, height, TrimHandle.Out);
-                }
+                DrawDeletionRange(dc, 0, trimInX, height);
+                DrawDeletionRange(dc, trimOutX, width, height);
+                DrawTrimHandle(dc, trimInX, height, TrimHandle.In);
+                DrawTrimHandle(dc, trimOutX, height, TrimHandle.Out);
                 break;
 
             case TimelineRenderLayer.Transient:
@@ -892,41 +885,38 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                     DrawRect(dc, shadeX, height - 7, shadeRight - shadeX, 7, _accentSubtle, null);
                 }
 
-                if (_trimModeEnabled)
+                if (_trim.InMs > _viewport.ViewStartMs)
                 {
-                    if (_trim.InMs > _viewport.ViewStartMs)
-                    {
-                        double deleteRight = _viewport.MsToPx(
-                            Math.Min(_trim.InMs, _viewport.ViewEndMs),
-                            width);
-                        DrawDeletionRange(dc, 0, deleteRight, height);
-                    }
+                    double deleteRight = _viewport.MsToPx(
+                        Math.Min(_trim.InMs, _viewport.ViewEndMs),
+                        width);
+                    DrawDeletionRange(dc, 0, deleteRight, height);
+                }
 
-                    if (_trim.OutMs < _viewport.ViewEndMs)
-                    {
-                        double deleteLeft = _viewport.MsToPx(
-                            Math.Max(_trim.OutMs, _viewport.ViewStartMs),
-                            width);
-                        DrawDeletionRange(dc, deleteLeft, width, height);
-                    }
+                if (_trim.OutMs < _viewport.ViewEndMs)
+                {
+                    double deleteLeft = _viewport.MsToPx(
+                        Math.Max(_trim.OutMs, _viewport.ViewStartMs),
+                        width);
+                    DrawDeletionRange(dc, deleteLeft, width, height);
+                }
 
-                    if (IsVisibleInDetail(_trim.InMs))
-                    {
-                        DrawTrimHandle(
-                            dc,
-                            _viewport.MsToPx(_trim.InMs, width),
-                            height,
-                            TrimHandle.In);
-                    }
+                if (IsVisibleInDetail(_trim.InMs))
+                {
+                    DrawTrimHandle(
+                        dc,
+                        _viewport.MsToPx(_trim.InMs, width),
+                        height,
+                        TrimHandle.In);
+                }
 
-                    if (IsVisibleInDetail(_trim.OutMs))
-                    {
-                        DrawTrimHandle(
-                            dc,
-                            _viewport.MsToPx(_trim.OutMs, width),
-                            height,
-                            TrimHandle.Out);
-                    }
+                if (IsVisibleInDetail(_trim.OutMs))
+                {
+                    DrawTrimHandle(
+                        dc,
+                        _viewport.MsToPx(_trim.OutMs, width),
+                        height,
+                        TrimHandle.Out);
                 }
                 break;
 

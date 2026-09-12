@@ -8,9 +8,11 @@ using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Gallery;
+using MyCapture.App.GitHub;
 using MyCapture.App.Ocr;
 using MyCapture.App.Pinning;
 using MyCapture.App.Settings;
+using MyCapture.App.Themes;
 using MyCapture.Core.Diagnostics;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Capture;
@@ -73,6 +75,8 @@ public partial class App : Application
     private StartupRegistrationService? _startupService;
     private SettingsApplyService? _settingsApply;
     private bool _pasteToScreenInFlight;
+    private bool _gitHubUploadInFlight;
+    private GitHubIssueImageUploadService? _gitHubUpload;
 
     /// <summary>The record persisted for the capture currently being edited, if any.</summary>
     private CaptureRecord? _currentRecord;
@@ -173,6 +177,7 @@ public partial class App : Application
 
         _settings = _services.GetRequiredService<SettingsStore>().Load();
         UiText.Configure(_settings.General.Language);
+        ThemeService.ApplyFromSettings(_settings.General.Theme);
 
         _tray = _services.GetRequiredService<TrayIconService>();
         _hotkeys = _services.GetRequiredService<GlobalHotkeyService>();
@@ -205,6 +210,9 @@ public partial class App : Application
             () => _settings!.Pin,
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
+        _gitHubUpload = new GitHubIssueImageUploadService(
+            () => _settings!,
+            _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
 
         _ocrService = _services.GetRequiredService<IOcrService>();
         _automaticIndexer = new OcrIndexingService(
@@ -390,6 +398,53 @@ public partial class App : Application
                 _log?.LogInformation("Region recording hotkey requested");
                 HandleRecordRegion();
                 break;
+            case GlobalHotkeyCommand.UploadGitHubImage:
+                _log?.LogInformation("GitHub image URL hotkey requested");
+                HandleGitHubImageUpload();
+                break;
+        }
+    }
+
+    private async void HandleGitHubImageUpload()
+    {
+        if (_gitHubUpload is null || _gitHubUploadInFlight)
+        {
+            return;
+        }
+
+        _gitHubUploadInFlight = true;
+        try
+        {
+            _tray?.ShowBalloon(
+                "MyCapture",
+                UiText.Get("GitHub.Opening"),
+                TrayBalloonKind.Information,
+                playSound: false);
+            GitHubIssueImageUploadResult result = await _gitHubUpload.UploadClipboardImageAsync();
+            string message = result.Status switch
+            {
+                GitHubIssueImageUploadStatus.CopiedUrl => UiText.Get("GitHub.Done"),
+                GitHubIssueImageUploadStatus.NeedImage => UiText.Get("GitHub.NeedImage"),
+                GitHubIssueImageUploadStatus.InvalidUrl => UiText.Get("GitHub.InvalidUrl"),
+                GitHubIssueImageUploadStatus.Busy => UiText.Get("GitHub.Busy"),
+                _ => UiText.Get("GitHub.Failed"),
+            };
+            _tray?.ShowBalloon(
+                "MyCapture",
+                message,
+                result.Status == GitHubIssueImageUploadStatus.CopiedUrl
+                    ? TrayBalloonKind.Information
+                    : TrayBalloonKind.Warning,
+                playSound: false);
+        }
+        catch (Exception ex)
+        {
+            _log?.LogWarning(ex, "F4 GitHub image upload failed");
+            _tray?.ShowBalloon("MyCapture", UiText.Get("GitHub.Failed"), TrayBalloonKind.Warning, playSound: false);
+        }
+        finally
+        {
+            _gitHubUploadInFlight = false;
         }
     }
 
@@ -1313,7 +1368,8 @@ public partial class App : Application
         var viewModel = new GalleryViewModel(
             _galleryController,
             record => Path.Combine(_queue.GetDirectory(record), CaptureFileNames.Thumbnail),
-            _settings.Queue.ThumbnailLongEdge);
+            _settings.Queue.ThumbnailLongEdge,
+            imageRetentionHours: () => _settings!.Queue.ImageRetentionHours);
 
         OcrIndexingService ocrIndexing = _automaticIndexer
             ?? throw new InvalidOperationException("Capture indexing is unavailable.");
@@ -1336,6 +1392,7 @@ public partial class App : Application
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
+        window.FloatRequested += (_, image) => _pins?.PinImage(image);
 
         _galleryWindow = window;
         return window;

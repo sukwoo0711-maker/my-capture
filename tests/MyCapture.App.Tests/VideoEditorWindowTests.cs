@@ -329,7 +329,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
         using var timeline = new TwoLineTimeline();
         timeline.Initialize(durationMs: 10_000, fps: 20);
 
-        Assert.False(timeline.TrimModeEnabled);
+        Assert.True(timeline.TrimModeEnabled);
         timeline.SetTrimMode(true);
         timeline.SetPlayhead(1_000);
         timeline.SetIn(2_500);

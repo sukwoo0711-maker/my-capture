@@ -3001,4 +3001,36 @@ Drag to select a region, then edit shapes and text.
 Confirm or save to add the capture to the gallery. Cancelled or replaced drafts are not saved.
 Hold Shift for precise pixel selection.
 Open Gallery, Settings, or Language from the tray menu.</value></data>
+  <data name="Settings.Theme" xml:space="preserve"><value>Theme</value></data>
+  <data name="Settings.ThemeHint" xml:space="preserve"><value>Apply updates colours immediately. Reopen a window to fully refresh its chrome.</value></data>
+  <data name="Settings.ThemeMidnight" xml:space="preserve"><value>Midnight (default)</value></data>
+  <data name="Settings.ThemeDaylight" xml:space="preserve"><value>Daylight</value></data>
+  <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>High contrast</value></data>
+  <data name="Settings.GitHubIssueUrl" xml:space="preserve"><value>GitHub issue URL</value></data>
+  <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F4 pastes the clipboard image into this issue’s Write box. Use an issue you can comment on. Empty values use a safe default.</value></data>
+  <data name="Settings.GitHubIssueUrlInvalid" xml:space="preserve"><value>Use https://github.com/owner/repo/issues/number or /issues/new.</value></data>
+  <data name="Settings.RetentionHours" xml:space="preserve"><value>Library image retention (hours)</value></data>
+  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>Unpinned images are deleted after this many hours. The default is 168 hours (7 days). Videos and pinned items are kept.</value></data>
+  <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>Clipboard image to GitHub URL</value></data>
+  <data name="Gallery.Float" xml:space="preserve"><value>Float</value></data>
+  <data name="Gallery.FloatHint" xml:space="preserve"><value>Pin this capture to the screen as a floating window.</value></data>
+  <data name="Gallery.RetentionDays" xml:space="preserve"><value>d-{0}</value></data>
+  <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>d-{0} {1}h</value></data>
+  <data name="Gallery.RetentionHours" xml:space="preserve"><value>{0}h</value></data>
+  <data name="Gallery.RetentionHoursMinutes" xml:space="preserve"><value>{0}h {1}m</value></data>
+  <data name="Gallery.RetentionMinutes" xml:space="preserve"><value>{0}m</value></data>
+  <data name="Gallery.RetentionKept" xml:space="preserve"><value>Kept</value></data>
+  <data name="Gallery.RetentionVideo" xml:space="preserve"><value>No expiry</value></data>
+  <data name="Gallery.RetentionExpired" xml:space="preserve"><value>d-0</value></data>
+  <data name="Gallery.FloatFailed" xml:space="preserve"><value>Could not float this image.</value></data>
+  <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F4.</value></data>
+  <data name="GitHub.Opening" xml:space="preserve"><value>Opening the GitHub issue and pasting the image…</value></data>
+  <data name="GitHub.Done" xml:space="preserve"><value>Copied the attachment URL to the clipboard.</value></data>
+  <data name="GitHub.Failed" xml:space="preserve"><value>Could not read a GitHub image URL. Paste into the issue Write box yourself, then try again once the URL appears.</value></data>
+  <data name="GitHub.InvalidUrl" xml:space="preserve"><value>Settings need a valid GitHub issue URL.</value></data>
+  <data name="GitHub.Busy" xml:space="preserve"><value>A GitHub upload is already running.</value></data>
+  <data name="Video.MarkIn" xml:space="preserve"><value>In</value></data>
+  <data name="Video.MarkOut" xml:space="preserve"><value>Out</value></data>
+  <data name="Video.Layers" xml:space="preserve"><value>Layers</value></data>
+  <data name="Video.EditTextHint" xml:space="preserve"><value>Double-click text on the preview to edit it.</value></data>
 </root>

@@ -134,6 +134,9 @@ internal sealed partial class GalleryWindow : Window
     /// <summary>Raised when a re-edit commit finalises a capture, so the tray count can update.</summary>
     internal event EventHandler? CaptureChanged;
 
+    /// <summary>Asks the shell to float a rendered library image as a pin window.</summary>
+    internal event EventHandler<BitmapSource>? FloatRequested;
+
     /// <summary>
     /// Shows the window and brings it forward, rebuilding the view from the current queue so a
     /// capture taken while it was hidden appears.
@@ -773,6 +776,36 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
+    private void OnFloatClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTile(sender) is not GalleryItemViewModel tile || !tile.IsImage)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (!EnsureRecordReady(tile.Id))
+        {
+            return;
+        }
+
+        CaptureRecord? record = _controller.Find(tile.Id);
+        if (record is null)
+        {
+            return;
+        }
+
+        string renderedPath = _queue.GetFilePath(record, CaptureFileNames.Rendered);
+        BitmapSource? rendered = ImageCodec.TryLoad(renderedPath);
+        if (rendered is null)
+        {
+            ShowStatus(UiText.Get("Gallery.FloatFailed"));
+            return;
+        }
+
+        FloatRequested?.Invoke(this, rendered);
+    }
+
     private async void OnCopyClick(object sender, RoutedEventArgs e)
     {
         if (ResolveTile(sender) is GalleryItemViewModel tile)
@@ -1100,7 +1133,7 @@ internal sealed partial class GalleryWindow : Window
                 return;
             }
 
-            var editor = new GalleryEditorWindow(context, _privacyRedactionService) { Owner = this };
+            var editor = new GalleryEditorWindow(context, _privacyRedactionService, record, () => _viewModel.FindTile(record.Id)?.RetentionHours() ?? CaptureRetention.DefaultImageRetentionHours) { Owner = this };
             editor.CommitRequested = result => CommitReeditAsync(record, result, editSession);
             editor.Committed += (_, _) => OnReeditCommitted(tile.Id);
             _ = editor.ShowDialog();

@@ -186,7 +186,8 @@ internal sealed class PinManager
         double cursorXDip = cursorX / scale;
         double cursorYDip = cursorY / scale;
 
-        PinGeometry.Placement placement = PinGeometry.InitialPlacement(
+        Prune();
+        PinGeometry.Placement placement = PinGeometry.CascadedPlacement(
             imageWidthDip,
             imageHeightDip,
             workLeftDip,
@@ -194,7 +195,8 @@ internal sealed class PinManager
             workWidthDip,
             workHeightDip,
             cursorXDip,
-            cursorYDip);
+            cursorYDip,
+            _pins.Count);
 
         var state = new PinViewState(
             imageWidthDip,
