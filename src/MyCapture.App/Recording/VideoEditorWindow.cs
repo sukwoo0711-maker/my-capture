@@ -567,36 +567,26 @@ internal sealed class VideoEditorWindow : Window
         transport.Children.Add(Spacer(10));
         transport.Children.Add(MakeTransportIcon("Icon.StepBack", UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
         transport.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
+        transport.Children.Add(Spacer(8));
+        transport.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
+        transport.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
+        transport.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
+        transport.Children.Add(Spacer(6));
+        transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkIn"), SetInHere));
+        transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkOut"), SetOutHere));
+        transport.Children.Add(Spacer(6));
+        transport.Children.Add(MakeCompactIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"), UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame));
         Grid.SetRow(transport, 0);
         controls.Children.Add(transport);
 
-        var precisionAndEdit = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
-        precisionAndEdit.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
-        precisionAndEdit.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
-        precisionAndEdit.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
-        precisionAndEdit.Children.Add(Spacer(6));
+        // Trim is on by default in 2.0; keep the mode control off the compact bar so a
+        // 770px editor still has one visible toolbar row and the timeline stays in view.
         _trimButton = MakeCompactButton(
             UiText.Get("Text_7DDE1114417E"),
             UiText.Get("Text_BBA2EFF5675C"),
             "Button.Ghost",
             ToggleTrimMode);
-        precisionAndEdit.Children.Add(_trimButton);
-        precisionAndEdit.Children.Add(MakeCompactButton(
-            UiText.Get("Video.MarkIn"),
-            UiText.Get("Video.MarkIn"),
-            "Button.Ghost",
-            SetInHere));
-        precisionAndEdit.Children.Add(MakeCompactButton(
-            UiText.Get("Video.MarkOut"),
-            UiText.Get("Video.MarkOut"),
-            "Button.Ghost",
-            SetOutHere));
-        precisionAndEdit.Children.Add(Spacer(6));
-        precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"), UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame));
+        _trimButton.Visibility = Visibility.Collapsed;
 
         _cancelOperationButton = new Button
         {
@@ -611,9 +601,12 @@ internal sealed class VideoEditorWindow : Window
         AutomationProperties.SetHelpText(_cancelOperationButton, UiText.Get("Text_3DEFBAD62044"));
         _cancelOperationButton.Click += (_, _) => _operationCts?.Cancel();
         _cancelOperationButton.HorizontalAlignment = HorizontalAlignment.Center;
-        precisionAndEdit.Children.Add(_cancelOperationButton);
-        Grid.SetRow(precisionAndEdit, 1);
-        controls.Children.Add(precisionAndEdit);
+
+        var hidden = new StackPanel { Orientation = Orientation.Horizontal };
+        hidden.Children.Add(_trimButton);
+        hidden.Children.Add(_cancelOperationButton);
+        Grid.SetRow(hidden, 1);
+        controls.Children.Add(hidden);
 
         _controlRows = controls;
         return controls;
@@ -1919,6 +1912,15 @@ internal sealed class VideoEditorWindow : Window
         Button button = MakeButton(content, automationName, styleKey, onClick);
         button.Margin = new Thickness(0, 0, 4, 0);
         button.MinWidth = 52;
+        return button;
+    }
+
+    private Button MakeMarkButton(string content, Action onClick)
+    {
+        Button button = MakeCompactButton(content, content, "Button.Ghost", onClick);
+        button.MinWidth = 36;
+        button.Padding = new Thickness(6, 4, 6, 4);
+        button.Margin = new Thickness(0, 0, 4, 0);
         return button;
     }
 
