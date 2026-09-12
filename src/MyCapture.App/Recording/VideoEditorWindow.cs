@@ -570,14 +570,17 @@ internal sealed class VideoEditorWindow : Window
         Grid.SetRow(transport, 0);
         controls.Children.Add(transport);
 
-        var precisionAndEdit = transport;
-        precisionAndEdit.Children.Add(Spacer(12));
+        var precisionAndEdit = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
         precisionAndEdit.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
         precisionAndEdit.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
         precisionAndEdit.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
         precisionAndEdit.Children.Add(Spacer(6));
         _trimButton = MakeCompactButton(
-            UiText.Get("Text_4601577BA0F6"),
+            UiText.Get("Text_7DDE1114417E"),
             UiText.Get("Text_BBA2EFF5675C"),
             "Button.Ghost",
             ToggleTrimMode);
@@ -594,7 +597,6 @@ internal sealed class VideoEditorWindow : Window
             SetOutHere));
         precisionAndEdit.Children.Add(Spacer(6));
         precisionAndEdit.Children.Add(MakeCompactIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"), UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame));
-        precisionAndEdit.Children.Add(Spacer(6));
 
         _cancelOperationButton = new Button
         {
@@ -609,8 +611,9 @@ internal sealed class VideoEditorWindow : Window
         AutomationProperties.SetHelpText(_cancelOperationButton, UiText.Get("Text_3DEFBAD62044"));
         _cancelOperationButton.Click += (_, _) => _operationCts?.Cancel();
         _cancelOperationButton.HorizontalAlignment = HorizontalAlignment.Center;
-        Grid.SetRow(_cancelOperationButton, 1);
-        controls.Children.Add(_cancelOperationButton);
+        precisionAndEdit.Children.Add(_cancelOperationButton);
+        Grid.SetRow(precisionAndEdit, 1);
+        controls.Children.Add(precisionAndEdit);
 
         _controlRows = controls;
         return controls;

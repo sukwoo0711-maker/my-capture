@@ -218,7 +218,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _viewport = new TimelineViewport(_durationMs, _fps);
         _trim = new TrimSelection(_durationMs);
         _playheadMs = 0;
-        _trimModeEnabled = false;
+        _trimModeEnabled = true;
         _activeTrimHandle = TrimHandle.In;
 
         // The two strips must look different immediately. Select one coarse overview interval
