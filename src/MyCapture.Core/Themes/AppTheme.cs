@@ -6,16 +6,19 @@ public enum AppTheme
     Midnight = 0,
     Daylight = 1,
     HighContrast = 2,
+    Workspace = 3,
 }
 
 public static class AppThemeNames
 {
+    public const string Workspace = "workspace";
     public const string Midnight = "midnight";
     public const string Daylight = "daylight";
     public const string HighContrast = "high-contrast";
 
     public static AppTheme Parse(string? value)
     {
+        if (string.Equals(value, Workspace, StringComparison.OrdinalIgnoreCase)) return AppTheme.Workspace;
         if (string.Equals(value, Daylight, StringComparison.OrdinalIgnoreCase)
             || string.Equals(value, "light", StringComparison.OrdinalIgnoreCase))
         {
@@ -33,6 +36,7 @@ public static class AppThemeNames
 
     public static string ToSetting(AppTheme theme) => theme switch
     {
+        AppTheme.Workspace => Workspace,
         AppTheme.Daylight => Daylight,
         AppTheme.HighContrast => HighContrast,
         _ => Midnight,
@@ -51,6 +55,7 @@ public static class ThemeCatalog
 {
     public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme) => theme switch
     {
+        AppTheme.Workspace => WorkspaceColors,
         AppTheme.Daylight => DaylightColors,
         AppTheme.HighContrast => HighContrastColors,
         _ => MidnightColors,
@@ -198,5 +203,33 @@ public static class ThemeCatalog
         ["Overlay.SelectionBorder"] = ThemeColor.Rgb(0xFF, 0xD0, 0x00),
         ["Overlay.HandleFill"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
         ["Overlay.HandleStroke"] = ThemeColor.Rgb(0xFF, 0xD0, 0x00),
+    };
+    internal static readonly Dictionary<string, ThemeColor> WorkspaceColors = new(MidnightColors, StringComparer.Ordinal)
+    {
+        ["Surface.Canvas"] = ThemeColor.Rgb(0x14, 0x1b, 0x22),
+        ["Surface.Base"] = ThemeColor.Rgb(0x14, 0x1b, 0x22),
+        ["Surface.Raised"] = ThemeColor.Rgb(0x20, 0x2b, 0x34),
+        ["Surface.Overlay"] = ThemeColor.Rgb(0x25, 0x32, 0x3c),
+        ["Surface.Sunken"] = ThemeColor.Rgb(0x10, 0x17, 0x1d),
+        ["Surface.Hover"] = ThemeColor.Rgb(0x2a, 0x3c, 0x43),
+        ["Surface.Pressed"] = ThemeColor.Rgb(0x30, 0x49, 0x51),
+        ["Text.Primary"] = ThemeColor.Rgb(0xed, 0xf5, 0xfb),
+        ["Text.Secondary"] = ThemeColor.Rgb(0xbd, 0xd0, 0xd8),
+        ["Text.Muted"] = ThemeColor.Rgb(0x9d, 0xaf, 0xbb),
+        ["Text.OnAccent"] = ThemeColor.Rgb(0x10, 0x2b, 0x2b),
+        ["Accent.Default"] = ThemeColor.Rgb(0x5a, 0xd9, 0xc5),
+        ["Accent.Hover"] = ThemeColor.Rgb(0x81, 0xe5, 0xd4),
+        ["Accent.Pressed"] = ThemeColor.Rgb(0x3b, 0xbc, 0xa8),
+        ["Accent.Subtle"] = ThemeColor.Rgb(0x18, 0x3e, 0x3c),
+        ["Accent.Cool"] = ThemeColor.Rgb(0x5a, 0xd9, 0xc5),
+        ["Accent.Gradient"] = ThemeColor.Rgb(0x5a, 0xd9, 0xc5),
+        ["Border.Subtle"] = ThemeColor.Rgb(0x35, 0x46, 0x50),
+        ["Border.Focus"] = ThemeColor.Rgb(0x5a, 0xd9, 0xc5),
+        ["Border.Accent"] = ThemeColor.Rgb(0x5a, 0xd9, 0xc5),
+        ["Timeline.Background"] = ThemeColor.Rgb(0x14, 0x1b, 0x22),
+        ["Timeline.Track"] = ThemeColor.Rgb(0x20, 0x2b, 0x34),
+        ["Timeline.Playhead"] = ThemeColor.Rgb(0x5a, 0xd9, 0xc5),
+        ["Timeline.TextLayer"] = ThemeColor.Rgb(0x31, 0x9c, 0x91),
+        ["Timeline.FrameLayer"] = ThemeColor.Rgb(0x71, 0x8a, 0xc5),
     };
 }

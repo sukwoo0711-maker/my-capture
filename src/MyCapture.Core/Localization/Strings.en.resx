@@ -3042,4 +3042,16 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Video.SourceTimeHint" xml:space="preserve"><value>Time in the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Export includes In up to, but excluding, Out.</value></data>
   <data name="Video.TrimInputInvalid" xml:space="preserve"><value>The range was not changed. Enter In and Out within the source, with In at least 0.1 seconds before Out.</value></data>
   <data name="Video.TextSourceTimeHint" xml:space="preserve"><value>Display times refer to the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Text appears from Start up to, but excluding, End. Only its overlap with In–Out is exported.</value></data>
+  <data name="Settings.ThemeWorkspace" xml:space="preserve"><value>Workspace · light library and dark video editor</value></data>
+  <data name="Workspace.Library" xml:space="preserve"><value>Library</value></data>
+  <data name="Workspace.All" xml:space="preserve"><value>All captures</value></data>
+  <data name="Workspace.Pinned" xml:space="preserve"><value>Kept captures</value></data>
+  <data name="Workspace.Details" xml:space="preserve"><value>Selected capture</value></data>
+  <data name="Workspace.SelectHint" xml:space="preserve"><value>Select one capture to see its preview and details.</value></data>
+  <data name="Workspace.RetentionHint" xml:space="preserve"><value>Images are cleaned up after their retention period. Use More to keep a capture.</value></data>
+  <data name="Workspace.EditHint" xml:space="preserve"><value>Save your edits to continue editing from the library later.</value></data>
+  <data name="Workspace.VideoHint" xml:space="preserve"><value>Save edits updates the library; Export creates a new file.</value></data>
+  <data name="Workspace.Properties" xml:space="preserve"><value>Layer properties</value></data>
+<data name="Workspace.EditProperties" xml:space="preserve"><value>Edit properties</value></data>
+<data name="Workspace.SelectLayer" xml:space="preserve"><value>Select a layer to see its content and visible interval.</value></data>
 </root>

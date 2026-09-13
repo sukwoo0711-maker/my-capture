@@ -119,6 +119,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         : !string.IsNullOrWhiteSpace(Record.SourceWindowTitle) ? Record.SourceWindowTitle
         : string.Empty;
 
+    public string DetailDimensions => $"{Record.Width} \u00d7 {Record.Height}";
+
     public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
 
     /// <summary>Non-empty label for confirmations, OCR windows and other contextual UI.</summary>

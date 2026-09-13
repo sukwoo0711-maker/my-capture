@@ -499,6 +499,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 PlayCaptureSound = _playCaptureSound,
                 Language = _language,
                 Theme = AppThemeNames.ToSetting(AppThemeNames.Parse(_theme)),
+                ThemeRevision = 1,
                 IsFirstRun = _preservedIsFirstRun,
             },
             Capture =

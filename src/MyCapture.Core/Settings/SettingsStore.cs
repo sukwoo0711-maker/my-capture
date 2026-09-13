@@ -262,6 +262,12 @@ public sealed class SettingsStore
             s.GitHub.IssueUrl = issueUrl;
         }
 
+        if (s.General.ThemeRevision < 1)
+        {
+            if (MyCapture.Core.Themes.AppThemeNames.Parse(s.General.Theme) == MyCapture.Core.Themes.AppTheme.Midnight)
+                s.General.Theme = MyCapture.Core.Themes.AppThemeNames.Workspace;
+            s.General.ThemeRevision = 1;
+        }
         s.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(
             MyCapture.Core.Themes.AppThemeNames.Parse(s.General.Theme));
     }

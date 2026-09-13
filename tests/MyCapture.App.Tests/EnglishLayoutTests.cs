@@ -94,6 +94,7 @@ public sealed class EnglishLayoutTests
             Border layerPanel = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoLayersPanel");
             foreach (Button action in Descendants(layerPanel).OfType<Button>())
             {
+                AssertReachableInScrollViewport(action, window);
                 Point bottom = action.TranslatePoint(new Point(action.ActualWidth, action.ActualHeight), layerPanel);
                 Assert.InRange(bottom.X, 0, layerPanel.ActualWidth + 0.5);
                 Assert.InRange(bottom.Y, 0, layerPanel.ActualHeight - layerPanel.Padding.Bottom + 0.5);
@@ -117,6 +118,7 @@ public sealed class EnglishLayoutTests
                 Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);
                 Assert.NotNull(button.ToolTip);
+                AssertReachableInScrollViewport(button, window);
                 Point top = button.TranslatePoint(new Point(0, 0), layout);
                 Point bottom = button.TranslatePoint(new Point(button.ActualWidth, button.ActualHeight), layout);
                 Assert.True(button.IsVisible && top.X >= 0 && bottom.X <= layout.ActualWidth + 0.5 && bottom.Y <= layout.ActualHeight + 0.5, caption);
@@ -133,6 +135,7 @@ public sealed class EnglishLayoutTests
                 Button action = Assert.Single(buttons, button => AutomationProperties.GetName(button) == UiText.Get(key));
                 Assert.NotNull(action.ToolTip);
                 Assert.True(action.IsVisible && action.ActualWidth >= 36 && action.ActualHeight >= 36);
+                AssertReachableInScrollViewport(action, window);
                 Point bottom = action.TranslatePoint(new Point(action.ActualWidth, action.ActualHeight), layout);
                 Assert.InRange(bottom.X, 0, layout.ActualWidth + 0.5);
                 Assert.InRange(bottom.Y, 0, layout.ActualHeight + 0.5);
@@ -155,6 +158,33 @@ public sealed class EnglishLayoutTests
             finally { OwnedTestDirectory.Delete(root); }
         }
     });
+
+    private static void AssertReachableInScrollViewport(Button button, Window window)
+    {
+        ScrollViewer? scroll = null;
+        for (DependencyObject? ancestor = VisualTreeHelper.GetParent(button); ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor))
+        {
+            if (ancestor is ScrollViewer viewer) { scroll = viewer; break; }
+        }
+        if (scroll is null) return; // Fixed toolbar buttons retain the existing always-visible checks.
+
+        button.BringIntoView();
+        window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+        window.UpdateLayout();
+        var viewport = Assert.IsType<ScrollContentPresenter>(scroll.Template.FindName("PART_ScrollContentPresenter", scroll));
+        Point top = button.TranslatePoint(new Point(), viewport);
+        Point bottom = button.TranslatePoint(new Point(button.ActualWidth, button.ActualHeight), viewport);
+        // Scroll the actual production viewer if BringIntoView only brought its outer panel into view.
+        if (top.Y < 0) scroll.ScrollToVerticalOffset(scroll.VerticalOffset + top.Y);
+        else if (bottom.Y > viewport.ActualHeight) scroll.ScrollToVerticalOffset(scroll.VerticalOffset + bottom.Y - viewport.ActualHeight);
+        window.UpdateLayout();
+        top = button.TranslatePoint(new Point(), viewport);
+        bottom = button.TranslatePoint(new Point(button.ActualWidth, button.ActualHeight), viewport);
+        string name = AutomationProperties.GetName(button);
+        Assert.True(button.IsVisible && button.ActualWidth > 0 && button.ActualHeight > 0, name);
+        Assert.True(top.X >= -0.5 && top.Y >= -0.5 && bottom.X <= viewport.ActualWidth + 0.5 && bottom.Y <= viewport.ActualHeight + 0.5,
+            $"Scrollable action must be fully reachable: {name}; top={top}; bottom={bottom}; viewport={viewport.ActualWidth}x{viewport.ActualHeight}");
+    }
 
     private static void LoadWindowTheme(Window window)
     {

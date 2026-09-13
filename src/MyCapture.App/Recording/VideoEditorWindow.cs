@@ -69,6 +69,8 @@ internal sealed class VideoEditorWindow : Window
     private readonly TextBlock _loadingLabel;
     private readonly Border _loadingOverlay;
     private readonly ListBox _overlayList;
+    private TextBlock? _layerPropertiesSummary;
+    private Button? _layerPropertiesEdit;
     private Button _trimButton = null!;
     private Button _addTextButton = null!;
     private Button _editTextButton = null!;
@@ -138,6 +140,7 @@ internal sealed class VideoEditorWindow : Window
                 recording.DurationMs))
             .NormalizeFor(recording.Width, recording.Height, recording.DurationMs);
 
+        WorkspaceTheme.Attach(this, WorkspaceRole.VideoEditor);
         StandardWindowTheme.Apply(this);
 
         Title = UiText.Get("Text_79188256BC8D");
@@ -237,7 +240,7 @@ internal sealed class VideoEditorWindow : Window
         {
             MinHeight = 38,
             MaxHeight = 120,
-            MinWidth = 280,
+            MinWidth = 0,
             BorderThickness = new Thickness(0),
             Background = Brushes.Transparent,
             SelectionMode = SelectionMode.Single,
@@ -370,8 +373,12 @@ internal sealed class VideoEditorWindow : Window
         var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
         var exports = new StackPanel { Orientation = Orientation.Horizontal };
         Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"));
+        saveEdits.ToolTip = UiText.Get("Workspace.VideoHint");
+        AutomationProperties.SetHelpText(saveEdits, UiText.Get("Workspace.VideoHint"));
         saveEdits.Click += (_, _) => CommitTrim();
         Button export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_ExportFormats"), "MediaExport_ArrowExport", true);
+        export.ToolTip = UiText.Get("Workspace.VideoHint");
+        AutomationProperties.SetHelpText(export, UiText.Get("Workspace.VideoHint"));
         export.Click += (_, _) => OpenExport();
         _editControls.Add(saveEdits); _editControls.Add(export);
         exports.Children.Add(saveEdits); exports.Children.Add(export);
@@ -571,9 +578,31 @@ internal sealed class VideoEditorWindow : Window
         lane.Children.Add(layerHeader);
 
         Grid.SetRow(_overlayList, 1);
-        _overlayList.MaxHeight = double.PositiveInfinity;
+        _overlayList.MaxHeight = 120;
         _overlayList.Margin = new Thickness(0, 8, 0, 8);
-        lane.Children.Add(_overlayList);
+        var inspectorContent = new StackPanel();
+        inspectorContent.Children.Add(_overlayList);
+        inspectorContent.Children.Add(new TextBlock
+        {
+            Text = UiText.Get("Workspace.Properties"), FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 8, 0, 8),
+        });
+        _layerPropertiesSummary = new TextBlock
+        {
+            Text = UiText.Get("Workspace.SelectLayer"), TextWrapping = TextWrapping.Wrap,
+            Foreground = TryBrush("Text.Secondary", Colors.LightGray), FontSize = 12,
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+        inspectorContent.Children.Add(_layerPropertiesSummary);
+        _layerPropertiesEdit = MakeButton(UiText.Get("Workspace.EditProperties"), UiText.Get("Workspace.EditProperties"), "Button.Secondary", EditSelectedOverlay);
+        inspectorContent.Children.Add(_layerPropertiesEdit);
+        var inspectorScroll = new ScrollViewer
+        {
+            Content = inspectorContent, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = false,
+        };
+        Grid.SetRow(inspectorScroll, 1);
+        lane.Children.Add(inspectorScroll);
 
         var actions = new WrapPanel
         {
@@ -1317,11 +1346,16 @@ internal sealed class VideoEditorWindow : Window
     private FrameworkElement LayerCaption(string title, double start, double end, string icon)
     {
         var row = new DockPanel { LastChildFill = true };
-        var symbol = new TextBlock { Text = icon, Width = 30, VerticalAlignment = VerticalAlignment.Center, FontSize = 20 };
+        var symbol = new System.Windows.Shapes.Path
+        {
+            Data = TryGeometry(icon), Width = 18, Height = 18, Margin = new Thickness(0, 0, 10, 0),
+            Stretch = Stretch.Uniform, StrokeThickness = 1.6, Stroke = TryBrush("Accent.Default", Colors.Teal),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
         DockPanel.SetDock(symbol, Dock.Left); row.Children.Add(symbol);
         var caption = new StackPanel();
         caption.Children.Add(new TextBlock { Text = title, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 140 });
-        var timing = new TextBlock { Text = $"In {SourceTimeInput.Format(start)}\nOut {SourceTimeInput.Format(end)}", FontSize = 11 };
+        var timing = new TextBlock { Text = $"{UiText.Get("Video.TrimIn")} {SourceTimeInput.Format(start)}\n{UiText.Get("Video.TrimOut")} {SourceTimeInput.Format(end)}", FontSize = 11 };
         timing.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         caption.Children.Add(timing); row.Children.Add(caption);
         return row;
@@ -1344,7 +1378,7 @@ internal sealed class VideoEditorWindow : Window
 
                 var item = new ListBoxItem
                 {
-                    Content = LayerCaption(oneLine, overlay.StartMs, overlay.EndMs, "T"),
+                    Content = LayerCaption(oneLine, overlay.StartMs, overlay.EndMs, "Icon.Text"),
                     Tag = overlay,
                     ToolTip = overlay.Text,
                     Padding = new Thickness(8, 4, 8, 4),
@@ -1361,7 +1395,7 @@ internal sealed class VideoEditorWindow : Window
             {
                 var item = new ListBoxItem
                 {
-                    Content = LayerCaption(layer.Name, layer.StartMs, layer.EndMs, "▧"),
+                    Content = LayerCaption(layer.Name, layer.StartMs, layer.EndMs, "Icon.Image"),
                     Tag = layer,
                     ToolTip = UiText.Get("Text_E75BE1B916FD"),
                     Padding = new Thickness(8, 4, 8, 4),
@@ -1404,6 +1438,16 @@ internal sealed class VideoEditorWindow : Window
         bool anySelected = textSelected || SelectedFrameLayer() is not null;
         _editTextButton.IsEnabled = interactive && textSelected;
         _deleteTextButton.IsEnabled = interactive && anySelected;
+        if (_layerPropertiesEdit is not null) _layerPropertiesEdit.IsEnabled = interactive && textSelected;
+        if (_layerPropertiesSummary is not null)
+        {
+            string title = SelectedOverlay()?.Text ?? SelectedFrameLayer()?.Name ?? string.Empty;
+            double? start = SelectedOverlay()?.StartMs ?? SelectedFrameLayer()?.StartMs;
+            double? end = SelectedOverlay()?.EndMs ?? SelectedFrameLayer()?.EndMs;
+            _layerPropertiesSummary.Text = start.HasValue && end.HasValue
+                ? $"{title}\n{UiText.Get("Video.TrimIn")} {SourceTimeInput.Format(start.Value)}\n{UiText.Get("Video.TrimOut")} {SourceTimeInput.Format(end.Value)}"
+                : UiText.Get("Workspace.SelectLayer");
+        }
     }
 
     private void RefreshTextPreview()
@@ -2124,8 +2168,8 @@ internal sealed class VideoEditorWindow : Window
         FontSize = 13,
     };
 
-    private static Brush TryBrush(string key, Color fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
+    private Brush TryBrush(string key, Color fallback) =>
+        TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
 
     private static FontFamily TryFont(string key) =>
         Application.Current?.TryFindResource(key) as FontFamily ?? new FontFamily("Segoe UI");
@@ -2133,6 +2177,6 @@ internal sealed class VideoEditorWindow : Window
     private static Geometry TryGeometry(string key) =>
         Application.Current?.TryFindResource(key) as Geometry ?? Geometry.Empty;
 
-    private static Style? TryStyle(string key) =>
-        Application.Current?.TryFindResource(key) as Style;
+    private Style? TryStyle(string key) =>
+        TryFindResource(key) as Style;
 }

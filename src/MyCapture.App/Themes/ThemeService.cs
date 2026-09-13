@@ -10,7 +10,7 @@ namespace MyCapture.App.Themes;
 /// </summary>
 internal static class ThemeService
 {
-    internal static AppTheme Current { get; private set; } = AppTheme.Midnight;
+    internal static AppTheme Current { get; private set; } = AppTheme.Workspace;
 
     internal static void Apply(AppTheme theme)
     {
@@ -21,6 +21,7 @@ internal static class ThemeService
         }
 
         ApplyResources(theme, resources);
+        WorkspaceTheme.Refresh(theme);
     }
 
     internal static void ApplyResources(AppTheme theme, ResourceDictionary resources)
@@ -39,7 +40,7 @@ internal static class ThemeService
                 }
                 else
                 {
-                    brush.Color = Color.FromArgb(color.A, color.R, color.G, color.B);
+                    brush.SetCurrentValue(SolidColorBrush.ColorProperty, Color.FromArgb(color.A, color.R, color.G, color.B));
                 }
             }
         }

@@ -84,6 +84,13 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     public bool HasSelection => Selection.SelectedIds.Count > 0;
     public string SelectionText => UiText.Format("LibrarySelection_Count", Selection.SelectedIds.Count);
     public GalleryItemViewModel? SingleSelectedTile => SelectedTiles.Count == 1 ? SelectedTiles[0] : null;
+    private GalleryFilter _filter;
+    public GalleryFilter Filter
+    {
+        get => _filter;
+        set { if (_filter != value) { _filter = value; Raise(); Refresh(); } }
+    }
+
     public bool CanReduceSelected => SingleSelectedTile?.IsImage == true;
     public bool CanGifSelected => SingleSelectedTile?.IsVideo == true;
 
@@ -198,11 +205,14 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
             var tiles = new List<GalleryItemViewModel>(group.Records.Count);
             foreach (CaptureRecord record in group.Records)
             {
+                if (_filter == GalleryFilter.Images && !record.IsImage
+                    || _filter == GalleryFilter.Videos && !record.IsVideo
+                    || _filter == GalleryFilter.Pinned && !record.IsPinned) continue;
                 tiles.Add(GetOrCreateTile(record));
                 seenTiles.Add(record.Id);
             }
 
-            _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles));
+            if (tiles.Count > 0) _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles));
         }
 
         // Drop cached tiles for records that no longer exist so decoded bitmaps are released.
@@ -326,3 +336,5 @@ public sealed class GalleryGroupViewModel
 
     public IReadOnlyList<GalleryItemViewModel> Items { get; }
 }
+
+public enum GalleryFilter { All, Images, Videos, Pinned }

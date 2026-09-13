@@ -119,6 +119,7 @@ internal static class UxReviewSelfTest
                 new GalleryReeditLoader(queue, logs.CreateLogger<GalleryReeditLoader>()), commit, queue,
                 videoLibrary, paths, logs, presenter, () => settings.Ocr, indexing,
                 new FixturePrivacy(), NullLogger.Instance)));
+            viewModel.Select(viewModel.Groups.SelectMany(group => group.Items).First().Id);
             windows.Add(("settings", new SettingsWindow(() => settings,
                 _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance)));
             var region = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
@@ -127,7 +128,8 @@ internal static class UxReviewSelfTest
             RecordingResult recording = CreateFixtureVideo(Path.Combine(paths.DataRoot, "synthetic.mp4"), sample);
             var document = VideoEditDocument.CreateFor(recording.Width, recording.Height, recording.DurationMs);
             document.TextOverlays.Add(new TimedTextOverlay { Text = "텍스트 표시 구간 · 드래그로 조절", StartMs = 300, EndMs = 2200 });
-            windows.Add(("video", new VideoEditorWindow(recording, paths, logs, document)));
+            var videoFixture = new VideoEditorWindow(recording, paths, logs, document);
+            windows.Add(("video", videoFixture));
             const string source = "public void Capture()\r\n{\r\n\tSave();\r\n}";
             BitmapSource code = ClipboardCodeRenderer.TryRender(source,
                 "<div style=\"color: #d4d4d4; background-color: #1e1e1e; white-space: pre;\"><div><span style=\"color: #569cd6;\">public void</span> Capture()</div><div>{</div><div>    Save();</div><div>}</div></div>")
@@ -176,6 +178,11 @@ internal static class UxReviewSelfTest
                     window.ShowActivated = false;
                     window.Show();
                     Pump(TimeSpan.FromMilliseconds(name == "video" ? 1800 : 180));
+                    if (window is VideoEditorWindow)
+                    {
+                        Descendants(window).OfType<ListBox>().Single().SelectedIndex = 0;
+                        window.UpdateLayout();
+                    }
                     if (window is GalleryWindow)
                     {
                         ListBox rows = Descendants(window).OfType<ListBox>().Single(list => list.Name == "RowsList");
@@ -229,11 +236,33 @@ internal static class UxReviewSelfTest
                         window.Height = compact ? Math.Max(window.MinHeight, name is "pin-code" or "image-export" ? normalHeight : 560) : normalHeight;
                         window.UpdateLayout();
                         Pump(TimeSpan.FromMilliseconds(100));
+                        if (compact && window is GalleryWindow)
+                        {
+                            ListBox compactRows = Descendants(window).OfType<ListBox>().Single(list => list.Name == "RowsList");
+                            ScrollViewer compactScroll = Descendants(compactRows).OfType<ScrollViewer>().First();
+                            compactScroll.ScrollToVerticalOffset(60);
+                            Pump(TimeSpan.FromMilliseconds(100));
+                            bool fullCardFits = compactScroll.ViewportHeight >= 304;
+                            report.AppendLine($"Gallery compact viewport={compactScroll.ViewportHeight:0.##} DIP; 304-DIP full card fits after scrolling heading away={fullCardFits}");
+                            if (!fullCardFits) failures++;
+                        }
                         string label = name + (compact ? "-compact" : "-normal");
                         foreach (int dpi in new[] { 96, 144, 192 })
                             Render(window, Path.Combine(outputDirectory, $"{label}-{dpi}dpi.png"), dpi);
                         WriteLayoutInventory(window, Path.Combine(outputDirectory, label + "-layout.json"));
                         report.AppendLine($"Rendered {label}: {window.ActualWidth:0}x{window.ActualHeight:0} DIP; native scale={VisualTreeHelper.GetDpi(window).DpiScaleX:0.##}");
+                    }
+                    if (window is GalleryWindow)
+                    {
+                        var inline = (MediaElement)window.FindName("InlineVideo");
+                        var inlinePanel = (Border)window.FindName("InlineVideoPanel");
+                        inline.Source = new Uri(recording.OutputPath, UriKind.Absolute);
+                        inlinePanel.Visibility = Visibility.Visible;
+                        RadioButton imageFilter = Descendants(window).OfType<RadioButton>().Single(button => Equals(button.Tag, "Images"));
+                        imageFilter.IsChecked = true;
+                        bool released = inline.Source is null && inlinePanel.Visibility == Visibility.Collapsed;
+                        report.AppendLine($"Gallery filter change releases inline media and reveals inspector: {released}");
+                        if (!released) failures++;
                     }
                     if (window is SettingsWindow)
                     {

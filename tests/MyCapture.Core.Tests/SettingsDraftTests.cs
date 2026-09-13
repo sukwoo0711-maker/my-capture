@@ -85,7 +85,7 @@ public sealed class SettingsDraftTests
         Assert.Empty(draft.AllErrors());
         Assert.Equal("168", draft.ImageRetentionHours);
         Assert.Equal(MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl, draft.GitHubIssueUrl);
-        Assert.Equal("midnight", draft.Theme);
+        Assert.Equal("workspace", draft.Theme);
         Assert.Equal("F4", draft.UploadGitHubImageHotkey);
         Assert.False(string.IsNullOrWhiteSpace(draft.CapturesDirectoryOverride));
         Assert.False(string.IsNullOrWhiteSpace(draft.QuickSaveDirectoryOverride));
