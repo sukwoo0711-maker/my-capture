@@ -18,6 +18,7 @@ public enum GlobalHotkeyCommand
     CaptureWindow,
     CaptureFullScreen,
     RecordRegion,
+    UploadGitHubImage,
 }
 
 /// <summary>
@@ -268,6 +269,7 @@ public sealed class GlobalHotkeyService : IDisposable
         yield return (GlobalHotkeyCommand.CaptureWindow, settings.CaptureWindow);
         yield return (GlobalHotkeyCommand.CaptureFullScreen, settings.CaptureFullScreen);
         yield return (GlobalHotkeyCommand.RecordRegion, settings.RecordRegion);
+        yield return (GlobalHotkeyCommand.UploadGitHubImage, settings.UploadGitHubImage);
     }
 
     private static int IdFor(GlobalHotkeyCommand command) => FirstHotkeyId + (int)command;

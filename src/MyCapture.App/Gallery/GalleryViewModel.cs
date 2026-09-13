@@ -27,6 +27,7 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     private readonly GalleryController _controller;
     private readonly Func<CaptureRecord, string> _thumbnailPathResolver;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly Func<int> _retentionHours;
     private readonly int _decodePixelWidth;
     private readonly Dictionary<Guid, GalleryItemViewModel> _tileCache = [];
     private readonly LinkedList<Guid> _thumbnailRecency = new();
@@ -109,12 +110,14 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
         GalleryController controller,
         Func<CaptureRecord, string> thumbnailPathResolver,
         int decodePixelWidth,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        Func<int>? imageRetentionHours = null)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _thumbnailPathResolver = thumbnailPathResolver ?? throw new ArgumentNullException(nameof(thumbnailPathResolver));
         _decodePixelWidth = Math.Max(1, decodePixelWidth);
         _clock = clock ?? (() => DateTimeOffset.Now);
+        _retentionHours = imageRetentionHours ?? (() => CaptureRetention.DefaultImageRetentionHours);
 
         Groups = new ReadOnlyObservableCollection<GalleryGroupViewModel>(_groups);
         Rows = new ReadOnlyObservableCollection<GalleryRow>(_rows);
@@ -276,7 +279,11 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
             return existing;
         }
 
-        var tile = new GalleryItemViewModel(record, _thumbnailPathResolver, _decodePixelWidth);
+        var tile = new GalleryItemViewModel(record, _thumbnailPathResolver, _decodePixelWidth)
+        {
+            Clock = _clock,
+            RetentionHours = _retentionHours,
+        };
         if (_thumbnailLoader is not null && _thumbnailDispatcher is not null)
             tile.ConfigureAsyncLoading(_thumbnailLoader, _thumbnailDispatcher);
         tile.SetThumbnailLoadingEnabled(_thumbnailLoadingEnabled);

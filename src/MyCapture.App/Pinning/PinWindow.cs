@@ -58,7 +58,9 @@ internal sealed class PinWindow : Window
     private readonly TextBlock _feedback;
     private readonly DispatcherTimer _feedbackTimer;
     private readonly DispatcherTimer _ctrlClickTimer;
+    private readonly DispatcherTimer _zoomSettleTimer;
 
+    private bool _liveZooming;
     private bool _dragging;
     private Point _dragAnchor;
     private RectD? _dragDesktop;
@@ -170,6 +172,11 @@ internal sealed class PinWindow : Window
         // Ctrl+C copies the rendered image; Ctrl+double-click copies text.
         _ctrlClickTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher);
         _ctrlClickTimer.Tick += OnCtrlClickTimerTick;
+        _zoomSettleTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(160),
+        };
+        _zoomSettleTimer.Tick += OnZoomSettleTick;
 
         SourceInitialized += OnSourceInitialized;
         Loaded += OnPinLoaded;
@@ -653,7 +660,7 @@ internal sealed class PinWindow : Window
         Width = _state.WidthDip;
         Height = _state.HeightDip;
         ApplyPositionKeepingGrabbable(newLeft, newTop);
-        AnimateZoomSettle(oldZoom, newZoom, pointerXDip, pointerYDip);
+        BeginLiveZoom();
         ShowFeedback($"{newZoom * 100:0}%");
     }
 
@@ -673,8 +680,41 @@ internal sealed class PinWindow : Window
         Width = _state.WidthDip;
         Height = _state.HeightDip;
         ApplyPositionKeepingGrabbable(newLeft, newTop);
-        AnimateZoomSettle(oldZoom, newZoom, centerX, centerY);
+        BeginLiveZoom();
         ShowFeedback("100%");
+    }
+
+    private void BeginLiveZoom()
+    {
+        _liveZooming = true;
+        RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.LowQuality);
+        _imageElement.CacheMode ??= new BitmapCache { RenderAtScale = 1, EnableClearType = false, SnapsToDevicePixels = true };
+        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        _pinScale.ScaleX = 1;
+        _pinScale.ScaleY = 1;
+        _zoomSettleTimer.Stop();
+        _zoomSettleTimer.Start();
+    }
+
+    private void OnZoomSettleTick(object? sender, EventArgs e)
+    {
+        _zoomSettleTimer.Stop();
+        CommitCrispZoom();
+    }
+
+    /// <summary>Test hook: commit the live-zoom cache the way the settle timer would.</summary>
+    internal void ForceZoomSettleForTest() => CommitCrispZoom();
+
+    internal bool IsLiveZoomingForTest => _liveZooming;
+
+    private void CommitCrispZoom()
+    {
+        _liveZooming = false;
+        _imageElement.CacheMode = null;
+        RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.HighQuality);
+        _imageElement.InvalidateVisual();
+        _chrome.InvalidateVisual();
     }
 
     private void ApplyPositionKeepingGrabbable(double left, double top)
@@ -807,41 +847,6 @@ internal sealed class PinWindow : Window
         _chrome.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
         _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleX, HandoffBehavior.SnapshotAndReplace);
         _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleY, HandoffBehavior.SnapshotAndReplace);
-    }
-
-    private void AnimateZoomSettle(
-        double oldZoom,
-        double newZoom,
-        double pointerXDip,
-        double pointerYDip)
-    {
-        if (!FluidMotion.AnimationsEnabled || newZoom <= 0 || Width <= 0 || Height <= 0)
-        {
-            return;
-        }
-
-        double ratio = oldZoom / newZoom;
-        double currentScaleX = _pinScale.ScaleX;
-        double currentScaleY = _pinScale.ScaleY;
-        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-        _chrome.RenderTransformOrigin = new Point(
-            Math.Clamp((pointerXDip - Left) / Width, 0, 1),
-            Math.Clamp((pointerYDip - Top) / Height, 0, 1));
-        _pinScale.ScaleX = 1;
-        _pinScale.ScaleY = 1;
-        var x = new DoubleAnimation(currentScaleX * ratio, 1, FluidMotion.FastDuration)
-        {
-            EasingFunction = FluidMotion.StandardEasing,
-            FillBehavior = FillBehavior.Stop,
-        };
-        var y = new DoubleAnimation(currentScaleY * ratio, 1, FluidMotion.FastDuration)
-        {
-            EasingFunction = FluidMotion.StandardEasing,
-            FillBehavior = FillBehavior.Stop,
-        };
-        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, x, HandoffBehavior.SnapshotAndReplace);
-        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, y, HandoffBehavior.SnapshotAndReplace);
     }
 
     /// <summary>
@@ -1045,6 +1050,8 @@ internal sealed class PinWindow : Window
         _feedbackTimer.Tick -= OnFeedbackTimerTick;
         _ctrlClickTimer.Stop();
         _ctrlClickTimer.Tick -= OnCtrlClickTimerTick;
+        _zoomSettleTimer.Stop();
+        _zoomSettleTimer.Tick -= OnZoomSettleTick;
         SourceInitialized -= OnSourceInitialized;
         Loaded -= OnPinLoaded;
         base.OnClosed(e);

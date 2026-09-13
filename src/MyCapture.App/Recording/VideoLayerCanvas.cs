@@ -21,13 +21,14 @@ internal sealed class VideoLayerCanvas : FrameworkElement
     internal event EventHandler? InteractionStarted;
     internal event EventHandler? BoundsChanged;
     internal event EventHandler? InteractionCompleted;
+    internal event EventHandler? LayerActivated;
 
     internal VideoLayerCanvas()
     {
         Focusable = true;
         ClipToBounds = true;
         AutomationProperties.SetName(this, UiText.Get("Text_FA67EC449E04"));
-        ToolTip = UiText.Get("Text_0BDF6B210A31");
+        ToolTip = UiText.Get("Video.EditTextHint");
     }
 
     internal void SetDocument(VideoEditDocument document) { _document = document; InvalidateVisual(); }
@@ -113,6 +114,11 @@ internal sealed class VideoLayerCanvas : FrameworkElement
             if (_dragging) { InteractionStarted?.Invoke(this, EventArgs.Empty); }
         }
         InvalidateVisual();
+        if (e.ClickCount >= 2 && SelectedId is not null)
+        {
+            LayerActivated?.Invoke(this, EventArgs.Empty);
+        }
+
         e.Handled = true;
     }
 

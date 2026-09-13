@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.Core.Queue;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.Gallery;
@@ -137,6 +138,18 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         }
     }
 
+    internal Func<int> RetentionHours { get; set; } = static () => CaptureRetention.DefaultImageRetentionHours;
+
+    internal Func<DateTimeOffset> Clock { get; set; } = static () => DateTimeOffset.Now;
+
+    /// <summary>TTL countdown matching the configured gallery retention.</summary>
+    public string RetentionCaption => CaptureRetention.FormatCountdown(
+        Record.CreatedAt,
+        CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = RetentionHours() }),
+        Clock(),
+        IsImage,
+        IsPinned);
+
     /// <summary>Secondary caption line: capture time.</summary>
     // Keep the wall-clock time captured with the record's stored offset. LocalDateTime
     // would reinterpret it through the current machine time zone and could change the
@@ -185,6 +198,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(HasCaption));
         Raise(nameof(ContextLabel));
         Raise(nameof(AccessibleName));
+        Raise(nameof(RetentionCaption));
     }
 
     /// <summary>Notifies the view that pin/meta changed without re-decoding the image.</summary>
@@ -192,6 +206,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     {
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));
+        Raise(nameof(RetentionCaption));
     }
 
     private void EnsureThumbnail()

@@ -177,6 +177,8 @@ public sealed class SettingsApplyService
             }
         }
 
+        MyCapture.App.Themes.ThemeService.ApplyFromSettings(next.General.Theme);
+
         bool languageChanged = !string.Equals(previous.General.Language, next.General.Language, StringComparison.OrdinalIgnoreCase);
         if (languageChanged)
         {
@@ -294,11 +296,14 @@ internal static class HotkeyCloneExtensions
     public static HotkeySettings DeepCloneHotkeys(this HotkeySettings s) => new()
     {
         Capture = s.Capture,
+        OpenLibrary = s.OpenLibrary,
         PasteToScreen = s.PasteToScreen,
         HideAllPins = s.HideAllPins,
         ToggleClickThrough = s.ToggleClickThrough,
         RepeatLastRegion = s.RepeatLastRegion,
         CaptureWindow = s.CaptureWindow,
         CaptureFullScreen = s.CaptureFullScreen,
+        RecordRegion = s.RecordRegion,
+        UploadGitHubImage = s.UploadGitHubImage,
     };
 }

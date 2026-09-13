@@ -46,6 +46,10 @@ public sealed class AppSettingsCloneTests
         source.Recording.IncludeCursor = false;
         source.Recording.BitrateBitsPerSecond = 8_000_000;
         source.Recording.CoarseStepSeconds = 2.5;
+        source.General.Theme = "daylight";
+        source.GitHub.IssueUrl = "https://github.com/sukwoo0711-maker/my-capture/issues/1";
+        source.Queue.ImageRetentionHours = 48;
+        source.Hotkeys.UploadGitHubImage = new Hotkey(HotkeyModifiers.Alt, Hotkey.VkF4);
 
         AppSettings clone = source.DeepClone();
 
@@ -62,6 +66,10 @@ public sealed class AppSettingsCloneTests
         Assert.False(clone.Recording.IncludeCursor);
         Assert.Equal(8_000_000, clone.Recording.BitrateBitsPerSecond);
         Assert.Equal(2.5, clone.Recording.CoarseStepSeconds);
+        Assert.Equal("daylight", clone.General.Theme);
+        Assert.Equal("https://github.com/sukwoo0711-maker/my-capture/issues/1", clone.GitHub.IssueUrl);
+        Assert.Equal(48, clone.Queue.ImageRetentionHours);
+        Assert.Equal("Alt+F4", clone.Hotkeys.UploadGitHubImage.ToString());
     }
 }
 
@@ -75,6 +83,12 @@ public sealed class SettingsDraftTests
         SettingsDraft draft = NewDraft();
         Assert.False(draft.HasErrors);
         Assert.Empty(draft.AllErrors());
+        Assert.Equal("168", draft.ImageRetentionHours);
+        Assert.Equal(MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl, draft.GitHubIssueUrl);
+        Assert.Equal("midnight", draft.Theme);
+        Assert.Equal("F4", draft.UploadGitHubImageHotkey);
+        Assert.False(string.IsNullOrWhiteSpace(draft.CapturesDirectoryOverride));
+        Assert.False(string.IsNullOrWhiteSpace(draft.QuickSaveDirectoryOverride));
     }
 
     [Fact]
@@ -373,6 +387,48 @@ public sealed class SettingsDraftTests
         AppSettings mapped = draft.ToAppSettings();
         Assert.True(SettingsRanges.MaxItems.Contains(mapped.Queue.MaxItems));
         Assert.True(SettingsRanges.CtrlClickDebounceMs.Contains(mapped.Pin.CtrlClickDebounceMs));
+    }
+
+    [Fact]
+    public void EmptyGitHubIssueUrl_MapsToSafeDefault()
+    {
+        SettingsDraft draft = NewDraft();
+        draft.GitHubIssueUrl = string.Empty;
+        Assert.False(draft.HasErrors);
+        Assert.Equal(MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl, draft.ToAppSettings().GitHub.IssueUrl);
+    }
+
+    [Theory]
+    [InlineData("http://github.com/a/b/issues/1")]
+    [InlineData("https://evil.com/a/b/issues/1")]
+    [InlineData("https://github.com/a/b/pulls/1")]
+    public void GitHubIssueUrl_RejectsUnsafeValues(string value)
+    {
+        SettingsDraft draft = NewDraft();
+        draft.GitHubIssueUrl = value;
+        Assert.True(draft.HasErrors);
+        Assert.NotEmpty(draft.GetErrors(nameof(SettingsDraft.GitHubIssueUrl)).Cast<string>());
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("8761")]
+    [InlineData("abc")]
+    public void ImageRetentionHours_RejectsOutOfRange(string value)
+    {
+        SettingsDraft draft = NewDraft();
+        draft.ImageRetentionHours = value;
+        Assert.True(draft.HasErrors);
+    }
+
+    [Fact]
+    public void DefaultStoragePath_PersistsAsEmptyOverride()
+    {
+        SettingsDraft draft = NewDraft();
+        Assert.False(draft.HasErrors);
+        AppSettings mapped = draft.ToAppSettings();
+        Assert.Equal(string.Empty, mapped.Queue.CapturesDirectoryOverride);
+        Assert.Equal(string.Empty, mapped.Export.QuickSaveDirectoryOverride);
     }
 }
 

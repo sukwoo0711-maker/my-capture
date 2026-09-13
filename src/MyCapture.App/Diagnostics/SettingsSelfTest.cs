@@ -171,6 +171,7 @@ internal static class SettingsSelfTest
                 CaptureWindow = Hotkey.None,
                 CaptureFullScreen = Hotkey.None,
                 RecordRegion = Hotkey.None,
+                UploadGitHubImage = Hotkey.None,
             };
 
             lastResult = hotkeys.Reconfigure(probe);

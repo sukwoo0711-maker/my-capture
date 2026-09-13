@@ -227,6 +227,7 @@ public sealed class GlobalHotkeyReconfigureTests
                 CaptureWindow = Hotkey.None,
                 CaptureFullScreen = Hotkey.None,
                 RecordRegion = Hotkey.None,
+                UploadGitHubImage = Hotkey.None,
             };
 
             HotkeyReconfigureResult result = service.Reconfigure(next);

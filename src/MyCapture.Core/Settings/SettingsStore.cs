@@ -155,6 +155,13 @@ public sealed class SettingsStore
         s.Queue.ThumbnailLongEdge = ClampWithWarning(
             s.Queue.ThumbnailLongEdge, 96, 1024, nameof(QueueSettings.ThumbnailLongEdge), warnings);
 
+        s.Queue.ImageRetentionHours = ClampWithWarning(
+            s.Queue.ImageRetentionHours,
+            SettingsRanges.ImageRetentionHours.Min,
+            SettingsRanges.ImageRetentionHours.Max,
+            nameof(QueueSettings.ImageRetentionHours),
+            warnings);
+
         // --- Export ---
         if (string.IsNullOrWhiteSpace(s.Export.FileNamePattern))
         {
@@ -239,6 +246,24 @@ public sealed class SettingsStore
             s.Hotkeys.Capture = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
             warnings.Add(UiText.Get("Text_CFACAAC223E9"));
         }
+
+        if (!s.Hotkeys.UploadGitHubImage.IsAssigned)
+        {
+            s.Hotkeys.UploadGitHubImage = new Hotkey(HotkeyModifiers.None, Hotkey.VkF4);
+        }
+
+        if (!MyCapture.Core.GitHub.GitHubIssueImageUrl.TryNormalize(s.GitHub.IssueUrl, out string issueUrl))
+        {
+            warnings.Add(UiText.Get("Settings.GitHubIssueUrlInvalid"));
+            s.GitHub.IssueUrl = MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl;
+        }
+        else
+        {
+            s.GitHub.IssueUrl = issueUrl;
+        }
+
+        s.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(
+            MyCapture.Core.Themes.AppThemeNames.Parse(s.General.Theme));
     }
 
     private static int ClampWithWarning(int value, int min, int max, string name, List<string> warnings)

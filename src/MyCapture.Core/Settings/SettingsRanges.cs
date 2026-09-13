@@ -43,6 +43,9 @@ public static class SettingsRanges
 
     public static readonly Range<double> UpscaleFactor = new(1.0, 4.0);
 
+    /// <summary>Gallery image TTL in hours. Floor 1 hour; ceiling one year.</summary>
+    public static readonly Range<int> ImageRetentionHours = new(1, 24 * 365);
+
     /// <summary>1 GiB expressed in bytes, the unit the storage cap is shown in.</summary>
     public const long BytesPerGiB = 1024L * 1024 * 1024;
 }
