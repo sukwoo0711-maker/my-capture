@@ -81,4 +81,7 @@ public static class GitHubIssueImageUrl
         url = match.Value;
         return true;
     }
+
+    public static IEnumerable<string> ExtractAttachmentUrls(string? text) =>
+        string.IsNullOrWhiteSpace(text) ? [] : AttachmentUrl.Matches(text).Select(match => match.Value);
 }

@@ -3026,7 +3026,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="GitHub.NeedImage" xml:space="preserve"><value>먼저 이미지를 복사한 뒤 F4를 누르세요.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>GitHub 이슈를 열고 이미지를 붙이는 중…</value></data>
   <data name="GitHub.Done" xml:space="preserve"><value>첨부 URL을 클립보드에 복사했습니다.</value></data>
-  <data name="GitHub.Failed" xml:space="preserve"><value>GitHub에서 이미지 URL을 가져오지 못했습니다. 이슈 Write 칸에 직접 붙인 뒤 URL이 생기면 다시 시도하세요.</value></data>
+  <data name="GitHub.Failed" xml:space="preserve"><value>이미지 주소를 가져오지 못했습니다. GitHub에 로그인하고 설정한 이슈의 댓글·설명 입력란을 표시한 뒤, 이미지를 복사하고 F4를 눌러주세요. 업로드 중에는 해당 탭과 클립보드를 유지해주세요.</value></data>
   <data name="GitHub.InvalidUrl" xml:space="preserve"><value>설정에 올바른 GitHub 이슈 URL이 필요합니다.</value></data>
   <data name="GitHub.Busy" xml:space="preserve"><value>이미 GitHub 업로드가 진행 중입니다.</value></data>
   <data name="Video.MarkIn" xml:space="preserve"><value>In</value></data>

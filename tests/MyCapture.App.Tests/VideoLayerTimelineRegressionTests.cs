@@ -14,6 +14,27 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class VideoLayerTimelineRegressionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SingleFrameBarsKeepBothHandlesInsideViewportWithoutChangingSourceTime(bool textMode) => StaTestHost.Run(() =>
+    {
+        var timeline = new VideoLayerTimeline();
+        timeline.Initialize(60000);
+        var frame = new FrameEditLayer { StartMs = 59966.667, EndMs = 60000 };
+        var text = new TimedTextOverlay { Text = "Short", StartMs = frame.StartMs, EndMs = frame.EndMs };
+        timeline.SetLayers(textMode ? [text] : [], textMode ? [] : [frame]);
+        timeline.Measure(new Size(400, double.PositiveInfinity));
+        timeline.Arrange(new Rect(0, 0, 400, timeline.DesiredSize.Height));
+        Rect bar = timeline.SelectedBarBounds;
+        Assert.True(bar.Width >= 24);
+        Assert.InRange(bar.Right, 0, timeline.ActualWidth);
+        Assert.True(Math.Min(10, bar.Width / 3) >= 8);
+        Assert.Equal(59966.667, frame.StartMs);
+        Assert.Equal(60000, frame.EndMs);
+        Assert.Equal(frame.StartMs, text.StartMs);
+    });
+
     [Fact]
     public void VideoLayerTimeline_SameMutableListInstance_GainingAndRemovingLayers_UpdatesHeightAndSelection() =>
         StaTestHost.Run(() =>

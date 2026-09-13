@@ -15,6 +15,7 @@ internal sealed class TimedTextOverlayDialog : Window
     private readonly double _durationMs;
     private readonly Guid _id;
     private readonly TimedTextOverlay? _existing;
+    private readonly FrameEditLayer? _existingFrame;
     private readonly TextBox _text;
     private readonly TextBox _start;
     private readonly TextBox _end;
@@ -25,14 +26,17 @@ internal sealed class TimedTextOverlayDialog : Window
         double durationMs,
         double playheadMs,
         TimedTextOverlay? existing = null,
-        double? defaultEndMs = null)
+        double? defaultEndMs = null,
+        FrameEditLayer? existingFrame = null)
     {
         _durationMs = Math.Max(1, durationMs);
         _id = existing?.Id ?? Guid.NewGuid();
         _existing = existing?.Clone();
+        _existingFrame = existingFrame?.Clone();
 
         StandardWindowTheme.Apply(this);
         Title = existing is null ? UiText.Get("Text_6235669450B0") : UiText.Get("Text_16803FE760A3");
+        if (_existingFrame is not null) Title = UiText.Get("Workspace.Properties");
         Width = 520;
         SizeToContent = SizeToContent.Height;
         MinHeight = 360;
@@ -53,18 +57,19 @@ internal sealed class TimedTextOverlayDialog : Window
 
         _text = new TextBox
         {
-            Text = existing?.Text ?? string.Empty,
+            Text = _existingFrame?.Name ?? existing?.Text ?? string.Empty,
+            IsReadOnly = _existingFrame is not null,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
-            MinHeight = 110,
+            MinHeight = _existingFrame is null ? 110 : 36,
             MaxLength = VideoEditDocument.MaximumTextLength,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         AutomationProperties.SetName(_text, UiText.Get("Text_06B3E66B7B78"));
 
-        _start = TimeBox(startMs);
+        _start = TimeBox(_existingFrame?.StartMs ?? startMs);
         AutomationProperties.SetName(_start, UiText.Get("Text_FE872AF40869"));
-        _end = TimeBox(endMs);
+        _end = TimeBox(_existingFrame?.EndMs ?? endMs);
         AutomationProperties.SetName(_end, UiText.Get("Text_1882C23FDDB1"));
 
         var placements = new[]
@@ -93,13 +98,15 @@ internal sealed class TimedTextOverlayDialog : Window
         Content = BuildLayout();
         Loaded += (_, _) =>
         {
-            _ = _text.Focus();
-            _text.SelectAll();
+            TextBox initial = _existingFrame is null ? _text : _start;
+            _ = initial.Focus();
+            initial.SelectAll();
         };
         PreviewKeyDown += OnPreviewKeyDown;
     }
 
     internal TimedTextOverlay? Result { get; private set; }
+    internal FrameEditLayer? FrameResult { get; private set; }
 
     private UIElement BuildLayout()
     {
@@ -109,24 +116,24 @@ internal sealed class TimedTextOverlayDialog : Window
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         }
 
-        root.Children.Add(Label(UiText.Get("Text_06B3E66B7B78"), 0));
+        root.Children.Add(Label(UiText.Get(_existingFrame is null ? "Text_06B3E66B7B78" : "Video.Layers"), 0));
         Grid.SetRow(_text, 1);
         _text.Margin = new Thickness(0, 6, 0, 14);
         root.Children.Add(_text);
 
         // Labels sit above their controls so longer translated labels never push fields outside the dialog.
         var timing = new Grid();
-        for (int column = 0; column < 3; column++)
+        for (int column = 0; column < (_existingFrame is null ? 3 : 2); column++)
             timing.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         timing.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         timing.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Add(timing, new TextBlock { Text = UiText.Get("Text_25A15C7C4EFF"), TextWrapping = TextWrapping.Wrap }, 0);
         Add(timing, new TextBlock { Text = UiText.Get("Text_A6434B74B299"), TextWrapping = TextWrapping.Wrap }, 1);
-        Add(timing, new TextBlock { Text = UiText.Get("Text_6C0B9DD710AB"), TextWrapping = TextWrapping.Wrap }, 2);
-        Control[] fields = [_start, _end, _placement];
+        if (_existingFrame is null) Add(timing, new TextBlock { Text = UiText.Get("Text_6C0B9DD710AB"), TextWrapping = TextWrapping.Wrap }, 2);
+        Control[] fields = _existingFrame is null ? [_start, _end, _placement] : [_start, _end];
         for (int column = 0; column < fields.Length; column++)
         {
-            fields[column].Margin = new Thickness(0, 6, column == 2 ? 0 : 12, 0);
+            fields[column].Margin = new Thickness(0, 6, column == fields.Length - 1 ? 0 : 12, 0);
             Grid.SetRow(fields[column], 1);
             Add(timing, fields[column], column);
         }
@@ -135,7 +142,7 @@ internal sealed class TimedTextOverlayDialog : Window
 
         var hint = new TextBlock
         {
-            Text = UiText.Get("Video.TextSourceTimeHint"),
+            Text = UiText.Get(_existingFrame is null ? "Video.TextSourceTimeHint" : "Video.SourceTimeHint"),
             Foreground = ResourceBrush("Text.Secondary", Colors.LightGray),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 12, 0, 0),
@@ -166,7 +173,7 @@ internal sealed class TimedTextOverlayDialog : Window
     private void Save()
     {
         string text = _text.Text.Trim();
-        if (string.IsNullOrWhiteSpace(text))
+        if (_existingFrame is null && string.IsNullOrWhiteSpace(text))
         {
             Fail(UiText.Get("Text_7A3486B4FEBF"), _text);
             return;
@@ -184,6 +191,15 @@ internal sealed class TimedTextOverlayDialog : Window
             Fail(
                 UiText.Format("Text_41FC07B1EA9B", (_durationMs / 1000)),
                 _start);
+            return;
+        }
+
+        if (_existingFrame is not null)
+        {
+            FrameResult = _existingFrame.Clone();
+            FrameResult.StartMs = startMs;
+            FrameResult.EndMs = endMs;
+            DialogResult = true;
             return;
         }
 
