@@ -1204,6 +1204,24 @@ internal sealed class VideoEditorWindow : Window
 
     private void EditSelectedOverlay()
     {
+        if (_mediaReady && !_operationRunning && SelectedFrameLayer() is { } frame)
+        {
+            PausePlayback();
+            var frameDialog = new TimedTextOverlayDialog(_durationMs, frame.StartMs, existingFrame: frame) { Owner = this };
+            if (frameDialog.ShowDialog() == true && frameDialog.FrameResult is { } editedFrame)
+            {
+                int frameIndex = _editDocument.FrameEditLayers.FindIndex(item => item.Id == frame.Id);
+                if (frameIndex < 0) return;
+                RememberEdit();
+                _editDocument.FrameEditLayers[frameIndex] = editedFrame;
+                _layerCanvas.SetDocument(_editDocument);
+                RefreshOverlayList(editedFrame.Id);
+                RefreshTextPreview();
+                Seek(editedFrame.StartMs);
+                _statusLabel.Text = UiText.Format("Text_E77D23C3D35B", FormatMs(editedFrame.StartMs), FormatMs(editedFrame.EndMs));
+            }
+            return;
+        }
         if (!_mediaReady
             || _operationRunning
             || SelectedOverlay() is not { } selected)
@@ -1436,9 +1454,9 @@ internal sealed class VideoEditorWindow : Window
             && _editDocument.TextOverlays.Count < VideoEditDocument.MaximumOverlayCount;
         bool textSelected = SelectedOverlay() is not null;
         bool anySelected = textSelected || SelectedFrameLayer() is not null;
-        _editTextButton.IsEnabled = interactive && textSelected;
+        _editTextButton.IsEnabled = interactive && anySelected;
         _deleteTextButton.IsEnabled = interactive && anySelected;
-        if (_layerPropertiesEdit is not null) _layerPropertiesEdit.IsEnabled = interactive && textSelected;
+        if (_layerPropertiesEdit is not null) _layerPropertiesEdit.IsEnabled = interactive && anySelected;
         if (_layerPropertiesSummary is not null)
         {
             string title = SelectedOverlay()?.Text ?? SelectedFrameLayer()?.Name ?? string.Empty;

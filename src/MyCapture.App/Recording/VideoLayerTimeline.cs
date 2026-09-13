@@ -22,7 +22,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     private const double PaddingTop = 4;
     private const double PaddingBottom = 4;
     private const double HandleZoneWidth = 10;
-    private const double MinBarWidth = 4;
+    private const double MinBarWidth = 24;
 
     private readonly Brush _background;
     private readonly Brush _track;
@@ -326,11 +326,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + height));
         DrawText(dc, rowLabel, 8, top + ((height - 14) / 2.0), _textSecondary, 10.5, LabelWidth - 12);
 
-        double left = LabelWidth + (Math.Clamp(startMs / _durationMs, 0, 1) * timelineWidth);
-        double right = LabelWidth + (Math.Clamp(endMs / _durationMs, 0, 1) * timelineWidth);
-        double barTop = top + ((height - BarHeight) / 2.0);
-        double barWidth = Math.Max(MinBarWidth, right - left);
-        var bar = new Rect(left, barTop, barWidth, BarHeight);
+        var bar = GetBarRect(startMs, endMs, top + ((height - BarHeight) / 2.0), LabelWidth + timelineWidth);
 
         dc.DrawRoundedRectangle(layerBrush, null, bar, 3, 3);
         if (hatch && bar.Width >= 8)
@@ -393,10 +389,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         TimedTextOverlay layer = _textLayers[index];
         double top = PaddingTop + (index * (LayerTrackHeight + Gap));
         double barTop = top + ((LayerTrackHeight - BarHeight) / 2.0);
-        double timelineWidth = Math.Max(1, actualWidth - LabelWidth);
-        double left = LabelWidth + (Math.Clamp(layer.StartMs / _durationMs, 0, 1) * timelineWidth);
-        double right = LabelWidth + (Math.Clamp(layer.EndMs / _durationMs, 0, 1) * timelineWidth);
-        return new Rect(left, barTop, Math.Max(MinBarWidth, right - left), BarHeight);
+        return GetBarRect(layer.StartMs, layer.EndMs, barTop, actualWidth);
     }
 
     private Rect GetFrameBarRect(int index, double actualWidth)
@@ -410,10 +403,18 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         double frameSectionTop = PaddingTop + GetTextSectionHeight() + Gap;
         double top = frameSectionTop + (index * (LayerTrackHeight + Gap));
         double barTop = top + ((LayerTrackHeight - BarHeight) / 2.0);
-        double timelineWidth = Math.Max(1, actualWidth - LabelWidth);
-        double left = LabelWidth + (Math.Clamp(layer.StartMs / _durationMs, 0, 1) * timelineWidth);
-        double right = LabelWidth + (Math.Clamp(layer.EndMs / _durationMs, 0, 1) * timelineWidth);
-        return new Rect(left, barTop, Math.Max(MinBarWidth, right - left), BarHeight);
+        return GetBarRect(layer.StartMs, layer.EndMs, barTop, actualWidth);
+    }
+
+    private Rect GetBarRect(double startMs, double endMs, double top, double width)
+    {
+        double trackWidth = Math.Max(1, width - LabelWidth);
+        double left = LabelWidth + Math.Clamp(startMs / _durationMs, 0, 1) * trackWidth;
+        double right = LabelWidth + Math.Clamp(endMs / _durationMs, 0, 1) * trackWidth;
+        double barWidth = Math.Min(trackWidth, Math.Max(MinBarWidth, right - left));
+        // Even a single frame at the end of the video keeps both handles inside the viewport.
+        left = Math.Clamp(left, LabelWidth, LabelWidth + trackWidth - barWidth);
+        return new Rect(left, top, barWidth, BarHeight);
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new TimelineAutomationPeer(this);
@@ -676,12 +677,12 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         {
             case DragAction.TrimStart:
                 (newStart, newEnd) = TextLayerTiming.Resize(
-                    _dragInitialStartMs, _dragInitialEndMs, _durationMs, startHandle: true, targetMs: mouseTimeMs);
+                    _dragInitialStartMs, _dragInitialEndMs, _durationMs, startHandle: true, targetMs: _dragInitialStartMs + deltaMs);
                 break;
 
             case DragAction.TrimEnd:
                 (newStart, newEnd) = TextLayerTiming.Resize(
-                    _dragInitialStartMs, _dragInitialEndMs, _durationMs, startHandle: false, targetMs: mouseTimeMs);
+                    _dragInitialStartMs, _dragInitialEndMs, _durationMs, startHandle: false, targetMs: _dragInitialEndMs + deltaMs);
                 break;
 
             case DragAction.MoveBody:

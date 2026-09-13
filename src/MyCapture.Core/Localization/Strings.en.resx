@@ -3026,7 +3026,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F4.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>Opening the GitHub issue and pasting the image…</value></data>
   <data name="GitHub.Done" xml:space="preserve"><value>Copied the attachment URL to the clipboard.</value></data>
-  <data name="GitHub.Failed" xml:space="preserve"><value>Could not read a GitHub image URL. Paste into the issue Write box yourself, then try again once the URL appears.</value></data>
+  <data name="GitHub.Failed" xml:space="preserve"><value>Could not obtain the image URL. Sign in to GitHub and show the configured issue's comment or description field, then copy an image and press F4. Keep that tab and clipboard unchanged during upload.</value></data>
   <data name="GitHub.InvalidUrl" xml:space="preserve"><value>Settings need a valid GitHub issue URL.</value></data>
   <data name="GitHub.Busy" xml:space="preserve"><value>A GitHub upload is already running.</value></data>
   <data name="Video.MarkIn" xml:space="preserve"><value>In</value></data>
