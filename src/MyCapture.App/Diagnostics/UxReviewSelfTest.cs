@@ -347,12 +347,21 @@ internal static class UxReviewSelfTest
     private static void WriteLayoutInventory(Window window, string path)
     {
         var entries = new List<object>();
+        if (window is VideoEditorWindow && window.Content is Grid videoRoot)
+        {
+            var client = (FrameworkElement)VisualTreeHelper.GetParent(videoRoot);
+            entries.Add(new { Kind = "VideoLayout", WindowHeight = window.ActualHeight, RootHeight = videoRoot.ActualHeight,
+                ClientHeight = client.ActualHeight, RootTop = videoRoot.TranslatePoint(new Point(), window).Y,
+                Rows = videoRoot.RowDefinitions.Select(row => new { Actual = row.ActualHeight, Min = row.MinHeight, Max = double.IsFinite(row.MaxHeight) ? (double?)row.MaxHeight : null }).ToArray() });
+        }
         foreach (FrameworkElement element in Descendants(window).OfType<FrameworkElement>().Where(element => element.IsVisible))
         {
             if (element is TextBlock text && !string.IsNullOrWhiteSpace(text.Text))
             {
                 entries.Add(new { Kind = "Text", text.Text, text.FontSize, Font = text.FontFamily.Source,
                     Width = text.ActualWidth, Height = text.ActualHeight, Wrapping = text.TextWrapping.ToString(), Trimming = text.TextTrimming.ToString(),
+                    WindowTop = text.TranslatePoint(new Point(), window).Y,
+                    WindowBottom = text.TranslatePoint(new Point(0, text.ActualHeight), window).Y,
                     ClipCandidate = text.DesiredSize.Width > text.ActualWidth + 1 || text.DesiredSize.Height > text.ActualHeight + 1 });
             }
             else if (element is ButtonBase or TextBox or ComboBox or Slider)

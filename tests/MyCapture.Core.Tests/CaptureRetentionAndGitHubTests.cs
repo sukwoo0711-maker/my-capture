@@ -18,15 +18,15 @@ public sealed class CaptureRetentionTestsExtras
     }
 
     [Fact]
-    public void FormatCountdown_UsesDayPrefixThenHours()
+    public void FormatCountdown_ExplainsAutomaticDeletion()
     {
         using (UiText.UseLanguage("en-US"))
         {
             DateTimeOffset created = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
             TimeSpan ttl = TimeSpan.FromDays(7);
-            Assert.Equal("d-7", CaptureRetention.FormatCountdown(created, ttl, created, isImage: true, isPinned: false));
-            Assert.Equal("d-5 12h", CaptureRetention.FormatCountdown(created, ttl, created.AddHours(36), isImage: true, isPinned: false));
-            Assert.Equal("3h", CaptureRetention.FormatCountdown(created, ttl, created.AddDays(7).AddHours(-3), isImage: true, isPinned: false));
+            Assert.Equal("Auto-delete in 7 days", CaptureRetention.FormatCountdown(created, ttl, created, isImage: true, isPinned: false));
+            Assert.Equal("Auto-delete in 5 days 12 hours", CaptureRetention.FormatCountdown(created, ttl, created.AddHours(36), isImage: true, isPinned: false));
+            Assert.Equal("Auto-delete in 3 hours", CaptureRetention.FormatCountdown(created, ttl, created.AddDays(7).AddHours(-3), isImage: true, isPinned: false));
             Assert.Equal("Kept", CaptureRetention.FormatCountdown(created, ttl, created, isImage: true, isPinned: true));
             Assert.Equal("No expiry", CaptureRetention.FormatCountdown(created, ttl, created, isImage: false, isPinned: false));
         }

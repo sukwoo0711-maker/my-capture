@@ -101,6 +101,33 @@ public sealed class RecordingSelectionPreparationTests
         finally { coordinator.CancelRegionSelection(); OwnedTestDirectory.Delete(root); }
     });
 
+    [Fact]
+    public void DisplayOriginChangedDuringAcquisition_RejectsStaleCoordinates_AndCanRetry() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-record-selection-");
+        RegionRecordingCoordinator coordinator = Create(root);
+        int failures = 0;
+        Window? overlay = null;
+        coordinator.ExcludeSelectionWindow = window => { overlay = window; return true; };
+        coordinator.SelectionPreparationFailed += _ => failures++;
+        coordinator.SelectionDesktopBounds = () => new RectD(-32, 0, 32, 20);
+        coordinator.AcquireSelectionFrame = Frame;
+        try
+        {
+            coordinator.Toggle();
+            PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
+            Assert.Equal(1, failures);
+            Assert.False(coordinator.IsActive);
+            Assert.False(overlay!.IsVisible);
+            coordinator.SelectionDesktopBounds = () => new RectD(0, 0, 32, 20);
+            coordinator.Toggle();
+            PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
+            Assert.True(overlay!.IsVisible);
+            Assert.True(coordinator.IsActive);
+        }
+        finally { coordinator.CancelRegionSelection(); OwnedTestDirectory.Delete(root); }
+    });
+
     private static RegionRecordingCoordinator Create(string root)
     {
         AppPaths paths = AppPaths.CreateForRoot(root);

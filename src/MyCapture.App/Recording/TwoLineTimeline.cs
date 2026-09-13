@@ -162,6 +162,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     /// <summary>Raised for immediate visual intent while the user moves the playhead.</summary>
     internal event EventHandler<double>? PlayheadChanged;
+    internal event EventHandler? TrimInteractionStarted;
+    internal event EventHandler? TrimInteractionCompleted;
 
     /// <summary>Raised once after a pointer playhead interaction finishes; use for exact seek.</summary>
     internal event EventHandler<double>? PlayheadInteractionCompleted;
@@ -236,7 +238,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// <summary>Externally sets the playhead and keeps it inside the detail viewport.</summary>
     internal void SetPlayhead(double ms, bool ensureVisible = true)
     {
-        _playheadMs = _trim.ClampToSelection(Math.Clamp(ms, 0, _durationMs));
+        _playheadMs = Math.Clamp(ms, 0, _durationMs);
         double beforeStart = _viewport.ViewStartMs;
         double beforeEnd = _viewport.ViewEndMs;
         if (ensureVisible)
@@ -258,7 +260,6 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     {
         _activeTrimHandle = TrimHandle.In;
         _trim.SetIn(ms);
-        ClampPlayheadAfterTrim();
         InvalidateRange();
         TrimChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -267,9 +268,22 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     {
         _activeTrimHandle = TrimHandle.Out;
         _trim.SetOut(ms);
-        ClampPlayheadAfterTrim();
         InvalidateRange();
         TrimChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal bool SetTrimRange(double inMs, double outMs)
+    {
+        if (!double.IsFinite(inMs) || !double.IsFinite(outMs) || inMs < 0
+            || outMs > _durationMs || outMs - inMs < Math.Min(TrimSelection.MinimumSpanMs, _durationMs))
+            return false;
+        if (inMs == InMs && outMs == OutMs) return true;
+        _trim.Reset();
+        _trim.SetOut(outMs);
+        _trim.SetIn(inMs);
+        InvalidateRange();
+        TrimChanged?.Invoke(this, EventArgs.Empty);
+        return true;
     }
 
     internal void SetTrimMode(bool enabled)
@@ -395,6 +409,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             }
         }
 
+        if (_drag is DragMode.TrimIn or DragMode.TrimOut) TrimInteractionStarted?.Invoke(this, EventArgs.Empty);
         strip.CaptureMouse();
         UpdateCursor(strip, x);
         e.Handled = true;
@@ -468,6 +483,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                         : _viewport.PxToMs(x, width),
                     _fps,
                     _durationMs));
+                SeekTo(InMs, snap: false, followDetail: false);
                 break;
             case DragMode.TrimOut:
                 SetOut(FrameStepCalculator.SnapToFrame(
@@ -476,6 +492,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                         : _viewport.PxToMs(x, width),
                     _fps,
                     _durationMs));
+                SeekTo(OutMs, snap: false, followDetail: false);
                 break;
         }
     }
@@ -503,14 +520,17 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
         }
 
+        if (completed is DragMode.TrimIn or DragMode.TrimOut) TrimInteractionCompleted?.Invoke(this, EventArgs.Empty);
         UpdateCursor(strip, x);
         e.Handled = true;
     }
 
     private void OnLostMouseCapture(object sender, MouseEventArgs e)
     {
+        bool trim = _drag is DragMode.TrimIn or DragMode.TrimOut;
         bool reconcile = _drag is DragMode.Playhead or DragMode.TrimIn or DragMode.TrimOut;
         _drag = DragMode.None;
+        if (trim) TrimInteractionCompleted?.Invoke(this, EventArgs.Empty);
         if (reconcile)
         {
             PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
@@ -547,9 +567,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         }
 
         bool onTrim = (IsVisibleInDetail(_trim.InMs)
-                 && Math.Abs(x - _viewport.MsToPx(_trim.InMs, width)) <= EdgeGrab)
+                 && Math.Abs(x - _viewport.MsToPx(_trim.InMs, width)) <= EdgeGrab + TrimHandleWidth / 2)
                 || (IsVisibleInDetail(_trim.OutMs)
-                    && Math.Abs(x - _viewport.MsToPx(_trim.OutMs, width)) <= EdgeGrab);
+                    && Math.Abs(x - _viewport.MsToPx(_trim.OutMs, width)) <= EdgeGrab + TrimHandleWidth / 2);
         strip.Cursor = onTrim ? Cursors.SizeWE : Cursors.Cross;
     }
 
@@ -572,7 +592,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         double beforeStart = _viewport.ViewStartMs;
         double beforeEnd = _viewport.ViewEndMs;
-        _playheadMs = _trim.ClampToSelection(clamped);
+        _playheadMs = clamped;
         if (followDetail && !IsVisibleInDetail(_playheadMs))
         {
             CenterDetailOn(_playheadMs);
@@ -587,20 +607,6 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             InvalidatePlayhead();
         }
 
-        PlayheadChanged?.Invoke(this, _playheadMs);
-    }
-
-    private void ClampPlayheadAfterTrim()
-    {
-        double clamped = _trim.ClampToSelection(_playheadMs);
-        if (Math.Abs(clamped - _playheadMs) <= 0.001)
-        {
-            return;
-        }
-
-        _playheadMs = clamped;
-        _viewport.EnsureVisible(_playheadMs);
-        InvalidatePlayhead();
         PlayheadChanged?.Invoke(this, _playheadMs);
     }
 

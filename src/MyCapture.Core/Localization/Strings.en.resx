@@ -3014,14 +3014,14 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>Clipboard image to GitHub URL</value></data>
   <data name="Gallery.Float" xml:space="preserve"><value>Float</value></data>
   <data name="Gallery.FloatHint" xml:space="preserve"><value>Pin this capture to the screen as a floating window.</value></data>
-  <data name="Gallery.RetentionDays" xml:space="preserve"><value>d-{0}</value></data>
-  <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>d-{0} {1}h</value></data>
-  <data name="Gallery.RetentionHours" xml:space="preserve"><value>{0}h</value></data>
-  <data name="Gallery.RetentionHoursMinutes" xml:space="preserve"><value>{0}h {1}m</value></data>
-  <data name="Gallery.RetentionMinutes" xml:space="preserve"><value>{0}m</value></data>
+  <data name="Gallery.RetentionDays" xml:space="preserve"><value>Auto-delete in {0} days</value></data>
+  <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>Auto-delete in {0} days {1} hours</value></data>
+  <data name="Gallery.RetentionHours" xml:space="preserve"><value>Auto-delete in {0} hours</value></data>
+  <data name="Gallery.RetentionHoursMinutes" xml:space="preserve"><value>Auto-delete in {0} hours {1} minutes</value></data>
+  <data name="Gallery.RetentionMinutes" xml:space="preserve"><value>Auto-delete in {0} minutes</value></data>
   <data name="Gallery.RetentionKept" xml:space="preserve"><value>Kept</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>No expiry</value></data>
-  <data name="Gallery.RetentionExpired" xml:space="preserve"><value>d-0</value></data>
+  <data name="Gallery.RetentionExpired" xml:space="preserve"><value>Awaiting auto-delete</value></data>
   <data name="Gallery.FloatFailed" xml:space="preserve"><value>Could not float this image.</value></data>
   <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F4.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>Opening the GitHub issue and pasting the image…</value></data>
@@ -3033,4 +3033,13 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Video.MarkOut" xml:space="preserve"><value>Out</value></data>
   <data name="Video.Layers" xml:space="preserve"><value>Layers</value></data>
   <data name="Video.EditTextHint" xml:space="preserve"><value>Double-click text on the preview to edit it.</value></data>
+  <data name="Capture.DisplayChanged" xml:space="preserve"><value>The monitor configuration changed. Please start region selection again.</value></data>
+  <data name="Video.Trim" xml:space="preserve"><value>Trim</value></data>
+  <data name="Video.TrimIn" xml:space="preserve"><value>In</value></data>
+  <data name="Video.TrimOut" xml:space="preserve"><value>Out</value></data>
+  <data name="Video.ApplyTrim" xml:space="preserve"><value>Apply range</value></data>
+  <data name="Video.PreviewFit" xml:space="preserve"><value>Fit preview</value></data>
+  <data name="Video.SourceTimeHint" xml:space="preserve"><value>Time in the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Export includes In up to, but excluding, Out.</value></data>
+  <data name="Video.TrimInputInvalid" xml:space="preserve"><value>The range was not changed. Enter In and Out within the source, with In at least 0.1 seconds before Out.</value></data>
+  <data name="Video.TextSourceTimeHint" xml:space="preserve"><value>Display times refer to the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Text appears from Start up to, but excluding, End. Only its overlap with In–Out is exported.</value></data>
 </root>

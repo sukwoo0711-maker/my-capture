@@ -24,8 +24,7 @@ public static class CaptureRetention
         ExpiresAt(createdAt, ttl) - now;
 
     /// <summary>
-    /// User-facing countdown. Whole remaining days use <c>d-N</c>; leftover hours
-    /// and minutes are appended so the label matches the real TTL unit.
+    /// User-facing time until automatic deletion, with explicit units and expiry wording.
     /// </summary>
     public static string FormatCountdown(
         DateTimeOffset createdAt,

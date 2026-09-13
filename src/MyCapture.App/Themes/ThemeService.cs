@@ -20,13 +20,21 @@ internal static class ThemeService
             return;
         }
 
+        ApplyResources(theme, resources);
+    }
+
+    internal static void ApplyResources(AppTheme theme, ResourceDictionary resources)
+    {
         foreach ((string key, ThemeColor color) in ThemeCatalog.ColorsFor(theme))
         {
             if (resources[key] is SolidColorBrush brush)
             {
                 if (brush.IsFrozen)
                 {
-                    var live = new SolidColorBrush(Color.FromArgb(color.A, color.R, color.G, color.B));
+                    // Keep opacity and transforms: Overlay.Dimmer intentionally uses a
+                    // translucent brush even though its palette color has an opaque alpha.
+                    var live = brush.CloneCurrentValue();
+                    live.Color = Color.FromArgb(color.A, color.R, color.G, color.B);
                     resources[key] = live;
                 }
                 else

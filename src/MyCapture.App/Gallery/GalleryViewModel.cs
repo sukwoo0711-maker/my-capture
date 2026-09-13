@@ -95,7 +95,7 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
 
     public void SelectDay(string heading, bool control)
     {
-        Selection.SelectGroup(_groups.Where(g => g.Heading == heading).SelectMany(g => g.Items).Select(t => t.Id), control);
+        Selection.SelectGroup(_groups.Where(g => g.Heading == heading).SelectMany(g => g.Items).Select(t => t.Id), control, toggle: true);
         PublishSelection();
     }
 

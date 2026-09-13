@@ -33,12 +33,12 @@ public sealed class GallerySelection
         _anchor = id;
     }
 
-    public void SelectGroup(IEnumerable<Guid> ids, bool control)
+    public void SelectGroup(IEnumerable<Guid> ids, bool control, bool toggle = false)
     {
         Guid[] group = ids.Where(_visible.Contains).Distinct().ToArray();
         if (group.Length == 0) return;
-        bool remove = control && group.All(_selected.Contains);
-        if (!control) _selected.Clear();
+        bool remove = (control || toggle) && group.All(_selected.Contains);
+        if (!control && !toggle) _selected.Clear();
         foreach (Guid id in group) { if (remove) _selected.Remove(id); else _selected.Add(id); }
         _anchor = group[0];
     }

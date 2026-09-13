@@ -1034,6 +1034,7 @@ public partial class App : Application
     /// </summary>
     private void HandleRecordRegion()
     {
+        _shellPresenter?.DismissForCapture();
         if (_recorder is null || (!_recorder.IsActive && (_overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)))
         {
             return;

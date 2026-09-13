@@ -88,6 +88,8 @@ internal sealed class CaptureOverlayWindow : Window
     {
         ArgumentNullException.ThrowIfNull(frame);
         if (_completed) return;
+        if (frame.ScreenBounds.ToPixelBounds() != _screenBounds.ToPixelBounds())
+            throw new InvalidOperationException(UiText.Get("Capture.DisplayChanged"));
         _frame = frame;
         _view.AttachFrame(frame);
         if (IsVisible)
