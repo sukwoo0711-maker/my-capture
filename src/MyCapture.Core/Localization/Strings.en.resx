@@ -3014,14 +3014,14 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>Clipboard image to GitHub URL</value></data>
   <data name="Gallery.Float" xml:space="preserve"><value>Float</value></data>
   <data name="Gallery.FloatHint" xml:space="preserve"><value>Pin this capture to the screen as a floating window.</value></data>
-  <data name="Gallery.RetentionDays" xml:space="preserve"><value>d-{0}</value></data>
-  <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>d-{0} {1}h</value></data>
-  <data name="Gallery.RetentionHours" xml:space="preserve"><value>{0}h</value></data>
-  <data name="Gallery.RetentionHoursMinutes" xml:space="preserve"><value>{0}h {1}m</value></data>
-  <data name="Gallery.RetentionMinutes" xml:space="preserve"><value>{0}m</value></data>
+  <data name="Gallery.RetentionDays" xml:space="preserve"><value>Auto-delete in {0} days</value></data>
+  <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>Auto-delete in {0} days {1} hours</value></data>
+  <data name="Gallery.RetentionHours" xml:space="preserve"><value>Auto-delete in {0} hours</value></data>
+  <data name="Gallery.RetentionHoursMinutes" xml:space="preserve"><value>Auto-delete in {0} hours {1} minutes</value></data>
+  <data name="Gallery.RetentionMinutes" xml:space="preserve"><value>Auto-delete in {0} minutes</value></data>
   <data name="Gallery.RetentionKept" xml:space="preserve"><value>Kept</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>No expiry</value></data>
-  <data name="Gallery.RetentionExpired" xml:space="preserve"><value>d-0</value></data>
+  <data name="Gallery.RetentionExpired" xml:space="preserve"><value>Awaiting auto-delete</value></data>
   <data name="Gallery.FloatFailed" xml:space="preserve"><value>Could not float this image.</value></data>
   <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F4.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>Opening the GitHub issue and pasting the image…</value></data>
@@ -3033,4 +3033,25 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Video.MarkOut" xml:space="preserve"><value>Out</value></data>
   <data name="Video.Layers" xml:space="preserve"><value>Layers</value></data>
   <data name="Video.EditTextHint" xml:space="preserve"><value>Double-click text on the preview to edit it.</value></data>
+  <data name="Capture.DisplayChanged" xml:space="preserve"><value>The monitor configuration changed. Please start region selection again.</value></data>
+  <data name="Video.Trim" xml:space="preserve"><value>Trim</value></data>
+  <data name="Video.TrimIn" xml:space="preserve"><value>In</value></data>
+  <data name="Video.TrimOut" xml:space="preserve"><value>Out</value></data>
+  <data name="Video.ApplyTrim" xml:space="preserve"><value>Apply range</value></data>
+  <data name="Video.PreviewFit" xml:space="preserve"><value>Fit preview</value></data>
+  <data name="Video.SourceTimeHint" xml:space="preserve"><value>Time in the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Export includes In up to, but excluding, Out.</value></data>
+  <data name="Video.TrimInputInvalid" xml:space="preserve"><value>The range was not changed. Enter In and Out within the source, with In at least 0.1 seconds before Out.</value></data>
+  <data name="Video.TextSourceTimeHint" xml:space="preserve"><value>Display times refer to the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Text appears from Start up to, but excluding, End. Only its overlap with In–Out is exported.</value></data>
+  <data name="Settings.ThemeWorkspace" xml:space="preserve"><value>Workspace · light library and dark video editor</value></data>
+  <data name="Workspace.Library" xml:space="preserve"><value>Library</value></data>
+  <data name="Workspace.All" xml:space="preserve"><value>All captures</value></data>
+  <data name="Workspace.Pinned" xml:space="preserve"><value>Kept captures</value></data>
+  <data name="Workspace.Details" xml:space="preserve"><value>Selected capture</value></data>
+  <data name="Workspace.SelectHint" xml:space="preserve"><value>Select one capture to see its preview and details.</value></data>
+  <data name="Workspace.RetentionHint" xml:space="preserve"><value>Images are cleaned up after their retention period. Use More to keep a capture.</value></data>
+  <data name="Workspace.EditHint" xml:space="preserve"><value>Save your edits to continue editing from the library later.</value></data>
+  <data name="Workspace.VideoHint" xml:space="preserve"><value>Save edits updates the library; Export creates a new file.</value></data>
+  <data name="Workspace.Properties" xml:space="preserve"><value>Layer properties</value></data>
+<data name="Workspace.EditProperties" xml:space="preserve"><value>Edit properties</value></data>
+<data name="Workspace.SelectLayer" xml:space="preserve"><value>Select a layer to see its content and visible interval.</value></data>
 </root>

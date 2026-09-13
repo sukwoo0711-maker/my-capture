@@ -10,7 +10,7 @@ namespace MyCapture.App.Themes;
 /// </summary>
 internal static class ThemeService
 {
-    internal static AppTheme Current { get; private set; } = AppTheme.Midnight;
+    internal static AppTheme Current { get; private set; } = AppTheme.Workspace;
 
     internal static void Apply(AppTheme theme)
     {
@@ -20,18 +20,27 @@ internal static class ThemeService
             return;
         }
 
+        ApplyResources(theme, resources);
+        WorkspaceTheme.Refresh(theme);
+    }
+
+    internal static void ApplyResources(AppTheme theme, ResourceDictionary resources)
+    {
         foreach ((string key, ThemeColor color) in ThemeCatalog.ColorsFor(theme))
         {
             if (resources[key] is SolidColorBrush brush)
             {
                 if (brush.IsFrozen)
                 {
-                    var live = new SolidColorBrush(Color.FromArgb(color.A, color.R, color.G, color.B));
+                    // Keep opacity and transforms: Overlay.Dimmer intentionally uses a
+                    // translucent brush even though its palette color has an opaque alpha.
+                    var live = brush.CloneCurrentValue();
+                    live.Color = Color.FromArgb(color.A, color.R, color.G, color.B);
                     resources[key] = live;
                 }
                 else
                 {
-                    brush.Color = Color.FromArgb(color.A, color.R, color.G, color.B);
+                    brush.SetCurrentValue(SolidColorBrush.ColorProperty, Color.FromArgb(color.A, color.R, color.G, color.B));
                 }
             }
         }

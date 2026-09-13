@@ -56,6 +56,10 @@ internal sealed class VideoEditorWindow : Window
     private readonly List<VideoEditDocument> _undo = [];
     private readonly List<VideoEditDocument> _redo = [];
     private VideoEditDocument? _interactionBefore;
+    private VideoEditDocument? _trimInteractionBefore;
+    private bool _syncingTrim;
+    private TextBox _trimInInput = null!;
+    private TextBox _trimOutInput = null!;
     private readonly MediaElementPreviewEngine _previewEngine;
     private readonly PreviewSeekCoordinator _previewSeeks;
     private readonly TwoLineTimeline _timeline;
@@ -65,6 +69,8 @@ internal sealed class VideoEditorWindow : Window
     private readonly TextBlock _loadingLabel;
     private readonly Border _loadingOverlay;
     private readonly ListBox _overlayList;
+    private TextBlock? _layerPropertiesSummary;
+    private Button? _layerPropertiesEdit;
     private Button _trimButton = null!;
     private Button _addTextButton = null!;
     private Button _editTextButton = null!;
@@ -134,6 +140,7 @@ internal sealed class VideoEditorWindow : Window
                 recording.DurationMs))
             .NormalizeFor(recording.Width, recording.Height, recording.DurationMs);
 
+        WorkspaceTheme.Attach(this, WorkspaceRole.VideoEditor);
         StandardWindowTheme.Apply(this);
 
         Title = UiText.Get("Text_79188256BC8D");
@@ -196,7 +203,9 @@ internal sealed class VideoEditorWindow : Window
         _layerTimeline.LayerTimingInteractionCompleted += OnLayerTimingInteractionCompleted;
         _timeline.PlayheadChanged += OnTimelinePlayhead;
         _timeline.PlayheadInteractionCompleted += OnTimelinePlayheadInteractionCompleted;
-        _timeline.TrimChanged += (_, _) => UpdateStatusForMode();
+        _timeline.TrimChanged += (_, _) => OnTrimChanged();
+        _timeline.TrimInteractionStarted += (_, _) => { PausePlayback(); _trimInteractionBefore = _editDocument.Clone(); };
+        _timeline.TrimInteractionCompleted += (_, _) => CompleteTrimInteraction();
         _positionLabel = BuildMono("00:00.000 / 00:00.000");
         _statusLabel = new TextBlock
         {
@@ -231,7 +240,7 @@ internal sealed class VideoEditorWindow : Window
         {
             MinHeight = 38,
             MaxHeight = 120,
-            MinWidth = 280,
+            MinWidth = 0,
             BorderThickness = new Thickness(0),
             Background = Brushes.Transparent,
             SelectionMode = SelectionMode.Single,
@@ -348,8 +357,8 @@ internal sealed class VideoEditorWindow : Window
     {
         var root = new Grid { Margin = new Thickness(12, 8, 12, 8) };
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(3, GridUnitType.Star), MinHeight = 112 }); // preview
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MaxHeight = 250 }); // fit the timeline contents; spare space belongs to preview
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // controls
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MaxHeight = 250 }); // timeline
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // status
 
         var previewStack = new Grid { Name = "VideoPreviewViewport", MinHeight = 112, ClipToBounds = true };
@@ -364,14 +373,21 @@ internal sealed class VideoEditorWindow : Window
         var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
         var exports = new StackPanel { Orientation = Orientation.Horizontal };
         Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"));
+        saveEdits.ToolTip = UiText.Get("Workspace.VideoHint");
+        AutomationProperties.SetHelpText(saveEdits, UiText.Get("Workspace.VideoHint"));
         saveEdits.Click += (_, _) => CommitTrim();
         Button export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_ExportFormats"), "MediaExport_ArrowExport", true);
+        export.ToolTip = UiText.Get("Workspace.VideoHint");
+        AutomationProperties.SetHelpText(export, UiText.Get("Workspace.VideoHint"));
         export.Click += (_, _) => OpenExport();
         _editControls.Add(saveEdits); _editControls.Add(export);
         exports.Children.Add(saveEdits); exports.Children.Add(export);
         DockPanel.SetDock(exports, Dock.Right); header.Children.Add(exports);
         FrameworkElement tools = BuildOverlayLane();
-        header.Children.Add(tools);
+        var fit = new ComboBox { Width = 130, MinHeight = 36, VerticalAlignment = VerticalAlignment.Center };
+        fit.Items.Add(UiText.Get("Video.PreviewFit")); fit.SelectedIndex = 0;
+        AutomationProperties.SetName(fit, UiText.Get("Video.PreviewFit"));
+        header.Children.Add(fit);
         workspace.Children.Add(header);
         Grid.SetRow(previewStack, 1); workspace.Children.Add(previewStack);
         var preview = new Border
@@ -384,7 +400,15 @@ internal sealed class VideoEditorWindow : Window
             Child = workspace,
         };
         Grid.SetRow(preview, 0);
-        root.Children.Add(preview);
+        var upper = new Grid();
+        upper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star), MinWidth = 300 });
+        upper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 220, MaxWidth = 330 });
+        upper.Children.Add(preview);
+        var layerPanel = new Border { Name = "VideoLayersPanel", Child = tools, Padding = new Thickness(8), Margin = new Thickness(8, 0, 0, 0), BorderThickness = new Thickness(1) };
+        layerPanel.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
+        layerPanel.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        Grid.SetColumn(layerPanel, 1); upper.Children.Add(layerPanel);
+        root.Children.Add(upper);
 
         Grid timeline = BuildTimeline();
         var timelineScroll = new ScrollViewer
@@ -405,13 +429,13 @@ internal sealed class VideoEditorWindow : Window
             }
         };
         AutomationProperties.SetName(timelineScroll, UiText.Get("Text_D9378793F9FE"));
-        Grid.SetRow(timelineScroll, 1);
+        Grid.SetRow(timelineScroll, 2);
         root.Children.Add(timelineScroll);
 
         var controls = new StackPanel();
         controls.Children.Add(BuildControlRow());
         RefreshOverlayList();
-        Grid.SetRow(controls, 2);
+        Grid.SetRow(controls, 1);
         root.Children.Add(controls);
 
         var statusBar = new Border
@@ -428,13 +452,27 @@ internal sealed class VideoEditorWindow : Window
             // The command rows share the preview card, but must never take space
             // from its visible media viewport. Compact windows scroll the timeline;
             // larger windows retain enough height for both time strips and layer tracks.
-            double requiredPreview = previewStack.MinHeight + header.DesiredSize.Height
-                + preview.Padding.Top + preview.Padding.Bottom + preview.BorderThickness.Top + preview.BorderThickness.Bottom;
-            double available = root.ActualHeight - controls.DesiredSize.Height - statusBar.DesiredSize.Height - requiredPreview;
+            // Grid.DesiredSize may already be clipped by its star-row allocation.
+            // Reserve the independent minimum of its auto command rows and readable list.
+            double requiredLayers = ((Grid)tools).RowDefinitions.Sum(row =>
+                row.Height.IsStar ? row.MinHeight : row.ActualHeight);
+            double requiredPreview = Math.Max(
+                previewStack.MinHeight + header.DesiredSize.Height
+                    + preview.Padding.Top + preview.Padding.Bottom + preview.BorderThickness.Top + preview.BorderThickness.Bottom,
+                requiredLayers + layerPanel.Padding.Top + layerPanel.Padding.Bottom
+                    + layerPanel.BorderThickness.Top + layerPanel.BorderThickness.Bottom);
+            if (Math.Abs(root.RowDefinitions[0].MinHeight - requiredPreview) > 0.5)
+                root.RowDefinitions[0].MinHeight = requiredPreview;
+            // ActualHeight can include Grid's overflowing minimum rows. Budget against
+            // its parent viewport, otherwise the overflow feeds itself back as space.
+            double clientHeight = VisualTreeHelper.GetParent(root) is FrameworkElement client && client.ActualHeight > 0
+                ? Math.Max(0, client.ActualHeight - root.Margin.Top - root.Margin.Bottom)
+                : root.ActualHeight;
+            double available = clientHeight - controls.DesiredSize.Height - statusBar.DesiredSize.Height - requiredPreview;
             double maximum = Math.Clamp(Math.Floor(available), 100, 250);
-            if (Math.Abs(root.RowDefinitions[1].MaxHeight - maximum) > 0.5)
+            if (Math.Abs(root.RowDefinitions[2].MaxHeight - maximum) > 0.5)
             {
-                root.RowDefinitions[1].MaxHeight = maximum;
+                root.RowDefinitions[2].MaxHeight = maximum;
                 // Bound the ScrollViewer itself so its internal viewport scrolls,
                 // instead of arranging full content height outside a clipped Grid cell.
                 timelineScroll.MaxHeight = maximum;
@@ -445,11 +483,38 @@ internal sealed class VideoEditorWindow : Window
         tools.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
         controls.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
         statusBar.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+        root.Loaded += (_, _) =>
+        {
+            if (VisualTreeHelper.GetParent(root) is FrameworkElement client)
+                client.SizeChanged += (_, _) => FitTimelineToAvailableHeight();
+            FitTimelineToAvailableHeight();
+        };
 
         return root;
     }
 
     private Grid _timelineCache = null!;
+
+    private FrameworkElement BuildTrimInputs()
+    {
+        var row = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
+        row.Children.Add(new TextBlock { Text = UiText.Get("Video.Trim"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) });
+        TextBox Input(string name)
+        {
+            row.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 6, 0) });
+            var input = new TextBox { Width = 144, MinHeight = 36, Padding = new Thickness(8, 4, 8, 4), VerticalContentAlignment = VerticalAlignment.Center, ToolTip = UiText.Get("Video.SourceTimeHint") };
+            AutomationProperties.SetName(input, name);
+            input.PreviewKeyDown += (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; ApplyTrimInputs(); } };
+            row.Children.Add(input); _editControls.Add(input);
+            return input;
+        }
+        _trimInInput = Input(UiText.Get("Video.TrimIn"));
+        _trimOutInput = Input(UiText.Get("Video.TrimOut"));
+        Button apply = MakeButton(UiText.Get("Video.ApplyTrim"), UiText.Get("Video.SourceTimeHint"), "Button.Secondary", ApplyTrimInputs);
+        row.Children.Add(apply);
+        RefreshTrimInputs();
+        return row;
+    }
 
     private Grid BuildTimeline()
     {
@@ -464,12 +529,13 @@ internal sealed class VideoEditorWindow : Window
         timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // layer tracks
         timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // layer tools
 
-        Grid.SetRow(_timeline, 0);
+        timeline.Children.Add(BuildTrimInputs());
+        Grid.SetRow(_timeline, 1);
         timeline.Children.Add(_timeline);
 
         _positionLabel.HorizontalAlignment = HorizontalAlignment.Center;
         _positionLabel.Margin = new Thickness(0, 6, 0, 0);
-        Grid.SetRow(_positionLabel, 1);
+        Grid.SetRow(_positionLabel, 2);
         timeline.Children.Add(_positionLabel);
 
         var layerScroll = new ScrollViewer
@@ -480,7 +546,7 @@ internal sealed class VideoEditorWindow : Window
             Focusable = false,
         };
         AutomationProperties.SetName(layerScroll, UiText.Get("Text_D9378793F9FE"));
-        Grid.SetRow(layerScroll, 2);
+        Grid.SetRow(layerScroll, 3);
         timeline.Children.Add(layerScroll);
 
 
@@ -493,9 +559,9 @@ internal sealed class VideoEditorWindow : Window
     private FrameworkElement BuildOverlayLane()
     {
         var lane = new Grid();
-        lane.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        lane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 84 });
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var label = new TextBlock
@@ -508,11 +574,35 @@ internal sealed class VideoEditorWindow : Window
         };
         Grid.SetColumn(label, 0);
         label.Text = UiText.Get("Video.Layers");
-        lane.Children.Add(label);
+        var layerHeader = new DockPanel();
+        lane.Children.Add(layerHeader);
 
-        Grid.SetColumn(_overlayList, 1);
-        _overlayList.MaxHeight = 72;
-        lane.Children.Add(_overlayList);
+        Grid.SetRow(_overlayList, 1);
+        _overlayList.MaxHeight = 120;
+        _overlayList.Margin = new Thickness(0, 8, 0, 8);
+        var inspectorContent = new StackPanel();
+        inspectorContent.Children.Add(_overlayList);
+        inspectorContent.Children.Add(new TextBlock
+        {
+            Text = UiText.Get("Workspace.Properties"), FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 8, 0, 8),
+        });
+        _layerPropertiesSummary = new TextBlock
+        {
+            Text = UiText.Get("Workspace.SelectLayer"), TextWrapping = TextWrapping.Wrap,
+            Foreground = TryBrush("Text.Secondary", Colors.LightGray), FontSize = 12,
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+        inspectorContent.Children.Add(_layerPropertiesSummary);
+        _layerPropertiesEdit = MakeButton(UiText.Get("Workspace.EditProperties"), UiText.Get("Workspace.EditProperties"), "Button.Secondary", EditSelectedOverlay);
+        inspectorContent.Children.Add(_layerPropertiesEdit);
+        var inspectorScroll = new ScrollViewer
+        {
+            Content = inspectorContent, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = false,
+        };
+        Grid.SetRow(inspectorScroll, 1);
+        lane.Children.Add(inspectorScroll);
 
         var actions = new WrapPanel
         {
@@ -527,8 +617,12 @@ internal sealed class VideoEditorWindow : Window
         actions.Children.Add(MakeButton(UiText.Get("Text_DC0760235344"), UiText.Get("Text_D8F5F6738520"), "Button.Secondary", () => AddShapeLayer(false)));
         actions.Children.Add(MakeButton(UiText.Get("Text_C19FD6787279"), UiText.Get("Text_29C79CAFC1D7"), "Button.Secondary", () => AddShapeLayer(true)));
         actions.Children.Add(MakeButton(UiText.Get("Text_302BAE127938"), UiText.Get("Text_21C405702C2B"), "Button.Secondary", AddImageLayer));
-        actions.Children.Add(_editTextButton);
-        actions.Children.Add(_deleteTextButton);
+        var selectedActions = new StackPanel { Orientation = Orientation.Horizontal };
+        selectedActions.Children.Add(_editTextButton);
+        selectedActions.Children.Add(_deleteTextButton);
+        DockPanel.SetDock(selectedActions, Dock.Right);
+        layerHeader.Children.Add(selectedActions);
+        layerHeader.Children.Add(label);
         foreach (Button action in actions.Children.OfType<Button>())
         {
             if (double.IsNaN(action.Width))
@@ -539,7 +633,7 @@ internal sealed class VideoEditorWindow : Window
             action.MinHeight = 36;
             action.Margin = new Thickness(0, 0, 4, 0);
         }
-        Grid.SetRow(actions, 1);
+        Grid.SetRow(actions, 2);
         Grid.SetColumnSpan(actions, 2);
         lane.Children.Add(actions);
 
@@ -661,8 +755,7 @@ internal sealed class VideoEditorWindow : Window
             _recording.Height,
             _durationMs);
         _initialDocument = _editDocument.Clone();
-        _timeline.SetIn(_editDocument.TrimInMs);
-        _timeline.SetOut(_editDocument.TrimOutMs);
+        SynchronizeTrim();
         _timeline.SetPlayhead(_editDocument.TrimInMs);
         _timeline.SetTrimMode(true);
         _trimButton.Content = UiText.Get("Text_7DDE1114417E");
@@ -783,7 +876,7 @@ internal sealed class VideoEditorWindow : Window
         }
 
         PausePlayback();
-        double clamped = Math.Clamp(positionMs, _timeline.InMs, _timeline.OutMs);
+        double clamped = Math.Clamp(positionMs, 0, _durationMs);
         _previewSeeks.RequestExact(clamped);
         _timeline.SetPlayhead(clamped);
         _layerTimeline.SetPlayhead(clamped);
@@ -799,7 +892,7 @@ internal sealed class VideoEditorWindow : Window
         }
 
         PausePlayback();
-        double clamped = Math.Clamp(ms, _timeline.InMs, _timeline.OutMs);
+        double clamped = Math.Clamp(ms, 0, _durationMs);
         UpdatePositionLabel(clamped);
         _layerTimeline.SetPlayhead(clamped);
         _previewSeeks.RequestPreview(clamped);
@@ -810,7 +903,7 @@ internal sealed class VideoEditorWindow : Window
     {
         if (_mediaReady)
         {
-            _previewSeeks.RequestExact(Math.Clamp(ms, _timeline.InMs, _timeline.OutMs));
+            _previewSeeks.RequestExact(Math.Clamp(ms, 0, _durationMs));
         }
     }
 
@@ -846,8 +939,8 @@ internal sealed class VideoEditorWindow : Window
         {
             double presented = Math.Clamp(
                 frame.PresentedPositionMs,
-                _timeline.InMs,
-                _timeline.OutMs);
+                0,
+                _durationMs);
             _overlayPreview.SetSourceTime(presented);
             _layerCanvas.SetSourceTime(presented);
             _layerTimeline.SetPlayhead(presented);
@@ -952,6 +1045,54 @@ internal sealed class VideoEditorWindow : Window
         _interactionBefore = null;
     }
 
+    private void OnTrimChanged()
+    {
+        if (_syncingTrim) return;
+        bool changed = _editDocument.TrimInMs != _timeline.InMs || _editDocument.TrimOutMs != _timeline.OutMs;
+        if (changed && _trimInteractionBefore is null) RememberEdit();
+        _editDocument.TrimInMs = _timeline.InMs;
+        _editDocument.TrimOutMs = _timeline.OutMs;
+        RefreshTrimInputs();
+        UpdateStatusForMode();
+    }
+
+    private void CompleteTrimInteraction()
+    {
+        if (_trimInteractionBefore is { } before
+            && (before.TrimInMs != _editDocument.TrimInMs || before.TrimOutMs != _editDocument.TrimOutMs)) RememberEdit(before);
+        _trimInteractionBefore = null;
+    }
+
+    private void SynchronizeTrim()
+    {
+        _syncingTrim = true;
+        try { _timeline.SetTrimRange(_editDocument.TrimInMs, _editDocument.TrimOutMs); }
+        finally { _syncingTrim = false; }
+        RefreshTrimInputs();
+    }
+
+    private void RefreshTrimInputs()
+    {
+        if (_trimInInput is null) return;
+        _trimInInput.Text = SourceTimeInput.Format(_timeline.InMs);
+        _trimOutInput.Text = SourceTimeInput.Format(_timeline.OutMs);
+    }
+
+    private void ApplyTrimInputs()
+    {
+        if (!_mediaReady || _operationRunning) return;
+        PausePlayback();
+        if (!SourceTimeInput.TryParse(_trimInInput.Text, out double start)
+            || !SourceTimeInput.TryParse(_trimOutInput.Text, out double end)
+            || !_timeline.SetTrimRange(start, end))
+        {
+            _statusLabel.Text = UiText.Get("Video.TrimInputInvalid");
+            RefreshTrimInputs();
+            return;
+        }
+        RefreshTrimInputs();
+    }
+
     private void RestoreEdit(bool redo)
     {
         List<VideoEditDocument> source = redo ? _redo : _undo;
@@ -961,6 +1102,7 @@ internal sealed class VideoEditorWindow : Window
         target.Add(_editDocument.Clone());
         _editDocument = source[^1];
         source.RemoveAt(source.Count - 1);
+        SynchronizeTrim();
         _layerCanvas.SetDocument(_editDocument);
         RefreshOverlayList(selected);
         RefreshTextPreview();
@@ -1046,7 +1188,9 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
-        var dialog = new TimedTextOverlayDialog(_durationMs, CurrentMs()) { Owner = this };
+        PausePlayback();
+        double start = Math.Clamp(CurrentMs(), _timeline.InMs, Math.Max(_timeline.InMs, _timeline.OutMs - 1));
+        var dialog = new TimedTextOverlayDialog(_durationMs, start, defaultEndMs: _timeline.OutMs) { Owner = this };
         if (dialog.ShowDialog() == true && dialog.Result is { } overlay)
         {
             RememberEdit();
@@ -1067,6 +1211,7 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
+        PausePlayback();
         var dialog = new TimedTextOverlayDialog(_durationMs, selected.StartMs, selected) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } edited)
         {
@@ -1077,7 +1222,7 @@ internal sealed class VideoEditorWindow : Window
         if (index >= 0)
         {
             RememberEdit();
-            edited.Bounds = selected.Bounds;
+            edited.Bounds = edited.Placement == selected.Placement ? selected.Bounds : null;
             _editDocument.TextOverlays[index] = edited;
         }
 
@@ -1164,7 +1309,7 @@ internal sealed class VideoEditorWindow : Window
 
         if (seekTarget.HasValue)
         {
-            _previewSeeks.RequestExact(Math.Clamp(seekTarget.Value, _timeline.InMs, _timeline.OutMs));
+            _previewSeeks.RequestExact(Math.Clamp(seekTarget.Value, 0, _durationMs));
         }
     }
 
@@ -1198,6 +1343,24 @@ internal sealed class VideoEditorWindow : Window
         }
     }
 
+    private FrameworkElement LayerCaption(string title, double start, double end, string icon)
+    {
+        var row = new DockPanel { LastChildFill = true };
+        var symbol = new System.Windows.Shapes.Path
+        {
+            Data = TryGeometry(icon), Width = 18, Height = 18, Margin = new Thickness(0, 0, 10, 0),
+            Stretch = Stretch.Uniform, StrokeThickness = 1.6, Stroke = TryBrush("Accent.Default", Colors.Teal),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        DockPanel.SetDock(symbol, Dock.Left); row.Children.Add(symbol);
+        var caption = new StackPanel();
+        caption.Children.Add(new TextBlock { Text = title, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 140 });
+        var timing = new TextBlock { Text = $"{UiText.Get("Video.TrimIn")} {SourceTimeInput.Format(start)}\n{UiText.Get("Video.TrimOut")} {SourceTimeInput.Format(end)}", FontSize = 11 };
+        timing.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        caption.Children.Add(timing); row.Children.Add(caption);
+        return row;
+    }
+
     private void RefreshOverlayList(Guid? selectedId = null)
     {
         _updatingOverlayList = true;
@@ -1215,7 +1378,7 @@ internal sealed class VideoEditorWindow : Window
 
                 var item = new ListBoxItem
                 {
-                    Content = UiText.Format("Text_845D771D4CCB", FormatMs(overlay.StartMs), FormatMs(overlay.EndMs), oneLine),
+                    Content = LayerCaption(oneLine, overlay.StartMs, overlay.EndMs, "Icon.Text"),
                     Tag = overlay,
                     ToolTip = overlay.Text,
                     Padding = new Thickness(8, 4, 8, 4),
@@ -1232,7 +1395,7 @@ internal sealed class VideoEditorWindow : Window
             {
                 var item = new ListBoxItem
                 {
-                    Content = UiText.Format("Text_EC43594BD44D", FormatMs(layer.StartMs), FormatMs(layer.EndMs), layer.Name),
+                    Content = LayerCaption(layer.Name, layer.StartMs, layer.EndMs, "Icon.Image"),
                     Tag = layer,
                     ToolTip = UiText.Get("Text_E75BE1B916FD"),
                     Padding = new Thickness(8, 4, 8, 4),
@@ -1275,6 +1438,16 @@ internal sealed class VideoEditorWindow : Window
         bool anySelected = textSelected || SelectedFrameLayer() is not null;
         _editTextButton.IsEnabled = interactive && textSelected;
         _deleteTextButton.IsEnabled = interactive && anySelected;
+        if (_layerPropertiesEdit is not null) _layerPropertiesEdit.IsEnabled = interactive && textSelected;
+        if (_layerPropertiesSummary is not null)
+        {
+            string title = SelectedOverlay()?.Text ?? SelectedFrameLayer()?.Name ?? string.Empty;
+            double? start = SelectedOverlay()?.StartMs ?? SelectedFrameLayer()?.StartMs;
+            double? end = SelectedOverlay()?.EndMs ?? SelectedFrameLayer()?.EndMs;
+            _layerPropertiesSummary.Text = start.HasValue && end.HasValue
+                ? $"{title}\n{UiText.Get("Video.TrimIn")} {SourceTimeInput.Format(start.Value)}\n{UiText.Get("Video.TrimOut")} {SourceTimeInput.Format(end.Value)}"
+                : UiText.Get("Workspace.SelectLayer");
+        }
     }
 
     private void RefreshTextPreview()
@@ -1681,7 +1854,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (!_mediaReady)
+        if (!_mediaReady || Keyboard.FocusedElement is TextBox)
         {
             return;
         }
@@ -1995,8 +2168,8 @@ internal sealed class VideoEditorWindow : Window
         FontSize = 13,
     };
 
-    private static Brush TryBrush(string key, Color fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
+    private Brush TryBrush(string key, Color fallback) =>
+        TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
 
     private static FontFamily TryFont(string key) =>
         Application.Current?.TryFindResource(key) as FontFamily ?? new FontFamily("Segoe UI");
@@ -2004,6 +2177,6 @@ internal sealed class VideoEditorWindow : Window
     private static Geometry TryGeometry(string key) =>
         Application.Current?.TryFindResource(key) as Geometry ?? Geometry.Empty;
 
-    private static Style? TryStyle(string key) =>
-        Application.Current?.TryFindResource(key) as Style;
+    private Style? TryStyle(string key) =>
+        TryFindResource(key) as Style;
 }

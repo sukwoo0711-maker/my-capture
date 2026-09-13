@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Recording;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Recording;
 using Xunit;
@@ -37,13 +38,16 @@ public sealed class EnglishLayoutTests
 
     [Theory]
     [InlineData(760, 555)]
+    [InlineData(780, 560)]
     [InlineData(920, 680)]
     public void VideoEditorEnglishActionsAndStatusFitNativeWindow(int width, int height) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("en-US");
         string root = OwnedTestDirectory.Create("mc-en-layout-");
         var recording = new RecordingResult(Path.Combine(root, "layout-only.mp4"), 2000, 30, 60, 320, 240);
-        var window = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+        var document = VideoEditDocument.CreateFor(320, 240, 2000);
+        document.TextOverlays.Add(new TimedTextOverlay { Text = "Readable source timing", StartMs = 300, EndMs = 2000 });
+        var window = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document);
         try
         {
             LoadWindowTheme(window);
@@ -59,20 +63,53 @@ public sealed class EnglishLayoutTests
             window.UpdateLayout();
             Grid layout = Assert.IsType<Grid>(window.Content);
             Assert.DoesNotMatch("[가-힣]", window.Title);
-            Border preview = layout.Children.OfType<Border>().Single(b => Grid.GetRow(b) == 0);
+            Border preview = Descendants(layout).OfType<Border>().Single(child => child.Child is Grid panel && panel.Children.OfType<Grid>().Any(grid => grid.Name == "VideoPreviewViewport"));
             Border status = layout.Children.OfType<Border>().Single(b => Grid.GetRow(b) == 3);
             Assert.True(preview.ActualHeight >= 112);
             Grid viewport = Descendants(preview).OfType<Grid>().Single(grid => grid.Name == "VideoPreviewViewport");
             Assert.True(viewport.ActualHeight >= 112, "The actual video viewport must retain usable height");
             Assert.InRange(viewport.TranslatePoint(new Point(0, viewport.ActualHeight), preview).Y, 0, preview.ActualHeight + 0.5);
             ScrollViewer timeline = Assert.Single(layout.Children.OfType<ScrollViewer>());
-            Assert.True(timeline.ActualHeight <= layout.RowDefinitions[1].ActualHeight + 0.5,
+            Assert.True(timeline.ActualHeight <= layout.RowDefinitions[2].ActualHeight + 0.5,
                 "Timeline contents must scroll within the space allocated by the window");
             Assert.InRange(timeline.ViewportHeight, 0, timeline.ActualHeight + 0.5);
+            foreach (string key in new[] { "Video.TrimIn", "Video.TrimOut" })
+            {
+                TextBox input = Assert.Single(Descendants(layout).OfType<TextBox>(),
+                    candidate => AutomationProperties.GetName(candidate) == UiText.Get(key));
+                Assert.True(input.IsVisible, key);
+                input.Text = "00:00:02.000";
+                input.ApplyTemplate();
+                window.UpdateLayout();
+                var host = Assert.IsType<ScrollViewer>(input.Template.FindName("PART_ContentHost", input));
+                Assert.True(host.ViewportWidth > 0, key);
+                Assert.True(host.ExtentWidth <= host.ViewportWidth + 0.5, "Precise In/Out timecode requires horizontal scrolling");
+            }
+            ListBox layers = Assert.Single(Descendants(layout).OfType<ListBox>());
+            var firstLayer = Assert.IsType<ListBoxItem>(layers.Items[0]);
+            Point layerBottom = firstLayer.TranslatePoint(new Point(0, firstLayer.ActualHeight), layers);
+            Assert.InRange(layerBottom.Y, 0, layers.ActualHeight + 0.5);
+            foreach (TextBlock text in Descendants(firstLayer).OfType<TextBlock>())
+                Assert.InRange(text.TranslatePoint(new Point(0, text.ActualHeight), layers).Y, 0, layers.ActualHeight + 0.5);
+            Border layerPanel = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoLayersPanel");
+            foreach (Button action in Descendants(layerPanel).OfType<Button>())
+            {
+                AssertReachableInScrollViewport(action, window);
+                Point bottom = action.TranslatePoint(new Point(action.ActualWidth, action.ActualHeight), layerPanel);
+                Assert.InRange(bottom.X, 0, layerPanel.ActualWidth + 0.5);
+                Assert.InRange(bottom.Y, 0, layerPanel.ActualHeight - layerPanel.Padding.Bottom + 0.5);
+            }
             var client = (FrameworkElement)VisualTreeHelper.GetParent(layout);
             var statusText = Assert.IsType<TextBlock>(status.Child);
             Assert.True(statusText.ActualHeight >= statusText.DesiredSize.Height - 0.5);
             Assert.InRange(statusText.TranslatePoint(new Point(0, statusText.ActualHeight), client).Y, 0, client.ActualHeight + 0.5);
+            for (DependencyObject? ancestor = VisualTreeHelper.GetParent(statusText); ancestor is FrameworkElement bounds; ancestor = VisualTreeHelper.GetParent(ancestor))
+            {
+                Point top = statusText.TranslatePoint(new Point(), bounds);
+                Point bottom = statusText.TranslatePoint(new Point(statusText.ActualWidth, statusText.ActualHeight), bounds);
+                Assert.InRange(top.Y, -0.5, bounds.ActualHeight + 0.5);
+                Assert.InRange(bottom.Y, 0, bounds.ActualHeight + 0.5);
+            }
             var connector = Assert.Single(Descendants(layout).OfType<TimelineRenderSurface>(), surface => !surface.IsHitTestVisible);
             Assert.True(connector.ActualHeight >= 18, "Connector hint must reserve a complete text line");
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
@@ -81,6 +118,7 @@ public sealed class EnglishLayoutTests
                 Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);
                 Assert.NotNull(button.ToolTip);
+                AssertReachableInScrollViewport(button, window);
                 Point top = button.TranslatePoint(new Point(0, 0), layout);
                 Point bottom = button.TranslatePoint(new Point(button.ActualWidth, button.ActualHeight), layout);
                 Assert.True(button.IsVisible && top.X >= 0 && bottom.X <= layout.ActualWidth + 0.5 && bottom.Y <= layout.ActualHeight + 0.5, caption);
@@ -97,6 +135,7 @@ public sealed class EnglishLayoutTests
                 Button action = Assert.Single(buttons, button => AutomationProperties.GetName(button) == UiText.Get(key));
                 Assert.NotNull(action.ToolTip);
                 Assert.True(action.IsVisible && action.ActualWidth >= 36 && action.ActualHeight >= 36);
+                AssertReachableInScrollViewport(action, window);
                 Point bottom = action.TranslatePoint(new Point(action.ActualWidth, action.ActualHeight), layout);
                 Assert.InRange(bottom.X, 0, layout.ActualWidth + 0.5);
                 Assert.InRange(bottom.Y, 0, layout.ActualHeight + 0.5);
@@ -119,6 +158,33 @@ public sealed class EnglishLayoutTests
             finally { OwnedTestDirectory.Delete(root); }
         }
     });
+
+    private static void AssertReachableInScrollViewport(Button button, Window window)
+    {
+        ScrollViewer? scroll = null;
+        for (DependencyObject? ancestor = VisualTreeHelper.GetParent(button); ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor))
+        {
+            if (ancestor is ScrollViewer viewer) { scroll = viewer; break; }
+        }
+        if (scroll is null) return; // Fixed toolbar buttons retain the existing always-visible checks.
+
+        button.BringIntoView();
+        window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+        window.UpdateLayout();
+        var viewport = Assert.IsType<ScrollContentPresenter>(scroll.Template.FindName("PART_ScrollContentPresenter", scroll));
+        Point top = button.TranslatePoint(new Point(), viewport);
+        Point bottom = button.TranslatePoint(new Point(button.ActualWidth, button.ActualHeight), viewport);
+        // Scroll the actual production viewer if BringIntoView only brought its outer panel into view.
+        if (top.Y < 0) scroll.ScrollToVerticalOffset(scroll.VerticalOffset + top.Y);
+        else if (bottom.Y > viewport.ActualHeight) scroll.ScrollToVerticalOffset(scroll.VerticalOffset + bottom.Y - viewport.ActualHeight);
+        window.UpdateLayout();
+        top = button.TranslatePoint(new Point(), viewport);
+        bottom = button.TranslatePoint(new Point(button.ActualWidth, button.ActualHeight), viewport);
+        string name = AutomationProperties.GetName(button);
+        Assert.True(button.IsVisible && button.ActualWidth > 0 && button.ActualHeight > 0, name);
+        Assert.True(top.X >= -0.5 && top.Y >= -0.5 && bottom.X <= viewport.ActualWidth + 0.5 && bottom.Y <= viewport.ActualHeight + 0.5,
+            $"Scrollable action must be fully reachable: {name}; top={top}; bottom={bottom}; viewport={viewport.ActualWidth}x{viewport.ActualHeight}");
+    }
 
     private static void LoadWindowTheme(Window window)
     {

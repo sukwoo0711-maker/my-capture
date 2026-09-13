@@ -14,6 +14,7 @@ internal sealed class TimedTextOverlayDialog : Window
 {
     private readonly double _durationMs;
     private readonly Guid _id;
+    private readonly TimedTextOverlay? _existing;
     private readonly TextBox _text;
     private readonly TextBox _start;
     private readonly TextBox _end;
@@ -23,10 +24,12 @@ internal sealed class TimedTextOverlayDialog : Window
     internal TimedTextOverlayDialog(
         double durationMs,
         double playheadMs,
-        TimedTextOverlay? existing = null)
+        TimedTextOverlay? existing = null,
+        double? defaultEndMs = null)
     {
         _durationMs = Math.Max(1, durationMs);
         _id = existing?.Id ?? Guid.NewGuid();
+        _existing = existing?.Clone();
 
         StandardWindowTheme.Apply(this);
         Title = existing is null ? UiText.Get("Text_6235669450B0") : UiText.Get("Text_16803FE760A3");
@@ -41,7 +44,7 @@ internal sealed class TimedTextOverlayDialog : Window
         FontFamily = Application.Current?.TryFindResource("Font.Ui") as FontFamily ?? new FontFamily("Segoe UI");
 
         double startMs = existing?.StartMs ?? Math.Clamp(playheadMs, 0, _durationMs - 1);
-        double endMs = existing?.EndMs ?? Math.Min(_durationMs, startMs + 3000);
+        double endMs = existing?.EndMs ?? Math.Min(Math.Min(_durationMs, defaultEndMs ?? _durationMs), startMs + 3000);
         if (endMs <= startMs)
         {
             startMs = 0;
@@ -132,7 +135,7 @@ internal sealed class TimedTextOverlayDialog : Window
 
         var hint = new TextBlock
         {
-            Text = UiText.Get("Text_EEA09781BBD7"),
+            Text = UiText.Get("Video.TextSourceTimeHint"),
             Foreground = ResourceBrush("Text.Secondary", Colors.LightGray),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 12, 0, 0),
@@ -169,15 +172,13 @@ internal sealed class TimedTextOverlayDialog : Window
             return;
         }
 
-        if (!TrySeconds(_start.Text, out double startSeconds)
-            || !TrySeconds(_end.Text, out double endSeconds))
+        if (!SourceTimeInput.TryParse(_start.Text, out double startMs)
+            || !SourceTimeInput.TryParse(_end.Text, out double endMs))
         {
             Fail(UiText.Get("Text_328D27BC4C06"), _start);
             return;
         }
 
-        double startMs = startSeconds * 1000;
-        double endMs = endSeconds * 1000;
         if (startMs < 0 || endMs > _durationMs + 0.5 || endMs <= startMs)
         {
             Fail(
@@ -186,14 +187,13 @@ internal sealed class TimedTextOverlayDialog : Window
             return;
         }
 
-        Result = new TimedTextOverlay
-        {
-            Id = _id,
-            Text = text,
-            StartMs = startMs,
-            EndMs = endMs,
-            Placement = (_placement.SelectedItem as PlacementChoice)?.Value ?? VideoTextPlacement.Bottom,
-        };
+        Result = _existing?.Clone() ?? new TimedTextOverlay { Id = _id };
+        Result.Text = text;
+        Result.StartMs = startMs;
+        Result.EndMs = endMs;
+        VideoTextPlacement placement = (_placement.SelectedItem as PlacementChoice)?.Value ?? VideoTextPlacement.Bottom;
+        if (Result.Placement != placement) Result.Bounds = null;
+        Result.Placement = placement;
         DialogResult = true;
     }
 
@@ -211,11 +211,6 @@ internal sealed class TimedTextOverlayDialog : Window
         _error.Text = message;
         _ = focus.Focus();
     }
-
-    private static bool TrySeconds(string value, out double seconds) =>
-        (double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out seconds)
-         || double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out seconds))
-        && double.IsFinite(seconds);
 
     private static TextBox TimeBox(double milliseconds) => new()
     {

@@ -258,6 +258,7 @@
                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.Theme}" Margin="0,12,0,0" />
                         <ComboBox x:Name="ThemeSelector" SelectedValue="{Binding Theme}" SelectedValuePath="Tag"
                                   AutomationProperties.Name="{loc:Text Settings.Theme}" MinWidth="220" HorizontalAlignment="Left" Margin="0,4,0,4">
+                            <ComboBoxItem Tag="workspace" Content="{loc:Text Settings.ThemeWorkspace}" />
                             <ComboBoxItem Tag="midnight" Content="{loc:Text Settings.ThemeMidnight}" />
                             <ComboBoxItem Tag="daylight" Content="{loc:Text Settings.ThemeDaylight}" />
                             <ComboBoxItem Tag="high-contrast" Content="{loc:Text Settings.ThemeHighContrast}" />

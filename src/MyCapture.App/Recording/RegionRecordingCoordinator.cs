@@ -184,6 +184,9 @@ internal sealed class RegionRecordingCoordinator
         Exception? failure = null;
         try
         {
+            // Reserve the session while tray/help windows finish disappearing, as still
+            // capture does. Do not wait for dispatcher idle: native acquisition is off-thread.
+            await Task.Delay(100).ConfigureAwait(false);
             frame = await Task.Run(() =>
             {
                 if (preparation.Cancelled) throw new OperationCanceledException();

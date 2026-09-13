@@ -100,14 +100,14 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             editor.Show();
             editor.UpdateLayout();
             Grid layout = Assert.IsType<Grid>(editor.Content);
-            Border preview = layout.Children.OfType<Border>().Single(child => Grid.GetRow(child) == 0);
+            Border preview = Descendants(layout).OfType<Border>().Single(child => child.Child is Grid panel && panel.Children.OfType<Grid>().Any(grid => grid.Name == "VideoPreviewViewport"));
             Border status = layout.Children.OfType<Border>().Single(child => Grid.GetRow(child) == 3);
             ScrollViewer timelineTools = Assert.Single(layout.Children.OfType<ScrollViewer>());
             Assert.True(preview.ActualHeight >= 112, "compact video editor lost its usable preview");
             Assert.True(status.TranslatePoint(new Point(0, status.ActualHeight), layout).Y <= layout.ActualHeight + 0.5,
                 "compact video editor clipped the processing status");
             Assert.Equal(ScrollBarVisibility.Disabled, timelineTools.HorizontalScrollBarVisibility);
-            Assert.True(timelineTools.ActualHeight <= layout.RowDefinitions[1].ActualHeight + 0.5,
+            Assert.True(timelineTools.ActualHeight <= layout.RowDefinitions[2].ActualHeight + 0.5,
                 "timeline was arranged outside its Grid row instead of constraining the scroll viewport");
             Assert.InRange(timelineTools.ViewportHeight, 0, timelineTools.ActualHeight + 0.5);
             var layerTracks = Descendants(layout).OfType<VideoLayerTimeline>().Single();
@@ -240,7 +240,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             editor.Width = 1200;
             editor.Height = 900;
             editor.UpdateLayout();
-            string beforeSettle = $"layout={layout.ActualHeight}, preview={preview.ActualHeight}, timeline={timelineTools.ActualHeight}, timeline maximum={layout.RowDefinitions[1].MaxHeight}";
+            string beforeSettle = $"layout={layout.ActualHeight}, preview={preview.ActualHeight}, timeline={timelineTools.ActualHeight}, timeline maximum={layout.RowDefinitions[2].MaxHeight}";
             // SizeChanged updates the compact timeline budget after the first arrange.
             // Observe the rendered layout after that normal dispatcher layout pass.
             editor.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
@@ -251,7 +251,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
                 File.WriteAllText(DiagnosticOutputPaths.Child(folder, "video-resize-layout.txt"),
                     $"Compact: layout={compactLayoutHeight}, preview={compactPreviewHeight}, timeline={compactTimelineHeight}\n"
                     + $"After first arrange: {beforeSettle}\n"
-                    + $"After dispatcher layout: layout={layout.ActualHeight}, preview={preview.ActualHeight}, timeline={timelineTools.ActualHeight}, timeline maximum={layout.RowDefinitions[1].MaxHeight}\n");
+                    + $"After dispatcher layout: layout={layout.ActualHeight}, preview={preview.ActualHeight}, timeline={timelineTools.ActualHeight}, timeline maximum={layout.RowDefinitions[2].MaxHeight}\n");
             }
             // Windows may cap a requested 900px window to the CI desktop's work area.
             // Assert how the actual available space is allocated, not the requested size.
@@ -261,7 +261,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             // A larger window first restores the timeline's normal budget, then gives
             // all remaining height to the preview.
             double timelineGrowth = timelineTools.ActualHeight - compactTimelineHeight;
-            Assert.True(timelineTools.ActualHeight <= layout.RowDefinitions[1].ActualHeight + 0.5,
+            Assert.True(timelineTools.ActualHeight <= layout.RowDefinitions[2].ActualHeight + 0.5,
                 "expanded timeline was arranged outside its Grid row");
             Assert.True(preview.ActualHeight >= compactPreviewHeight + availableHeightGrowth - timelineGrowth - 0.5,
                 $"larger window left spare height outside preview/timeline: available growth={availableHeightGrowth:0.0}, preview growth={preview.ActualHeight - compactPreviewHeight:0.0}, timeline growth={timelineGrowth:0.0}");
@@ -324,7 +324,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
     });
 
     [Fact]
-    public void TrimMode_UsesDeletionHandlesAndKeepsPlayheadInsideRetainedRange() => RunSta(() =>
+    public void TrimMode_AllowsSourcePreviewOutsideRetainedRange() => RunSta(() =>
     {
         using var timeline = new TwoLineTimeline();
         timeline.Initialize(durationMs: 10_000, fps: 20);
@@ -334,16 +334,16 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
         timeline.SetPlayhead(1_000);
         timeline.SetIn(2_500);
         Assert.True(timeline.TrimModeEnabled);
-        Assert.Equal(2_500, timeline.PlayheadMs, precision: 1);
+        Assert.Equal(1_000, timeline.PlayheadMs, precision: 1);
 
         timeline.SetPlayhead(9_000);
         timeline.SetOut(7_500);
-        Assert.Equal(7_500, timeline.PlayheadMs, precision: 1);
+        Assert.Equal(9_000, timeline.PlayheadMs, precision: 1);
 
         timeline.SetPlayhead(0);
-        Assert.Equal(2_500, timeline.PlayheadMs, precision: 1);
+        Assert.Equal(0, timeline.PlayheadMs, precision: 1);
         timeline.SetPlayhead(10_000);
-        Assert.Equal(7_500, timeline.PlayheadMs, precision: 1);
+        Assert.Equal(10_000, timeline.PlayheadMs, precision: 1);
     });
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)

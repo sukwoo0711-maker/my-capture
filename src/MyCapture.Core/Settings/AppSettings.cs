@@ -293,7 +293,10 @@ public sealed class GeneralSettings
     public string Language { get; set; } = string.Empty;
 
     /// <summary>Chrome palette id: midnight, daylight, or high-contrast.</summary>
-    public string Theme { get; set; } = MyCapture.Core.Themes.AppThemeNames.Midnight;
+    public string Theme { get; set; } = MyCapture.Core.Themes.AppThemeNames.Workspace;
+
+    /// <summary>One preserves theme choices made after the workspace migration.</summary>
+    public int ThemeRevision { get; set; }
 
     [JsonIgnore]
     public bool IsFirstRun { get; set; }

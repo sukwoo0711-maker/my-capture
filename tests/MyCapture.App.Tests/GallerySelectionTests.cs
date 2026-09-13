@@ -6,6 +6,23 @@ namespace MyCapture.App.Tests;
 public sealed class GallerySelectionTests
 {
     [Fact]
+    public void DayHeader_TogglesOnlyItsGroup_AndPartialSelectionBecomesFull()
+    {
+        Guid[] ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToArray();
+        var selection = new GallerySelection();
+        selection.SetVisible(ids);
+        selection.Select(ids[0]);
+        selection.Select(ids[2], control: true);
+        selection.SelectGroup(ids.Skip(2), control: false, toggle: true);
+        Assert.Equal(new[] { ids[0], ids[2], ids[3], ids[4] }, selection.SelectedIds);
+        selection.SelectGroup(ids.Skip(2), control: false, toggle: true);
+        Assert.Equal(new[] { ids[0] }, selection.SelectedIds);
+        selection.SelectGroup(ids, control: false);
+        selection.SelectGroup(ids, control: false);
+        Assert.Equal(ids, selection.SelectedIds);
+    }
+
+    [Fact]
     public void ShiftRange_IsInclusiveAcrossRowsAndDays_AndRetainsAnchor()
     {
         Guid[] ids = Enumerable.Range(0, 12).Select(_ => Guid.NewGuid()).ToArray();

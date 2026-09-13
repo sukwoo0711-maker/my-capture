@@ -106,6 +106,7 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        MyCapture.App.Themes.WorkspaceTheme.Attach(this, MyCapture.App.Themes.WorkspaceRole.Gallery, resourcesLoaded: true);
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
         DataContext = _viewModel;
@@ -759,6 +760,17 @@ internal sealed partial class GalleryWindow : Window
     }
 
     // ---- Per-card buttons ----------------------------------------------------------
+
+    private void OnLibraryFilterChanged(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel is not null && sender is RadioButton { Tag: string filter })
+        {
+            GalleryFilter next = Enum.Parse<GalleryFilter>(filter);
+            if (_viewModel.Filter == next) return;
+            CloseInlinePlayer();
+            _viewModel.Filter = next;
+        }
+    }
 
     private void OnEditClick(object sender, RoutedEventArgs e)
     {

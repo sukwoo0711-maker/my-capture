@@ -65,6 +65,44 @@ public sealed class GalleryTests : KoreanCaptionTest
         finally { DeleteRoot(root); }
     });
 
+    [Fact]
+    public void WorkspaceFiltersRetainTilesAndSelectionDetailsReuseBoundedThumbnail() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            CaptureQueue queue = NewQueue(paths, new QueueSettings());
+            CaptureRecord first = AddSyntheticRecord(queue, DateTimeOffset.Now, "first");
+            CaptureRecord second = AddSyntheticRecord(queue, DateTimeOffset.Now.AddMinutes(-1), "second");
+            first.IsPinned = true;
+            string imagePath = Path.Combine(root, "detail-fixture.png");
+            MyCapture.Platform.Imaging.ImageCodec.SavePng(Solid(512, 512), imagePath);
+            int loads = 0;
+            var vm = new GalleryViewModel(NewController(queue), _ => { loads++; return imagePath; }, 160);
+            GalleryItemViewModel tile = vm.FindTile(first.Id)!;
+            BitmapSource thumbnail = tile.Thumbnail!;
+            vm.Select(first.Id);
+            Assert.Same(tile, vm.SingleSelectedTile);
+            var detail = new Image();
+            detail.SetBinding(Image.SourceProperty, new System.Windows.Data.Binding("SingleSelectedTile.Thumbnail") { Source = vm });
+            Assert.Same(thumbnail, detail.Source);
+            Assert.Equal(1, loads);
+            vm.Filter = GalleryFilter.Pinned;
+            Assert.Single(vm.Groups.SelectMany(group => group.Items));
+            Assert.Same(tile, vm.SingleSelectedTile);
+            vm.Filter = GalleryFilter.Videos;
+            Assert.True(vm.IsEmpty);
+            Assert.Null(vm.SingleSelectedTile);
+            Assert.Null(detail.Source);
+            vm.Filter = GalleryFilter.All;
+            Assert.Equal(2, vm.Groups.SelectMany(group => group.Items).Count());
+            Assert.Same(tile, vm.FindTile(first.Id));
+            Assert.Equal(1, loads);
+        }
+        finally { DeleteRoot(root); }
+    });
+
     private static void RunSta(Action action)
     {
         Exception? failure = null;
