@@ -379,25 +379,25 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void ApplyRotatedBaseBitmap()
     {
+        // The editor canvas is always the selected pixels at (0,0). _originalCropRegion is
+        // the capture's location on the desktop and must not be used as a hit-test origin:
+        // restoring it after a rotation shifts every click by that offset.
         if (_rotationTurns == 0)
         {
-            if (!_surface.Frame.Bitmap.Equals(_selectedBitmap))
-            {
-                SwapBaseBitmap(_selectedBitmap, _originalCropRegion);
-            }
+            SwapBaseBitmap(_selectedBitmap, new RectD(0, 0, _originalWidth, _originalHeight));
             return;
         }
 
-        int width = _canvasWidth;
-        int height = _canvasHeight;
         BitmapSource rotated = _selectedBitmap;
         for (int pass = 0; pass < _rotationTurns; pass++)
         {
             rotated = RotateQuarterClockwise(rotated);
-            (width, height) = (height, width);
         }
 
-        SwapBaseBitmap(rotated, new RectD(0, 0, width, height));
+        // Size the crop from the bitmap that was actually produced. Swapping the *current*
+        // canvas size `_rotationTurns` times is wrong after the first turn (180° would keep
+        // the previous 90° dimensions and every handle would miss the pixels).
+        SwapBaseBitmap(rotated, new RectD(0, 0, rotated.PixelWidth, rotated.PixelHeight));
     }
 
     private void SwapBaseBitmap(BitmapSource bitmap, RectD region)
@@ -544,29 +544,29 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void PlaceTextBox(PointD image)
     {
-        // A long single-line caption is the common case: start the box at a comfortable
-        // width and let it grow with the text (see OnLiveTextBoxTextChanged) until it
-        // reaches the right canvas edge, wrapping only after that.
-        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        double maxWidthDip = Math.Max(180, _canvasWidth * dipPerPixel - (image.X * dipPerPixel) - 8);
-        double defaultWidth = Math.Min(480, Math.Max(180, maxWidthDip));
-        double defaultHeight = 40 / dipPerPixel;
-        TextAnnotation annotation = _controller.BeginTextAnnotation(image, defaultWidth / dipPerPixel, defaultHeight);
+        // Start the live box at the remaining canvas width so a long Korean sentence
+        // stays on one line. Wrapping begins only when the text hits the right edge.
+        double remainingPx = Math.Max(32, _canvasWidth - image.X - 8);
+        double lineHeightPx = Math.Max(24, _controller.DefaultFontSize * 1.8);
+        TextAnnotation annotation = _controller.BeginTextAnnotation(image, remainingPx, lineHeightPx);
         _editingText = annotation;
 
+        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
         Rect box = _surface.ToSurfaceRect(annotation.Rect);
         var textBox = new TextBox
         {
             Width = Math.Max(60, box.Width),
+            MinWidth = 60,
             MinHeight = Math.Max(28, box.Height),
-            FontSize = Math.Max(12, annotation.FontSize * dipPerPixel),
+            FontFamily = new FontFamily(annotation.FontFamily),
+            FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
             Foreground = annotation.Foreground.ToBrush(),
             Background = Brush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
             BorderBrush = Brush("Accent.Default", Color.FromRgb(0x58, 0xC7, 0xF3)),
             BorderThickness = new Thickness(1),
             AcceptsReturn = true,
-            TextWrapping = TextWrapping.Wrap,
-            Padding = new Thickness(2),
+            TextWrapping = TextWrapping.NoWrap,
+            Padding = new Thickness(4, 2, 4, 2),
         };
         AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
 
@@ -582,9 +582,8 @@ internal sealed class AnnotationEditorControl : Grid
     }
 
     /// <summary>
-    /// Grows the live text box horizontally as the user types so a long single-line
-    /// sentence does not wrap. Wrapping still applies once the box reaches the right
-    /// edge of the visible image.
+    /// Keeps a long single line unwrapped until the box reaches the right edge of the
+    /// visible image (in surface coordinates, including letterbox origin).
     /// </summary>
     private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
     {
@@ -593,14 +592,21 @@ internal sealed class AnnotationEditorControl : Grid
             return;
         }
 
-        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        Rect canvas = _surface.ToSurfaceRect(new RectD(0, 0, _canvasWidth, _canvasHeight));
         double left = Canvas.GetLeft(box);
-        double maxRightDip = _canvasWidth * dipPerPixel - 4;
-        double availableDip = Math.Max(60, maxRightDip - left - 4);
-
+        double availableDip = Math.Max(60, canvas.Right - left - 4);
         FormattedText measured = MeasureLiveText(box);
-        double desiredDip = measured.Width + box.Padding.Left + box.Padding.Right + 4;
-        box.Width = Math.Clamp(desiredDip, box.MinWidth, Math.Max(box.MinWidth, availableDip));
+        double desiredDip = measured.Width + box.Padding.Left + box.Padding.Right + 8;
+        if (desiredDip <= availableDip)
+        {
+            box.TextWrapping = TextWrapping.NoWrap;
+            box.Width = Math.Max(box.MinWidth, desiredDip);
+        }
+        else
+        {
+            box.TextWrapping = TextWrapping.Wrap;
+            box.Width = availableDip;
+        }
     }
 
     private FormattedText MeasureLiveText(TextBox box)
@@ -632,13 +638,15 @@ internal sealed class AnnotationEditorControl : Grid
         box.TextChanged -= OnLiveTextBoxTextChanged;
         _overlayCanvas.Children.Remove(box);
 
-        // Persist the grown box in image-pixel space. Canvas coordinates are DIP on the
-        // letterboxed surface, so convert through ToImagePoint rather than dividing the
-        // overlay origin by scale (which would shift text after a rotation or resize).
+        // Shrink-wrap to the typed text in image-pixel space so a wide live box does not
+        // leave a huge empty plate after commit.
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
         PointD imageOrigin = _surface.ToImagePoint(new Point(Canvas.GetLeft(box), Canvas.GetTop(box)));
-        double width = Math.Max(1, (box.ActualWidth > 0 ? box.ActualWidth : box.Width) / dipPerPixel);
-        double height = Math.Max(annotation.Rect.Height, (box.ActualHeight > 0 ? box.ActualHeight : box.MinHeight) / dipPerPixel);
+        FormattedText measured = MeasureLiveText(box);
+        double width = Math.Max(annotation.FontSize, (measured.Width + box.Padding.Left + box.Padding.Right + 8) / dipPerPixel);
+        double height = Math.Max(annotation.FontSize * 1.4, (measured.Height + box.Padding.Top + box.Padding.Bottom + 4) / dipPerPixel);
+        width = Math.Min(width, Math.Max(1, _canvasWidth - imageOrigin.X));
+        height = Math.Min(height, Math.Max(1, _canvasHeight - imageOrigin.Y));
         RectD finalRect = new(imageOrigin.X, imageOrigin.Y, width, height);
         if (finalRect != annotation.Rect)
         {
@@ -1187,6 +1195,12 @@ internal sealed class AnnotationEditorControl : Grid
 
             _controller.ApplyFontSize(args.NewValue);
             RememberPreferences();
+            if (_activeTextBox is not null)
+            {
+                _activeTextBox.FontSize = Math.Max(1, args.NewValue * _surface.DipPerPixel);
+                OnLiveTextBoxTextChanged(_activeTextBox, null!);
+            }
+
             if (_controller.Selected is TextAnnotation)
             {
                 SetStatus(UiText.Format("Text_5F3A9C8D1E21", args.NewValue));
