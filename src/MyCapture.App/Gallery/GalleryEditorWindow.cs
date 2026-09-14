@@ -30,6 +30,11 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
             return;
         }
 
+        // The base constructor already assigned the editor as this window's Content.
+        // Adding that same instance to a DockPanel without disconnecting it throws
+        // "Specified element is already the logical child of another element".
+        Content = null;
+
         TimeSpan ttl = CaptureRetention.TimeToLive(new QueueSettings
         {
             ImageRetentionHours = retentionHours?.Invoke() ?? CaptureRetention.DefaultImageRetentionHours,
@@ -41,18 +46,30 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
             record.IsImage,
             record.IsPinned);
 
+        var bannerText = new TextBlock
+        {
+            Text = countdown,
+            FontSize = 13,
+        };
+        if (TryFindResource("Font.Mono") is FontFamily mono)
+        {
+            bannerText.FontFamily = mono;
+        }
+
+        if (TryFindResource("Text.Secondary") is Brush foreground)
+        {
+            bannerText.Foreground = foreground;
+        }
+
         var banner = new Border
         {
             Padding = new Thickness(16, 8, 16, 8),
-            Background = TryFindResource("Surface.Overlay") as Brush,
-            Child = new TextBlock
-            {
-                Text = countdown,
-                FontFamily = TryFindResource("Font.Mono") as FontFamily,
-                Foreground = TryFindResource("Text.Secondary") as Brush,
-                FontSize = 13,
-            },
+            Child = bannerText,
         };
+        if (TryFindResource("Surface.Overlay") is Brush overlay)
+        {
+            banner.Background = overlay;
+        }
         var root = new DockPanel();
         DockPanel.SetDock(banner, Dock.Top);
         root.Children.Add(banner);

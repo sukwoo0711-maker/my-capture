@@ -88,14 +88,14 @@ public sealed class RecordingFeatureTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void UploadGitHubImageHotkey_DefaultsToF4()
+    public void UploadGitHubImageHotkey_DefaultsToF9()
     {
         var settings = new HotkeySettings();
 
         Assert.True(settings.UploadGitHubImage.IsAssigned);
         Assert.Equal(HotkeyModifiers.None, settings.UploadGitHubImage.Modifiers);
-        Assert.Equal(Hotkey.VkF4, settings.UploadGitHubImage.VirtualKey);
-        Assert.Equal("F4", settings.UploadGitHubImage.ToString());
+        Assert.Equal(Hotkey.VkF9, settings.UploadGitHubImage.VirtualKey);
+        Assert.Equal("F9", settings.UploadGitHubImage.ToString());
         Assert.Contains(GlobalHotkeyCommand.UploadGitHubImage, Enum.GetValues<GlobalHotkeyCommand>());
     }
 

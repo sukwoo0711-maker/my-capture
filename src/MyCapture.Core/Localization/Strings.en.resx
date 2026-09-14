@@ -2103,6 +2103,38 @@ This cannot be undone.</value>
     <value>Lower the value to fill the shape with its stroke color.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
+  <data name="Text_5F3A9C8D1E20" xml:space="preserve">
+    <value>Font size</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_5F3A9C8D1E21" xml:space="preserve">
+    <value>Font size changed to {0:0}pt.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_6B2C41A9E530" xml:space="preserve">
+    <value>Rotate image</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
+  </data>
+  <data name="Text_6B2C41A9E531" xml:space="preserve">
+    <value>Image rotated.</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_6B2C41A9E532" xml:space="preserve">
+    <value>Rotate left</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_6B2C41A9E533" xml:space="preserve">
+    <value>Rotate 90 degrees left (Q)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_6B2C41A9E534" xml:space="preserve">
+    <value>Rotate right</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
+  <data name="Text_6B2C41A9E535" xml:space="preserve">
+    <value>Rotate 90 degrees right (W)</value>
+    <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
+  </data>
   <data name="Text_BA79DCE6BD5D" xml:space="preserve">
     <value>The recording was safely saved to the library, but the editor could not open. Reopen the video from the library.
 
@@ -2123,6 +2155,10 @@ This cannot be undone.</value>
   </data>
   <data name="Text_BCA2A41F7456" xml:space="preserve">
     <value>This capture cannot be edited.</value>
+    <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
+  </data>
+  <data name="Text_BCA2A41F7457" xml:space="preserve">
+    <value>This capture cannot be edited. Reason: {0}</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_BCC2F939B733" xml:space="preserve">
@@ -2573,6 +2609,10 @@ This cannot be undone.</value>
     <value>The default recording shortcut was changed to Ctrl+Shift+X.</value>
     <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
   </data>
+  <data name="Text_3AE1B1D2C640" xml:space="preserve">
+    <value>The default GitHub URL shortcut was changed to F9.</value>
+    <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
+  </data>
   <data name="Text_E166B75FADF4" xml:space="preserve">
     <value>Jump backward</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
@@ -3007,8 +3047,8 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Settings.ThemeDaylight" xml:space="preserve"><value>Daylight</value></data>
   <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>High contrast</value></data>
   <data name="Settings.GitHubIssueUrl" xml:space="preserve"><value>GitHub issue URL</value></data>
-  <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F4 pastes the clipboard image into this issue’s Write box. Use an issue you can comment on. Empty values use a safe default.</value></data>
-  <data name="Settings.GitHubIssueUrlInvalid" xml:space="preserve"><value>Use https://github.com/owner/repo/issues/number or /issues/new.</value></data>
+  <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F9 pastes the clipboard image into this issue’s Write box. Use an issue you can comment on. Empty values use a safe default.</value></data>
+  <data name="Settings.GitHubIssueUrlInvalid" xml:space="preserve"><value>Use https://host/owner/repo/issues/number or /issues/new.</value></data>
   <data name="Settings.RetentionHours" xml:space="preserve"><value>Library image retention (hours)</value></data>
   <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>Unpinned images are deleted after this many hours. The default is 168 hours (7 days). Videos and pinned items are kept.</value></data>
   <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>Clipboard image to GitHub URL</value></data>
@@ -3023,10 +3063,10 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>No expiry</value></data>
   <data name="Gallery.RetentionExpired" xml:space="preserve"><value>Awaiting auto-delete</value></data>
   <data name="Gallery.FloatFailed" xml:space="preserve"><value>Could not float this image.</value></data>
-  <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F4.</value></data>
+  <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F9.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>Opening the GitHub issue and pasting the image…</value></data>
   <data name="GitHub.Done" xml:space="preserve"><value>Copied the attachment URL to the clipboard.</value></data>
-  <data name="GitHub.Failed" xml:space="preserve"><value>Could not obtain the image URL. Sign in to GitHub and show the configured issue's comment or description field, then copy an image and press F4. Keep that tab and clipboard unchanged during upload.</value></data>
+  <data name="GitHub.Failed" xml:space="preserve"><value>Could not obtain the image URL. Sign in to GitHub and show the configured issue's comment or description field, then copy an image and press F9. Keep that tab and clipboard unchanged during upload.</value></data>
   <data name="GitHub.InvalidUrl" xml:space="preserve"><value>Settings need a valid GitHub issue URL.</value></data>
   <data name="GitHub.Busy" xml:space="preserve"><value>A GitHub upload is already running.</value></data>
   <data name="Video.MarkIn" xml:space="preserve"><value>In</value></data>

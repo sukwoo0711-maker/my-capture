@@ -10,17 +10,21 @@ public static class GitHubIssueImageUrl
 {
     public const string DefaultIssueUrl = "https://github.com/sukwoo0711-maker/my-capture/issues/new";
 
+    // Attachment URLs GitHub writes after a clipboard paste. The host is not pinned to
+    // github.com so GitHub Enterprise Server issues work too; the path shape is what
+    // identifies an attachment.
     private static readonly Regex AttachmentUrl = new(
-        @"https://github\.com/user-attachments/assets/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        @"https://[^/\s]+/user-attachments/assets/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex OwnerRepo = new(
-        @"^[a-zA-Z0-9](?:[a-zA-Z0-9._-]{0,37}[a-zA-Z0-9])?$",
+        @"^[^\s/\\?#:]+$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
-    /// Accepts <c>https://github.com/{owner}/{repo}/issues/{n}</c> or <c>…/issues/new</c>.
-    /// Fragments and query strings are stripped. Empty input maps to <see cref="DefaultIssueUrl"/>.
+    /// Accepts <c>https://{host}/{owner}/{repo}/issues/{n|new}</c> on any host
+    /// (github.com or a GitHub Enterprise Server). Fragments and query strings are
+    /// stripped. Empty input maps to <see cref="DefaultIssueUrl"/>.
     /// </summary>
     public static bool TryNormalize(string? raw, out string url)
     {
@@ -36,10 +40,12 @@ public static class GitHubIssueImageUrl
             return false;
         }
 
+        // HTTPS stays mandatory: the browser session that pastes a clipboard image into
+        // the issue must not be redirected through plaintext.
         if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
             || !string.IsNullOrEmpty(uri.UserInfo)
             || (!uri.IsDefaultPort && uri.Port != 443)
-            || !string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+            || string.IsNullOrWhiteSpace(uri.Host))
         {
             return false;
         }
@@ -60,7 +66,14 @@ public static class GitHubIssueImageUrl
             return false;
         }
 
-        url = $"https://github.com/{segments[0]}/{segments[1]}/issues/{(numbered ? n.ToString(System.Globalization.CultureInfo.InvariantCulture) : "new")}";
+        // Rebuild from the parsed host so a GitHub Enterprise Server URL keeps its host
+        // while fragments, query strings and a trailing slash are dropped.
+        string host = $"{Uri.UriSchemeHttps}{Uri.SchemeDelimiter}{uri.Host}";
+        string owner = Uri.EscapeDataString(segments[0]);
+        string repo = Uri.EscapeDataString(segments[1]);
+        url = numbered
+            ? $"{host}/{owner}/{repo}/issues/{n.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+            : $"{host}/{owner}/{repo}/issues/new";
         return true;
     }
 

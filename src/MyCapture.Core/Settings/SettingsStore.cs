@@ -140,6 +140,19 @@ public sealed class SettingsStore
             s.SchemaVersion = 3;
         }
 
+        if (s.SchemaVersion < 4)
+        {
+            // 2.2.0 moved the GitHub URL default from F4 to F9. Only the bare F4 default
+            // is migrated; a user-chosen binding that includes F4 keeps working.
+            if (s.Hotkeys.UploadGitHubImage == new Hotkey(HotkeyModifiers.None, Hotkey.VkF4))
+            {
+                s.Hotkeys.UploadGitHubImage = new Hotkey(HotkeyModifiers.None, Hotkey.VkF9);
+                warnings.Add(UiText.Get("Text_3AE1B1D2C640"));
+            }
+
+            s.SchemaVersion = 4;
+        }
+
         // --- Queue ---
         // The floor of 10 is not arbitrary: below that, capturing a handful of
         // screenshots in a row would start evicting work the user is still using.
@@ -249,7 +262,7 @@ public sealed class SettingsStore
 
         if (!s.Hotkeys.UploadGitHubImage.IsAssigned)
         {
-            s.Hotkeys.UploadGitHubImage = new Hotkey(HotkeyModifiers.None, Hotkey.VkF4);
+            s.Hotkeys.UploadGitHubImage = new Hotkey(HotkeyModifiers.None, Hotkey.VkF9);
         }
 
         if (!MyCapture.Core.GitHub.GitHubIssueImageUrl.TryNormalize(s.GitHub.IssueUrl, out string issueUrl))

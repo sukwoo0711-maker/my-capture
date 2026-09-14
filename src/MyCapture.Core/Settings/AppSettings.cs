@@ -27,7 +27,7 @@ public sealed class AppSettings
     /// <summary>
     /// Incremented only for changes that cannot be handled by defaulting.
     /// </summary>
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
 
     public HotkeySettings Hotkeys { get; set; } = new();
 
@@ -105,7 +105,7 @@ public sealed class HotkeySettings
     /// Uploads the clipboard image to the configured GitHub issue and copies the
     /// resulting user-attachments URL.
     /// </summary>
-    public Hotkey UploadGitHubImage { get; set; } = new(HotkeyModifiers.None, Hotkey.VkF4);
+    public Hotkey UploadGitHubImage { get; set; } = new(HotkeyModifiers.None, Hotkey.VkF9);
 }
 
 public sealed class QueueSettings
@@ -302,11 +302,11 @@ public sealed class GeneralSettings
     public bool IsFirstRun { get; set; }
 }
 
-/// <summary>GitHub issue used as a clipboard-image host for F4.</summary>
+/// <summary>GitHub issue used as a clipboard-image host for the GitHub URL hotkey.</summary>
 public sealed class GitHubSettings
 {
     /// <summary>
-    /// Issue URL opened by F4. Empty is treated as
+    /// Issue URL opened by the GitHub URL hotkey (default F9). Empty is treated as
     /// <see cref="MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl"/>.
     /// </summary>
     public string IssueUrl { get; set; } = MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl;

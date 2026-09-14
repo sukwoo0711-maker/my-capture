@@ -135,6 +135,13 @@ internal static class SettingsSelfTest
                 settingsWindow.CloseForExit();
             }
 
+            // 6) BROWSEINFO marshalling regression (2.1.0 "unexpected error" on Browse):
+            //    a StringBuilder struct field throws MarshalDirectiveException on .NET at
+            //    the SHBrowseForFolder call, so the struct must round-trip through
+            //    StructureToPtr with an IntPtr display-name field.
+            Check(report, "BROWSEINFO marshals without a StringBuilder field",
+                FolderBrowseDialog.NativeBufferRoundTripSucceeds());
+
             report.AppendLine();
             report.AppendLine("RESULT: PASS");
             File.WriteAllText(Path.Combine(outputDirectory, "settings-selftest-report.txt"), report.ToString(), Encoding.UTF8);

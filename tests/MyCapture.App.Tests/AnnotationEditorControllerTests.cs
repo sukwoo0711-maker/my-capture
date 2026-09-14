@@ -106,6 +106,109 @@ public sealed class AnnotationEditorControllerTests
         Assert.Empty(doc.Items);
         Assert.True(c.PerformRedo());
         Assert.Single(doc.Items);
+        Assert.Equal(EditorTool.Rectangle, c.Tool);
+    }
+
+    [Fact]
+    public void RectangleTool_StaysActiveAcrossConsecutiveBoxes()
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out _);
+        c.Tool = EditorTool.Rectangle;
+
+        c.PointerDown(new PointD(10, 10));
+        c.PointerMove(new PointD(40, 40));
+        c.PointerUp(new PointD(40, 40));
+
+        Assert.Equal(EditorTool.Rectangle, c.Tool);
+        Assert.Same(doc.Items[0], c.Selected);
+
+        c.PointerDown(new PointD(80, 80));
+        c.PointerMove(new PointD(120, 130));
+        c.PointerUp(new PointD(120, 130));
+
+        Assert.Equal(2, doc.Items.Count);
+        Assert.Equal(EditorTool.Rectangle, c.Tool);
+        Assert.Same(doc.Items[1], c.Selected);
+    }
+
+    [Fact]
+    public void ArrowTool_StaysActiveAfterCompletedShape()
+    {
+        AnnotationEditorController c = NewController(out _, out _);
+        c.Tool = EditorTool.Arrow;
+        c.PointerDown(new PointD(20, 20));
+        c.PointerMove(new PointD(200, 120));
+        c.PointerUp(new PointD(200, 120));
+
+        Assert.Equal(EditorTool.Arrow, c.Tool);
+    }
+
+    [Fact]
+    public void RotateDocument_QuarterTurnSwapsCanvasAndIsOneUndoStep()
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out UndoStack undo);
+        c.Tool = EditorTool.Rectangle;
+        c.PointerDown(new PointD(10, 20));
+        c.PointerMove(new PointD(110, 70));
+        c.PointerUp(new PointD(110, 70));
+        var rect = Assert.IsType<RectangleAnnotation>(Assert.Single(doc.Items));
+
+        c.RotateDocument(1);
+
+        Assert.Equal(1, c.RotationTurns);
+        Assert.Equal(600, doc.CanvasWidth);
+        Assert.Equal(800, doc.CanvasHeight);
+        Assert.Equal(530, rect.Rect.X, 3);
+        Assert.Equal(10, rect.Rect.Y, 3);
+        Assert.Equal(50, rect.Rect.Width, 3);
+        Assert.Equal(100, rect.Rect.Height, 3);
+
+        Assert.True(c.PerformUndo());
+        Assert.Equal(0, c.RotationTurns);
+        Assert.Equal(800, doc.CanvasWidth);
+        Assert.Equal(600, doc.CanvasHeight);
+        Assert.Equal(10, rect.Rect.X, 3);
+        Assert.Equal(20, rect.Rect.Y, 3);
+
+        Assert.True(c.PerformRedo());
+        Assert.Equal(1, c.RotationTurns);
+        Assert.Equal(600, doc.CanvasWidth);
+        Assert.Equal(800, doc.CanvasHeight);
+        Assert.Equal(2, undo.UndoCount);
+    }
+
+    [Fact]
+    public void RotateDocument_TwoTurnsAreDistinguishableFromIdentityOnUndo()
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out _);
+        c.RotateDocument(1);
+        c.RotateDocument(1);
+
+        Assert.Equal(2, c.RotationTurns);
+        Assert.Equal(800, doc.CanvasWidth);
+        Assert.Equal(600, doc.CanvasHeight);
+
+        Assert.True(c.PerformUndo());
+        Assert.Equal(1, c.RotationTurns);
+        Assert.Equal(600, doc.CanvasWidth);
+        Assert.Equal(800, doc.CanvasHeight);
+    }
+
+    [Fact]
+    public void ApplyFontSize_IsOneUndoStep()
+    {
+        AnnotationEditorController c = NewController(out _, out UndoStack undo);
+        TextAnnotation text = c.BeginTextAnnotation(new PointD(10, 10), 180, 40);
+        c.CommitTextEdit(text, "hello");
+        c.SetSelected(text);
+        int undoBefore = undo.UndoCount;
+
+        c.ApplyFontSize(36);
+
+        Assert.Equal(36, text.FontSize);
+        Assert.Equal(undoBefore + 1, undo.UndoCount);
+        Assert.True(c.PerformUndo());
+        Assert.Equal(18, text.FontSize, 3);
     }
 
     [Fact]

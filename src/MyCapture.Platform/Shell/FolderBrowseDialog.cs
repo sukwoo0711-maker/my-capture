@@ -22,11 +22,14 @@ public static class FolderBrowseDialog
 {
     public static string? Browse(IntPtr owner, string title, string? initialPath)
     {
-        var buffer = new StringBuilder(260);
+        // BROWSEINFO.pszDisplayName is declared IntPtr and backed by native memory:
+        // .NET (Core) cannot marshal a StringBuilder struct field, so a managed field
+        // here would throw at the SHBrowseForFolder call on every invocation.
+        IntPtr displayName = Marshal.AllocCoTaskMem(DisplayNameCapacity * sizeof(char));
         var info = new BROWSEINFO
         {
             hwndOwner = owner,
-            pszDisplayName = buffer,
+            pszDisplayName = displayName,
             lpszTitle = title ?? string.Empty,
             ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX,
         };
@@ -49,7 +52,7 @@ public static class FolderBrowseDialog
                 return null;
             }
 
-            var pathBuffer = new StringBuilder(260);
+            var pathBuffer = new StringBuilder(MaxPath);
             return SHGetPathFromIDList(pidl, pathBuffer) ? pathBuffer.ToString() : null;
         }
         catch (SEHException)
@@ -62,6 +65,8 @@ public static class FolderBrowseDialog
             {
                 Marshal.FreeCoTaskMem(pidl);
             }
+
+            Marshal.FreeCoTaskMem(displayName);
 
             if (initialHandle.IsAllocated)
             {
@@ -90,6 +95,8 @@ public static class FolderBrowseDialog
     private const uint BIF_EDITBOX = 0x00000010;
     private const int BFFM_INITIALIZED = 1;
     private const uint BFFM_SETSELECTIONW = 0x0467;
+    private const int DisplayNameCapacity = 260; // MAX_PATH, per the BROWSEINFO contract.
+    private const int MaxPath = 260;
 
     private delegate int BrowseCallback(IntPtr hwnd, int msg, IntPtr lParam, IntPtr lpData);
 
@@ -98,7 +105,7 @@ public static class FolderBrowseDialog
     {
         public IntPtr hwndOwner;
         public IntPtr pidlRoot;
-        public StringBuilder pszDisplayName;
+        public IntPtr pszDisplayName;
         public string lpszTitle;
         public uint ulFlags;
         public BrowseCallback? lpfn;
@@ -115,4 +122,43 @@ public static class FolderBrowseDialog
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, string lParam);
+
+    /// <summary>
+    /// Verifies the BROWSEINFO layout marshals natively. The 2.1.0 regression shipped a
+    /// StringBuilder struct field, which .NET rejects with MarshalDirectiveException only
+    /// at the native call — after the settings window is already up. This probe runs the
+    /// same StructureToPtr the P/Invoke performs so that failure mode is caught by the
+    /// packaged settings self-test instead.
+    /// </summary>
+    public static bool NativeBufferRoundTripSucceeds()
+    {
+        var probe = new BROWSEINFO
+        {
+            hwndOwner = IntPtr.Zero,
+            pszDisplayName = Marshal.AllocCoTaskMem(DisplayNameCapacity * sizeof(char)),
+            lpszTitle = "probe",
+            ulFlags = BIF_RETURNONLYFSDIRS,
+        };
+        try
+        {
+            IntPtr buffer = Marshal.AllocHGlobal(Marshal.SizeOf(probe));
+            try
+            {
+                Marshal.StructureToPtr(probe, buffer, fDeleteOld: false);
+                return true;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+        catch (Exception ex) when (ex is MarshalDirectiveException or ArgumentException)
+        {
+            return false;
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(probe.pszDisplayName);
+        }
+    }
 }

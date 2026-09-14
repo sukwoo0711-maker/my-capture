@@ -223,7 +223,7 @@ public sealed class SettingsStoreTests
 
         AppSettings settings = store.Load();
 
-        Assert.Equal(3, settings.SchemaVersion);
+        Assert.Equal(4, settings.SchemaVersion);
         Assert.Equal("Ctrl+Shift+X", settings.Hotkeys.RecordRegion.ToString());
         Assert.Equal("Ctrl+Shift+Z", settings.Hotkeys.OpenLibrary.ToString());
         Assert.Contains(store.LastLoadWarnings, warning => warning.Contains("Ctrl+Shift+X", StringComparison.Ordinal));
@@ -240,8 +240,40 @@ public sealed class SettingsStoreTests
 
         AppSettings settings = store.Load();
 
-        Assert.Equal(3, settings.SchemaVersion);
+        Assert.Equal(4, settings.SchemaVersion);
         Assert.Equal("Alt+F8", settings.Hotkeys.RecordRegion.ToString());
+    }
+
+    [Fact]
+    public void Load_PreviousGitHubDefaultHotkeyMigratesToF9()
+    {
+        using var workspace = new TempWorkspace();
+        SettingsStore store = CreateStore(workspace);
+        var previousSettings = new AppSettings { SchemaVersion = 3 };
+        previousSettings.Hotkeys.UploadGitHubImage = new Hotkey(HotkeyModifiers.None, Hotkey.VkF4);
+        store.Save(previousSettings);
+
+        AppSettings settings = store.Load();
+
+        Assert.Equal(4, settings.SchemaVersion);
+        Assert.Equal("F9", settings.Hotkeys.UploadGitHubImage.ToString());
+        Assert.Contains(store.LastLoadWarnings, warning => warning.Contains("F9", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Load_CustomGitHubHotkeyUsingF4SurvivesMigration()
+    {
+        using var workspace = new TempWorkspace();
+        SettingsStore store = CreateStore(workspace);
+        var previousSettings = new AppSettings { SchemaVersion = 3 };
+        previousSettings.Hotkeys.UploadGitHubImage = new Hotkey(HotkeyModifiers.Control, Hotkey.VkF4);
+        store.Save(previousSettings);
+
+        AppSettings settings = store.Load();
+
+        Assert.Equal(4, settings.SchemaVersion);
+        Assert.Equal("Ctrl+F4", settings.Hotkeys.UploadGitHubImage.ToString());
+        Assert.DoesNotContain(store.LastLoadWarnings, warning => warning.Contains("F9", StringComparison.Ordinal));
     }
 
     [Fact]
