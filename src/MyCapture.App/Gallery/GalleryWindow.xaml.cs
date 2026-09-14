@@ -1017,8 +1017,7 @@ internal sealed partial class GalleryWindow : Window
         long requestedContentRevision = record.ContentRevision;
         string context = tile.ContextLabel;
 
-        OcrRequest RequestFactory() => OcrRequest.FromFile(
-            renderedPath, settings.UpscaleFactor, settings.PreferredLanguages);
+        OcrRequest RequestFactory() => OcrRequestFactory.FromFile(renderedPath, settings);
 
         void OnFresh(OcrResult result)
         {

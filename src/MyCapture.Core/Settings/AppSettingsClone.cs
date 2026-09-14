@@ -120,6 +120,7 @@ public static class AppSettingsClone
     private static OcrSettings Clone(OcrSettings s) => new()
     {
         PreferredLanguages = [.. s.PreferredLanguages],
+        Quality = s.Quality,
         UpscaleFactor = s.UpscaleFactor,
         CacheResults = s.CacheResults,
     };

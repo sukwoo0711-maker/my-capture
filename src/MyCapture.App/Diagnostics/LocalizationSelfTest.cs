@@ -45,6 +45,12 @@ internal static class LocalizationSelfTest
                 var selector = (ComboBox)window.FindName("LanguageSelector");
                 Check(Equals(selector.SelectedValue, "en-US"), "Persisted English selected");
                 Check(AutomationProperties.GetName(selector) == "Display language", "English language selector accessibility");
+                var themeSelector = (ComboBox)window.FindName("ThemeSelector");
+                Check(themeSelector.Items.Count == 6, "English theme selector has six palettes");
+                Check(Equals(themeSelector.SelectedValue, "glass"), "Default glass theme selected");
+                var qualitySelector = (ComboBox)window.FindName("OcrQualitySelector");
+                Check(qualitySelector.Items.Count == 3, "English OCR quality selector has three stages");
+                Check(Equals(qualitySelector.SelectedValue, "balanced"), "Default OCR quality is balanced");
                 selector.SelectedValue = "ko-KR";
                 Check(((SettingsDraft)window.DataContext).Language == "ko-KR", "Language selection edits existing draft field");
                 Check(settings.General.Language == "en-US", "Unapplied language keeps current settings");

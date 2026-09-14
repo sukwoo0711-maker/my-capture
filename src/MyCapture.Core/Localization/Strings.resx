@@ -3042,8 +3042,8 @@
 Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
 트레이에서 갤러리, 설정, Language를 선택할 수 있습니다.</value></data>
   <data name="Settings.Theme" xml:space="preserve"><value>테마</value></data>
-  <data name="Settings.ThemeHint" xml:space="preserve"><value>적용하면 바로 색이 바뀝니다. 이미 열린 창은 다시 열면 새 테마를 완전히 반영합니다.</value></data>
-  <data name="Settings.ThemeMidnight" xml:space="preserve"><value>미드나잇 (기본)</value></data>
+  <data name="Settings.ThemeHint" xml:space="preserve"><value>적용하면 바로 색이 바뀝니다. 글래스 테마는 Windows 11 Mica와 반투명 패널을 사용합니다.</value></data>
+  <data name="Settings.ThemeMidnight" xml:space="preserve"><value>미드나잇</value></data>
   <data name="Settings.ThemeDaylight" xml:space="preserve"><value>데이라이트</value></data>
   <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>고대비</value></data>
   <data name="Settings.GitHubIssueUrl" xml:space="preserve"><value>GitHub 이슈 URL</value></data>
@@ -3083,6 +3083,13 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Video.TrimInputInvalid" xml:space="preserve"><value>구간을 적용하지 않았습니다. 원본 범위 안에서 In이 Out보다 최소 0.1초 앞서도록 입력해 주세요.</value></data>
   <data name="Video.TextSourceTimeHint" xml:space="preserve"><value>표시 시간은 원본 영상 기준입니다. 초(예: 2.5) 또는 시:분:초.밀리초로 입력하세요. 시작부터 끝 직전까지 표시되며, 내보내기에는 In–Out 구간과 겹치는 부분만 포함됩니다.</value></data>
   <data name="Settings.ThemeWorkspace" xml:space="preserve"><value>작업실 · 밝은 보관함과 어두운 영상 편집기</value></data>
+  <data name="Settings.ThemeGlass" xml:space="preserve"><value>글래스 · Windows 기본</value></data>
+  <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>글래스 라이트 · 밝은 반투명</value></data>
+  <data name="Settings.OcrQuality" xml:space="preserve"><value>인식 품질</value></data>
+  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>빠름은 속도 우선, 보통은 균형, 느림은 영수증·작은 글자에 더 정확하지만 시간이 더 걸립니다.</value></data>
+  <data name="Settings.OcrQualityFast" xml:space="preserve"><value>빠름 (OCR 성능 약함)</value></data>
+  <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>보통 (속도와 정확도 균형)</value></data>
+  <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>느림 (영수증·텍스트 최대 정확도)</value></data>
   <data name="Workspace.Library" xml:space="preserve"><value>보관함</value></data>
   <data name="Workspace.All" xml:space="preserve"><value>모두 보기</value></data>
   <data name="Workspace.Pinned" xml:space="preserve"><value>보관한 항목</value></data>

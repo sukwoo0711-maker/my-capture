@@ -1300,9 +1300,11 @@ public partial class App : Application
         {
             if (_ocrService is not null)
             {
-                copied = await PinTextCopyService.CopyAsync(image, _ocrService,
-                    ClipboardImageService.CopyTextAsync, _settings?.Ocr.UpscaleFactor ?? 2.0,
-                    _settings?.Ocr.PreferredLanguages ?? []);
+                copied = await PinTextCopyService.CopyAsync(
+                    image,
+                    _ocrService,
+                    ClipboardImageService.CopyTextAsync,
+                    _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings());
             }
         }
         catch (Exception ex)

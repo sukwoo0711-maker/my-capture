@@ -112,18 +112,28 @@ public sealed class ThemeCatalogTests
         Assert.Equal(AppTheme.Midnight, AppThemeNames.Parse(null));
         Assert.Equal(AppTheme.Daylight, AppThemeNames.Parse("light"));
         Assert.Equal(AppTheme.HighContrast, AppThemeNames.Parse("high-contrast"));
+        Assert.Equal(AppTheme.Glass, AppThemeNames.Parse("glass"));
+        Assert.Equal(AppTheme.Glass, AppThemeNames.Parse("mica"));
+        Assert.Equal(AppTheme.GlassLight, AppThemeNames.Parse("glass-light"));
         Assert.Equal("daylight", AppThemeNames.ToSetting(AppTheme.Daylight));
+        Assert.Equal("glass", AppThemeNames.ToSetting(AppTheme.Glass));
         Assert.Contains("Surface.Base", ThemeCatalog.ColorsFor(AppTheme.Daylight).Keys);
         Assert.Contains("Surface.Badge", ThemeCatalog.ColorsFor(AppTheme.Daylight).Keys);
-        Assert.Equal(
-            ThemeCatalog.ColorsFor(AppTheme.Midnight).Keys.OrderBy(k => k, StringComparer.Ordinal),
-            ThemeCatalog.ColorsFor(AppTheme.Daylight).Keys.OrderBy(k => k, StringComparer.Ordinal));
-        Assert.Equal(
-            ThemeCatalog.ColorsFor(AppTheme.Midnight).Keys.OrderBy(k => k, StringComparer.Ordinal),
-            ThemeCatalog.ColorsFor(AppTheme.HighContrast).Keys.OrderBy(k => k, StringComparer.Ordinal));
+        string[] midnightKeys = [.. ThemeCatalog.ColorsFor(AppTheme.Midnight).Keys.OrderBy(k => k, StringComparer.Ordinal)];
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            Assert.Equal(
+                midnightKeys,
+                ThemeCatalog.ColorsFor(theme).Keys.OrderBy(k => k, StringComparer.Ordinal));
+        }
+
         Assert.NotEqual(
             ThemeCatalog.ColorsFor(AppTheme.Midnight)["Surface.Base"],
             ThemeCatalog.ColorsFor(AppTheme.Daylight)["Surface.Base"]);
+        Assert.True(AppThemeNames.UsesBackdrop(AppTheme.Glass));
+        Assert.True(AppThemeNames.IsLight(AppTheme.GlassLight));
+        Assert.True(ThemeCatalog.ColorsFor(AppTheme.Glass)["Surface.Raised"].A < 0xFF);
+        Assert.True(ThemeCatalog.ColorsFor(AppTheme.GlassLight)["Surface.Raised"].A < 0xFF);
     }
 }
 

@@ -74,6 +74,39 @@ public sealed class ImageCodecPathTests
     });
 
     [Fact]
+    public void StretchContrast_SpreadsFaintGreyPrintTowardBlackAndWhite() => RunSta(() =>
+    {
+        const int width = 8;
+        const int height = 2;
+        var source = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+        byte[] pixels = new byte[width * height * 4];
+        for (int x = 0; x < width; x++)
+        {
+            WritePixel(pixels, x, 0, width, 110);
+            WritePixel(pixels, x, 1, width, 170);
+        }
+
+        source.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
+        source.Freeze();
+
+        BitmapSource stretched = ImageCodec.StretchContrastForRecognition(source);
+        Assert.True(stretched.IsFrozen);
+        byte[] result = new byte[pixels.Length];
+        stretched.CopyPixels(result, width * 4, 0);
+        Assert.True(result[0] < 40, "Dark paper print should move toward black.");
+        Assert.True(result[(width * 4) + 0] > 210, "Light paper should move toward white.");
+    });
+
+    private static void WritePixel(byte[] pixels, int x, int y, int width, byte gray)
+    {
+        int offset = ((y * width) + x) * 4;
+        pixels[offset] = gray;
+        pixels[offset + 1] = gray;
+        pixels[offset + 2] = gray;
+        pixels[offset + 3] = 255;
+    }
+
+    [Fact]
     public void TryLoad_MissingOrBadPath_ReturnsNull_NeverThrows() => RunSta(() =>
     {
         Assert.Null(ImageCodec.TryLoad("does-not-exist-\u0001.png"));

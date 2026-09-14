@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
@@ -41,6 +43,20 @@ internal static class SettingsSelfTest
             var settings = new AppSettings();
             var draft = new SettingsDraft(settings);
             Check(report, "Default draft is valid", !draft.HasErrors);
+            Check(report, "Launch at login defaults on", settings.General.LaunchAtLogin && draft.LaunchAtLogin);
+            Check(report, "Default theme is glass", settings.General.Theme == "glass" && draft.Theme == "glass");
+            Check(report, "Default OCR quality is balanced",
+                settings.Ocr.Quality == OcrQuality.Balanced && draft.OcrQuality == "balanced");
+
+            draft.OcrQuality = "fast";
+            Check(report, "Fast OCR maps to 1x upscale",
+                draft.ToAppSettings().Ocr.UpscaleFactor == 1.0
+                && draft.ToAppSettings().Ocr.Quality == OcrQuality.Fast);
+            draft.OcrQuality = "accurate";
+            Check(report, "Accurate OCR maps to 4x upscale",
+                draft.ToAppSettings().Ocr.UpscaleFactor == 4.0
+                && draft.ToAppSettings().Ocr.Quality == OcrQuality.Accurate);
+            draft.OcrQuality = "balanced";
 
             draft.MaxItems = "5";               // below the floor of 10
             Check(report, "Out-of-range MaxItems flagged", draft.HasErrors);
@@ -120,6 +136,16 @@ internal static class SettingsSelfTest
                 loggerFactory.CreateLogger<SettingsWindow>());
             try
             {
+                settingsWindow.Width = 940;
+                settingsWindow.Height = 700;
+                settingsWindow.Left = -10000;
+                settingsWindow.Top = -10000;
+                settingsWindow.WindowStartupLocation = WindowStartupLocation.Manual;
+                settingsWindow.ShowInTaskbar = false;
+                settingsWindow.ShowActivated = false;
+                settingsWindow.Show();
+                PumpDispatcherOnce();
+
                 var applyKey = FindKeyBinding(settingsWindow, Key.S, ModifierKeys.Control);
                 Check(report, "Ctrl+S binding present", applyKey is not null);
                 Check(report, "Ctrl+S invokes ApplyCommand",
@@ -129,6 +155,28 @@ internal static class SettingsSelfTest
                 Check(report, "Esc binding present", escKey is not null);
                 Check(report, "Esc invokes CancelCommand",
                     ReferenceEquals(escKey!.Command, SettingsWindow.CancelCommand));
+
+                var themeSelector = settingsWindow.FindName("ThemeSelector") as ComboBox;
+                Check(report, "Theme selector is present", themeSelector is not null);
+                string[] themeTags = themeSelector!.Items.OfType<ComboBoxItem>()
+                    .Select(item => item.Tag as string ?? string.Empty)
+                    .ToArray();
+                Check(report, "Theme selector lists glass, workspace, light, and contrast palettes",
+                    themeTags is ["glass", "glass-light", "workspace", "daylight", "midnight", "high-contrast"]);
+                Check(report, "Theme selector defaults to glass",
+                    Equals(themeSelector.SelectedValue, "glass"));
+
+                var qualitySelector = settingsWindow.FindName("OcrQualitySelector") as ComboBox;
+                Check(report, "OCR quality selector is present", qualitySelector is not null);
+                string[] qualityTags = qualitySelector!.Items.OfType<ComboBoxItem>()
+                    .Select(item => item.Tag as string ?? string.Empty)
+                    .ToArray();
+                Check(report, "OCR quality lists fast, normal, and slow stages",
+                    qualityTags is ["fast", "balanced", "accurate"]);
+                Check(report, "OCR quality defaults to balanced",
+                    Equals(qualitySelector.SelectedValue, "balanced"));
+                Check(report, "Launch-at-login checkbox is on by default",
+                    ((SettingsDraft)settingsWindow.DataContext).LaunchAtLogin);
             }
             finally
             {

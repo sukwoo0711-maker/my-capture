@@ -19,7 +19,9 @@ internal static class WorkspaceTheme
             window.Resources.MergedDictionaries.Add(Create(role));
         }
         Windows.Add((new WeakReference<Window>(window), role));
+        ModernWindowChrome.SetWorkspaceRole(window, role);
         Apply(window.Resources, role, ThemeService.Current);
+        ModernWindowChrome.Refresh(window);
     }
 
     internal static ResourceDictionary Create(WorkspaceRole role)

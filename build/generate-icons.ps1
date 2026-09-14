@@ -73,10 +73,20 @@ function Draw-Icon {
     if ($Mode -eq 'Plate') {
         $pad = [Math]::Max(0.5, $s * 0.03)
         $plateSize = $s - ($pad * 2)
-        $plate = New-RoundedPath -X $pad -Y $pad -W $plateSize -H $plateSize -R ($s * 0.21)
+        $plate = New-RoundedPath -X $pad -Y $pad -W $plateSize -H $plateSize -R ($s * 0.22)
         $bg = New-Object System.Drawing.SolidBrush($GraphitePlate)
         $g.FillPath($bg, $plate)
         $bg.Dispose()
+        $sheen = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+            ([System.Drawing.PointF]::new([float]$pad, [float]$pad)),
+            ([System.Drawing.PointF]::new([float]$pad, [float]($pad + ($plateSize * 0.55)))),
+            [System.Drawing.Color]::FromArgb(48, 255, 255, 255),
+            [System.Drawing.Color]::FromArgb(0, 255, 255, 255))
+        $g.FillPath($sheen, $plate)
+        $sheen.Dispose()
+        $edge = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(64, 246, 248, 252), [Math]::Max(1.0, $s * 0.018))
+        $g.DrawPath($edge, $plate)
+        $edge.Dispose()
         $plate.Dispose()
 
         $margin = [Math]::Round($s * 0.17)

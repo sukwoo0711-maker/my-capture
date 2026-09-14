@@ -13,7 +13,12 @@ public sealed class ThemeOpacityTests
     [InlineData(true)]
     public void ApplyingPalette_PreservesCaptureDimmerTransparency(bool frozen) => StaTestHost.Run(() =>
     {
-        var resources = new ResourceDictionary { Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Tokens.xaml") };
+        _ = System.IO.Packaging.PackUriHelper.UriSchemePack;
+        _ = new FrameworkElement();
+        var resources = new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Tokens.xaml", UriKind.Absolute),
+        };
         var original = ((SolidColorBrush)resources["Overlay.Dimmer"]).CloneCurrentValue();
         Assert.InRange(original.Opacity, 0.01, 0.99);
         double opacity = original.Opacity;
@@ -26,6 +31,10 @@ public sealed class ThemeOpacityTests
         if (frozen) Assert.NotSame(original, updated);
         else Assert.Same(original, updated);
         ThemeService.ApplyResources(AppTheme.Daylight, resources);
+        Assert.Equal(opacity, ((SolidColorBrush)resources["Overlay.Dimmer"]).Opacity);
+        ThemeService.ApplyResources(AppTheme.Glass, resources);
+        Assert.Equal(opacity, ((SolidColorBrush)resources["Overlay.Dimmer"]).Opacity);
+        ThemeService.ApplyResources(AppTheme.GlassLight, resources);
         Assert.Equal(opacity, ((SolidColorBrush)resources["Overlay.Dimmer"]).Opacity);
     });
 }
