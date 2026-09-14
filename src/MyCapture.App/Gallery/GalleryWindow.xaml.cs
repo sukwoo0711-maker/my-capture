@@ -1154,7 +1154,11 @@ internal sealed partial class GalleryWindow : Window
         {
             _log.LogWarning(ex, "Could not open image editor for {Id}", record.Id);
             if (IsVisible && visibilityGeneration == _visibilityGeneration)
-                ShowStatus(UiText.Get("Text_BCA2A41F7456"));
+            {
+                // The generic message alone gives a user nothing to report back; include
+                // the concrete fault so a support conversation can start from evidence.
+                ShowStatus(UiText.Format("Text_BCA2A41F7457", ex.Message));
+            }
         }
         finally
         {

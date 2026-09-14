@@ -146,6 +146,63 @@ internal sealed class AnnotationEditorController
         RaiseVisual();
     }
 
+    /// <summary>
+    /// Rotates the annotation layer by <paramref name="quarterTurns"/> clockwise quarter
+    /// turns as one undoable step. The caller rotates the base bitmap itself and keeps it
+    /// in sync with the returned document dimensions.
+    /// </summary>
+    /// <summary>
+    /// Clockwise quarter-turns applied to the live document relative to the original
+    /// capture. The view uses this to keep the base bitmap in the same orientation;
+    /// canvas width/height alone cannot distinguish 0° from 180°.
+    /// </summary>
+    internal int RotationTurns { get; private set; }
+
+    internal void RotateDocument(int quarterTurns)
+    {
+        int turns = ((quarterTurns % 4) + 4) % 4;
+        if (turns == 0)
+        {
+            return;
+        }
+
+        SetSelected(null);
+        _undo.Execute(new DocumentRotationCommand(this, _document, turns));
+        RaiseVisual();
+    }
+
+    private void AddRotation(int quarterTurns) =>
+        RotationTurns = ((RotationTurns + quarterTurns) % 4 + 4) % 4;
+
+    /// <summary>Rotates the annotation document in place as one reversible command.</summary>
+    private sealed class DocumentRotationCommand : IUndoableCommand
+    {
+        private readonly AnnotationEditorController _owner;
+        private readonly AnnotationDocument _document;
+        private readonly int _turns;
+
+        public DocumentRotationCommand(AnnotationEditorController owner, AnnotationDocument document, int turns)
+        {
+            _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            _document = document ?? throw new ArgumentNullException(nameof(document));
+            _turns = turns;
+        }
+
+        public string Description => UiText.Get("Text_6B2C41A9E530");
+
+        public void Execute()
+        {
+            AnnotationDocumentRotator.Rotate(_document, _turns);
+            _owner.AddRotation(_turns);
+        }
+
+        public void Undo()
+        {
+            AnnotationDocumentRotator.Rotate(_document, -_turns);
+            _owner.AddRotation(-_turns);
+        }
+    }
+
     // ---- Pointer gestures (image-pixel coordinates) ---------------------------------
 
     internal void PointerDown(PointD point)
@@ -460,6 +517,41 @@ internal sealed class AnnotationEditorController
     }
 
     /// <summary>
+    /// Applies a font size to the selected text annotation, or records it as the default
+    /// for the next text annotation when nothing is selected. The box height follows the
+    /// size so a larger font is never clipped by its own rect.
+    /// </summary>
+    internal void ApplyFontSize(double fontSize)
+    {
+        double size = double.IsFinite(fontSize) ? Math.Clamp(fontSize, 8, 200) : DefaultFontSize;
+        DefaultFontSize = size;
+        if (_selected is not TextAnnotation text)
+        {
+            return;
+        }
+
+        if (Math.Abs(text.FontSize - size) < 1e-6)
+        {
+            return;
+        }
+
+        double oldSize = text.FontSize;
+        RectD oldRect = text.Rect;
+        double scaledHeight = oldRect.Height * (size / Math.Max(double.Epsilon, oldSize));
+        RectD scaledRect = new(oldRect.X, oldRect.Y, oldRect.Width, scaledHeight);
+        using (_undo.BeginBatch(UiText.Get("Text_258AD4B095A1")))
+        {
+            PushProperty(text, UiText.Get("Text_258AD4B095A1"), static (t, v) => t.FontSize = v, oldSize, size);
+            if (scaledRect != oldRect)
+            {
+                PushProperty(text, UiText.Get("Text_258AD4B095A1"), static (t, v) => t.Rect = v, oldRect, scaledRect);
+            }
+        }
+
+        RaiseVisual();
+    }
+
+    /// <summary>
     /// Hit-tests handles first, then the item itself. Exposed so the view can pick a cursor.
     /// </summary>
     internal ResizeHandle HandleAt(PointD point, double handlePixels)
@@ -579,7 +671,9 @@ internal sealed class AnnotationEditorController
         // The item was added directly during the drag so it could be drawn live. Wrap that
         // in an undoable add without re-adding it.
         _undo.Push(new AlreadyAddedCommand(_document, draft));
-        Tool = EditorTool.Select;
+        // Shape tools stay active after a completed shape (like the pen) so a user filling
+        // an area with boxes does not have to re-select the tool for every one. The shape
+        // is still selected for immediate inspector edits; the next press starts fresh.
         SetSelected(draft);
     }
 

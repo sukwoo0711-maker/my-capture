@@ -30,8 +30,8 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 {
     private const double HandlePixels = 8;
 
-    private readonly FrozenFrame _frame;
-    private readonly RectD _cropRegion;
+    private FrozenFrame _frame;
+    private RectD _cropRegion;
     private readonly AnnotationEditorController _controller;
     private readonly AnnotationRenderer _renderer;
     private readonly Brush _dimmerBrush;
@@ -71,6 +71,17 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
     /// <summary>The visual frame and crop used by this surface.</summary>
     internal FrozenFrame Frame => _frame;
+
+    /// <summary>
+    /// Replaces the base bitmap and crop (a rotation swaps width and height) and repaints.
+    /// Only the editor's document-rotation action may call this.
+    /// </summary>
+    internal void ReplaceFrame(FrozenFrame frame, RectD cropRegion)
+    {
+        _frame = frame ?? throw new ArgumentNullException(nameof(frame));
+        _cropRegion = cropRegion.Normalized();
+        InvalidateVisual();
+    }
 
     internal RectD CropRegion => _cropRegion;
 

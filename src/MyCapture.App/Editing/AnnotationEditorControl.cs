@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Globalization;
 using Microsoft.Win32;
 using MyCapture.App.Ocr;
 using MyCapture.Core.Annotations;
@@ -15,6 +16,7 @@ using MyCapture.Core.Primitives;
 using MyCapture.Core.Undo;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 
 namespace MyCapture.App.Editing;
 
@@ -59,11 +61,19 @@ internal sealed class AnnotationEditorControl : Grid
     private readonly Canvas _overlayCanvas = new();
     private readonly Dictionary<EditorTool, ToggleButton> _toolButtons = new();
 
-    private readonly int _canvasWidth;
-    private readonly int _canvasHeight;
+    private int _canvasWidth;
+    private int _canvasHeight;
+    private readonly int _originalWidth;
+    private readonly int _originalHeight;
+    private MonitorInfo? _frameMonitor;
+    private double _frameElapsedMilliseconds;
+    private RectD _originalCropRegion;
+    private int _rotationTurns;
 
     private Button _undoButton = null!;
     private Button _redoButton = null!;
+    private Button _rotateLeftButton = null!;
+    private Button _rotateRightButton = null!;
     private Button _deleteButton = null!;
     private Button _redactButton = null!;
     private Slider _thicknessSlider = null!;
@@ -71,6 +81,8 @@ internal sealed class AnnotationEditorControl : Grid
     private Slider _fillTransparencySlider = null!;
     private TextBlock _fillTransparencyLabel = null!;
     private FrameworkElement _shapeStyleSection = null!;
+    private Slider _fontSizeSlider = null!;
+    private FrameworkElement _fontSizeSection = null!;
     private bool _syncingInspector;
     private ColumnDefinition _inspectorColumn = null!;
     private Border _inspectorPanel = null!;
@@ -124,9 +136,14 @@ internal sealed class AnnotationEditorControl : Grid
         _cropRegion = bitmapRegion.Normalized();
         _selectedBitmap = selectedBitmap ?? throw new ArgumentNullException(nameof(selectedBitmap));
         _privacyRedactionService = privacyRedactionService;
+        _frameMonitor = frame.Monitor;
+        _frameElapsedMilliseconds = frame.ElapsedMilliseconds;
+        _originalCropRegion = bitmapRegion.Normalized();
 
         _canvasWidth = Math.Max(1, selectedBitmap.PixelWidth);
         _canvasHeight = Math.Max(1, selectedBitmap.PixelHeight);
+        _originalWidth = _canvasWidth;
+        _originalHeight = _canvasHeight;
 
         // Seed decoded assets before wiring the renderer so restored image annotations draw
         // on the first paint.
@@ -325,9 +342,86 @@ internal sealed class AnnotationEditorControl : Grid
             case Key.I:
                 SelectTool(EditorTool.Image);
                 return true;
+            case Key.Q:
+                RotateCapture(-1);
+                return true;
+            case Key.W:
+                RotateCapture(1);
+                return true;
         }
 
         return false;
+    }
+
+    // ---- Rotation ------------------------------------------------------------------
+
+    /// <summary>
+    /// Rotates the capture and its annotation layer by <paramref name="quarterTurns"/>
+    /// clockwise quarter turns (negative for counter-clockwise) as one undoable step.
+    /// </summary>
+    /// <remarks>
+    /// The document rotation goes through the controller's undo stack. The base bitmap is
+    /// derived state, so it is recomputed from the current rotation counter whenever the
+    /// undo stack changes — undoing a rotation then restores the original bitmap without a
+    /// second command type.
+    /// </remarks>
+    private void RotateCapture(int quarterTurns)
+    {
+        if (_completed || _commitInProgress || quarterTurns == 0)
+        {
+            return;
+        }
+
+        CommitActiveText();
+        _controller.RotateDocument(quarterTurns);
+        SetStatus(UiText.Get("Text_6B2C41A9E531"));
+    }
+
+    private void ApplyRotatedBaseBitmap()
+    {
+        if (_rotationTurns == 0)
+        {
+            if (!_surface.Frame.Bitmap.Equals(_selectedBitmap))
+            {
+                SwapBaseBitmap(_selectedBitmap, _originalCropRegion);
+            }
+            return;
+        }
+
+        int width = _canvasWidth;
+        int height = _canvasHeight;
+        BitmapSource rotated = _selectedBitmap;
+        for (int pass = 0; pass < _rotationTurns; pass++)
+        {
+            rotated = RotateQuarterClockwise(rotated);
+            (width, height) = (height, width);
+        }
+
+        SwapBaseBitmap(rotated, new RectD(0, 0, width, height));
+    }
+
+    private void SwapBaseBitmap(BitmapSource bitmap, RectD region)
+    {
+        if (bitmap.CanFreeze)
+        {
+            bitmap.Freeze();
+        }
+
+        var frame = new FrozenFrame(bitmap, region, _frameMonitor, _frameElapsedMilliseconds);
+        _surface.ReplaceFrame(frame, region);
+        _canvasWidth = Math.Max(1, bitmap.PixelWidth);
+        _canvasHeight = Math.Max(1, bitmap.PixelHeight);
+        UpdateResponsiveLayout();
+    }
+
+    private static BitmapSource RotateQuarterClockwise(BitmapSource source)
+    {
+        var rotated = new TransformedBitmap(source, new RotateTransform(90));
+        if (rotated.CanFreeze)
+        {
+            rotated.Freeze();
+        }
+        return rotated;
     }
 
     // ---- Pointer -------------------------------------------------------------------
@@ -450,9 +544,14 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void PlaceTextBox(PointD image)
     {
-        double defaultWidth = 180 / Math.Max(double.Epsilon, _surface.DipPerPixel);
-        double defaultHeight = 40 / Math.Max(double.Epsilon, _surface.DipPerPixel);
-        TextAnnotation annotation = _controller.BeginTextAnnotation(image, defaultWidth, defaultHeight);
+        // A long single-line caption is the common case: start the box at a comfortable
+        // width and let it grow with the text (see OnLiveTextBoxTextChanged) until it
+        // reaches the right canvas edge, wrapping only after that.
+        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        double maxWidthDip = Math.Max(180, _canvasWidth * dipPerPixel - (image.X * dipPerPixel) - 8);
+        double defaultWidth = Math.Min(480, Math.Max(180, maxWidthDip));
+        double defaultHeight = 40 / dipPerPixel;
+        TextAnnotation annotation = _controller.BeginTextAnnotation(image, defaultWidth / dipPerPixel, defaultHeight);
         _editingText = annotation;
 
         Rect box = _surface.ToSurfaceRect(annotation.Rect);
@@ -460,7 +559,7 @@ internal sealed class AnnotationEditorControl : Grid
         {
             Width = Math.Max(60, box.Width),
             MinHeight = Math.Max(28, box.Height),
-            FontSize = Math.Max(12, annotation.FontSize * _surface.DipPerPixel),
+            FontSize = Math.Max(12, annotation.FontSize * dipPerPixel),
             Foreground = annotation.Foreground.ToBrush(),
             Background = Brush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
             BorderBrush = Brush("Accent.Default", Color.FromRgb(0x58, 0xC7, 0xF3)),
@@ -477,8 +576,45 @@ internal sealed class AnnotationEditorControl : Grid
         _activeTextBox = textBox;
         SetStatus(UiText.Get("Text_230D26DEB9AE"));
 
+        textBox.TextChanged += OnLiveTextBoxTextChanged;
         textBox.LostKeyboardFocus += (_, _) => CommitActiveText();
         _ = textBox.Focus();
+    }
+
+    /// <summary>
+    /// Grows the live text box horizontally as the user types so a long single-line
+    /// sentence does not wrap. Wrapping still applies once the box reaches the right
+    /// edge of the visible image.
+    /// </summary>
+    private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is not TextBox box)
+        {
+            return;
+        }
+
+        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        double left = Canvas.GetLeft(box);
+        double maxRightDip = _canvasWidth * dipPerPixel - 4;
+        double availableDip = Math.Max(60, maxRightDip - left - 4);
+
+        FormattedText measured = MeasureLiveText(box);
+        double desiredDip = measured.Width + box.Padding.Left + box.Padding.Right + 4;
+        box.Width = Math.Clamp(desiredDip, box.MinWidth, Math.Max(box.MinWidth, availableDip));
+    }
+
+    private FormattedText MeasureLiveText(TextBox box)
+    {
+        FontFamily family = box.FontFamily ?? new FontFamily("Malgun Gothic");
+        var typeface = new Typeface(family, box.FontStyle, box.FontWeight, FontStretches.Normal);
+        return new FormattedText(
+            box.Text ?? string.Empty,
+            CultureInfo.CurrentUICulture,
+            box.FlowDirection,
+            typeface,
+            box.FontSize,
+            Brushes.Black,
+            VisualTreeHelper.GetDpi(this).PixelsPerDip);
     }
 
     private void CommitActiveText()
@@ -493,7 +629,22 @@ internal sealed class AnnotationEditorControl : Grid
         _activeTextBox = null;
         _editingText = null;
 
+        box.TextChanged -= OnLiveTextBoxTextChanged;
         _overlayCanvas.Children.Remove(box);
+
+        // Persist the grown box in image-pixel space. Canvas coordinates are DIP on the
+        // letterboxed surface, so convert through ToImagePoint rather than dividing the
+        // overlay origin by scale (which would shift text after a rotation or resize).
+        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        PointD imageOrigin = _surface.ToImagePoint(new Point(Canvas.GetLeft(box), Canvas.GetTop(box)));
+        double width = Math.Max(1, (box.ActualWidth > 0 ? box.ActualWidth : box.Width) / dipPerPixel);
+        double height = Math.Max(annotation.Rect.Height, (box.ActualHeight > 0 ? box.ActualHeight : box.MinHeight) / dipPerPixel);
+        RectD finalRect = new(imageOrigin.X, imageOrigin.Y, width, height);
+        if (finalRect != annotation.Rect)
+        {
+            annotation.Rect = finalRect;
+        }
+
         bool hadText = !string.IsNullOrEmpty(box.Text);
         _controller.CommitTextEdit(annotation, box.Text ?? string.Empty);
         SetStatus(hadText ? UiText.Get("Text_B09611FF35C1") : UiText.Get("Text_8BDB6F46B7FF"));
@@ -613,6 +764,12 @@ internal sealed class AnnotationEditorControl : Grid
         });
         left.Children.Add(_undoButton);
         left.Children.Add(_redoButton);
+        left.Children.Add(Separator());
+
+        _rotateLeftButton = IconButton(UiText.Get("Text_6B2C41A9E532"), UiText.Get("Text_6B2C41A9E533"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
+        _rotateRightButton = IconButton(UiText.Get("Text_6B2C41A9E534"), UiText.Get("Text_6B2C41A9E535"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
+        left.Children.Add(_rotateLeftButton);
+        left.Children.Add(_rotateRightButton);
         left.Children.Add(Separator());
 
         _redactButton = TextButton(
@@ -828,6 +985,8 @@ internal sealed class AnnotationEditorControl : Grid
         stack.Children.Add(_thicknessSection);
         _shapeStyleSection = BuildShapeStyleSection();
         stack.Children.Add(_shapeStyleSection);
+        _fontSizeSection = BuildFontSizeSection();
+        stack.Children.Add(_fontSizeSection);
 
         _deleteButton = TextButton(UiText.Get("Text_0DED92FCE6B0"), UiText.Get("Text_7DFFA4D81765"), "Button.Danger", DeleteSelected);
         _deleteButton.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -999,6 +1158,41 @@ internal sealed class AnnotationEditorControl : Grid
             FontSize = 12,
             Margin = new Thickness(0, 6, 0, 0),
         });
+        return panel;
+    }
+
+    private FrameworkElement BuildFontSizeSection()
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        panel.Children.Add(SectionLabel(UiText.Get("Text_5F3A9C8D1E20")));
+
+        _fontSizeSlider = new Slider
+        {
+            Minimum = 8,
+            Maximum = 200,
+            Value = _controller.DefaultFontSize,
+            SmallChange = 1,
+            LargeChange = 4,
+            TickFrequency = 1,
+            Margin = new Thickness(0, 4, 0, 0),
+            ToolTip = UiText.Get("Text_5F3A9C8D1E20"),
+        };
+        AutomationName(_fontSizeSlider, UiText.Get("Text_5F3A9C8D1E20"));
+        _fontSizeSlider.ValueChanged += (_, args) =>
+        {
+            if (_syncingInspector)
+            {
+                return;
+            }
+
+            _controller.ApplyFontSize(args.NewValue);
+            RememberPreferences();
+            if (_controller.Selected is TextAnnotation)
+            {
+                SetStatus(UiText.Format("Text_5F3A9C8D1E21", args.NewValue));
+            }
+        };
+        panel.Children.Add(_fontSizeSlider);
         return panel;
     }
 
@@ -1219,6 +1413,10 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static Geometry FallbackRedo() => Geometry.Parse("M12.75,5.25 L16.5,9 L12.75,12.75 M16.25,9 H8.75 A5,5 0 0 0 5.25,17");
 
+    private static Geometry FallbackRotateLeft() => Geometry.Parse("M6.5,5.5 L3.5,8.5 L6.5,11.5 M3.75,8.5 H11 A5.25,5.25 0 1 1 5.75,13.75");
+
+    private static Geometry FallbackRotateRight() => Geometry.Parse("M13.5,5.5 L16.5,8.5 L13.5,11.5 M16.25,8.5 H9 A5.25,5.25 0 1 0 14.25,13.75");
+
     private static Geometry FallbackCopy() => Geometry.Parse("M7,3.5 H15.25 A1.25,1.25 0 0 1 16.5,4.75 V13 H7 Z M5,6.5 H4.75 A1.25,1.25 0 0 0 3.5,7.75 V15.25 A1.25,1.25 0 0 0 4.75,16.5 H12.25 A1.25,1.25 0 0 0 13.5,15.25 V15");
 
     private static Geometry FallbackCheck() => Geometry.Parse("M3.75,10.25 L8.15,14.65 L16.25,5.35");
@@ -1294,8 +1492,28 @@ internal sealed class AnnotationEditorControl : Grid
     private void OnHistoryChanged()
     {
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
+        SyncRotationWithDocument();
         RefreshHistoryButtons();
         UpdateInspector();
+    }
+
+    /// <summary>
+    /// Re-derives the base bitmap after any undo-stack change so undoing (or redoing) a
+    /// rotation restores the matching bitmap orientation. The turn count lives on the
+    /// controller because canvas width/height cannot distinguish 0° from 180°.
+    /// </summary>
+    private void SyncRotationWithDocument()
+    {
+        int turns = _controller.RotationTurns;
+        if (turns == _rotationTurns
+            && _controller.Document.CanvasWidth == _canvasWidth
+            && _controller.Document.CanvasHeight == _canvasHeight)
+        {
+            return;
+        }
+
+        _rotationTurns = turns;
+        ApplyRotatedBaseBitmap();
     }
 
     private void RefreshHistoryButtons()
@@ -1343,10 +1561,12 @@ internal sealed class AnnotationEditorControl : Grid
         bool colorApplies = ColorApplies(selected, _controller.Tool);
         bool thicknessApplies = ThicknessApplies(selected, _controller.Tool);
         bool shapeApplies = selected is ShapeAnnotation || (selected is null && _controller.Tool == EditorTool.Rectangle);
+        bool fontSizeApplies = selected is TextAnnotation || (selected is null && _controller.Tool == EditorTool.Text);
 
         _colorSection.Visibility = colorApplies ? Visibility.Visible : Visibility.Collapsed;
         _thicknessSection.Visibility = thicknessApplies ? Visibility.Visible : Visibility.Collapsed;
         _shapeStyleSection.Visibility = shapeApplies ? Visibility.Visible : Visibility.Collapsed;
+        _fontSizeSection.Visibility = fontSizeApplies ? Visibility.Visible : Visibility.Collapsed;
 
         _syncingInspector = true;
         try
@@ -1364,6 +1584,16 @@ internal sealed class AnnotationEditorControl : Grid
                 ShapeAnnotation? shape = selected as ShapeAnnotation;
                 _strokeStyleComboBox.SelectedIndex = (int)(shape?.StrokeStyle ?? _controller.StrokeStyle);
                 _fillTransparencySlider.Value = shape?.FillTransparency ?? _controller.FillTransparency;
+            }
+
+            if (fontSizeApplies)
+            {
+                double fontSize = (selected as TextAnnotation)?.FontSize ?? _controller.DefaultFontSize;
+                double clamped = Math.Clamp(fontSize, _fontSizeSlider.Minimum, _fontSizeSlider.Maximum);
+                if (Math.Abs(_fontSizeSlider.Value - clamped) > 0.001)
+                {
+                    _fontSizeSlider.Value = clamped;
+                }
             }
         }
         finally
@@ -1583,6 +1813,13 @@ internal sealed class AnnotationEditorControl : Grid
         AnnotationDocument document = _controller.Document;
         document.NormalizeZIndices();
 
+        // After a rotation the base pixels are the surface's rotated bitmap and the canvas
+        // is the rotated rectangle; committing the untouched selection here would write
+        // rotated annotations onto an unrotated image. Without a rotation the original
+        // selection stays authoritative so its crop provenance is preserved exactly.
+        BitmapSource baseBitmap = _rotationTurns == 0 ? _selectedBitmap : _surface.Frame.Bitmap;
+        RectD baseRegion = _rotationTurns == 0 ? _cropRegion : _surface.CropRegion;
+
         IEnumerable<string> usedAssets = document.Items
             .OfType<ImageAnnotation>()
             .Select(i => i.AssetFileName)
@@ -1590,8 +1827,8 @@ internal sealed class AnnotationEditorControl : Grid
 
         var result = new AnnotationEditingResult(
             _frame,
-            _cropRegion,
-            _selectedBitmap,
+            baseRegion,
+            baseBitmap,
             document,
             action,
             _imageStore.DecodedFor(usedAssets),

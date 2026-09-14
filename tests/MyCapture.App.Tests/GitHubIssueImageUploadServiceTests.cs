@@ -70,7 +70,7 @@ public sealed class GitHubIssueImageUploadServiceTests
     public async Task Upload_InvalidUrl_WhenSettingsRejectTheIssue()
     {
         var settings = new AppSettings();
-        settings.GitHub.IssueUrl = "https://evil.com/a/b/issues/1";
+        settings.GitHub.IssueUrl = "http://github.com/a/b/issues/1"; // HTTP is rejected.
         var service = new GitHubIssueImageUploadService(
             () => settings,
             _ => Task.FromResult(true),
@@ -82,6 +82,25 @@ public sealed class GitHubIssueImageUploadServiceTests
 
         GitHubIssueImageUploadResult result = await service.UploadClipboardImageAsync();
         Assert.Equal(GitHubIssueImageUploadStatus.InvalidUrl, result.Status);
+    }
+
+    [Fact]
+    public async Task Upload_AcceptsEnterpriseServerIssueUrl()
+    {
+        var settings = new AppSettings();
+        settings.GitHub.IssueUrl = "https://ghe.example.corp/internal/app/issues/42";
+        var service = new GitHubIssueImageUploadService(
+            () => settings,
+            _ => Task.FromResult(true),
+            (_, _) => Task.FromResult(true),
+            _ => true,
+            (_, _, _, _) => Task.FromResult<string?>("https://ghe.example.corp/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9"),
+            _ => Task.FromResult<BitmapSource?>(FrozenPixel()),
+            NullLogger.Instance, () => 7u);
+
+        GitHubIssueImageUploadResult result = await service.UploadClipboardImageAsync();
+        Assert.Equal(GitHubIssueImageUploadStatus.CopiedUrl, result.Status);
+        Assert.Equal("https://ghe.example.corp/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9", result.Url);
     }
 
     private static BitmapSource FrozenPixel()

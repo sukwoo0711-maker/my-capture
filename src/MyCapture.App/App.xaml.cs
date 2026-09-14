@@ -439,7 +439,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            _log?.LogWarning(ex, "F4 GitHub image upload failed");
+            _log?.LogWarning(ex, "F9 GitHub image upload failed");
             _tray?.ShowBalloon("MyCapture", UiText.Get("GitHub.Failed"), TrayBalloonKind.Warning, playSound: false);
         }
         finally

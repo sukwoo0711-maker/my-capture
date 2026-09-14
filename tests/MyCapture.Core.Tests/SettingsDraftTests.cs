@@ -86,7 +86,7 @@ public sealed class SettingsDraftTests
         Assert.Equal("168", draft.ImageRetentionHours);
         Assert.Equal(MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl, draft.GitHubIssueUrl);
         Assert.Equal("workspace", draft.Theme);
-        Assert.Equal("F4", draft.UploadGitHubImageHotkey);
+        Assert.Equal("F9", draft.UploadGitHubImageHotkey);
         Assert.False(string.IsNullOrWhiteSpace(draft.CapturesDirectoryOverride));
         Assert.False(string.IsNullOrWhiteSpace(draft.QuickSaveDirectoryOverride));
     }
@@ -400,7 +400,6 @@ public sealed class SettingsDraftTests
 
     [Theory]
     [InlineData("http://github.com/a/b/issues/1")]
-    [InlineData("https://evil.com/a/b/issues/1")]
     [InlineData("https://github.com/a/b/pulls/1")]
     public void GitHubIssueUrl_RejectsUnsafeValues(string value)
     {
@@ -408,6 +407,14 @@ public sealed class SettingsDraftTests
         draft.GitHubIssueUrl = value;
         Assert.True(draft.HasErrors);
         Assert.NotEmpty(draft.GetErrors(nameof(SettingsDraft.GitHubIssueUrl)).Cast<string>());
+    }
+
+    [Fact]
+    public void GitHubIssueUrl_AcceptsEnterpriseServerHost()
+    {
+        SettingsDraft draft = NewDraft();
+        draft.GitHubIssueUrl = "https://ghe.example.corp/internal/app/issues/42";
+        Assert.False(draft.HasErrors);
     }
 
     [Theory]

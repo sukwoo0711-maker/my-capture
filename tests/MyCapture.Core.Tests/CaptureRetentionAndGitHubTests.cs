@@ -70,11 +70,20 @@ public sealed class GitHubIssueImageUrlTests
         Assert.Equal("https://github.com/nexu-io/open-design/issues/80085", url);
     }
 
+    [Fact]
+    public void EnterpriseServerIssue_IsAcceptedAndKeepsItsHost()
+    {
+        Assert.True(GitHubIssueImageUrl.TryNormalize(
+            "https://ghe.example.corp/internal/app/issues/42/",
+            out string url));
+        Assert.Equal("https://ghe.example.corp/internal/app/issues/42", url);
+    }
+
     [Theory]
     [InlineData("http://github.com/a/b/issues/1")]
-    [InlineData("https://evil.com/a/b/issues/1")]
     [InlineData("https://github.com/a/b/pulls/1")]
     [InlineData("https://github.com/a/b/issues/abc")]
+    [InlineData("https://github.com/a/issues/1")]
     public void RejectsUnsafeOrNonIssueUrls(string raw) =>
         Assert.False(GitHubIssueImageUrl.TryNormalize(raw, out _));
 
@@ -84,6 +93,14 @@ public sealed class GitHubIssueImageUrlTests
         const string html = """<img width="4244" alt="Image" src="https://github.com/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9"/>""";
         Assert.True(GitHubIssueImageUrl.TryExtractAttachmentUrl(html, out string url));
         Assert.Equal("https://github.com/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9", url);
+    }
+
+    [Fact]
+    public void ExtractsEnterpriseServerAttachmentUrl()
+    {
+        const string html = """<img alt="Image" src="https://ghe.example.corp/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9"/>""";
+        Assert.True(GitHubIssueImageUrl.TryExtractAttachmentUrl(html, out string url));
+        Assert.Equal("https://ghe.example.corp/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9", url);
     }
 }
 
