@@ -157,10 +157,9 @@ public sealed class OcrIndexingService
                 {
                     Guid recordId = record.Id;
                     long requestedContentRevision = record.ContentRevision;
-                    OcrRequest request = OcrRequest.FromFile(
+                    OcrRequest request = OcrRequestFactory.FromFile(
                         imagePath,
-                        settings.UpscaleFactor,
-                        settings.PreferredLanguages,
+                        settings,
                         searchRotatedOrientations: false);
 
                     OcrResult result = await _ocr.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);

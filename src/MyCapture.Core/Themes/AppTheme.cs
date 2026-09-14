@@ -1,12 +1,14 @@
 namespace MyCapture.Core.Themes;
 
-/// <summary>User-selectable chrome palettes. Midnight is the shipped Focus Portal look.</summary>
+/// <summary>User-selectable chrome palettes. Glass is the shipped Windows-native default.</summary>
 public enum AppTheme
 {
     Midnight = 0,
     Daylight = 1,
     HighContrast = 2,
     Workspace = 3,
+    Glass = 4,
+    GlassLight = 5,
 }
 
 public static class AppThemeNames
@@ -15,6 +17,8 @@ public static class AppThemeNames
     public const string Midnight = "midnight";
     public const string Daylight = "daylight";
     public const string HighContrast = "high-contrast";
+    public const string Glass = "glass";
+    public const string GlassLight = "glass-light";
 
     public static AppTheme Parse(string? value)
     {
@@ -31,6 +35,20 @@ public static class AppThemeNames
             return AppTheme.HighContrast;
         }
 
+        if (string.Equals(value, Glass, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "mica", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "acrylic", StringComparison.OrdinalIgnoreCase))
+        {
+            return AppTheme.Glass;
+        }
+
+        if (string.Equals(value, GlassLight, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "mica-light", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "light-glass", StringComparison.OrdinalIgnoreCase))
+        {
+            return AppTheme.GlassLight;
+        }
+
         return AppTheme.Midnight;
     }
 
@@ -39,8 +57,14 @@ public static class AppThemeNames
         AppTheme.Workspace => Workspace,
         AppTheme.Daylight => Daylight,
         AppTheme.HighContrast => HighContrast,
+        AppTheme.Glass => Glass,
+        AppTheme.GlassLight => GlassLight,
         _ => Midnight,
     };
+
+    public static bool IsLight(AppTheme theme) => theme is AppTheme.Daylight or AppTheme.GlassLight;
+
+    public static bool UsesBackdrop(AppTheme theme) => theme is AppTheme.Glass or AppTheme.GlassLight;
 }
 
 /// <summary>ARGB values applied to live WPF brushes. Keys match Tokens.xaml.</summary>
@@ -58,6 +82,8 @@ public static class ThemeCatalog
         AppTheme.Workspace => WorkspaceColors,
         AppTheme.Daylight => DaylightColors,
         AppTheme.HighContrast => HighContrastColors,
+        AppTheme.Glass => GlassColors,
+        AppTheme.GlassLight => GlassLightColors,
         _ => MidnightColors,
     };
 
@@ -231,5 +257,37 @@ public static class ThemeCatalog
         ["Timeline.Playhead"] = ThemeColor.Rgb(0x5a, 0xd9, 0xc5),
         ["Timeline.TextLayer"] = ThemeColor.Rgb(0x31, 0x9c, 0x91),
         ["Timeline.FrameLayer"] = ThemeColor.Rgb(0x71, 0x8a, 0xc5),
+    };
+
+    internal static readonly Dictionary<string, ThemeColor> GlassColors = new(MidnightColors, StringComparer.Ordinal)
+    {
+        ["Surface.Canvas"] = ThemeColor.Argb(0xE8, 0x18, 0x1C, 0x24),
+        ["Surface.Base"] = ThemeColor.Argb(0xF0, 0x1C, 0x20, 0x28),
+        ["Surface.Raised"] = ThemeColor.Argb(0xB8, 0x2A, 0x32, 0x3E),
+        ["Surface.Overlay"] = ThemeColor.Argb(0xC8, 0x32, 0x3A, 0x48),
+        ["Surface.Floating"] = ThemeColor.Argb(0xE0, 0x28, 0x30, 0x3C),
+        ["Surface.Sunken"] = ThemeColor.Argb(0x99, 0x12, 0x16, 0x1C),
+        ["Surface.Hover"] = ThemeColor.Argb(0xCC, 0x3A, 0x48, 0x58),
+        ["Surface.Pressed"] = ThemeColor.Argb(0xE0, 0x48, 0x58, 0x68),
+        ["Surface.Scrim"] = ThemeColor.Argb(0xB3, 0x08, 0x0C, 0x12),
+        ["Border.Subtle"] = ThemeColor.Argb(0x66, 0xF6, 0xF8, 0xFC),
+        ["Border.Strong"] = ThemeColor.Argb(0x99, 0xC6, 0xD0, 0xDF),
+        ["Timeline.Background"] = ThemeColor.Argb(0xE8, 0x18, 0x1C, 0x24),
+        ["Timeline.Track"] = ThemeColor.Argb(0xB8, 0x2A, 0x32, 0x3E),
+    };
+
+    internal static readonly Dictionary<string, ThemeColor> GlassLightColors = new(DaylightColors, StringComparer.Ordinal)
+    {
+        ["Surface.Canvas"] = ThemeColor.Argb(0xD9, 0xF3, 0xF5, 0xF8),
+        ["Surface.Base"] = ThemeColor.Argb(0xE6, 0xF7, 0xF8, 0xFB),
+        ["Surface.Raised"] = ThemeColor.Argb(0xB3, 0xFF, 0xFF, 0xFF),
+        ["Surface.Overlay"] = ThemeColor.Argb(0xCC, 0xEE, 0xF2, 0xF6),
+        ["Surface.Floating"] = ThemeColor.Argb(0xE6, 0xFF, 0xFF, 0xFF),
+        ["Surface.Sunken"] = ThemeColor.Argb(0x99, 0xE7, 0xEC, 0xF2),
+        ["Surface.Hover"] = ThemeColor.Argb(0xD9, 0xE2, 0xE8, 0xF0),
+        ["Surface.Pressed"] = ThemeColor.Argb(0xE6, 0xD0, 0xD8, 0xE4),
+        ["Border.Subtle"] = ThemeColor.Argb(0x73, 0xC5, 0xD0, 0xDE),
+        ["Timeline.Background"] = ThemeColor.Argb(0xD9, 0xF3, 0xF5, 0xF8),
+        ["Timeline.Track"] = ThemeColor.Argb(0xB3, 0xE7, 0xEC, 0xF2),
     };
 }

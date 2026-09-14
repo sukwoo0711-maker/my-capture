@@ -262,12 +262,19 @@ public sealed class OcrSettings
     public List<string> PreferredLanguages { get; set; } = ["ko-KR", "en-US"];
 
     /// <summary>
+    /// Fast / balanced / accurate recognition stage. Upscale and extra preparation
+    /// are derived from this value on load and save.
+    /// </summary>
+    public OcrQuality Quality { get; set; } = OcrQuality.Balanced;
+
+    /// <summary>
     /// Upscale factor applied before recognition.
     /// </summary>
     /// <remarks>
     /// Windows OCR accuracy drops sharply on small text, and UI screenshots are
     /// frequently 11-13px. Upscaling 2x before recognition is a large accuracy win
-    /// for a small time cost.
+    /// for a small time cost. The settings UI edits <see cref="Quality"/>; this
+    /// multiplier is kept in the file so older builds still read a usable value.
     /// </remarks>
     public double UpscaleFactor { get; set; } = 2.0;
 
@@ -277,7 +284,7 @@ public sealed class OcrSettings
 
 public sealed class GeneralSettings
 {
-    public bool LaunchAtLogin { get; set; }
+    public bool LaunchAtLogin { get; set; } = true;
 
     /// <summary>
     /// Show a tray notification after a successful quick save.
@@ -292,8 +299,8 @@ public sealed class GeneralSettings
     /// <summary>UI language tag. Empty follows the OS.</summary>
     public string Language { get; set; } = string.Empty;
 
-    /// <summary>Chrome palette id: midnight, daylight, or high-contrast.</summary>
-    public string Theme { get; set; } = MyCapture.Core.Themes.AppThemeNames.Workspace;
+    /// <summary>Chrome palette id: glass, glass-light, workspace, midnight, daylight, or high-contrast.</summary>
+    public string Theme { get; set; } = MyCapture.Core.Themes.AppThemeNames.Glass;
 
     /// <summary>One preserves theme choices made after the workspace migration.</summary>
     public int ThemeRevision { get; set; }

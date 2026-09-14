@@ -1,8 +1,9 @@
 <!--
   MyCapture shared control styles.
 
-  Direction (Focus Portal):
-    * Quiet graphite hierarchy with one cyan action/focus accent.
+  Direction (Focus Portal, with Windows-native glass palettes):
+    * Quiet graphite hierarchy with one cyan action/focus accent. Glass themes keep
+      the same keys and let DWM Mica show through translucent Surface brushes.
     * Accent fills always pair with Text.OnAccent dark ink, including checks and glyphs.
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
       shown by recolouring the fixed chrome border and revealing an inset ring with no layout

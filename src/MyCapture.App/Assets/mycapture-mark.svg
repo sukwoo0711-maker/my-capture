@@ -1,7 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title desc">
-  <title id="title">MyCapture Focus Portal</title>
-  <desc id="desc">Two offset rounded panes representing a captured region becoming a floating object.</desc>
-  <rect x="1" y="1" width="22" height="22" rx="5" fill="#0B0F17"/>
+  <title id="title">MyCapture</title>
+  <desc id="desc">Two offset rounded panes on a Windows 11 glass plate, representing a captured region becoming a floating object.</desc>
+  <defs>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="22" height="22" rx="5.2" fill="#1C2028"/>
+  <rect x="1" y="1" width="22" height="22" rx="5.2" fill="url(#sheen)"/>
+  <rect x="1" y="1" width="22" height="22" rx="5.2" fill="none" stroke="#F6F8FC" stroke-opacity="0.28" stroke-width="0.6"/>
   <rect x="9" y="8" width="11" height="11" rx="2.25" fill="none" stroke="#58C7F3" stroke-width="2.25"/>
   <rect x="4" y="4" width="11" height="11" rx="2.25" fill="none" stroke="#F6F8FC" stroke-width="2.25"/>
 </svg>

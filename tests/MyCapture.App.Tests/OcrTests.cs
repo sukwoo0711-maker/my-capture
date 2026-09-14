@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.Core.Settings;
 using MyCapture.Ocr;
 using Xunit;
 
@@ -456,6 +457,24 @@ public sealed class OcrTests
         Assert.Equal(
             [(320, 160), (160, 320), (320, 160), (160, 320)],
             recognizer.Invocations.Select(call => (call.Width, call.Height)));
+    }
+
+    [Fact]
+    public void Factory_AppliesQualityStageToRequest()
+    {
+        var settings = new OcrSettings { Quality = OcrQuality.Accurate, PreferredLanguages = ["en-US"] };
+        OcrQualityProfile.Synchronize(settings);
+        OcrRequest accurate = OcrRequestFactory.FromBitmap(Solid(), settings);
+        Assert.Equal(4.0, accurate.UpscaleFactor);
+        Assert.True(accurate.EnhanceContrast);
+        Assert.True(accurate.SearchRotatedOrientations);
+
+        settings.Quality = OcrQuality.Fast;
+        OcrQualityProfile.Synchronize(settings);
+        OcrRequest fast = OcrRequestFactory.FromFile("rendered.png", settings, searchRotatedOrientations: false);
+        Assert.Equal(1.0, fast.UpscaleFactor);
+        Assert.False(fast.EnhanceContrast);
+        Assert.False(fast.SearchRotatedOrientations);
     }
 
     [Fact]

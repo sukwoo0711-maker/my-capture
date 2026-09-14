@@ -257,10 +257,12 @@
 
                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.Theme}" Margin="0,12,0,0" />
                         <ComboBox x:Name="ThemeSelector" SelectedValue="{Binding Theme}" SelectedValuePath="Tag"
-                                  AutomationProperties.Name="{loc:Text Settings.Theme}" MinWidth="220" HorizontalAlignment="Left" Margin="0,4,0,4">
+                                  AutomationProperties.Name="{loc:Text Settings.Theme}" MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,4">
+                            <ComboBoxItem Tag="glass" Content="{loc:Text Settings.ThemeGlass}" />
+                            <ComboBoxItem Tag="glass-light" Content="{loc:Text Settings.ThemeGlassLight}" />
                             <ComboBoxItem Tag="workspace" Content="{loc:Text Settings.ThemeWorkspace}" />
-                            <ComboBoxItem Tag="midnight" Content="{loc:Text Settings.ThemeMidnight}" />
                             <ComboBoxItem Tag="daylight" Content="{loc:Text Settings.ThemeDaylight}" />
+                            <ComboBoxItem Tag="midnight" Content="{loc:Text Settings.ThemeMidnight}" />
                             <ComboBoxItem Tag="high-contrast" Content="{loc:Text Settings.ThemeHighContrast}" />
                         </ComboBox>
                         <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.ThemeHint}" />
@@ -656,11 +658,15 @@
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_99B8BDC92E9D}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Text_5C6A8668C3C0}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
-                                     AutomationProperties.Name="{loc:Text Text_99B8BDC92E9D}"
-                                     Text="{Binding UpscaleFactor, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.OcrQuality}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.OcrQualityHint}" />
+                            <ComboBox x:Name="OcrQualitySelector" SelectedValue="{Binding OcrQuality}" SelectedValuePath="Tag"
+                                      AutomationProperties.Name="{loc:Text Settings.OcrQuality}"
+                                      MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
+                                <ComboBoxItem Tag="fast" Content="{loc:Text Settings.OcrQualityFast}" />
+                                <ComboBoxItem Tag="balanced" Content="{loc:Text Settings.OcrQualityBalanced}" />
+                                <ComboBoxItem Tag="accurate" Content="{loc:Text Settings.OcrQualityAccurate}" />
+                            </ComboBox>
                         </StackPanel>
 
                         <CheckBox Style="{StaticResource Settings.CheckBox}"

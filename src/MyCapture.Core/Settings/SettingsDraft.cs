@@ -91,7 +91,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     // ----- OCR -----
     private string _preferredLanguages = string.Empty;
-    private string _upscaleFactor = string.Empty;
+    private string _ocrQuality = OcrQualityNames.Balanced;
     private bool _cacheResults;
 
     // ----- Annotation -----
@@ -342,10 +342,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _preferredLanguages, value)) ValidateLanguages(value); }
     }
 
-    public string UpscaleFactor
+    public string OcrQuality
     {
-        get => _upscaleFactor;
-        set { if (Set(ref _upscaleFactor, value)) ValidateDouble(value, SettingsRanges.UpscaleFactor); }
+        get => _ocrQuality;
+        set => Set(ref _ocrQuality, OcrQualityNames.ToSetting(OcrQualityNames.Parse(value)));
     }
 
     // ================= Annotation =================
@@ -443,7 +443,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _closedWindowRestoreLimit = Int(s.Pin.ClosedWindowRestoreLimit);
 
         _preferredLanguages = string.Join(", ", s.Ocr.PreferredLanguages);
-        _upscaleFactor = Dbl(s.Ocr.UpscaleFactor);
+        _ocrQuality = OcrQualityNames.ToSetting(s.Ocr.Quality);
         _cacheResults = s.Ocr.CacheResults;
 
         _lastAnnotationTool = s.Annotation.LastTool;
@@ -570,7 +570,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             Ocr =
             {
                 PreferredLanguages = ParseLanguages(_preferredLanguages),
-                UpscaleFactor = ParseDouble(_upscaleFactor),
+                Quality = OcrQualityNames.Parse(_ocrQuality),
+                UpscaleFactor = OcrQualityProfile.UpscaleFactor(OcrQualityNames.Parse(_ocrQuality)),
                 CacheResults = _cacheResults,
             },
             Annotation =
@@ -653,7 +654,6 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ValidateInt(_ctrlClickDebounceMs, SettingsRanges.CtrlClickDebounceMs, nameof(CtrlClickDebounceMs));
         ValidateInt(_closedWindowRestoreLimit, SettingsRanges.ClosedWindowRestoreLimit, nameof(ClosedWindowRestoreLimit));
         ValidateLanguages(_preferredLanguages);
-        ValidateDouble(_upscaleFactor, SettingsRanges.UpscaleFactor, nameof(UpscaleFactor));
         ValidateDouble(_strokeThickness, SettingsRanges.StrokeThickness, nameof(StrokeThickness));
         ValidateDouble(_fontSize, SettingsRanges.FontSize, nameof(FontSize));
         ValidateNonEmpty(_fontFamily, nameof(FontFamily), UiText.Get("Text_B64CA1BE6711"));

@@ -313,7 +313,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
                 Directory.Delete(paths.SettingsFile, recursive: true);
                 AppSettings reloaded = store.Load();
                 Assert.Equal(originalCapture, reloaded.Hotkeys.Capture);
-                Assert.False(reloaded.General.LaunchAtLogin);
+                Assert.True(reloaded.General.LaunchAtLogin);
             }
             finally
             {

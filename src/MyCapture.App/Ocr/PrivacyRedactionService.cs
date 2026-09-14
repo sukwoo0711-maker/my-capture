@@ -65,10 +65,7 @@ internal sealed class PrivacyRedactionService : IPrivacyRedactionService
         try
         {
             result = await _ocr.RecognizeAsync(
-                    OcrRequest.FromBitmap(
-                        bitmap,
-                        settings.UpscaleFactor,
-                        settings.PreferredLanguages),
+                    OcrRequestFactory.FromBitmap(bitmap, settings),
                     cancellationToken)
                 .ConfigureAwait(true);
         }

@@ -35,6 +35,9 @@ public sealed class WorkspaceThemeTests
             Assert.Equal(0.52, ((Brush)gallery["Overlay.Dimmer"]).Opacity, 2);
             WorkspaceTheme.Apply(gallery, WorkspaceRole.Gallery, AppTheme.Daylight);
             Assert.Equal(ThemeCatalog.ColorsFor(AppTheme.Daylight)["Surface.Base"].R, galleryBrush.Color.R);
+            WorkspaceTheme.Apply(gallery, WorkspaceRole.Gallery, AppTheme.Glass);
+            Assert.Equal(ThemeCatalog.ColorsFor(AppTheme.Glass)["Surface.Base"].R, galleryBrush.Color.R);
+            Assert.Equal(ThemeCatalog.ColorsFor(AppTheme.Glass)["Surface.Base"].A, galleryBrush.Color.A);
             WorkspaceTheme.Apply(gallery, WorkspaceRole.Gallery, AppTheme.Workspace);
             Assert.Equal(Colors.White, cardBrush.Color);
         });

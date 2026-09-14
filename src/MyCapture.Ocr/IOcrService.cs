@@ -45,6 +45,12 @@ public sealed class OcrRequest
     public double UpscaleFactor { get; init; } = 1.0;
 
     /// <summary>
+    /// Stretch luminance before recognition. Accurate/receipt mode uses this so faint
+    /// grey print separates from paper without changing the caller's bitmap.
+    /// </summary>
+    public bool EnhanceContrast { get; init; }
+
+    /// <summary>
     /// Preferred BCP-47 tags in priority order, or empty to defer to the user profile.
     /// </summary>
     public IReadOnlyList<string> PreferredLanguages { get; init; } = [];
@@ -53,7 +59,8 @@ public sealed class OcrRequest
         byte[] encodedImage,
         double upscaleFactor = 1.0,
         IReadOnlyList<string>? preferredLanguages = null,
-        bool searchRotatedOrientations = true)
+        bool searchRotatedOrientations = true,
+        bool enhanceContrast = false)
     {
         ArgumentNullException.ThrowIfNull(encodedImage);
         return new OcrRequest(encodedImage, filePath: null, bitmap: null)
@@ -61,6 +68,7 @@ public sealed class OcrRequest
             UpscaleFactor = upscaleFactor,
             PreferredLanguages = preferredLanguages ?? [],
             SearchRotatedOrientations = searchRotatedOrientations,
+            EnhanceContrast = enhanceContrast,
         };
     }
 
@@ -68,7 +76,8 @@ public sealed class OcrRequest
         string filePath,
         double upscaleFactor = 1.0,
         IReadOnlyList<string>? preferredLanguages = null,
-        bool searchRotatedOrientations = true)
+        bool searchRotatedOrientations = true,
+        bool enhanceContrast = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         return new OcrRequest(encodedImage: null, filePath, bitmap: null)
@@ -76,6 +85,7 @@ public sealed class OcrRequest
             UpscaleFactor = upscaleFactor,
             PreferredLanguages = preferredLanguages ?? [],
             SearchRotatedOrientations = searchRotatedOrientations,
+            EnhanceContrast = enhanceContrast,
         };
     }
 
@@ -83,7 +93,8 @@ public sealed class OcrRequest
         BitmapSource bitmap,
         double upscaleFactor = 1.0,
         IReadOnlyList<string>? preferredLanguages = null,
-        bool searchRotatedOrientations = true)
+        bool searchRotatedOrientations = true,
+        bool enhanceContrast = false)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
         return new OcrRequest(encodedImage: null, filePath: null, bitmap)
@@ -91,6 +102,7 @@ public sealed class OcrRequest
             UpscaleFactor = upscaleFactor,
             PreferredLanguages = preferredLanguages ?? [],
             SearchRotatedOrientations = searchRotatedOrientations,
+            EnhanceContrast = enhanceContrast,
         };
     }
 }

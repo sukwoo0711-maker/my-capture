@@ -3042,8 +3042,8 @@ Confirm or save to add the capture to the gallery. Cancelled or replaced drafts 
 Hold Shift for precise pixel selection.
 Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Settings.Theme" xml:space="preserve"><value>Theme</value></data>
-  <data name="Settings.ThemeHint" xml:space="preserve"><value>Apply updates colours immediately. Reopen a window to fully refresh its chrome.</value></data>
-  <data name="Settings.ThemeMidnight" xml:space="preserve"><value>Midnight (default)</value></data>
+  <data name="Settings.ThemeHint" xml:space="preserve"><value>Apply updates colours immediately. Glass themes use Windows 11 Mica and translucent panels.</value></data>
+  <data name="Settings.ThemeMidnight" xml:space="preserve"><value>Midnight</value></data>
   <data name="Settings.ThemeDaylight" xml:space="preserve"><value>Daylight</value></data>
   <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>High contrast</value></data>
   <data name="Settings.GitHubIssueUrl" xml:space="preserve"><value>GitHub issue URL</value></data>
@@ -3083,6 +3083,13 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Video.TrimInputInvalid" xml:space="preserve"><value>The range was not changed. Enter In and Out within the source, with In at least 0.1 seconds before Out.</value></data>
   <data name="Video.TextSourceTimeHint" xml:space="preserve"><value>Display times refer to the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Text appears from Start up to, but excluding, End. Only its overlap with In–Out is exported.</value></data>
   <data name="Settings.ThemeWorkspace" xml:space="preserve"><value>Workspace · light library and dark video editor</value></data>
+  <data name="Settings.ThemeGlass" xml:space="preserve"><value>Glass · Windows default</value></data>
+  <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>Glass light · bright translucent</value></data>
+  <data name="Settings.OcrQuality" xml:space="preserve"><value>Recognition quality</value></data>
+  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast favours speed, Normal balances both, Slow maximises accuracy for receipts and small text but takes longer.</value></data>
+  <data name="Settings.OcrQualityFast" xml:space="preserve"><value>Fast (weaker OCR)</value></data>
+  <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>Normal (balanced speed and accuracy)</value></data>
+  <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>Slow (maximum accuracy for receipts and text)</value></data>
   <data name="Workspace.Library" xml:space="preserve"><value>Library</value></data>
   <data name="Workspace.All" xml:space="preserve"><value>All captures</value></data>
   <data name="Workspace.Pinned" xml:space="preserve"><value>Kept captures</value></data>

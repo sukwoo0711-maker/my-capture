@@ -22,6 +22,7 @@ internal static class ThemeService
 
         ApplyResources(theme, resources);
         WorkspaceTheme.Refresh(theme);
+        ModernWindowChrome.RefreshAll();
     }
 
     internal static void ApplyResources(AppTheme theme, ResourceDictionary resources)

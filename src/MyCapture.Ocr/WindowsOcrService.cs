@@ -128,6 +128,7 @@ public sealed class WindowsOcrService : IOcrService
                     scale,
                     rotation: 0,
                     languagePasses,
+                    request.EnhanceContrast,
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -147,6 +148,7 @@ public sealed class WindowsOcrService : IOcrService
                             scale,
                             rotation,
                             languagePasses,
+                            request.EnhanceContrast,
                             cancellationToken)
                         .ConfigureAwait(false);
 
@@ -212,18 +214,23 @@ public sealed class WindowsOcrService : IOcrService
 
     /// <summary>
     /// Applies the effective scale: nearest-neighbour upscale for small UI text (crisp glyph
-    /// edges), a plain resize when shrinking an oversized source to fit the engine.
+    /// edges), a plain resize when shrinking an oversized source to fit the engine. Accurate
+    /// mode stretches contrast first so faint receipt ink survives the later scale.
     /// </summary>
-    private static BitmapSource Prepare(BitmapSource source, double scale)
+    private static BitmapSource Prepare(BitmapSource source, double scale, bool enhanceContrast)
     {
+        BitmapSource current = enhanceContrast
+            ? ImageCodec.StretchContrastForRecognition(source)
+            : source;
+
         if (Math.Abs(scale - 1.0) < 1e-6)
         {
-            return source;
+            return current;
         }
 
         return scale > 1.0
-            ? ImageCodec.UpscaleForRecognition(source, scale)
-            : ImageCodec.Resize(source, scale);
+            ? ImageCodec.UpscaleForRecognition(current, scale)
+            : ImageCodec.Resize(current, scale);
     }
 
     private async Task<OrientationResult> RecognizeOrientationAsync(
@@ -231,9 +238,10 @@ public sealed class WindowsOcrService : IOcrService
         double scale,
         int rotation,
         IReadOnlyList<string?> languagePasses,
+        bool enhanceContrast,
         CancellationToken cancellationToken)
     {
-        BitmapSource prepared = Prepare(Rotate(source, rotation), scale);
+        BitmapSource prepared = Prepare(Rotate(source, rotation), scale, enhanceContrast);
         var passes = new List<LanguageResult>(languagePasses.Count);
         bool recognizerWasAvailable = false;
 

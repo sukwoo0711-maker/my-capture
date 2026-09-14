@@ -245,6 +245,8 @@ public sealed class SettingsStore
         // --- OCR ---
         s.Ocr.UpscaleFactor = ClampWithWarning(
             s.Ocr.UpscaleFactor, 1.0, 4.0, nameof(OcrSettings.UpscaleFactor), warnings);
+        s.Ocr.Quality = OcrQualityProfile.ResolveLoaded(s.Ocr.Quality, s.Ocr.UpscaleFactor);
+        OcrQualityProfile.Synchronize(s.Ocr);
 
         if (s.Ocr.PreferredLanguages.Count == 0)
         {

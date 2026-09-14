@@ -161,6 +161,112 @@ public static class ImageCodec
         return target;
     }
 
+    /// <summary>
+    /// Stretches luminance between the 2nd and 98th percentiles so faint grey print on
+    /// receipts separates from paper. Flat or already-contrasty images are returned unchanged.
+    /// </summary>
+    public static BitmapSource StretchContrastForRecognition(BitmapSource bitmap)
+    {
+        ArgumentNullException.ThrowIfNull(bitmap);
+
+        BitmapSource bgra = bitmap.Format == PixelFormats.Bgra32
+            ? bitmap
+            : new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+        if (!bgra.IsFrozen && bgra.CanFreeze)
+        {
+            bgra.Freeze();
+        }
+
+        int width = bgra.PixelWidth;
+        int height = bgra.PixelHeight;
+        if (width <= 0 || height <= 0)
+        {
+            return bitmap;
+        }
+
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        bgra.CopyPixels(pixels, stride, 0);
+
+        Span<int> histogram = stackalloc int[256];
+        histogram.Clear();
+        int counted = 0;
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            if (pixels[i + 3] == 0)
+            {
+                continue;
+            }
+
+            int luminance = (pixels[i] * 19 + pixels[i + 1] * 183 + pixels[i + 2] * 54) >> 8;
+            histogram[Math.Clamp(luminance, 0, 255)]++;
+            counted++;
+        }
+
+        if (counted == 0)
+        {
+            return bitmap;
+        }
+
+        int tail = Math.Max(1, (int)(counted * 0.02));
+        int low = 0;
+        int high = 255;
+        int accumulated = 0;
+        for (int i = 0; i < 256; i++)
+        {
+            accumulated += histogram[i];
+            if (accumulated >= tail)
+            {
+                low = i;
+                break;
+            }
+        }
+
+        accumulated = 0;
+        for (int i = 255; i >= 0; i--)
+        {
+            accumulated += histogram[i];
+            if (accumulated >= tail)
+            {
+                high = i;
+                break;
+            }
+        }
+
+        if (high <= low + 8)
+        {
+            return bitmap;
+        }
+
+        double scale = 255.0 / (high - low);
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            if (pixels[i + 3] == 0)
+            {
+                continue;
+            }
+
+            pixels[i] = StretchChannel(pixels[i], low, scale);
+            pixels[i + 1] = StretchChannel(pixels[i + 1], low, scale);
+            pixels[i + 2] = StretchChannel(pixels[i + 2], low, scale);
+        }
+
+        var result = BitmapSource.Create(
+            width,
+            height,
+            bgra.DpiX,
+            bgra.DpiY,
+            PixelFormats.Bgra32,
+            null,
+            pixels,
+            stride);
+        result.Freeze();
+        return result;
+    }
+
+    private static byte StretchChannel(byte value, int low, double scale) =>
+        (byte)Math.Clamp((int)Math.Round((value - low) * scale), 0, 255);
+
     public static bool HasAlpha(BitmapSource bitmap)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
