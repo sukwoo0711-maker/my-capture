@@ -12,9 +12,14 @@ internal static class ThemeService
 {
     internal static AppTheme Current { get; private set; } = AppTheme.Workspace;
 
+    /// <summary>Null until the first Apply; lets diagnostics restore the pre-fixture state.</summary>
+    internal static AppTheme? IsAppliedForTest => _applied ? Current : null;
+    private static bool _applied;
+
     internal static void Apply(AppTheme theme)
     {
         Current = theme;
+        _applied = true;
         if (Application.Current?.Resources is not { } resources)
         {
             return;
