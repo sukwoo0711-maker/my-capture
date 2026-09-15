@@ -404,6 +404,63 @@
     </Style>
 
     <!-- ============================================================= -->
+    <!-- RadioButton: same token language as CheckBox, round instead of boxed. -->
+    <!-- ============================================================= -->
+    <Style TargetType="{x:Type RadioButton}">
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="themes:FluidMotion.PressFeedback" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RadioButton}">
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
+                            <Ellipse x:Name="Dot"
+                                     Fill="{DynamicResource Surface.Sunken}"
+                                     Stroke="{DynamicResource Border.Strong}"
+                                     StrokeThickness="1" />
+                            <Ellipse x:Name="Check" Width="8" Height="8"
+                                     Fill="{DynamicResource Text.OnAccent}"
+                                     Visibility="Collapsed" />
+                            <!-- Inset focus ring, opacity-toggled (stable thickness). -->
+                            <Ellipse x:Name="FocusRing"
+                                     Margin="-2"
+                                     Stroke="{DynamicResource Border.Focus}"
+                                     StrokeThickness="1"
+                                     IsHitTestVisible="False"
+                                     Opacity="0" />
+                        </Grid>
+                        <ContentPresenter Grid.Column="1" VerticalAlignment="Center" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource Border.Focus}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource Accent.Default}" />
+                            <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource Accent.Default}" />
+                            <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.48" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================= -->
     <!-- Tabs / Lists -->
     <!-- ============================================================= -->
     <Style TargetType="{x:Type TabControl}">
