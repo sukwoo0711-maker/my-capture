@@ -188,7 +188,7 @@ internal sealed class OcrModelStore
         {
             Timeout = TimeSpan.FromMinutes(3),
         };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("MyCapture/2.3.3 (OCR model download)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("MyCapture/2.3.4 (OCR model download)");
         return client;
     }
 }
