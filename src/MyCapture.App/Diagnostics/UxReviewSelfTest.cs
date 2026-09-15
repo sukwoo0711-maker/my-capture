@@ -27,6 +27,7 @@ using MyCapture.Core.Queue;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
+using MyCapture.Core.Themes;
 using MyCapture.Ocr;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
@@ -79,6 +80,19 @@ internal static class UxReviewSelfTest
         bool? oldMotion = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = false;
         report.AppendLine($"Reduced-motion test override: animations enabled={FluidMotion.AnimationsEnabled}");
+
+        // Render every palette: the gallery filter rail radios and details text must stay
+        // readable in dark themes (midnight / glass / workspace editor) and light themes alike.
+        AppTheme? oldTheme = ThemeService.IsAppliedForTest;
+        IReadOnlyList<AppTheme> themesToReview =
+        [
+            AppTheme.Midnight,
+            AppTheme.Glass,
+            AppTheme.Workspace,
+            AppTheme.Daylight,
+            AppTheme.GlassLight,
+            AppTheme.HighContrast,
+        ];
         var windows = new List<(string Name, Window Window)>();
         using ILoggerFactory logs = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning));
         var ocr = new FixtureOcr();
@@ -178,6 +192,14 @@ internal static class UxReviewSelfTest
                     window.ShowActivated = false;
                     window.Show();
                     Pump(TimeSpan.FromMilliseconds(name == "video" ? 1800 : 180));
+                    // Per-theme render sweep: the first pass keeps the initial palette; the
+                    // remaining palettes are applied live so the same fixture is captured
+                    // in every theme without recreating the window.
+                    List<AppTheme> renderThemes = [.. themesToReview];
+                    if (oldTheme is AppTheme initial && renderThemes.Count > 0 && renderThemes[0] != initial)
+                    {
+                        renderThemes.Insert(0, initial);
+                    }
                     if (window is VideoEditorWindow)
                     {
                         Descendants(window).OfType<ListBox>().Single().SelectedIndex = 0;
@@ -230,27 +252,44 @@ internal static class UxReviewSelfTest
                         report.AppendLine($"Video media ready={video.IsMediaReadyForTest}; failed={video.HasMediaFailedForTest}");
                     double normalWidth = window.Width;
                     double normalHeight = window.Height;
-                    foreach (bool compact in new[] { false, true })
+                    foreach (AppTheme reviewTheme in renderThemes)
                     {
-                        window.Width = compact ? Math.Max(window.MinWidth, name is "pin-code" or "image-export" ? normalWidth : 780) : normalWidth;
-                        window.Height = compact ? Math.Max(window.MinHeight, name is "pin-code" or "image-export" ? normalHeight : 560) : normalHeight;
-                        window.UpdateLayout();
-                        Pump(TimeSpan.FromMilliseconds(100));
-                        if (compact && window is GalleryWindow)
+                        ThemeService.Apply(reviewTheme);
+                        Pump(TimeSpan.FromMilliseconds(80));
+                        string themeLabel = AppThemeNames.ToSetting(reviewTheme);
+                        foreach (bool compact in new[] { false, true })
                         {
-                            ListBox compactRows = Descendants(window).OfType<ListBox>().Single(list => list.Name == "RowsList");
-                            ScrollViewer compactScroll = Descendants(compactRows).OfType<ScrollViewer>().First();
-                            compactScroll.ScrollToVerticalOffset(60);
+                            window.Width = compact ? Math.Max(window.MinWidth, name is "pin-code" or "image-export" ? normalWidth : 780) : normalWidth;
+                            window.Height = compact ? Math.Max(window.MinHeight, name is "pin-code" or "image-export" ? normalHeight : 560) : normalHeight;
+                            window.UpdateLayout();
                             Pump(TimeSpan.FromMilliseconds(100));
-                            bool fullCardFits = compactScroll.ViewportHeight >= 304;
-                            report.AppendLine($"Gallery compact viewport={compactScroll.ViewportHeight:0.##} DIP; 304-DIP full card fits after scrolling heading away={fullCardFits}");
-                            if (!fullCardFits) failures++;
+                            if (compact && window is GalleryWindow)
+                            {
+                                ListBox compactRows = Descendants(window).OfType<ListBox>().Single(list => list.Name == "RowsList");
+                                ScrollViewer compactScroll = Descendants(compactRows).OfType<ScrollViewer>().First();
+                                compactScroll.ScrollToVerticalOffset(60);
+                                Pump(TimeSpan.FromMilliseconds(100));
+                                bool fullCardFits = compactScroll.ViewportHeight >= 304;
+                                report.AppendLine($"Gallery [{themeLabel}] compact viewport={compactScroll.ViewportHeight:0.##} DIP; 304-DIP full card fits after scrolling heading away={fullCardFits}");
+                                if (!fullCardFits) failures++;
+                            }
+                            string label = name + (compact ? "-compact" : "-normal") + "-" + themeLabel;
+                            foreach (int dpi in new[] { 96, 144, 192 })
+                                Render(window, Path.Combine(outputDirectory, $"{label}-{dpi}dpi.png"), dpi);
+                            WriteLayoutInventory(window, Path.Combine(outputDirectory, label + "-layout.json"));
+                            report.AppendLine($"Rendered {label}: {window.ActualWidth:0}x{window.ActualHeight:0} DIP; native scale={VisualTreeHelper.GetDpi(window).DpiScaleX:0.##}");
                         }
-                        string label = name + (compact ? "-compact" : "-normal");
-                        foreach (int dpi in new[] { 96, 144, 192 })
-                            Render(window, Path.Combine(outputDirectory, $"{label}-{dpi}dpi.png"), dpi);
-                        WriteLayoutInventory(window, Path.Combine(outputDirectory, label + "-layout.json"));
-                        report.AppendLine($"Rendered {label}: {window.ActualWidth:0}x{window.ActualHeight:0} DIP; native scale={VisualTreeHelper.GetDpi(window).DpiScaleX:0.##}");
+
+                        // Text-on-surface audit for the live window: every TextBlock in the
+                        // visual tree must carry enough contrast against its effective
+                        // background to be counted as visible, per the current palette.
+                        if (window is GalleryWindow)
+                        {
+                            List<string> offenders = new();
+                            int unreadable = CountUnreadableText(window, reviewTheme, offenders);
+                            report.AppendLine($"Gallery [{themeLabel}] unreadable text elements={unreadable}{(offenders.Count > 0 ? " :: " + string.Join(" | ", offenders.Take(6)) : string.Empty)}");
+                            if (unreadable > 0) failures++;
+                        }
                     }
                     if (window is GalleryWindow)
                     {
@@ -311,11 +350,84 @@ internal static class UxReviewSelfTest
                 else fixture.Window.Close();
             }
             FluidMotion.AnimationsEnabledOverrideForTest = oldMotion;
+            if (oldTheme is AppTheme restore) ThemeService.Apply(restore);
         }
         report.AppendLine("Layout JSON records visible text, font metrics, wrapping/trimming, and control automation/focus metadata; candidates require visual review, not automatic pass claims.");
         report.AppendLine(failures == 0 ? "RESULT: PASS (fixture rendering and command checks; manual visual review required)" : $"RESULT: FAIL ({failures})");
         File.WriteAllText(Path.Combine(outputDirectory, "ux-review-selftest-report.txt"), report.ToString(), new UTF8Encoding(false));
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Counts TextBlocks whose foreground/surface pairing falls below the AA threshold in
+    /// the current palette. Uses each element's inherited Text.* brush resolved through
+    /// the theme catalog against the palette surface the element sits on.
+    /// </summary>
+    private static int CountUnreadableText(Window window, AppTheme theme, List<string> offenders)
+    {
+        IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
+        AppTheme palette = theme == AppTheme.Workspace ? AppTheme.Midnight : theme;
+        IReadOnlyDictionary<string, ThemeColor> paletteColors = ThemeCatalog.ColorsFor(palette);
+        int unreadable = 0;
+        foreach (TextBlock text in Descendants(window).OfType<TextBlock>())
+        {
+            if (string.IsNullOrEmpty(text.Text) || !text.IsVisible)
+            {
+                continue;
+            }
+
+            string? brushKey = (text.Foreground as SolidColorBrush) is { } brush
+                ? ResolveTokenKey(colors, brush)
+                : null;
+            if (brushKey is null
+                || brushKey is "Text.OnAccent" or "Text.Badge"
+                || paletteColors[brushKey].A < 0xFF)
+            {
+                // OnAccent/Badge text sits on accent or dark chip fills, not palette
+                // surfaces, and translucent surfaces are covered by the glass backdrop
+                // tests in ThemeContrastTests.
+                continue;
+            }
+
+            // Find the nearest ancestor surface brush for the effective background.
+            ThemeColor background = paletteColors["Surface.Base"];
+            string? backgroundKey = null;
+            DependencyObject? ancestor = text;
+            while ((ancestor = LogicalTreeHelper.GetParent(ancestor) ?? VisualTreeHelper.GetParent(ancestor)) is not null)
+            {
+                if (ancestor is Border { Background: SolidColorBrush panel }
+                    && ResolveTokenKey(colors, panel) is { } panelKey
+                    && panelKey.StartsWith("Surface.", StringComparison.Ordinal))
+                {
+                    background = paletteColors[panelKey];
+                    backgroundKey = panelKey;
+                    break;
+                }
+            }
+
+            double ratio = ThemeContrast.Ratio(paletteColors[brushKey], background);
+            if (ratio < 4.5)
+            {
+                unreadable++;
+                offenders.Add($"[{brushKey} on {backgroundKey ?? "unknown"} {ratio:0.00}] {text.Text}");
+            }
+        }
+
+        return unreadable;
+    }
+
+    private static string? ResolveTokenKey(IReadOnlyDictionary<string, ThemeColor> colors, SolidColorBrush brush)
+    {
+        foreach ((string key, ThemeColor color) in colors)
+        {
+            if (color.R == brush.Color.R && color.G == brush.Color.G && color.B == brush.Color.B
+                && (key.StartsWith("Text.", StringComparison.Ordinal)))
+            {
+                return key;
+            }
+        }
+
+        return null;
     }
 
     private static BitmapSource CreateFixtureBitmap()
