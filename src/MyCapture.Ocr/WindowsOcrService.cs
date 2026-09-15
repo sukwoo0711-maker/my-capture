@@ -129,6 +129,7 @@ public sealed class WindowsOcrService : IOcrService
                     rotation: 0,
                     languagePasses,
                     request.EnhanceContrast,
+                    request.LocalCorrection,
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -149,6 +150,7 @@ public sealed class WindowsOcrService : IOcrService
                             rotation,
                             languagePasses,
                             request.EnhanceContrast,
+                            request.LocalCorrection,
                             cancellationToken)
                         .ConfigureAwait(false);
 
@@ -217,11 +219,17 @@ public sealed class WindowsOcrService : IOcrService
     /// edges), a plain resize when shrinking an oversized source to fit the engine. Accurate
     /// mode stretches contrast first so faint receipt ink survives the later scale.
     /// </summary>
-    private static BitmapSource Prepare(BitmapSource source, double scale, bool enhanceContrast)
+    private static BitmapSource Prepare(
+        BitmapSource source,
+        double scale,
+        bool enhanceContrast,
+        bool localCorrection)
     {
-        BitmapSource current = enhanceContrast
-            ? ImageCodec.StretchContrastForRecognition(source)
-            : source;
+        BitmapSource current = localCorrection
+            ? ImageCodec.CorrectImageForRecognition(source)
+            : enhanceContrast
+                ? ImageCodec.StretchContrastForRecognition(source)
+                : source;
 
         if (Math.Abs(scale - 1.0) < 1e-6)
         {
@@ -239,9 +247,10 @@ public sealed class WindowsOcrService : IOcrService
         int rotation,
         IReadOnlyList<string?> languagePasses,
         bool enhanceContrast,
+        bool localCorrection,
         CancellationToken cancellationToken)
     {
-        BitmapSource prepared = Prepare(Rotate(source, rotation), scale, enhanceContrast);
+        BitmapSource prepared = Prepare(Rotate(source, rotation), scale, enhanceContrast, localCorrection);
         var passes = new List<LanguageResult>(languagePasses.Count);
         bool recognizerWasAvailable = false;
 

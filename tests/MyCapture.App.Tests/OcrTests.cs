@@ -469,6 +469,7 @@ public sealed class OcrTests
         Assert.True(accurate.EnhanceContrast);
         Assert.True(accurate.SearchRotatedOrientations);
         Assert.True(accurate.UseNeuralModel);
+        Assert.False(accurate.LocalCorrection);
 
         settings.Quality = OcrQuality.Fast;
         OcrQualityProfile.Synchronize(settings);
@@ -477,6 +478,16 @@ public sealed class OcrTests
         Assert.False(fast.EnhanceContrast);
         Assert.False(fast.SearchRotatedOrientations);
         Assert.False(fast.UseNeuralModel);
+        Assert.False(fast.LocalCorrection);
+
+        settings.Quality = OcrQuality.Enhanced;
+        OcrQualityProfile.Synchronize(settings);
+        OcrRequest enhanced = OcrRequestFactory.FromBitmap(Solid(), settings);
+        Assert.Equal(2.0, enhanced.UpscaleFactor);
+        Assert.True(enhanced.EnhanceContrast);
+        Assert.True(enhanced.SearchRotatedOrientations);
+        Assert.True(enhanced.UseNeuralModel);
+        Assert.True(enhanced.LocalCorrection);
     }
 
     [Fact]

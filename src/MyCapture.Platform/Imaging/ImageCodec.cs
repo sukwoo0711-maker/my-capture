@@ -267,6 +267,214 @@ public static class ImageCodec
     private static byte StretchChannel(byte value, int low, double scale) =>
         (byte)Math.Clamp((int)Math.Round((value - low) * scale), 0, 255);
 
+    /// <summary>
+    /// Receipt/document preprocess: flatten uneven lighting, stretch contrast, then sharpen.
+    /// No extra model — pixel operations only.
+    /// </summary>
+    public static BitmapSource CorrectImageForRecognition(BitmapSource bitmap)
+    {
+        ArgumentNullException.ThrowIfNull(bitmap);
+
+        BitmapSource flattened = FlattenIlluminationForRecognition(bitmap);
+        BitmapSource contrasted = StretchContrastForRecognition(flattened);
+        return SharpenForRecognition(contrasted);
+    }
+
+    /// <summary>
+    /// Divides each pixel by a large-radius paper estimate so glare and lighting gradients
+    /// collapse toward a mid-grey sheet. Uniform images stay uniform.
+    /// </summary>
+    public static BitmapSource FlattenIlluminationForRecognition(BitmapSource bitmap)
+    {
+        ArgumentNullException.ThrowIfNull(bitmap);
+
+        BitmapSource bgra = bitmap.Format == PixelFormats.Bgra32
+            ? bitmap
+            : new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+        if (!bgra.IsFrozen && bgra.CanFreeze)
+        {
+            bgra.Freeze();
+        }
+
+        int width = bgra.PixelWidth;
+        int height = bgra.PixelHeight;
+        if (width <= 0 || height <= 0)
+        {
+            return bitmap;
+        }
+
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        bgra.CopyPixels(pixels, stride, 0);
+
+        int radius = Math.Clamp(Math.Min(width, height) / 8, 8, 48);
+        if (width < radius * 2 + 1 || height < radius * 2 + 1)
+        {
+            return bitmap;
+        }
+
+        int integralW = width + 1;
+        int integralH = height + 1;
+        long[] integral = new long[integralW * integralH];
+        for (int y = 0; y < height; y++)
+        {
+            long rowSum = 0;
+            int pixelRow = y * stride;
+            int integralRow = (y + 1) * integralW;
+            int prevIntegralRow = y * integralW;
+            for (int x = 0; x < width; x++)
+            {
+                int i = pixelRow + (x * 4);
+                int luma = pixels[i + 3] == 0
+                    ? 0
+                    : (pixels[i] * 19 + pixels[i + 1] * 183 + pixels[i + 2] * 54) >> 8;
+                rowSum += luma;
+                integral[integralRow + x + 1] = integral[prevIntegralRow + x + 1] + rowSum;
+            }
+        }
+
+        const int targetPaper = 180;
+        for (int y = 0; y < height; y++)
+        {
+            int y0 = y - radius;
+            int y1 = y + radius;
+            if (y0 < 0)
+            {
+                y0 = 0;
+            }
+
+            if (y1 >= height)
+            {
+                y1 = height - 1;
+            }
+
+            int pixelRow = y * stride;
+            for (int x = 0; x < width; x++)
+            {
+                int i = pixelRow + (x * 4);
+                if (pixels[i + 3] == 0)
+                {
+                    continue;
+                }
+
+                int x0 = x - radius;
+                int x1 = x + radius;
+                if (x0 < 0)
+                {
+                    x0 = 0;
+                }
+
+                if (x1 >= width)
+                {
+                    x1 = width - 1;
+                }
+
+                long sum = integral[(y1 + 1) * integralW + (x1 + 1)]
+                    - integral[y0 * integralW + (x1 + 1)]
+                    - integral[(y1 + 1) * integralW + x0]
+                    + integral[y0 * integralW + x0];
+                int count = (x1 - x0 + 1) * (y1 - y0 + 1);
+                int background = count <= 0 ? 1 : (int)(sum / count);
+                if (background < 1)
+                {
+                    background = 1;
+                }
+
+                double gain = (double)targetPaper / background;
+                pixels[i] = (byte)Math.Clamp((int)Math.Round(pixels[i] * gain), 0, 255);
+                pixels[i + 1] = (byte)Math.Clamp((int)Math.Round(pixels[i + 1] * gain), 0, 255);
+                pixels[i + 2] = (byte)Math.Clamp((int)Math.Round(pixels[i + 2] * gain), 0, 255);
+            }
+        }
+
+        var result = BitmapSource.Create(
+            width,
+            height,
+            bgra.DpiX,
+            bgra.DpiY,
+            PixelFormats.Bgra32,
+            null,
+            pixels,
+            stride);
+        result.Freeze();
+        return result;
+    }
+
+    /// <summary>
+    /// Mild 3x3 Laplacian sharpening to recover sharp glyph edges from subpixel ClearType
+    /// antialiasing without introducing noise artifacts.
+    /// </summary>
+    public static BitmapSource SharpenForRecognition(BitmapSource bitmap)
+    {
+        ArgumentNullException.ThrowIfNull(bitmap);
+
+        BitmapSource bgra = bitmap.Format == PixelFormats.Bgra32
+            ? bitmap
+            : new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+        if (!bgra.IsFrozen && bgra.CanFreeze)
+        {
+            bgra.Freeze();
+        }
+
+        int width = bgra.PixelWidth;
+        int height = bgra.PixelHeight;
+        if (width < 3 || height < 3)
+        {
+            return bitmap;
+        }
+
+        int stride = width * 4;
+        byte[] src = new byte[stride * height];
+        bgra.CopyPixels(src, stride, 0);
+
+        byte[] dst = new byte[src.Length];
+        Buffer.BlockCopy(src, 0, dst, 0, src.Length);
+
+        const int weight = 90;
+
+        for (int y = 1; y < height - 1; y++)
+        {
+            int rowOffset = y * stride;
+            int topOffset = (y - 1) * stride;
+            int bottomOffset = (y + 1) * stride;
+
+            for (int x = 1; x < width - 1; x++)
+            {
+                int i = rowOffset + (x * 4);
+                if (src[i + 3] == 0)
+                {
+                    continue;
+                }
+
+                int top = topOffset + (x * 4);
+                int bottom = bottomOffset + (x * 4);
+                int left = i - 4;
+                int right = i + 4;
+
+                for (int c = 0; c < 3; c++)
+                {
+                    int centerVal = src[i + c];
+                    int neighbors = src[top + c] + src[bottom + c] + src[left + c] + src[right + c];
+                    int laplacian = (centerVal * 4) - neighbors;
+                    int sharpened = centerVal + ((laplacian * weight) >> 8);
+                    dst[i + c] = (byte)Math.Clamp(sharpened, 0, 255);
+                }
+            }
+        }
+
+        var result = BitmapSource.Create(
+            width,
+            height,
+            bgra.DpiX,
+            bgra.DpiY,
+            PixelFormats.Bgra32,
+            null,
+            dst,
+            stride);
+        result.Freeze();
+        return result;
+    }
+
     public static bool HasAlpha(BitmapSource bitmap)
     {
         ArgumentNullException.ThrowIfNull(bitmap);

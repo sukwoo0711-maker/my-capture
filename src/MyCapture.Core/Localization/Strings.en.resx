@@ -3086,10 +3086,11 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Settings.ThemeGlass" xml:space="preserve"><value>Glass · Windows default</value></data>
   <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>Glass light · bright translucent</value></data>
   <data name="Settings.OcrQuality" xml:space="preserve"><value>Recognition quality</value></data>
-  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use Windows OCR. Slow downloads the PP-OCRv5 Korean receipt model and uses it for recognition.</value></data>
+  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use Windows OCR. Slow uses PP-OCRv5 for receipts. Careful runs the same model after local lighting, contrast, and sharpen correction, with no extra download.</value></data>
   <data name="Settings.OcrQualityFast" xml:space="preserve"><value>Fast (weaker OCR)</value></data>
   <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>Normal (balanced speed and accuracy)</value></data>
-  <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>Slow (maximum accuracy for receipts and text)</value></data>
+  <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>Slow (PP-OCR for receipts)</value></data>
+  <data name="Settings.OcrQualityEnhanced" xml:space="preserve"><value>Careful (correct lighting and blur, then OCR)</value></data>
   <data name="Workspace.Library" xml:space="preserve"><value>Library</value></data>
   <data name="Workspace.All" xml:space="preserve"><value>All captures</value></data>
   <data name="Workspace.Pinned" xml:space="preserve"><value>Kept captures</value></data>

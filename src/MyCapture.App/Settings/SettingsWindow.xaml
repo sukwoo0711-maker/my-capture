@@ -666,6 +666,7 @@
                                 <ComboBoxItem Tag="fast" Content="{loc:Text Settings.OcrQualityFast}" />
                                 <ComboBoxItem Tag="balanced" Content="{loc:Text Settings.OcrQualityBalanced}" />
                                 <ComboBoxItem Tag="accurate" Content="{loc:Text Settings.OcrQualityAccurate}" />
+                                <ComboBoxItem Tag="enhanced" Content="{loc:Text Settings.OcrQualityEnhanced}" />
                             </ComboBox>
                         </StackPanel>
 

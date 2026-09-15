@@ -262,7 +262,7 @@ public sealed class OcrSettings
     public List<string> PreferredLanguages { get; set; } = ["ko-KR", "en-US"];
 
     /// <summary>
-    /// Fast / balanced / accurate recognition stage. Upscale and extra preparation
+    /// Fast / balanced / accurate / enhanced recognition stage. Upscale and extra preparation
     /// are derived from this value on load and save.
     /// </summary>
     public OcrQuality Quality { get; set; } = OcrQuality.Fast;

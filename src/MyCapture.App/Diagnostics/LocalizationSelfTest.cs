@@ -49,7 +49,7 @@ internal static class LocalizationSelfTest
                 Check(themeSelector.Items.Count == 6, "English theme selector has six palettes");
                 Check(Equals(themeSelector.SelectedValue, "glass"), "Default glass theme selected");
                 var qualitySelector = (ComboBox)window.FindName("OcrQualitySelector");
-                Check(qualitySelector.Items.Count == 3, "English OCR quality selector has three stages");
+                Check(qualitySelector.Items.Count == 4, "English OCR quality selector has four stages");
                 Check(Equals(qualitySelector.SelectedValue, "fast"), "Default OCR quality is fast");
                 selector.SelectedValue = "ko-KR";
                 Check(((SettingsDraft)window.DataContext).Language == "ko-KR", "Language selection edits existing draft field");

@@ -56,6 +56,10 @@ internal static class SettingsSelfTest
             Check(report, "Accurate OCR maps to 4x upscale",
                 draft.ToAppSettings().Ocr.UpscaleFactor == 4.0
                 && draft.ToAppSettings().Ocr.Quality == OcrQuality.Accurate);
+            draft.OcrQuality = "enhanced";
+            Check(report, "Enhanced OCR maps to 2x upscale",
+                draft.ToAppSettings().Ocr.UpscaleFactor == 2.0
+                && draft.ToAppSettings().Ocr.Quality == OcrQuality.Enhanced);
             draft.OcrQuality = "fast";
 
             draft.MaxItems = "5";               // below the floor of 10
@@ -171,8 +175,8 @@ internal static class SettingsSelfTest
                 string[] qualityTags = qualitySelector!.Items.OfType<ComboBoxItem>()
                     .Select(item => item.Tag as string ?? string.Empty)
                     .ToArray();
-                Check(report, "OCR quality lists fast, normal, and slow stages",
-                    qualityTags is ["fast", "balanced", "accurate"]);
+                Check(report, "OCR quality lists fast, normal, slow, and careful stages",
+                    qualityTags is ["fast", "balanced", "accurate", "enhanced"]);
                 Check(report, "OCR quality defaults to fast",
                     Equals(qualitySelector.SelectedValue, "fast"));
                 Check(report, "Launch-at-login checkbox is on by default",

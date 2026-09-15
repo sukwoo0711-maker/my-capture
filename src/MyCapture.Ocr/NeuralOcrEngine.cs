@@ -66,7 +66,23 @@ internal sealed class NeuralOcrEngine : IDisposable
             return OcrResult.Failed(UiText.Get("Text_475D185DC33B"), TimeSpan.Zero);
         }
 
-        if (request.EnhanceContrast)
+        double scale = 1.0;
+        if (request.LocalCorrection)
+        {
+            source = ImageCodec.CorrectImageForRecognition(source);
+            if (request.UpscaleFactor > 1.0)
+            {
+                int maxDimension = 4096;
+                int longEdge = Math.Max(source.PixelWidth, source.PixelHeight);
+                double cap = (double)maxDimension / Math.Max(1, longEdge);
+                scale = cap < 1.0 ? 1.0 : Math.Min(request.UpscaleFactor, cap);
+                if (scale > 1.0)
+                {
+                    source = ImageCodec.UpscaleForRecognition(source, scale);
+                }
+            }
+        }
+        else if (request.EnhanceContrast)
         {
             source = ImageCodec.StretchContrastForRecognition(source);
         }
@@ -84,7 +100,7 @@ internal sealed class NeuralOcrEngine : IDisposable
             {
                 RapidOcr engine = _engine ?? throw new InvalidOperationException("PP-OCR session was not initialized.");
                 var options = RapidOcrOptions.Default with { ReturnWordBox = true, DoAngle = true };
-                return ToResult(engine.Detect(bitmap, options, cancellationToken));
+                return ToResult(engine.Detect(bitmap, options, cancellationToken), scale);
             }
         }
         catch (OperationCanceledException)
@@ -223,7 +239,7 @@ internal sealed class NeuralOcrEngine : IDisposable
         return null;
     }
 
-    private static OcrResult ToResult(RapidOcrNet.OcrResult raw)
+    private static OcrResult ToResult(RapidOcrNet.OcrResult raw, double scale = 1.0)
     {
         if (raw.TextBlocks is null || raw.TextBlocks.Length == 0)
         {
@@ -238,13 +254,13 @@ internal sealed class NeuralOcrEngine : IDisposable
                 continue;
             }
 
-            OcrRect lineBox = ToRect(block.BoxPoints);
+            OcrRect lineBox = ToRect(block.BoxPoints, scale);
             IReadOnlyList<OcrWord> words;
             if (block.WordResults is { Length: > 0 })
             {
                 words = block.WordResults
                     .Where(word => !string.IsNullOrWhiteSpace(word.Text))
-                    .Select(word => new OcrWord(word.Text.Trim(), ToRect(word.BoxPoints)))
+                    .Select(word => new OcrWord(word.Text.Trim(), ToRect(word.BoxPoints, scale)))
                     .ToArray();
             }
             else
@@ -269,7 +285,7 @@ internal sealed class NeuralOcrEngine : IDisposable
         return OcrResult.Success(text, "ko-KR", lines, TimeSpan.FromMilliseconds(raw.DetectTime));
     }
 
-    private static OcrRect ToRect(SKPointI[]? points)
+    private static OcrRect ToRect(SKPointI[]? points, double scale = 1.0)
     {
         if (points is null || points.Length == 0)
         {
@@ -286,6 +302,15 @@ internal sealed class NeuralOcrEngine : IDisposable
             minY = Math.Min(minY, points[i].Y);
             maxX = Math.Max(maxX, points[i].X);
             maxY = Math.Max(maxY, points[i].Y);
+        }
+
+        if (scale > 1.0)
+        {
+            int unscaledX = (int)Math.Round(minX / scale);
+            int unscaledY = (int)Math.Round(minY / scale);
+            int unscaledWidth = Math.Max(1, (int)Math.Round((maxX - minX) / scale));
+            int unscaledHeight = Math.Max(1, (int)Math.Round((maxY - minY) / scale));
+            return new OcrRect(unscaledX, unscaledY, unscaledWidth, unscaledHeight);
         }
 
         return new OcrRect(minX, minY, Math.Max(1, maxX - minX), Math.Max(1, maxY - minY));

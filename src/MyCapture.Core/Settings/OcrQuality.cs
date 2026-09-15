@@ -14,6 +14,9 @@ public enum OcrQuality
 
     /// <summary>4×, rotation search, and contrast stretch for receipts and faint type.</summary>
     Accurate = 2,
+
+    /// <summary>Local lighting flatten, contrast, sharpen, then PP-OCR for difficult receipts.</summary>
+    Enhanced = 3,
 }
 
 public static class OcrQualityNames
@@ -21,6 +24,7 @@ public static class OcrQualityNames
     public const string Fast = "fast";
     public const string Balanced = "balanced";
     public const string Accurate = "accurate";
+    public const string Enhanced = "enhanced";
 
     public static OcrQuality Parse(string? value)
     {
@@ -35,6 +39,14 @@ public static class OcrQualityNames
             return OcrQuality.Accurate;
         }
 
+        if (string.Equals(value, Enhanced, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "careful", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "document", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "precise", StringComparison.OrdinalIgnoreCase))
+        {
+            return OcrQuality.Enhanced;
+        }
+
         return OcrQuality.Balanced;
     }
 
@@ -42,6 +54,7 @@ public static class OcrQualityNames
     {
         OcrQuality.Fast => Fast,
         OcrQuality.Accurate => Accurate,
+        OcrQuality.Enhanced => Enhanced,
         _ => Balanced,
     };
 }
@@ -57,13 +70,17 @@ public static class OcrQualityProfile
 
     public static bool SearchRotatedOrientations(OcrQuality quality) => quality != OcrQuality.Fast;
 
-    public static bool EnhanceContrast(OcrQuality quality) => quality == OcrQuality.Accurate;
+    public static bool EnhanceContrast(OcrQuality quality) =>
+        quality is OcrQuality.Accurate or OcrQuality.Enhanced;
+
+    public static bool LocalCorrection(OcrQuality quality) => quality == OcrQuality.Enhanced;
 
     /// <summary>
-    /// Accurate/receipt mode downloads and runs PP-OCRv5 Korean recognition instead of
+    /// Accurate and Enhanced modes download and run PP-OCRv5 Korean recognition instead of
     /// relying on Windows OCR alone.
     /// </summary>
-    public static bool UseNeuralModel(OcrQuality quality) => quality == OcrQuality.Accurate;
+    public static bool UseNeuralModel(OcrQuality quality) =>
+        quality is OcrQuality.Accurate or OcrQuality.Enhanced;
 
     public static OcrQuality FromUpscale(double upscale)
     {
