@@ -142,8 +142,6 @@ public sealed class AppPaths
         Directory.CreateDirectory(DataRoot);
         Directory.CreateDirectory(CapturesRoot);
         Directory.CreateDirectory(LogsRoot);
-        // codeql[cs/path-injection] -- OcrModelsRoot is CanonicalizeRoot of LocalAppData or an isolated test root
-        Directory.CreateDirectory(OcrModelsRoot);
     }
 
     private static string CanonicalizeRoot(string path, string parameterName)
