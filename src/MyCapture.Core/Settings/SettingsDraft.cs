@@ -91,7 +91,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     // ----- OCR -----
     private string _preferredLanguages = string.Empty;
-    private string _ocrQuality = OcrQualityNames.Accurate;
+    private string _ocrQuality = OcrQualityNames.Balanced;
     private bool _cacheResults;
 
     // ----- Annotation -----

@@ -47,6 +47,14 @@ internal sealed class NeuralOcrEngine : IDisposable
             return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
         }
 
+        // ONNX init + detect must not run on the WPF dispatcher. A large receipt otherwise
+        // freezes the shell long enough to look like a hang or failed launch.
+        return await Task.Run(() => RecognizeOnWorker(request, cancellationToken), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private OcrResult RecognizeOnWorker(OcrRequest request, CancellationToken cancellationToken)
+    {
         if (!TryInitialize())
         {
             return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
@@ -70,15 +78,24 @@ internal sealed class NeuralOcrEngine : IDisposable
             return OcrResult.Failed(UiText.Get("Text_475D185DC33B"), TimeSpan.Zero);
         }
 
-        RapidOcrNet.OcrResult raw;
-        lock (_sync)
+        try
         {
-            RapidOcr engine = _engine ?? throw new InvalidOperationException("PP-OCR session was not initialized.");
-            var options = RapidOcrOptions.Default with { ReturnWordBox = true, DoAngle = true };
-            raw = engine.Detect(bitmap, options, cancellationToken);
+            lock (_sync)
+            {
+                RapidOcr engine = _engine ?? throw new InvalidOperationException("PP-OCR session was not initialized.");
+                var options = RapidOcrOptions.Default with { ReturnWordBox = true, DoAngle = true };
+                return ToResult(engine.Detect(bitmap, options, cancellationToken));
+            }
         }
-
-        return ToResult(raw);
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "PP-OCR detect failed");
+            return OcrResult.Failed(UiText.Get("Text_AA254F35F02E"), TimeSpan.Zero);
+        }
     }
 
     internal bool TryInitialize()
@@ -104,7 +121,10 @@ internal sealed class NeuralOcrEngine : IDisposable
             string keys = _store.PathFor(OcrModelCatalog.Dictionary);
             if (cls is null || string.IsNullOrEmpty(det))
             {
-                _log.LogWarning("Bundled PP-OCR detector or classifier was not found next to the application.");
+                _log.LogWarning(
+                    "Bundled PP-OCR detector or classifier was not found. BaseDirectory={BaseDirectory}; Process={Process}",
+                    AppContext.BaseDirectory,
+                    Environment.ProcessPath);
                 _initFailed = true;
                 return false;
             }
@@ -114,11 +134,12 @@ internal sealed class NeuralOcrEngine : IDisposable
                 var engine = new RapidOcr();
                 engine.InitModels(det, cls, rec, keys);
                 _engine = engine;
+                _log.LogInformation("PP-OCR session ready det={Det} rec={Rec}", det, rec);
                 return true;
             }
             catch (Exception ex)
             {
-                _log.LogWarning(ex, "PP-OCR session could not be created");
+                _log.LogWarning(ex, "PP-OCR session could not be created det={Det} rec={Rec} keys={Keys}", det, rec, keys);
                 _initFailed = true;
                 return false;
             }
@@ -136,12 +157,32 @@ internal sealed class NeuralOcrEngine : IDisposable
 
     private static string? Bundled(string fileName)
     {
-        string path = Path.Combine(
-            AppContext.BaseDirectory,
-            RapidOcr.ModelsFolderName,
-            RapidOcr.ModelsVersion,
-            fileName);
-        return File.Exists(path) ? path : null;
+        foreach (string root in CandidateRoots())
+        {
+            string path = Path.Combine(root, RapidOcr.ModelsFolderName, RapidOcr.ModelsVersion, fileName);
+            if (File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> CandidateRoots()
+    {
+        yield return AppContext.BaseDirectory;
+        string? process = Path.GetDirectoryName(Environment.ProcessPath);
+        if (!string.IsNullOrWhiteSpace(process))
+        {
+            yield return process;
+        }
+
+        string? assembly = Path.GetDirectoryName(typeof(NeuralOcrEngine).Assembly.Location);
+        if (!string.IsNullOrWhiteSpace(assembly))
+        {
+            yield return assembly;
+        }
     }
 
     private static BitmapSource? Decode(OcrRequest request)

@@ -45,8 +45,8 @@ internal static class SettingsSelfTest
             Check(report, "Default draft is valid", !draft.HasErrors);
             Check(report, "Launch at login defaults on", settings.General.LaunchAtLogin && draft.LaunchAtLogin);
             Check(report, "Default theme is glass", settings.General.Theme == "glass" && draft.Theme == "glass");
-            Check(report, "Default OCR quality is accurate",
-                settings.Ocr.Quality == OcrQuality.Accurate && draft.OcrQuality == "accurate");
+            Check(report, "Default OCR quality is balanced",
+                settings.Ocr.Quality == OcrQuality.Balanced && draft.OcrQuality == "balanced");
 
             draft.OcrQuality = "fast";
             Check(report, "Fast OCR maps to 1x upscale",
@@ -173,8 +173,8 @@ internal static class SettingsSelfTest
                     .ToArray();
                 Check(report, "OCR quality lists fast, normal, and slow stages",
                     qualityTags is ["fast", "balanced", "accurate"]);
-                Check(report, "OCR quality defaults to accurate",
-                    Equals(qualitySelector.SelectedValue, "accurate"));
+                Check(report, "OCR quality defaults to balanced",
+                    Equals(qualitySelector.SelectedValue, "balanced"));
                 Check(report, "Launch-at-login checkbox is on by default",
                     ((SettingsDraft)settingsWindow.DataContext).LaunchAtLogin);
             }
