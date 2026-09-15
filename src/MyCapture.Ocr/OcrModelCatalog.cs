@@ -1,8 +1,13 @@
+using Microsoft.ML.OnnxRuntime;
+using System.IO;
+
 namespace MyCapture.Ocr;
 
 /// <summary>
-/// PP-OCRv5 files fetched from RapidAI's published ModelScope catalog. Hashes match
-/// <c>default_models.yaml</c> v3.9.2 so a truncated download cannot be used for recognition.
+/// Real-ESRGAN x4 (RRDBNet, BSD-3, xinntao/Real-ESRGAN) ONNX weights exported by
+/// Qualcomm AI Hub for Real-ESRGAN-x4plus. The model is fixed 128×128 → 512×512 and
+/// stores its weights as external ONNX data beside the model file. Hashes pin the
+/// exact downloaded bytes; a truncated or altered file is never used.
 /// </summary>
 internal static class OcrModelCatalog
 {
@@ -27,6 +32,26 @@ internal static class OcrModelCatalog
     internal static IReadOnlyList<OcrModelFile> Required { get; } = [Recognition, Dictionary];
 
     internal static IReadOnlyList<OcrModelFile> Optional { get; } = [Detection];
+
+    internal static readonly OcrModelFile SuperResolution = new(
+        "realesrgan_x4.onnx",
+        SuperResolutionUri,
+        "29FFD5BC0277B19536CD39B737627FB2D79DF9999B8329741B558498DD5E31F7");
+
+    internal static readonly OcrModelFile SuperResolutionData = new(
+        "realesrgan_x4.onnx.data",
+        SuperResolutionUri,
+        "28FADA125730D3C87D504D48DD8332837F65811EC431A570EA4919BA3EEE3287");
+
+    internal static string ZipMemberNameFor(string fileName) => fileName switch
+    {
+        "realesrgan_x4.onnx" => "real_esrgan_x4plus.onnx",
+        "realesrgan_x4.onnx.data" => "real_esrgan_x4plus.data",
+        _ => throw new ArgumentException($"No zip member mapping for {fileName}", nameof(fileName)),
+    };
+
+    private const string SuperResolutionUri =
+        "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_x4plus/releases/v0.62.2/real_esrgan_x4plus-onnx-float.zip";
 }
 
 internal sealed record OcrModelFile(

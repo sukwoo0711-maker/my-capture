@@ -76,6 +76,13 @@ public static class OcrQualityProfile
     public static bool LocalCorrection(OcrQuality quality) => quality == OcrQuality.Enhanced;
 
     /// <summary>
+    /// Careful additionally runs the optional Real-ESRGAN x4 weights when they are present.
+    /// The download happens on the first Careful recognition and failure falls back to
+    /// nearest-neighbour scaling.
+    /// </summary>
+    public static bool UseSuperResolution(OcrQuality quality) => quality == OcrQuality.Enhanced;
+
+    /// <summary>
     /// Accurate and Enhanced modes download and run PP-OCRv5 Korean recognition instead of
     /// relying on Windows OCR alone.
     /// </summary>

@@ -85,5 +85,8 @@ public sealed class OcrQualityAndThemeDefaultsTests
         Assert.True(OcrQualityProfile.EnhanceContrast(mapped.Ocr.Quality));
         Assert.True(OcrQualityProfile.LocalCorrection(mapped.Ocr.Quality));
         Assert.True(OcrQualityProfile.UseNeuralModel(mapped.Ocr.Quality));
+        Assert.True(OcrQualityProfile.UseSuperResolution(mapped.Ocr.Quality));
+        Assert.False(OcrQualityProfile.UseSuperResolution(OcrQuality.Accurate));
+        Assert.False(OcrQualityProfile.UseSuperResolution(OcrQuality.Fast));
     }
 }
