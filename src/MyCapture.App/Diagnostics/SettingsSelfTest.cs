@@ -3,12 +3,15 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Themes;
 using MyCapture.App.Settings;
+using MyCapture.App.Themes;
 using MyCapture.Platform.Shell;
 
 namespace MyCapture.App.Diagnostics;
@@ -186,6 +189,32 @@ internal static class SettingsSelfTest
             {
                 settingsWindow.CloseForExit();
             }
+
+            // 5b) Theme readability contract: every palette keeps AA contrast on the
+            //     surfaces that carry text, and switching palettes recolours the live
+            //     brushes so open windows follow the new theme immediately.
+            static ThemeColor Opaque(ThemeColor color) => ThemeColor.Rgb(color.R, color.G, color.B);
+            foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+            {
+                IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
+                bool readable =
+                    ThemeContrast.Ratio(colors["Text.Primary"], Opaque(colors["Surface.Base"])) >= 4.5
+                    && ThemeContrast.Ratio(colors["Text.Secondary"], Opaque(colors["Surface.Raised"])) >= 4.5
+                    && ThemeContrast.Ratio(colors["Text.Muted"], Opaque(colors["Surface.Overlay"])) >= 4.5;
+                Check(report, $"{AppThemeNames.ToSetting(theme)} text stays AA-readable on its surfaces", readable);
+
+                if (Application.Current?.Resources is { } live)
+                {
+                    ThemeService.Apply(theme);
+                    var expected = Color.FromArgb(
+                        colors["Surface.Base"].A, colors["Surface.Base"].R, colors["Surface.Base"].G, colors["Surface.Base"].B);
+                    var brush = live["Surface.Base"] as SolidColorBrush;
+                    Check(report, $"{AppThemeNames.ToSetting(theme)} recolours Surface.Base", brush is not null && brush.Color == expected);
+                }
+            }
+
+            // Leave the shipped default active for the next session.
+            ThemeService.ApplyFromSettings("glass");
 
             // 6) BROWSEINFO marshalling regression (2.1.0 "unexpected error" on Browse):
             //    a StringBuilder struct field throws MarshalDirectiveException on .NET at
