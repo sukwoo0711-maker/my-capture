@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,6 +21,44 @@ public sealed class NeuralOcrEngineLiveTests
 
         Assert.True(engine.TryInitialize(), "PP-OCR session should initialize from the downloaded Korean model.");
         Assert.True(engine.IsReady);
+    }
+
+    [Fact]
+    public void RealKoreanModel_WritesReceiptProbeReport()
+    {
+        using NeuralOcrEngine? engine = CreateIfModelsPresent();
+        if (engine is null)
+        {
+            return;
+        }
+
+        Assert.True(engine.TryInitialize());
+        StaTestHost.Run(() =>
+        {
+            BitmapSource image = ReceiptBitmap();
+            string dir = Path.Combine(Path.GetTempPath(), "mycapture-ocr-probe");
+            Directory.CreateDirectory(dir);
+            string imagePath = Path.Combine(dir, "receipt.png");
+            MyCapture.Platform.Imaging.ImageCodec.SavePng(image, imagePath);
+            OcrResult result = engine.RecognizeAsync(
+                    OcrRequest.FromBitmap(image, 1.0, ["ko-KR"], false, true, true),
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            string report = string.Join(
+                Environment.NewLine,
+                [
+                    $"Status: {result.Status}",
+                    $"Language: {result.LanguageTag}",
+                    $"HasText: {result.HasText}",
+                    $"Lines: {result.Lines.Count}",
+                    "Text:",
+                    result.Text,
+                ]);
+            File.WriteAllText(Path.Combine(dir, "ocr-probe-report.txt"), report);
+            Assert.Equal(OcrStatus.Success, result.Status);
+            Assert.True(result.HasText);
+        });
     }
 
     [Fact]
