@@ -1453,15 +1453,13 @@ public partial class App : Application
         }
 
         OcrModelStore store = _services.GetRequiredService<OcrModelStore>();
-        NeuralOcrEngine neural = _services.GetRequiredService<NeuralOcrEngine>();
         _ = Task.Run(async () =>
         {
             try
             {
-                if (await store.EnsureAsync(CancellationToken.None).ConfigureAwait(false))
-                {
-                    neural.TryInitialize();
-                }
+                // Download only. Session creation stays on the first Accurate OCR so a
+                // native ONNX fault during startup cannot take down the tray process.
+                await store.EnsureAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

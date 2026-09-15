@@ -204,8 +204,8 @@ public sealed class SettingsStoreTests
         Assert.True(settings.General.IsFirstRun);
         Assert.True(settings.General.LaunchAtLogin);
         Assert.Equal("glass", settings.General.Theme);
-        Assert.Equal(OcrQuality.Accurate, settings.Ocr.Quality);
-        Assert.Equal(4.0, settings.Ocr.UpscaleFactor);
+        Assert.Equal(OcrQuality.Balanced, settings.Ocr.Quality);
+        Assert.Equal(2.0, settings.Ocr.UpscaleFactor);
         Assert.Equal(300, settings.Queue.MaxItems);
         Assert.Equal(2L * 1024 * 1024 * 1024, settings.Queue.MaxBytes);
         Assert.Equal("Ctrl+Shift+C", settings.Hotkeys.Capture.ToString());

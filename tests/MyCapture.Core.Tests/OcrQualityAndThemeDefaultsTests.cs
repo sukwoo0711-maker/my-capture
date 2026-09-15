@@ -52,7 +52,7 @@ public sealed class OcrQualityAndThemeDefaultsTests
         var draft = new SettingsDraft(new AppSettings());
         Assert.True(draft.LaunchAtLogin);
         Assert.Equal(AppThemeNames.Glass, draft.Theme);
-        Assert.Equal(OcrQualityNames.Accurate, draft.OcrQuality);
+        Assert.Equal(OcrQualityNames.Balanced, draft.OcrQuality);
 
         draft.OcrQuality = "fast";
         draft.Theme = "glass-light";
