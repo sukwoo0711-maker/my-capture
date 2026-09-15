@@ -468,6 +468,7 @@ public sealed class OcrTests
         Assert.Equal(4.0, accurate.UpscaleFactor);
         Assert.True(accurate.EnhanceContrast);
         Assert.True(accurate.SearchRotatedOrientations);
+        Assert.True(accurate.UseNeuralModel);
 
         settings.Quality = OcrQuality.Fast;
         OcrQualityProfile.Synchronize(settings);
@@ -475,6 +476,7 @@ public sealed class OcrTests
         Assert.Equal(1.0, fast.UpscaleFactor);
         Assert.False(fast.EnhanceContrast);
         Assert.False(fast.SearchRotatedOrientations);
+        Assert.False(fast.UseNeuralModel);
     }
 
     [Fact]

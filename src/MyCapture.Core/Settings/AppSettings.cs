@@ -265,7 +265,7 @@ public sealed class OcrSettings
     /// Fast / balanced / accurate recognition stage. Upscale and extra preparation
     /// are derived from this value on load and save.
     /// </summary>
-    public OcrQuality Quality { get; set; } = OcrQuality.Balanced;
+    public OcrQuality Quality { get; set; } = OcrQuality.Accurate;
 
     /// <summary>
     /// Upscale factor applied before recognition.
@@ -276,7 +276,7 @@ public sealed class OcrSettings
     /// for a small time cost. The settings UI edits <see cref="Quality"/>; this
     /// multiplier is kept in the file so older builds still read a usable value.
     /// </remarks>
-    public double UpscaleFactor { get; set; } = 2.0;
+    public double UpscaleFactor { get; set; } = 4.0;
 
     /// <summary>Cache the recognised text on the capture record.</summary>
     public bool CacheResults { get; set; } = true;

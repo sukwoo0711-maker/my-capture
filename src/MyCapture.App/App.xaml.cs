@@ -215,6 +215,7 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
 
         _ocrService = _services.GetRequiredService<IOcrService>();
+        StartOcrModelDownload();
         _automaticIndexer = new OcrIndexingService(
             _galleryController!, _ocrService, record => _queue!.GetDirectory(record),
             () => _settings!.Ocr, _services.GetRequiredService<ILogger<OcrIndexingService>>(), Dispatcher);
@@ -1444,6 +1445,31 @@ public partial class App : Application
         return window;
     }
 
+    private void StartOcrModelDownload()
+    {
+        if (_services is null)
+        {
+            return;
+        }
+
+        OcrModelStore store = _services.GetRequiredService<OcrModelStore>();
+        NeuralOcrEngine neural = _services.GetRequiredService<NeuralOcrEngine>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (await store.EnsureAsync(CancellationToken.None).ConfigureAwait(false))
+                {
+                    neural.TryInitialize();
+                }
+            }
+            catch (Exception ex)
+            {
+                _log?.LogWarning(ex, "Background OCR model download failed");
+            }
+        });
+    }
+
     private void StartCapturePrewarm()
     {
         if (_services is null)
@@ -1695,7 +1721,10 @@ public partial class App : Application
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-error.ico")));
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<GlobalHotkeyService>();
-        services.AddSingleton<IOcrService, WindowsOcrService>();
+        services.AddSingleton<OcrModelStore>();
+        services.AddSingleton<NeuralOcrEngine>();
+        services.AddSingleton<WindowsOcrService>();
+        services.AddSingleton<IOcrService, CaptureOcrService>();
 
         // Launch-at-login through the per-user Run key. The registry adapter is the only
         // Windows-specific piece; the service logic is fully testable against a fake store.
