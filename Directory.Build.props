@@ -31,9 +31,9 @@
     <!-- The application and its implementation libraries are shipped together as the
          verified desktop bundle; none is an independently supported NuGet package. -->
     <IsPackable>false</IsPackable>
-    <Version>2.3.1</Version>
-    <FileVersion>2.3.1.0</FileVersion>
-    <AssemblyVersion>2.3.1.0</AssemblyVersion>
+    <Version>2.3.2</Version>
+    <FileVersion>2.3.2.0</FileVersion>
+    <AssemblyVersion>2.3.2.0</AssemblyVersion>
     <Copyright>Copyright (c) 2026 MyCapture contributors</Copyright>
 
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
