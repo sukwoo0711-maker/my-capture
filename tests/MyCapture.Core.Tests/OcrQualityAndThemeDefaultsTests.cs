@@ -35,10 +35,15 @@ public sealed class OcrQualityAndThemeDefaultsTests
     {
         using var workspace = new TempWorkspace();
         var store = new SettingsStore(workspace.Paths, NullLogger<SettingsStore>.Instance);
-        store.Save(new AppSettings { Ocr = { Quality = OcrQuality.Balanced, UpscaleFactor = 4.0 } });
+        store.Save(new AppSettings { Ocr = { Quality = OcrQuality.Fast, UpscaleFactor = 4.0 } });
         AppSettings accurate = store.Load();
         Assert.Equal(OcrQuality.Accurate, accurate.Ocr.Quality);
         Assert.Equal(4.0, accurate.Ocr.UpscaleFactor);
+
+        store.Save(new AppSettings { Ocr = { Quality = OcrQuality.Fast, UpscaleFactor = 2.0 } });
+        AppSettings balanced = store.Load();
+        Assert.Equal(OcrQuality.Balanced, balanced.Ocr.Quality);
+        Assert.Equal(2.0, balanced.Ocr.UpscaleFactor);
 
         store.Save(new AppSettings { Ocr = { Quality = OcrQuality.Balanced, UpscaleFactor = 1.0 } });
         AppSettings fast = store.Load();
@@ -52,13 +57,13 @@ public sealed class OcrQualityAndThemeDefaultsTests
         var draft = new SettingsDraft(new AppSettings());
         Assert.True(draft.LaunchAtLogin);
         Assert.Equal(AppThemeNames.Glass, draft.Theme);
-        Assert.Equal(OcrQualityNames.Balanced, draft.OcrQuality);
+        Assert.Equal(OcrQualityNames.Fast, draft.OcrQuality);
 
-        draft.OcrQuality = "fast";
+        draft.OcrQuality = "balanced";
         draft.Theme = "glass-light";
         AppSettings mapped = draft.ToAppSettings();
-        Assert.Equal(OcrQuality.Fast, mapped.Ocr.Quality);
-        Assert.Equal(1.0, mapped.Ocr.UpscaleFactor);
+        Assert.Equal(OcrQuality.Balanced, mapped.Ocr.Quality);
+        Assert.Equal(2.0, mapped.Ocr.UpscaleFactor);
         Assert.Equal(AppThemeNames.GlassLight, mapped.General.Theme);
         Assert.True(mapped.General.LaunchAtLogin);
 

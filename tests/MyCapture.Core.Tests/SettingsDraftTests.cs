@@ -87,7 +87,7 @@ public sealed class SettingsDraftTests
         Assert.Equal(MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl, draft.GitHubIssueUrl);
         Assert.Equal("glass", draft.Theme);
         Assert.True(draft.LaunchAtLogin);
-        Assert.Equal("balanced", draft.OcrQuality);
+        Assert.Equal("fast", draft.OcrQuality);
         Assert.Equal("F9", draft.UploadGitHubImageHotkey);
         Assert.False(string.IsNullOrWhiteSpace(draft.CapturesDirectoryOverride));
         Assert.False(string.IsNullOrWhiteSpace(draft.QuickSaveDirectoryOverride));
