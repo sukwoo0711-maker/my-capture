@@ -3086,7 +3086,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Settings.ThemeGlass" xml:space="preserve"><value>Glass · Windows default</value></data>
   <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>Glass light · bright translucent</value></data>
   <data name="Settings.OcrQuality" xml:space="preserve"><value>Recognition quality</value></data>
-  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast favours speed, Normal balances both, Slow maximises accuracy for receipts and small text but takes longer.</value></data>
+  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use Windows OCR. Slow downloads the PP-OCRv5 Korean receipt model and uses it for recognition.</value></data>
   <data name="Settings.OcrQualityFast" xml:space="preserve"><value>Fast (weaker OCR)</value></data>
   <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>Normal (balanced speed and accuracy)</value></data>
   <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>Slow (maximum accuracy for receipts and text)</value></data>

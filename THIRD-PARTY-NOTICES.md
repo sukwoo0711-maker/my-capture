@@ -12,6 +12,10 @@ under their own licenses.
 | Microsoft.Extensions.DependencyInjection 10.0.11 | Dependency injection | MIT | <https://github.com/dotnet/runtime> |
 | Microsoft.Extensions.Logging 10.0.11 | Logging abstractions and implementation | MIT | <https://github.com/dotnet/runtime> |
 | Microsoft.Extensions.Logging.Debug 10.0.11 | Debug logging provider | MIT | <https://github.com/dotnet/runtime> |
+| RapidOcrNet 4.2.0 | PP-OCR ONNX pipeline used for receipt-quality OCR | Apache-2.0 | <https://github.com/BobLd/RapidOcrNet> |
+| Microsoft.ML.OnnxRuntime | ONNX inference for RapidOcrNet | MIT | <https://github.com/microsoft/onnxruntime> |
+| SkiaSharp | Image decode/resize for RapidOcrNet | MIT | <https://github.com/mono/SkiaSharp> |
+| PaddleOCR / RapidAI PP-OCRv5 models | Downloaded Korean receipt detector and recognizer | Apache-2.0 | <https://github.com/PaddlePaddle/PaddleOCR>, <https://github.com/RapidAI/RapidOCR> |
 
 The portable and installer packages include the authoritative .NET license as
 `DOTNET-LICENSE.txt` and the complete .NET third-party notice set as

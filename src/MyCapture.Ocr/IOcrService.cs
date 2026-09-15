@@ -51,6 +51,12 @@ public sealed class OcrRequest
     public bool EnhanceContrast { get; init; }
 
     /// <summary>
+    /// Run the downloaded PP-OCR receipt model when it is available. Windows OCR remains
+    /// the fallback when the model has not been fetched yet.
+    /// </summary>
+    public bool UseNeuralModel { get; init; }
+
+    /// <summary>
     /// Preferred BCP-47 tags in priority order, or empty to defer to the user profile.
     /// </summary>
     public IReadOnlyList<string> PreferredLanguages { get; init; } = [];
@@ -60,7 +66,8 @@ public sealed class OcrRequest
         double upscaleFactor = 1.0,
         IReadOnlyList<string>? preferredLanguages = null,
         bool searchRotatedOrientations = true,
-        bool enhanceContrast = false)
+        bool enhanceContrast = false,
+        bool useNeuralModel = false)
     {
         ArgumentNullException.ThrowIfNull(encodedImage);
         return new OcrRequest(encodedImage, filePath: null, bitmap: null)
@@ -69,6 +76,7 @@ public sealed class OcrRequest
             PreferredLanguages = preferredLanguages ?? [],
             SearchRotatedOrientations = searchRotatedOrientations,
             EnhanceContrast = enhanceContrast,
+            UseNeuralModel = useNeuralModel,
         };
     }
 
@@ -77,7 +85,8 @@ public sealed class OcrRequest
         double upscaleFactor = 1.0,
         IReadOnlyList<string>? preferredLanguages = null,
         bool searchRotatedOrientations = true,
-        bool enhanceContrast = false)
+        bool enhanceContrast = false,
+        bool useNeuralModel = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         return new OcrRequest(encodedImage: null, filePath, bitmap: null)
@@ -86,6 +95,7 @@ public sealed class OcrRequest
             PreferredLanguages = preferredLanguages ?? [],
             SearchRotatedOrientations = searchRotatedOrientations,
             EnhanceContrast = enhanceContrast,
+            UseNeuralModel = useNeuralModel,
         };
     }
 
@@ -94,7 +104,8 @@ public sealed class OcrRequest
         double upscaleFactor = 1.0,
         IReadOnlyList<string>? preferredLanguages = null,
         bool searchRotatedOrientations = true,
-        bool enhanceContrast = false)
+        bool enhanceContrast = false,
+        bool useNeuralModel = false)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
         return new OcrRequest(encodedImage: null, filePath: null, bitmap)
@@ -103,6 +114,7 @@ public sealed class OcrRequest
             PreferredLanguages = preferredLanguages ?? [],
             SearchRotatedOrientations = searchRotatedOrientations,
             EnhanceContrast = enhanceContrast,
+            UseNeuralModel = useNeuralModel,
         };
     }
 }

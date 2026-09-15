@@ -24,11 +24,12 @@ public sealed class AppPaths
 {
     public const string AppFolderName = "MyCapture";
 
-    private AppPaths(string dataRoot, string capturesRoot, string quickSaveRoot)
+    private AppPaths(string dataRoot, string capturesRoot, string quickSaveRoot, string ocrModelsRoot)
     {
         DataRoot = CanonicalizeRoot(dataRoot, nameof(dataRoot));
         CapturesRoot = CanonicalizeRoot(capturesRoot, nameof(capturesRoot));
         QuickSaveRoot = CanonicalizeRoot(quickSaveRoot, nameof(quickSaveRoot));
+        OcrModelsRoot = CanonicalizeRoot(ocrModelsRoot, nameof(ocrModelsRoot));
     }
 
     /// <summary>
@@ -45,6 +46,12 @@ public sealed class AppPaths
     /// Default destination for quick-save exports.
     /// </summary>
     public string QuickSaveRoot { get; }
+
+    /// <summary>
+    /// Downloaded PP-OCR recognition models. Kept under local app data so roaming
+    /// profiles do not copy tens of megabytes of ONNX weights.
+    /// </summary>
+    public string OcrModelsRoot { get; }
 
     public string SettingsFile => Path.Combine(DataRoot, "settings.json");
 
@@ -72,11 +79,18 @@ public sealed class AppPaths
             : pictures;
 
         string dataRoot = Path.Combine(appData, AppFolderName);
+        string localAppData = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData,
+            Environment.SpecialFolderOption.Create);
+        string ocrModelsRoot = Path.Combine(
+            string.IsNullOrEmpty(localAppData) ? dataRoot : Path.Combine(localAppData, AppFolderName),
+            "ocr-models");
 
         return new AppPaths(
             dataRoot: dataRoot,
             capturesRoot: Path.Combine(dataRoot, "captures"),
-            quickSaveRoot: Path.Combine(quickSaveBase, "Captures"));
+            quickSaveRoot: Path.Combine(quickSaveBase, "Captures"),
+            ocrModelsRoot: ocrModelsRoot);
     }
 
     /// <summary>
@@ -89,7 +103,8 @@ public sealed class AppPaths
         return new AppPaths(
             dataRoot: root,
             capturesRoot: Path.Combine(root, "captures"),
-            quickSaveRoot: Path.Combine(root, "quicksave"));
+            quickSaveRoot: Path.Combine(root, "quicksave"),
+            ocrModelsRoot: Path.Combine(root, "ocr-models"));
     }
 
     /// <summary>
@@ -99,13 +114,13 @@ public sealed class AppPaths
     public AppPaths WithCapturesRoot(string capturesRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(capturesRoot);
-        return new AppPaths(DataRoot, capturesRoot, QuickSaveRoot);
+        return new AppPaths(DataRoot, capturesRoot, QuickSaveRoot, OcrModelsRoot);
     }
 
     public AppPaths WithQuickSaveRoot(string quickSaveRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(quickSaveRoot);
-        return new AppPaths(DataRoot, CapturesRoot, quickSaveRoot);
+        return new AppPaths(DataRoot, CapturesRoot, quickSaveRoot, OcrModelsRoot);
     }
 
     /// <summary>
@@ -127,6 +142,7 @@ public sealed class AppPaths
         Directory.CreateDirectory(DataRoot);
         Directory.CreateDirectory(CapturesRoot);
         Directory.CreateDirectory(LogsRoot);
+        Directory.CreateDirectory(OcrModelsRoot);
     }
 
     private static string CanonicalizeRoot(string path, string parameterName)

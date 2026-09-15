@@ -59,6 +59,12 @@ public static class OcrQualityProfile
 
     public static bool EnhanceContrast(OcrQuality quality) => quality == OcrQuality.Accurate;
 
+    /// <summary>
+    /// Accurate/receipt mode downloads and runs PP-OCRv5 Korean recognition instead of
+    /// relying on Windows OCR alone.
+    /// </summary>
+    public static bool UseNeuralModel(OcrQuality quality) => quality == OcrQuality.Accurate;
+
     public static OcrQuality FromUpscale(double upscale)
     {
         if (upscale <= 1.25)
