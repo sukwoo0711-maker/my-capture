@@ -16,6 +16,9 @@ under their own licenses.
 | Microsoft.ML.OnnxRuntime | ONNX inference for RapidOcrNet | MIT | <https://github.com/microsoft/onnxruntime> |
 | SkiaSharp | Image decode/resize for RapidOcrNet | MIT | <https://github.com/mono/SkiaSharp> |
 | PaddleOCR / RapidAI PP-OCRv5 models | Downloaded Korean receipt detector and recognizer | Apache-2.0 | <https://github.com/PaddlePaddle/PaddleOCR>, <https://github.com/RapidAI/RapidOCR> |
+| Real-ESRGAN x4plus (RRDBNet) model | Downloaded 4x image super-resolution used by Careful OCR | BSD-3-Clause | <https://github.com/xinntao/Real-ESRGAN> |
+| Qualcomm AI Hub Real-ESRGAN-x4plus ONNX export | ONNX float weights for the Real-ESRGAN model above (downloaded from the Qualcomm AI Hub public asset store; export tooling is its own project) | BSD-3-Clause (model), see the linked source for tooling terms | <https://aihub.qualcomm.com/models/real-esrgan-x4plus> |
+| Microsoft.ML.OnnxRuntime (Careful OCR SR) | Same ONNX runtime as above, also hosts the super-resolution session | MIT | <https://github.com/microsoft/onnxruntime> |
 
 The portable and installer packages include the authoritative .NET license as
 `DOTNET-LICENSE.txt` and the complete .NET third-party notice set as

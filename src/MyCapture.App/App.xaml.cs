@@ -1722,8 +1722,10 @@ public partial class App : Application
         services.AddSingleton(serviceProvider => new OcrModelStore(
             serviceProvider.GetRequiredService<AppPaths>(),
             serviceProvider.GetRequiredService<ILogger<OcrModelStore>>()));
+        services.AddSingleton<SuperResolutionEngine>();
         services.AddSingleton(serviceProvider => new NeuralOcrEngine(
             serviceProvider.GetRequiredService<OcrModelStore>(),
+            serviceProvider.GetRequiredService<SuperResolutionEngine>(),
             serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
         services.AddSingleton<WindowsOcrService>();
         services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(

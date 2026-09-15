@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Platform.Imaging;
 using RapidOcrNet;
 using SkiaSharp;
@@ -16,13 +17,26 @@ internal sealed class NeuralOcrEngine : IDisposable
 {
     private readonly OcrModelStore _store;
     private readonly ILogger _log;
+    private readonly SuperResolutionEngine _superResolution;
     private readonly object _sync = new();
     private RapidOcr? _engine;
     private bool _initFailed;
 
     internal NeuralOcrEngine(OcrModelStore store, ILogger<NeuralOcrEngine> log)
+        : this(
+            store,
+            new SuperResolutionEngine(store, NullLogger<SuperResolutionEngine>.Instance),
+            log)
+    {
+    }
+
+    internal NeuralOcrEngine(
+        OcrModelStore store,
+        SuperResolutionEngine superResolution,
+        ILogger<NeuralOcrEngine> log)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _superResolution = superResolution ?? throw new ArgumentNullException(nameof(superResolution));
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
@@ -45,6 +59,11 @@ internal sealed class NeuralOcrEngine : IDisposable
         if (!await _store.EnsureAsync(cancellationToken).ConfigureAwait(false))
         {
             return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
+        }
+
+        if (request.UseSuperResolution)
+        {
+            _ = await _store.EnsureSuperResolutionAsync(cancellationToken).ConfigureAwait(false);
         }
 
         // ONNX init + detect must not run on the WPF dispatcher. A large receipt otherwise
@@ -70,7 +89,21 @@ internal sealed class NeuralOcrEngine : IDisposable
         if (request.LocalCorrection)
         {
             source = ImageCodec.CorrectImageForRecognition(source);
-            if (request.UpscaleFactor > 1.0)
+            if (request.UseSuperResolution && _superResolution.IsReady)
+            {
+                int srLongEdge = Math.Max(source.PixelWidth, source.PixelHeight);
+                if (srLongEdge <= SuperResolutionEngine.MaxLongEdge)
+                {
+                    BitmapSource? upscaled = _superResolution.Upscale(source);
+                    if (upscaled is not null)
+                    {
+                        source = upscaled;
+                        scale = SuperResolutionEngine.Scale;
+                    }
+                }
+            }
+
+            if (scale == 1.0 && request.UpscaleFactor > 1.0)
             {
                 int maxDimension = 4096;
                 int longEdge = Math.Max(source.PixelWidth, source.PixelHeight);
@@ -169,6 +202,8 @@ internal sealed class NeuralOcrEngine : IDisposable
             _engine?.Dispose();
             _engine = null;
         }
+
+        _superResolution.Dispose();
     }
 
     private static string? Bundled(string fileName)

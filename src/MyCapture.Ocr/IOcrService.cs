@@ -63,6 +63,12 @@ public sealed class OcrRequest
     public bool LocalCorrection { get; init; }
 
     /// <summary>
+    /// Run the optional Real-ESRGAN x4 weights before recognition. Careful mode downloads
+    /// the model on first use; when it is absent or fails, nearest-neighbour scaling runs.
+    /// </summary>
+    public bool UseSuperResolution { get; init; }
+
+    /// <summary>
     /// Preferred BCP-47 tags in priority order, or empty to defer to the user profile.
     /// </summary>
     public IReadOnlyList<string> PreferredLanguages { get; init; } = [];
@@ -74,7 +80,8 @@ public sealed class OcrRequest
         bool searchRotatedOrientations = true,
         bool enhanceContrast = false,
         bool useNeuralModel = false,
-        bool localCorrection = false)
+        bool localCorrection = false,
+        bool useSuperResolution = false)
     {
         ArgumentNullException.ThrowIfNull(encodedImage);
         return new OcrRequest(encodedImage, filePath: null, bitmap: null)
@@ -85,6 +92,7 @@ public sealed class OcrRequest
             EnhanceContrast = enhanceContrast,
             UseNeuralModel = useNeuralModel,
             LocalCorrection = localCorrection,
+            UseSuperResolution = useSuperResolution,
         };
     }
 
@@ -95,7 +103,8 @@ public sealed class OcrRequest
         bool searchRotatedOrientations = true,
         bool enhanceContrast = false,
         bool useNeuralModel = false,
-        bool localCorrection = false)
+        bool localCorrection = false,
+        bool useSuperResolution = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         return new OcrRequest(encodedImage: null, filePath, bitmap: null)
@@ -106,6 +115,7 @@ public sealed class OcrRequest
             EnhanceContrast = enhanceContrast,
             UseNeuralModel = useNeuralModel,
             LocalCorrection = localCorrection,
+            UseSuperResolution = useSuperResolution,
         };
     }
 
@@ -116,7 +126,8 @@ public sealed class OcrRequest
         bool searchRotatedOrientations = true,
         bool enhanceContrast = false,
         bool useNeuralModel = false,
-        bool localCorrection = false)
+        bool localCorrection = false,
+        bool useSuperResolution = false)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
         return new OcrRequest(encodedImage: null, filePath: null, bitmap)
@@ -127,6 +138,7 @@ public sealed class OcrRequest
             EnhanceContrast = enhanceContrast,
             UseNeuralModel = useNeuralModel,
             LocalCorrection = localCorrection,
+            UseSuperResolution = useSuperResolution,
         };
     }
 }

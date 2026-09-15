@@ -3086,11 +3086,11 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Settings.ThemeGlass" xml:space="preserve"><value>글래스 · Windows 기본</value></data>
   <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>글래스 라이트 · 밝은 반투명</value></data>
   <data name="Settings.OcrQuality" xml:space="preserve"><value>인식 품질</value></data>
-  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows OCR입니다. 느림은 영수증용 PP-OCRv5입니다. 정밀은 같은 모델 앞에 조명·대비·선명 보정을 하며, 추가 모델은 없습니다.</value></data>
+  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows OCR입니다. 느림은 영수증용 PP-OCRv5입니다. 정밀은 조명·대비·선명 보정 후 Real-ESRGAN 4배 확장(첫 사용에 약 67MB 내려받음)과 PP-OCRv5를 씁니다.</value></data>
   <data name="Settings.OcrQualityFast" xml:space="preserve"><value>빠름 (OCR 성능 약함)</value></data>
   <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>보통 (속도와 정확도 균형)</value></data>
   <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>느림 (영수증 PP-OCR)</value></data>
-  <data name="Settings.OcrQualityEnhanced" xml:space="preserve"><value>정밀 (빛·흐림 보정 후 인식)</value></data>
+  <data name="Settings.OcrQualityEnhanced" xml:space="preserve"><value>정밀 (보정·AI 확장 후 인식)</value></data>
   <data name="Workspace.Library" xml:space="preserve"><value>보관함</value></data>
   <data name="Workspace.All" xml:space="preserve"><value>모두 보기</value></data>
   <data name="Workspace.Pinned" xml:space="preserve"><value>보관한 항목</value></data>

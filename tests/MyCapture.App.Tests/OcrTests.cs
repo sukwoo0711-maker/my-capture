@@ -488,6 +488,7 @@ public sealed class OcrTests
         Assert.True(enhanced.SearchRotatedOrientations);
         Assert.True(enhanced.UseNeuralModel);
         Assert.True(enhanced.LocalCorrection);
+        Assert.True(enhanced.UseSuperResolution);
     }
 
     [Fact]

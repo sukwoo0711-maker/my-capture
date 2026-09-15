@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '2.3.4',
+    [string]$Version = '2.3.5',
     [string]$ArtifactRoot = ''
 )
 
