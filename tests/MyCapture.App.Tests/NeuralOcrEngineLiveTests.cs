@@ -36,28 +36,36 @@ public sealed class NeuralOcrEngineLiveTests
         StaTestHost.Run(() =>
         {
             BitmapSource image = ReceiptBitmap();
-            string dir = Path.Combine(Path.GetTempPath(), "mycapture-ocr-probe");
-            Directory.CreateDirectory(dir);
-            string imagePath = Path.Combine(dir, "receipt.png");
-            MyCapture.Platform.Imaging.ImageCodec.SavePng(image, imagePath);
-            OcrResult result = engine.RecognizeAsync(
-                    OcrRequest.FromBitmap(image, 1.0, ["ko-KR"], false, true, true),
-                    CancellationToken.None)
-                .GetAwaiter()
-                .GetResult();
-            string report = string.Join(
-                Environment.NewLine,
-                [
-                    $"Status: {result.Status}",
-                    $"Language: {result.LanguageTag}",
-                    $"HasText: {result.HasText}",
-                    $"Lines: {result.Lines.Count}",
-                    "Text:",
-                    result.Text,
-                ]);
-            File.WriteAllText(Path.Combine(dir, "ocr-probe-report.txt"), report);
-            Assert.Equal(OcrStatus.Success, result.Status);
-            Assert.True(result.HasText);
+            string dir = OwnedTestDirectory.Create("ocr-probe-");
+            try
+            {
+                // codeql[cs/path-injection] -- isolated OwnedTestDirectory workspace
+                string imagePath = Path.Combine(dir, "receipt.png");
+                MyCapture.Platform.Imaging.ImageCodec.SavePng(image, imagePath);
+                OcrResult result = engine.RecognizeAsync(
+                        OcrRequest.FromBitmap(image, 1.0, ["ko-KR"], false, true, true),
+                        CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+                string report = string.Join(
+                    Environment.NewLine,
+                    [
+                        $"Status: {result.Status}",
+                        $"Language: {result.LanguageTag}",
+                        $"HasText: {result.HasText}",
+                        $"Lines: {result.Lines.Count}",
+                        "Text:",
+                        result.Text,
+                    ]);
+                // codeql[cs/path-injection] -- isolated OwnedTestDirectory workspace
+                File.WriteAllText(Path.Combine(dir, "ocr-probe-report.txt"), report);
+                Assert.Equal(OcrStatus.Success, result.Status);
+                Assert.True(result.HasText);
+            }
+            finally
+            {
+                OwnedTestDirectory.Delete(dir);
+            }
         });
     }
 
