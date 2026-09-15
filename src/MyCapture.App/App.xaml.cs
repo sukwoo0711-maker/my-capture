@@ -1719,10 +1719,17 @@ public partial class App : Application
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-error.ico")));
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<GlobalHotkeyService>();
-        services.AddSingleton<OcrModelStore>();
-        services.AddSingleton<NeuralOcrEngine>();
+        services.AddSingleton(serviceProvider => new OcrModelStore(
+            serviceProvider.GetRequiredService<AppPaths>(),
+            serviceProvider.GetRequiredService<ILogger<OcrModelStore>>()));
+        services.AddSingleton(serviceProvider => new NeuralOcrEngine(
+            serviceProvider.GetRequiredService<OcrModelStore>(),
+            serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
         services.AddSingleton<WindowsOcrService>();
-        services.AddSingleton<IOcrService, CaptureOcrService>();
+        services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(
+            serviceProvider.GetRequiredService<WindowsOcrService>(),
+            serviceProvider.GetRequiredService<NeuralOcrEngine>(),
+            serviceProvider.GetRequiredService<ILogger<CaptureOcrService>>()));
 
         // Launch-at-login through the per-user Run key. The registry adapter is the only
         // Windows-specific piece; the service logic is fully testable against a fake store.
