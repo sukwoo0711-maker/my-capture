@@ -1,6 +1,6 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
-    [string]$Version = '2.3.5'
+    [string]$Version = '2.3.6'
 )
 
 Set-StrictMode -Version 2.0
@@ -529,3 +529,4 @@ finally {
         Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+
