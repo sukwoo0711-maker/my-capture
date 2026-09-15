@@ -97,6 +97,124 @@ public sealed class ImageCodecPathTests
         Assert.True(result[(width * 4) + 0] > 210, "Light paper should move toward white.");
     });
 
+    [Fact]
+    public void FlattenIllumination_EvensLeftDarkRightBrightPaper() => RunSta(() =>
+    {
+        const int width = 64;
+        const int height = 32;
+        var source = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+        byte[] pixels = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                bool print = y is >= 12 and <= 19;
+                byte paper = x < width / 2 ? (byte)90 : (byte)210;
+                byte value = print ? (byte)(paper - 20) : paper;
+                WritePixel(pixels, x, y, width, value);
+            }
+        }
+
+        source.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
+        source.Freeze();
+
+        BitmapSource flattened = ImageCodec.FlattenIlluminationForRecognition(source);
+        byte[] result = new byte[pixels.Length];
+        flattened.CopyPixels(result, width * 4, 0);
+
+        byte leftPaper = result[((4 * width) + 8) * 4];
+        byte rightPaper = result[((4 * width) + 56) * 4];
+        byte leftPrint = result[((16 * width) + 8) * 4];
+        byte rightPrint = result[((16 * width) + 56) * 4];
+        Assert.True(Math.Abs(rightPaper - leftPaper) < 80, "Paper lighting should be flatter than the 120-point source gap.");
+        Assert.True(leftPrint < leftPaper, "Print on the dark side should stay darker than paper.");
+        Assert.True(rightPrint < rightPaper, "Print on the bright side should stay darker than paper.");
+    });
+
+    [Fact]
+    public void CorrectImageForRecognition_UniformGreyDoesNotExplode() => RunSta(() =>
+    {
+        const int width = 32;
+        const int height = 32;
+        var source = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+        byte[] pixels = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                WritePixel(pixels, x, y, width, 128);
+            }
+        }
+
+        source.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
+        source.Freeze();
+
+        BitmapSource corrected = ImageCodec.CorrectImageForRecognition(source);
+        byte[] result = new byte[pixels.Length];
+        corrected.CopyPixels(result, width * 4, 0);
+        int min = 255;
+        int max = 0;
+        for (int i = 0; i < result.Length; i += 4)
+        {
+            min = Math.Min(min, result[i]);
+            max = Math.Max(max, result[i]);
+        }
+
+        Assert.True(max - min < 40, "Flat paper should not become black/white noise.");
+    });
+
+    [Fact]
+    public void CorrectImageForRecognition_StretchesAndSharpens() => RunSta(() =>
+    {
+        const int width = 8;
+        const int height = 8;
+        var source = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+        byte[] pixels = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                byte val = (byte)(y < 4 ? 110 : 170);
+                WritePixel(pixels, x, y, width, val);
+            }
+        }
+
+        source.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
+        source.Freeze();
+
+        BitmapSource corrected = ImageCodec.CorrectImageForRecognition(source);
+        Assert.True(corrected.IsFrozen);
+        Assert.Equal(width, corrected.PixelWidth);
+        Assert.Equal(height, corrected.PixelHeight);
+    });
+
+    [Fact]
+    public void SharpenForRecognition_SharpensEdges() => RunSta(() =>
+    {
+        const int width = 5;
+        const int height = 5;
+        var source = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+        byte[] pixels = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                byte val = (x == 2 && y == 2) ? (byte)200 : (byte)100;
+                WritePixel(pixels, x, y, width, val);
+            }
+        }
+
+        source.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixels, width * 4, 0);
+        source.Freeze();
+
+        BitmapSource sharpened = ImageCodec.SharpenForRecognition(source);
+        Assert.True(sharpened.IsFrozen);
+        byte[] result = new byte[pixels.Length];
+        sharpened.CopyPixels(result, width * 4, 0);
+        int center = ((2 * width) + 2) * 4;
+        Assert.True(result[center] > 200, "Center peak should be sharpened higher than original 200.");
+    });
+
     private static void WritePixel(byte[] pixels, int x, int y, int width, byte gray)
     {
         int offset = ((y * width) + x) * 4;

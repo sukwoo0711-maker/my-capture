@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace MyCapture.Ocr;
 
 /// <summary>
-/// Routes Accurate/receipt requests through PP-OCR when the downloaded Korean model is
+/// Routes Accurate and Enhanced receipt requests through PP-OCR when the downloaded Korean model is
 /// present, and keeps Windows OCR as the Fast/Balanced engine and as a fallback.
 /// </summary>
 public sealed class CaptureOcrService : IOcrService

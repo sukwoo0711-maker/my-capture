@@ -13,6 +13,10 @@ public sealed class OcrQualityAndThemeDefaultsTests
     [InlineData("normal", OcrQuality.Balanced, 2.0, true, false, false)]
     [InlineData("accurate", OcrQuality.Accurate, 4.0, true, true, true)]
     [InlineData("slow", OcrQuality.Accurate, 4.0, true, true, true)]
+    [InlineData("enhanced", OcrQuality.Enhanced, 2.0, true, true, true)]
+    [InlineData("careful", OcrQuality.Enhanced, 2.0, true, true, true)]
+    [InlineData("document", OcrQuality.Enhanced, 2.0, true, true, true)]
+    [InlineData("precise", OcrQuality.Enhanced, 2.0, true, true, true)]
     public void QualityStageDerivesUpscaleRotationAndContrast(
         string id,
         OcrQuality expected,
@@ -72,5 +76,14 @@ public sealed class OcrQualityAndThemeDefaultsTests
         Assert.Equal(OcrQuality.Accurate, mapped.Ocr.Quality);
         Assert.Equal(4.0, mapped.Ocr.UpscaleFactor);
         Assert.True(OcrQualityProfile.EnhanceContrast(mapped.Ocr.Quality));
+        Assert.False(OcrQualityProfile.LocalCorrection(mapped.Ocr.Quality));
+
+        draft.OcrQuality = "enhanced";
+        mapped = draft.ToAppSettings();
+        Assert.Equal(OcrQuality.Enhanced, mapped.Ocr.Quality);
+        Assert.Equal(2.0, mapped.Ocr.UpscaleFactor);
+        Assert.True(OcrQualityProfile.EnhanceContrast(mapped.Ocr.Quality));
+        Assert.True(OcrQualityProfile.LocalCorrection(mapped.Ocr.Quality));
+        Assert.True(OcrQualityProfile.UseNeuralModel(mapped.Ocr.Quality));
     }
 }

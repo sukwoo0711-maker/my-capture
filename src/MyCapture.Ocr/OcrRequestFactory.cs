@@ -18,7 +18,8 @@ public static class OcrRequestFactory
             settings.PreferredLanguages,
             searchRotatedOrientations ?? OcrQualityProfile.SearchRotatedOrientations(settings.Quality),
             OcrQualityProfile.EnhanceContrast(settings.Quality),
-            OcrQualityProfile.UseNeuralModel(settings.Quality));
+            OcrQualityProfile.UseNeuralModel(settings.Quality),
+            OcrQualityProfile.LocalCorrection(settings.Quality));
     }
 
     public static OcrRequest FromBitmap(
@@ -33,6 +34,7 @@ public static class OcrRequestFactory
             settings.PreferredLanguages,
             searchRotatedOrientations ?? OcrQualityProfile.SearchRotatedOrientations(settings.Quality),
             OcrQualityProfile.EnhanceContrast(settings.Quality),
-            OcrQualityProfile.UseNeuralModel(settings.Quality));
+            OcrQualityProfile.UseNeuralModel(settings.Quality),
+            OcrQualityProfile.LocalCorrection(settings.Quality));
     }
 }
