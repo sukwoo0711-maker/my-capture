@@ -9,7 +9,7 @@ public enum OcrQuality
     /// <summary>1×, no rotation search. Fastest, weakest on small or rotated text.</summary>
     Fast = 0,
 
-    /// <summary>2× with rotation search. Default balance for UI screenshots.</summary>
+    /// <summary>2× with rotation search. Middle stage for UI screenshots.</summary>
     Balanced = 1,
 
     /// <summary>4×, rotation search, and contrast stretch for receipts and faint type.</summary>
@@ -82,10 +82,16 @@ public static class OcrQualityProfile
 
     /// <summary>
     /// Older files stored only <c>upscaleFactor</c>. A missing quality deserialises as
-    /// Balanced, so a non-default multiplier is treated as the implied stage.
+    /// Fast. A multiplier that does not match that stage is treated as the implied
+    /// quality. Balanced plus a non-2× multiplier is still inferred the same way.
     /// </summary>
     public static OcrQuality ResolveLoaded(OcrQuality quality, double upscale)
     {
+        if (quality == OcrQuality.Fast && Math.Abs(upscale - 1.0) > 0.01)
+        {
+            return FromUpscale(upscale);
+        }
+
         if (quality == OcrQuality.Balanced && Math.Abs(upscale - 2.0) > 0.01)
         {
             return FromUpscale(upscale);

@@ -45,18 +45,18 @@ internal static class SettingsSelfTest
             Check(report, "Default draft is valid", !draft.HasErrors);
             Check(report, "Launch at login defaults on", settings.General.LaunchAtLogin && draft.LaunchAtLogin);
             Check(report, "Default theme is glass", settings.General.Theme == "glass" && draft.Theme == "glass");
-            Check(report, "Default OCR quality is balanced",
-                settings.Ocr.Quality == OcrQuality.Balanced && draft.OcrQuality == "balanced");
+            Check(report, "Default OCR quality is fast",
+                settings.Ocr.Quality == OcrQuality.Fast && draft.OcrQuality == "fast");
 
-            draft.OcrQuality = "fast";
-            Check(report, "Fast OCR maps to 1x upscale",
-                draft.ToAppSettings().Ocr.UpscaleFactor == 1.0
-                && draft.ToAppSettings().Ocr.Quality == OcrQuality.Fast);
+            draft.OcrQuality = "balanced";
+            Check(report, "Balanced OCR maps to 2x upscale",
+                draft.ToAppSettings().Ocr.UpscaleFactor == 2.0
+                && draft.ToAppSettings().Ocr.Quality == OcrQuality.Balanced);
             draft.OcrQuality = "accurate";
             Check(report, "Accurate OCR maps to 4x upscale",
                 draft.ToAppSettings().Ocr.UpscaleFactor == 4.0
                 && draft.ToAppSettings().Ocr.Quality == OcrQuality.Accurate);
-            draft.OcrQuality = "balanced";
+            draft.OcrQuality = "fast";
 
             draft.MaxItems = "5";               // below the floor of 10
             Check(report, "Out-of-range MaxItems flagged", draft.HasErrors);
@@ -173,8 +173,8 @@ internal static class SettingsSelfTest
                     .ToArray();
                 Check(report, "OCR quality lists fast, normal, and slow stages",
                     qualityTags is ["fast", "balanced", "accurate"]);
-                Check(report, "OCR quality defaults to balanced",
-                    Equals(qualitySelector.SelectedValue, "balanced"));
+                Check(report, "OCR quality defaults to fast",
+                    Equals(qualitySelector.SelectedValue, "fast"));
                 Check(report, "Launch-at-login checkbox is on by default",
                     ((SettingsDraft)settingsWindow.DataContext).LaunchAtLogin);
             }
