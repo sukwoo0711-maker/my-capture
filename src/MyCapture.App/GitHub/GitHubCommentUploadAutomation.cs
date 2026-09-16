@@ -17,8 +17,13 @@ internal static class GitHubCommentUploadAutomation
             AutomationElement? editor = null;
             AutomationElement? address = null;
             nint window = 0;
+            // The window active before the flow stole focus, restored on exit so the
+            // user's typing target is not displaced for the whole 60 s window.
+            nint originalForeground = GetForegroundWindow();
             string before = string.Empty;
             bool pasted = false;
+            try
+            {
             while (elapsed.Elapsed < timeout)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -72,7 +77,38 @@ internal static class GitHubCommentUploadAutomation
                 await Task.Delay(350, cancellationToken).ConfigureAwait(false);
             }
             return null;
+            }
+            finally
+            {
+                RestoreForeground(originalForeground);
+            }
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Best-effort focus restoration. Windows restricts SetForegroundWindow for background
+    /// processes, so this attaches to the current foreground thread to inherit permission.
+    /// A failure here must never fail the upload.
+    /// </summary>
+    private static void RestoreForeground(nint target)
+    {
+        if (target == 0) return;
+        try
+        {
+            nint foreground = GetForegroundWindow();
+            uint foregroundThread = GetWindowThreadProcessId(foreground, out _);
+            uint targetThread = GetWindowThreadProcessId(target, out _);
+            uint current = GetCurrentThreadId();
+            if (foregroundThread != 0) _ = AttachThreadInput(current, foregroundThread, true);
+            if (targetThread != 0) _ = AttachThreadInput(current, targetThread, true);
+            _ = SetForegroundWindow(target);
+            if (foregroundThread != 0) _ = AttachThreadInput(current, foregroundThread, false);
+            if (targetThread != 0) _ = AttachThreadInput(current, targetThread, false);
+        }
+        catch
+        {
+            // Focus restoration is a courtesy; the upload result is unaffected.
+        }
     }
 
     internal static bool AddressMatches(string value, string issueUrl)
@@ -187,4 +223,7 @@ internal static class GitHubCommentUploadAutomation
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint hwnd, out uint processId);
     [DllImport("user32.dll")] private static extern uint GetClipboardSequenceNumber();
     [DllImport("user32.dll")] private static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hWnd);
+    [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
 }

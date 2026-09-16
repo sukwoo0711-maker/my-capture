@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -66,13 +66,7 @@ internal sealed partial class GalleryWindow : Window
     private bool _ocrIndexingRunning;
     private CancellationTokenSource? _ocrIndexingCts;
     private readonly HashSet<Guid> _openEditors = [];
-    private readonly DispatcherTimer _inlinePlaybackTimer;
-    private Guid? _inlineVideoId;
-    private string? _inlineVideoPath;
-    private bool _inlineMediaReady;
-    private bool _inlinePlaying;
-    private bool _inlineSeekUpdating;
-    private bool _inlineAutoPlayPending;
+    private GalleryVideoPlayerWindow? _videoPlayer;
 
     internal GalleryWindow(
         GalleryViewModel viewModel,
@@ -120,11 +114,6 @@ internal sealed partial class GalleryWindow : Window
             if (!IsVisible) ResetDragGesture();
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
         };
-        _inlinePlaybackTimer = new DispatcherTimer(DispatcherPriority.Render)
-        {
-            Interval = TimeSpan.FromMilliseconds(200),
-        };
-        _inlinePlaybackTimer.Tick += OnInlinePlaybackTick;
 
         // Ctrl+F focuses the search box from anywhere in the window.
         InputBindings.Add(new KeyBinding(
@@ -201,7 +190,6 @@ internal sealed partial class GalleryWindow : Window
         }
 
         CloseInlinePlayer();
-        _inlinePlaybackTimer.Tick -= OnInlinePlaybackTick;
 
         base.OnClosing(e);
     }
@@ -222,7 +210,7 @@ internal sealed partial class GalleryWindow : Window
     /// <summary>
     /// Updates the coverage banner: hidden when the whole library is already searchable and
     /// OCR is available; a "no language pack" advisory when the OS engine is missing; otherwise
-    /// an "N captures not yet searchable — index now" prompt. This is what turns full-text
+    /// an "N captures not yet searchable ??index now" prompt. This is what turns full-text
     /// search from a per-capture manual action into a property of the whole history.
     /// </summary>
     private void RefreshOcrCoverageBanner()
@@ -336,7 +324,7 @@ internal sealed partial class GalleryWindow : Window
 
         if (tile.IsVideo)
         {
-            PrepareInlineVideo(tile, autoPlay: false);
+            PrepareVideoPlayer(tile, autoPlay: false);
         }
         else
         {
@@ -366,7 +354,7 @@ internal sealed partial class GalleryWindow : Window
         if (e.ClickCount == 2)
         {
             _collapseOnRelease = false;
-            if (tile.IsVideo) PrepareInlineVideo(tile, autoPlay: true); else OpenReedit(tile);
+            if (tile.IsVideo) PrepareVideoPlayer(tile, autoPlay: true); else OpenReedit(tile);
             return;
         }
         if (!Mouse.Capture(this, CaptureMode.SubTree)) { ResetDragGesture(); return; }
@@ -435,7 +423,7 @@ internal sealed partial class GalleryWindow : Window
         if (_dragArmed && !_dragPreparing && _dragTile is { } tile)
         {
             if (_collapseOnRelease) _viewModel.Select(tile.Id);
-            if (_viewModel.SingleSelectedTile?.IsVideo == true) PrepareInlineVideo(tile, autoPlay: false);
+            if (_viewModel.SingleSelectedTile?.IsVideo == true) PrepareVideoPlayer(tile, autoPlay: false);
             else CloseInlinePlayer();
         }
         ResetDragGesture();
@@ -455,7 +443,7 @@ internal sealed partial class GalleryWindow : Window
         {
             if (tile.IsVideo)
             {
-                PrepareInlineVideo(tile, autoPlay: true);
+                PrepareVideoPlayer(tile, autoPlay: true);
             }
             else
             {
@@ -502,7 +490,7 @@ internal sealed partial class GalleryWindow : Window
             case Key.Enter:
                 if (tile.IsVideo)
                 {
-                    PrepareInlineVideo(tile, autoPlay: true);
+                    PrepareVideoPlayer(tile, autoPlay: true);
                 }
                 else
                 {
@@ -540,9 +528,14 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    // ---- In-library video playback ------------------------------------------------
+    // ---- Floating video player ------------------------------------------------------
 
-    private void PrepareInlineVideo(GalleryItemViewModel tile, bool autoPlay)
+    /// <summary>
+    /// Opens (or refocuses) the floating video player for a video tile. Playback lives in
+    /// its own window so it never duplicates the card's play affordance or overlaps the
+    /// details panel.
+    /// </summary>
+    private void PrepareVideoPlayer(GalleryItemViewModel tile, bool autoPlay)
     {
         CaptureRecord? record = _controller.Find(tile.Id);
         if (record is null || !record.IsVideo || !EnsureRecordReady(record.Id))
@@ -553,215 +546,45 @@ internal sealed partial class GalleryWindow : Window
         try
         {
             string path = Path.GetFullPath(_videoLibrary.CurrentVideoPath(record));
-            if (!File.Exists(path))
+            if (_videoPlayer is not null && _videoPlayer.VideoId == tile.Id)
+            {
+                // Same video: just bring the player forward and honour autoplay.
+                if (autoPlay && _videoPlayer.IsLoaded) { }
+                _videoPlayer.Show();
+                _videoPlayer.Activate();
+                return;
+            }
+
+            CloseInlinePlayer();
+            _videoPlayer = new GalleryVideoPlayerWindow();
+            _videoPlayer.Closed += (_, _) => _videoPlayer = null;
+            if (!_videoPlayer.Open(tile.Id, tile.ContextLabel, path, autoPlay))
             {
                 ShowStatus(UiText.Get("Text_EC7FF66E22C9"));
                 return;
             }
 
-            InlineVideoPanel.Visibility = Visibility.Visible;
-            InlineVideoTitle.Text = tile.ContextLabel;
-            if (_inlineVideoId == tile.Id
-                && string.Equals(_inlineVideoPath, path, StringComparison.OrdinalIgnoreCase))
-            {
-                _inlineAutoPlayPending |= autoPlay;
-                if (autoPlay && _inlineMediaReady)
-                {
-                    SetInlinePlayback(playing: true);
-                }
-
-                return;
-            }
-
-            _inlineAutoPlayPending = autoPlay;
-            InlineVideo.Stop();
-            InlineVideo.Source = new Uri(path, UriKind.Absolute);
-            _inlineVideoId = tile.Id;
-            _inlineVideoPath = path;
-            _inlineMediaReady = false;
-            _inlinePlaying = false;
-            InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
-            InlinePlaybackStatus.Text = UiText.Get("Text_AE614DABA128");
-            InlineSeekSlider.Maximum = Math.Max(1, record.DurationMs);
-            SetInlineSliderValue(0);
-            InlineTimeLabel.Text = $"00:00 / {FormatPlaybackTime(record.DurationMs)}";
-
-            // Manual MediaElement playback needs one Play call to begin opening on every
-            // Windows media stack. MediaOpened decides whether to remain playing or pause.
-            InlineVideo.Play();
+            // Anchor near the details panel's top-right, clamped to the work area.
+            Rect work = SystemParameters.WorkArea;
+            _videoPlayer.Left = Math.Max(work.Left, work.Right - _videoPlayer.Width - 24);
+            _videoPlayer.Top = Math.Max(work.Top, work.Top + 90);
+            _videoPlayer.Show();
         }
         catch (Exception ex)
         {
-            _log.LogWarning(ex, "Could not open inline video {Id}", record.Id);
-            InlinePlaybackStatus.Text = UiText.Get("Text_B6AEB06C1E3E");
+            _log.LogWarning(ex, "Could not open the video player for {Id}", record.Id);
             ShowStatus(UiText.Get("Text_EBC9F14582AD") + ex.Message);
         }
     }
 
-    private void OnInlineMediaOpened(object sender, RoutedEventArgs e)
-    {
-        _inlineMediaReady = true;
-        double durationMs = InlineVideo.NaturalDuration.HasTimeSpan
-            ? InlineVideo.NaturalDuration.TimeSpan.TotalMilliseconds
-            : Math.Max(1, InlineSeekSlider.Maximum);
-        InlineSeekSlider.Maximum = Math.Max(1, durationMs);
-        InlinePlaybackStatus.Text = UiText.Get("Text_6E86D1A85620");
-        if (_inlineAutoPlayPending)
-        {
-            SetInlinePlayback(playing: true);
-        }
-        else
-        {
-            InlineVideo.Pause();
-            InlineVideo.Position = TimeSpan.Zero;
-            SetInlineSliderValue(0);
-            UpdateInlineTimeLabel();
-        }
-
-        _inlineAutoPlayPending = false;
-    }
-
-    private void OnInlineMediaEnded(object sender, RoutedEventArgs e)
-    {
-        InlineVideo.Pause();
-        InlineVideo.Position = TimeSpan.Zero;
-        _inlinePlaying = false;
-        _inlinePlaybackTimer.Stop();
-        InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
-        InlinePlaybackStatus.Text = UiText.Get("Text_2223CE0FF051");
-        SetInlineSliderValue(0);
-        UpdateInlineTimeLabel();
-    }
-
-    private void OnInlineMediaFailed(object sender, ExceptionRoutedEventArgs e)
-    {
-        _inlineMediaReady = false;
-        _inlinePlaying = false;
-        _inlineAutoPlayPending = false;
-        _inlinePlaybackTimer.Stop();
-        InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
-        InlinePlaybackStatus.Text = UiText.Get("Text_875917AFD6EF");
-        _log.LogWarning(e.ErrorException, "Inline gallery playback failed for {Path}", _inlineVideoPath);
-    }
-
-    private void OnInlinePlayClick(object sender, RoutedEventArgs e)
-    {
-        if (_inlineMediaReady)
-        {
-            SetInlinePlayback(!_inlinePlaying);
-        }
-    }
-
-    private void SetInlinePlayback(bool playing)
-    {
-        if (!_inlineMediaReady)
-        {
-            return;
-        }
-
-        if (playing)
-        {
-            if (InlineVideo.Position.TotalMilliseconds >= InlineSeekSlider.Maximum - 1)
-            {
-                InlineVideo.Position = TimeSpan.Zero;
-            }
-
-            InlineVideo.Play();
-            _inlinePlaying = true;
-            _inlinePlaybackTimer.Start();
-            InlinePlayButton.Content = UiText.Get("Text_4F51C0C8ADA8");
-            InlinePlaybackStatus.Text = UiText.Get("Text_8B5C97A7F917");
-        }
-        else
-        {
-            InlineVideo.Pause();
-            _inlinePlaying = false;
-            _inlinePlaybackTimer.Stop();
-            InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
-            InlinePlaybackStatus.Text = UiText.Get("Text_4F51C0C8ADA8");
-            UpdateInlinePlaybackPosition();
-        }
-    }
-
-    private void OnInlinePlaybackTick(object? sender, EventArgs e) =>
-        UpdateInlinePlaybackPosition();
-
-    private void UpdateInlinePlaybackPosition()
-    {
-        if (!_inlineMediaReady)
-        {
-            return;
-        }
-
-        SetInlineSliderValue(Math.Clamp(
-            InlineVideo.Position.TotalMilliseconds,
-            0,
-            InlineSeekSlider.Maximum));
-        UpdateInlineTimeLabel();
-    }
-
-    private void OnInlineSeekChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (_inlineSeekUpdating || !_inlineMediaReady)
-        {
-            return;
-        }
-
-        InlineVideo.Position = TimeSpan.FromMilliseconds(Math.Clamp(
-            e.NewValue,
-            0,
-            InlineSeekSlider.Maximum));
-        UpdateInlineTimeLabel();
-    }
-
-    private void SetInlineSliderValue(double value)
-    {
-        _inlineSeekUpdating = true;
-        try
-        {
-            InlineSeekSlider.Value = value;
-        }
-        finally
-        {
-            _inlineSeekUpdating = false;
-        }
-    }
-
-    private void UpdateInlineTimeLabel() =>
-        InlineTimeLabel.Text = $"{FormatPlaybackTime(InlineVideo.Position.TotalMilliseconds)} / {FormatPlaybackTime(InlineSeekSlider.Maximum)}";
-
-    private static string FormatPlaybackTime(double milliseconds)
-    {
-        TimeSpan value = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
-        return value.TotalHours >= 1
-            ? value.ToString(@"hh\:mm\:ss", System.Globalization.CultureInfo.InvariantCulture)
-            : value.ToString(@"mm\:ss", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private void OnInlineCloseClick(object sender, RoutedEventArgs e) => CloseInlinePlayer();
-
     private void CloseInlinePlayer()
     {
-        _inlinePlaybackTimer.Stop();
-        _inlinePlaying = false;
-        _inlineMediaReady = false;
-        _inlineAutoPlayPending = false;
-        _inlineVideoId = null;
-        _inlineVideoPath = null;
-        try
-        {
-            InlineVideo.Close();
-            InlineVideo.Source = null;
-        }
-        catch (InvalidOperationException)
-        {
-        }
-
-        InlineVideoPanel.Visibility = Visibility.Collapsed;
-        InlinePlayButton.Content = UiText.Get("Text_D43A776C5E28");
-        InlinePlaybackStatus.Text = UiText.Get("Text_6E86D1A85620");
-        SetInlineSliderValue(0);
+        _videoPlayer?.Close();
+        _videoPlayer = null;
     }
+
+    /// <summary>UX-review hook: selects a video tile the same way a user click would.</summary>
+    internal void SelectVideoForReview(GalleryItemViewModel tile) => PrepareVideoPlayer(tile, autoPlay: false);
 
     // ---- Per-card buttons ----------------------------------------------------------
 
