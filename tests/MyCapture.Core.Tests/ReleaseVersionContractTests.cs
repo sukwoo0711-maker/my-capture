@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Xml.Linq;
 using Xunit;
@@ -6,7 +6,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Keeps the 2.3.7 stable version and its Windows binary version aligned across MSBuild, packaging
+/// Keeps the 2.3.8 stable version and its Windows binary version aligned across MSBuild, packaging
 /// and installer validation.
 /// </summary>
 public sealed class ReleaseVersionContractTests
@@ -39,14 +39,14 @@ public sealed class ReleaseVersionContractTests
         XDocument props = XDocument.Parse(Read("Directory.Build.props"));
         XDocument manifest = XDocument.Parse(Read("src/MyCapture.App/app.manifest"));
 
-        Assert.Equal("2.3.7", Assert.Single(props.Descendants("Version")).Value);
-        Assert.Equal("2.3.7.0", Assert.Single(props.Descendants("FileVersion")).Value);
-        Assert.Equal("2.3.7.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
+        Assert.Equal("2.3.8", Assert.Single(props.Descendants("Version")).Value);
+        Assert.Equal("2.3.8.0", Assert.Single(props.Descendants("FileVersion")).Value);
+        Assert.Equal("2.3.8.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
 
         XElement identity = Assert.Single(
             manifest.Descendants(),
             element => element.Name.LocalName == "assemblyIdentity");
-        Assert.Equal("2.3.7.0", identity.Attribute("version")?.Value);
+        Assert.Equal("2.3.8.0", identity.Attribute("version")?.Value);
     }
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class ReleaseVersionContractTests
 
         // The shipping default is the GA version. A release candidate must never be the default
         // again, otherwise an operator who forgets -Version publishes a prerelease by accident.
-        Assert.Contains("[string]$Version = '2.3.7'", package, StringComparison.Ordinal);
-        Assert.Contains("[string]$Version = '2.3.7',", hostile, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '2.3.8'", package, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '2.3.8',", hostile, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", package, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", hostile, StringComparison.Ordinal);
 
