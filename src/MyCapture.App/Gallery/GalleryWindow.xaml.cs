@@ -138,6 +138,10 @@ internal sealed partial class GalleryWindow : Window
     /// <summary>Asks the shell to float a rendered library image as a pin window.</summary>
     internal event EventHandler<BitmapSource>? FloatRequested;
 
+    /// <summary>Header toolbar commands, wired by the shell: region capture and region recording.</summary>
+    internal Action? CaptureRegionRequested { get; set; }
+    internal Action? RecordRegionRequested { get; set; }
+
     /// <summary>
     /// Shows the window and brings it forward, rebuilding the view from the current queue so a
     /// capture taken while it was hidden appears.
@@ -909,6 +913,20 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnDeleteSelectedClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
     private void OnClearLibraryClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_controller.Records.Select(r => r.Id).ToArray(), true);
+
+    /// <summary>Header toolbar: start a region capture, mirroring the tray command.</summary>
+    private void OnCaptureRegionClick(object sender, RoutedEventArgs e)
+    {
+        Window.GetWindow(this)?.Hide();
+        CaptureRegionRequested?.Invoke();
+    }
+
+    /// <summary>Header toolbar: start (or stop) a region recording, mirroring the tray command.</summary>
+    private void OnRecordRegionClick(object sender, RoutedEventArgs e)
+    {
+        Window.GetWindow(this)?.Hide();
+        RecordRegionRequested?.Invoke();
+    }
 
     private async void ConfirmDeleteMany(IEnumerable<Guid> ids, bool entireLibrary)
     {

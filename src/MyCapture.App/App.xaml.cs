@@ -250,18 +250,24 @@ public partial class App : Application
 
         _shellPresenter = new ThemedShellPresenter(() => _overlay?.IsActive == true || _recorder?.IsActive == true);
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
-        _tray.MenuPresenter = () => _shellPresenter.ShowMenu(new (string, Action)[]
-        {
-            (UiText.Get("Text_2C20ADDA2018"), HandleCaptureRequested),
-            (UiText.Get("Text_EA1FBABE64F3"), HandleCaptureWindow),
-            (UiText.Get("Text_65BB6610ACA0"), HandleCaptureFullScreen),
-            (_scrollCancellation is not null ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"), HandleScrollingCapture),
-            (UiText.Get("Text_878A28AF568C"), HandleRepeatLastRegion),
-            (UiText.Get("Text_38FF9B0AA541"), HandleDelayedCapture),
-            (UiText.Get("Text_8739F6684453"), HandleGalleryRequested),
-            (UiText.Get("Text_00480581AAB5"), HandleSettingsRequested),
-            (UiText.Get("Text_72B6DBA8AAC5"), () => Shutdown(0)),
-        }, _settings!.General.Language, ChangeTrayLanguage);
+        _tray.MenuPresenter = () => _shellPresenter.ShowMenu(
+        [
+            // Capture commands grouped into one branch, following Windows tray menu
+            // conventions (grouped actions, then destinations, then settings/exit).
+            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_50EE4EA7C243"), null,
+            [
+                new(UiText.Get("Text_2C20ADDA2018"), HandleCaptureRequested),
+                new(UiText.Get("Text_EA1FBABE64F3"), HandleCaptureWindow),
+                new(UiText.Get("Text_65BB6610ACA0"), HandleCaptureFullScreen),
+                new(_scrollCancellation is not null ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"), HandleScrollingCapture),
+                new(UiText.Get("Text_878A28AF568C"), HandleRepeatLastRegion),
+                new(UiText.Get("Text_38FF9B0AA541"), HandleDelayedCapture),
+                new(UiText.Get("Text_4F5AF20FAA6E"), HandleRecordRegion),
+            ]),
+            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_8739F6684453"), HandleGalleryRequested),
+            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_00480581AAB5"), HandleSettingsRequested),
+            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_72B6DBA8AAC5"), () => Shutdown(0)),
+        ], _settings!.General.Language, ChangeTrayLanguage);
         AnnotationEditorPreferences.Read = () => _settings!.Annotation;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
@@ -270,6 +276,7 @@ public partial class App : Application
         _tray.RepeatLastRegionRequested += (_, _) => HandleRepeatLastRegion();
         _tray.DelayedCaptureRequested += (_, _) => HandleDelayedCapture();
         _tray.ScrollingCaptureRequested += (_, _) => HandleScrollingCapture();
+        _tray.RecordRegionRequested += (_, _) => HandleRecordRegion();
         _tray.GalleryRequested += (_, _) => HandleGalleryRequested();
         _tray.SettingsRequested += (_, _) => HandleSettingsRequested();
         _tray.ExitRequested += (_, _) => Shutdown(0);
@@ -1397,6 +1404,10 @@ public partial class App : Application
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
         window.FloatRequested += (_, image) => _pins?.PinImage(image);
+        // Header toolbar commands mirror the tray entries so capture/recording are reachable
+        // without the global hotkeys or the tray icon.
+        window.CaptureRegionRequested = () => HandleCaptureRequested();
+        window.RecordRegionRequested = HandleRecordRegion;
 
         _galleryWindow = window;
         return window;

@@ -442,14 +442,37 @@
                                HorizontalAlignment="Left" />
                 </StackPanel>
             </StackPanel>
-            <Button Grid.Column="1" Style="{StaticResource Button.Secondary}" Padding="14,8" Click="OnClearLibraryClick" ToolTip="{loc:Text LibrarySelection_ClearHint}"
-                    VerticalAlignment="Center">
-                <TextBlock x:Name="SummaryLabel"
-                           Text="{Binding SummaryText}"
-                           Foreground="{DynamicResource Text.Secondary}"
-                           FontSize="{StaticResource FontSize.Body}"
-                           AutomationProperties.Name="{Binding SummaryText}" />
-            </Button>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Style="{StaticResource Button.Secondary}" Padding="12,8" Margin="0,0,8,0"
+                        ToolTip="{loc:Text Text_2C20ADDA2018}"
+                        AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
+                        Click="OnCaptureRegionClick">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource Icon.Capture}" Width="16" Height="16" Stretch="Uniform"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.4" StrokeLineJoin="Round" Fill="Transparent" />
+                        <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="7,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource Button.Secondary}" Padding="12,8" Margin="0,0,8,0"
+                        ToolTip="{loc:Text Text_4F5AF20FAA6E}"
+                        AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}"
+                        Click="OnRecordRegionClick">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource Icon.Record}" Width="16" Height="16" Stretch="Uniform"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.4" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        <TextBlock Text="{loc:Text Text_4F5AF20FAA6E}" Margin="7,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource Button.Secondary}" Padding="14,8" Click="OnClearLibraryClick" ToolTip="{loc:Text LibrarySelection_ClearHint}">
+                    <TextBlock x:Name="SummaryLabel"
+                               Text="{Binding SummaryText}"
+                               Foreground="{DynamicResource Text.Secondary}"
+                               FontSize="{StaticResource FontSize.Body}"
+                               AutomationProperties.Name="{Binding SummaryText}" />
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- Search -->

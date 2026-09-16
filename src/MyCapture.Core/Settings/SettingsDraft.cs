@@ -858,12 +858,6 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             ClearError(property);
         }
 
-        // Capture must remain assigned: an unassigned capture chord makes the app inert.
-        if (parsed.TryGetValue(nameof(CaptureHotkey), out Hotkey? capture) && capture is not null && !capture.IsAssigned)
-        {
-            SetError(nameof(CaptureHotkey), UiText.Get("Text_D1ACE701CBFE"));
-        }
-
         // Duplicate detection over assigned chords using semantic (value) equality.
         var seen = new Dictionary<Hotkey, string>();
         foreach ((string property, Hotkey hotkey) in parsed.Select(kv => (kv.Key, kv.Value)))

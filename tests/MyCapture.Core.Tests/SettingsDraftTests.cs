@@ -259,12 +259,16 @@ public sealed class SettingsDraftTests
     }
 
     [Fact]
-    public void CaptureHotkey_CannotBeEmpty()
+    public void CaptureHotkey_CanBeEmpty()
     {
+        // Capture no longer has to be bound: every command is reachable from the tray
+        // menu and the library header toolbar, so an empty chord is a valid choice.
         SettingsDraft draft = NewDraft();
         draft.CaptureHotkey = "";
-        Assert.True(draft.HasErrors);
-        Assert.NotEmpty(draft.GetErrors(nameof(SettingsDraft.CaptureHotkey)).Cast<string>());
+        Assert.False(draft.HasErrors);
+
+        draft.CaptureHotkey = "Ctrl+Shift+C";
+        Assert.False(draft.HasErrors);
     }
 
     [Fact]
