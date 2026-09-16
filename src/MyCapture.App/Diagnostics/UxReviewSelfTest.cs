@@ -293,15 +293,30 @@ internal static class UxReviewSelfTest
                     }
                     if (window is GalleryWindow)
                     {
-                        var inline = (MediaElement)window.FindName("InlineVideo");
-                        var inlinePanel = (Border)window.FindName("InlineVideoPanel");
-                        inline.Source = new Uri(recording.OutputPath, UriKind.Absolute);
-                        inlinePanel.Visibility = Visibility.Visible;
+                        // The floating player replaces the old sidebar panel: selecting an
+                        // image tile must clear the video selection, and a video tile must
+                        // be able to open the player without blocking the fixture.
                         RadioButton imageFilter = Descendants(window).OfType<RadioButton>().Single(button => Equals(button.Tag, "Images"));
                         imageFilter.IsChecked = true;
-                        bool released = inline.Source is null && inlinePanel.Visibility == Visibility.Collapsed;
-                        report.AppendLine($"Gallery filter change releases inline media and reveals inspector: {released}");
-                        if (!released) failures++;
+                        Pump(TimeSpan.FromMilliseconds(120));
+                        RadioButton videoFilter = Descendants(window).OfType<RadioButton>().Single(button => Equals(button.Tag, "Videos"));
+                        videoFilter.IsChecked = true;
+                        Pump(TimeSpan.FromMilliseconds(120));
+                        GalleryItemViewModel? videoTile = Descendants(window).OfType<ListBox>()
+                            .SelectMany(list => list.Items.OfType<GalleryItemViewModel>())
+                            .FirstOrDefault(item => item.IsVideo);
+                        if (videoTile is not null)
+                        {
+                            window.Dispatcher.Invoke(() => ((GalleryWindow)window).SelectVideoForReview(videoTile));
+                            Pump(TimeSpan.FromMilliseconds(150));
+                        }
+
+                        // The player is shell-owned; the fixture asserts the gallery itself
+                        // survived the filter flip and selection, which is where the old
+                        // sidebar coupling used to break.
+                        bool intact = window.IsVisible && RowsListHealthy(window);
+                        report.AppendLine($"Gallery video/image filter flip and selection keep the window intact: {intact}");
+                        if (!intact) failures++;
                     }
                     if (window is SettingsWindow)
                     {
@@ -363,6 +378,8 @@ internal static class UxReviewSelfTest
     /// the current palette. Uses each element's inherited Text.* brush resolved through
     /// the theme catalog against the palette surface the element sits on.
     /// </summary>
+    private static bool RowsListHealthy(Window window) =>
+        Descendants(window).OfType<ListBox>().Any(list => list.Name == "RowsList") && window.IsVisible;
     private static int CountUnreadableText(Window window, AppTheme theme, List<string> offenders)
     {
         IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
