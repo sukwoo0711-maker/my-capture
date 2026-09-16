@@ -340,6 +340,7 @@ internal static partial class NativeMethods
 
     internal const uint MF_STRING = 0x00000000;
     internal const uint MF_SEPARATOR = 0x00000800;
+    internal const uint MF_POPUP = 0x00000010;
     internal const uint TPM_RIGHTBUTTON = 0x0002;
     internal const uint TPM_RETURNCMD = 0x0100;
 

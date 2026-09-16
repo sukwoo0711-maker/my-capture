@@ -17,6 +17,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     private ContextMenu? _menu;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(5) };
 
+    /// <summary>A command or a submenu branch in the tray tree. A null Action marks a branch.</summary>
+    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null);
+
     internal void ShowNotification(string title, string message, TrayBalloonKind kind)
     {
         Dismiss();
@@ -49,16 +52,11 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
 
     private void OnTimeout(object? sender, EventArgs e) => Dismiss();
 
-    internal void ShowMenu(IEnumerable<(string Label, Action Action)> commands, string language, Action<string> chooseLanguage)
+    internal void ShowMenu(IEnumerable<MenuEntry> commands, string language, Action<string> chooseLanguage)
     {
         Dismiss();
         var menu = new ContextMenu { Placement = PlacementMode.MousePoint, MinWidth = 240 };
-        foreach ((string label, Action action) in commands)
-        {
-            var item = new MenuItem { Header = label, MinHeight = 36 };
-            item.Click += (_, _) => { menu.IsOpen = false; action(); };
-            menu.Items.Add(item);
-        }
+        AppendEntries(menu.Items, commands, menu);
         menu.Items.Add(new Separator());
         menu.Items.Add(new MenuItem { Header = "Language", IsEnabled = false, MinHeight = 36 });
         foreach ((string label, string code) in new[] { ("한국어", "ko"), ("English", "en") })
@@ -76,6 +74,25 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         menu.Items.Add(help);
         _menu = menu;
         menu.IsOpen = true;
+    }
+
+    private static void AppendEntries(ItemCollection items, IEnumerable<MenuEntry> entries, ContextMenu root)
+    {
+        foreach (MenuEntry entry in entries)
+        {
+            if (entry.Action is null && entry.Children is { Count: > 0 } children)
+            {
+                var branch = new MenuItem { Header = entry.Label, MinHeight = 36 };
+                AppendEntries(branch.Items, children, root);
+                items.Add(branch);
+                continue;
+            }
+
+            var item = new MenuItem { Header = entry.Label, MinHeight = 36 };
+            Action action = entry.Action ?? (() => { });
+            item.Click += (_, _) => { root.IsOpen = false; action(); };
+            items.Add(item);
+        }
     }
 
     private void ShowHelp()

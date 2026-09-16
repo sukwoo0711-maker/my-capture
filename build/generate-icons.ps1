@@ -1,4 +1,4 @@
-# Generates multi-resolution .ico files for MyCapture.
+﻿# Generates multi-resolution .ico files for MyCapture.
 #
 # Each size is drawn independently so 16x16 tray icons stay crisp rather than
 # being downscaled from one large bitmap.
@@ -99,6 +99,40 @@ function Draw-Icon {
         $thickness = [Math]::Max(2.0, [Math]::Round($s * 0.10))
     }
 
+    if ($Mode -eq 'Glyph') {
+        # Refined glyph: a filled translucent shutter pane with a hairline aperture dot,
+        # plus a lighter rear pane. Fills survive dark/light taskbars better than the
+        # previous two raw strokes and read as "capture" at a glance.
+        $span = $s - ($margin * 2)
+        $paneSize = $span * 0.66
+        $offset = $span * 0.24
+        $radius = [Math]::Max(1.2, $s * 0.10)
+
+
+        # Front pane: accent-filled shutter with a small notch (aperture), the "live" pane.
+        $frontPath = New-RoundedPath -X $margin -Y ($margin + $offset * 0.4) -W $paneSize -H $paneSize -R $radius
+        $frontFill = New-Object System.Drawing.SolidBrush($Accent)
+        $g.FillPath($frontFill, $frontPath)
+        $frontFill.Dispose()
+
+        # Aperture: a centered dark dot on the shutter, the classic camera record mark.
+        $aperture = [Math]::Max(1.4, $s * 0.16)
+        $aperturePath = New-RoundedPath `
+            -X ($margin + ($paneSize - $aperture) / 2) `
+            -Y ($margin + $offset * 0.4 + ($paneSize - $aperture) / 2) `
+            -W $aperture -H $aperture -R ($aperture / 2)
+        $apertureBrush = New-Object System.Drawing.SolidBrush($GraphitePlate)
+        $g.FillPath($apertureBrush, $aperturePath)
+        $apertureBrush.Dispose()
+
+
+        
+        $frontPath.Dispose()
+        
+        $g.Dispose()
+        return $bmp
+    }
+
     # Focus Portal: a captured source pane moves forward into a floating pane.
     # Both rectangles are kept complete at small sizes; that silhouette survives
     # Windows tray resampling much better than four disconnected crop corners.
@@ -121,16 +155,13 @@ function Draw-Icon {
     }
 
     $rearPen = New-Object System.Drawing.Pen($Accent, $thickness)
-    $rearPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-    $g.DrawPath($rearPen, $rearPath)
-    $rearPen.Dispose()
 
     $frontColor = if ($Mode -eq 'Plate') { $PortalWhite } else { $Accent }
     $frontPen = New-Object System.Drawing.Pen($frontColor, $thickness)
     $frontPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
     $g.DrawPath($frontPen, $frontPath)
     $frontPen.Dispose()
-    $rearPath.Dispose()
+    
     $frontPath.Dispose()
 
     $g.Dispose()

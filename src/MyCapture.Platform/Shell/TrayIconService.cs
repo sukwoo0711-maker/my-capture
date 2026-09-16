@@ -41,6 +41,10 @@ public sealed class TrayIconService : IDisposable
     private const uint MenuRepeatLastRegion = 106;
     private const uint MenuDelayedCapture = 107;
     private const uint MenuScrollingCapture = 108;
+    private const uint MenuRecordRegion = 109;
+    // Submenu branch for the capture group. TrackPopupMenuEx returns the selected item id;
+    // popup handles never reach DispatchMenuCommand, so a fixed id above the leaves is safe.
+    private const uint MenuCaptureBranch = 200;
 
     private readonly NativeMessageWindow _window;
     private readonly TrayIconAssets _assets;
@@ -75,6 +79,7 @@ public sealed class TrayIconService : IDisposable
     public event EventHandler? RepeatLastRegionRequested;
     public event EventHandler? DelayedCaptureRequested;
     public event EventHandler? ScrollingCaptureRequested;
+    public event EventHandler? RecordRegionRequested;
 
     public TrayIconState State => _state;
 
@@ -302,21 +307,41 @@ public sealed class TrayIconService : IDisposable
 
         try
         {
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuCapture, UiText.Get("Text_2C20ADDA2018"));
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuCaptureWindow, UiText.Get("Text_EA1FBABE64F3"));
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuCaptureFullScreen, UiText.Get("Text_65BB6610ACA0"));
-            AppendMenu(
-                menu,
-                NativeMethods.MF_STRING,
-                MenuScrollingCapture,
-                _scrollingCaptureActive ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"));
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuRepeatLastRegion, UiText.Get("Text_878A28AF568C"));
-            AppendMenu(menu, NativeMethods.MF_STRING, MenuDelayedCapture, UiText.Get("Text_38FF9B0AA541"));
-            AppendMenu(menu, NativeMethods.MF_SEPARATOR, 0, null);
+            // Capture commands live in one submenu (Windows tray convention: grouped
+            // actions, then destinations, then settings/exit).
+            IntPtr captureMenu = NativeMethods.CreatePopupMenu();
+            if (captureMenu == IntPtr.Zero)
+            {
+                throw NewWin32Exception("create the capture submenu");
+            }
+
+            try
+            {
+                AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuCapture, UiText.Get("Text_2C20ADDA2018"));
+                AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuCaptureWindow, UiText.Get("Text_EA1FBABE64F3"));
+                AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuCaptureFullScreen, UiText.Get("Text_65BB6610ACA0"));
+                AppendMenu(
+                    captureMenu,
+                    NativeMethods.MF_STRING,
+                    MenuScrollingCapture,
+                    _scrollingCaptureActive ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"));
+                AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuRepeatLastRegion, UiText.Get("Text_878A28AF568C"));
+                AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuDelayedCapture, UiText.Get("Text_38FF9B0AA541"));
+                AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuRecordRegion, UiText.Get("Text_4F5AF20FAA6E"));
+                AppendMenu(
+                    menu,
+                    NativeMethods.MF_POPUP | NativeMethods.MF_STRING,
+                    (uint)captureMenu,
+                    UiText.Get("Text_50EE4EA7C243"));
+            }
+            catch
+            {
+                _ = NativeMethods.DestroyMenu(captureMenu);
+                throw;
+            }
+
             AppendMenu(menu, NativeMethods.MF_STRING, MenuGallery, UiText.Get("Text_8739F6684453"));
-            AppendMenu(menu, NativeMethods.MF_SEPARATOR, 0, null);
             AppendMenu(menu, NativeMethods.MF_STRING, MenuSettings, UiText.Get("Text_00480581AAB5"));
-            AppendMenu(menu, NativeMethods.MF_SEPARATOR, 0, null);
             AppendMenu(menu, NativeMethods.MF_STRING, MenuExit, UiText.Get("Text_72B6DBA8AAC5"));
             _ = NativeMethods.SetMenuDefaultItem(menu, MenuCapture, 0);
 
@@ -373,6 +398,9 @@ public sealed class TrayIconService : IDisposable
                 break;
             case MenuDelayedCapture:
                 DelayedCaptureRequested?.Invoke(this, EventArgs.Empty);
+                break;
+            case MenuRecordRegion:
+                RecordRegionRequested?.Invoke(this, EventArgs.Empty);
                 break;
             case MenuGallery:
                 GalleryRequested?.Invoke(this, EventArgs.Empty);
