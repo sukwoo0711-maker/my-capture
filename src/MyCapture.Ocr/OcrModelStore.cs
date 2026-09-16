@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
@@ -282,7 +282,7 @@ internal sealed class OcrModelStore
         {
             Timeout = TimeSpan.FromMinutes(3),
         };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("MyCapture/2.3.7 (OCR model download)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("MyCapture/2.3.8 (OCR model download)");
         return client;
     }
 }
