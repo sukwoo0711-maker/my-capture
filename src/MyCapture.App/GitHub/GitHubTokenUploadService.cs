@@ -3,7 +3,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.Core.GitHub;
@@ -20,18 +19,28 @@ internal sealed record GitHubTokenUploadResult(bool Success, string? Url = null,
 /// </summary>
 /// <remarks>
 /// The token is stored by the user in the settings file on their own machine and sent only
-/// to api.github.com over HTTPS. Scopes: the token needs <c>repo</c> (private issues) or
-/// <c>public_repo</c> (public issues).
+/// to the API host derived from the configured issue URL (api.github.com, or the enterprise
+/// server's <c>/api/v3</c>). Scopes: the token needs <c>repo</c> (private issues) or
+/// <c>public_repo</c> (public issues). Note that the user-attachments upload API is
+/// currently served by github.com only; when an enterprise server refuses it the caller
+/// falls back to the browser flow.
 /// </remarks>
 internal sealed class GitHubTokenUploadService
 {
     private readonly Func<AppSettings> _settings;
     private readonly ILogger _log;
+    private readonly Func<HttpClient> _clientFactory;
 
     internal GitHubTokenUploadService(Func<AppSettings> settings, ILogger log)
+        : this(settings, log, static () => new HttpClient())
+    {
+    }
+
+    internal GitHubTokenUploadService(Func<AppSettings> settings, ILogger log, Func<HttpClient> clientFactory)
     {
         _settings = settings;
         _log = log;
+        _clientFactory = clientFactory;
     }
 
     internal async Task<GitHubTokenUploadResult> UploadAsync(
@@ -46,14 +55,7 @@ internal sealed class GitHubTokenUploadService
             return new GitHubTokenUploadResult(false, Error: "no-token");
         }
 
-        if (!GitHubIssueImageUrl.TryNormalize(settings.GitHub.IssueUrl, out string issueUrl))
-        {
-            return new GitHubTokenUploadResult(false, Error: "invalid-url");
-        }
-
-        // Parse owner/repo/number from the normalized URL.
-        Match issue = Regex.Match(issueUrl, @"^https://github\.com/([^/]+)/([^/]+)/issues/(\d+)$");
-        if (!issue.Success)
+        if (!GitHubIssueImageUrl.TryParseTarget(settings.GitHub.IssueUrl, out GitHubIssueTarget target))
         {
             return new GitHubTokenUploadResult(false, Error: "invalid-url");
         }
@@ -66,15 +68,15 @@ internal sealed class GitHubTokenUploadService
 
         try
         {
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                "Bearer", settings.GitHub.Token.Trim());
+            using var client = _clientFactory();
             client.DefaultRequestHeaders.UserAgent.ParseAdd("MyCapture");
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 
-            // 1) Request a user-attachments upload policy (GitHub Images API).
+            // 1) Request a user-attachments upload policy (GitHub Images API). The token is
+            //    set per request: the signed upload URL in step 2 lives on a different host
+            //    and must not carry the Authorization header.
             string fileName = $"mycapture-{DateTime.Now:yyyyMMdd-HHmmss}.png";
-            using var policyRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.github.com/upload/policies")
+            using var policyRequest = new HttpRequestMessage(HttpMethod.Post, $"{target.ApiBase}/upload/policies")
             {
                 Content = JsonContent.Create(new
                 {
@@ -83,6 +85,8 @@ internal sealed class GitHubTokenUploadService
                     content_type = "image/png",
                 }),
             };
+            policyRequest.Headers.Authorization = new AuthenticationHeaderValue(
+                "Bearer", settings.GitHub.Token.Trim());
             using HttpResponseMessage policyResponse = await client.SendAsync(policyRequest, cancellationToken);
             if (!policyResponse.IsSuccessStatusCode)
             {
@@ -100,13 +104,14 @@ internal sealed class GitHubTokenUploadService
                 return new GitHubTokenUploadResult(false, Error: "policy-missing-fields");
             }
 
-            // 2) Upload the bytes to the signed URL.
+            // 2) Upload the bytes to the signed URL. No Authorization header here: the
+            //    URL is pre-signed, and client default headers are not merged (the token
+            //    was set on the policy request only).
             using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, uploadUrl)
             {
                 Content = new ByteArrayContent(png),
             };
             uploadRequest.Content.Headers.Add("Content-Type", "image/png");
-            uploadRequest.Headers.Add("Authorization", string.Empty); // Signed URL forbids auth header.
             using HttpResponseMessage uploadResponse = await client.SendAsync(uploadRequest, cancellationToken);
             if (!uploadResponse.IsSuccessStatusCode)
             {
@@ -115,7 +120,7 @@ internal sealed class GitHubTokenUploadService
                 return new GitHubTokenUploadResult(false, Error: $"upload-{(int)uploadResponse.StatusCode}");
             }
 
-            string url = $"https://github.com/user-attachments/assets/{assetId}";
+            string url = $"{target.AssetUrlBase}{assetId}";
             _log.LogInformation("Uploaded image via token: {Url}", url);
             return new GitHubTokenUploadResult(true, Url: url);
         }

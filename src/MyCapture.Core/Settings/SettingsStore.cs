@@ -84,6 +84,16 @@ public sealed class SettingsStore
         Sanitize(settings, warnings);
         LastLoadWarnings = warnings;
 
+        // A token written by 2.4.0 sits in plaintext on disk. Re-save it once so the
+        // DPAPI converter rewrites it encrypted; a marker in the text means it already is.
+        if (settings.GitHub.Token.Length > 0
+            && text is not null
+            && !text.Contains(DpapiSecretConverter.EncryptedPrefix, StringComparison.Ordinal))
+        {
+            _log.LogInformation("Re-encrypting the GitHub token at rest");
+            Save(settings);
+        }
+
         return settings;
     }
 
@@ -98,15 +108,25 @@ public sealed class SettingsStore
     }
 
     /// <summary>
-    /// Writes the settings as a portable JSON file the user picks. The exported payload is
-    /// the same shape as the live settings file, so ImportFrom uses one code path.
+    /// Writes the settings as a portable JSON file the user picks. Secrets are never
+    /// exported: the GitHub PAT is DPAPI-encrypted per machine and per user, so a copied
+    /// blob could not be decrypted elsewhere anyway — the field is simply omitted instead.
+    /// The exported payload keeps the live settings file's shape, so ImportFrom uses one
+    /// code path.
     /// </summary>
     public void ExportTo(AppSettings settings, string destinationPath)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
 
-        string json = JsonSerializer.Serialize(settings, SerializerOptions);
+        // Clone through JSON (the converter decrypts the token in memory) and blank the
+        // secret before writing the portable copy. The live settings are not mutated.
+        AppSettings exportable = JsonSerializer.Deserialize<AppSettings>(
+            JsonSerializer.Serialize(settings, SerializerOptions),
+            SerializerOptions)!;
+        exportable.GitHub.Token = string.Empty;
+
+        string json = JsonSerializer.Serialize(exportable, SerializerOptions);
         AtomicFile.WriteAllText(destinationPath, json);
         _log.LogInformation("Settings exported to {Path}", LogText.SingleLine(destinationPath));
     }
