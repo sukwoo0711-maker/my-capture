@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -145,6 +146,12 @@ internal sealed class OcrResultWindow : Window
         _copyButton.Click += (_, _) => CopyText();
         buttons.Children.Add(_copyButton);
 
+        // Export writes the same text to a picked .txt file (UTF-8, no BOM).
+        var exportButton = MakeButton(UiText.Get("Ocr_ExportText"), UiText.Get("Ocr_ExportText"));
+        exportButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
+        exportButton.Click += (_, _) => ExportText();
+        buttons.Children.Add(exportButton);
+
         // The footer shares the uniform surface — no raised bar or divider — keeping the window
         // text-first with the actions quietly anchored bottom-right.
         var footer = new Border
@@ -160,6 +167,8 @@ internal sealed class OcrResultWindow : Window
 
         _ = InputBindings.Add(new KeyBinding(
             new RelayUiCommand(CopyText), new KeyGesture(Key.C, ModifierKeys.Control)));
+        _ = InputBindings.Add(new KeyBinding(
+            new RelayUiCommand(ExportText), new KeyGesture(Key.S, ModifierKeys.Control)));
         PreviewKeyDown += OnPreviewKeyDown;
     }
 
@@ -271,6 +280,40 @@ internal sealed class OcrResultWindow : Window
         {
             // Clipboard momentarily locked by another app; a copy failure must not throw.
             _status.Text = UiText.Get("Text_75425A6D9BE8");
+        }
+    }
+
+    /// <summary>Saves the recognised text to a UTF-8 .txt file the user picks.</summary>
+    private void ExportText()
+    {
+        if (string.IsNullOrEmpty(_textBox.Text))
+        {
+            _status.Text = UiText.Get("Ocr_ExportNone");
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = UiText.Get("Ocr_ExportText"),
+            Filter = "Text (*.txt)|*.txt",
+            DefaultExt = ".txt",
+            AddExtension = true,
+            OverwritePrompt = true,
+            FileName = $"MyCapture-OCR-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(dialog.FileName, _textBox.Text, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            _status.Text = UiText.Get("Ocr_ExportDone") + " " + dialog.FileName;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _status.Text = UiText.Get("Text_75425A6D9BE8") + " " + ex.Message;
         }
     }
 

@@ -39,6 +39,7 @@ internal sealed class VideoExportDialog : Window
     private bool _working;
     private bool _closeRequested;
     private bool _closed;
+    private bool _autoCalculatedOnShow;
     private int _settingsRevision;
 
     internal VideoExportDialog(RecordingResult recording, VideoEditDocument document, ILoggerFactory logs, bool gif)
@@ -121,6 +122,17 @@ internal sealed class VideoExportDialog : Window
         };
         Closing += (_, e) => { if (_working) { e.Cancel = true; _closeRequested = true; _cancellation?.Cancel(); } };
         Closed += (_, _) => { _closed = true; _cancellation?.Cancel(); _result?.Dispose(); _result = null; };
+        // GIF is the common share target: calculate the moment the dialog is shown so the
+        // user sees a size and preview without pressing 계산. Loaded (not the ctor) so
+        // headless construction in tests never starts a calculation pump.
+        Loaded += (_, _) =>
+        {
+            if (_format.SelectedIndex == 1 && !_autoCalculatedOnShow)
+            {
+                _autoCalculatedOnShow = true;
+                _ = CalculateAsync();
+            }
+        };
         Changed();
     }
 
@@ -137,9 +149,23 @@ internal sealed class VideoExportDialog : Window
         _mp4.Visibility = gif ? Visibility.Collapsed : Visibility.Visible;
         _gif.Visibility = gif ? Visibility.Visible : Visibility.Collapsed;
         _targetLabel.Text = UiText.Format("MediaExport_Target", (int)_target.Value);
-        bool tooLong = gif && _document.TrimOutMs - _document.TrimInMs > AnimatedGifExporter.MaximumDurationMs + 0.5;
+        double span = _document.TrimOutMs - _document.TrimInMs;
+        bool tooLong = gif && span > AnimatedGifExporter.MaximumDurationMs + 0.5;
         _calculate.IsEnabled = !tooLong;
         _status.Text = UiText.Get(tooLong ? "MediaExport_TrimGif" : "MediaExport_CalculateHint");
+    }
+
+    /// <summary>
+    /// Clamps the selection to the first 20 s (GIF hard limit) by moving Out. Returns true
+    /// when the document changed and the caller should reflect it in the editor timeline.
+    /// </summary>
+    internal bool TryAutoTrimForGif()
+    {
+        double span = _document.TrimOutMs - _document.TrimInMs;
+        if (span <= AnimatedGifExporter.MaximumDurationMs + 0.5) return false;
+        _document.TrimOutMs = _document.TrimInMs + AnimatedGifExporter.MaximumDurationMs;
+        Changed();
+        return true;
     }
 
     internal int TargetReductionPercent

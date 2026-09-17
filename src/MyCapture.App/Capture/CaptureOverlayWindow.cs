@@ -108,6 +108,18 @@ internal sealed class CaptureOverlayWindow : Window
     internal event EventHandler<CaptureSelectionCompletedEventArgs>? SelectionCompleted;
 
     internal event EventHandler? SelectionCancelled;
+
+    /// <summary>
+    /// Optional fixed-size preset for this selection. When set, the overlay lets the user
+    /// drag only the top-left position: the drag start seeds a rectangle of exactly the
+    /// preset size (clamped to the frame), so repeated recordings keep identical dimensions.
+    /// </summary>
+    internal System.Drawing.Size? PresetSize
+    {
+        get => _view.PresetSize;
+        set => _view.PresetSize = value;
+    }
+
     /// <summary>Recording needs geometry only; it must not allocate a cropped screenshot.</summary>
     internal Action<RectD>? GeometrySelectionCompleted { get; set; }
 

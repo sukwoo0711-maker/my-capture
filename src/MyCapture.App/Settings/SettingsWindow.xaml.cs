@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
+using Microsoft.Win32;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -35,6 +37,7 @@ internal sealed partial class SettingsWindow : Window
 {
     private readonly Func<AppSettings> _currentSettings;
     private readonly Func<AppSettings, SettingsApplyResult> _apply;
+    private readonly Func<SettingsStore>? _settingsStore;
     private readonly ILogger _log;
 
     private SettingsDraft _draft;
@@ -43,11 +46,13 @@ internal sealed partial class SettingsWindow : Window
     internal SettingsWindow(
         Func<AppSettings> currentSettings,
         Func<AppSettings, SettingsApplyResult> apply,
-        ILogger log)
+        ILogger log,
+        Func<SettingsStore>? settingsStore = null)
     {
         _currentSettings = currentSettings ?? throw new ArgumentNullException(nameof(currentSettings));
         _apply = apply ?? throw new ArgumentNullException(nameof(apply));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _settingsStore = settingsStore;
 
         InitializeComponent();
         InitializeUpdates();
@@ -138,15 +143,20 @@ internal sealed partial class SettingsWindow : Window
         base.OnClosing(e);
     }
 
-    private void ReloadDraft()
+    private void ReloadDraft() => ReloadDraftFrom(_currentSettings());
+
+    private void ReloadDraftFrom(AppSettings settings)
     {
-        _draft = new SettingsDraft(_currentSettings());
+        _draft = new SettingsDraft(settings);
         _draft.ErrorsChanged += (_, _) => RefreshErrorSummary();
         _draft.PropertyChanged += (_, _) => _settingsEdited = true;
         _settingsEdited = false;
         DataContext = _draft;
         RefreshErrorSummary();
     }
+
+    /// <summary>Writes a transient line into the status bar area used by updates.</summary>
+    private void SetStatusMessage(string message) => UpdateStatus.Text = message;
 
     // ---- Commands / buttons --------------------------------------------------------
 
@@ -160,6 +170,70 @@ internal sealed partial class SettingsWindow : Window
         // so Cancel (or reopening) restores the prior values.
         _draft.ResetToDefaults();
         RefreshErrorSummary();
+    }
+
+    private void OnExportSettings(object sender, RoutedEventArgs e)
+    {
+        if (_settingsStore is null)
+        {
+            SetStatusMessage(UiText.Get("Settings_Export"));
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = UiText.Get("Settings_Export"),
+            Filter = "MyCapture settings (*.json)|*.json",
+            DefaultExt = ".json",
+            AddExtension = true,
+            OverwritePrompt = true,
+            FileName = $"MyCapture-settings-{DateTime.Now:yyyyMMdd}.json",
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        try
+        {
+            _settingsStore().ExportTo(_currentSettings(), dialog.FileName);
+            SetStatusMessage(UiText.Get("Settings_ExportDone"));
+        }
+        catch (Exception ex)
+        {
+            SetStatusMessage(ex.Message);
+        }
+    }
+
+    private void OnImportSettings(object sender, RoutedEventArgs e)
+    {
+        if (_settingsStore is null)
+        {
+            return;
+        }
+
+        var dialog = new OpenFileDialog
+        {
+            Title = UiText.Get("Settings_Import"),
+            Filter = "MyCapture settings (*.json)|*.json",
+            CheckFileExists = true,
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        try
+        {
+            AppSettings imported = _settingsStore().ImportFrom(dialog.FileName);
+            ReloadDraftFrom(imported);
+            SetStatusMessage(UiText.Get("Settings_ImportDone"));
+            RefreshErrorSummary();
+        }
+        catch (Exception ex)
+        {
+            SetStatusMessage(UiText.Get("Settings_ImportFailed") + " " + ex.Message);
+        }
     }
 
     private void Apply()
@@ -215,7 +289,10 @@ internal sealed partial class SettingsWindow : Window
         ++_updateProgressGeneration;
         _updates.Cancel();
         // Discard edits by dropping the draft, then hide.
-        ReloadDraft();
+        if (_draft is not null)
+        {
+            ReloadDraft();
+        }
         Hide();
     }
 

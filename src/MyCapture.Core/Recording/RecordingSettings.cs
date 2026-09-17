@@ -64,5 +64,14 @@ public sealed class RecordingSettings
     /// </remarks>
     public double CoarseStepSeconds { get; set; } = 5.0;
 
+    /// <summary>
+    /// Optional fixed size for new region recordings, in physical pixels. A non-null value
+    /// offers a preset in the selection overlay (the user still confirms position); null
+    /// keeps the free-drag behaviour.
+    /// </summary>
+    public int? PresetWidth { get; set; }
+
+    public int? PresetHeight { get; set; }
+
     public int TargetFps => (int)FrameRate;
 }

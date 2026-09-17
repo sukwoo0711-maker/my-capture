@@ -174,6 +174,69 @@ internal sealed class AnnotationEditorController
     private void AddRotation(int quarterTurns) =>
         RotationTurns = ((RotationTurns + quarterTurns) % 4 + 4) % 4;
 
+    /// <summary>
+    /// Crops the capture to <paramref name="region"/> as one undoable step: the canvas
+    /// shrinks and every annotation translates by the new origin. The caller replaces the
+    /// base bitmap with the cropped pixels and keeps them in sync via undo-stack changes.
+    /// </summary>
+    internal void CropDocument(RectD region)
+    {
+        RectD clamped = region.Normalized()
+            .ClampTo(new RectD(0, 0, _document.CanvasWidth, _document.CanvasHeight));
+        if (clamped.Width < 2 || clamped.Height < 2
+            || (clamped.Width >= _document.CanvasWidth && clamped.Height >= _document.CanvasHeight))
+        {
+            return;
+        }
+
+        SetSelected(null);
+        _undo.Execute(new DocumentCropCommand(this, _document, clamped));
+        RaiseVisual();
+    }
+
+    /// <summary>How far the live canvas origin sits from the original capture, in pixels.</summary>
+    internal PointD CropOrigin { get; private set; }
+
+    /// <summary>Rotates the annotation document in place as one reversible command.</summary>
+    private sealed class DocumentCropCommand : IUndoableCommand
+    {
+        private readonly AnnotationEditorController _owner;
+        private readonly AnnotationDocument _document;
+        private readonly RectD _region;
+
+        public DocumentCropCommand(AnnotationEditorController owner, AnnotationDocument document, RectD region)
+        {
+            _owner = owner;
+            _document = document;
+            _region = region;
+        }
+
+        public string Description => UiText.Get("Tools_Crop");
+
+        public void Execute()
+        {
+            Apply(_document, _region);
+            _owner.CropOrigin = new PointD(_owner.CropOrigin.X + _region.X, _owner.CropOrigin.Y + _region.Y);
+        }
+
+        public void Undo()
+        {
+            Apply(_document, new RectD(-_region.X, -_region.Y, _document.CanvasWidth + _region.X, _document.CanvasHeight + _region.Y));
+            _owner.CropOrigin = new PointD(_owner.CropOrigin.X - _region.X, _owner.CropOrigin.Y - _region.Y);
+        }
+
+        private static void Apply(AnnotationDocument document, RectD offset)
+        {
+            foreach (AnnotationItem item in document.Items)
+            {
+                item.Translate(-offset.X, -offset.Y);
+            }
+
+            document.CanvasWidth = Math.Max(1, (int)offset.Width);
+            document.CanvasHeight = Math.Max(1, (int)offset.Height);
+        }
+    }
+
     /// <summary>Rotates the annotation document in place as one reversible command.</summary>
     private sealed class DocumentRotationCommand : IUndoableCommand
     {

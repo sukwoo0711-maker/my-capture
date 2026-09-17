@@ -60,6 +60,10 @@ internal sealed class AnnotationEditorControl : Grid
     private readonly Grid _viewport = new();
     private readonly Canvas _overlayCanvas = new();
     private readonly Dictionary<EditorTool, ToggleButton> _toolButtons = new();
+    private bool _mosaicDragging;
+    private PointD _mosaicStart;
+    private bool _cropDragging;
+    private PointD _cropStart;
 
     private int _canvasWidth;
     private int _canvasHeight;
@@ -362,7 +366,7 @@ internal sealed class AnnotationEditorControl : Grid
     /// <remarks>
     /// The document rotation goes through the controller's undo stack. The base bitmap is
     /// derived state, so it is recomputed from the current rotation counter whenever the
-    /// undo stack changes — undoing a rotation then restores the original bitmap without a
+    /// undo stack changes ??undoing a rotation then restores the original bitmap without a
     /// second command type.
     /// </remarks>
     private void RotateCapture(int quarterTurns)
@@ -395,8 +399,8 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         // Size the crop from the bitmap that was actually produced. Swapping the *current*
-        // canvas size `_rotationTurns` times is wrong after the first turn (180° would keep
-        // the previous 90° dimensions and every handle would miss the pixels).
+        // canvas size `_rotationTurns` times is wrong after the first turn (180째 would keep
+        // the previous 90째 dimensions and every handle would miss the pixels).
         SwapBaseBitmap(rotated, new RectD(0, 0, rotated.PixelWidth, rotated.PixelHeight));
     }
 
@@ -448,6 +452,18 @@ internal sealed class AnnotationEditorControl : Grid
                 InsertImage(image);
                 e.Handled = true;
                 return;
+            case EditorTool.Mosaic:
+                _mosaicDragging = true;
+                _mosaicStart = image;
+                CapturePointer();
+                e.Handled = true;
+                return;
+            case EditorTool.Crop:
+                _cropDragging = true;
+                _cropStart = image;
+                CapturePointer();
+                e.Handled = true;
+                return;
             default:
                 _controller.HitTolerance = 6 / Math.Max(double.Epsilon, _surface.DipPerPixel);
                 _controller.PointerDown(image);
@@ -455,6 +471,105 @@ internal sealed class AnnotationEditorControl : Grid
                 e.Handled = true;
                 break;
         }
+    }
+
+    /// <summary>
+    /// Pixels the captured content inside <paramref name="region"/> and adds the patch as
+    /// a movable/resizable image annotation. Sampling the frozen capture keeps the patch
+    /// in sync with rotation and crop, and making it an image (not a live effect) means
+    /// the flattener, video layer pipeline and re-edit story need no new code path.
+    /// </summary>
+    internal void ApplyMosaic(RectD region, int blockSize)
+    {
+        RectD normalized = region.Normalized().ClampTo(new RectD(0, 0, _canvasWidth, _canvasHeight));
+        int x = (int)Math.Floor(normalized.X);
+        int y = (int)Math.Floor(normalized.Y);
+        int width = (int)Math.Ceiling(normalized.Width);
+        int height = (int)Math.Ceiling(normalized.Height);
+        if (width < 2 || height < 2)
+        {
+            return;
+        }
+
+        int step = Math.Clamp(blockSize, 4, 64);
+        int stride = _selectedBitmap.PixelWidth * 4;
+        byte[] source = new byte[stride * _selectedBitmap.PixelHeight];
+        _selectedBitmap.CopyPixels(source, stride, 0);
+
+        int patchStride = width * 4;
+        byte[] patch = new byte[patchStride * height];
+
+        // Box-average each block into a 1횞1 sample, then write the sample across the
+        // block. Block averages (not nearest-neighbour picks) keep thin dark text visible
+        // as a smear rather than vanishing into the surrounding colour.
+        for (int by = 0; by < height; by += step)
+        {
+            int blockH = Math.Min(step, height - by);
+            for (int bx = 0; bx < width; bx += step)
+            {
+                int blockW = Math.Min(step, width - bx);
+                long sumB = 0, sumG = 0, sumR = 0, count = 0;
+                for (int py = 0; py < blockH; py++)
+                {
+                    int sy = y + by + py;
+                    int row = sy * stride;
+                    for (int px = 0; px < blockW; px++)
+                    {
+                        int sx = x + bx + px;
+                        int i = row + (sx * 4);
+                        if (source[i + 3] == 0)
+                        {
+                            continue;
+                        }
+
+                        sumB += source[i];
+                        sumG += source[i + 1];
+                        sumR += source[i + 2];
+                        count++;
+                    }
+                }
+
+                if (count == 0)
+                {
+                    continue;
+                }
+
+                byte b = (byte)(sumB / count);
+                byte gByte = (byte)(sumG / count);
+                byte r = (byte)(sumR / count);
+                for (int py = 0; py < blockH; py++)
+                {
+                    int dy = by + py;
+                    int row = dy * patchStride;
+                    for (int px = 0; px < blockW; px++)
+                    {
+                        int di = row + ((bx + px) * 4);
+                        patch[di] = b;
+                        patch[di + 1] = gByte;
+                        patch[di + 2] = r;
+                        patch[di + 3] = 255;
+                    }
+                }
+            }
+        }
+
+        var decoded = BitmapSource.Create(
+            width,
+            height,
+            96,
+            96,
+            System.Windows.Media.PixelFormats.Bgra32,
+            null,
+            patch,
+            patchStride);
+        decoded.Freeze();
+
+        (BitmapSource Bitmap, string AssetFileName) asset = _imageStore.RegisterInMemory(decoded);
+        double scale = Math.Max(1.0, _surface.DipPerPixel);
+        var rect = new RectD(normalized.X, normalized.Y, normalized.Width / scale, normalized.Height / scale);
+        _controller.AddImageAnnotation(asset.AssetFileName, width, height, rect);
+        SelectTool(EditorTool.Select);
+        SetStatus(UiText.Get("Text_3F8046019B34"));
     }
 
     private void OnSurfaceMouseMove(object sender, MouseEventArgs e)
@@ -485,6 +600,30 @@ internal sealed class AnnotationEditorControl : Grid
     {
         if (_activeTextBox is not null)
         {
+            return;
+        }
+
+        if (_mosaicDragging)
+        {
+            _mosaicDragging = false;
+            ReleasePointer();
+            Point mosaicDip = e.GetPosition(_surface);
+            PointD mosaicEnd = _surface.ToImagePoint(mosaicDip);
+            ApplyMosaic(
+                new RectD(_mosaicStart.X, _mosaicStart.Y, mosaicEnd.X - _mosaicStart.X, mosaicEnd.Y - _mosaicStart.Y),
+                blockSize: 14);
+            e.Handled = true;
+            return;
+        }
+
+        if (_cropDragging)
+        {
+            _cropDragging = false;
+            ReleasePointer();
+            Point cropDip = e.GetPosition(_surface);
+            PointD cropEnd = _surface.ToImagePoint(cropDip);
+            ApplyCrop(new RectD(_cropStart.X, _cropStart.Y, cropEnd.X - _cropStart.X, cropEnd.Y - _cropStart.Y));
+            e.Handled = true;
             return;
         }
 
@@ -657,6 +796,53 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.CommitTextEdit(annotation, box.Text ?? string.Empty);
         SetStatus(hadText ? UiText.Get("Text_B09611FF35C1") : UiText.Get("Text_8BDB6F46B7FF"));
         UpdateInspector();
+    }
+
+    /// <summary>
+    /// Crops the capture and its annotation layer to <paramref name="region"/> as one
+    /// undoable step. The base bitmap is re-derived on undo via
+    /// <see cref="ApplyUncroppedBaseBitmap"/>.
+    /// </summary>
+    internal void ApplyCrop(RectD region)
+    {
+        RectD normalized = region.Normalized().ClampTo(new RectD(0, 0, _canvasWidth, _canvasHeight));
+        if (normalized.Width < 8 || normalized.Height < 8)
+        {
+            SelectTool(EditorTool.Select);
+            return;
+        }
+
+        CommitActiveText();
+        int stride = _selectedBitmap.PixelWidth * 4;
+        byte[] source = new byte[stride * _selectedBitmap.PixelHeight];
+        _selectedBitmap.CopyPixels(source, stride, 0);
+
+        int x = (int)Math.Floor(normalized.X);
+        int y = (int)Math.Floor(normalized.Y);
+        int width = (int)Math.Ceiling(normalized.Width);
+        int height = (int)Math.Ceiling(normalized.Height);
+        int cropStride = width * 4;
+        byte[] crop = new byte[cropStride * height];
+        for (int row = 0; row < height; row++)
+        {
+            Buffer.BlockCopy(source, ((y + row) * stride) + (x * 4), crop, row * cropStride, width * 4);
+        }
+
+        var cropped = BitmapSource.Create(
+            width,
+            height,
+            _selectedBitmap.DpiX,
+            _selectedBitmap.DpiY,
+            System.Windows.Media.PixelFormats.Bgra32,
+            null,
+            crop,
+            cropStride);
+        cropped.Freeze();
+
+        _controller.CropDocument(normalized);
+        SwapBaseBitmap(cropped, new RectD(0, 0, width, height));
+        SelectTool(EditorTool.Select);
+        SetStatus(UiText.Get("Tools_CropApplied"));
     }
 
     // ---- Image insertion -----------------------------------------------------------
@@ -937,6 +1123,8 @@ internal sealed class AnnotationEditorControl : Grid
         AddToolButton(stack, EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), "P", UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen);
         AddToolButton(stack, EditorTool.Text, UiText.Get("Text_258AD4B095A1"), "T", UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText);
         AddToolButton(stack, EditorTool.Image, UiText.Get("Text_302BAE127938"), "I", UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage);
+        AddToolButton(stack, EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), "M", UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic);
+        AddToolButton(stack, EditorTool.Crop, UiText.Get("Tools_Crop"), "X", UiText.Get("Tools_CropHint"), "Icon.Crop", FallbackCrop);
 
         var panel = new Border { Child = stack };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
@@ -1423,6 +1611,10 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static Geometry FallbackImage() => Geometry.Parse("M3,4 H17 V16 H3 Z M3,13 L8,9 L11,12 L14,9 L17,12 M12.5,7.5 A1,1 0 1 1 12.4,7.5");
 
+    private static Geometry FallbackMosaic() => Geometry.Parse("M3,4 H17 V16 H3 Z M3,9 H9 V4 M9,9 H15 M9,9 V16 M15,9 V14 A2,2 0 0 1 13,16");
+
+    private static Geometry FallbackCrop() => Geometry.Parse("M5,3 V13 H17 M17,13 L14,10 M17,13 L14,16 M3,5 A2,2 0 0 1 5,3");
+
     private static Geometry FallbackUndo() => Geometry.Parse("M8,6 L4,10 L8,14 M4,10 H13 A4,4 0 0 1 13,18");
 
     private static Geometry FallbackRedo() => Geometry.Parse("M12.75,5.25 L16.5,9 L12.75,12.75 M16.25,9 H8.75 A5,5 0 0 0 5.25,17");
@@ -1507,6 +1699,7 @@ internal sealed class AnnotationEditorControl : Grid
     {
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncRotationWithDocument();
+        SyncCropWithDocument();
         RefreshHistoryButtons();
         UpdateInspector();
     }
@@ -1514,7 +1707,7 @@ internal sealed class AnnotationEditorControl : Grid
     /// <summary>
     /// Re-derives the base bitmap after any undo-stack change so undoing (or redoing) a
     /// rotation restores the matching bitmap orientation. The turn count lives on the
-    /// controller because canvas width/height cannot distinguish 0° from 180°.
+    /// controller because canvas width/height cannot distinguish 0째 from 180째.
     /// </summary>
     private void SyncRotationWithDocument()
     {
@@ -1525,9 +1718,69 @@ internal sealed class AnnotationEditorControl : Grid
         {
             return;
         }
-
         _rotationTurns = turns;
         ApplyRotatedBaseBitmap();
+    }
+
+    /// <summary>
+    /// Re-derives the base bitmap after a crop (or its undo) so the visible pixels match
+    /// the document canvas. Undo of a crop re-cuts from the last pre-crop bitmap kept by
+    /// <see cref="ApplyCrop"/>'s source — the full original — because the canvas size alone
+    /// cannot reconstruct pixels that were removed.
+    /// </summary>
+    private void SyncCropWithDocument()
+    {
+        int width = Math.Max(1, _controller.Document.CanvasWidth);
+        int height = Math.Max(1, _controller.Document.CanvasHeight);
+        if (width == _canvasWidth && height == _canvasHeight)
+        {
+            return;
+        }
+
+        if (width <= _selectedBitmap.PixelWidth && height <= _selectedBitmap.PixelHeight)
+        {
+            ApplyCropFromOriginal(width, height);
+            return;
+        }
+
+        // Growing back (crop undo): recut from the original capture at the current origin.
+        ApplyCropFromOriginal(width, height);
+    }
+
+    private void ApplyCropFromOriginal(int width, int height)
+    {
+        PointD origin = _controller.CropOrigin;
+        int stride = _selectedBitmap.PixelWidth * 4;
+        byte[] source = new byte[stride * _selectedBitmap.PixelHeight];
+        _selectedBitmap.CopyPixels(source, stride, 0);
+
+        int x = Math.Clamp((int)Math.Round(origin.X), 0, _selectedBitmap.PixelWidth - 1);
+        int y = Math.Clamp((int)Math.Round(origin.Y), 0, _selectedBitmap.PixelHeight - 1);
+        width = Math.Min(width, _selectedBitmap.PixelWidth - x);
+        height = Math.Min(height, _selectedBitmap.PixelHeight - y);
+        if (width < 1 || height < 1)
+        {
+            return;
+        }
+
+        int cropStride = width * 4;
+        byte[] crop = new byte[cropStride * height];
+        for (int row = 0; row < height; row++)
+        {
+            Buffer.BlockCopy(source, ((y + row) * stride) + (x * 4), crop, row * cropStride, width * 4);
+        }
+
+        var cropped = BitmapSource.Create(
+            width,
+            height,
+            _selectedBitmap.DpiX,
+            _selectedBitmap.DpiY,
+            System.Windows.Media.PixelFormats.Bgra32,
+            null,
+            crop,
+            cropStride);
+        cropped.Freeze();
+        SwapBaseBitmap(cropped, new RectD(0, 0, width, height));
     }
 
     private void RefreshHistoryButtons()

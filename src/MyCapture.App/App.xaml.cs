@@ -423,6 +423,43 @@ public partial class App : Application
         _gitHubUploadInFlight = true;
         try
         {
+            // Token mode: upload through the REST API. No browser, no focus change, no
+            // clipboard dance — the URL lands straight on the clipboard.
+            if (!string.IsNullOrWhiteSpace(_settings!.GitHub.Token))
+            {
+                MyCapture.App.Pinning.ClipboardImageReader.PinReadAttempt attempt =
+                    await MyCapture.App.Pinning.ClipboardImageReader.ReadPinAsync();
+                System.Windows.Media.Imaging.BitmapSource? image = attempt.Content?.Image;
+                if (attempt.Outcome.Status != MyCapture.Core.Pin.ClipboardImageStatus.Success || image is null)
+                {
+                    _tray?.ShowBalloon("MyCapture", UiText.Get("GitHub.NeedImage"), TrayBalloonKind.Warning, playSound: false);
+                    return;
+                }
+
+                var uploader = new GitHubTokenUploadService(
+                    () => _settings,
+                    _log ?? (Microsoft.Extensions.Logging.ILogger)Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+                GitHubTokenUploadResult tokenResult = await uploader.UploadAsync(image);
+                if (tokenResult.Success && tokenResult.Url is not null)
+                {
+                    bool copied = await GitHubClipboardCommit.CopyUrlAsync(tokenResult.Url, GitHubClipboardCommit.GetVersion());
+                    _tray?.ShowBalloon(
+                        "MyCapture",
+                        copied ? UiText.Get("GitHub.Done") : tokenResult.Url,
+                        copied ? TrayBalloonKind.Information : TrayBalloonKind.Warning,
+                        playSound: false);
+                    return;
+                }
+
+                // A token failure falls through to the browser flow so the user is not
+                // stranded by an expired token or a transient API outage.
+                _tray?.ShowBalloon(
+                    "MyCapture",
+                    UiText.Get("GitHub.TokenFailed") + " " + (tokenResult.Error ?? string.Empty),
+                    TrayBalloonKind.Warning,
+                    playSound: false);
+            }
+
             _tray?.ShowBalloon(
                 "MyCapture",
                 UiText.Get("GitHub.Opening"),
@@ -1440,7 +1477,8 @@ public partial class App : Application
         var window = new SettingsWindow(
             () => _settings!,
             next => _settingsApply!.Apply(next),
-            _services.GetRequiredService<ILogger<SettingsWindow>>());
+            _services.GetRequiredService<ILogger<SettingsWindow>>(),
+            () => _services.GetRequiredService<SettingsStore>());
 
         window.CanExitForUpdate = () =>
             _recorder?.IsActive != true && _overlay?.IsActive != true &&
@@ -1526,10 +1564,11 @@ public partial class App : Application
         int uxIndex = FindSwitch(args, UxReviewSelfTest.CommandLineSwitch);
         if (uxIndex >= 0)
         {
+            bool compareBaseline = FindSwitch(args, UxReviewSelfTest.CompareBaselineSwitch) >= 0;
             int exitCode;
             try
             {
-                exitCode = UxReviewSelfTest.Run();
+                exitCode = UxReviewSelfTest.Run(compareBaseline);
             }
             catch (Exception ex)
             {

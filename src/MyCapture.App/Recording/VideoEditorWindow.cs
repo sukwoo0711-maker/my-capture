@@ -1769,11 +1769,25 @@ internal sealed class VideoEditorWindow : Window
         return Path.Combine(dir, stem + "_edited.mp4");
     }
 
-    private void ExportGif() => OpenExport(gif: true);
+    private void ExportGif() => OpenExport(gif: true, autoTrim: true);
+
+    /// <summary>
+    /// Persists the auto-trim applied by the export dialog back into the editor document
+    /// so the timeline reflects the clamped selection after the dialog closes.
+    /// </summary>
+    private void CommitDocumentForExportTrim()
+    {
+        _editDocument = _editDocument.NormalizeFor(
+            _recording.Width,
+            _recording.Height,
+            _durationMs);
+        _ = _timeline.SetTrimRange(_editDocument.TrimInMs, _editDocument.TrimOutMs);
+        UpdatePositionLabel(_editDocument.TrimInMs);
+    }
 
     private VideoExportDialog? _exportDialog;
 
-    private void OpenExport(bool gif = false)
+    private void OpenExport(bool gif = false, bool autoTrim = false)
     {
         if (_exportDialog is not null || !IsVisible || !_mediaReady || _operationRunning
             || !TryValidateLayerResources(_editDocument.FrameEditLayers)) return;
@@ -1781,6 +1795,11 @@ internal sealed class VideoEditorWindow : Window
         try
         {
             _exportDialog = new VideoExportDialog(_recording, BuildCurrentDocument(), _loggerFactory, gif) { Owner = this };
+            // GIF has a hard 20 s ceiling; clamp Out instead of leaving Calculate disabled.
+            if (autoTrim && _exportDialog.TryAutoTrimForGif())
+            {
+                CommitDocumentForExportTrim();
+            }
             _ = _exportDialog.ShowDialog();
         }
         catch (Exception error)

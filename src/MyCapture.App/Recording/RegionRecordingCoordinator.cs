@@ -159,6 +159,12 @@ internal sealed class RegionRecordingCoordinator
         try
         {
             overlay = new CaptureOverlayWindow(SelectionDesktopBounds(), abortOnFocusLoss: false, showMagnifier: true);
+            // A configured preset fixes the recording's size; the drag only positions it.
+            if (_settings().PresetWidth is { } w && w > 0
+                && _settings().PresetHeight is { } h && h > 0)
+            {
+                overlay.PresetSize = new System.Drawing.Size(w, h);
+            }
             _selectionOverlay = overlay;
             overlay.GeometrySelectionCompleted = OpenControls;
             overlay.SelectionCancelled += OnSelectionCancelled;

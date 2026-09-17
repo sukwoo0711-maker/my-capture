@@ -41,14 +41,22 @@ internal static class UxReviewSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-ux-review";
 
-    internal static int Run()
+    /// <summary>
+    /// When this switch is present, each rendered fixture PNG is compared against a stored
+    /// baseline of the same name under <c>artifacts/visual-baselines</c>. A size or pixel
+    /// difference is reported and fails the run; missing baselines are written as new
+    /// baselines instead of failing, so the first run establishes the reference set.
+    /// </summary>
+    internal const string CompareBaselineSwitch = "--compare-baseline";
+
+    internal static int Run(bool compareBaseline = false)
     {
         DirectoryInfo output = UxReviewOutputDirectory.Create();
         Console.WriteLine($"UX_REVIEW_OUTPUT={output.FullName}");
         System.Diagnostics.Trace.TraceInformation("UX review output: {0}", output.FullName);
         try
         {
-            return RunGenerated(output.FullName);
+            return RunGenerated(output.FullName, compareBaseline);
         }
         catch (Exception ex)
         {
@@ -60,7 +68,7 @@ internal static class UxReviewSelfTest
         }
     }
 
-    private static int RunGenerated(string outputDirectory)
+    private static int RunGenerated(string outputDirectory, bool compareBaseline = false)
     {
         Directory.CreateDirectory(outputDirectory);
         // A fresh child on every invocation prevents recovery/retention work on earlier fixtures.
@@ -107,13 +115,17 @@ internal static class UxReviewSelfTest
         int failures = 0;
         try
         {
+            // Fixed wall clock: gallery time captions, retention countdowns, and date-group
+            // headings must be byte-stable between runs for the baseline comparison mode.
+            DateTimeOffset fixtureNow = new DateTimeOffset(2026, 9, 15, 10, 24, 0,
+                TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 9, 15, 10, 24, 0)));
             for (int index = 0; index < 80; index++)
             {
                 var record = new CaptureRecord
                 {
                     Width = sample.PixelWidth, Height = sample.PixelHeight,
                     Title = index == 0 ? "검토용 캡처 · 여러 줄 코드와 긴 한국어 제목 정렬 확인" : $"UI review sample {index + 1}",
-                    CreatedAt = DateTimeOffset.Now.AddHours(-index * 7),
+                    CreatedAt = fixtureNow.AddHours(-index * 7),
                     IsPinned = index == 1,
                     OcrText = "Synthetic local fixture", OcrContentRevision = 0,
                 };
@@ -126,7 +138,8 @@ internal static class UxReviewSelfTest
                 File.WriteAllBytes(Path.Combine(directory, CaptureFileNames.Original), png);
             }
             var viewModel = new GalleryViewModel(controller,
-                record => Path.Combine(queue.GetDirectory(record), CaptureFileNames.Thumbnail), 320);
+                record => Path.Combine(queue.GetDirectory(record), CaptureFileNames.Thumbnail), 320,
+                clock: () => fixtureNow);
             var indexing = new OcrIndexingService(controller, ocr, queue.GetDirectory, () => settings.Ocr,
                 logs.CreateLogger<OcrIndexingService>(), Dispatcher.CurrentDispatcher);
             windows.Add(("gallery", new GalleryWindow(viewModel, controller,
@@ -135,7 +148,8 @@ internal static class UxReviewSelfTest
                 new FixturePrivacy(), NullLogger.Instance)));
             viewModel.Select(viewModel.Groups.SelectMany(group => group.Items).First().Id);
             windows.Add(("settings", new SettingsWindow(() => settings,
-                _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance)));
+                _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance,
+                settingsStore: null)));
             var region = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
             windows.Add(("annotation", new AnnotationEditorWindow(new FrozenFrame(sample, region, null, 0), region, sample)));
             windows.Add(("image-export", new ImageReductionExportDialog(sample, Path.Combine(paths.QuickSaveRoot, "review.png"))));
@@ -275,7 +289,17 @@ internal static class UxReviewSelfTest
                             }
                             string label = name + (compact ? "-compact" : "-normal") + "-" + themeLabel;
                             foreach (int dpi in new[] { 96, 144, 192 })
-                                Render(window, Path.Combine(outputDirectory, $"{label}-{dpi}dpi.png"), dpi);
+                            {
+                                string renderPath = Path.Combine(outputDirectory, $"{label}-{dpi}dpi.png");
+                                Render(window, renderPath, dpi);
+                                if (compareBaseline && dpi == 96)
+                                {
+                                    if (!CompareWithBaseline(renderPath, Path.Combine(FindBaselineRoot(), label + "-96dpi.png"), report))
+                                    {
+                                        failures++;
+                                    }
+                                }
+                            }
                             WriteLayoutInventory(window, Path.Combine(outputDirectory, label + "-layout.json"));
                             report.AppendLine($"Rendered {label}: {window.ActualWidth:0}x{window.ActualHeight:0} DIP; native scale={VisualTreeHelper.GetDpi(window).DpiScaleX:0.##}");
                         }
@@ -488,6 +512,73 @@ internal static class UxReviewSelfTest
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using FileStream output = File.Create(path);
         encoder.Save(output);
+    }
+
+    /// <summary>Repository root that stores the reference fixture renders.</summary>
+    private static string FindBaselineRoot()
+    {
+        string? dir = AppContext.BaseDirectory;
+        for (int depth = 0; depth < 8 && dir is not null; depth++)
+        {
+            string candidate = Path.Combine(dir, "artifacts", "visual-baselines");
+            if (Directory.Exists(Path.Combine(dir, ".git")) || File.Exists(Path.Combine(dir, "MyCapture.slnx")))
+            {
+                return Path.Combine(dir, "artifacts", "visual-baselines");
+            }
+
+            dir = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
+        }
+
+        return Path.Combine(AppContext.BaseDirectory, "artifacts", "visual-baselines");
+    }
+
+    /// <summary>
+    /// Pixel comparison with a stored baseline. Sizes must match exactly (the fixtures are
+    /// deterministic); a mismatch reports the first differing pixel pair. A missing baseline
+    /// is copied into place, so committing the baseline establishes the reference set.
+    /// </summary>
+    private static bool CompareWithBaseline(string renderPath, string baselinePath, StringBuilder report)
+    {
+        try
+        {
+            if (!File.Exists(baselinePath))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(baselinePath)!);
+                File.Copy(renderPath, baselinePath);
+                report.AppendLine($"Baseline created: {Path.GetFileName(baselinePath)}");
+                return true;
+            }
+
+            var render = new BitmapImage(new Uri(renderPath));
+            var baseline = new BitmapImage(new Uri(baselinePath));
+            if (render.PixelWidth != baseline.PixelWidth || render.PixelHeight != baseline.PixelHeight)
+            {
+                report.AppendLine($"Size drift: {Path.GetFileName(renderPath)} {render.PixelWidth}x{render.PixelHeight} vs {baseline.PixelWidth}x{baseline.PixelHeight}");
+                return false;
+            }
+
+            int stride = render.PixelWidth * 4;
+            var a = new byte[stride * render.PixelHeight];
+            var b = new byte[stride * baseline.PixelHeight];
+            render.CopyPixels(a, stride, 0);
+            baseline.CopyPixels(b, stride, 0);
+            for (int i = 0; i < a.Length; i++)
+            {
+                if (Math.Abs(a[i] - b[i]) > 8)
+                {
+                    int pixel = i / 4;
+                    report.AppendLine($"Pixel drift at ({pixel % render.PixelWidth},{pixel / render.PixelWidth}): {renderPath}");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            report.AppendLine($"Baseline comparison failed: {ex.Message}");
+            return false;
+        }
     }
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)

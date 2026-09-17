@@ -317,4 +317,11 @@ public sealed class GitHubSettings
     /// <see cref="MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl"/>.
     /// </summary>
     public string IssueUrl { get; set; } = MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl;
+
+    /// <summary>
+    /// Optional personal access token. When set, the GitHub URL hotkey uploads the image
+    /// through the REST API without opening a browser or stealing focus. Kept on this PC
+    /// inside the settings file; never sent anywhere except api.github.com.
+    /// </summary>
+    public string Token { get; set; } = string.Empty;
 }

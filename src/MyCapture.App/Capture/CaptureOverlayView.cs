@@ -30,6 +30,13 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private FrozenFrame? _frame;
     private readonly RectD _screenBounds;
     private readonly bool _showMagnifier;
+
+    /// <summary>
+    /// Optional fixed selection size (physical pixels). When set, dragging only positions
+    /// the rectangle: the drag start seeds a preset-sized box clamped to the frame, so
+    /// repeated captures keep identical dimensions.
+    /// </summary>
+    internal System.Drawing.Size? PresetSize { get; set; }
     private readonly Brush _dimmerBrush;
     private readonly Brush _selectionBrush;
     private readonly Brush _chromeBrush;
@@ -427,7 +434,19 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (_interaction == InteractionMode.Create)
         {
             PointD edge = ClampEdgePoint(rawPixel);
-            _selection = RectD.FromCorners(_dragAnchor, edge).ClampTo(FrameBounds);
+            if (PresetSize is { } preset && preset.Width > 0 && preset.Height > 0)
+            {
+                // Fixed size: the drag only moves the box's top-left corner. The stored
+                // size is honoured exactly (clamped to the frame) so every capture from
+                // the same preset has identical dimensions.
+                double width = Math.Min(preset.Width, FrameBounds.Width);
+                double height = Math.Min(preset.Height, FrameBounds.Height);
+                _selection = new RectD(_dragAnchor.X, _dragAnchor.Y, width, height).ClampTo(FrameBounds);
+            }
+            else
+            {
+                _selection = RectD.FromCorners(_dragAnchor, edge).ClampTo(FrameBounds);
+            }
         }
 
         QueueFeedback();

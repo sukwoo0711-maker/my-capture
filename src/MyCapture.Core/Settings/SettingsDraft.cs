@@ -55,6 +55,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _useRecordingStartDelay;
     private string _recordingStartDelaySeconds = string.Empty;
     private bool _recordingIncludeCursor;
+    private string _recordingPresetWidth = "0";
+    private string _recordingPresetHeight = "0";
 
     // ----- Hotkeys -----
     private string _captureHotkey = string.Empty;
@@ -75,6 +77,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _capturesDirectoryOverride = string.Empty;
     private string _imageRetentionHours = string.Empty;
     private string _gitHubIssueUrl = GitHubIssueImageUrl.DefaultIssueUrl;
+    private string _gitHubToken = string.Empty;
     private string _theme = AppThemeNames.Midnight;
 
     // ----- Export -----
@@ -183,6 +186,20 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set => Set(ref _recordingIncludeCursor, value);
     }
 
+    /// <summary>Optional fixed recording width in physical pixels. 0 = free drag.</summary>
+    public string RecordingPresetWidth
+    {
+        get => _recordingPresetWidth;
+        set { if (Set(ref _recordingPresetWidth, value)) ValidateInt(value, SettingsRanges.ThumbnailLongEdge); }
+    }
+
+    /// <summary>Optional fixed recording height in physical pixels. 0 = free drag.</summary>
+    public string RecordingPresetHeight
+    {
+        get => _recordingPresetHeight;
+        set { if (Set(ref _recordingPresetHeight, value)) ValidateInt(value, SettingsRanges.ThumbnailLongEdge); }
+    }
+
     // ================= Hotkeys =================
 
     public string CaptureHotkey
@@ -281,6 +298,16 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _gitHubIssueUrl;
         set { if (Set(ref _gitHubIssueUrl, value)) ValidateGitHubIssueUrl(value); }
+    }
+
+    /// <summary>
+    /// Optional PAT enabling background (no-browser) uploads. Preserved verbatim; an empty
+    /// value keeps the classic browser flow.
+    /// </summary>
+    public string GitHubToken
+    {
+        get => _gitHubToken;
+        set => Set(ref _gitHubToken, value?.Trim() ?? string.Empty);
     }
 
     public string Theme
@@ -406,6 +433,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _useRecordingStartDelay = s.Recording.UseStartDelay;
         _recordingStartDelaySeconds = Int(s.Recording.StartDelaySeconds);
         _recordingIncludeCursor = s.Recording.IncludeCursor;
+        _recordingPresetWidth = (s.Recording.PresetWidth ?? 0).ToString(CultureInfo.InvariantCulture);
+        _recordingPresetHeight = (s.Recording.PresetHeight ?? 0).ToString(CultureInfo.InvariantCulture);
 
         _captureHotkey = s.Hotkeys.Capture.ToString();
         _openLibraryHotkey = s.Hotkeys.OpenLibrary.ToString();
@@ -432,6 +461,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _gitHubIssueUrl = GitHubIssueImageUrl.TryNormalize(s.GitHub.IssueUrl, out string issueUrl)
             ? issueUrl
             : GitHubIssueImageUrl.DefaultIssueUrl;
+        _gitHubToken = s.GitHub.Token ?? string.Empty;
         _theme = AppThemeNames.ToSetting(AppThemeNames.Parse(s.General.Theme));
         _copyToClipboardOnQuickSave = s.Export.CopyToClipboardOnQuickSave;
         _fileNamePattern = s.Export.FileNamePattern;
@@ -520,6 +550,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 IncludeCursor = _recordingIncludeCursor,
                 BitrateBitsPerSecond = _preservedRecordingBitrateBitsPerSecond,
                 CoarseStepSeconds = _preservedRecordingCoarseStepSeconds,
+                PresetWidth = ParseOptionalInt(_recordingPresetWidth),
+                PresetHeight = ParseOptionalInt(_recordingPresetHeight),
             },
             Hotkeys =
             {
@@ -549,6 +581,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 IssueUrl = GitHubIssueImageUrl.TryNormalize(_gitHubIssueUrl, out string issueUrl)
                     ? issueUrl
                     : GitHubIssueImageUrl.DefaultIssueUrl,
+                Token = _gitHubToken,
             },
             Export =
             {
@@ -882,6 +915,13 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     private static int ParseInt(string value) =>
         int.Parse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture);
+
+    private static int? ParseOptionalInt(string value)
+    {
+        return int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) && parsed > 0
+            ? parsed
+            : null;
+    }
 
     private static double ParseDouble(string value) =>
         double.Parse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture);
