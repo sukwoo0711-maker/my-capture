@@ -97,4 +97,48 @@ public static class GitHubIssueImageUrl
 
     public static IEnumerable<string> ExtractAttachmentUrls(string? text) =>
         string.IsNullOrWhiteSpace(text) ? [] : AttachmentUrl.Matches(text).Select(match => match.Value);
+
+    /// <summary>
+    /// Parses a numbered issue URL on any host (github.com or a GitHub Enterprise Server).
+    /// Fails for <c>issues/new</c>, which cannot host an upload target.
+    /// </summary>
+    public static bool TryParseTarget(string? issueUrl, out GitHubIssueTarget target)
+    {
+        target = new GitHubIssueTarget(string.Empty, string.Empty, string.Empty, 0);
+        if (!TryNormalize(issueUrl, out string normalized)
+            || !Uri.TryCreate(normalized, UriKind.Absolute, out Uri? uri))
+        {
+            return false;
+        }
+
+        string[] segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length != 4
+            || !int.TryParse(segments[3], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int number)
+            || number <= 0)
+        {
+            return false;
+        }
+
+        target = new GitHubIssueTarget(
+            uri.Host,
+            Uri.UnescapeDataString(segments[0]),
+            Uri.UnescapeDataString(segments[1]),
+            number);
+        return true;
+    }
+}
+
+/// <summary>
+/// Host-scoped parts of a validated numbered issue plus the API roots derived from the
+/// host: github.com talks to api.github.com, any other host is an enterprise server whose
+/// REST API lives under <c>/api/v3</c>. Attachment URLs are served by the site host itself,
+/// not by the API host.
+/// </summary>
+public sealed record GitHubIssueTarget(string Host, string Owner, string Repo, int IssueNumber)
+{
+    public string ApiBase => string.Equals(Host, "github.com", StringComparison.OrdinalIgnoreCase)
+        ? "https://api.github.com"
+        : $"https://{Host}/api/v3";
+
+    public string AssetUrlBase => $"https://{Host}/user-attachments/assets/";
 }

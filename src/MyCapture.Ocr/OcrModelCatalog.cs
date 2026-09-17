@@ -26,7 +26,7 @@ internal static class OcrModelCatalog
     internal static readonly OcrModelFile Dictionary = new(
         "ppocrv5_korean_dict.txt",
         "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile/ppocrv5_korean_dict.txt",
-        null,
+        "A88071C68C01707489BAA79EBE0405B7BEB5CCA229F4FC94CC3EF992328802D7",
         2048);
 
     internal static IReadOnlyList<OcrModelFile> Required { get; } = [Recognition, Dictionary];

@@ -227,6 +227,8 @@ internal sealed partial class SettingsWindow : Window
         {
             AppSettings imported = _settingsStore().ImportFrom(dialog.FileName);
             ReloadDraftFrom(imported);
+            // Exports never carry the GitHub PAT, so the import must not wipe the live one.
+            _draft.GitHubToken = _currentSettings().GitHub.Token;
             SetStatusMessage(UiText.Get("Settings_ImportDone"));
             RefreshErrorSummary();
         }

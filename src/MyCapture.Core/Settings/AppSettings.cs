@@ -320,8 +320,11 @@ public sealed class GitHubSettings
 
     /// <summary>
     /// Optional personal access token. When set, the GitHub URL hotkey uploads the image
-    /// through the REST API without opening a browser or stealing focus. Kept on this PC
-    /// inside the settings file; never sent anywhere except api.github.com.
+    /// through the REST API without opening a browser or stealing focus. Stored on this PC
+    /// only, DPAPI-encrypted at rest by <see cref="DpapiSecretConverter"/>; sent only to the
+    /// API host derived from the configured issue URL (api.github.com, or an enterprise
+    /// server's /api/v3). Never written to exported settings files.
     /// </summary>
+    [JsonConverter(typeof(DpapiSecretConverter))]
     public string Token { get; set; } = string.Empty;
 }
