@@ -350,6 +350,10 @@ internal sealed class PinWindow : Window
     {
         _handle = new WindowInteropHelper(this).Handle;
 
+        // WPF's ShowInTaskbar=false does not remove the window from Alt+Tab; without the
+        // tool-window bit every pin on the desk shows up as an identical switcher entry.
+        WindowStyleFacade.ExcludeFromAltTab(_handle);
+
         // Re-apply any click-through state that was set before the handle existed.
         if (_state.IsClickThrough)
         {

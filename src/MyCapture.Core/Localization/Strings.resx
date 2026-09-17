@@ -3132,4 +3132,5 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="GitHub.TokenFailed" xml:space="preserve"><value>토큰 업로드 실패 — 브라우저 방식으로 전환합니다.</value></data>
   <data name="Recording_PresetWidth" xml:space="preserve"><value>고정 너비 (px, 0=자유)</value></data>
   <data name="Recording_PresetHeight" xml:space="preserve"><value>고정 높이 (px, 0=자유)</value></data>
+  <data name="Recording_CursorHighlight" xml:space="preserve"><value>녹화 화면에 커서 강조 표시 (클릭 중에는 빨간색)</value></data>
 </root>

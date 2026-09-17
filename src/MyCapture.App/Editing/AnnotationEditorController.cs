@@ -34,6 +34,7 @@ internal sealed class AnnotationEditorController
     private PointD _gestureLast;
     private RectD _transformBefore;
     private ResizeHandle _resizeHandle = ResizeHandle.None;
+    private double _fontSizeBefore;
     private AnnotationItem? _draftItem;
     private List<PointD>? _draftPoints;
 
@@ -309,6 +310,19 @@ internal sealed class AnnotationEditorController
                 if (_selected is not null)
                 {
                     RectD resized = ApplyResize(_transformBefore, _resizeHandle, point);
+                    // Corner handles on text scale the font with the box so the glyphs grow
+                    // proportionally, PowerPoint-style; edge handles only reshape the box.
+                    if (_selected is TextAnnotation text
+                        && IsCornerHandle(_resizeHandle)
+                        && _transformBefore.Height > double.Epsilon)
+                    {
+                        double ratio = resized.Height / _transformBefore.Height;
+                        if (double.IsFinite(ratio) && ratio > 0)
+                        {
+                            text.FontSize = Math.Clamp(_fontSizeBefore * ratio, 8, 200);
+                        }
+                    }
+
                     _selected.SetBounds(resized);
                     RaiseVisual();
                 }
@@ -344,8 +358,21 @@ internal sealed class AnnotationEditorController
                     if (after != _transformBefore)
                     {
                         // The item already followed the pointer; record the net transform so
-                        // one drag is one undo step.
-                        _undo.Push(new TransformAnnotationCommand(_selected, _transformBefore, after));
+                        // one drag is one undo step. A proportional text resize changes the
+                        // font too, so both go into the same batch.
+                        if (_selected is TextAnnotation text && text.FontSize != _fontSizeBefore)
+                        {
+                            using (_undo.BeginBatch(UiText.Get("Text_258AD4B095A1")))
+                            {
+                                PushProperty(text, UiText.Get("Text_258AD4B095A1"),
+                                    static (t, v) => t.FontSize = v, _fontSizeBefore, text.FontSize);
+                                _undo.Push(new TransformAnnotationCommand(_selected, _transformBefore, after));
+                            }
+                        }
+                        else
+                        {
+                            _undo.Push(new TransformAnnotationCommand(_selected, _transformBefore, after));
+                        }
                     }
                 }
 
@@ -639,6 +666,7 @@ internal sealed class AnnotationEditorController
                 _gesture = Gesture.Resize;
                 _resizeHandle = handle;
                 _transformBefore = _selected.Bounds;
+                _fontSizeBefore = _selected is TextAnnotation text ? text.FontSize : 0;
                 return;
             }
         }
@@ -820,6 +848,10 @@ internal sealed class AnnotationEditorController
 
         return new RectD(left, top, right - left, bottom - top).Normalized();
     }
+
+    private static bool IsCornerHandle(ResizeHandle handle) =>
+        handle is ResizeHandle.TopLeft or ResizeHandle.TopRight
+            or ResizeHandle.BottomLeft or ResizeHandle.BottomRight;
 
     /// <summary>
     /// Which resize handle, if any, sits under <paramref name="point"/>.

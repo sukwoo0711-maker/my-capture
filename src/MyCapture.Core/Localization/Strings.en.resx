@@ -3132,4 +3132,5 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="GitHub.TokenFailed" xml:space="preserve"><value>Token upload failed — falling back to the browser flow.</value></data>
   <data name="Recording_PresetWidth" xml:space="preserve"><value>Fixed width (px, 0=free)</value></data>
   <data name="Recording_PresetHeight" xml:space="preserve"><value>Fixed height (px, 0=free)</value></data>
+  <data name="Recording_CursorHighlight" xml:space="preserve"><value>Highlight the cursor on recordings (red while clicking)</value></data>
 </root>

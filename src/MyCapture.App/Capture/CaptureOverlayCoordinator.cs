@@ -25,6 +25,17 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private bool _isOpeningEditor;
     private CancellationTokenSource? _openingEditorCts;
 
+    /// <summary>
+    /// Tick of the last time an app-owned topmost surface (capture overlay, editor, tray
+    /// menu) left the screen. The frozen frame must not photograph its dismissal, so a
+    /// capture that starts within <see cref="PresentationSettleMs"/> still waits briefly;
+    /// cold captures skip the wait entirely.
+    /// </summary>
+    private long _lastPresentationDismissedTick = long.MinValue;
+
+    /// <summary>How long after a dismissal a capture still waits out the presentation.</summary>
+    internal const int PresentationSettleMs = 750;
+
     internal CaptureOverlayCoordinator(
         ScreenCaptureEngine captureEngine,
         WindowCandidateService windowCandidates,
@@ -116,18 +127,28 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             throw;
         }
 
-        LastPreparationForTest = AcquireAndShowAsync(preparation, includeCursor);
+        bool settle = Environment.TickCount64 - _lastPresentationDismissedTick < PresentationSettleMs;
+        LastPreparationForTest = AcquireAndShowAsync(preparation, includeCursor, settle);
     }
 
-    private async Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor)
+    /// <summary>Records that an app-owned topmost surface has just left the screen, so the
+    /// next capture waits out its dismissal instead of photographing it.</summary>
+    internal void NoteForegroundDismissal() => _lastPresentationDismissedTick = Environment.TickCount64;
+
+    private async Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation)
     {
         FrozenFrame? frame = null;
         Exception? failure = null;
         try
         {
-            // Allow close/menu-dismiss presentation to settle without waiting for dispatcher
-            // idle, which continuous input can starve. Preparation still coalesces hotkeys.
-            await Task.Delay(100).ConfigureAwait(false);
+            // A capture racing a just-dismissed overlay or tray menu would freeze that
+            // dismissal into the frame, so only those captures wait for the presentation to
+            // settle. Cold captures — the common case — acquire immediately.
+            if (settlePresentation)
+            {
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+
             frame = await Task.Run(() =>
             {
                 if (preparation.Cancelled) throw new OperationCanceledException();
@@ -499,6 +520,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         if (!_disposed && _preparation is null && _activeOverlay is null && _activeEditor is null && !_isOpeningEditor)
         {
+            _lastPresentationDismissedTick = Environment.TickCount64;
             OverlayClosed?.Invoke(this, EventArgs.Empty);
         }
     }

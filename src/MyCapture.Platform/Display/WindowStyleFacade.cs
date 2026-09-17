@@ -80,6 +80,29 @@ public static class WindowStyleFacade
         return (exStyle & NativeMethods.WS_EX_TRANSPARENT) != 0;
     }
 
+    /// <summary>
+    /// Removes <paramref name="hwnd"/> from the Alt+Tab switcher by setting
+    /// <c>WS_EX_TOOLWINDOW</c>. WPF's <c>ShowInTaskbar = false</c> only clears the taskbar
+    /// button; the window still enumerates in Alt+Tab, so a desk covered in pins drowns the
+    /// switcher in identical entries. The bit is OR-ed in like the click-through styles so
+    /// WPF's own extended style bits survive.
+    /// </summary>
+    public static void ExcludeFromAltTab(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        long exStyle = NativeMethods.GetWindowLongPtr(hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+        if ((exStyle & NativeMethods.WS_EX_TOOLWINDOW) != 0)
+        {
+            return;
+        }
+
+        _ = NativeMethods.SetWindowLongPtr(hwnd, NativeMethods.GWL_EXSTYLE, new IntPtr(exStyle | NativeMethods.WS_EX_TOOLWINDOW));
+    }
+
     /// <summary>The current cursor position in physical pixels, or (0,0) if unavailable.</summary>
     public static (int X, int Y) GetCursorPosition()
     {

@@ -45,6 +45,12 @@ public sealed class RecordingSettings
     public bool IncludeCursor { get; set; } = true;
 
     /// <summary>
+    /// Draws an emphasis ring around the pointer on every recorded frame, turning red
+    /// while the left button is held. Requires <see cref="IncludeCursor"/>.
+    /// </summary>
+    public bool CursorHighlight { get; set; } = true;
+
+    /// <summary>
     /// Target bitrate in bits per second. 0 means derive from frame size and rate.
     /// </summary>
     /// <remarks>

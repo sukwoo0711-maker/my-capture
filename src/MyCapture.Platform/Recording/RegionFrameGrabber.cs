@@ -28,14 +28,16 @@ public sealed class RegionFrameGrabber : IDisposable
 {
     private readonly ScreenCaptureEngine _engine;
     private readonly bool _includeCursor;
+    private readonly bool _cursorHighlight;
     private RectD _region;
     private byte[] _buffer = [];
     private ScreenCaptureEngine.CaptureSession? _session;
 
-    public RegionFrameGrabber(ScreenCaptureEngine engine, bool includeCursor)
+    public RegionFrameGrabber(ScreenCaptureEngine engine, bool includeCursor, bool cursorHighlight = false)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _includeCursor = includeCursor;
+        _cursorHighlight = cursorHighlight;
     }
 
     public int Width { get; private set; }
@@ -74,9 +76,17 @@ public sealed class RegionFrameGrabber : IDisposable
     /// </remarks>
     public byte[] GrabInto()
     {
-        _session ??= _engine.CreateSession(_region, _includeCursor);
+        _session ??= CreateSession();
         _session.CaptureInto(_buffer, Stride);
         return _buffer;
+    }
+
+    private ScreenCaptureEngine.CaptureSession CreateSession()
+    {
+        ScreenCaptureEngine.CaptureSession session = _engine.CreateSession(_region, _includeCursor);
+        // The emphasis ring is only meaningful on recordings; still captures never enable it.
+        session.CursorHighlight = _cursorHighlight;
+        return session;
     }
 
     /// <summary>Releases native resources on the recording thread that captured frames.</summary>

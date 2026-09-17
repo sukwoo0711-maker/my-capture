@@ -14,6 +14,10 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
 {
     private Window? _toast;
     private Window? _help;
+
+    /// <summary>Raised whenever a tray-owned surface (command menu) has just left the screen,
+    /// so a capture starting immediately afterwards can wait out the dismissal.</summary>
+    internal event Action? ForegroundDismissed;
     private ContextMenu? _menu;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(5) };
 
@@ -76,7 +80,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         menu.IsOpen = true;
     }
 
-    private static void AppendEntries(ItemCollection items, IEnumerable<MenuEntry> entries, ContextMenu root)
+    private void AppendEntries(ItemCollection items, IEnumerable<MenuEntry> entries, ContextMenu root)
     {
         foreach (MenuEntry entry in entries)
         {
@@ -90,7 +94,14 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
 
             var item = new MenuItem { Header = entry.Label, MinHeight = 36 };
             Action action = entry.Action ?? (() => { });
-            item.Click += (_, _) => { root.IsOpen = false; action(); };
+            item.Click += (_, _) =>
+            {
+                root.IsOpen = false;
+                // The menu is visually dismissing while the command runs; a capture that
+                // starts from here must let the dismissal leave the screen before BitBlt.
+                ForegroundDismissed?.Invoke();
+                action();
+            };
             items.Add(item);
         }
     }

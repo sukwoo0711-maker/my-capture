@@ -274,7 +274,7 @@ internal sealed class RegionRecordingCoordinator
 
             RegionRecorder BuildRecorder()
             {
-                var grabber = new RegionFrameGrabber(_captureEngine, settings.IncludeCursor);
+                var grabber = new RegionFrameGrabber(_captureEngine, settings.IncludeCursor, settings.CursorHighlight);
                 return new RegionRecorder(
                     grabber,
                     options => new MediaFoundationVideoEncoder(
