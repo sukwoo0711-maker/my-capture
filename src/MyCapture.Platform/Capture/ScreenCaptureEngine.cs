@@ -336,6 +336,12 @@ public sealed class ScreenCaptureEngine
         public int Width { get; }
         public int Height { get; }
 
+        /// <summary>
+        /// Draws an emphasis ring around the pointer on every captured frame. Recording
+        /// only: still captures never set this.
+        /// </summary>
+        public bool CursorHighlight { get; set; }
+
         public void CaptureInto(byte[] destination, int stride)
         {
             VerifyThread();
@@ -351,6 +357,10 @@ public sealed class ScreenCaptureEngine
                     (int)_pixels.Left, (int)_pixels.Top, NativeMethods.SRCCOPY | NativeMethods.CAPTUREBLT))
                     throw new InvalidOperationException($"BitBlt failed (Win32 {Marshal.GetLastWin32Error()}).");
                 if (_includeCursor) _owner.DrawCursor(_memoryDc, (int)_pixels.Left, (int)_pixels.Top, Width, Height);
+                if (_includeCursor && CursorHighlight)
+                {
+                    _owner.DrawCursorHighlight(_memoryDc, (int)_pixels.Left, (int)_pixels.Top, Width, Height);
+                }
             }
             finally
             {
@@ -474,6 +484,55 @@ public sealed class ScreenCaptureEngine
         finally
         {
             NativeMethods.DestroyIcon(cursor);
+        }
+    }
+
+    /// <summary>
+    /// Draws an emphasis ring around the recorded pointer position so viewers can follow
+    /// it on a recording. The ring colour signals the left-button state, which is what
+    /// turns a silent screencast into a legible click-by-click walkthrough.
+    /// </summary>
+    private void DrawCursorHighlight(IntPtr targetDc, int originX, int originY, int width, int height)
+    {
+        var info = new NativeMethods.CURSORINFO
+        {
+            cbSize = Marshal.SizeOf<NativeMethods.CURSORINFO>(),
+        };
+
+        if (!NativeMethods.GetCursorInfo(ref info) || (info.flags & NativeMethods.CURSOR_SHOWING) == 0)
+        {
+            return;
+        }
+
+        bool pressed = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0;
+        int radius = pressed ? 18 : 13;
+        int penWidth = pressed ? 5 : 3;
+        // COLORREF is 0x00BBGGRR: warm amber when idle, coral red while the button is down.
+        uint color = pressed ? 0x004040FFu : 0x0000C7FFu;
+        IntPtr pen = NativeMethods.CreatePen(NativeMethods.PS_SOLID, penWidth, color);
+        if (IsInvalidGdiHandle(pen))
+        {
+            return;
+        }
+
+        IntPtr previousPen = NativeMethods.SelectObject(targetDc, pen);
+        IntPtr previousBrush = NativeMethods.SelectObject(targetDc, NativeMethods.GetStockObject(NativeMethods.NULL_BRUSH));
+        try
+        {
+            int centerX = info.ptScreenPos.X - originX;
+            int centerY = info.ptScreenPos.Y - originY;
+            _ = NativeMethods.Ellipse(
+                targetDc,
+                centerX - radius,
+                centerY - radius,
+                centerX + radius,
+                centerY + radius);
+        }
+        finally
+        {
+            _ = NativeMethods.SelectObject(targetDc, previousPen);
+            _ = NativeMethods.SelectObject(targetDc, previousBrush);
+            _ = NativeMethods.DeleteObject(pen);
         }
     }
 

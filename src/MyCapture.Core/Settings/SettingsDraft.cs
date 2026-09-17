@@ -55,6 +55,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _useRecordingStartDelay;
     private string _recordingStartDelaySeconds = string.Empty;
     private bool _recordingIncludeCursor;
+    private bool _recordingCursorHighlight;
     private string _recordingPresetWidth = "0";
     private string _recordingPresetHeight = "0";
 
@@ -184,6 +185,13 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _recordingIncludeCursor;
         set => Set(ref _recordingIncludeCursor, value);
+    }
+
+    /// <summary>Draws an emphasis ring around the pointer on recorded frames.</summary>
+    public bool RecordingCursorHighlight
+    {
+        get => _recordingCursorHighlight;
+        set => Set(ref _recordingCursorHighlight, value);
     }
 
     /// <summary>Optional fixed recording width in physical pixels. 0 = free drag.</summary>
@@ -433,6 +441,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _useRecordingStartDelay = s.Recording.UseStartDelay;
         _recordingStartDelaySeconds = Int(s.Recording.StartDelaySeconds);
         _recordingIncludeCursor = s.Recording.IncludeCursor;
+        _recordingCursorHighlight = s.Recording.CursorHighlight;
         _recordingPresetWidth = (s.Recording.PresetWidth ?? 0).ToString(CultureInfo.InvariantCulture);
         _recordingPresetHeight = (s.Recording.PresetHeight ?? 0).ToString(CultureInfo.InvariantCulture);
 
@@ -548,6 +557,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 UseStartDelay = _useRecordingStartDelay,
                 StartDelaySeconds = ParseInt(_recordingStartDelaySeconds),
                 IncludeCursor = _recordingIncludeCursor,
+                CursorHighlight = _recordingCursorHighlight,
                 BitrateBitsPerSecond = _preservedRecordingBitrateBitsPerSecond,
                 CoarseStepSeconds = _preservedRecordingCoarseStepSeconds,
                 PresetWidth = ParseOptionalInt(_recordingPresetWidth),

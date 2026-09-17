@@ -431,6 +431,11 @@
                                   Content="{loc:Text Text_F0CFD62F0971}"
                                   AutomationProperties.Name="{loc:Text Text_F0CFD62F0971}"
                                   IsChecked="{Binding RecordingIncludeCursor}" />
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text Recording_CursorHighlight}"
+                                  AutomationProperties.Name="{loc:Text Recording_CursorHighlight}"
+                                  IsChecked="{Binding RecordingCursorHighlight}" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

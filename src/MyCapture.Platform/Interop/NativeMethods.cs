@@ -39,6 +39,20 @@ internal static partial class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool DeleteDC(IntPtr hdc);
 
+    [LibraryImport("gdi32.dll", SetLastError = true)]
+    internal static partial IntPtr CreatePen(int style, int width, uint color);
+
+    [LibraryImport("gdi32.dll")]
+    internal static partial IntPtr GetStockObject(int stockObject);
+
+    [LibraryImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool Ellipse(IntPtr hdc, int left, int top, int right, int bottom);
+
+    internal const int PS_SOLID = 0;
+    internal const int NULL_BRUSH = 5;
+    internal const int VK_LBUTTON = 0x01;
+
     /// <summary>SRCCOPY: straight copy with no raster operation.</summary>
     internal const uint SRCCOPY = 0x00CC0020;
 
@@ -409,6 +423,9 @@ internal static partial class NativeMethods
     internal const long WS_EX_NOACTIVATE = 0x08000000L;
     internal const long WS_EX_LAYERED = 0x00080000L;
     internal const long WS_EX_TOOLWINDOW = 0x00000080L;
+
+    [LibraryImport("user32.dll")]
+    internal static partial short GetAsyncKeyState(int virtKey);
 
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     internal static partial IntPtr GetWindowLongPtr(IntPtr hWnd, int index);

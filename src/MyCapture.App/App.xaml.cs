@@ -268,6 +268,9 @@ public partial class App : Application
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_00480581AAB5"), HandleSettingsRequested),
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_72B6DBA8AAC5"), () => Shutdown(0)),
         ], _settings!.General.Language, ChangeTrayLanguage);
+        // A capture started from the tray menu races the menu's dismissal; the coordinator
+        // uses this to decide whether the frozen frame must wait it out.
+        _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
         AnnotationEditorPreferences.Read = () => _settings!.Annotation;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();

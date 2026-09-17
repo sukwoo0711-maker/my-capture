@@ -132,7 +132,15 @@ internal sealed class NeuralOcrEngine : IDisposable
             lock (_sync)
             {
                 RapidOcr engine = _engine ?? throw new InvalidOperationException("PP-OCR session was not initialized.");
-                var options = RapidOcrOptions.Default with { ReturnWordBox = true, DoAngle = true };
+                // Recognition dominates receipts (many short lines); serial recognition was
+                // the default and left every core but one idle. Angle classification stays
+                // on because rotated phone photos are the common case here.
+                var options = RapidOcrOptions.Default with
+                {
+                    ReturnWordBox = true,
+                    DoAngle = true,
+                    RecMaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 1, 8),
+                };
                 return ToResult(engine.Detect(bitmap, options, cancellationToken), scale);
             }
         }
