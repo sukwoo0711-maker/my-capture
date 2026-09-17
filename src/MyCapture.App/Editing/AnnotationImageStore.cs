@@ -64,6 +64,21 @@ internal sealed class AnnotationImageStore
     internal BitmapSource? Get(string assetFileName) =>
         _decoded.TryGetValue(assetFileName, out BitmapSource? bitmap) ? bitmap : null;
 
+    /// <summary>
+    /// Registers pixels the app produced in memory (e.g. a pixelated patch for the
+    /// Mosaic tool) under a fresh asset name, exactly like <see cref="LoadFromFile"/> does
+    /// for a picked file. No source path: the bytes are written to the capture's sidecar
+    /// on commit from <see cref="DecodedFor"/>.
+    /// </summary>
+    internal (BitmapSource Bitmap, string AssetFileName) RegisterInMemory(BitmapSource bitmap)
+    {
+        ArgumentNullException.ThrowIfNull(bitmap);
+        if (!bitmap.IsFrozen) bitmap.Freeze();
+        string assetName = $"image-{++_counter:D2}.png";
+        _decoded[assetName] = bitmap;
+        return (bitmap, assetName);
+    }
+
     /// <summary>Release assets that no live annotation or reversible command can restore.</summary>
     internal void PruneToReachable(AnnotationDocument document, UndoStack history)
     {

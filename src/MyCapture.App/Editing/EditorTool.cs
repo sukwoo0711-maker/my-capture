@@ -29,4 +29,10 @@ internal enum EditorTool
 
     /// <summary>Pick an image from disk and drop it onto the capture.</summary>
     Image,
+
+    /// <summary>Drag a rectangle to pixelate the capture content underneath it.</summary>
+    Mosaic,
+
+    /// <summary>Drag the area to keep; Enter applies the crop as one undoable step.</summary>
+    Crop,
 }

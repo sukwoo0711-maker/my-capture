@@ -390,6 +390,27 @@
                                      Text="{Binding RecordingFrameRate, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Recording_SizePreset}" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Style="{StaticResource Settings.TextBox}"
+                                         Width="120" HorizontalAlignment="Left"
+                                         AutomationProperties.Name="{loc:Text Recording_PresetWidth}"
+                                         Text="{Binding RecordingPresetWidth, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                <TextBlock Grid.Column="2" Text="×" VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBox Style="{StaticResource Settings.TextBox}"
+                                     Width="120" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                     AutomationProperties.Name="{loc:Text Recording_PresetHeight}"
+                                     Text="{Binding RecordingPresetHeight, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Recording_LastRegion}" Margin="0,4,0,0" />
+                        </StackPanel>
+
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text Text_F1C1BB1D5771}"
                                   AutomationProperties.Name="{loc:Text Text_F1C1BB1D5771}"
@@ -543,6 +564,14 @@
                             <TextBox Style="{StaticResource Settings.TextBox}"
                                      AutomationProperties.Name="{loc:Text Settings.GitHubIssueUrl}"
                                      Text="{Binding GitHubIssueUrl, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text GitHub_TokenMode}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text GitHub_TokenHint}" />
+                            <TextBox Style="{StaticResource Settings.TextBox}"
+                                     AutomationProperties.Name="{loc:Text GitHub_TokenLabel}"
+                                     Text="{Binding GitHubToken, UpdateSourceTrigger=PropertyChanged}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
@@ -788,6 +817,20 @@
                     AutomationProperties.Name="{loc:Text Text_205C50A145BA}"
                     AutomationProperties.HelpText="{loc:Text Text_D8A23CD47E7A}"
                     Click="OnResetDefaults" />
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Style="{StaticResource Button.Ghost}"
+                        Content="{loc:Text Settings_Export}"
+                        MinWidth="110"
+                        AutomationProperties.Name="{loc:Text Settings_Export}"
+                        Click="OnExportSettings" />
+                <Button Style="{StaticResource Button.Ghost}"
+                        Content="{loc:Text Settings_Import}"
+                        MinWidth="110"
+                        Margin="8,0,0,0"
+                        AutomationProperties.Name="{loc:Text Settings_Import}"
+                        Click="OnImportSettings" />
+            </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <Button x:Name="ApplyButton"

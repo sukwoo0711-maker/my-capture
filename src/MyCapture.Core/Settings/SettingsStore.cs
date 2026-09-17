@@ -97,6 +97,41 @@ public sealed class SettingsStore
         _log.LogDebug("Settings saved to {Path}", LogText.SingleLine(_paths.SettingsFile));
     }
 
+    /// <summary>
+    /// Writes the settings as a portable JSON file the user picks. The exported payload is
+    /// the same shape as the live settings file, so ImportFrom uses one code path.
+    /// </summary>
+    public void ExportTo(AppSettings settings, string destinationPath)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+
+        string json = JsonSerializer.Serialize(settings, SerializerOptions);
+        AtomicFile.WriteAllText(destinationPath, json);
+        _log.LogInformation("Settings exported to {Path}", LogText.SingleLine(destinationPath));
+    }
+
+    /// <summary>
+    /// Reads a settings file produced by <see cref="ExportTo"/> (or a live settings file)
+    /// and returns a clamped copy. Throws on unreadable JSON so the caller can surface a
+    /// clear message; the running settings are untouched either way.
+    /// </summary>
+    public AppSettings ImportFrom(string sourcePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+
+        string text = File.ReadAllText(sourcePath);
+        if (!TryDeserialize(text, out AppSettings? parsed) || parsed is null)
+        {
+            throw new InvalidDataException(UiText.Get("Settings_ImportFailed"));
+        }
+
+        var warnings = new List<string>();
+        Sanitize(parsed, warnings);
+        _log.LogInformation("Settings imported from {Path}", LogText.SingleLine(sourcePath));
+        return parsed;
+    }
+
     private static bool TryDeserialize(string text, out AppSettings? settings)
     {
         settings = null;

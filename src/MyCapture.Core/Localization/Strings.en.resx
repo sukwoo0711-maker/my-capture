@@ -3102,4 +3102,34 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Workspace.Properties" xml:space="preserve"><value>Layer properties</value></data>
 <data name="Workspace.EditProperties" xml:space="preserve"><value>Edit properties</value></data>
 <data name="Workspace.SelectLayer" xml:space="preserve"><value>Select a layer to see its content and visible interval.</value></data>
+  <data name="Text_3F8046019B32" xml:space="preserve"><value>Mosaic</value></data>
+  <data name="Text_3F8046019B33" xml:space="preserve"><value>Drag over the area to pixelate (M)</value></data>
+  <data name="Text_3F8046019B34" xml:space="preserve"><value>Area pixelated.</value></data>
+  <data name="Tools_ColorPicker" xml:space="preserve"><value>Color picker</value></data>
+  <data name="Tools_ColorPickerHint" xml:space="preserve"><value>Copies the colour under the click to the clipboard.</value></data>
+  <data name="Tools_ColorCopied" xml:space="preserve"><value>{0} copied</value></data>
+  <data name="Tools_Ruler" xml:space="preserve"><value>Screen ruler</value></data>
+  <data name="Tools_RulerHint" xml:space="preserve"><value>Shows an on-screen ruler. Drag an edge to rotate.</value></data>
+  <data name="Tools_Crop" xml:space="preserve"><value>Crop</value></data>
+  <data name="Tools_CropHint" xml:space="preserve"><value>Adjust to the area to keep, press Enter to apply.</value></data>
+  <data name="Tools_CropApplied" xml:space="preserve"><value>Crop applied.</value></data>
+  <data name="Settings_Export" xml:space="preserve"><value>Export settings</value></data>
+  <data name="Settings_Import" xml:space="preserve"><value>Import settings</value></data>
+  <data name="Settings_ImportDone" xml:space="preserve"><value>Settings imported. Some items apply on next start.</value></data>
+  <data name="Settings_ImportFailed" xml:space="preserve"><value>Could not read the settings file.</value></data>
+  <data name="Settings_ExportDone" xml:space="preserve"><value>Settings exported.</value></data>
+  <data name="GitHub_TokenMode" xml:space="preserve"><value>Upload with token (experimental)</value></data>
+  <data name="GitHub_TokenLabel" xml:space="preserve"><value>Personal access token (repo scope)</value></data>
+  <data name="GitHub_TokenHint" xml:space="preserve"><value>With a token the image uploads without opening a browser. The token stays on this PC.</value></data>
+  <data name="Recording_SizePreset" xml:space="preserve"><value>Size preset</value></data>
+  <data name="Recording_LastRegion" xml:space="preserve"><value>Last region</value></data>
+  <data name="Recording_Free" xml:space="preserve"><value>Free</value></data>
+  <data name="Recording_Fixed720" xml:space="preserve"><value>1280×720</value></data>
+  <data name="Recording_Fixed1080" xml:space="preserve"><value>1920×1080</value></data>
+  <data name="Ocr_ExportText" xml:space="preserve"><value>Export text</value></data>
+  <data name="Ocr_ExportDone" xml:space="preserve"><value>Text saved.</value></data>
+  <data name="Ocr_ExportNone" xml:space="preserve"><value>No recognised text to export.</value></data>
+  <data name="GitHub.TokenFailed" xml:space="preserve"><value>Token upload failed — falling back to the browser flow.</value></data>
+  <data name="Recording_PresetWidth" xml:space="preserve"><value>Fixed width (px, 0=free)</value></data>
+  <data name="Recording_PresetHeight" xml:space="preserve"><value>Fixed height (px, 0=free)</value></data>
 </root>
