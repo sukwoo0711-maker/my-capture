@@ -3133,4 +3133,28 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Recording_PresetWidth" xml:space="preserve"><value>Fixed width (px, 0=free)</value></data>
   <data name="Recording_PresetHeight" xml:space="preserve"><value>Fixed height (px, 0=free)</value></data>
   <data name="Recording_CursorHighlight" xml:space="preserve"><value>Highlight the cursor on recordings (red while clicking)</value></data>
+  <data name="Library.Organize.Title" xml:space="preserve"><value>Organize capture</value></data>
+  <data name="Library.Organize.Action" xml:space="preserve"><value>Title &amp; tags</value></data>
+  <data name="Library.Organize.Hint" xml:space="preserve"><value>Find this capture again by your own words. Stored on this PC; pixels and OCR are unchanged.</value></data>
+  <data name="Library.Organize.Name" xml:space="preserve"><value>Title</value></data>
+  <data name="Library.Organize.Tags" xml:space="preserve"><value>Tags</value></data>
+  <data name="Library.Organize.TagsHint" xml:space="preserve"><value>Separate tags with commas. Up to 12 tags, 32 characters each. A title or tag does not prevent automatic cleanup; use Keep to retain important captures.</value></data>
+  <data name="Library.Organize.Saved" xml:space="preserve"><value>Title and tags saved. Search now includes your labels.</value></data>
+  <data name="Library.Organize.Missing" xml:space="preserve"><value>This capture is no longer in the library. Your draft has not been discarded.</value></data>
+  <data name="Library.Organize.Invalid" xml:space="preserve"><value>Use a title up to 140 characters and up to 12 tags of 32 characters. Control characters are not allowed.</value></data>
+  <data name="Library.Organize.Failed" xml:space="preserve"><value>Could not save. Check disk space and folder access, then try again. Your draft is still here.</value></data>
+  <data name="Library.Action.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Library.Action.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Library.Archive.Title" xml:space="preserve"><value>Export selected captures to a new ZIP</value></data>
+  <data name="Library.Archive.Action" xml:space="preserve"><value>Export ZIP</value></data>
+  <data name="Library.Archive.Hint" xml:space="preserve"><value>Rendered PNG and current MP4 only. No original images, OCR index, titles, tags or settings. Choose a new filename.</value></data>
+  <data name="Library.Archive.Preparing" xml:space="preserve"><value>Preparing protected copies of the selected captures…</value></data>
+  <data name="Library.Archive.Progress" xml:space="preserve"><value>Exporting {0} of {1} files…</value></data>
+  <data name="Library.Archive.Done" xml:space="preserve"><value>Exported {0} files. Original captures remain in your library.</value></data>
+  <data name="Library.Archive.Cancelled" xml:space="preserve"><value>Export cancelled. No archive was published.</value></data>
+  <data name="Library.Archive.Failed" xml:space="preserve"><value>Could not export. Choose a new filename and check disk space and access. Existing files were not replaced.</value></data>
+  <data name="Library.Search.Count" xml:space="preserve"><value>{0} of {1} items</value></data>
+  <data name="Library.Search.Reset" xml:space="preserve"><value>Clear search and filters</value></data>
+  <data name="Library.Empty.Start" xml:space="preserve"><value>Your capture workspace</value></data>
+  <data name="Library.Empty.NoResults" xml:space="preserve"><value>No matching captures</value></data>
 </root>

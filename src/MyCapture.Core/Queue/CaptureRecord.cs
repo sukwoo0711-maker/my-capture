@@ -116,6 +116,9 @@ public sealed class CaptureRecord
     /// </summary>
     public string Title { get; set; } = string.Empty;
 
+    /// <summary>User-managed, comma-separated local search tags; empty for legacy indexes.</summary>
+    public string Tags { get; set; } = string.Empty;
+
     /// <summary>
     /// Title of the foreground window at capture time.
     /// </summary>
@@ -161,6 +164,7 @@ public sealed class CaptureRecord
         string.Join(
             ' ',
             Title,
+            Tags,
             SourceWindowTitle,
             OcrText ?? string.Empty,
             IsVideo ? "동영상 비디오 video recording" : "이미지 스크린샷 image screenshot");

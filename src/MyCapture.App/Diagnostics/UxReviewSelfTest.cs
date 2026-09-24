@@ -147,6 +147,10 @@ internal static class UxReviewSelfTest
                 videoLibrary, paths, logs, presenter, () => settings.Ocr, indexing,
                 new FixturePrivacy(), NullLogger.Instance)));
             viewModel.Select(viewModel.Groups.SelectMany(group => group.Items).First().Id);
+            // Render the real organization dialog across all existing theme/density checks.
+            // This visual fixture intentionally does not save user data.
+            windows.Add(("organization", new GalleryOrganizationDialog(queue.Records.First(),
+                (_, _) => Task.FromResult(true))));
             windows.Add(("settings", new SettingsWindow(() => settings,
                 _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance,
                 settingsStore: null)));
@@ -275,6 +279,12 @@ internal static class UxReviewSelfTest
                         {
                             window.Width = compact ? Math.Max(window.MinWidth, name is "pin-code" or "image-export" ? normalWidth : 780) : normalWidth;
                             window.Height = compact ? Math.Max(window.MinHeight, name is "pin-code" or "image-export" ? normalHeight : 560) : normalHeight;
+                            // Exercise the new dialog at its true minimum, not a wider generic fixture.
+                            if (compact && window is GalleryOrganizationDialog)
+                            {
+                                window.Width = window.MinWidth;
+                                window.Height = window.MinHeight;
+                            }
                             window.UpdateLayout();
                             Pump(TimeSpan.FromMilliseconds(100));
                             if (compact && window is GalleryWindow)
@@ -286,6 +296,20 @@ internal static class UxReviewSelfTest
                                 bool fullCardFits = compactScroll.ViewportHeight >= 304;
                                 report.AppendLine($"Gallery [{themeLabel}] compact viewport={compactScroll.ViewportHeight:0.##} DIP; 304-DIP full card fits after scrolling heading away={fullCardFits}");
                                 if (!fullCardFits) failures++;
+                            }
+                            if (window is GalleryOrganizationDialog)
+                            {
+                                Button[] actions = Descendants(window).OfType<Button>()
+                                    .Where(button => button.IsDefault || button.IsCancel).ToArray();
+                                bool visibleActions = actions.Length == 2 && actions.All(button =>
+                                {
+                                    Rect bounds = button.TransformToAncestor(window).TransformBounds(
+                                        new Rect(0, 0, button.ActualWidth, button.ActualHeight));
+                                    return button.IsVisible && button.ActualHeight >= 24 && bounds.Top >= 0
+                                        && bounds.Bottom <= window.ActualHeight && bounds.Left >= 0 && bounds.Right <= window.ActualWidth;
+                                });
+                                report.AppendLine($"Organization [{themeLabel}] compact={compact}; save/cancel fully visible={visibleActions}");
+                                if (!visibleActions) failures++;
                             }
                             string label = name + (compact ? "-compact" : "-normal") + "-" + themeLabel;
                             foreach (int dpi in new[] { 96, 144, 192 })

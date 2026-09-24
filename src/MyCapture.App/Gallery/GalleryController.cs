@@ -115,6 +115,39 @@ public sealed class GalleryController
 
     public CaptureRecord? Find(Guid id) => _queue.Find(id);
 
+    /// <summary>Edits only user metadata; serializes publication with OCR and image edits.</summary>
+    public async Task<bool> UpdateOrganizationAsync(Guid id, string? title, string? tags,
+        CancellationToken cancellationToken = default)
+    {
+        string normalizedTitle = CaptureOrganization.NormalizeTitle(title);
+        string normalizedTags = CaptureOrganization.NormalizeTags(tags);
+        using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        CaptureRecord? record = _queue.Find(id);
+        if (record is null) return false;
+        using IDisposable lease = _queue.AcquireEvictionLease(id);
+        string previousTitle = record.Title;
+        string previousTags = record.Tags;
+        DateTimeOffset previousUpdatedAt = record.UpdatedAt;
+        record.Title = normalizedTitle;
+        record.Tags = normalizedTags;
+        record.UpdatedAt = DateTimeOffset.Now;
+        try
+        {
+            await _queue.PublishRecordAsync(record, reservation);
+        }
+        catch
+        {
+            record.Title = previousTitle;
+            record.Tags = previousTags;
+            record.UpdatedAt = previousUpdatedAt;
+            throw;
+        }
+        // Do not log user-authored labels, which can contain private project names.
+        _log.LogInformation("Updated organization metadata for capture {Id}", id);
+        return true;
+    }
+
     /// <summary>
     /// How much of the queue is full-text searchable right now (i.e. carries OCR text).
     /// Drives the "N captures not yet searchable — index now?" affordance.
