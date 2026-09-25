@@ -12,6 +12,7 @@ public enum CaptureMatchField
     WindowTitle = 2,
     OcrText = 4,
     MediaType = 8,
+    Tags = 16,
 }
 
 /// <summary>
@@ -42,7 +43,7 @@ public readonly record struct OcrCoverage(int Total, int Indexed, int WithOcrTex
 
 /// <summary>
 /// Full-text search over the persistent capture queue: matches a free-text query against
-/// each record's title, source-window title, and recognised OCR text.
+/// each record's title, tags, source-window title, and recognised OCR text.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -175,6 +176,11 @@ public static class CaptureTextSearch
             if (Contains(media, term))
             {
                 termFields |= CaptureMatchField.MediaType;
+            }
+
+            if (Contains(record.Tags ?? string.Empty, term))
+            {
+                termFields |= CaptureMatchField.Tags;
             }
 
             // AND semantics: a term found in no field fails the whole record.
