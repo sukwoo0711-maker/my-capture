@@ -6,5 +6,6 @@ namespace MyCapture.App.Editing;
 internal static class AnnotationEditorPreferences
 {
     internal static Func<AnnotationDefaults>? Read { get; set; }
+    internal static Func<bool>? ReadShowSourceWindowTitle { get; set; }
     internal static Action<AnnotationDefaults>? Write { get; set; }
 }

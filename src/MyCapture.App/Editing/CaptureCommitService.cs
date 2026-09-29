@@ -78,13 +78,14 @@ internal sealed class CaptureCommitService
     /// once the user releases the capture drag, the image is offered to the shared exact-PNG
     /// clipboard writer even if the editor is later cancelled or committed with Done.
     /// </summary>
-    internal async Task<bool> CopyCapturedRegionAsync(BitmapSource capturedBitmap)
+    internal async Task<bool> CopyCapturedRegionAsync(BitmapSource capturedBitmap, string? sourceWindowTitle = null)
     {
         ArgumentNullException.ThrowIfNull(capturedBitmap);
 
         try
         {
-            bool copied = await _copyImageAsync(capturedBitmap);
+            BitmapSource result = await RenderCapturedImageAsync(capturedBitmap, sourceWindowTitle);
+            bool copied = await _copyImageAsync(result);
             if (!copied)
             {
                 _log.LogWarning("Automatic captured-region clipboard copy failed");
@@ -104,6 +105,16 @@ internal sealed class CaptureCommitService
             _log.LogWarning(ex, "Automatic captured-region clipboard copy threw");
             return false;
         }
+    }
+
+    internal Task<BitmapSource> RenderCapturedImageAsync(BitmapSource original, string? sourceWindowTitle)
+    {
+        if (!_settings().Export.ShowSourceWindowTitle || string.IsNullOrWhiteSpace(sourceWindowTitle))
+            return Task.FromResult(original);
+
+        return StaThreadTask.RunAsync(() => Flatten(original,
+            AnnotationDocument.CreateFor(original.PixelWidth, original.PixelHeight),
+            new Dictionary<string, BitmapSource>(), sourceWindowTitle), "MyCapture capture title renderer");
     }
 
     /// <summary>
@@ -127,8 +138,13 @@ internal sealed class CaptureCommitService
         editSession?.ThrowIfDisposed();
 
         AnnotationDocument snapshot = CreatePersistenceSnapshot(result.Document);
+        // An open editor keeps the option it previews; re-opening a library capture reads
+        // the current preference again. Always draw over original pixels, never a prior result.
+        string? sourceWindowTitle = (result.ShowSourceWindowTitle ?? _settings().Export.ShowSourceWindowTitle)
+            ? result.SourceWindowTitle ?? record?.SourceWindowTitle
+            : null;
         BitmapSource flattened = await StaThreadTask.RunAsync(
-            () => Flatten(result.SelectedBitmap, snapshot, result.ImageAssetBitmaps),
+            () => Flatten(result.SelectedBitmap, snapshot, result.ImageAssetBitmaps, sourceWindowTitle),
             "MyCapture annotation renderer");
 
         switch (result.Action)
@@ -235,11 +251,12 @@ internal sealed class CaptureCommitService
     private static BitmapSource Flatten(
         BitmapSource selectedBitmap,
         AnnotationDocument document,
-        IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps)
+        IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
+        string? sourceWindowTitle = null)
     {
         AnnotationImageStore store = AnnotationImageStore.FromDecoded(imageAssetBitmaps);
         var renderer = new AnnotationRenderer(store);
-        return AnnotationFlattener.Flatten(selectedBitmap, document, renderer);
+        return AnnotationFlattener.Flatten(selectedBitmap, document, renderer, sourceWindowTitle);
     }
 
     private async Task<CaptureRecord?> PersistFinalIfAvailableAsync(

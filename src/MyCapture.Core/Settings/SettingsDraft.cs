@@ -84,6 +84,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     // ----- Export -----
     private string _quickSaveDirectoryOverride = string.Empty;
     private bool _copyToClipboardOnQuickSave;
+    private bool _showSourceWindowTitle;
     private string _fileNamePattern = string.Empty;
 
     // ----- Pin -----
@@ -334,6 +335,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     public bool CopyToClipboardOnQuickSave { get => _copyToClipboardOnQuickSave; set => Set(ref _copyToClipboardOnQuickSave, value); }
 
+    public bool ShowSourceWindowTitle { get => _showSourceWindowTitle; set => Set(ref _showSourceWindowTitle, value); }
+
     public string FileNamePattern
     {
         get => _fileNamePattern;
@@ -473,6 +476,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _gitHubToken = s.GitHub.Token ?? string.Empty;
         _theme = AppThemeNames.ToSetting(AppThemeNames.Parse(s.General.Theme));
         _copyToClipboardOnQuickSave = s.Export.CopyToClipboardOnQuickSave;
+        _showSourceWindowTitle = s.Export.ShowSourceWindowTitle;
         _fileNamePattern = s.Export.FileNamePattern;
 
         _closeOnDoubleClick = s.Pin.CloseOnDoubleClick;
@@ -599,6 +603,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                     _quickSaveDirectoryOverride,
                     AppPaths.CreateDefault().QuickSaveRoot),
                 CopyToClipboardOnQuickSave = _copyToClipboardOnQuickSave,
+                ShowSourceWindowTitle = _showSourceWindowTitle,
                 FileNamePattern = _fileNamePattern.Trim(),
                 PreserveTransparency = _preservedPreserveTransparency,
             },

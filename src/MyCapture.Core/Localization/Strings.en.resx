@@ -3042,7 +3042,9 @@ Confirm or save to add the capture to the gallery. Cancelled or replaced drafts 
 Hold Shift for precise pixel selection.
 Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Settings.Theme" xml:space="preserve"><value>Theme</value></data>
-  <data name="Settings.ThemeHint" xml:space="preserve"><value>Apply updates colours immediately. Glass themes use Windows 11 Mica and translucent panels.</value></data>
+  <data name="Settings.ThemeHint" xml:space="preserve"><value>Select a theme to preview it. Apply to save your choice.</value></data>
+  <data name="Settings.ShowSourceWindowTitle" xml:space="preserve"><value>Show document/window title at the top right of images</value></data>
+  <data name="Settings.ShowSourceWindowTitleHint" xml:space="preserve"><value>Applies to new captures and reopened editors.</value></data>
   <data name="Settings.ThemeMidnight" xml:space="preserve"><value>Midnight</value></data>
   <data name="Settings.ThemeDaylight" xml:space="preserve"><value>Daylight</value></data>
   <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>High contrast</value></data>

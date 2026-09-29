@@ -430,7 +430,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 selection.Frame,
                 selection.BitmapRegion,
                 selection.SelectedBitmap,
-                privacyRedactionService: PrivacyRedactionService);
+                privacyRedactionService: PrivacyRedactionService,
+                sourceWindowTitle: selection.SourceTitle);
             _activeEditor = editor;
             editor.CommitRequested = CommitRequested;
             editor.Committed += OnEditorCommitted;

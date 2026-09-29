@@ -3042,7 +3042,9 @@
 Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
 트레이에서 갤러리, 설정, Language를 선택할 수 있습니다.</value></data>
   <data name="Settings.Theme" xml:space="preserve"><value>테마</value></data>
-  <data name="Settings.ThemeHint" xml:space="preserve"><value>적용하면 바로 색이 바뀝니다. 글래스 테마는 Windows 11 Mica와 반투명 패널을 사용합니다.</value></data>
+  <data name="Settings.ThemeHint" xml:space="preserve"><value>테마를 선택하면 미리 볼 수 있습니다. 적용하면 저장됩니다.</value></data>
+  <data name="Settings.ShowSourceWindowTitle" xml:space="preserve"><value>이미지 우측 상단에 문서·창 제목 표시</value></data>
+  <data name="Settings.ShowSourceWindowTitleHint" xml:space="preserve"><value>새 캡처와 다시 여는 편집기에 적용됩니다.</value></data>
   <data name="Settings.ThemeMidnight" xml:space="preserve"><value>미드나잇</value></data>
   <data name="Settings.ThemeDaylight" xml:space="preserve"><value>데이라이트</value></data>
   <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>고대비</value></data>

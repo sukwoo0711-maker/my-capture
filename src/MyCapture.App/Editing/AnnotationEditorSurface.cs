@@ -72,6 +72,8 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     /// <summary>The visual frame and crop used by this surface.</summary>
     internal FrozenFrame Frame => _frame;
 
+    internal string? SourceWindowTitle { get; set; }
+
     /// <summary>
     /// Replaces the base bitmap and crop (a rotation swaps width and height) and repaints.
     /// Only the editor's document-rotation action may call this.
@@ -206,6 +208,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
         AnnotationItem? suppress = _controller.IsCreatingText ? _controller.Selected : null;
         _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress);
+        SourceWindowTitleRenderer.Draw(dc, SourceWindowTitle, _cropRegion.Width, _cropRegion.Height);
 
         dc.Pop();
         dc.Pop();

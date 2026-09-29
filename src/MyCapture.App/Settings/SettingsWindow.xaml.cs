@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Microsoft.Extensions.Logging;
+using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Shell;
 
@@ -24,8 +25,8 @@ namespace MyCapture.App.Settings;
 /// </para>
 /// <para>
 /// The window binds to a <see cref="SettingsDraft"/> — a deep copy of the live settings — so
-/// nothing the user types can leak into a capture taken while the window is open, and Cancel
-/// is a guaranteed no-op on the running configuration.
+/// operational settings remain unchanged while editing. Theme selection previews the live
+/// palette; cancelling restores the palette from the saved settings.
 /// </para>
 /// <para>
 /// Apply validates first: if the draft has errors it does not close, reveals the error
@@ -39,6 +40,7 @@ internal sealed partial class SettingsWindow : Window
     private readonly Func<AppSettings, SettingsApplyResult> _apply;
     private readonly Func<SettingsStore>? _settingsStore;
     private readonly ILogger _log;
+    private readonly Action<string> _showSaveFailureMessage;
 
     private SettingsDraft _draft;
     private bool _allowClose;
@@ -47,19 +49,21 @@ internal sealed partial class SettingsWindow : Window
         Func<AppSettings> currentSettings,
         Func<AppSettings, SettingsApplyResult> apply,
         ILogger log,
-        Func<SettingsStore>? settingsStore = null)
+        Func<SettingsStore>? settingsStore = null,
+        Action<string>? showSaveFailureMessage = null)
     {
         _currentSettings = currentSettings ?? throw new ArgumentNullException(nameof(currentSettings));
         _apply = apply ?? throw new ArgumentNullException(nameof(apply));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _settingsStore = settingsStore;
+        _showSaveFailureMessage = showSaveFailureMessage ?? (message => MessageBox.Show(
+            this, message, UiText.Get("Text_13A717215F51"), MessageBoxButton.OK, MessageBoxImage.Warning));
 
         InitializeComponent();
         InitializeUpdates();
 
         _draft = new SettingsDraft(_currentSettings());
-        _draft.ErrorsChanged += (_, _) => RefreshErrorSummary();
-        _draft.PropertyChanged += (_, _) => _settingsEdited = true;
+        AttachDraftEvents();
         _settingsEdited = false;
         DataContext = _draft;
 
@@ -143,16 +147,46 @@ internal sealed partial class SettingsWindow : Window
         base.OnClosing(e);
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        DetachDraftEvents();
+        ThemeService.ApplyFromSettings(_currentSettings().General.Theme);
+        base.OnClosed(e);
+    }
+
     private void ReloadDraft() => ReloadDraftFrom(_currentSettings());
 
     private void ReloadDraftFrom(AppSettings settings)
     {
+        DetachDraftEvents();
         _draft = new SettingsDraft(settings);
-        _draft.ErrorsChanged += (_, _) => RefreshErrorSummary();
-        _draft.PropertyChanged += (_, _) => _settingsEdited = true;
+        AttachDraftEvents();
         _settingsEdited = false;
         DataContext = _draft;
+        ThemeService.ApplyFromSettings(_draft.Theme);
         RefreshErrorSummary();
+    }
+
+    private void AttachDraftEvents()
+    {
+        _draft.ErrorsChanged += OnDraftErrorsChanged;
+        _draft.PropertyChanged += OnDraftPropertyChanged;
+    }
+
+    private void DetachDraftEvents()
+    {
+        _draft.ErrorsChanged -= OnDraftErrorsChanged;
+        _draft.PropertyChanged -= OnDraftPropertyChanged;
+    }
+
+    private void OnDraftErrorsChanged(object? sender, DataErrorsChangedEventArgs e) => RefreshErrorSummary();
+
+    private void OnDraftPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        _settingsEdited = true;
+        // ResetToDefaults raises a whole-draft notification instead of one for Theme.
+        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(SettingsDraft.Theme))
+            ThemeService.ApplyFromSettings(_draft.Theme);
     }
 
     /// <summary>Writes a transient line into the status bar area used by updates.</summary>
@@ -255,14 +289,10 @@ internal sealed partial class SettingsWindow : Window
             // Persistence failed and every OS-visible change was rolled back. Keep the
             // window open and the user's draft exactly as typed — do NOT reload or hide —
             // so they can fix the underlying problem (read-only folder, full disk, path
-            // conflict) and retry without re-entering everything. Nothing took effect, so
-            // the shell is not notified of an apply.
-            MessageBox.Show(
-                this,
-                string.Join(Environment.NewLine, result.Messages),
-                UiText.Get("Text_13A717215F51"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            // conflict) and retry without re-entering everything. Its theme remains a
+            // reversible preview; the shell is not notified of a saved apply.
+            ThemeService.ApplyFromSettings(_draft.Theme);
+            _showSaveFailureMessage(string.Join(Environment.NewLine, result.Messages));
             return;
         }
 

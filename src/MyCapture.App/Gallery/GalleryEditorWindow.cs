@@ -23,7 +23,8 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
             UiText.Get("Text_D9FC5F981274"),
             context.Document,
             context.AssetBitmaps,
-            privacyRedactionService)
+            privacyRedactionService,
+            context.Record.SourceWindowTitle)
     {
         if (record is null || Content is not UIElement editor)
         {
