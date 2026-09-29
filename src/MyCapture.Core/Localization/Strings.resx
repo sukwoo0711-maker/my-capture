@@ -550,7 +550,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_3185888F798A" xml:space="preserve">
-    <value>중괄호 안에 날짜 형식을 넣습니다. 예: capture_{yyyyMMdd}_{HHmmss}. 확장자는 자동으로 붙습니다.</value>
+    <value>{title}은 캡처한 창의 제목입니다. 날짜 형식도 넣을 수 있습니다. 예: {title}_{yyyyMMdd}_{HHmmss}. 확장자는 자동으로 붙습니다.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_32512F9EA32E" xml:space="preserve">
@@ -3133,4 +3133,29 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Recording_PresetWidth" xml:space="preserve"><value>고정 너비 (px, 0=자유)</value></data>
   <data name="Recording_PresetHeight" xml:space="preserve"><value>고정 높이 (px, 0=자유)</value></data>
   <data name="Recording_CursorHighlight" xml:space="preserve"><value>녹화 화면에 커서 강조 표시 (클릭 중에는 빨간색)</value></data>
+  <data name="Library.Organize.Title" xml:space="preserve"><value>캡처 정리</value></data>
+  <data name="Library.Organize.Action" xml:space="preserve"><value>제목·태그 편집</value></data>
+  <data name="Library.Organize.Hint" xml:space="preserve"><value>내가 기억하는 말로 다시 찾으세요. 이 PC에만 저장되며 이미지와 OCR 결과는 바뀌지 않습니다.</value></data>
+  <data name="Library.Organize.Name" xml:space="preserve"><value>제목</value></data>
+  <data name="Library.Organize.Tags" xml:space="preserve"><value>태그</value></data>
+  <data name="Library.Organize.TagsHint" xml:space="preserve"><value>쉼표로 구분해 최대 12개, 태그당 32자까지 입력하세요. 제목·태그만으로 자동 정리가 방지되지는 않습니다. 중요한 캡처는 보관 고정을 사용하세요.</value></data>
+  <data name="Library.Organize.Saved" xml:space="preserve"><value>제목·태그를 저장했습니다. 입력한 말로 검색할 수 있습니다.</value></data>
+  <data name="Library.Organize.Missing" xml:space="preserve"><value>라이브러리에 없는 캡처입니다. 입력한 내용은 이 창에 남아 있습니다.</value></data>
+  <data name="Library.Organize.Invalid" xml:space="preserve"><value>제목 140자, 태그 최대 12개·각 32자 이내로 입력하세요. 제어 문자는 사용할 수 없습니다.</value></data>
+  <data name="Library.Organize.Failed" xml:space="preserve"><value>저장하지 못했습니다. 디스크 공간과 폴더 권한을 확인하고 다시 시도하세요. 입력 내용은 유지됩니다.</value></data>
+  <data name="Library.Action.Cancel" xml:space="preserve"><value>취소</value></data>
+  <data name="Library.Action.Save" xml:space="preserve"><value>저장</value></data>
+  <data name="Library.Archive.Title" xml:space="preserve"><value>선택한 캡처를 새 ZIP으로 내보내기</value></data>
+  <data name="Library.Archive.Action" xml:space="preserve"><value>ZIP 내보내기</value></data>
+  <data name="Library.Archive.Hint" xml:space="preserve"><value>편집된 PNG·현재 MP4만 포함합니다. 원본 이미지·OCR 색인·제목·태그·설정은 제외합니다. 새 파일명을 선택하세요.</value></data>
+  <data name="Library.Archive.Preparing" xml:space="preserve"><value>선택한 캡처의 안전한 복사본을 준비하고 있습니다…</value></data>
+  <data name="Library.Archive.Progress" xml:space="preserve"><value>{1}개 중 {0}개 내보내는 중…</value></data>
+  <data name="Library.Archive.Done" xml:space="preserve"><value>{0}개 파일을 내보냈습니다. 라이브러리 원본은 그대로 유지됩니다.</value></data>
+  <data name="Library.Archive.Cancelled" xml:space="preserve"><value>내보내기를 취소했습니다. ZIP 파일은 생성되지 않았습니다.</value></data>
+  <data name="Library.Archive.Failed" xml:space="preserve"><value>내보내지 못했습니다. 새 파일명·디스크 공간·폴더 권한을 확인하세요. 기존 파일은 덮어쓰지 않았습니다.</value></data>
+  <data name="Library.Search.Count" xml:space="preserve"><value>전체 {1}개 중 {0}개</value></data>
+  <data name="Library.Search.Reset" xml:space="preserve"><value>검색·필터 초기화</value></data>
+  <data name="Library.Empty.Start" xml:space="preserve"><value>나의 캡처 작업 공간</value></data>
+  <data name="Library.Empty.NoResults" xml:space="preserve"><value>일치하는 캡처가 없습니다</value></data>
+  <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 편집창에서 저장을 눌러 다시 시도하세요. {0}</value></data>
 </root>

@@ -108,7 +108,7 @@ public sealed class CaptureQueueBatchRemovalTests
         using var locked = new FileStream(lockedPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
         queue.Evicted += (_, _) =>
         {
-            try { Directory.Delete(directory, true); }
+            try { TestRecycleBin.DeleteDirectory(directory, true); }
             catch (IOException) { }
         };
         CaptureBatchRemovalResult result = await queue.RemoveManyAsync([record.Id]);

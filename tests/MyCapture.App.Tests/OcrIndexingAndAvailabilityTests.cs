@@ -185,7 +185,7 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
     [Fact]
     public async Task ConcurrentAutomaticAndManualPassesDoNotRecognizeTheSameGenerationTwice()
     {
-        string root = Directory.CreateTempSubdirectory("mc-ocridx-concurrent-").FullName;
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocridx-concurrent-").FullName;
         try
         {
             GalleryController gallery = NewGallery(out CaptureQueue queue, root);
@@ -210,14 +210,14 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         }
         finally
         {
-            if (Directory.Exists(root)) Directory.Delete(root, true);
+            if (Directory.Exists(root)) TestRecycleBin.DeleteDirectory(root, true);
         }
     }
 
     [Fact]
     public async Task Index_WhenEngineUnavailable_ReturnsUnavailable_WithoutCalling()
     {
-        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mc-ocridx-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocridx-").FullName;
         try
         {
             GalleryController gallery = NewGallery(out CaptureQueue queue, root);
@@ -237,14 +237,14 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         }
         finally
         {
-            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(root, true); } catch (System.IO.IOException) { }
         }
     }
 
     [Fact]
     public async Task Index_WhenNothingMissing_ReturnsNothingToDo()
     {
-        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mc-ocridx-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocridx-").FullName;
         try
         {
             GalleryController gallery = NewGallery(out CaptureQueue queue, root);
@@ -264,14 +264,14 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         }
         finally
         {
-            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(root, true); } catch (System.IO.IOException) { }
         }
     }
 
     [Fact]
     public void Coverage_ExposedThroughService()
     {
-        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mc-ocridx-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocridx-").FullName;
         try
         {
             GalleryController gallery = NewGallery(out _, root);
@@ -288,16 +288,14 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         }
         finally
         {
-            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(root, true); } catch (System.IO.IOException) { }
         }
     }
 
     [Fact]
     public async Task CoverageAndIndexing_ExcludeVideoRecords()
     {
-        string root = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(),
-            "mc-ocridx-video-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocridx-video-").FullName;
         try
         {
             GalleryController gallery = NewGallery(out CaptureQueue queue, root);
@@ -328,7 +326,7 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         }
         finally
         {
-            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(root, true); } catch (System.IO.IOException) { }
         }
     }
 
@@ -457,7 +455,7 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
     [Fact]
     public void Index_PersistedCapture_CachesText_RaisesCoverage_AndBecomesSearchable() => RunSta(() =>
     {
-        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mc-ocridx-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocridx-").FullName;
         try
         {
             AppPaths paths = AppPaths.CreateForRoot(root);
@@ -500,14 +498,14 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         }
         finally
         {
-            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(root, true); } catch (System.IO.IOException) { }
         }
     });
 
     [Fact]
     public void Index_AlreadyCancelledToken_ReturnsCancelled() => RunSta(() =>
     {
-        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mc-ocridx-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocridx-").FullName;
         try
         {
             AppPaths paths = AppPaths.CreateForRoot(root);
@@ -531,16 +529,14 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         }
         finally
         {
-            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(root, true); } catch (System.IO.IOException) { }
         }
     });
 
     [Fact]
     public void Index_NoTextResult_IsGenerationScopedDurableAndNotRetried() => RunSta(() =>
     {
-        string root = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(),
-            "mc-ocr-notext-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocr-notext-").FullName;
         try
         {
             AppPaths paths = AppPaths.CreateForRoot(root);
@@ -604,16 +600,14 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         }
         finally
         {
-            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(root, true); } catch (System.IO.IOException) { }
         }
     });
 
     [Fact]
     public async Task Index_CancelledResultAfterRecognitionStarts_ReturnsCancelled()
     {
-        string root = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(),
-            "mc-ocr-cancel-result-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocr-cancel-result-").FullName;
         try
         {
             AppPaths paths = AppPaths.CreateForRoot(root);
@@ -661,16 +655,14 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         }
         finally
         {
-            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(root, true); } catch (System.IO.IOException) { }
         }
     }
 
     [Fact]
     public async Task Index_ResultHeldAcrossReedit_IsMarshalledAndRejectedAsStale()
     {
-        string root = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(),
-            "mc-ocr-generation-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-ocr-generation-").FullName;
         System.IO.Directory.CreateDirectory(root);
 
         Dispatcher? dispatcher = null;
@@ -767,7 +759,7 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
             }
 
             Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "OCR dispatcher did not shut down.");
-            try { System.IO.Directory.Delete(root, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(root, true); } catch (System.IO.IOException) { }
         }
 
         if (threadFailure is not null)

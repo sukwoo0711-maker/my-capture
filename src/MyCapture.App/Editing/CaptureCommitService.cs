@@ -137,10 +137,10 @@ internal sealed class CaptureCommitService
                 // Choose the destination before persisting so a cancel keeps the editor open
                 // with no side effects the user did not ask for.
                 bool exported = result.ReduceExport
-                    ? ShowReducedExport(flattened)
+                    ? ShowReducedExport(flattened, record)
                     : await ImageExportTransaction.RunAsync(async () =>
                 {
-                    string? chosen = ResolveSaveAsPath();
+                    string? chosen = ResolveSaveAsPath(record);
                     if (chosen is null)
                     {
                         _log.LogInformation("Save As cancelled; keeping editor open");
@@ -165,9 +165,9 @@ internal sealed class CaptureCommitService
                 return await CopyEditedImageAsync(flattened, "Save As");
 
             case EditorCommitAction.QuickSave:
-                await PersistFinalIfAvailableAsync(
+                record = await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
-                bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened));
+                bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened, record));
                 if (!quickSaved)
                 {
                     return false;
@@ -221,10 +221,10 @@ internal sealed class CaptureCommitService
         return copied;
     }
 
-    private bool ShowReducedExport(BitmapSource flattened)
+    private bool ShowReducedExport(BitmapSource flattened, CaptureRecord? record)
     {
         string directory = ResolveQuickSaveDirectory();
-        string stem = QuickSaveNaming.BuildStem(_settings().Export.FileNamePattern, DateTimeOffset.Now);
+        string stem = BuildExportStem(record);
         string suggested = QuickSaveNaming.ResolvePath(directory, stem, ".png");
         return ReducedExportPrompt is not null
             ? ReducedExportPrompt(flattened, suggested)
@@ -242,7 +242,7 @@ internal sealed class CaptureCommitService
         return AnnotationFlattener.Flatten(selectedBitmap, document, renderer);
     }
 
-    private async Task PersistFinalIfAvailableAsync(
+    private async Task<CaptureRecord?> PersistFinalIfAvailableAsync(
         CaptureRecord? record,
         EditorCommitAction action,
         BitmapSource flattened,
@@ -255,7 +255,7 @@ internal sealed class CaptureCommitService
         if (record is null)
         {
             _log.LogWarning("Queue persistence is unavailable; running {Action} in recovery-export mode", action);
-            return;
+            return null;
         }
 
         await _persistence.FinalizeAsync(
@@ -265,18 +265,21 @@ internal sealed class CaptureCommitService
             imageAssetBitmaps,
             editSession?.ExpectedContentRevision);
         editSession?.AdvanceTo(record.ContentRevision);
+        return record;
     }
 
-    private async Task<bool> QuickSaveAsync(BitmapSource flattened)
+    private async Task<bool> QuickSaveAsync(BitmapSource flattened, CaptureRecord? record)
     {
         string directory = ResolveQuickSaveDirectory();
         try
         {
             string pattern = _settings().Export.FileNamePattern;
+            DateTimeOffset timestamp = record?.CreatedAt ?? DateTimeOffset.Now;
+            string? title = record?.SourceWindowTitle;
             (string path, long bytes) = await Task.Run(() =>
             {
                 Directory.CreateDirectory(directory);
-                string stem = QuickSaveNaming.BuildStem(pattern, DateTimeOffset.Now);
+                string stem = QuickSaveNaming.BuildStem(pattern, timestamp, title);
                 byte[] encoded = ImageCodec.EncodePng(flattened);
                 string savedPath = QuickSaveNaming.WriteCollisionFreeExport(directory, stem, ".png", encoded);
                 return (savedPath, encoded.LongLength);
@@ -327,10 +330,13 @@ internal sealed class CaptureCommitService
         return string.IsNullOrWhiteSpace(overridePath) ? _paths().QuickSaveRoot : overridePath;
     }
 
-    private string? ResolveSaveAsPath()
+    private string BuildExportStem(CaptureRecord? record) => QuickSaveNaming.BuildStem(
+        _settings().Export.FileNamePattern, record?.CreatedAt ?? DateTimeOffset.Now, record?.SourceWindowTitle);
+
+    private string? ResolveSaveAsPath(CaptureRecord? record)
     {
         string directory = ResolveQuickSaveDirectory();
-        string stem = QuickSaveNaming.BuildStem(_settings().Export.FileNamePattern, DateTimeOffset.Now);
+        string stem = BuildExportStem(record);
         string suggested = QuickSaveNaming.ResolvePath(directory, stem, ".png");
 
         if (SaveAsPrompt is not null)

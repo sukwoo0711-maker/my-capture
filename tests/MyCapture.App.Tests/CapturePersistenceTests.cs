@@ -49,7 +49,7 @@ public sealed class CapturePersistenceTests
 
     private static string NewRoot()
     {
-        string root = Path.Combine(Path.GetTempPath(), "mycapture-app-tests", Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mycapture-app-tests-").FullName;
         Directory.CreateDirectory(root);
         return root;
     }
@@ -60,7 +60,7 @@ public sealed class CapturePersistenceTests
         {
             if (Directory.Exists(root))
             {
-                Directory.Delete(root, recursive: true);
+                TestRecycleBin.DeleteDirectory(root, recursive: true);
             }
         }
         catch (IOException)
@@ -275,7 +275,7 @@ public sealed class CapturePersistenceTests
     public void Finalize_CanonicalisesImageSidecarAndSurvivesSourceDeletion() => RunSta(() =>
     {
         string root = NewRoot();
-        string sourcePath = Path.Combine(Path.GetTempPath(), $"mycapture-src-{Guid.NewGuid():N}.png");
+        string sourcePath = TestRecycleBin.CreateFilePath("mycapture-src-", ".png");
         try
         {
             // Write a real PNG source, decode it into a store as if inserted, then delete it.
@@ -288,7 +288,7 @@ public sealed class CapturePersistenceTests
             string sessionAsset = loaded!.Value.AssetFileName;
 
             // The source file is gone before we persist — the in-memory bitmap must carry it.
-            File.Delete(sourcePath);
+            TestRecycleBin.DeleteFile(sourcePath);
             Assert.False(File.Exists(sourcePath));
 
             AppPaths paths = AppPaths.CreateForRoot(root);
@@ -326,7 +326,7 @@ public sealed class CapturePersistenceTests
         {
             if (File.Exists(sourcePath))
             {
-                File.Delete(sourcePath);
+                TestRecycleBin.DeleteFile(sourcePath);
             }
 
             DeleteRoot(root);
@@ -380,7 +380,7 @@ public sealed class CaptureCommitServiceTests
 
     private static string NewRoot()
     {
-        string root = Path.Combine(Path.GetTempPath(), "mycapture-commit-tests", Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mycapture-commit-tests-").FullName;
         Directory.CreateDirectory(root);
         return root;
     }
@@ -391,7 +391,7 @@ public sealed class CaptureCommitServiceTests
         {
             if (Directory.Exists(root))
             {
-                Directory.Delete(root, recursive: true);
+                TestRecycleBin.DeleteDirectory(root, recursive: true);
             }
         }
         catch (IOException)

@@ -89,7 +89,7 @@ public sealed class RecordingScenarioTests
         // the app does, surfacing any real-device failure the field report hit.
         var engine = NewEngine();
         var grabber = new RegionFrameGrabber(engine, includeCursor: false);
-        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mc-realrec-" + Guid.NewGuid().ToString("N"));
+        string dir = TestRecycleBin.CreateTempSubdirectory("mc-realrec-").FullName;
         System.IO.Directory.CreateDirectory(dir);
         string path = System.IO.Path.Combine(dir, "real.mp4");
 
@@ -112,7 +112,7 @@ public sealed class RecordingScenarioTests
         finally
         {
             recorder.Dispose();
-            try { System.IO.Directory.Delete(dir, true); } catch (System.IO.IOException) { }
+            try { TestRecycleBin.DeleteDirectory(dir, true); } catch (System.IO.IOException) { }
         }
     }
 

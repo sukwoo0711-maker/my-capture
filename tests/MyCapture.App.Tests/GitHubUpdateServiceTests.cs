@@ -60,7 +60,7 @@ public sealed class GitHubUpdateServiceTests
         }
         finally
         {
-            if (Directory.Exists(link)) Directory.Delete(link);
+            if (Directory.Exists(link)) TestRecycleBin.DeleteDirectory(link);
             DeleteDirectory(root);
             DeleteDirectory(target);
         }

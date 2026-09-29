@@ -139,7 +139,7 @@ public sealed class VideoExportCalculationTests
         }
         finally
         {
-            if (Directory.Exists(link)) Directory.Delete(link); // Remove only the owned junction.
+            if (Directory.Exists(link)) TestRecycleBin.DeleteDirectory(link); // Remove only the owned junction.
             OwnedTestDirectory.Delete(root);
         }
     }

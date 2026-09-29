@@ -131,7 +131,7 @@ public sealed class GalleryBatchDragTests
             link = queue.GetFilePath(record, CaptureFileNames.Rendered);
             string target = Path.Combine(targetRoot, "unrelated.png");
             File.WriteAllText(target, "unrelated file");
-            File.Delete(link);
+            TestRecycleBin.DeleteFile(link);
             File.CreateSymbolicLink(link, target);
             string staging = Path.Combine(root, "staging");
             var service = new GalleryDragExportService(queue, staging);
@@ -143,7 +143,7 @@ public sealed class GalleryBatchDragTests
         }
         finally
         {
-            if (link is not null && File.Exists(link)) File.Delete(link);
+            if (link is not null && File.Exists(link)) TestRecycleBin.DeleteFile(link);
             OwnedTestDirectory.Delete(root); OwnedTestDirectory.Delete(targetRoot);
         }
     }
@@ -159,7 +159,7 @@ public sealed class GalleryBatchDragTests
             var queue = NewQueue(root);
             CaptureRecord record = Add(queue);
             link = queue.GetFilePath(record, CaptureFileNames.Rendered);
-            File.Delete(link);
+            TestRecycleBin.DeleteFile(link);
             string keep = Path.Combine(targetRoot, "keep.txt");
             File.WriteAllText(keep, "unrelated");
             UpdatePathsTests.CreateJunction(link, targetRoot);
@@ -173,7 +173,7 @@ public sealed class GalleryBatchDragTests
         }
         finally
         {
-            if (link is not null && Directory.Exists(link)) Directory.Delete(link);
+            if (link is not null && Directory.Exists(link)) TestRecycleBin.DeleteDirectory(link);
             OwnedTestDirectory.Delete(root); OwnedTestDirectory.Delete(targetRoot);
         }
     }
@@ -210,7 +210,7 @@ public sealed class GalleryBatchDragTests
         finally
         {
             if (link is not null && Directory.Exists(link)
-                && File.GetAttributes(link).HasFlag(FileAttributes.ReparsePoint)) Directory.Delete(link);
+                && File.GetAttributes(link).HasFlag(FileAttributes.ReparsePoint)) TestRecycleBin.DeleteDirectory(link);
             OwnedTestDirectory.Delete(root); OwnedTestDirectory.Delete(targetRoot);
         }
     }
@@ -236,7 +236,7 @@ public sealed class GalleryBatchDragTests
         }
         finally
         {
-            if (Directory.Exists(link)) Directory.Delete(link);
+            if (Directory.Exists(link)) TestRecycleBin.DeleteDirectory(link);
             OwnedTestDirectory.Delete(root); OwnedTestDirectory.Delete(targetRoot);
         }
     }
@@ -263,7 +263,7 @@ public sealed class GalleryBatchDragTests
         }
         finally
         {
-            if (Directory.Exists(link)) Directory.Delete(link);
+            if (Directory.Exists(link)) TestRecycleBin.DeleteDirectory(link);
             OwnedTestDirectory.Delete(root); OwnedTestDirectory.Delete(targetRoot);
         }
     }
@@ -335,7 +335,7 @@ public sealed class GalleryBatchDragTests
         finally
         {
             if (Directory.Exists(staging) && File.GetAttributes(staging).HasFlag(FileAttributes.ReparsePoint))
-                Directory.Delete(staging);
+                TestRecycleBin.DeleteDirectory(staging);
             OwnedTestDirectory.Delete(root); OwnedTestDirectory.Delete(targetRoot);
         }
     }

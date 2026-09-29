@@ -110,4 +110,42 @@ public sealed class MultiMonitorRecordingLayoutTests
         Assert.True(layout.PaletteOverlapsRegion);
         Assert.Equal(desktop.Inflate(2.5), layout.FrameBounds);
     }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(1.5)]
+    [InlineData(2)]
+    public void FullScreen_ControlsStayInsideActualMonitorWorkArea(double scale)
+    {
+        var region = new RectD(-2560, -1440, 2560, 1440);
+        var work = new RectD(-2560, -1440, 2560, 1392);
+        RecordingControlLayout layout = RecordingControlLayoutPlanner.Plan(region, work, scale, 6, 56, 460);
+        Assert.Equal(region.Inflate(6 * scale), layout.FrameBounds);
+        Assert.Equal(460 * scale, layout.PaletteBounds.Width);
+        Assert.True(work.Contains(layout.PaletteBounds.TopLeft));
+        Assert.True(work.Contains(layout.PaletteBounds.BottomRight));
+        Assert.True(layout.PaletteOverlapsRegion);
+    }
+
+    [Fact]
+    public void StaggeredDisplays_PaletteAvoidsVirtualDesktopGapAndTaskbar()
+    {
+        var region = new RectD(-1500, 500, 1800, 1400);
+        // The left monitor ends at y=1040; another display extends the desktop to y=2160.
+        var leftWorkArea = new RectD(-1920, 0, 1920, 1040);
+        RecordingControlLayout layout = RecordingControlLayoutPlanner.Plan(region, leftWorkArea, 1.5, 6, 56, 460);
+        Assert.True(leftWorkArea.Contains(layout.PaletteBounds.TopLeft));
+        Assert.True(leftWorkArea.Contains(layout.PaletteBounds.BottomRight));
+        Assert.Equal(region.Inflate(9), layout.FrameBounds);
+    }
+
+    [Fact]
+    public void VeryNarrowHighDpiWorkArea_PaletteFitsInsteadOfExtendingOffscreen()
+    {
+        var work = new RectD(400, 100, 640, 800);
+        RecordingControlLayout layout = RecordingControlLayoutPlanner.Plan(work, work, 2, 6, 56, 460);
+        Assert.Equal(work.Width, layout.PaletteBounds.Width);
+        Assert.True(work.Contains(layout.PaletteBounds.TopLeft));
+        Assert.True(work.Contains(layout.PaletteBounds.BottomRight));
+    }
 }

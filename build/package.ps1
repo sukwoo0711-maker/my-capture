@@ -1,6 +1,6 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
-    [string]$Version = '3.0.0'
+    [string]$Version = '3.1.0'
 )
 
 Set-StrictMode -Version 2.0
@@ -127,7 +127,7 @@ function New-FileRecord([string]$Path, [string]$RelativePath) {
 }
 
 function New-InventoryZip([string]$SourceRoot, [string]$ZipPath, [object[]]$Inventory) {
-    if (Test-Path -LiteralPath $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
+    if (Test-Path -LiteralPath $ZipPath) { throw "Preserving existing ZIP; use a fresh output path: $ZipPath" }
     $zipStream = [IO.File]::Open($ZipPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     $archive = New-Object IO.Compression.ZipArchive($zipStream, [IO.Compression.ZipArchiveMode]::Create, $false)
     try {
@@ -219,7 +219,7 @@ foreach ($requiredDotnetNotice in @($dotnetLicense, $dotnetNotices)) {
 }
 
 if (Test-Path -LiteralPath $artifactRoot) {
-    Remove-Item -LiteralPath $artifactRoot -Recurse -Force -ErrorAction Stop
+    throw "Preserving existing release artifacts; move them to the Recycle Bin before repackaging: $artifactRoot"
 }
 [IO.Directory]::CreateDirectory($publish) | Out-Null
 [IO.Directory]::CreateDirectory($stage) | Out-Null
@@ -526,7 +526,7 @@ USER DATA
 }
 finally {
     if (Test-Path -LiteralPath $stage) {
-        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Output "STAGE_RETAINED=$stage"
     }
 }
 

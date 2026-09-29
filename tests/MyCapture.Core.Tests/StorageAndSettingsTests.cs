@@ -14,7 +14,7 @@ internal sealed class TempWorkspace : IDisposable
     public TempWorkspace()
     {
         // Let the BCL allocate and create an owned random child with a constant prefix.
-        Root = Directory.CreateTempSubdirectory("mycapture-tests-").FullName;
+        Root = TestRecycleBin.CreateTempSubdirectory("mycapture-tests-").FullName;
     }
 
     public string Root { get; }
@@ -27,7 +27,7 @@ internal sealed class TempWorkspace : IDisposable
         {
             if (Directory.Exists(Root))
             {
-                Directory.Delete(Root, recursive: true);
+                TestRecycleBin.DeleteDirectory(Root, recursive: true);
             }
         }
         catch (IOException)

@@ -158,7 +158,7 @@ public sealed class ExportSettings
     /// <summary>
     /// Filename pattern for quick save, excluding the extension.
     /// </summary>
-    public string FileNamePattern { get; set; } = "capture_{yyyyMMdd}_{HHmmss}";
+    public string FileNamePattern { get; set; } = MyCapture.Core.Storage.QuickSaveNaming.DefaultPattern;
 
     /// <summary>
     /// Preserve the alpha channel when the annotated result has transparency.

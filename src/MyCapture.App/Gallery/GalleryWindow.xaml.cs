@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -115,6 +115,9 @@ internal sealed partial class GalleryWindow : Window
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
         };
 
+        // F2 edits the selected capture's searchable title/tags without altering pixels.
+        InputBindings.Add(new KeyBinding(new RelayCommand(() => OnOrganizeClick(this, new RoutedEventArgs())),
+            new KeyGesture(Key.F2)));
         // Ctrl+F focuses the search box from anywhere in the window.
         InputBindings.Add(new KeyBinding(
             new RelayCommand(FocusSearch),

@@ -119,7 +119,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         _log.LogInformation("Capture frame acquisition requested");
         try
         {
-            ShowOverlay(_desktopBounds(), abortOnFocusLoss, showMagnifier, preparation.Elapsed, frame: null);
+            RectD desktop = _desktopBounds();
+            preparation.SourceWindows = _windowCandidates.GetCandidates(desktop);
+            ShowOverlay(desktop, abortOnFocusLoss, showMagnifier, preparation.Elapsed, frame: null);
         }
         catch
         {
@@ -234,6 +236,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             ? new CaptureOverlayWindow(screenBounds, abortOnFocusLoss, showMagnifier)
             : new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier);
         _activeOverlay = overlay;
+        overlay.SourceWindows = _preparation?.SourceWindows ?? [];
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
         overlay.Closed += OnOverlayClosed;
         overlay.ContentRendered += OnFirstRendered;
@@ -350,6 +353,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private sealed class CapturePreparation
     {
         internal volatile bool Cancelled;
+        internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
         internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();
     }
 

@@ -77,9 +77,9 @@ internal sealed class AdvancedCaptureService
 
         try
         {
+            string title = _environment.WindowAt(_environment.CursorPosition)?.Title ?? string.Empty;
             FrozenFrame frame = _environment.CaptureMonitorUnderCursor();
             var region = new RectD(0, 0, frame.PixelWidth, frame.PixelHeight);
-            string title = frame.Monitor?.DeviceName ?? string.Empty;
             return Open(new AdvancedSelection(frame, region, title));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -135,6 +135,7 @@ internal sealed class AdvancedCaptureService
         try
         {
             PointD cursor = _environment.CursorPosition;
+            string title = _environment.WindowAt(cursor)?.Title ?? string.Empty;
             FrozenFrame frame = _environment.CaptureMonitorUnderCursor();
             RectD? placement = FixedRegionPlanner.PlaceAtCursor(width, height, cursor, frame.ScreenBounds);
             if (placement is null)
@@ -145,7 +146,7 @@ internal sealed class AdvancedCaptureService
             RectD region = frame.ToBitmapSpace(placement.Value);
             return region.IsEmpty
                 ? CaptureOutcome.NothingToCapture(UiText.Get("Text_E2B271067CCF"))
-                : Open(new AdvancedSelection(frame, region, string.Empty));
+                : Open(new AdvancedSelection(frame, region, title));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -177,9 +178,10 @@ internal sealed class AdvancedCaptureService
                     UiText.Get("Text_D5A4B6986227"));
             }
 
+            string title = _environment.WindowAt(resolved.Value.Center)?.Title ?? string.Empty;
             FrozenFrame frame = _environment.CaptureScreenRegion(resolved.Value);
             var region = new RectD(0, 0, frame.PixelWidth, frame.PixelHeight);
-            return Open(new AdvancedSelection(frame, region, string.Empty));
+            return Open(new AdvancedSelection(frame, region, title));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

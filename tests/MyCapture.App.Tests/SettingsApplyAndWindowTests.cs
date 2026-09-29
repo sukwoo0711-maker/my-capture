@@ -92,7 +92,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
 
     private static string NewTempRoot()
     {
-        string root = Path.Combine(Path.GetTempPath(), "mycapture-settings-tests", Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mycapture-settings-tests-").FullName;
         Directory.CreateDirectory(root);
         return root;
     }
@@ -310,7 +310,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
 
                 // 5) Persisted settings unchanged: reading back (after removing the blocker)
                 //    still yields the original capture chord, never the candidate.
-                Directory.Delete(paths.SettingsFile, recursive: true);
+                TestRecycleBin.DeleteDirectory(paths.SettingsFile, recursive: true);
                 AppSettings reloaded = store.Load();
                 Assert.Equal(originalCapture, reloaded.Hotkeys.Capture);
                 Assert.True(reloaded.General.LaunchAtLogin);
@@ -409,7 +409,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
                 Assert.Equal(321, store.Load().Queue.MaxItems);
                 Assert.Contains(result.Messages, m => m.Contains("색인", StringComparison.Ordinal));
 
-                Directory.Delete(paths.IndexFile, recursive: true);
+                TestRecycleBin.DeleteDirectory(paths.IndexFile, recursive: true);
             }
             finally
             {
@@ -424,7 +424,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
         {
             if (Directory.Exists(root))
             {
-                Directory.Delete(root, recursive: true);
+                TestRecycleBin.DeleteDirectory(root, recursive: true);
             }
         }
         catch (IOException)

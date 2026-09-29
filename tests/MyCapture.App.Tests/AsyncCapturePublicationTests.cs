@@ -116,7 +116,7 @@ public sealed class AsyncCapturePublicationTests
             PumpUntil(() => pending.IsCompleted);
             Assert.True(pending.GetAwaiter().GetResult());
             Assert.True(fixture.Queue.Remove(record.Id));
-            Directory.Delete(fixture.Queue.GetDirectory(record), recursive: true);
+            TestRecycleBin.DeleteDirectory(fixture.Queue.GetDirectory(record), recursive: true);
             fixture.Queue.Save();
             Assert.False(Directory.Exists(fixture.Queue.GetDirectory(record)));
         }
@@ -138,7 +138,7 @@ public sealed class AsyncCapturePublicationTests
     private sealed class Fixture : IDisposable
     {
         private readonly SynchronizationContext? _previous = SynchronizationContext.Current;
-        private readonly string _root = Directory.CreateTempSubdirectory("mycapture-publication-tests-").FullName;
+        private readonly string _root = TestRecycleBin.CreateTempSubdirectory("mycapture-publication-tests-").FullName;
         internal Fixture()
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
@@ -159,7 +159,7 @@ public sealed class AsyncCapturePublicationTests
         public void Dispose()
         {
             SynchronizationContext.SetSynchronizationContext(_previous);
-            Directory.Delete(_root, recursive: true);
+            TestRecycleBin.DeleteDirectory(_root, recursive: true);
         }
     }
 }

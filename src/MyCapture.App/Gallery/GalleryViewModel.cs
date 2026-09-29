@@ -172,6 +172,10 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     /// <summary>True when the queue itself is empty (as opposed to a search with no hits).</summary>
     public bool QueueIsEmpty => _controller.Count == 0;
 
+    public int VisibleCount => _groups.Sum(group => group.Items.Count);
+    public string ResultCountText => UiText.Format("Library.Search.Count", VisibleCount, _controller.Count);
+    public string EmptyStateTitle => UiText.Get(QueueIsEmpty ? "Library.Empty.Start" : "Library.Empty.NoResults");
+
     /// <summary>Empty-state message, tailored to whether a search is active.</summary>
     public string EmptyStateText =>
         QueueIsEmpty
@@ -236,6 +240,9 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
         Raise(nameof(IsEmpty));
         Raise(nameof(QueueIsEmpty));
         Raise(nameof(EmptyStateText));
+        Raise(nameof(EmptyStateTitle));
+        Raise(nameof(VisibleCount));
+        Raise(nameof(ResultCountText));
         Raise(nameof(SummaryText));
     }
 

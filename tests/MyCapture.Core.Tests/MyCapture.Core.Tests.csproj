@@ -8,6 +8,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\MyCapture.Core\MyCapture.Core.csproj" />
+    <Compile Include="..\Shared\TestRecycleBin.cs" Link="TestRecycleBin.cs" />
+    <Using Include="MyCapture.Tests" />
   </ItemGroup>
 
   <ItemGroup>

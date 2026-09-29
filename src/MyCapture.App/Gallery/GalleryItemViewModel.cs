@@ -121,6 +121,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public string DetailDimensions => $"{Record.Width} \u00d7 {Record.Height}";
 
+    public string TagsCaption => Record.Tags ?? string.Empty;
+
     public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
 
     /// <summary>Non-empty label for confirmations, OCR windows and other contextual UI.</summary>
@@ -206,6 +208,10 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     /// <summary>Notifies the view that pin/meta changed without re-decoding the image.</summary>
     public void RaiseMetaChanged()
     {
+        Raise(nameof(Caption));
+        Raise(nameof(HasCaption));
+        Raise(nameof(ContextLabel));
+        Raise(nameof(TagsCaption));
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));

@@ -52,6 +52,45 @@ public sealed class QuickSaveNamingTests
     }
 
     [Fact]
+    public void TitleToken_SanitizesDocumentTitleWithoutInterpretingItsBraces()
+    {
+        string stem = QuickSaveNaming.BuildStem("{title}_{yyyyMMdd}_{HHmmss}", Sample,
+            "매출 {yyyy}: Q3/2026.xlsx - Excel");
+        Assert.Equal("매출 {yyyy}_ Q3_2026.xlsx - Excel_20260829_135312", stem);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("...")]
+    public void TitleToken_UsesCaptureFallbackWhenNoUsableTitle(string? title) =>
+        Assert.Equal("capture_20260829_135312",
+            QuickSaveNaming.BuildStem(QuickSaveNaming.DefaultPattern, Sample, title));
+
+    [Theory]
+    [InlineData("CON", "_CON")]
+    [InlineData("NUL.txt", "_NUL.txt")]
+    [InlineData("LPT9", "_LPT9")]
+    [InlineData("COM1", "_COM1")]
+    public void TitleToken_ProtectsReservedWindowsDeviceNames(string title, string expected) =>
+        Assert.Equal(expected, QuickSaveNaming.BuildStem("{title}", Sample, title));
+
+    [Fact]
+    public void LongTitle_PreservesTimestampAndCompleteUnicodeCharacters()
+    {
+        string stem = QuickSaveNaming.BuildStem(QuickSaveNaming.DefaultPattern, Sample,
+            new string('가', 99) + "😀" + new string('나', 300));
+        Assert.Equal(new string('가', 99) + "_20260829_135312", stem);
+        Assert.True(stem.Length < 180);
+    }
+
+    [Fact]
+    public void ExistingCustomPatternsRemainUnchangedWhenTitleIsAvailable() =>
+        Assert.Equal("capture_20260829_135312",
+            QuickSaveNaming.BuildStem("capture_{yyyyMMdd}_{HHmmss}", Sample, "report.xlsx - Excel"));
+
+    [Fact]
     public void ResolvePath_ReturnsPlainNameWhenNoCollision()
     {
         using var workspace = new TempWorkspace();

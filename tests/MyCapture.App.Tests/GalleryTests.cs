@@ -129,7 +129,7 @@ public sealed class GalleryTests : KoreanCaptionTest
 
     private static string NewRoot()
     {
-        string root = Path.Combine(Path.GetTempPath(), "mycapture-gallery-tests", Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mycapture-gallery-tests-").FullName;
         Directory.CreateDirectory(root);
         return root;
     }
@@ -140,7 +140,7 @@ public sealed class GalleryTests : KoreanCaptionTest
         {
             if (Directory.Exists(root))
             {
-                Directory.Delete(root, recursive: true);
+                TestRecycleBin.DeleteDirectory(root, recursive: true);
             }
         }
         catch (IOException)
@@ -389,7 +389,7 @@ public sealed class GalleryTests : KoreanCaptionTest
                     string dir = queue.GetDirectory(e.Record);
                     if (Directory.Exists(dir))
                     {
-                        Directory.Delete(dir, recursive: true);
+                        TestRecycleBin.DeleteDirectory(dir, recursive: true);
                     }
                 });
 
@@ -514,7 +514,7 @@ public sealed class GalleryTests : KoreanCaptionTest
                     queue, paths, () => settings, NullLogger<CapturePersistenceService>.Instance);
 
                 CaptureRecord record = persistence.PersistOriginal(Solid(40, 30), 1.0, string.Empty, string.Empty);
-                File.Delete(queue.GetFilePath(record, CaptureFileNames.Original));
+                TestRecycleBin.DeleteFile(queue.GetFilePath(record, CaptureFileNames.Original));
 
                 var loader = new GalleryReeditLoader(queue, NullLogger<GalleryReeditLoader>.Instance);
                 GalleryReeditContext? context = loader.TryLoad(record, out GalleryReeditLoader.LoadFailure failure);
@@ -562,7 +562,7 @@ public sealed class GalleryTests : KoreanCaptionTest
 
                 // Delete the canonical sidecar so the load must drop that annotation.
                 string dir = queue.GetDirectory(record);
-                File.Delete(Path.Combine(dir, $"{CaptureFileNames.AssetPrefix}01.png"));
+                TestRecycleBin.DeleteFile(Path.Combine(dir, $"{CaptureFileNames.AssetPrefix}01.png"));
 
                 var loader = new GalleryReeditLoader(queue, NullLogger<GalleryReeditLoader>.Instance);
                 GalleryReeditContext? context = loader.TryLoad(record, out GalleryReeditLoader.LoadFailure failure);

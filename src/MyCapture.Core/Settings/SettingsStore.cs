@@ -233,7 +233,7 @@ public sealed class SettingsStore
         // --- Export ---
         if (string.IsNullOrWhiteSpace(s.Export.FileNamePattern))
         {
-            s.Export.FileNamePattern = "capture_{yyyyMMdd}_{HHmmss}";
+            s.Export.FileNamePattern = MyCapture.Core.Storage.QuickSaveNaming.DefaultPattern;
             warnings.Add(UiText.Get("Text_55D025693B34"));
         }
 

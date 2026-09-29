@@ -87,7 +87,7 @@ public sealed class UpdatePathsTests
         }
         finally
         {
-            if (Directory.Exists(link)) Directory.Delete(link);
+            if (Directory.Exists(link)) TestRecycleBin.DeleteDirectory(link);
             OwnedTestDirectory.Delete(root);
             OwnedTestDirectory.Delete(target);
         }
