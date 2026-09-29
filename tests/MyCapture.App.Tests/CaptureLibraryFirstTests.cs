@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -24,6 +26,182 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureLibraryFirstTests
 {
+    [Theory]
+    [InlineData(true, "valid")]
+    [InlineData(true, "missing")]
+    [InlineData(true, "corrupt")]
+    [InlineData(true, "wrong-size")]
+    [InlineData(false, "valid")]
+    [InlineData(false, "missing")]
+    [InlineData(false, "corrupt")]
+    [InlineData(false, "wrong-size")]
+    [InlineData(true, "legacy-valid")]
+    [InlineData(false, "legacy-missing")]
+    [InlineData(false, "legacy-corrupt")]
+    public void PendingOriginalRecovery_PreservesOrRebuildsInitialTitleDespiteSettingDrift(bool showTitle, string renderState) => StaTestHost.Run(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Settings.Export.ShowSourceWindowTitle = showTitle;
+        fixture.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("injected first publication failure");
+        fixture.Wait(fixture.Select(fixture.Selection));
+        Assert.Null(fixture.CurrentRecord);
+        CaptureRecord pending = fixture.PendingRecord;
+        Assert.Equal(showTitle, pending.InitialRenderShowsSourceWindowTitle);
+        string originalPath = fixture.Queue.GetFilePath(pending, CaptureFileNames.Original);
+        string renderedPath = fixture.Queue.GetFilePath(pending, CaptureFileNames.Rendered);
+        string thumbPath = fixture.Queue.GetFilePath(pending, CaptureFileNames.Thumbnail);
+        string marker = fixture.Queue.GetFilePath(pending, CaptureFileNames.OriginalPending);
+        byte[] originalBytes = File.ReadAllBytes(originalPath);
+        byte[] expected = Pixels(ImageCodec.TryLoad(renderedPath)!);
+        byte[] expectedThumbnail = Pixels(ImageCodec.TryLoad(thumbPath)!);
+        byte[]? validRenderedBytes = null;
+        CaptureRecord journal = JsonSerializer.Deserialize<CaptureRecord>(File.ReadAllText(marker))!;
+        Assert.Equal(showTitle, journal.InitialRenderShowsSourceWindowTitle);
+        if (showTitle) Assert.NotEqual(Pixels(fixture.Frame.Bitmap), expected);
+        else Assert.Equal(Pixels(fixture.Frame.Bitmap), expected);
+
+        switch (renderState)
+        {
+            case "missing": TestRecycleBin.DeleteFile(renderedPath); break;
+            case "corrupt": File.WriteAllBytes(renderedPath, [1, 2, 3]); break;
+            case "wrong-size":
+                ImageCodec.SavePng(new CroppedBitmap(fixture.Frame.Bitmap, new Int32Rect(0, 0, 8, 8)), renderedPath);
+                break;
+            case "legacy-valid":
+            case "legacy-missing":
+            case "legacy-corrupt":
+                JsonNode legacy = JsonNode.Parse(File.ReadAllText(marker))!;
+                Assert.True(legacy.AsObject().Remove(nameof(CaptureRecord.InitialRenderShowsSourceWindowTitle)));
+                File.WriteAllText(marker, legacy.ToJsonString());
+                if (renderState == "legacy-missing") TestRecycleBin.DeleteFile(renderedPath);
+                if (renderState == "legacy-corrupt") File.WriteAllBytes(renderedPath, [1, 2, 3]);
+                break;
+        }
+        if (renderState is "valid" or "legacy-valid")
+        {
+            // Distinguish preserving a valid PNG file from decoding/re-encoding its pixels.
+            // A normal renderer does not retain this ancillary metadata on a re-encode.
+            BitmapSource validImage = ImageCodec.TryLoad(renderedPath)!;
+            var metadata = new BitmapMetadata("png");
+            metadata.SetQuery("/tEXt/{str=RecoveryEvidence}", "preserve these PNG bytes");
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(validImage, null, metadata, null));
+            using (FileStream output = File.Create(renderedPath)) encoder.Save(output);
+            validRenderedBytes = File.ReadAllBytes(renderedPath);
+        }
+        fixture.Settings.Export.ShowSourceWindowTitle = !showTitle;
+        var restartedQueue = new CaptureQueue(fixture.Paths, fixture.Settings.Queue, NullLogger<CaptureQueue>.Instance);
+        restartedQueue.Load();
+        var restarted = new CapturePersistenceService(restartedQueue, fixture.Paths, () => fixture.Settings.Queue,
+            NullLogger<CapturePersistenceService>.Instance);
+        CaptureRecord recovered = Assert.Single(restartedQueue.Records);
+        Assert.Equal(pending.Id, recovered.Id);
+        Assert.Equal(pending.CreatedAt, recovered.CreatedAt);
+        if (renderState.StartsWith("legacy-", StringComparison.Ordinal)) Assert.Null(recovered.InitialRenderShowsSourceWindowTitle);
+        else Assert.Equal(showTitle, recovered.InitialRenderShowsSourceWindowTitle);
+        if (validRenderedBytes is not null) Assert.Equal(validRenderedBytes, File.ReadAllBytes(renderedPath));
+        Assert.Equal(expected, Pixels(ImageCodec.TryLoad(renderedPath)!));
+        Assert.Equal(expectedThumbnail, Pixels(ImageCodec.TryLoad(thumbPath)!));
+        Assert.Equal(originalBytes, File.ReadAllBytes(originalPath));
+        Assert.Empty(AnnotationDocument.TryFromJson(File.ReadAllText(
+            restartedQueue.GetFilePath(recovered, CaptureFileNames.Layers)))!.Items);
+        Assert.False(File.Exists(marker));
+        Assert.False(restarted.IsBusy(recovered.Id));
+        // Queue/meta JSON copies must retain the new flag on a second startup as well.
+        var nextQueue = new CaptureQueue(fixture.Paths, fixture.Settings.Queue, NullLogger<CaptureQueue>.Instance);
+        nextQueue.Load();
+        Assert.Equal(recovered.InitialRenderShowsSourceWindowTitle, Assert.Single(nextQueue.Records).InitialRenderShowsSourceWindowTitle);
+        _ = new CapturePersistenceService(nextQueue, fixture.Paths, () => fixture.Settings.Queue,
+            NullLogger<CapturePersistenceService>.Instance);
+        Assert.Equal(expected, Pixels(ImageCodec.TryLoad(renderedPath)!));
+        if (validRenderedBytes is not null) Assert.Equal(validRenderedBytes, File.ReadAllBytes(renderedPath));
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PendingOriginalRetry_UsesCapturedTitleOptionInsteadOfChangedSetting(bool showTitle) => StaTestHost.Run(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Settings.Export.ShowSourceWindowTitle = showTitle;
+        fixture.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("injected first publication failure");
+        fixture.Wait(fixture.Select(fixture.Selection));
+        CaptureRecord pending = fixture.PendingRecord;
+        string renderedPath = fixture.Queue.GetFilePath(pending, CaptureFileNames.Rendered);
+        byte[] expected = Pixels(ImageCodec.TryLoad(renderedPath)!);
+        fixture.Settings.Export.ShowSourceWindowTitle = !showTitle;
+        int publications = 0;
+        fixture.Persistence.BeforeRecordMetadataCommit = id =>
+        {
+            Assert.Equal(pending.Id, id);
+            Assert.Equal(expected, Pixels(ImageCodec.TryLoad(renderedPath)!));
+            publications++;
+        };
+        var result = new AnnotationEditingResult(fixture.Frame, fixture.Region, fixture.Frame.Bitmap,
+            AnnotationDocument.CreateFor(64, 48), EditorCommitAction.Done,
+            new Dictionary<string, BitmapSource>(), new Dictionary<string, string>(),
+            sourceWindowTitle: pending.SourceWindowTitle, showSourceWindowTitle: showTitle);
+        Assert.True(fixture.Wait(fixture.Commit(result)));
+        Assert.True(publications > 0);
+        Assert.Same(pending, fixture.CurrentRecord);
+        Assert.Equal(expected, Pixels(fixture.CopiedImages[^1]));
+        Assert.Equal(showTitle, pending.InitialRenderShowsSourceWindowTitle);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FirstSaveAsRetry_UsesPendingCaptureNameAndTime_WithoutPublishingOnCancel(bool reduced) => StaTestHost.Run(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Settings.Export.ShowSourceWindowTitle = true;
+        fixture.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("injected first publication failure");
+        fixture.Wait(fixture.Select(fixture.Selection));
+        Assert.Null(fixture.CurrentRecord);
+        CaptureRecord pending = fixture.PendingRecord;
+        pending.CreatedAt = pending.CreatedAt.AddMinutes(-5);
+        string expectedName = QuickSaveNaming.BuildStem(fixture.Settings.Export.FileNamePattern,
+            pending.CreatedAt, pending.SourceWindowTitle) + ".png";
+        string marker = fixture.Queue.GetFilePath(pending, CaptureFileNames.OriginalPending);
+        byte[] markerBeforeCancel = File.ReadAllBytes(marker);
+        int publications = 0, prompts = 0;
+        bool accepted = false;
+        fixture.Persistence.BeforeRecordMetadataCommit = _ => publications++;
+        fixture.CommitService.SaveAsPrompt = suggested =>
+        {
+            Assert.False(reduced);
+            Assert.Equal(expectedName, Path.GetFileName(suggested));
+            prompts++;
+            return accepted ? Path.Combine(fixture.Paths.DataRoot, expectedName) : null;
+        };
+        fixture.CommitService.ReducedExportPrompt = (_, suggested) =>
+        {
+            Assert.True(reduced);
+            Assert.Equal(expectedName, Path.GetFileName(suggested));
+            prompts++;
+            return accepted;
+        };
+        var result = new AnnotationEditingResult(fixture.Frame, fixture.Region, fixture.Frame.Bitmap,
+            AnnotationDocument.CreateFor(64, 48), EditorCommitAction.SaveAs,
+            new Dictionary<string, BitmapSource>(), new Dictionary<string, string>(), reduceExport: reduced,
+            sourceWindowTitle: pending.SourceWindowTitle, showSourceWindowTitle: true);
+        Assert.False(fixture.Wait(fixture.Commit(result)));
+        Assert.Null(fixture.CurrentRecord);
+        Assert.Equal(0, publications);
+        Assert.Equal(0, pending.ContentRevision);
+        Assert.Equal(markerBeforeCancel, File.ReadAllBytes(marker));
+        Assert.Empty(fixture.CopiedImages);
+        accepted = true;
+        Assert.True(fixture.Wait(fixture.Commit(result)));
+        Assert.Equal(2, prompts);
+        Assert.True(publications > 0);
+        Assert.Same(pending, fixture.CurrentRecord);
+        Assert.Equal(pending.Id, Assert.Single(fixture.Queue.Records).Id);
+        Assert.Equal(1, pending.ContentRevision);
+        Assert.False(File.Exists(marker));
+        if (!reduced) Assert.True(File.Exists(Path.Combine(fixture.Paths.DataRoot, expectedName)));
+    });
+
     [Fact]
     public void TitleEnabled_EscapeKeepsTitledLibraryResultAndUntouchedOriginal() => StaTestHost.Run(() =>
     {
@@ -382,6 +560,7 @@ public sealed class CaptureLibraryFirstTests
             CommitService = new CaptureCommitService(Persistence, () => settings, () => Paths,
                 NullLogger<CaptureCommitService>.Instance, image => { CopiedImages.Add(image); return Task.FromResult(true); });
             Set("_queue", Queue);
+            Set("_settings", settings);
             Set("_persistence", Persistence);
             Set("_commit", CommitService);
             BitmapSource bitmap = BitmapSource.Create(64, 48, 96, 96, PixelFormats.Bgra32,

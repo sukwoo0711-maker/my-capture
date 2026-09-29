@@ -213,6 +213,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Product header. The duplicate "Ctrl+S 적용" badge is omitted; the Apply button in
@@ -814,8 +815,21 @@
             </StackPanel>
         </Border>
 
+        <Border x:Name="SettingsStatusRegion" Grid.Row="3" Margin="0,8,0,0"
+                Padding="12,8" CornerRadius="6" Visibility="Collapsed"
+                Background="{DynamicResource Surface.Raised}"
+                BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1">
+            <ScrollViewer MaxHeight="72" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <TextBlock x:Name="SettingsStatus" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Text.Secondary}"
+                           FontSize="{StaticResource FontSize.Caption}"
+                           AutomationProperties.LiveSetting="Polite" />
+            </ScrollViewer>
+        </Border>
+
         <!-- ===================== Command bar ===================== -->
-        <Grid Grid.Row="3" Margin="0,14,0,0">
+        <Grid Grid.Row="4" Margin="0,14,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />

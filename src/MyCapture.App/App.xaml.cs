@@ -1,7 +1,6 @@
 using System.IO;
 using System.Threading;
 using System.Windows;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -927,9 +926,11 @@ public partial class App : Application
         // coordinator awaits this handler before opening the editor, so Esc cannot discard
         // an otherwise successfully captured image from the library.
         _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
-            e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty);
+            e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty,
+            initialRenderShowsSourceWindowTitle: _settings?.Export.ShowSourceWindowTitle == true);
         Task<bool>? automaticClipboardCopy = e.CopyToClipboardImmediately && _commit is not null
-            ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle)
+            ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle,
+                _pendingRecord.InitialRenderShowsSourceWindowTitle)
             : null;
         try
         {
@@ -940,8 +941,7 @@ public partial class App : Application
             // Protect the editor's record across that boundary even when all older items
             // are pinned or this image alone exceeds the configured capacity.
             _currentEditSession = _commit.BeginEditSession(_pendingRecord);
-            BitmapSource renderedCapture = await _commit.RenderCapturedImageAsync(e.SelectedBitmap, e.SourceTitle);
-            _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, e.SelectedBitmap, renderedCapture);
+            _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, e.SelectedBitmap);
         }
         catch (Exception ex)
         {
@@ -1067,7 +1067,7 @@ public partial class App : Application
                     _currentEditSession = null;
                     throw;
                 }
-            });
+            }, namingRecord: _pendingRecord);
             if (shouldClose)
             {
                 _tray?.SetCaptureCount(_queue?.Count ?? 0);
