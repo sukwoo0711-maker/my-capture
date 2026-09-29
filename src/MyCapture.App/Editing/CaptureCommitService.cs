@@ -78,13 +78,14 @@ internal sealed class CaptureCommitService
     /// once the user releases the capture drag, the image is offered to the shared exact-PNG
     /// clipboard writer even if the editor is later cancelled or committed with Done.
     /// </summary>
-    internal async Task<bool> CopyCapturedRegionAsync(BitmapSource capturedBitmap, string? sourceWindowTitle = null)
+    internal async Task<bool> CopyCapturedRegionAsync(BitmapSource capturedBitmap, string? sourceWindowTitle = null,
+        bool? showSourceWindowTitle = null)
     {
         ArgumentNullException.ThrowIfNull(capturedBitmap);
 
         try
         {
-            BitmapSource result = await RenderCapturedImageAsync(capturedBitmap, sourceWindowTitle);
+            BitmapSource result = await RenderCapturedImageAsync(capturedBitmap, sourceWindowTitle, showSourceWindowTitle);
             bool copied = await _copyImageAsync(result);
             if (!copied)
             {
@@ -107,9 +108,10 @@ internal sealed class CaptureCommitService
         }
     }
 
-    internal Task<BitmapSource> RenderCapturedImageAsync(BitmapSource original, string? sourceWindowTitle)
+    internal Task<BitmapSource> RenderCapturedImageAsync(BitmapSource original, string? sourceWindowTitle,
+        bool? showSourceWindowTitle = null)
     {
-        if (!_settings().Export.ShowSourceWindowTitle || string.IsNullOrWhiteSpace(sourceWindowTitle))
+        if (!(showSourceWindowTitle ?? _settings().Export.ShowSourceWindowTitle) || string.IsNullOrWhiteSpace(sourceWindowTitle))
             return Task.FromResult(original);
 
         return StaThreadTask.RunAsync(() => Flatten(original,
@@ -128,7 +130,8 @@ internal sealed class CaptureCommitService
         CaptureRecord? record,
         AnnotationEditingResult result,
         CaptureEditSession? editSession = null,
-        Func<Task<(CaptureRecord Record, CaptureEditSession? Session)>>? createRecordAsync = null)
+        Func<Task<(CaptureRecord Record, CaptureEditSession? Session)>>? createRecordAsync = null,
+        CaptureRecord? namingRecord = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         if (record is not null && editSession is not null && editSession.RecordId != record.Id)
@@ -137,11 +140,15 @@ internal sealed class CaptureCommitService
         }
         editSession?.ThrowIfDisposed();
 
+        // A failed first publication still has valid capture provenance. Use it only for
+        // export naming; it must not bypass the create/persist callback below.
+        CaptureRecord? exportRecord = record ?? namingRecord;
+
         AnnotationDocument snapshot = CreatePersistenceSnapshot(result.Document);
         // An open editor keeps the option it previews; re-opening a library capture reads
         // the current preference again. Always draw over original pixels, never a prior result.
         string? sourceWindowTitle = (result.ShowSourceWindowTitle ?? _settings().Export.ShowSourceWindowTitle)
-            ? result.SourceWindowTitle ?? record?.SourceWindowTitle
+            ? result.SourceWindowTitle ?? exportRecord?.SourceWindowTitle
             : null;
         BitmapSource flattened = await StaThreadTask.RunAsync(
             () => Flatten(result.SelectedBitmap, snapshot, result.ImageAssetBitmaps, sourceWindowTitle),
@@ -153,10 +160,10 @@ internal sealed class CaptureCommitService
                 // Choose the destination before persisting so a cancel keeps the editor open
                 // with no side effects the user did not ask for.
                 bool exported = result.ReduceExport
-                    ? ShowReducedExport(flattened, record)
+                    ? ShowReducedExport(flattened, exportRecord)
                     : await ImageExportTransaction.RunAsync(async () =>
                 {
-                    string? chosen = ResolveSaveAsPath(record);
+                    string? chosen = ResolveSaveAsPath(exportRecord);
                     if (chosen is null)
                     {
                         _log.LogInformation("Save As cancelled; keeping editor open");

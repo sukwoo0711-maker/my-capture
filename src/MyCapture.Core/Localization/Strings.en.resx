@@ -3117,7 +3117,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Tools_CropApplied" xml:space="preserve"><value>Crop applied.</value></data>
   <data name="Settings_Export" xml:space="preserve"><value>Export settings</value></data>
   <data name="Settings_Import" xml:space="preserve"><value>Import settings</value></data>
-  <data name="Settings_ImportDone" xml:space="preserve"><value>Settings imported. Some items apply on next start.</value></data>
+  <data name="Settings_ImportDone" xml:space="preserve"><value>Settings loaded. Select Apply to save.</value></data>
   <data name="Settings_ImportFailed" xml:space="preserve"><value>Could not read the settings file.</value></data>
   <data name="Settings_ExportDone" xml:space="preserve"><value>Settings exported.</value></data>
   <data name="GitHub_TokenMode" xml:space="preserve"><value>Upload with token (experimental)</value></data>

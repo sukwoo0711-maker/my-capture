@@ -164,6 +164,7 @@ internal sealed partial class SettingsWindow : Window
         _settingsEdited = false;
         DataContext = _draft;
         ThemeService.ApplyFromSettings(_draft.Theme);
+        SetStatusMessage(string.Empty);
         RefreshErrorSummary();
     }
 
@@ -189,8 +190,17 @@ internal sealed partial class SettingsWindow : Window
             ThemeService.ApplyFromSettings(_draft.Theme);
     }
 
-    /// <summary>Writes a transient line into the status bar area used by updates.</summary>
-    private void SetStatusMessage(string message) => UpdateStatus.Text = message;
+    /// <summary>Reports settings file operations independently of the selected category.</summary>
+    private void SetStatusMessage(string message)
+    {
+        SettingsStatus.Text = message;
+        SettingsStatusRegion.Visibility = string.IsNullOrWhiteSpace(message) ? Visibility.Collapsed : Visibility.Visible;
+        if (SettingsStatusRegion.IsVisible)
+        {
+            UIElementAutomationPeer.CreatePeerForElement(SettingsStatus)
+                ?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+        }
+    }
 
     // ---- Commands / buttons --------------------------------------------------------
 
@@ -257,18 +267,30 @@ internal sealed partial class SettingsWindow : Window
             return;
         }
 
+        ImportSettingsFrom(dialog.FileName);
+    }
+
+    internal void ImportSettingsFrom(string path)
+    {
+        if (_settingsStore is null) return;
         try
         {
-            AppSettings imported = _settingsStore().ImportFrom(dialog.FileName);
+            AppSettings imported = _settingsStore().ImportFrom(path);
             ReloadDraftFrom(imported);
             // Exports never carry the GitHub PAT, so the import must not wipe the live one.
             _draft.GitHubToken = _currentSettings().GitHub.Token;
+            // Import replaces the entire draft; an empty saved token may not raise any
+            // property change. Keep update/restart blocked until Apply or discard.
+            _settingsEdited = true;
             SetStatusMessage(UiText.Get("Settings_ImportDone"));
             RefreshErrorSummary();
         }
         catch (Exception ex)
         {
-            SetStatusMessage(UiText.Get("Settings_ImportFailed") + " " + ex.Message);
+            string failure = UiText.Get("Settings_ImportFailed");
+            SetStatusMessage(string.Equals(failure, ex.Message, StringComparison.Ordinal)
+                ? failure
+                : failure + " " + ex.Message);
         }
     }
 

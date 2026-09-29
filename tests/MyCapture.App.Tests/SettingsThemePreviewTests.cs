@@ -19,17 +19,20 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-public sealed class SettingsThemePreviewTests
+public sealed partial class SettingsThemePreviewTests
 {
     private const string ChildFlag = "MYCAPTURE_SETTINGS_THEME_TEST_CHILD";
     private const string ReceiptRoot = "MYCAPTURE_SETTINGS_THEME_TEST_RECEIPT";
 
     [Fact]
-    public async Task ThemeSelectionPreviewsAndAllDismissalPathsRestoreSavedPalette()
+    public Task ThemeSelectionPreviewsAndAllDismissalPathsRestoreSavedPalette() =>
+        RunIsolated(nameof(ThemeSelectionPreviewsAndAllDismissalPathsRestoreSavedPalette), VerifyPreviewLifecycle);
+
+    private static async Task RunIsolated(string testName, Action verify)
     {
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
-            StaTestHost.Run(VerifyPreviewLifecycle);
+            StaTestHost.Run(verify);
             string receipt = DiagnosticOutputPaths.Child(
                 Environment.GetEnvironmentVariable(ReceiptRoot) ?? throw new IOException("Missing parent test receipt."), "completed.txt");
             File.WriteAllText(receipt, "PASS");
@@ -52,7 +55,7 @@ public sealed class SettingsThemePreviewTests
         start.ArgumentList.Add("vstest");
         start.ArgumentList.Add(typeof(SettingsThemePreviewTests).Assembly.Location);
         start.ArgumentList.Add("--TestCaseFilter:FullyQualifiedName=" + typeof(SettingsThemePreviewTests).FullName
-            + "." + nameof(ThemeSelectionPreviewsAndAllDismissalPathsRestoreSavedPalette));
+            + "." + testName);
         start.ArgumentList.Add("--Logger:console;verbosity=normal");
         start.Environment[ChildFlag] = "1";
         start.Environment[ReceiptRoot] = receiptRoot;

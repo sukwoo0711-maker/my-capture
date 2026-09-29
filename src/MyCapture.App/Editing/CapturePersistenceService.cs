@@ -112,7 +112,8 @@ internal sealed class CapturePersistenceService
     }
 
     internal static CaptureRecord CreatePendingRecord(BitmapSource original, double dpiScale,
-        string sourceWindowTitle, string sourceMonitor) => CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor);
+        string sourceWindowTitle, string sourceMonitor, bool initialRenderShowsSourceWindowTitle = false) =>
+        CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor, initialRenderShowsSourceWindowTitle);
 
     internal async Task<CaptureRecord> PersistPendingOriginalAsync(CaptureRecord record, BitmapSource original,
         BitmapSource? initialRendered = null)
@@ -177,7 +178,8 @@ internal sealed class CapturePersistenceService
         BitmapSource original,
         double dpiScale,
         string sourceWindowTitle,
-        string sourceMonitor)
+        string sourceMonitor,
+        bool initialRenderShowsSourceWindowTitle = false)
     {
         var record = new CaptureRecord
         {
@@ -187,6 +189,7 @@ internal sealed class CapturePersistenceService
             Height = original.PixelHeight,
             DpiScale = dpiScale > 0 ? dpiScale : 1.0,
             SourceWindowTitle = sourceWindowTitle ?? string.Empty,
+            InitialRenderShowsSourceWindowTitle = initialRenderShowsSourceWindowTitle,
             SourceMonitor = sourceMonitor ?? string.Empty,
         };
         record.RelativeDirectory = CaptureQueue.BuildRelativeDirectory(record.Id, record.CreatedAt);
@@ -198,7 +201,8 @@ internal sealed class CapturePersistenceService
         BitmapSource original,
         bool createPendingJournal = true,
         bool rewriteOriginal = true,
-        BitmapSource? initialRendered = null)
+        BitmapSource? initialRendered = null,
+        bool preserveRendered = false)
     {
         string directory = _queue.GetDirectory(record);
         Directory.CreateDirectory(directory);
@@ -221,8 +225,13 @@ internal sealed class CapturePersistenceService
             : SafeFileLength(originalPath);
 
         // rendered.png may include the optional title; original.png remains untouched.
+        initialRendered ??= RenderInitialImage(record, original);
         string renderedPath = Path.Combine(directory, CaptureFileNames.Rendered);
-        if (initialRendered is not null && !ReferenceEquals(initialRendered, original))
+        if (preserveRendered)
+        {
+            bytes += SafeFileLength(renderedPath);
+        }
+        else if (initialRendered is not null && !ReferenceEquals(initialRendered, original))
         {
             bytes += ImageCodec.SavePng(initialRendered, renderedPath);
         }
@@ -246,6 +255,16 @@ internal sealed class CapturePersistenceService
         bytes += WriteThumbnail(initialRendered ?? original, directory);
 
         return bytes;
+    }
+
+    private static BitmapSource RenderInitialImage(CaptureRecord record, BitmapSource original)
+    {
+        if (record.InitialRenderShowsSourceWindowTitle != true || string.IsNullOrWhiteSpace(record.SourceWindowTitle))
+            return original;
+
+        return AnnotationFlattener.Flatten(original,
+            AnnotationDocument.CreateFor(original.PixelWidth, original.PixelHeight),
+            new AnnotationRenderer(new AnnotationImageStore()), record.SourceWindowTitle);
     }
 
     private void CompleteOriginal(CaptureRecord record, long bytes)
@@ -813,13 +832,20 @@ internal sealed class CapturePersistenceService
 
                 record.Width = original.PixelWidth;
                 record.Height = original.PixelHeight;
+                // A complete derived image may precede the failed index publication. Keep its
+                // pixels (including legacy title badges) instead of drawing another badge.
+                BitmapSource? rendered = ImageCodec.TryLoad(Path.Combine(directory, CaptureFileNames.Rendered));
+                if (rendered is null || rendered.PixelWidth != original.PixelWidth || rendered.PixelHeight != original.PixelHeight)
+                    rendered = null;
                 // original.png is the durable source for this recovery. Rewriting it would
                 // create an untracked full-size .bak beside an otherwise valid 8K capture.
                 long bytes = WriteOriginalFiles(
                     record,
                     original,
                     createPendingJournal: false,
-                    rewriteOriginal: false);
+                    rewriteOriginal: false,
+                    initialRendered: rendered,
+                    preserveRendered: rendered is not null);
                 record.HasAnnotations = false;
                 record.ContentRevision = 0;
                 record.OcrText = null;

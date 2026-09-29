@@ -129,6 +129,13 @@ public sealed class CaptureRecord
     public string SourceWindowTitle { get; set; } = string.Empty;
 
     /// <summary>
+    /// Capture-time title option used to reconstruct an interrupted initial render.
+    /// Later editor saves choose their own displayed option; null means a legacy record
+    /// did not persist this preference, while new captures explicitly record true or false.
+    /// </summary>
+    public bool? InitialRenderShowsSourceWindowTitle { get; set; }
+
+    /// <summary>
     /// Directory holding this capture's files, relative to the captures root.
     /// </summary>
     /// <remarks>
