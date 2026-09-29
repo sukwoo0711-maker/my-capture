@@ -25,8 +25,7 @@ public sealed class VideoEditorViewportTests
     public void DefaultSizeKeepsCommandsOnEachActualTargetMonitor() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("en-US");
-        string root = Path.Combine(Path.GetTempPath(), "mc-video-default-viewport-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        string root = MyCapture.Tests.TestRecycleBin.CreateTempSubdirectory("mc-video-default-viewport-").FullName;
         RecordingResult recording = EncodeClip(Path.Combine(root, "source.mp4"), 3840, 2160);
         foreach (MonitorInfo monitor in MonitorEnumerator.GetAll())
         {
@@ -88,8 +87,7 @@ public sealed class VideoEditorViewportTests
     {
         using var language = UiText.UseLanguage("en-US");
         // Keep generated evidence recoverable; this fixture never deletes its temporary clip.
-        string root = Path.Combine(Path.GetTempPath(), "mc-video-viewport-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        string root = MyCapture.Tests.TestRecycleBin.CreateTempSubdirectory("mc-video-viewport-").FullName;
         RecordingResult recording = EncodeClip(Path.Combine(root, "source.mp4"), sourceWidth, sourceHeight);
         var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
         try
