@@ -921,12 +921,37 @@ public partial class App : Application
             e.SelectedBitmap.PixelWidth,
             e.SelectedBitmap.PixelHeight);
 
-        // Selection is a draft: identity/provenance only, no queue, journal, or disk writes.
+        // Keep one identity through original persistence, retries, and edited saves. The
+        // coordinator awaits this handler before opening the editor, so Esc cannot discard
+        // an otherwise successfully captured image from the library.
         _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
             e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty);
         Task<bool>? automaticClipboardCopy = e.CopyToClipboardImmediately && _commit is not null
             ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap)
             : null;
+        try
+        {
+            if (_persistence is null || _commit is null)
+                throw new InvalidOperationException("Capture persistence is unavailable.");
+
+            // Persistence releases its own temporary eviction lease before returning.
+            // Protect the editor's record across that boundary even when all older items
+            // are pinned or this image alone exceeds the configured capacity.
+            _currentEditSession = _commit.BeginEditSession(_pendingRecord);
+            _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, e.SelectedBitmap);
+        }
+        catch (Exception ex)
+        {
+            _currentEditSession?.Dispose();
+            _currentRecord = null;
+            _currentEditSession = null;
+            _log?.LogError(ex, "Could not persist the captured original");
+            _tray?.ShowBalloon(
+                UiText.Get("Text_4033027EAEDB"),
+                UiText.Format("Capture.LibrarySaveFailed", ex.Message),
+                TrayBalloonKind.Error);
+        }
+
         try
         {
             // Repeat history is intentionally limited to explicit manual region selections.
@@ -959,14 +984,8 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            _currentEditSession?.Dispose();
-            _currentRecord = null;
-            _currentEditSession = null;
-            _log?.LogError(ex, "Could not persist the captured original");
-            _tray?.ShowBalloon(
-                UiText.Get("Text_4033027EAEDB"),
-                ex.Message,
-                TrayBalloonKind.Error);
+            // Optional repeat history or shell feedback must not invalidate a durable image.
+            _log?.LogWarning(ex, "Could not update capture history or tray count");
         }
 
         // Copy the untouched explicit-region selection now, before the editor can be cancelled
@@ -1033,9 +1052,18 @@ public partial class App : Application
                 if (_currentRecord is not null) return (_currentRecord, _currentEditSession);
                 if (_persistence is null || _pendingRecord is null)
                     throw new InvalidOperationException("Capture draft persistence is unavailable.");
-                _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, result.SelectedBitmap);
-                _currentEditSession = _commit.BeginEditSession(_currentRecord);
-                return (_currentRecord, _currentEditSession);
+                _currentEditSession = _commit.BeginEditSession(_pendingRecord);
+                try
+                {
+                    _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, result.SelectedBitmap);
+                    return (_currentRecord, _currentEditSession);
+                }
+                catch
+                {
+                    _currentEditSession.Dispose();
+                    _currentEditSession = null;
+                    throw;
+                }
             });
             if (shouldClose)
             {

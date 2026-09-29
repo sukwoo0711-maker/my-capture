@@ -25,7 +25,7 @@ internal sealed class WindowsFileSymlinkFactAttribute : FactAttribute
         }
         finally
         {
-            if (File.Exists(link)) File.Delete(link);
+            if (File.Exists(link)) TestRecycleBin.DeleteFile(link);
             OwnedTestDirectory.Delete(root);
         }
     }

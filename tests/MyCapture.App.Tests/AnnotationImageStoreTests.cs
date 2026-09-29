@@ -44,7 +44,7 @@ public sealed class AnnotationImageStoreTests
 
     private static string WriteTempPng(int width, int height)
     {
-        string path = Path.Combine(Path.GetTempPath(), $"mycapture-test-{Guid.NewGuid():N}.png");
+        string path = TestRecycleBin.CreateFilePath("mycapture-test-", ".png");
         var bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
         byte[] pixels = new byte[width * height * 4];
         for (int i = 0; i < pixels.Length; i++)
@@ -81,7 +81,7 @@ public sealed class AnnotationImageStoreTests
             Assert.EndsWith(".png", loaded.Value.AssetFileName);
 
             // The store must not hold the file open: deleting immediately must succeed.
-            File.Delete(path);
+            TestRecycleBin.DeleteFile(path);
             Assert.False(File.Exists(path));
 
             // The decoded pixels survive the source file being gone.
@@ -91,7 +91,7 @@ public sealed class AnnotationImageStoreTests
         {
             if (File.Exists(path))
             {
-                File.Delete(path);
+                TestRecycleBin.DeleteFile(path);
             }
         }
     });
@@ -99,7 +99,7 @@ public sealed class AnnotationImageStoreTests
     [Fact]
     public void LoadFromFile_ReturnsNullForNonImage() => RunSta(() =>
     {
-        string path = Path.Combine(Path.GetTempPath(), $"mycapture-test-{Guid.NewGuid():N}.txt");
+        string path = TestRecycleBin.CreateFilePath("mycapture-test-", ".txt");
         File.WriteAllText(path, "not an image");
         try
         {
@@ -108,7 +108,7 @@ public sealed class AnnotationImageStoreTests
         }
         finally
         {
-            File.Delete(path);
+            TestRecycleBin.DeleteFile(path);
         }
     });
 
@@ -131,8 +131,8 @@ public sealed class AnnotationImageStoreTests
         }
         finally
         {
-            File.Delete(a);
-            File.Delete(b);
+            TestRecycleBin.DeleteFile(a);
+            TestRecycleBin.DeleteFile(b);
         }
     });
 }

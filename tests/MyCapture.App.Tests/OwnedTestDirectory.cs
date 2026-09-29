@@ -10,7 +10,7 @@ internal static class OwnedTestDirectory
 
     internal static string Create(string prefix)
     {
-        DirectoryInfo directory = Directory.CreateTempSubdirectory(prefix);
+        DirectoryInfo directory = TestRecycleBin.CreateTempSubdirectory(prefix);
         if (!Owned.TryAdd(directory.FullName, directory))
             throw new IOException("Test directory ownership collision.");
         return directory.FullName;
@@ -25,7 +25,7 @@ internal static class OwnedTestDirectory
         if (directory.Exists)
         {
             AssertNoLinks(directory);
-            directory.Delete(recursive: true);
+            TestRecycleBin.DeleteDirectory(directory.FullName, recursive: true);
         }
         Owned.TryRemove(canonical, out _);
     }

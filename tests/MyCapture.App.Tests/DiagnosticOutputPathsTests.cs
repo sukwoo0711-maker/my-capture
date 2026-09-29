@@ -66,7 +66,7 @@ public sealed class DiagnosticOutputPathsTests
         }
         finally
         {
-            if (Directory.Exists(link)) Directory.Delete(link);
+            if (Directory.Exists(link)) TestRecycleBin.DeleteDirectory(link);
             OwnedTestDirectory.Delete(owner);
             OwnedTestDirectory.Delete(target);
         }
@@ -88,7 +88,7 @@ public sealed class DiagnosticOutputPathsTests
         }
         finally
         {
-            if (Directory.Exists(link)) Directory.Delete(link);
+            if (Directory.Exists(link)) TestRecycleBin.DeleteDirectory(link);
             OwnedTestDirectory.Delete(owner);
             OwnedTestDirectory.Delete(target);
         }

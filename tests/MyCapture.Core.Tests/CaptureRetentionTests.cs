@@ -62,7 +62,7 @@ public sealed class CaptureRetentionTests
             string directory = queue.GetDirectory(e.Record);
             Assert.StartsWith(workspace.Paths.CapturesRoot + Path.DirectorySeparatorChar, directory, StringComparison.Ordinal);
             Assert.Equal(managed, directory);
-            Directory.Delete(directory, recursive: true);
+            TestRecycleBin.DeleteDirectory(directory, recursive: true);
         };
         using (queue.SuspendEviction())
         {

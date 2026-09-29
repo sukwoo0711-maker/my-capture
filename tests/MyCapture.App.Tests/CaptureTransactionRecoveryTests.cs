@@ -295,7 +295,7 @@ public sealed class CaptureTransactionRecoveryTests
         File.Move(assetPath, Path.Combine(rollback, assetName));
         // Terminal cleanup can remove the rollback copy before the process exits. A marked
         // tombstone is complete based on the absent target; recovery must not require backup.
-        File.Delete(Path.Combine(rollback, assetName));
+        TestRecycleBin.DeleteFile(Path.Combine(rollback, assetName));
         WriteJournal(
             stage,
             record,
@@ -1446,7 +1446,7 @@ public sealed class CaptureTransactionRecoveryTests
                 return;
             }
 
-            File.Delete(metaPath);
+            TestRecycleBin.DeleteFile(metaPath);
             Directory.CreateDirectory(metaPath);
         };
 
@@ -1471,7 +1471,7 @@ public sealed class CaptureTransactionRecoveryTests
         Assert.True(stillBlocked.IsBusy(startupRecord.Id));
         Assert.Single(ValidStageDirectories(startupQueue.GetDirectory(startupRecord)));
 
-        Directory.Delete(metaPath);
+        TestRecycleBin.DeleteDirectory(metaPath);
         var repairQueue = NewQueue(workspace.Paths, settings);
         repairQueue.Load();
         CaptureRecord repairedRecord = Assert.Single(repairQueue.Records);
@@ -1807,7 +1807,7 @@ public sealed class CaptureTransactionRecoveryTests
     {
         if (Directory.Exists(directory))
         {
-            Directory.Delete(directory, recursive: true);
+            TestRecycleBin.DeleteDirectory(directory, recursive: true);
         }
     }
 
@@ -1851,10 +1851,7 @@ public sealed class CaptureTransactionRecoveryTests
     {
         internal TestWorkspace()
         {
-            Root = Path.Combine(
-                Path.GetTempPath(),
-                "mycapture-transaction-tests",
-                Guid.NewGuid().ToString("N"));
+            Root = TestRecycleBin.CreateTempSubdirectory("mycapture-transaction-tests-").FullName;
             Directory.CreateDirectory(Root);
             Paths = AppPaths.CreateForRoot(Root);
         }
@@ -1869,7 +1866,7 @@ public sealed class CaptureTransactionRecoveryTests
             {
                 if (Directory.Exists(Root))
                 {
-                    Directory.Delete(Root, recursive: true);
+                    TestRecycleBin.DeleteDirectory(Root, recursive: true);
                 }
             }
             catch (IOException)

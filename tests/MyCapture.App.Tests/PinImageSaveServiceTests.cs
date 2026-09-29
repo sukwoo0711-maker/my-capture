@@ -320,10 +320,7 @@ public sealed class PinImageSaveServiceTests
     {
         internal TempDirectory()
         {
-            Path = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "mycapture-pin-save-tests",
-                Guid.NewGuid().ToString("N"));
+            Path = TestRecycleBin.CreateTempSubdirectory("mycapture-pin-save-tests-").FullName;
             Directory.CreateDirectory(Path);
         }
 
@@ -333,7 +330,7 @@ public sealed class PinImageSaveServiceTests
         {
             try
             {
-                Directory.Delete(Path, recursive: true);
+                TestRecycleBin.DeleteDirectory(Path, recursive: true);
             }
             catch (IOException)
             {

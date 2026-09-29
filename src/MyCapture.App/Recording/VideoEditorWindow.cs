@@ -1,11 +1,13 @@
 using System.Globalization;
 using System.ComponentModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -19,6 +21,7 @@ using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 using MyCapture.Platform.Imaging;
 using MyCapture.Platform.Recording;
 
@@ -153,9 +156,10 @@ internal sealed class VideoEditorWindow : Window
         MinWidth = 760;
         MinHeight = 555;
 
-        Rect work = SystemParameters.WorkArea;
-        Width = Math.Min(Math.Max(920, recording.Width + 120), Math.Max(MinWidth, work.Width - 80));
-        Height = Math.Min(Math.Max(680, recording.Height + 260), Math.Max(MinHeight, work.Height - 60));
+        Width = Math.Max(920, recording.Width + 120);
+        Height = Math.Max(680, recording.Height + 260);
+        FitInitialSizeToMonitor(MonitorEnumerator.GetFromCursor());
+        SourceInitialized += OnSourceInitialized;
 
         AutomationProperties.SetName(this, UiText.Get("Text_EF83F428AA11"));
 
@@ -269,6 +273,46 @@ internal sealed class VideoEditorWindow : Window
         Closed += OnClosedInternal;
         IsVisibleChanged += (_, _) => { if (!IsVisible) { PausePlayback(); } };
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) { PausePlayback(); } };
+    }
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        // CenterScreen uses the owner's monitor, or the pointer's monitor without an
+        // owner. The primary work area can be much larger (e.g. an ultrawide beside a
+        // portrait display), and an already oversized HWND may straddle both monitors.
+        // Respect callers that explicitly position/size an editor instead.
+        if (WindowStartupLocation != WindowStartupLocation.CenterScreen) return;
+        IntPtr ownerHandle = Owner is null ? IntPtr.Zero : new WindowInteropHelper(Owner).Handle;
+        MonitorInfo monitor = ownerHandle == IntPtr.Zero
+            ? MonitorEnumerator.GetFromCursor()
+            : MonitorEnumerator.GetFromWindow(ownerHandle);
+        FitInitialSizeToMonitor(monitor);
+        // WPF has already computed the CenterScreen origin from the previous size.
+        // Recenter the resized HWND in physical pixels; preserve its activation/z-order.
+        double scale = Math.Max(1, monitor.Dpi) / 96.0;
+        int width = (int)Math.Round(Width * scale);
+        int height = (int)Math.Round(Height * scale);
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+        if (!SetWindowPos(handle, IntPtr.Zero,
+            (int)Math.Round(monitor.WorkArea.Left + (monitor.WorkArea.Width - width) / 2),
+            (int)Math.Round(monitor.WorkArea.Top + (monitor.WorkArea.Height - height) / 2),
+            width, height, 0x0004 | 0x0010)) // SWP_NOZORDER | SWP_NOACTIVATE
+            _log.LogWarning("Could not fit the video editor to its target monitor (Win32 {Error})", Marshal.GetLastWin32Error());
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+    private void FitInitialSizeToMonitor(MonitorInfo monitor)
+    {
+        double scale = Math.Max(1, monitor.Dpi) / 96.0;
+        double availableWidth = Math.Max(1, monitor.WorkArea.Width / scale);
+        double availableHeight = Math.Max(1, monitor.WorkArea.Height / scale);
+        MinWidth = Math.Min(760, availableWidth);
+        MinHeight = Math.Min(555, availableHeight);
+        Width = Math.Clamp(Width, MinWidth, Math.Max(MinWidth, availableWidth - 80));
+        Height = Math.Clamp(Height, MinHeight, Math.Max(MinHeight, availableHeight - 60));
     }
 
     private void OnLoadedInternal(object? sender, RoutedEventArgs e)
@@ -2084,6 +2128,7 @@ internal sealed class VideoEditorWindow : Window
         KeyDown -= OnKeyDown;
         Closing -= OnClosingInternal;
         Loaded -= OnLoadedInternal;
+        SourceInitialized -= OnSourceInitialized;
         Closed -= OnClosedInternal;
         _media.MediaOpened -= OnMediaOpened;
         _media.MediaFailed -= OnMediaFailed;

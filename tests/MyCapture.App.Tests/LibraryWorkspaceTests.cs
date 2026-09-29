@@ -11,9 +11,9 @@ namespace MyCapture.App.Tests;
 
 public sealed class LibraryWorkspaceTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "mycapture-workspace-tests", Guid.NewGuid().ToString("N"));
+    private readonly string _root = TestRecycleBin.CreateTempSubdirectory("mycapture-workspace-tests-").FullName;
     public LibraryWorkspaceTests() => Directory.CreateDirectory(_root);
-    public void Dispose() { try { Directory.Delete(_root, true); } catch (IOException) { } }
+    public void Dispose() { try { TestRecycleBin.DeleteDirectory(_root, true); } catch (IOException) { } }
 
     [Theory]
     [InlineData(null, "")]

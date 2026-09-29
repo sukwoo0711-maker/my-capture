@@ -1007,7 +1007,7 @@ public sealed class VideoLibraryServiceTests
 
     private static string NewRoot()
     {
-        string root = Path.Combine(Path.GetTempPath(), "mycapture-video-library-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mycapture-video-library-").FullName;
         // codeql[cs/path-injection] -- isolated GUID test workspace
         Directory.CreateDirectory(root);
         return root;
@@ -1018,7 +1018,7 @@ public sealed class VideoLibraryServiceTests
         try
         {
             // codeql[cs/path-injection] -- isolated GUID test workspace
-            Directory.Delete(root, recursive: true);
+            TestRecycleBin.DeleteDirectory(root, recursive: true);
         }
         catch (IOException)
         {

@@ -51,7 +51,7 @@ public sealed class ImageCodecPathTests
     [Fact]
     public void TryLoad_RelativePath_LoadsInsteadOfThrowing() => RunSta(() =>
     {
-        string dir = Path.Combine(Path.GetTempPath(), "mc-imgcodec-" + Guid.NewGuid().ToString("N"));
+        string dir = TestRecycleBin.CreateTempSubdirectory("mc-imgcodec-").FullName;
         string abs = WriteTempPng(dir, "img.png");
         string originalCwd = Directory.GetCurrentDirectory();
         try
@@ -68,7 +68,7 @@ public sealed class ImageCodecPathTests
         finally
         {
             Directory.SetCurrentDirectory(originalCwd);
-            try { Directory.Delete(dir, true); } catch (IOException) { }
+            try { TestRecycleBin.DeleteDirectory(dir, true); } catch (IOException) { }
             _ = abs;
         }
     });

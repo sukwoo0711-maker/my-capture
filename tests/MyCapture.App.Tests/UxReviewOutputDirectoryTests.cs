@@ -9,8 +9,8 @@ public sealed class UxReviewOutputDirectoryTests
     [Fact]
     public void Create_AllocatesDistinctExistingEmptyDirectories()
     {
-        DirectoryInfo first = UxReviewOutputDirectory.Create();
-        DirectoryInfo second = UxReviewOutputDirectory.Create();
+        DirectoryInfo first = TestRecycleBin.TrackNewDirectory(UxReviewOutputDirectory.Create);
+        DirectoryInfo second = TestRecycleBin.TrackNewDirectory(UxReviewOutputDirectory.Create);
         try
         {
             Assert.NotEqual(first.FullName, second.FullName);
@@ -23,29 +23,29 @@ public sealed class UxReviewOutputDirectoryTests
         }
         finally
         {
-            first.Delete(recursive: true);
-            second.Delete(recursive: true);
+            TestRecycleBin.DeleteDirectory(first.FullName, recursive: true);
+            TestRecycleBin.DeleteDirectory(second.FullName, recursive: true);
         }
     }
 
     [Fact]
     public void GeneratedDirectory_CleanupDoesNotAffectAnotherRun()
     {
-        DirectoryInfo first = UxReviewOutputDirectory.Create();
-        DirectoryInfo second = UxReviewOutputDirectory.Create();
+        DirectoryInfo first = TestRecycleBin.TrackNewDirectory(UxReviewOutputDirectory.Create);
+        DirectoryInfo second = TestRecycleBin.TrackNewDirectory(UxReviewOutputDirectory.Create);
         try
         {
             string evidence = Path.Combine(second.FullName, "evidence.txt");
             File.WriteAllText(evidence, "independent review evidence");
-            first.Delete();
+            TestRecycleBin.DeleteDirectory(first.FullName);
             Assert.True(second.Exists);
             Assert.Equal("independent review evidence", File.ReadAllText(evidence));
         }
         finally
         {
             first.Refresh();
-            if (first.Exists) first.Delete(recursive: true);
-            second.Delete(recursive: true);
+            if (first.Exists) TestRecycleBin.DeleteDirectory(first.FullName, recursive: true);
+            TestRecycleBin.DeleteDirectory(second.FullName, recursive: true);
         }
     }
 }

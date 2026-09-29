@@ -729,7 +729,7 @@ public sealed class CaptureQueueTests
         AddCapture(queue, workspace, DateTimeOffset.Now, 100);
         queue.Save();
 
-        File.Delete(Path.Combine(
+        TestRecycleBin.DeleteFile(Path.Combine(
             workspace.Paths.CapturesRoot, ghost.RelativeDirectory, CaptureFileNames.Original));
 
         CaptureQueue reloaded = CreateQueue(workspace);
@@ -759,7 +759,7 @@ public sealed class CaptureQueueTests
         string backup = workspace.Paths.IndexFile + Storage.AtomicFile.BackupSuffix;
         if (File.Exists(backup))
         {
-            File.Delete(backup);
+            TestRecycleBin.DeleteFile(backup);
         }
 
         CaptureQueue reloaded = CreateQueue(workspace);

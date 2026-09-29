@@ -78,7 +78,7 @@ public sealed class GalleryVideoTests : KoreanCaptionTest
 
     private static string NewRoot()
     {
-        string root = Path.Combine(Path.GetTempPath(), "mycapture-gallery-video-" + Guid.NewGuid().ToString("N"));
+        string root = TestRecycleBin.CreateTempSubdirectory("mycapture-gallery-video-").FullName;
         // codeql[cs/path-injection] -- isolated GUID test workspace
         Directory.CreateDirectory(root);
         return root;
@@ -89,7 +89,7 @@ public sealed class GalleryVideoTests : KoreanCaptionTest
         try
         {
             // codeql[cs/path-injection] -- isolated GUID test workspace
-            Directory.Delete(root, recursive: true);
+            TestRecycleBin.DeleteDirectory(root, recursive: true);
         }
         catch (IOException)
         {

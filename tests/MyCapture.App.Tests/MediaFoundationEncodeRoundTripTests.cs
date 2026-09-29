@@ -51,7 +51,7 @@ public sealed class MediaFoundationEncodeRoundTripTests
         const int fps = 15;
         const int frameCount = 30; // ~2 seconds
 
-        string dir = Path.Combine(Path.GetTempPath(), "mycapture-mftest-" + Guid.NewGuid().ToString("N"));
+        string dir = TestRecycleBin.CreateTempSubdirectory("mycapture-mftest-").FullName;
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, "roundtrip.mp4");
 
@@ -99,7 +99,7 @@ public sealed class MediaFoundationEncodeRoundTripTests
         }
         finally
         {
-            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+            try { TestRecycleBin.DeleteDirectory(dir, recursive: true); } catch (IOException) { }
         }
     });
 
@@ -110,7 +110,7 @@ public sealed class MediaFoundationEncodeRoundTripTests
         // round-trip, the bright quadrant must still be top-left. This catches the classic MF
         // RGB32 bottom-up bug (would move it to bottom-left) and any horizontal mirror.
         const int width = 160, height = 120, fps = 15, frames = 20;
-        string dir = Path.Combine(Path.GetTempPath(), "mc-orient-" + Guid.NewGuid().ToString("N"));
+        string dir = TestRecycleBin.CreateTempSubdirectory("mc-orient-").FullName;
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, "orient.mp4");
         try
@@ -145,7 +145,7 @@ public sealed class MediaFoundationEncodeRoundTripTests
         }
         finally
         {
-            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+            try { TestRecycleBin.DeleteDirectory(dir, recursive: true); } catch (IOException) { }
         }
     });
 
@@ -287,7 +287,7 @@ public sealed class MediaFoundationEncodeRoundTripTests
         const int fps = 15;
         const int frameCount = 45; // ~3 seconds
 
-        string dir = Path.Combine(Path.GetTempPath(), "mycapture-trimtest-" + Guid.NewGuid().ToString("N"));
+        string dir = TestRecycleBin.CreateTempSubdirectory("mycapture-trimtest-").FullName;
         Directory.CreateDirectory(dir);
         string source = Path.Combine(dir, "source.mp4");
         string trimmed = Path.Combine(dir, "source_trim.mp4");
@@ -338,7 +338,7 @@ public sealed class MediaFoundationEncodeRoundTripTests
         }
         finally
         {
-            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+            try { TestRecycleBin.DeleteDirectory(dir, recursive: true); } catch (IOException) { }
         }
     });
 }

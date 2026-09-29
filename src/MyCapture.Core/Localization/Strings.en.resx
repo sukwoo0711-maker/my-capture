@@ -550,7 +550,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_3185888F798A" xml:space="preserve">
-    <value>Put date formats in braces, for example capture_{yyyyMMdd}_{HHmmss}. The extension is added automatically.</value>
+    <value>{title} uses the captured window title. Add date formats in braces, for example {title}_{yyyyMMdd}_{HHmmss}. The extension is added automatically.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_32512F9EA32E" xml:space="preserve">
@@ -3157,4 +3157,5 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Library.Search.Reset" xml:space="preserve"><value>Clear search and filters</value></data>
   <data name="Library.Empty.Start" xml:space="preserve"><value>Your capture workspace</value></data>
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>No matching captures</value></data>
+  <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>Could not save to the library. Use Save in the editor to try again. {0}</value></data>
 </root>

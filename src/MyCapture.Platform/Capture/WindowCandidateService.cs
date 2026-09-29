@@ -6,7 +6,7 @@ using MyCapture.Platform.Interop;
 namespace MyCapture.Platform.Capture;
 
 /// <summary>A visible top-level window in virtual-desktop physical pixels.</summary>
-public sealed record WindowCandidate(IntPtr Handle, RectD ScreenBounds);
+public sealed record WindowCandidate(IntPtr Handle, RectD ScreenBounds, string Title = "");
 
 /// <summary>
 /// Snap candidates captured before the selection overlay appears. EnumWindows returns
@@ -27,6 +27,7 @@ public sealed class WindowCandidateService
         RectD monitor = monitorBounds.Normalized();
         var candidates = new List<WindowCandidate>();
         uint ownProcessId = unchecked((uint)Environment.ProcessId);
+        var titles = new WindowTitleService();
 
         bool Callback(IntPtr hwnd, IntPtr data)
         {
@@ -51,7 +52,7 @@ public sealed class WindowCandidateService
             RectD clipped = Intersect(bounds, monitor);
             if (clipped.Width >= 2 && clipped.Height >= 2)
             {
-                candidates.Add(new WindowCandidate(hwnd, clipped));
+                candidates.Add(new WindowCandidate(hwnd, clipped, titles.ReadTitle(hwnd)));
             }
 
             return true;
@@ -65,6 +66,33 @@ public sealed class WindowCandidateService
         }
 
         return candidates;
+    }
+
+    /// <summary>
+    /// Uses titles frozen before the overlay takes focus. Prefer the frontmost titled
+    /// window at the selection centre; for a centre over desktop space use the largest
+    /// intersecting window. Never query the live foreground window after selection.
+    /// </summary>
+    public static string ResolveSourceTitle(IReadOnlyList<WindowCandidate> candidates, RectD selection)
+    {
+        RectD region = selection.Normalized();
+        if (region.IsEmpty) return string.Empty;
+        string title = string.Empty;
+        double largestArea = 0;
+        foreach (WindowCandidate candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate.Title)) continue;
+            RectD overlap = Intersect(candidate.ScreenBounds, region);
+            if (overlap.IsEmpty) continue;
+            if (candidate.ScreenBounds.Contains(region.Center)) return candidate.Title;
+            double area = overlap.Width * overlap.Height;
+            if (area > largestArea)
+            {
+                largestArea = area;
+                title = candidate.Title;
+            }
+        }
+        return title;
     }
 
     private static bool IsCloaked(IntPtr hwnd)

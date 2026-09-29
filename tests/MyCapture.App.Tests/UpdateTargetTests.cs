@@ -24,7 +24,7 @@ public sealed class UpdateTargetTests
     public void PortableSourceSelectsDefaultDestinationAndRetainsItsOwnFiles()
     {
         using var fixture = new OwnedFixture();
-        File.Delete(Path.Combine(fixture.Root, "install-manifest.json"));
+        TestRecycleBin.DeleteFile(Path.Combine(fixture.Root, "install-manifest.json"));
         var target = UpdateTarget.Resolve(fixture.Root, UpdateTarget.DefaultRoot);
         Assert.True(target.IsPortableMigration);
         Assert.Equal(UpdateTarget.DefaultRoot, target.InstallRoot);
@@ -82,7 +82,7 @@ public sealed class UpdateTargetTests
         }
         public void Dispose()
         {
-            foreach (string file in new[] { "MyCapture.exe", "MyCapture.dll", "install-manifest.json" }) File.Delete(Path.Combine(Root, file));
+            foreach (string file in new[] { "MyCapture.exe", "MyCapture.dll", "install-manifest.json" }) TestRecycleBin.DeleteFile(Path.Combine(Root, file));
             OwnedTestDirectory.Delete(Root);
         }
     }

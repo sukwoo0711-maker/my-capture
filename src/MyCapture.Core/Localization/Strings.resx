@@ -550,7 +550,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_3185888F798A" xml:space="preserve">
-    <value>중괄호 안에 날짜 형식을 넣습니다. 예: capture_{yyyyMMdd}_{HHmmss}. 확장자는 자동으로 붙습니다.</value>
+    <value>{title}은 캡처한 창의 제목입니다. 날짜 형식도 넣을 수 있습니다. 예: {title}_{yyyyMMdd}_{HHmmss}. 확장자는 자동으로 붙습니다.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_32512F9EA32E" xml:space="preserve">
@@ -3157,4 +3157,5 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Search.Reset" xml:space="preserve"><value>검색·필터 초기화</value></data>
   <data name="Library.Empty.Start" xml:space="preserve"><value>나의 캡처 작업 공간</value></data>
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>일치하는 캡처가 없습니다</value></data>
+  <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 편집창에서 저장을 눌러 다시 시도하세요. {0}</value></data>
 </root>

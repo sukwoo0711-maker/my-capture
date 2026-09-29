@@ -522,10 +522,7 @@ public sealed class PinManagerTests : KoreanCaptionTest
     {
         internal TempDirectory()
         {
-            Path = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "mycapture-pin-manager-tests",
-                Guid.NewGuid().ToString("N"));
+            Path = TestRecycleBin.CreateTempSubdirectory("mycapture-pin-manager-tests-").FullName;
             Directory.CreateDirectory(Path);
         }
 
@@ -535,7 +532,7 @@ public sealed class PinManagerTests : KoreanCaptionTest
         {
             try
             {
-                Directory.Delete(Path, recursive: true);
+                TestRecycleBin.DeleteDirectory(Path, recursive: true);
             }
             catch (IOException)
             {

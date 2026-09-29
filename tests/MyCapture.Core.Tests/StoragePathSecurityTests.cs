@@ -156,7 +156,7 @@ public sealed class StoragePathSecurityTests
         {
             if (Directory.Exists(link))
             {
-                Directory.Delete(link);
+                TestRecycleBin.DeleteDirectory(link);
             }
         }
     }

@@ -10,7 +10,8 @@ namespace MyCapture.Core.Storage;
 /// <remarks>
 /// <para>
 /// The pattern is a plain string with <c>{...}</c> tokens whose contents are a .NET
-/// custom date/time format applied to the capture time — for example
+/// custom date/time format applied to the capture time, or <c>{title}</c> for the source
+/// window title — for example
 /// <c>capture_{yyyyMMdd}_{HHmmss}</c> becomes <c>capture_20260829_135312</c>. A single
 /// documented mechanism (a date format inside braces) is easier to explain than a fixed
 /// list of named tokens, and it lets a user express any ordering they like.
@@ -32,15 +33,17 @@ public static class QuickSaveNaming
     /// <summary>Fallback used when a pattern renders to nothing usable.</summary>
     public const string FallbackStem = "capture";
 
+    public const string DefaultPattern = "{title}_{yyyyMMdd}_{HHmmss}";
+
     /// <summary>
     /// Expands <paramref name="pattern"/> against <paramref name="timestamp"/> into a base
     /// file name (without extension), with illegal characters sanitised.
     /// </summary>
-    public static string BuildStem(string pattern, DateTimeOffset timestamp)
+    public static string BuildStem(string pattern, DateTimeOffset timestamp, string? sourceWindowTitle = null)
     {
         if (string.IsNullOrWhiteSpace(pattern))
         {
-            pattern = "capture_{yyyyMMdd}_{HHmmss}";
+            pattern = DefaultPattern;
         }
 
         var builder = new StringBuilder(pattern.Length + 8);
@@ -54,7 +57,9 @@ public static class QuickSaveNaming
                 if (close > i)
                 {
                     string token = pattern.Substring(i + 1, close - i - 1);
-                    builder.Append(FormatToken(token, timestamp));
+                    builder.Append(string.Equals(token, "title", StringComparison.OrdinalIgnoreCase)
+                        ? TitleStem(sourceWindowTitle)
+                        : FormatToken(token, timestamp));
                     i = close + 1;
                     continue;
                 }
@@ -196,9 +201,29 @@ public static class QuickSaveNaming
         var builder = new StringBuilder(text.Length);
         foreach (char c in text)
         {
-            builder.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
+            builder.Append(Array.IndexOf(invalid, c) >= 0 || c < ' ' ? '_' : c);
         }
 
-        return builder.ToString().Trim().TrimEnd('.');
+        string sanitized = Truncate(builder.ToString().Trim(), 180).TrimEnd('.', ' ');
+        string device = sanitized.Split('.')[0];
+        if (device.Equals("CON", StringComparison.OrdinalIgnoreCase)
+            || device.Equals("PRN", StringComparison.OrdinalIgnoreCase)
+            || device.Equals("AUX", StringComparison.OrdinalIgnoreCase)
+            || device.Equals("NUL", StringComparison.OrdinalIgnoreCase)
+            || (device.Length == 4 && device[3] is >= '1' and <= '9'
+                && (device.StartsWith("COM", StringComparison.OrdinalIgnoreCase)
+                    || device.StartsWith("LPT", StringComparison.OrdinalIgnoreCase))))
+            sanitized = "_" + sanitized;
+        return sanitized;
     }
+
+    private static string TitleStem(string? title)
+    {
+        string stem = Truncate(Sanitize(title ?? string.Empty), 100).TrimEnd('.', ' ');
+        return string.IsNullOrWhiteSpace(stem) ? FallbackStem : stem;
+    }
+
+    private static string Truncate(string value, int limit) => value.Length <= limit
+        ? value
+        : value[..(char.IsHighSurrogate(value[limit - 1]) ? limit - 1 : limit)];
 }

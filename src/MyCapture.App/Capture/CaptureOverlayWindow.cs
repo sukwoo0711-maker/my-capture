@@ -123,6 +123,8 @@ internal sealed class CaptureOverlayWindow : Window
     /// <summary>Recording needs geometry only; it must not allocate a cropped screenshot.</summary>
     internal Action<RectD>? GeometrySelectionCompleted { get; set; }
 
+    internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
+
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         // EnsureHandle may create this HWND solely to apply recording exclusion.
@@ -209,6 +211,9 @@ internal sealed class CaptureOverlayWindow : Window
         }
         FrozenFrame frame = _frame ?? throw new InvalidOperationException("A frozen capture frame is required.");
         System.Windows.Media.Imaging.BitmapSource crop = ScreenCaptureEngine.Crop(frame, bitmapRegion);
+        string sourceTitle = WindowCandidateService.ResolveSourceTitle(SourceWindows,
+            new RectD(_screenBounds.Left + bitmapRegion.Left, _screenBounds.Top + bitmapRegion.Top,
+                bitmapRegion.Width, bitmapRegion.Height));
 
         // Remove the dimmed overlay before the normal editor window is created. The original
         // frozen frame and cropped physical pixels are retained; the desktop is never recaptured.
@@ -217,7 +222,7 @@ internal sealed class CaptureOverlayWindow : Window
         {
             SelectionCompleted?.Invoke(
                 this,
-                new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop));
+                new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop, sourceTitle));
         }
         finally
         {
@@ -256,6 +261,7 @@ internal sealed class CaptureOverlayWindow : Window
         _pendingSelection = null;
         Content = null;
         GeometrySelectionCompleted = null;
+        SourceWindows = [];
         _view.SelectionConfirmed -= OnSelectionConfirmed;
         _view.CancelRequested -= OnCancelRequested;
         SourceInitialized -= OnSourceInitialized;

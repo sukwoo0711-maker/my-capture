@@ -68,7 +68,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
     [Fact]
     public void TwoSecondClip_OpensAndBecomesReady_WithControlsEnabled() => RunSta(() =>
     {
-        string dir = Path.Combine(Path.GetTempPath(), "mc-vew-" + Guid.NewGuid().ToString("N"));
+        string dir = TestRecycleBin.CreateTempSubdirectory("mc-vew-").FullName;
         Directory.CreateDirectory(dir);
         string clip = Path.Combine(dir, "twosec.mp4");
         try
@@ -295,7 +295,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
         }
         finally
         {
-            try { Directory.Delete(dir, true); } catch (IOException) { }
+            try { TestRecycleBin.DeleteDirectory(dir, true); } catch (IOException) { }
         }
     });
 

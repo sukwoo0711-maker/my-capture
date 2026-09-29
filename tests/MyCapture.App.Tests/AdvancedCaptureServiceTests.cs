@@ -128,12 +128,16 @@ public sealed class AdvancedCaptureServiceTests
     [Fact]
     public void FullScreen_OpensWholeMonitorWithoutChangingHistory() => RunSta(() =>
     {
-        var env = new FakeEnvironment();
+        var env = new FakeEnvironment
+        {
+            Window = new WindowUnderCursor(new IntPtr(7), new RectD(0, 0, 300, 200), "매출.xlsx - Excel"),
+        };
         var store = new LastRegionStore(() => 10);
         CaptureOutcome result = NewService(env, store).CaptureFullScreen();
         Assert.Equal(CaptureOutcomeKind.Completed, result.Kind);
         Assert.Equal(new RectD(0, 0, 300, 200), env.LastSelection!.Region);
         Assert.False(env.LastSelection.RecordForRepeat);
+        Assert.Equal("매출.xlsx - Excel", env.LastSelection.SourceTitle);
         Assert.Equal(0, store.Count);
     });
 

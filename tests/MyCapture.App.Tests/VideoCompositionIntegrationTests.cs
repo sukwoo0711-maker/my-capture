@@ -41,7 +41,7 @@ public sealed class VideoCompositionIntegrationTests
             BitmapSource preview = VideoExportDialog.CreateGifPreview(path);
             Assert.True(preview.IsFrozen);
             Assert.False(preview is BitmapFrame, "The preview must not retain a decoder-backed BitmapFrame");
-            File.Delete(path); // No cached frame or live stream may require the export stage.
+            TestRecycleBin.DeleteFile(path); // No cached frame or live stream may require the export stage.
             byte[] copied = Task.Run(() =>
             {
                 byte[] pixels = new byte[stride * height];

@@ -43,9 +43,8 @@ internal sealed class RecordingControlWindow : Window
     private const double BorderThicknessPx = 6.0;
     private const double StripHeight = 56.0;
 
-    // The control strip must never be narrower than this, or (for a small capture region) the
-    // record/stop button, status text and elapsed timer overlap. The window widens to this
-    // minimum and the region outline stays centred at its true size.
+    // The palette has a compact, predictable width independent from the recorded image.
+    // On an unusually narrow work area the Viewbox fits its controls instead of clipping them.
     private const double MinStripWidth = 460.0;
 
     private RectD _screenRegion;
@@ -111,7 +110,6 @@ internal sealed class RecordingControlWindow : Window
         _root.Children.Add(_regionFrame);
 
         _controlStrip = BuildControlStrip(out _primaryButton, out _statusText, out _timerText, out _clockCheckBox);
-        _controlStrip.MinWidth = MinStripWidth;
         _root.Children.Add(_controlStrip);
 
         Content = _root;
@@ -302,7 +300,12 @@ internal sealed class RecordingControlWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
             Effect = Application.Current?.TryFindResource("Shadow.Floating") as System.Windows.Media.Effects.Effect,
-            Child = panel,
+            Child = new Viewbox
+            {
+                Stretch = Stretch.Uniform,
+                StretchDirection = StretchDirection.DownOnly,
+                Child = new Border { Width = MinStripWidth - 2, Height = StripHeight - 2, Child = panel },
+            },
         };
     }
 
@@ -349,10 +352,12 @@ internal sealed class RecordingControlWindow : Window
         try
         {
             double scale = ResolveWindowScale();
-            RectD virtualPixels = MonitorEnumerator.GetVirtualDesktopBounds();
+            // The desktop bounding rectangle can contain gaps between staggered monitors.
+            // Keep every control on one real monitor and outside its taskbar/appbars.
+            RectD workArea = MonitorEnumerator.GetFromPoint(_screenRegion.Center).WorkArea;
             RecordingControlLayout layout = RecordingControlLayoutPlanner.Plan(
                 _screenRegion,
-                virtualPixels,
+                workArea,
                 scale,
                 BorderThicknessPx,
                 StripHeight,
@@ -375,7 +380,7 @@ internal sealed class RecordingControlWindow : Window
             Canvas.SetTop(_regionFrame, (frameBox.Top - windowPixels.Top) / scale);
 
             _controlStrip.Width = stripBox.Width / scale;
-            _controlStrip.Height = StripHeight;
+            _controlStrip.Height = stripBox.Height / scale;
             Canvas.SetLeft(_controlStrip, (stripBox.Left - windowPixels.Left) / scale);
             Canvas.SetTop(_controlStrip, (stripBox.Top - windowPixels.Top) / scale);
 
@@ -506,6 +511,9 @@ internal sealed class RecordingControlWindow : Window
     {
         try
         {
+            ApplyPhysicalLayout(positionHwnd: true);
+            if (!_captureExclusionApplied && _paletteOverlapsRegion)
+                throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
             _recorder = _recorderFactory();
             string output = _outputPathFactory();
             _recorder.Start(_screenRegion, output, _settings);
@@ -538,13 +546,6 @@ internal sealed class RecordingControlWindow : Window
         _regionFrame.IsHitTestVisible = false;
         _regionFrame.Background = null;
         ApplyPhysicalLayout(positionHwnd: true);
-        if (!_captureExclusionApplied && _paletteOverlapsRegion)
-        {
-            // Supported Windows 11 builds exclude the palette through display affinity. If that
-            // OS contract unexpectedly fails and no outside placement exists, hide only the
-            // palette. The outline stays outside the captured pixels. Ctrl+Shift+X still stops.
-            _controlStrip.Visibility = Visibility.Collapsed;
-        }
 
         _elapsedTimer = new DispatcherTimer(DispatcherPriority.Normal)
         {
@@ -930,22 +931,22 @@ internal static class RecordingControlLayoutPlanner
 {
     internal static RecordingControlLayout Plan(
         RectD screenRegion,
-        RectD virtualDesktop,
+        RectD paletteWorkArea,
         double dpiScale,
         double borderDip,
         double stripHeightDip,
         double minimumStripWidthDip)
     {
         RectD region = screenRegion.Normalized().ToPixelBounds();
-        RectD desktop = virtualDesktop.Normalized().ToPixelBounds();
+        RectD desktop = paletteWorkArea.Normalized().ToPixelBounds();
         double scale = double.IsFinite(dpiScale) && dpiScale > 0 ? dpiScale : 1.0;
         double borderPx = Math.Max(0, borderDip) * scale;
-        double stripHeightPx = Math.Max(1, stripHeightDip * scale);
+        double stripHeightPx = Math.Min(desktop.Height, Math.Max(1, stripHeightDip * scale));
         RectD frame = region.Inflate(borderPx);
 
         double stripWidthPx = Math.Min(
             desktop.Width,
-            Math.Max(frame.Width, Math.Max(1, minimumStripWidthDip * scale)));
+            Math.Max(1, minimumStripWidthDip * scale));
         double stripLeft = Math.Clamp(
             region.Center.X - (stripWidthPx / 2),
             desktop.Left,
@@ -953,9 +954,9 @@ internal static class RecordingControlLayoutPlanner
 
         double below = frame.Bottom;
         double above = frame.Top - stripHeightPx;
-        double stripTop = below + stripHeightPx <= desktop.Bottom
+        double stripTop = below >= desktop.Top && below + stripHeightPx <= desktop.Bottom
             ? below
-            : above >= desktop.Top
+            : above >= desktop.Top && above + stripHeightPx <= desktop.Bottom
                 ? above
                 : Math.Clamp(
                     frame.Top,
