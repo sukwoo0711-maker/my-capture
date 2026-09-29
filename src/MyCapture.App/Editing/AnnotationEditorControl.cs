@@ -56,6 +56,8 @@ internal sealed class AnnotationEditorControl : Grid
     private readonly AnnotationImageStore _imageStore = new();
     private readonly AnnotationEditorController _controller;
     private readonly AnnotationEditorSurface _surface;
+    private readonly string? _sourceWindowTitle;
+    private readonly bool _showSourceWindowTitle;
     private readonly IPrivacyRedactionService? _privacyRedactionService;
     private readonly Grid _viewport = new();
     private readonly Canvas _overlayCanvas = new();
@@ -134,12 +136,17 @@ internal sealed class AnnotationEditorControl : Grid
         BitmapSource selectedBitmap,
         AnnotationDocument? initialDocument,
         IReadOnlyDictionary<string, BitmapSource>? initialAssets,
-        IPrivacyRedactionService? privacyRedactionService = null)
+        IPrivacyRedactionService? privacyRedactionService = null,
+        string? sourceWindowTitle = null)
     {
         _frame = AnnotationSourceMetadata.FromFrame(frame);
         _cropRegion = bitmapRegion.Normalized();
         _selectedBitmap = selectedBitmap ?? throw new ArgumentNullException(nameof(selectedBitmap));
         _privacyRedactionService = privacyRedactionService;
+        // A frame/clipboard editor has no captured window title. Preserve that explicit
+        // absence in the result instead of falling back to a synthetic record label.
+        _sourceWindowTitle = sourceWindowTitle ?? string.Empty;
+        _showSourceWindowTitle = AnnotationEditorPreferences.ReadShowSourceWindowTitle?.Invoke() == true;
         _frameMonitor = frame.Monitor;
         _frameElapsedMilliseconds = frame.ElapsedMilliseconds;
         _originalCropRegion = bitmapRegion.Normalized();
@@ -176,7 +183,10 @@ internal sealed class AnnotationEditorControl : Grid
             visualRegion,
             frame.Monitor,
             frame.ElapsedMilliseconds);
-        _surface = new AnnotationEditorSurface(visualFrame, visualRegion, _controller, renderer);
+        _surface = new AnnotationEditorSurface(visualFrame, visualRegion, _controller, renderer)
+        {
+            SourceWindowTitle = _showSourceWindowTitle ? _sourceWindowTitle : null,
+        };
 
         Background = Brush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
         Focusable = true;
@@ -2100,7 +2110,9 @@ internal sealed class AnnotationEditorControl : Grid
             action,
             _imageStore.DecodedFor(usedAssets),
             _imageStore.SourcesFor(usedAssets),
-            reduceExport);
+            reduceExport,
+            _sourceWindowTitle,
+            _showSourceWindowTitle);
 
         // Keep the editor alive while background PNG encoding or clipboard contention
         // resolves. This guarantees Ctrl+C means copy-then-close, never close-then-copy.

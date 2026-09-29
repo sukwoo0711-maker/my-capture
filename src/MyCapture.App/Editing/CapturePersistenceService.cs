@@ -114,14 +114,15 @@ internal sealed class CapturePersistenceService
     internal static CaptureRecord CreatePendingRecord(BitmapSource original, double dpiScale,
         string sourceWindowTitle, string sourceMonitor) => CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor);
 
-    internal async Task<CaptureRecord> PersistPendingOriginalAsync(CaptureRecord record, BitmapSource original)
+    internal async Task<CaptureRecord> PersistPendingOriginalAsync(CaptureRecord record, BitmapSource original,
+        BitmapSource? initialRendered = null)
     {
         using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
         if (!_busyRecords.TryAdd(record.Id, 0)) throw new InvalidOperationException("The capture is already being written.");
         try
         {
             long bytes = await StaThreadTask.RunAsync(
-                () => WriteOriginalFiles(record, original),
+                () => WriteOriginalFiles(record, original, initialRendered: initialRendered),
                 "MyCapture original persistence");
             using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync();
             PrepareOriginalPublication(record, bytes);
@@ -196,7 +197,8 @@ internal sealed class CapturePersistenceService
         CaptureRecord record,
         BitmapSource original,
         bool createPendingJournal = true,
-        bool rewriteOriginal = true)
+        bool rewriteOriginal = true,
+        BitmapSource? initialRendered = null)
     {
         string directory = _queue.GetDirectory(record);
         Directory.CreateDirectory(directory);
@@ -218,9 +220,13 @@ internal sealed class CapturePersistenceService
             ? ImageCodec.SavePng(original, originalPath)
             : SafeFileLength(originalPath);
 
-        // rendered.png — identical to the original until annotations are flattened.
+        // rendered.png may include the optional title; original.png remains untouched.
         string renderedPath = Path.Combine(directory, CaptureFileNames.Rendered);
-        if (rewriteOriginal)
+        if (initialRendered is not null && !ReferenceEquals(initialRendered, original))
+        {
+            bytes += ImageCodec.SavePng(initialRendered, renderedPath);
+        }
+        else if (rewriteOriginal)
         {
             File.Copy(originalPath, renderedPath, overwrite: true);
             bytes += SafeFileLength(renderedPath);
@@ -237,7 +243,7 @@ internal sealed class CapturePersistenceService
         bytes += ByteLength(layersJson);
 
         // thumb.jpg — gallery tile.
-        bytes += WriteThumbnail(original, directory);
+        bytes += WriteThumbnail(initialRendered ?? original, directory);
 
         return bytes;
     }

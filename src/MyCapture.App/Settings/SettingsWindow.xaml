@@ -9,8 +9,8 @@
         MinWidth="780" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         FontFamily="{StaticResource Font.Ui}"
-        Background="{StaticResource Surface.Base}"
-        Foreground="{StaticResource Text.Primary}"
+        Background="{DynamicResource Surface.Base}"
+        Foreground="{DynamicResource Text.Primary}"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display">
 
@@ -22,7 +22,7 @@
 
         <!-- Shared label above a field. -->
         <Style x:Key="Settings.Label" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="0,0,0,2" />
@@ -30,7 +30,7 @@
 
         <!-- Secondary description under a label. Muted on sunken surfaces stays AA. -->
         <Style x:Key="Settings.Description" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Text.Muted}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
             <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Margin" Value="0,0,0,4" />
@@ -38,7 +38,7 @@
 
         <!-- Group heading inside a page. -->
         <Style x:Key="Settings.GroupHeading" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="FontSize" Value="{StaticResource FontSize.Subtitle}" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Margin" Value="0,4,0,8" />
@@ -63,7 +63,7 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="Validation.HasError" Value="True">
-                    <Setter Property="BorderBrush" Value="{StaticResource State.Danger}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource State.Danger}" />
                     <Setter Property="ToolTip"
                             Value="{Binding RelativeSource={RelativeSource Self},
                                             Path=(Validation.Errors)[0].ErrorContent}" />
@@ -85,7 +85,7 @@
              state; selection and focus change colour and reveal the accent bar only, so the
              row never resizes or shifts its neighbours (stable focus). -->
         <Style x:Key="Settings.TabItem" TargetType="TabItem">
-            <Setter Property="Foreground" Value="{StaticResource Text.Secondary}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
             <Setter Property="Padding" Value="10,9" />
             <Setter Property="Margin" Value="0,2" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -109,7 +109,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Border x:Name="AccentBar" Visibility="Hidden"
                                         Width="3"
-                                        Background="{StaticResource Accent.Default}"
+                                        Background="{DynamicResource Accent.Default}"
                                         CornerRadius="2" />
                                 <Viewbox Grid.Column="1" Width="18" Height="18"
                                          Margin="10,0,0,0" VerticalAlignment="Center">
@@ -118,7 +118,7 @@
                                                          RelativeSource={RelativeSource TemplatedParent}}"
                                           Width="20" Height="20"
                                           Stretch="Uniform"
-                                          Stroke="{StaticResource Text.Secondary}"
+                                          Stroke="{DynamicResource Text.Secondary}"
                                           StrokeThickness="1.6"
                                           StrokeStartLineCap="Round"
                                           StrokeEndLineCap="Round"
@@ -133,21 +133,21 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent.Subtle}" />
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Border.Accent}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
                                 <Setter TargetName="AccentBar" Property="Visibility" Value="Visible" />
-                                <Setter TargetName="Glyph" Property="Stroke" Value="{StaticResource Accent.Cool}" />
-                                <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Accent.Cool}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface.Hover}" />
-                                <Setter TargetName="Glyph" Property="Stroke" Value="{StaticResource Text.Primary}" />
-                                <Setter Property="Foreground" Value="{StaticResource Text.Primary}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Text.Primary}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                             </Trigger>
                             <!-- Focus changes only the border colour, never the thickness. -->
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Border.Focus}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -286,8 +286,8 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Ctrl+Shift+C" FontFamily="{StaticResource Font.Mono}"
-                                               Foreground="{StaticResource Accent.Cool}" FontWeight="SemiBold" />
-                                    <TextBlock Grid.Column="1" Text="{loc:Text Text_574815F8C801}" Foreground="{StaticResource Text.Secondary}" />
+                                               Foreground="{DynamicResource Accent.Cool}" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="{loc:Text Text_574815F8C801}" Foreground="{DynamicResource Text.Secondary}" />
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <Grid.ColumnDefinitions>
@@ -295,8 +295,8 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Ctrl+Shift+X" FontFamily="{StaticResource Font.Mono}"
-                                               Foreground="{StaticResource Accent.Cool}" FontWeight="SemiBold" />
-                                    <TextBlock Grid.Column="1" Text="{loc:Text Text_4DAE3A1EEAE4}" Foreground="{StaticResource Text.Secondary}" />
+                                               Foreground="{DynamicResource Accent.Cool}" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="{loc:Text Text_4DAE3A1EEAE4}" Foreground="{DynamicResource Text.Secondary}" />
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <Grid.ColumnDefinitions>
@@ -304,8 +304,8 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Ctrl+Shift+Z" FontFamily="{StaticResource Font.Mono}"
-                                               Foreground="{StaticResource Accent.Cool}" FontWeight="SemiBold" />
-                                    <TextBlock Grid.Column="1" Text="{loc:Text Text_66BA5DCDA810}" Foreground="{StaticResource Text.Secondary}" />
+                                               Foreground="{DynamicResource Accent.Cool}" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="{loc:Text Text_66BA5DCDA810}" Foreground="{DynamicResource Text.Secondary}" />
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -634,6 +634,14 @@
                                      AutomationProperties.Name="{loc:Text Text_72147902C22E}"
                                      Text="{Binding FileNamePattern, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
+
+                        <CheckBox x:Name="ShowSourceWindowTitleCheck"
+                                  Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text Settings.ShowSourceWindowTitle}"
+                                  AutomationProperties.Name="{loc:Text Settings.ShowSourceWindowTitle}"
+                                  IsChecked="{Binding ShowSourceWindowTitle}" />
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                                   Text="{loc:Text Settings.ShowSourceWindowTitleHint}" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -762,9 +770,9 @@
             </TabItem>
             <TabItem x:Name="UpdateTab">
                 <StackPanel Margin="20">
-                    <TextBlock x:Name="UpdateVersionLabel" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Text.Primary}" />
-                    <TextBlock x:Name="UpdateDescription" TextWrapping="Wrap" Margin="0,12,0,20" Foreground="{StaticResource Text.Primary}" />
-                    <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap" Margin="0,0,0,12" Foreground="{StaticResource Text.Primary}" AutomationProperties.LiveSetting="Polite" />
+                    <TextBlock x:Name="UpdateVersionLabel" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Text.Primary}" />
+                    <TextBlock x:Name="UpdateDescription" TextWrapping="Wrap" Margin="0,12,0,20" Foreground="{DynamicResource Text.Primary}" />
+                    <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap" Margin="0,0,0,12" Foreground="{DynamicResource Text.Primary}" AutomationProperties.LiveSetting="Polite" />
                     <ProgressBar x:Name="UpdateDownloadProgress" Height="8" Minimum="0" Maximum="100" Margin="0,0,0,20" />
                     <WrapPanel>
                         <Button x:Name="UpdateAction" Style="{StaticResource Button.Primary}" Click="OnUpdateAction" MinWidth="140" />
@@ -780,14 +788,14 @@
                 Margin="0,8,0,0"
                 Padding="12,8"
                 CornerRadius="6"
-                Background="{StaticResource Surface.Sunken}"
-                BorderBrush="{StaticResource State.Danger}"
+                Background="{DynamicResource Surface.Sunken}"
+                BorderBrush="{DynamicResource State.Danger}"
                 BorderThickness="1"
                 Visibility="Collapsed"
                 AutomationProperties.LiveSetting="Assertive">
             <StackPanel>
                 <TextBlock x:Name="ErrorSummaryHeading"
-                           Foreground="{StaticResource State.Danger}"
+                           Foreground="{DynamicResource State.Danger}"
                            FontWeight="Bold"
                            FontSize="{StaticResource FontSize.Body}"
                            Text="{loc:Text Text_EF7DD8DA5437}"
@@ -796,7 +804,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding}"
-                                       Foreground="{StaticResource Text.Primary}"
+                                       Foreground="{DynamicResource Text.Primary}"
                                        FontSize="{StaticResource FontSize.Caption}"
                                        TextWrapping="Wrap"
                                        Margin="0,1,0,1" />

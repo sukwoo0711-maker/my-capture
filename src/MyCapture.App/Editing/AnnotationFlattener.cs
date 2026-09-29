@@ -39,7 +39,8 @@ internal static class AnnotationFlattener
     internal static BitmapSource Flatten(
         BitmapSource baseBitmap,
         AnnotationDocument document,
-        AnnotationRenderer renderer)
+        AnnotationRenderer renderer,
+        string? sourceWindowTitle = null)
     {
         ArgumentNullException.ThrowIfNull(baseBitmap);
         ArgumentNullException.ThrowIfNull(document);
@@ -58,6 +59,7 @@ internal static class AnnotationFlattener
             // pixelsPerDip = 1.0: at 96 DPI a DIP is a device pixel, and text is measured in
             // the image's own pixels, matching what the editor showed.
             renderer.Render(dc, document, pixelsPerDip: 1.0);
+            SourceWindowTitleRenderer.Draw(dc, sourceWindowTitle, width, height);
         }
 
         // Pbgra32 preserves any transparency the annotations introduce (for example a

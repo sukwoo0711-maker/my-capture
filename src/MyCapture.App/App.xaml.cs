@@ -1,6 +1,7 @@
 using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -272,6 +273,7 @@ public partial class App : Application
         // uses this to decide whether the frozen frame must wait it out.
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
         AnnotationEditorPreferences.Read = () => _settings!.Annotation;
+        AnnotationEditorPreferences.ReadShowSourceWindowTitle = () => _settings!.Export.ShowSourceWindowTitle;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
         _tray.CaptureWindowRequested += (_, _) => HandleCaptureWindow();
@@ -927,7 +929,7 @@ public partial class App : Application
         _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
             e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty);
         Task<bool>? automaticClipboardCopy = e.CopyToClipboardImmediately && _commit is not null
-            ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap)
+            ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle)
             : null;
         try
         {
@@ -938,7 +940,8 @@ public partial class App : Application
             // Protect the editor's record across that boundary even when all older items
             // are pinned or this image alone exceeds the configured capacity.
             _currentEditSession = _commit.BeginEditSession(_pendingRecord);
-            _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, e.SelectedBitmap);
+            BitmapSource renderedCapture = await _commit.RenderCapturedImageAsync(e.SelectedBitmap, e.SourceTitle);
+            _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, e.SelectedBitmap, renderedCapture);
         }
         catch (Exception ex)
         {
@@ -988,7 +991,7 @@ public partial class App : Application
             _log?.LogWarning(ex, "Could not update capture history or tray count");
         }
 
-        // Copy the untouched explicit-region selection now, before the editor can be cancelled
+        // Copy the explicit-region result with its optional title before the editor can be cancelled
         // or committed with any action, and do not consult the quick-save clipboard preference.
         // Advanced capture modes opt out when they synthesize their editor selection.
         if (e.CopyToClipboardImmediately)
@@ -1028,7 +1031,7 @@ public partial class App : Application
                 }
             }
 
-            // Capturing opens the editor and copies the untouched selection, but does not also
+            // Capturing opens the editor and copies the result, but does not also
             // create a persistent floating window. F3 remains the explicit paste-to-screen
             // action when the user actually wants a pin.
         }
@@ -1156,7 +1159,7 @@ public partial class App : Application
                     record = await _persistence.PersistOriginalAsync(
                         result.SelectedBitmap,
                         result.Frame.DpiScale,
-                        sourceWindowTitle: UiText.Get("Text_8D723235CBF3"),
+                        sourceWindowTitle: result.SourceWindowTitle ?? string.Empty,
                         sourceMonitor: result.Frame.Monitor?.DeviceName ?? string.Empty);
                     editSession = _commit.BeginEditSession(record);
                 }
@@ -1878,6 +1881,7 @@ public partial class App : Application
     {
         if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
         AnnotationEditorPreferences.Read = null;
+        AnnotationEditorPreferences.ReadShowSourceWindowTitle = null;
         AnnotationEditorPreferences.Write = null;
         _shellPresenter?.Dispose();
         // Invalidate pending frame acquisition before tearing down tray/persistence services.

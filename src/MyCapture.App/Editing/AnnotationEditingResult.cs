@@ -37,9 +37,11 @@ internal sealed class AnnotationEditingResult
         EditorCommitAction action,
         IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
         IReadOnlyDictionary<string, string> imageAssetSources,
-        bool reduceExport = false)
+        bool reduceExport = false,
+        string? sourceWindowTitle = null,
+        bool? showSourceWindowTitle = null)
         : this(AnnotationSourceMetadata.FromFrame(frame), bitmapRegion, selectedBitmap, document,
-            action, imageAssetBitmaps, imageAssetSources, reduceExport)
+            action, imageAssetBitmaps, imageAssetSources, reduceExport, sourceWindowTitle, showSourceWindowTitle)
     {
     }
 
@@ -51,7 +53,9 @@ internal sealed class AnnotationEditingResult
         EditorCommitAction action,
         IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
         IReadOnlyDictionary<string, string> imageAssetSources,
-        bool reduceExport = false)
+        bool reduceExport = false,
+        string? sourceWindowTitle = null,
+        bool? showSourceWindowTitle = null)
     {
         Frame = frame ?? throw new ArgumentNullException(nameof(frame));
         BitmapRegion = bitmapRegion;
@@ -61,6 +65,8 @@ internal sealed class AnnotationEditingResult
         ImageAssetBitmaps = imageAssetBitmaps ?? throw new ArgumentNullException(nameof(imageAssetBitmaps));
         ImageAssetSources = imageAssetSources ?? throw new ArgumentNullException(nameof(imageAssetSources));
         ReduceExport = reduceExport;
+        SourceWindowTitle = sourceWindowTitle;
+        ShowSourceWindowTitle = showSourceWindowTitle;
     }
 
     /// <summary>Source-frame provenance, without retaining the desktop bitmap.</summary>
@@ -79,6 +85,11 @@ internal sealed class AnnotationEditingResult
     internal EditorCommitAction Action { get; }
 
     internal bool ReduceExport { get; }
+
+    internal string? SourceWindowTitle { get; }
+
+    /// <summary>The editor's displayed option; null for callers without a preview.</summary>
+    internal bool? ShowSourceWindowTitle { get; }
 
     /// <summary>
     /// The decoded, frozen bitmap for each <see cref="ImageAnnotation.AssetFileName"/> used

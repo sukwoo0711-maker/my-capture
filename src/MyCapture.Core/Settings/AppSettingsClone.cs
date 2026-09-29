@@ -70,6 +70,7 @@ public static class AppSettingsClone
         CopyToClipboardOnQuickSave = s.CopyToClipboardOnQuickSave,
         FileNamePattern = s.FileNamePattern,
         PreserveTransparency = s.PreserveTransparency,
+        ShowSourceWindowTitle = s.ShowSourceWindowTitle,
     };
 
     private static CaptureSettings Clone(CaptureSettings s) => new()

@@ -103,6 +103,9 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             Border preview = Descendants(layout).OfType<Border>().Single(child => child.Child is Grid panel && panel.Children.OfType<Grid>().Any(grid => grid.Name == "VideoPreviewViewport"));
             Border status = layout.Children.OfType<Border>().Single(child => Grid.GetRow(child) == 3);
             ScrollViewer timelineTools = Assert.Single(layout.Children.OfType<ScrollViewer>());
+            // TranslatePoint can accumulate double round-off at a scrolled boundary
+            // (for example, 224.00000000000006 for a 224 DIP viewport).
+            const double coordinateEpsilon = 1e-9;
             Assert.True(preview.ActualHeight >= 112, "compact video editor lost its usable preview");
             Assert.True(status.TranslatePoint(new Point(0, status.ActualHeight), layout).Y <= layout.ActualHeight + 0.5,
                 "compact video editor clipped the processing status");
@@ -115,17 +118,17 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             editor.UpdateLayout();
             Rect selectedBar = layerTracks.SelectedBarBounds;
             Assert.False(selectedBar.IsEmpty);
-            Assert.InRange(layerTracks.TranslatePoint(selectedBar.TopLeft, timelineTools).Y, 0, timelineTools.ViewportHeight);
-            Assert.InRange(layerTracks.TranslatePoint(selectedBar.BottomRight, timelineTools).Y, 0, timelineTools.ViewportHeight);
+            Assert.InRange(layerTracks.TranslatePoint(selectedBar.TopLeft, timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
+            Assert.InRange(layerTracks.TranslatePoint(selectedBar.BottomRight, timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
             foreach (TextBlock caption in Descendants(editor.TimelineForTest).OfType<TextBlock>())
             {
-                Assert.InRange(caption.TranslatePoint(new Point(0, 0), timelineTools).Y, 0, timelineTools.ViewportHeight);
-                Assert.InRange(caption.TranslatePoint(new Point(0, caption.ActualHeight), timelineTools).Y, 0, timelineTools.ViewportHeight);
+                Assert.InRange(caption.TranslatePoint(new Point(0, 0), timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
+                Assert.InRange(caption.TranslatePoint(new Point(0, caption.ActualHeight), timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
             }
             foreach (FrameworkElement strip in Descendants(editor.TimelineForTest).OfType<TimelineRenderSurface>())
             {
-                Assert.InRange(strip.TranslatePoint(new Point(0, 0), timelineTools).Y, 0, timelineTools.ViewportHeight);
-                Assert.InRange(strip.TranslatePoint(new Point(0, strip.ActualHeight), timelineTools).Y, 0, timelineTools.ViewportHeight);
+                Assert.InRange(strip.TranslatePoint(new Point(0, 0), timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
+                Assert.InRange(strip.TranslatePoint(new Point(0, strip.ActualHeight), timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
             }
             foreach (string label in new[] { "사각형", "원", "이미지" })
             {
@@ -148,7 +151,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             Button shape = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, "사각형"));
             shape.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             editor.UpdateLayout();
-            Assert.InRange(layerTracks.TranslatePoint(layerTracks.SelectedBarBounds.BottomRight, timelineTools).Y, 0, timelineTools.ViewportHeight);
+            Assert.InRange(layerTracks.TranslatePoint(layerTracks.SelectedBarBounds.BottomRight, timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
             var canvas = Descendants(layout).OfType<VideoLayerCanvas>().Single();
             Assert.NotNull(canvas.SelectedId);
             var documentField = typeof(VideoEditorWindow).GetField("_editDocument", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;

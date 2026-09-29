@@ -16,6 +16,7 @@ using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Imaging;
 using MyCapture.Tests;
 using Xunit;
 
@@ -23,6 +24,126 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureLibraryFirstTests
 {
+    [Fact]
+    public void TitleEnabled_EscapeKeepsTitledLibraryResultAndUntouchedOriginal() => StaTestHost.Run(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Settings.Export.ShowSourceWindowTitle = true;
+        Func<bool>? previous = AnnotationEditorPreferences.ReadShowSourceWindowTitle;
+        AnnotationEditorPreferences.ReadShowSourceWindowTitle = () => true;
+        using var coordinator = new CaptureOverlayCoordinator(
+            new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
+            new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
+            NullLogger<CaptureOverlayCoordinator>.Instance)
+        {
+            SelectionPersistRequested = selection => fixture.Select(new CaptureSelectionCompletedEventArgs(
+                selection.Frame, selection.BitmapRegion, selection.SelectedBitmap, selection.SourceTitle,
+                recordForRepeat: false, copyToClipboardImmediately: true)),
+            RequiresCaptureExclusion = () => true,
+        };
+        AnnotationEditorWindow? editor = null;
+        coordinator.ApplyCaptureExclusion = window =>
+        {
+            editor = Assert.IsType<AnnotationEditorWindow>(window);
+            CaptureRecord record = Assert.Single(fixture.Queue.Records);
+            Assert.Equal(Pixels(fixture.Frame.Bitmap), Pixels(ImageCodec.TryLoad(
+                fixture.Queue.GetFilePath(record, CaptureFileNames.Original))!));
+            Assert.NotEqual(Pixels(fixture.Frame.Bitmap), Pixels(ImageCodec.TryLoad(
+                fixture.Queue.GetFilePath(record, CaptureFileNames.Rendered))!));
+            Assert.NotEmpty(fixture.CopiedImages);
+            Assert.Equal(Pixels(fixture.CopiedImages[^1]), Pixels(ImageCodec.TryLoad(
+                fixture.Queue.GetFilePath(record, CaptureFileNames.Rendered))!));
+            window.WindowStartupLocation = WindowStartupLocation.Manual;
+            window.Left = -10000;
+            window.Top = -10000;
+            window.ShowActivated = false;
+            return true;
+        };
+        try
+        {
+            Assert.True(coordinator.StartWithSelection(fixture.Frame, fixture.Region, "매출.xlsx - Excel"));
+            PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+            Assert.NotNull(editor);
+            Assert.True(editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
+            var reloaded = new CaptureQueue(fixture.Paths, fixture.Settings.Queue, NullLogger<CaptureQueue>.Instance);
+            reloaded.Load();
+            CaptureRecord saved = Assert.Single(reloaded.Records);
+            Assert.NotEqual(Pixels(fixture.Frame.Bitmap), Pixels(ImageCodec.TryLoad(
+                reloaded.GetFilePath(saved, CaptureFileNames.Rendered))!));
+            Assert.False(saved.HasAnnotations);
+        }
+        finally
+        {
+            coordinator.Cancel();
+            AnnotationEditorPreferences.ReadShowSourceWindowTitle = previous;
+        }
+    });
+
+    [Theory]
+    [InlineData((int)EditorCommitAction.Done)]
+    [InlineData((int)EditorCommitAction.CopyToClipboard)]
+    [InlineData((int)EditorCommitAction.QuickSave)]
+    [InlineData((int)EditorCommitAction.SaveAs)]
+    public void TitleEnabled_AllCommitActionsSharePixels_AndReeditCanRemoveTitle(int actionValue) => StaTestHost.Run(() =>
+    {
+        var action = (EditorCommitAction)actionValue;
+        using var fixture = new Fixture();
+        fixture.Settings.Export.ShowSourceWindowTitle = true;
+        fixture.Wait(fixture.Select(fixture.Selection));
+        CaptureRecord record = Assert.Single(fixture.Queue.Records);
+        var document = AnnotationDocument.CreateFor(64, 48);
+        string chosen = Path.Combine(fixture.Paths.DataRoot, "title-save-as.png");
+        fixture.CommitService.SaveAsPrompt = _ => chosen;
+        var result = fixture.Result(document, action);
+        Assert.True(fixture.Wait(fixture.Commit(result)));
+        byte[] expected = Pixels(ImageCodec.TryLoad(fixture.Queue.GetFilePath(record, CaptureFileNames.Rendered))!);
+        Assert.Equal(expected, Pixels(fixture.CopiedImages[^1]));
+        if (action == EditorCommitAction.SaveAs) Assert.Equal(expected, Pixels(ImageCodec.TryLoad(chosen)!));
+        if (action == EditorCommitAction.QuickSave)
+            Assert.Equal(expected, Pixels(ImageCodec.TryLoad(Assert.Single(Directory.GetFiles(fixture.Paths.QuickSaveRoot, "*.png")))!));
+
+        // Another save starts from the same original and layers, so the title is never doubled.
+        Assert.True(fixture.Wait(fixture.Commit(fixture.Result(document, EditorCommitAction.Done))));
+        Assert.Equal(expected, Pixels(fixture.CopiedImages[^1]));
+        Assert.Empty(AnnotationDocument.TryFromJson(File.ReadAllText(
+            fixture.Queue.GetFilePath(record, CaptureFileNames.Layers)))!.Items);
+        fixture.Settings.Export.ShowSourceWindowTitle = false;
+        Assert.True(fixture.Wait(fixture.Commit(fixture.Result(document, EditorCommitAction.Done))));
+        Assert.Equal(Pixels(fixture.Frame.Bitmap), Pixels(fixture.CopiedImages[^1]));
+        Assert.Equal(Pixels(fixture.Frame.Bitmap), Pixels(ImageCodec.TryLoad(
+            fixture.Queue.GetFilePath(record, CaptureFileNames.Original))!));
+        Assert.Single(fixture.Queue.Records);
+    });
+
+    [Fact]
+    public void TitledSaveAs_CancelAndReducedExportRetryKeepTheExistingRecord() => StaTestHost.Run(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Settings.Export.ShowSourceWindowTitle = true;
+        fixture.Wait(fixture.Select(fixture.Selection));
+        CaptureRecord record = Assert.Single(fixture.Queue.Records);
+        long revision = record.ContentRevision;
+        fixture.CommitService.SaveAsPrompt = _ => null;
+        Assert.False(fixture.Wait(fixture.Commit(fixture.Result(AnnotationDocument.CreateFor(64, 48), EditorCommitAction.SaveAs))));
+        Assert.Equal(revision, record.ContentRevision);
+        BitmapSource? reducedInput = null;
+        fixture.CommitService.ReducedExportPrompt = (image, _) => { reducedInput = image; return true; };
+        var reduced = new AnnotationEditingResult(fixture.Frame, fixture.Region, fixture.Frame.Bitmap,
+            AnnotationDocument.CreateFor(64, 48), EditorCommitAction.SaveAs,
+            new Dictionary<string, BitmapSource>(), new Dictionary<string, string>(), reduceExport: true);
+        Assert.True(fixture.Wait(fixture.Commit(reduced)));
+        Assert.Equal(Pixels(reducedInput!), Pixels(fixture.CopiedImages[^1]));
+        Assert.Equal(record.Id, Assert.Single(fixture.Queue.Records).Id);
+    });
+
+    private static byte[] Pixels(BitmapSource bitmap)
+    {
+        var converted = new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+        byte[] pixels = new byte[converted.PixelWidth * converted.PixelHeight * 4];
+        converted.CopyPixels(pixels, converted.PixelWidth * 4, 0);
+        return pixels;
+    }
+
     [Fact]
     public void Selection_IsDurableBeforeEditorOpens_AndEscapeKeepsLibraryOriginal() => StaTestHost.Run(() =>
     {
@@ -239,6 +360,8 @@ public sealed class CaptureLibraryFirstTests
         internal CaptureQueue Queue { get; }
         internal CapturePersistenceService Persistence { get; }
         internal CaptureCommitService CommitService { get; }
+        internal AppSettings Settings { get; } = new();
+        internal List<BitmapSource> CopiedImages { get; } = [];
         internal FrozenFrame Frame { get; }
         internal RectD Region { get; } = new(0, 0, 64, 48);
         internal CaptureSelectionCompletedEventArgs Selection => new(Frame, Region, Frame.Bitmap,
@@ -251,13 +374,13 @@ public sealed class CaptureLibraryFirstTests
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
             Paths = AppPaths.CreateForRoot(_root);
-            var settings = new AppSettings();
+            AppSettings settings = Settings;
             if (queueSettings is not null) settings.Queue = queueSettings;
             Queue = new CaptureQueue(Paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
             Persistence = new CapturePersistenceService(Queue, Paths, () => settings.Queue,
                 NullLogger<CapturePersistenceService>.Instance);
             CommitService = new CaptureCommitService(Persistence, () => settings, () => Paths,
-                NullLogger<CaptureCommitService>.Instance, _ => Task.FromResult(true));
+                NullLogger<CaptureCommitService>.Instance, image => { CopiedImages.Add(image); return Task.FromResult(true); });
             Set("_queue", Queue);
             Set("_persistence", Persistence);
             Set("_commit", CommitService);

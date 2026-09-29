@@ -27,7 +27,8 @@ internal class AnnotationEditorWindow : Window
         string? title = null,
         AnnotationDocument? initialDocument = null,
         IReadOnlyDictionary<string, BitmapSource>? initialAssets = null,
-        IPrivacyRedactionService? privacyRedactionService = null)
+        IPrivacyRedactionService? privacyRedactionService = null,
+        string? sourceWindowTitle = null)
     {
         ArgumentNullException.ThrowIfNull(sourceFrame);
         ArgumentNullException.ThrowIfNull(selectedBitmap);
@@ -61,7 +62,8 @@ internal class AnnotationEditorWindow : Window
             selectedBitmap,
             initialDocument,
             initialAssets,
-            privacyRedactionService);
+            privacyRedactionService,
+            sourceWindowTitle);
         _editor.EditingCompleted += OnEditingCompleted;
         _editor.EditingCancelled += OnEditingCancelled;
         Content = _editor;

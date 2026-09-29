@@ -164,6 +164,9 @@ public sealed class ExportSettings
     /// Preserve the alpha channel when the annotated result has transparency.
     /// </summary>
     public bool PreserveTransparency { get; set; } = true;
+
+    /// <summary>Draw the captured document/window title at the top right of image results.</summary>
+    public bool ShowSourceWindowTitle { get; set; }
 }
 
 public sealed class CaptureSettings
