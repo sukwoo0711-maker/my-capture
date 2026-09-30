@@ -131,8 +131,17 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             throw;
         }
 
-        bool settle = Environment.TickCount64 - _lastPresentationDismissedTick < PresentationSettleMs;
+        bool settle = NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick);
         LastPreparationForTest = AcquireAndShowAsync(preparation, includeCursor, settle);
+    }
+
+    internal static bool NeedsPresentationSettle(long currentTick, long lastDismissedTick)
+    {
+        // The never-dismissed sentinel must not participate in elapsed-time arithmetic:
+        // subtracting long.MinValue wraps negative and used to delay every first capture.
+        if (lastDismissedTick == long.MinValue) return false;
+        long elapsed = unchecked(currentTick - lastDismissedTick);
+        return elapsed >= 0 && elapsed < PresentationSettleMs;
     }
 
     /// <summary>Records that an app-owned topmost surface has just left the screen, so the

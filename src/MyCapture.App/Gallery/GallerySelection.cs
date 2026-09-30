@@ -4,6 +4,7 @@ namespace MyCapture.App.Gallery;
 public sealed class GallerySelection
 {
     private readonly HashSet<Guid> _selected = [];
+    private readonly HashSet<Guid> _visibleIds = [];
     private Guid? _anchor;
     private IReadOnlyList<Guid> _visible = [];
     public IReadOnlyList<Guid> SelectedIds => _visible.Where(_selected.Contains).ToArray();
@@ -13,8 +14,10 @@ public sealed class GallerySelection
     public void SetVisible(IEnumerable<Guid> ids)
     {
         _visible = ids.ToArray();
-        _selected.IntersectWith(_visible);
-        if (_anchor is Guid anchor && !_visible.Contains(anchor)) _anchor = null;
+        _visibleIds.Clear();
+        _visibleIds.UnionWith(_visible);
+        _selected.IntersectWith(_visibleIds);
+        if (_anchor is Guid anchor && !_visibleIds.Contains(anchor)) _anchor = null;
     }
 
     public void Select(Guid id, bool control = false, bool shift = false)
@@ -35,7 +38,7 @@ public sealed class GallerySelection
 
     public void SelectGroup(IEnumerable<Guid> ids, bool control, bool toggle = false)
     {
-        Guid[] group = ids.Where(_visible.Contains).Distinct().ToArray();
+        Guid[] group = ids.Where(_visibleIds.Contains).Distinct().ToArray();
         if (group.Length == 0) return;
         bool remove = (control || toggle) && group.All(_selected.Contains);
         if (!control && !toggle) _selected.Clear();

@@ -12,7 +12,8 @@ internal static class CapturePageContext
         Func<IReadOnlyList<WindowCandidate>>? refreshCandidates = null)
     {
         WindowCandidate[] original = candidates.ToArray();
-        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> before = await ReadSafeAsync(read, original).ConfigureAwait(false);
+        WindowCandidate[] probeCandidates = GetUrlCandidates(original);
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> before = await ReadSafeAsync(read, probeCandidates).ConfigureAwait(false);
         (FrozenFrame frame, bool stableWindows) = await Task.Run(() =>
         {
             // UIA can take long enough for a window to move or another surface to rise.
@@ -25,14 +26,41 @@ internal static class CapturePageContext
                 && SameOrderedWindows(original, immediatelyAfter);
             return (acquired, stable);
         }).ConfigureAwait(false);
-        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> after = before.Count == 0 || !stableWindows
+        // Only a document seen before the pixels can pass StableUrl. Keep original
+        // z-order here, while the topology checks above still inspect every window.
+        WindowCandidate[] afterCandidates = stableWindows
+            ? probeCandidates.Where(candidate => before.ContainsKey(candidate.Handle)).ToArray()
+            : [];
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> after = afterCandidates.Length == 0
             ? new Dictionary<IntPtr, BrowserDocumentSnapshot>()
-            : await ReadSafeAsync(read, original).ConfigureAwait(false);
+            : await ReadSafeAsync(read, afterCandidates).ConfigureAwait(false);
         WindowCandidate[] frozen = original.Select(candidate => candidate with
         {
             SourcePageUrl = stableWindows ? StableUrl(candidate, before, after) : string.Empty
         }).ToArray();
         return (frame, frozen);
+    }
+
+    private static WindowCandidate[] GetUrlCandidates(WindowCandidate[] candidates)
+    {
+        var exposed = new List<WindowCandidate>(candidates.Length);
+        for (int index = 0; index < candidates.Length; index++)
+        {
+            var bounds = candidates[index].ScreenBounds;
+            bool covered = false;
+            for (int earlier = 0; earlier < index && !covered; earlier++)
+            {
+                var front = candidates[earlier].ScreenBounds;
+                // URL attribution chooses the first window containing the selection
+                // centre. A fully contained window can never win that lookup. Do not
+                // merge occluders or round away even a fractional exposed edge.
+                covered = !bounds.IsEmpty && !front.IsEmpty
+                    && front.Left <= bounds.Left && front.Top <= bounds.Top
+                    && front.Right >= bounds.Right && front.Bottom >= bounds.Bottom;
+            }
+            if (!covered) exposed.Add(candidates[index]);
+        }
+        return exposed.ToArray();
     }
 
     private static WindowCandidate[]? ReadCandidatesSafe(Func<IReadOnlyList<WindowCandidate>>? refresh,

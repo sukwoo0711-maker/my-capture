@@ -63,7 +63,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private readonly DrawingVisual _desktopVisual = new();
     private readonly DrawingVisual _dimmerVisual = new();
     private readonly DrawingVisual _revealVisual = new();
-    private readonly DrawingVisual _guideVisual = new();
+    private readonly DrawingVisual _horizontalGuideVisual = new();
+    private readonly DrawingVisual _verticalGuideVisual = new();
+    private readonly RectangleGeometry _horizontalGuideClip = new();
+    private readonly RectangleGeometry _verticalGuideClip = new();
     private readonly DrawingVisual _selectionVisual = new();
     private readonly DrawingVisual _instructionVisual = new();
     private readonly DrawingVisual _anchorVisual = new();
@@ -75,6 +78,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private RectD? _drawnSelection;
     private PointD? _drawnAnchor;
     private bool _drawnPrecision;
+    private PointD? _drawnPointer;
+    private PointD? _drawnMagnifierPointer;
+    private bool _drawnMagnifierMouseOver;
+    private bool _guideGeometryReady;
+    private bool _guidesVisible;
     private FormattedText? _instructionText;
     private FormattedText? _anchorText;
     private FormattedText? _precisionText;
@@ -140,6 +148,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     internal PointD UpdatePointer(bool precision, bool active)
     {
         if (_ended) return ClampEdgePoint(_cursorPixel);
+        bool wasPrecision = _precisionPointer.IsPrecision;
         PointD actual = ReadCursor();
         PointD target = _precisionPointer.Update(actual,
             active && precision, _screenBounds);
@@ -149,9 +158,13 @@ internal sealed class CaptureOverlayView : FrameworkElement
             target = actual;
         }
         PointD local = target.Offset(-_screenBounds.Left, -_screenBounds.Top);
-        _cursorPixel = ClampSamplePoint(local);
+        PointD cursor = ClampSamplePoint(local);
+        bool changed = _staticDirty || !_pointerInitialized || _cursorPixel != cursor || _drawnPointer != cursor
+            || wasPrecision != _precisionPointer.IsPrecision || _drawnPrecision != _precisionPointer.IsPrecision
+            || _drawnMagnifierMouseOver != IsMouseOver;
+        _cursorPixel = cursor;
         _pointerInitialized = true;
-        QueueFeedback();
+        if (changed) QueueFeedback();
         return ClampEdgePoint(local);
     }
 
@@ -174,10 +187,13 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _showSelectionGrid = showSelectionGrid;
         _visuals = new VisualCollection(this)
         {
-            _desktopVisual, _dimmerVisual, _revealVisual, _guideVisual, _selectionVisual,
+            _desktopVisual, _dimmerVisual, _revealVisual, _horizontalGuideVisual, _verticalGuideVisual, _selectionVisual,
             _instructionVisual, _anchorVisual, _pointerVisual, _magnifierVisual,
         };
         _feedbackScheduler = new CompositionFrameScheduler(Dispatcher, RenderLayers);
+        _horizontalGuideVisual.Clip = _horizontalGuideClip;
+        _verticalGuideVisual.Clip = _verticalGuideClip;
+        _horizontalGuideVisual.Opacity = _verticalGuideVisual.Opacity = 0;
         Unloaded += (_, _) => _feedbackScheduler.CancelPending();
 
         Focusable = true;
@@ -282,17 +298,33 @@ internal sealed class CaptureOverlayView : FrameworkElement
             using DrawingContext dc = _instructionVisual.RenderOpen();
             DrawInstructions(dc);
         }
-        PointD? anchor = _interaction == InteractionMode.Create ? _dragAnchor : null;
+        PointD? anchor = _interaction == InteractionMode.Create && _pointerInitialized && !_ended ? _dragAnchor : null;
         if (rebuild || _drawnAnchor != anchor)
         {
             _drawnAnchor = anchor;
             using DrawingContext dc = _anchorVisual.RenderOpen();
             if (anchor.HasValue) DrawPointerFeedback(dc, anchor: true);
         }
-        using (DrawingContext dc = _guideVisual.RenderOpen()) DrawStartingGuides(dc);
-        using (DrawingContext dc = _pointerVisual.RenderOpen()) DrawPointerFeedback(dc, anchor: false);
-        if (_showMagnifier && _pointerInitialized) UpdateMagnifier();
-        using (DrawingContext dc = _magnifierVisual.RenderOpen()) DrawMagnifier(dc);
+        UpdateStartingGuides(rebuild);
+        PointD? pointer = _pointerInitialized && !_ended ? _cursorPixel : null;
+        if (rebuild || _drawnPointer != pointer)
+        {
+            _drawnPointer = pointer;
+            using DrawingContext dc = _pointerVisual.RenderOpen();
+            DrawPointerFeedback(dc, anchor: false);
+        }
+        bool mouseOver = IsMouseOver;
+        if (rebuild || _drawnMagnifierPointer != pointer || _drawnMagnifierMouseOver != mouseOver)
+        {
+            _drawnMagnifierPointer = pointer;
+            _drawnMagnifierMouseOver = mouseOver;
+            if (_showMagnifier)
+            {
+                if (pointer.HasValue) UpdateMagnifier();
+                using DrawingContext dc = _magnifierVisual.RenderOpen();
+                if (pointer.HasValue) DrawMagnifier(dc);
+            }
+        }
     }
 
     private void DrawPointerFeedback(DrawingContext dc, bool anchor)
@@ -333,19 +365,49 @@ internal sealed class CaptureOverlayView : FrameworkElement
         DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect);
     }
 
-    private void DrawStartingGuides(DrawingContext dc)
+    private void UpdateStartingGuides(bool rebuild)
     {
-        // Help locate the first corner before a drag. These cursor-following guides live
-        // below the pointer and instructions, never in the frozen source used by Crop.
-        if (!_showSelectionGrid || !_pointerInitialized || _ended
-            || _interaction != InteractionMode.None || _selection.HasValue) return;
+        if (rebuild) _guideGeometryReady = false;
+        bool visible = _showSelectionGrid && _pointerInitialized && !_ended
+            && _interaction == InteractionMode.None && !_selection.HasValue;
+        if (!visible)
+        {
+            if (_guidesVisible)
+                _horizontalGuideVisual.Opacity = _verticalGuideVisual.Opacity = 0;
+            _guidesVisible = false;
+            return;
+        }
+        if (rebuild || !_guideGeometryReady)
+        {
+            // Retain two narrow strips rather than redrawing one viewport-sized visual.
+            // Their order preserves the original horizontal-then-vertical intersection.
+            using (DrawingContext dc = _horizontalGuideVisual.RenderOpen())
+                DrawGuide(dc, new Point(0, 0), new Point(ActualWidth, 0));
+            using (DrawingContext dc = _verticalGuideVisual.RenderOpen())
+                DrawGuide(dc, new Point(0, 0), new Point(0, ActualHeight));
+            _guideGeometryReady = true;
+        }
         Point p = ToDipPoint(_cursorPixel);
-        dc.PushClip(new RectangleGeometry(new Rect(RenderSize)));
-        DrawGuide(new Point(0, p.Y), new Point(ActualWidth, p.Y));
-        DrawGuide(new Point(p.X, 0), new Point(p.X, ActualHeight));
-        dc.Pop();
+        _horizontalGuideVisual.Offset = new Vector(0, p.Y);
+        _verticalGuideVisual.Offset = new Vector(p.X, 0);
+        double halfStroke = _guideShadowPen.Thickness / 2;
+        // Leave one physical pixel around the stroke's antialias fringe. Clipping at
+        // the stroke edge itself would multiply its partial coverage a second time.
+        double horizontalExtent = halfStroke + DipPerPixelY;
+        double verticalExtent = halfStroke + DipPerPixelX;
+        double top = Math.Max(-horizontalExtent, -p.Y);
+        double bottom = Math.Min(horizontalExtent, ActualHeight - p.Y);
+        double left = Math.Max(-verticalExtent, -p.X);
+        double right = Math.Min(verticalExtent, ActualWidth - p.X);
+        Rect horizontal = new(0, top, ActualWidth, Math.Max(0, bottom - top));
+        Rect vertical = new(left, 0, Math.Max(0, right - left), ActualHeight);
+        if (_horizontalGuideClip.Rect != horizontal) _horizontalGuideClip.Rect = horizontal;
+        if (_verticalGuideClip.Rect != vertical) _verticalGuideClip.Rect = vertical;
+        if (!_guidesVisible)
+            _horizontalGuideVisual.Opacity = _verticalGuideVisual.Opacity = 1;
+        _guidesVisible = true;
 
-        void DrawGuide(Point from, Point to)
+        void DrawGuide(DrawingContext dc, Point from, Point to)
         {
             dc.DrawLine(_guideShadowPen, from, to);
             dc.DrawLine(_guideLinePen, from, to);
@@ -458,6 +520,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         base.OnMouseMove(e);
         if (_ended) return;
         PointD rawPixel = UpdatePointer();
+        RectD? previous = _selection;
 
         if (_interaction == InteractionMode.Create)
         {
@@ -477,7 +540,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             }
         }
 
-        QueueFeedback();
+        if (previous != _selection) QueueFeedback();
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -589,6 +652,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _lastSample = null;
             QueueFeedback();
         }
+    }
+
+    protected override void OnMouseEnter(MouseEventArgs e)
+    {
+        base.OnMouseEnter(e);
+        if (!_ended) QueueFeedback();
     }
 
     private void NudgeSelection(Key key, ModifierKeys modifiers)

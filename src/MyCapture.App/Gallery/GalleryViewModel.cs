@@ -220,11 +220,14 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
         }
 
         // Drop cached tiles for records that no longer exist so decoded bitmaps are released.
+        HashSet<Guid>? retainedIds = null;
         foreach (Guid stale in _tileCache.Keys.Where(id => !seenTiles.Contains(id)).ToList())
         {
             // Keep a tile whose record still lives in the queue but is filtered out by search,
-            // so restoring the search term does not re-decode it.
-            if (_controller.Find(stale) is null)
+            // so restoring the search term does not re-decode it. Index membership once rather
+            // than scanning the full queue for every hidden tile.
+            retainedIds ??= _controller.Records.Select(record => record.Id).ToHashSet();
+            if (!retainedIds.Contains(stale))
             {
                 _tileCache[stale].SetThumbnailLoadingEnabled(false);
                 _tileCache.Remove(stale);

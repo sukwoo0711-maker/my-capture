@@ -217,19 +217,36 @@ public sealed class BrowserPageUrlService
         private readonly HashSet<object> _owned = new(ReferenceEqualityComparer.Instance);
         private readonly IUiAutomation _automation;
         private readonly IUiAutomationTreeWalker _walker;
+        private readonly IUiAutomationCacheRequest _cacheRequest;
 
         internal NativeAutomation()
         {
-            Type type = Type.GetTypeFromCLSID(new Guid("FF48DBA4-60EF-4201-AA87-54103EEF594E"), true)!;
-            _automation = Own((IUiAutomation)Activator.CreateInstance(type)!);
-            // Chromium can mark its root web document IsControlElement=false. The
-            // control view then removes it while retaining editable descendants.
-            _walker = Own(_automation.GetRawViewWalker());
+            try
+            {
+                Type type = Type.GetTypeFromCLSID(new Guid("FF48DBA4-60EF-4201-AA87-54103EEF594E"), true)!;
+                _automation = Own((IUiAutomation)Activator.CreateInstance(type)!);
+                // Chromium can mark its root web document IsControlElement=false. The
+                // control view then removes it while retaining editable descendants.
+                _walker = Own(_automation.GetRawViewWalker());
+                // Each probe owns fresh element-only caches. Batch only the two fields read
+                // for every node; document semantics, bounds, URLs and identity stay live.
+                _cacheRequest = Own(_automation.CreateCacheRequest());
+                _cacheRequest.SetTreeScope(1); // TreeScope.Element: never prefetch descendants.
+                _cacheRequest.SetTreeFilter(Own(_automation.GetRawViewCondition()));
+                _cacheRequest.SetAutomationElementMode(1); // Full: current document queries remain available.
+                _cacheRequest.AddProperty(30022); // IsOffscreen
+                _cacheRequest.AddProperty(30003); // ControlType
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
         }
 
         private T Own<T>(T value) where T : class { _owned.Add(value); return value; }
         internal IBrowserDocumentNode FromHandle(IntPtr handle) =>
-            new NativeNode(this, Own(_automation.ElementFromHandle(handle)));
+            new NativeNode(this, Own(_automation.ElementFromHandleBuildCache(handle, _cacheRequest)));
         private IBrowserDocumentNode? Wrap(IUiAutomationElement? element) =>
             element is null ? null : new NativeNode(this, Own(element));
 
@@ -247,8 +264,8 @@ public sealed class BrowserPageUrlService
             public BrowserDocumentNodeInfo ReadInfo()
             {
                 // Unsupported visibility is not evidence that this is the active page.
-                bool offscreen = element.GetCurrentPropertyValue(30022) is not false;
-                object controlType = element.GetCurrentPropertyValue(30003);
+                bool offscreen = element.GetCachedPropertyValue(30022) is not false;
+                object controlType = element.GetCachedPropertyValue(30003);
                 // Raw view includes layout-only WebView document wrappers. Their semantic
                 // flags are both false; descend through those containers to the page.
                 bool document = controlType is int type && type == 50030
@@ -264,8 +281,10 @@ public sealed class BrowserPageUrlService
                 element.GetCurrentPropertyValue(30045) as string,
                 element.GetCurrentPropertyValue(30093) as string);
             public string ReadIdentity() => string.Join(',', element.GetRuntimeId());
-            public IBrowserDocumentNode? FirstChild() => owner.Wrap(owner._walker.GetFirstChildElement(element));
-            public IBrowserDocumentNode? NextSibling() => owner.Wrap(owner._walker.GetNextSiblingElement(element));
+            public IBrowserDocumentNode? FirstChild() =>
+                owner.Wrap(owner._walker.GetFirstChildElementBuildCache(element, owner._cacheRequest));
+            public IBrowserDocumentNode? NextSibling() =>
+                owner.Wrap(owner._walker.GetNextSiblingElementBuildCache(element, owner._cacheRequest));
         }
     }
 
@@ -281,13 +300,17 @@ public sealed class BrowserPageUrlService
         void ElementFromPoint();
         void GetFocusedElement();
         void GetRootElementBuildCache();
-        void ElementFromHandleBuildCache();
+        IUiAutomationElement ElementFromHandleBuildCache(IntPtr hwnd, IUiAutomationCacheRequest cacheRequest);
         void ElementFromPointBuildCache();
         void GetFocusedElementBuildCache();
         void CreateTreeWalker();
         IUiAutomationTreeWalker GetControlViewWalker();
         void GetContentViewWalker();
         IUiAutomationTreeWalker GetRawViewWalker();
+        IUiAutomationCondition GetRawViewCondition();
+        void GetControlViewCondition();
+        void GetContentViewCondition();
+        IUiAutomationCacheRequest CreateCacheRequest();
     }
 
     [ComImport, Guid("D22108AA-8AC5-49A5-837B-37BBB3D7591E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -303,6 +326,9 @@ public sealed class BrowserPageUrlService
         void BuildUpdatedCache();
         [return: MarshalAs(UnmanagedType.Struct)]
         object GetCurrentPropertyValue(int propertyId);
+        void GetCurrentPropertyValueEx();
+        [return: MarshalAs(UnmanagedType.Struct)]
+        object GetCachedPropertyValue(int propertyId);
     }
 
     [ComImport, Guid("4042C624-389C-4AFC-A630-9DF854A541FC"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -312,7 +338,30 @@ public sealed class BrowserPageUrlService
         IUiAutomationElement? GetFirstChildElement(IUiAutomationElement element);
         void GetLastChildElement();
         IUiAutomationElement? GetNextSiblingElement(IUiAutomationElement element);
+        void GetPreviousSiblingElement();
+        void NormalizeElement();
+        void GetParentElementBuildCache();
+        IUiAutomationElement? GetFirstChildElementBuildCache(IUiAutomationElement element, IUiAutomationCacheRequest cacheRequest);
+        void GetLastChildElementBuildCache();
+        IUiAutomationElement? GetNextSiblingElementBuildCache(IUiAutomationElement element, IUiAutomationCacheRequest cacheRequest);
     }
+
+    [ComImport, Guid("B32A92B5-BC25-4078-9C08-D7EE95C48E03"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IUiAutomationCacheRequest
+    {
+        void AddProperty(int propertyId);
+        void AddPattern();
+        void Clone();
+        void GetTreeScope();
+        void SetTreeScope(int scope);
+        void GetTreeFilter();
+        void SetTreeFilter(IUiAutomationCondition filter);
+        void GetAutomationElementMode();
+        void SetAutomationElementMode(int mode);
+    }
+
+    [ComImport, Guid("352FFBA8-0973-437C-A61F-F64CAFD81DF9"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IUiAutomationCondition { }
 }
 
 internal readonly record struct BrowserDocumentNodeInfo(bool IsDocument, bool IsOffscreen, RectD Bounds);
