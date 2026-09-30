@@ -6,6 +6,57 @@ namespace MyCapture.App.Tests;
 public sealed class GallerySelectionTests
 {
     [Fact]
+    public void GroupSelection_IgnoresHiddenAndDuplicateIds_PreservingInputAnchorAndDisplayOrder()
+    {
+        Guid[] ids = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToArray();
+        Guid hidden = Guid.NewGuid();
+        var selection = new GallerySelection();
+        selection.SetVisible(ids);
+        selection.SelectGroup([hidden, ids[5], ids[2], ids[5], ids[1]], control: false);
+        Assert.Equal(new[] { ids[1], ids[2], ids[5] }, selection.SelectedIds);
+        Assert.Equal(ids[5], selection.Anchor);
+
+        selection.SelectGroup([hidden, hidden], control: false);
+        Assert.Equal(new[] { ids[1], ids[2], ids[5] }, selection.SelectedIds);
+        Assert.Equal(ids[5], selection.Anchor);
+        selection.Select(ids[7], shift: true);
+        Assert.Equal(ids.Skip(5), selection.SelectedIds);
+        Assert.Equal(ids[5], selection.Anchor);
+
+        selection.SelectGroup([ids[7], hidden, ids[5], ids[7]], control: false, toggle: true);
+        Assert.Equal(new[] { ids[6] }, selection.SelectedIds);
+        Assert.Equal(ids[7], selection.Anchor);
+        selection.SelectGroup([ids[5], hidden, ids[7]], control: true);
+        Assert.Equal(ids.Skip(5), selection.SelectedIds);
+    }
+
+    [Fact]
+    public void VisibilityRefresh_ReplacesMembershipAndKeepsOnlyVisibleSelectionAndAnchor()
+    {
+        Guid[] ids = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()).ToArray();
+        var selection = new GallerySelection();
+        selection.SetVisible(ids);
+        selection.SelectGroup([ids[0], ids[2]], control: false);
+        selection.SetVisible([ids[3], ids[2], ids[1]]);
+        Assert.Equal(new[] { ids[2] }, selection.SelectedIds);
+        Assert.Null(selection.Anchor);
+
+        selection.SelectGroup([ids[0], ids[3], ids[2]], control: false);
+        Assert.Equal(new[] { ids[3], ids[2] }, selection.SelectedIds);
+        Assert.Equal(ids[3], selection.Anchor);
+        selection.SetVisible([ids[2], ids[3]]);
+        Assert.Equal(new[] { ids[2], ids[3] }, selection.SelectedIds);
+        Assert.Equal(ids[3], selection.Anchor);
+        selection.Select(ids[2], shift: true);
+        Assert.Equal(new[] { ids[2], ids[3] }, selection.SelectedIds);
+
+        selection.SetVisible([]);
+        selection.SelectGroup(ids, control: false);
+        Assert.Empty(selection.SelectedIds);
+        Assert.Null(selection.Anchor);
+    }
+
+    [Fact]
     public void DayHeader_TogglesOnlyItsGroup_AndPartialSelectionBecomesFull()
     {
         Guid[] ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToArray();
