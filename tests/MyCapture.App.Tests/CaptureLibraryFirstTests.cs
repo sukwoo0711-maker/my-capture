@@ -76,7 +76,8 @@ public sealed class CaptureLibraryFirstTests
         string thumbPath = fixture.Queue.GetFilePath(pending, CaptureFileNames.Thumbnail);
         string marker = fixture.Queue.GetFilePath(pending, CaptureFileNames.OriginalPending);
         byte[] originalBytes = File.ReadAllBytes(originalPath);
-        byte[] expected = Pixels(ImageCodec.TryLoad(renderedPath)!);
+        BitmapSource initialRendered = Assert.IsAssignableFrom<BitmapSource>(ImageCodec.TryLoad(renderedPath));
+        byte[] expected = Pixels(initialRendered);
         byte[] expectedThumbnail = Pixels(ImageCodec.TryLoad(thumbPath)!);
         byte[]? validRenderedBytes = null;
         CaptureRecord journal = JsonSerializer.Deserialize<CaptureRecord>(File.ReadAllText(marker))!;
@@ -124,6 +125,11 @@ public sealed class CaptureLibraryFirstTests
         if (renderState.StartsWith("legacy-", StringComparison.Ordinal)) Assert.Null(recovered.InitialRenderShowsSourceWindowTitle);
         else Assert.Equal(showTitle, recovered.InitialRenderShowsSourceWindowTitle);
         if (validRenderedBytes is not null) Assert.Equal(validRenderedBytes, File.ReadAllBytes(renderedPath));
+        using (FileStream currentFile = File.OpenRead(renderedPath))
+        {
+            BitmapFrame onDisk = BitmapFrame.Create(currentFile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            Assert.Equal(expected, Pixels(onDisk));
+        }
         Assert.Equal(expected, Pixels(ImageCodec.TryLoad(renderedPath)!));
         Assert.Equal(expectedThumbnail, Pixels(ImageCodec.TryLoad(thumbPath)!));
         Assert.Equal(originalBytes, File.ReadAllBytes(originalPath));
@@ -138,6 +144,7 @@ public sealed class CaptureLibraryFirstTests
         _ = new CapturePersistenceService(nextQueue, fixture.Paths, () => fixture.Settings.Queue,
             NullLogger<CapturePersistenceService>.Instance);
         Assert.Equal(expected, Pixels(ImageCodec.TryLoad(renderedPath)!));
+        GC.KeepAlive(initialRendered); // Recovery must not mistake a live URI-cached image for the current file.
         if (validRenderedBytes is not null) Assert.Equal(validRenderedBytes, File.ReadAllBytes(renderedPath));
     });
 

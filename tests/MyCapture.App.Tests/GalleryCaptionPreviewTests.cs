@@ -65,7 +65,25 @@ public sealed class GalleryCaptionPreviewTests
             TextBlock expanded = Assert.Single(Descendants(tip).OfType<TextBlock>(), text => text.Text == LongCaption);
             Assert.Equal(TextWrapping.Wrap, expanded.TextWrapping);
             Assert.Equal(TextTrimming.None, expanded.TextTrimming);
-            Assert.True(expanded.ActualHeight > caption.ActualHeight * 2);
+            // Measure the full text with the popup's actual font. Tooltip text is
+            // smaller than the card caption, and CI may use a different Korean font
+            // fallback; a ratio against the caption does not prove wrapping.
+            var singleLine = new TextBlock
+            {
+                Text = LongCaption, TextWrapping = TextWrapping.NoWrap,
+                FontFamily = expanded.FontFamily, FontSize = expanded.FontSize,
+                FontWeight = expanded.FontWeight, FontStyle = expanded.FontStyle,
+                FontStretch = expanded.FontStretch, Language = expanded.Language,
+                FlowDirection = expanded.FlowDirection,
+            };
+            singleLine.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Assert.True(expanded.ActualHeight > singleLine.DesiredSize.Height + .5,
+                $"Full caption did not wrap: actual={expanded.RenderSize}; singleLine={singleLine.DesiredSize}; font={expanded.FontFamily}/{expanded.FontSize}");
+            Assert.True(expanded.ActualWidth < singleLine.DesiredSize.Width,
+                $"Expanded caption must wrap within the popup, not widen it to {singleLine.DesiredSize.Width}.");
+            var textViewport = Assert.Single(Descendants(tip).OfType<ScrollViewer>());
+            Assert.True(textViewport.ExtentHeight <= textViewport.ViewportHeight + .5,
+                $"This caption should be fully visible: extent={textViewport.ExtentHeight}; viewport={textViewport.ViewportHeight}");
             Assert.InRange(tip.ActualWidth, 100, 440);
             Assert.Equal(beforeSize, first.RenderSize);
             Assert.Equal(beforeSecond, second.TranslatePoint(new Point(), window));
@@ -74,17 +92,11 @@ public sealed class GalleryCaptionPreviewTests
             Drain(window);
             Assert.False(tip.IsOpen);
 
-            // Exercise the attached lifecycle through the actual WPF input pipeline.
-            // The test never synthesizes operating-system keystrokes into other apps.
-            window.Activate();
-            var tab = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), Environment.TickCount, Key.Tab)
-            {
-                RoutedEvent = Keyboard.PreviewKeyDownEvent, Source = window,
-            };
-            InputManager.Current.ProcessInput(tab);
-            Keyboard.Focus(first);
+            // Drive the framework's routed focus notifications, the production
+            // behavior's input boundary. Hosted test desktops cannot reliably grant
+            // foreground focus; no assertion depends on that OS permission.
+            RaiseFocusChange(null, first);
             Drain(window);
-            Assert.True(first.IsKeyboardFocused);
             Assert.True(tip.IsOpen);
             var escape = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), Environment.TickCount, Key.Escape)
             {
@@ -93,14 +105,23 @@ public sealed class GalleryCaptionPreviewTests
             first.RaiseEvent(escape);
             Assert.True(escape.Handled);
             Assert.False(tip.IsOpen);
-            Keyboard.Focus(second);
+            RaiseFocusChange(first, second);
             Drain(window);
             Assert.True(tip.IsOpen);
             Assert.Same(second, tip.PlacementTarget);
-            Keyboard.Focus(first);
+            first.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+            Assert.True(tip.IsOpen); // An old recycled tile cannot close another tile's hint.
+            RaiseFocusChange(second, first);
             Drain(window);
             Assert.True(tip.IsOpen);
             Assert.Same(first, tip.PlacementTarget);
+            Button actionButton = Descendants(first).OfType<Button>().First();
+            RaiseFocusChange(first, actionButton);
+            Assert.False(tip.IsOpen); // Action buttons retain their own hints.
+            Assert.NotNull(actionButton.ToolTip);
+            RaiseFocusChange(actionButton, first);
+            Drain(window);
+            Assert.True(tip.IsOpen);
             first.Visibility = Visibility.Hidden;
             Assert.False(tip.IsOpen);
             first.Visibility = Visibility.Visible;
@@ -150,6 +171,18 @@ public sealed class GalleryCaptionPreviewTests
     private static GalleryItemViewModel Tile(string title) => new(
         new CaptureRecord { Title = title, Width = 1280, Height = 720, CreatedAt = new DateTimeOffset(2026, 9, 30, 14, 25, 0, TimeSpan.Zero), IsPinned = true },
         _ => "missing-synthetic-preview.jpg", 320);
+
+    private static void RaiseFocusChange(UIElement? previous, UIElement next)
+    {
+        previous?.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, Environment.TickCount, previous, next)
+        {
+            RoutedEvent = Keyboard.LostKeyboardFocusEvent,
+        });
+        next.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, Environment.TickCount, previous, next)
+        {
+            RoutedEvent = Keyboard.GotKeyboardFocusEvent,
+        });
+    }
 
     private static void LoadProductTemplates(Window window)
     {
