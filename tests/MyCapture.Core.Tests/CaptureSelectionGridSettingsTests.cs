@@ -6,6 +6,18 @@ namespace MyCapture.Core.Tests;
 
 public sealed class CaptureSelectionGridSettingsTests
 {
+    [Theory]
+    [InlineData("""{"capture":{"showSelectionGrid":true}}""", true)]
+    [InlineData("""{"capture":{"showSelectionGrid":false}}""", false)]
+    public void CursorGuides_PreserveExistingGridPreference(string json, bool enabled)
+    {
+        using var workspace = new TempWorkspace();
+        workspace.Paths.EnsureCreated();
+        File.WriteAllText(workspace.Paths.SettingsFile, json);
+        var store = new SettingsStore(workspace.Paths, NullLogger<SettingsStore>.Instance);
+        Assert.Equal(enabled, store.Load().Capture.ShowSelectionGrid);
+    }
+
     [Fact]
     public void GridDefaultsOn_ForNewAndExistingSettingsWithoutTheNewField()
     {

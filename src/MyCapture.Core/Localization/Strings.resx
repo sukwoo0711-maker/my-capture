@@ -3160,7 +3160,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Empty.Start" xml:space="preserve"><value>나의 캡처 작업 공간</value></data>
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>일치하는 캡처가 없습니다</value></data>
   <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 편집창에서 저장을 눌러 다시 시도하세요. {0}</value></data>
-  <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>선택 영역에 격자 보조선 표시</value></data>
+  <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>드래그 전 커서 보조선 표시</value></data>
   <data name="Library.SourcePage.Label" xml:space="preserve"><value>원본 웹페이지</value></data>
   <data name="Library.SourcePage.Open" xml:space="preserve"><value>페이지 열기</value></data>
   <data name="Library.SourcePage.Copy" xml:space="preserve"><value>주소 복사</value></data>

@@ -3160,7 +3160,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Library.Empty.Start" xml:space="preserve"><value>Your capture workspace</value></data>
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>No matching captures</value></data>
   <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>Could not save to the library. Use Save in the editor to try again. {0}</value></data>
-  <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>Show grid guides in the selection</value></data>
+  <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>Show cursor guides before selecting</value></data>
   <data name="Library.SourcePage.Label" xml:space="preserve"><value>Source webpage</value></data>
   <data name="Library.SourcePage.Open" xml:space="preserve"><value>Open page</value></data>
   <data name="Library.SourcePage.Copy" xml:space="preserve"><value>Copy URL</value></data>
