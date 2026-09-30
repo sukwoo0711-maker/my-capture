@@ -180,6 +180,9 @@ public sealed class CaptureSettings
     /// <summary>Show the pixel magnifier during selection.</summary>
     public bool ShowMagnifier { get; set; } = true;
 
+    /// <summary>Show alignment guides inside screenshot and recording selections.</summary>
+    public bool ShowSelectionGrid { get; set; } = true;
+
     /// <summary>Format used when the colour picker copies a value.</summary>
     public ColorFormat ColorFormat { get; set; } = ColorFormat.Hex;
 

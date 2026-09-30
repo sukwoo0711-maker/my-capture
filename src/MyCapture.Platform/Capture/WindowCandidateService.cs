@@ -6,7 +6,8 @@ using MyCapture.Platform.Interop;
 namespace MyCapture.Platform.Capture;
 
 /// <summary>A visible top-level window in virtual-desktop physical pixels.</summary>
-public sealed record WindowCandidate(IntPtr Handle, RectD ScreenBounds, string Title = "");
+public sealed record WindowCandidate(IntPtr Handle, RectD ScreenBounds, string Title = "",
+    string SourcePageUrl = "", uint ProcessId = 0);
 
 /// <summary>
 /// Snap candidates captured before the selection overlay appears. EnumWindows returns
@@ -52,7 +53,7 @@ public sealed class WindowCandidateService
             RectD clipped = Intersect(bounds, monitor);
             if (clipped.Width >= 2 && clipped.Height >= 2)
             {
-                candidates.Add(new WindowCandidate(hwnd, clipped, titles.ReadTitle(hwnd)));
+                candidates.Add(new WindowCandidate(hwnd, clipped, titles.ReadTitle(hwnd), ProcessId: processId));
             }
 
             return true;
@@ -93,6 +94,16 @@ public sealed class WindowCandidateService
             }
         }
         return title;
+    }
+
+    /// <summary>URL attribution requires the frontmost window at the selection centre, even if untitled.</summary>
+    public static string ResolveSourcePageUrl(IReadOnlyList<WindowCandidate> candidates, RectD selection)
+    {
+        RectD region = selection.Normalized();
+        if (region.IsEmpty) return string.Empty;
+        WindowCandidate? source = candidates.FirstOrDefault(candidate => candidate.ScreenBounds.Contains(region.Center));
+        if (source is null || source.Title != ResolveSourceTitle(candidates, region)) return string.Empty;
+        return MyCapture.Core.Capture.SourcePageUrl.Normalize(source.SourcePageUrl);
     }
 
     private static bool IsCloaked(IntPtr hwnd)

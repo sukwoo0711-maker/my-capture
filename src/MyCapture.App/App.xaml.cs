@@ -312,6 +312,7 @@ public partial class App : Application
         _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         _recorder.PrivacyRedactionService = _privacyRedactionService;
+        _recorder.ShowSelectionGrid = () => _settings!.Capture.ShowSelectionGrid;
         _recorder.SessionEnded += (_, _) => RestoreTrayAfterCapture();
 
         // Add the icon first so registration failures have a non-modal place to be
@@ -607,7 +608,8 @@ public partial class App : Application
             _overlay.Start(
                 _settings.Capture.IncludeCursor,
                 _settings.Capture.AbortOnFocusLoss,
-                _settings.Capture.ShowMagnifier);
+                _settings.Capture.ShowMagnifier,
+                _settings.Capture.ShowSelectionGrid);
         }
         catch (Exception ex)
         {
@@ -927,7 +929,10 @@ public partial class App : Application
         // an otherwise successfully captured image from the library.
         _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
             e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty,
-            initialRenderShowsSourceWindowTitle: _settings?.Export.ShowSourceWindowTitle == true);
+            initialRenderShowsSourceWindowTitle: _settings?.Export.ShowSourceWindowTitle == true,
+            sourcePageUrl: e.SourcePageUrl);
+        if (_pendingRecord.SourcePageUrl.Length > 0)
+            _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
         Task<bool>? automaticClipboardCopy = e.CopyToClipboardImmediately && _commit is not null
             ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle,
                 _pendingRecord.InitialRenderShowsSourceWindowTitle)

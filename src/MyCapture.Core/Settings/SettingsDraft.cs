@@ -46,6 +46,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _includeCursor;
     private bool _autoDetectWindows;
     private bool _showMagnifier;
+    private bool _showSelectionGrid;
     private string _delaySeconds = string.Empty;
     private bool _abortOnFocusLoss;
     private string _regionHistoryLimit = string.Empty;
@@ -142,6 +143,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     public bool IncludeCursor { get => _includeCursor; set => Set(ref _includeCursor, value); }
     public bool AutoDetectWindows { get => _autoDetectWindows; set => Set(ref _autoDetectWindows, value); }
     public bool ShowMagnifier { get => _showMagnifier; set => Set(ref _showMagnifier, value); }
+
+    public bool ShowSelectionGrid { get => _showSelectionGrid; set => Set(ref _showSelectionGrid, value); }
     public bool AbortOnFocusLoss { get => _abortOnFocusLoss; set => Set(ref _abortOnFocusLoss, value); }
 
     public string DelaySeconds
@@ -436,6 +439,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _includeCursor = s.Capture.IncludeCursor;
         _autoDetectWindows = s.Capture.AutoDetectWindows;
         _showMagnifier = s.Capture.ShowMagnifier;
+        _showSelectionGrid = s.Capture.ShowSelectionGrid;
         _abortOnFocusLoss = s.Capture.AbortOnFocusLoss;
         _delaySeconds = Int(s.Capture.DelaySeconds);
         _regionHistoryLimit = Int(s.Capture.RegionHistoryLimit);
@@ -550,6 +554,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 IncludeCursor = _includeCursor,
                 AutoDetectWindows = _autoDetectWindows,
                 ShowMagnifier = _showMagnifier,
+                ShowSelectionGrid = _showSelectionGrid,
                 AbortOnFocusLoss = _abortOnFocusLoss,
                 ColorFormat = _preservedColorFormat,
                 DelaySeconds = ParseInt(_delaySeconds),

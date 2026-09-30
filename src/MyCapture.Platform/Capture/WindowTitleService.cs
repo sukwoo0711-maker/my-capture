@@ -9,7 +9,8 @@ public sealed record WindowUnderCursor(
     IntPtr Handle,
     RectD ScreenBounds,
     string Title,
-    RectD ClientBounds = default)
+    RectD ClientBounds = default,
+    uint ProcessId = 0)
 {
     /// <summary>The chrome-free viewport preferred by scrolling capture.</summary>
     public RectD ScrollBounds => ClientBounds.IsEmpty ? ScreenBounds : ClientBounds;
@@ -44,7 +45,8 @@ public sealed class WindowTitleService
         }
 
         _ = TryGetClientBounds(root, out RectD clientBounds);
-        return new WindowUnderCursor(root, bounds, ReadTitle(root), clientBounds);
+        _ = NativeMethods.GetWindowThreadProcessId(root, out uint processId);
+        return new WindowUnderCursor(root, bounds, ReadTitle(root), clientBounds, processId);
     }
 
     public string ReadTitle(IntPtr hwnd)

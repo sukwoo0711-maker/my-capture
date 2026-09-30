@@ -47,6 +47,7 @@ internal sealed class RegionRecordingCoordinator
     private SelectionPreparation? _selectionPreparation;
     internal Func<FrozenFrame>? AcquireSelectionFrame { get; set; }
     internal Func<RectD> SelectionDesktopBounds { get; set; } = MonitorEnumerator.GetVirtualDesktopBounds;
+    internal Func<bool> ShowSelectionGrid { get; set; } = () => true;
     internal Func<Window, bool> ExcludeSelectionWindow { get; set; } = CaptureWindowExclusion.TryApply;
     internal Task LastSelectionPreparation { get; private set; } = Task.CompletedTask;
     internal event Action<Exception>? SelectionPreparationFailed;
@@ -158,7 +159,8 @@ internal sealed class RegionRecordingCoordinator
         CaptureOverlayWindow? overlay = null;
         try
         {
-            overlay = new CaptureOverlayWindow(SelectionDesktopBounds(), abortOnFocusLoss: false, showMagnifier: true);
+            overlay = new CaptureOverlayWindow(SelectionDesktopBounds(), abortOnFocusLoss: false, showMagnifier: true,
+                showSelectionGrid: ShowSelectionGrid());
             // A configured preset fixes the recording's size; the drag only positions it.
             if (_settings().PresetWidth is { } w && w > 0
                 && _settings().PresetHeight is { } h && h > 0)

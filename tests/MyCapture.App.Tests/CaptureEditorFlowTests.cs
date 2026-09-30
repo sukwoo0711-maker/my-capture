@@ -51,7 +51,12 @@ public sealed class CaptureEditorFlowTests
         Assert.Contains(
             constructors,
             constructor => constructor.GetParameters().Select(parameter => parameter.ParameterType)
-                .SequenceEqual([typeof(FrozenFrame), typeof(bool)]));
+                .SequenceEqual([typeof(FrozenFrame), typeof(bool), typeof(bool)]));
+        ParameterInfo grid = constructors.Single(constructor =>
+            constructor.GetParameters().First().ParameterType == typeof(FrozenFrame)).GetParameters()[2];
+        Assert.Equal("showSelectionGrid", grid.Name);
+        Assert.True(grid.IsOptional);
+        Assert.Equal(true, grid.DefaultValue);
         Assert.DoesNotContain("Tab", CaptureOverlayView.InstructionText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("창 선택", CaptureOverlayView.InstructionText, StringComparison.Ordinal);
         Assert.DoesNotContain(

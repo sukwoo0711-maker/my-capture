@@ -13,6 +13,7 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
     private readonly CaptureOverlayCoordinator _coordinator;
     private readonly WindowTitleService _windowTitles;
     private readonly Func<bool> _includeCursor;
+    private readonly BrowserPageUrlService _pageUrls = new();
 
     internal OverlayAdvancedCaptureEnvironment(
         CaptureOverlayCoordinator coordinator,
@@ -55,6 +56,20 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
 
     public WindowUnderCursor? WindowAt(PointD screenPoint) => _windowTitles.ResolveAt(screenPoint);
 
+    // Existing advanced still commands are synchronous. The bounded reader waits at most
+    // 200 ms here; its native UI Automation work always runs on its own MTA thread.
+    public BrowserDocumentSnapshot? ReadSourceDocument(WindowUnderCursor? window) =>
+        ReadSourceDocumentAsync(window).GetAwaiter().GetResult();
+
+    public async Task<BrowserDocumentSnapshot?> ReadSourceDocumentAsync(WindowUnderCursor? window)
+    {
+        if (window is null || window.Handle == IntPtr.Zero || window.ProcessId == 0) return null;
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> documents = await _pageUrls.ReadAsync([
+            new WindowCandidate(window.Handle, window.ScreenBounds, window.Title, ProcessId: window.ProcessId),
+        ]).ConfigureAwait(false);
+        return documents.GetValueOrDefault(window.Handle);
+    }
+
     public RectD? ResolveRepeatRegion(RegionHistoryEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -83,7 +98,8 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
             selection.Frame,
             selection.Region,
             selection.SourceTitle,
-            selection.RecordForRepeat);
+            selection.RecordForRepeat,
+            selection.SourcePageUrl);
 
     private static bool Contains(RectD outer, RectD inner) =>
         inner.Left >= outer.Left

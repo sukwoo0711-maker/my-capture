@@ -123,6 +123,10 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public string TagsCaption => Record.Tags ?? string.Empty;
 
+    public string SourcePageUrl => MyCapture.Core.Capture.SourcePageUrl.Normalize(Record.SourcePageUrl);
+
+    public bool HasSourcePageUrl => SourcePageUrl.Length > 0;
+
     public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
 
     /// <summary>Non-empty label for confirmations, OCR windows and other contextual UI.</summary>
@@ -212,6 +216,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(HasCaption));
         Raise(nameof(ContextLabel));
         Raise(nameof(TagsCaption));
+        Raise(nameof(SourcePageUrl));
+        Raise(nameof(HasSourcePageUrl));
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));

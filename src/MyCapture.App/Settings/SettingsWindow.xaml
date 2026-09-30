@@ -340,6 +340,11 @@
                                   AutomationProperties.Name="{loc:Text Text_B9D242426446}"
                                   IsChecked="{Binding ShowMagnifier}" />
 
+                        <CheckBox x:Name="ShowSelectionGridCheck" Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text Settings.ShowSelectionGrid}"
+                                  AutomationProperties.Name="{loc:Text Settings.ShowSelectionGrid}"
+                                  IsChecked="{Binding ShowSelectionGrid}" />
+
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text Text_BD975387F343}"
                                   AutomationProperties.Name="{loc:Text Text_B36A1FC25CCE}"

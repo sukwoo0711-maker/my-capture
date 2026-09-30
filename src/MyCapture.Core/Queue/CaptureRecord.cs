@@ -128,6 +128,9 @@ public sealed class CaptureRecord
     /// </remarks>
     public string SourceWindowTitle { get; set; } = string.Empty;
 
+    /// <summary>Actual browser document URL observed around the captured frame; empty when unavailable.</summary>
+    public string SourcePageUrl { get; set; } = string.Empty;
+
     /// <summary>
     /// Capture-time title option used to reconstruct an interrupted initial render.
     /// Later editor saves choose their own displayed option; null means a legacy record
@@ -173,6 +176,7 @@ public sealed class CaptureRecord
             Title,
             Tags,
             SourceWindowTitle,
+            SourcePageUrl,
             OcrText ?? string.Empty,
             IsVideo ? "동영상 비디오 video recording" : "이미지 스크린샷 image screenshot");
 }

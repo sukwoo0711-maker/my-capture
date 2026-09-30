@@ -23,8 +23,9 @@ internal sealed class CaptureOverlayWindow : Window
     internal CaptureOverlayWindow(
         FrozenFrame frame,
         bool abortOnFocusLoss,
-        bool showMagnifier = true)
-        : this(frame.ScreenBounds, abortOnFocusLoss, showMagnifier, frame)
+        bool showMagnifier = true,
+        bool showSelectionGrid = true)
+        : this(frame.ScreenBounds, abortOnFocusLoss, showMagnifier, frame, showSelectionGrid)
     {
     }
 
@@ -32,7 +33,8 @@ internal sealed class CaptureOverlayWindow : Window
         RectD screenBounds,
         bool abortOnFocusLoss,
         bool showMagnifier,
-        FrozenFrame? frame = null)
+        FrozenFrame? frame = null,
+        bool showSelectionGrid = true)
     {
         _screenBounds = screenBounds.ToPixelBounds();
         if (_screenBounds.IsEmpty)
@@ -43,8 +45,8 @@ internal sealed class CaptureOverlayWindow : Window
         _frame = frame;
         _abortOnFocusLoss = abortOnFocusLoss;
         _view = frame is null
-            ? new CaptureOverlayView(_screenBounds, frame: null, showMagnifier)
-            : new CaptureOverlayView(frame, showMagnifier);
+            ? new CaptureOverlayView(_screenBounds, frame: null, showMagnifier, showSelectionGrid)
+            : new CaptureOverlayView(frame, showMagnifier, showSelectionGrid);
 
         // Frozen pixels and selection geometry must appear immediately and exactly; a reveal
         // transform here would expose the live desktop for a frame and make edge selection feel
@@ -222,7 +224,10 @@ internal sealed class CaptureOverlayWindow : Window
         {
             SelectionCompleted?.Invoke(
                 this,
-                new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop, sourceTitle));
+                new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop, sourceTitle,
+                    sourcePageUrl: WindowCandidateService.ResolveSourcePageUrl(SourceWindows,
+                        new RectD(_screenBounds.Left + bitmapRegion.Left, _screenBounds.Top + bitmapRegion.Top,
+                            bitmapRegion.Width, bitmapRegion.Height))));
         }
         finally
         {
@@ -281,7 +286,8 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
         System.Windows.Media.Imaging.BitmapSource selectedBitmap,
         string sourceTitle = "",
         bool recordForRepeat = true,
-        bool copyToClipboardImmediately = true)
+        bool copyToClipboardImmediately = true,
+        string sourcePageUrl = "")
     {
         Frame = frame;
         BitmapRegion = bitmapRegion;
@@ -289,6 +295,7 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
         SourceTitle = sourceTitle ?? string.Empty;
         RecordForRepeat = recordForRepeat;
         CopyToClipboardImmediately = copyToClipboardImmediately;
+        SourcePageUrl = MyCapture.Core.Capture.SourcePageUrl.Normalize(sourcePageUrl);
     }
 
     internal FrozenFrame Frame { get; }
@@ -307,4 +314,6 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
     internal System.Windows.Media.Imaging.BitmapSource SelectedBitmap { get; }
 
     internal string SourceTitle { get; }
+
+    internal string SourcePageUrl { get; }
 }

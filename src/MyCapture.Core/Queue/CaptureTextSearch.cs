@@ -13,6 +13,7 @@ public enum CaptureMatchField
     OcrText = 4,
     MediaType = 8,
     Tags = 16,
+    SourcePageUrl = 32,
 }
 
 /// <summary>
@@ -182,6 +183,9 @@ public static class CaptureTextSearch
             {
                 termFields |= CaptureMatchField.Tags;
             }
+
+            if (Contains(record.SourcePageUrl ?? string.Empty, term))
+                termFields |= CaptureMatchField.SourcePageUrl;
 
             // AND semantics: a term found in no field fails the whole record.
             if (termFields == CaptureMatchField.None)

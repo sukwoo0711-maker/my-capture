@@ -112,8 +112,9 @@ internal sealed class CapturePersistenceService
     }
 
     internal static CaptureRecord CreatePendingRecord(BitmapSource original, double dpiScale,
-        string sourceWindowTitle, string sourceMonitor, bool initialRenderShowsSourceWindowTitle = false) =>
-        CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor, initialRenderShowsSourceWindowTitle);
+        string sourceWindowTitle, string sourceMonitor, bool initialRenderShowsSourceWindowTitle = false,
+        string sourcePageUrl = "") =>
+        CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor, initialRenderShowsSourceWindowTitle, sourcePageUrl);
 
     internal async Task<CaptureRecord> PersistPendingOriginalAsync(CaptureRecord record, BitmapSource original,
         BitmapSource? initialRendered = null)
@@ -179,7 +180,7 @@ internal sealed class CapturePersistenceService
         double dpiScale,
         string sourceWindowTitle,
         string sourceMonitor,
-        bool initialRenderShowsSourceWindowTitle = false)
+        bool initialRenderShowsSourceWindowTitle = false, string sourcePageUrl = "")
     {
         var record = new CaptureRecord
         {
@@ -189,6 +190,7 @@ internal sealed class CapturePersistenceService
             Height = original.PixelHeight,
             DpiScale = dpiScale > 0 ? dpiScale : 1.0,
             SourceWindowTitle = sourceWindowTitle ?? string.Empty,
+            SourcePageUrl = MyCapture.Core.Capture.SourcePageUrl.Normalize(sourcePageUrl),
             InitialRenderShowsSourceWindowTitle = initialRenderShowsSourceWindowTitle,
             SourceMonitor = sourceMonitor ?? string.Empty,
         };

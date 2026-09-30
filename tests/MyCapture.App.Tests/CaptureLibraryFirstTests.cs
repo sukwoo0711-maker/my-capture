@@ -27,6 +27,30 @@ namespace MyCapture.App.Tests;
 public sealed class CaptureLibraryFirstTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CapturedPageUrlSurvivesInitialSaveAndInterruptedPublication(bool interrupt) => StaTestHost.Run(() =>
+    {
+        const string url = "https://github.com/example/review/pull/313?diff=split#comment";
+        using var fixture = new Fixture();
+        if (interrupt) fixture.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("interrupted URL metadata publication");
+        fixture.Wait(fixture.Select(new CaptureSelectionCompletedEventArgs(fixture.Frame, fixture.Region,
+            fixture.Frame.Bitmap, "Review — Browser", recordForRepeat: false, copyToClipboardImmediately: false, sourcePageUrl: url)));
+        CaptureRecord pending = fixture.PendingRecord;
+        Assert.Equal(url, pending.SourcePageUrl);
+        Assert.Equal(MyCapture.Core.Localization.UiText.Get("Capture.WebpageTag"), pending.Tags);
+        var queue = new CaptureQueue(fixture.Paths, fixture.Settings.Queue, NullLogger<CaptureQueue>.Instance);
+        queue.Load();
+        _ = new CapturePersistenceService(queue, fixture.Paths, () => fixture.Settings.Queue, NullLogger<CapturePersistenceService>.Instance);
+        CaptureRecord reloaded = Assert.Single(queue.Records);
+        Assert.Equal(url, reloaded.SourcePageUrl);
+        Assert.Equal(pending.Tags, reloaded.Tags);
+        CaptureRecord metadata = JsonSerializer.Deserialize<CaptureRecord>(File.ReadAllText(queue.GetFilePath(reloaded, CaptureFileNames.Meta)),
+            MyCapture.Core.Serialization.JsonDefaults.Readable)!;
+        Assert.Equal(url, metadata.SourcePageUrl);
+    });
+
+    [Theory]
     [InlineData(true, "valid")]
     [InlineData(true, "missing")]
     [InlineData(true, "corrupt")]
