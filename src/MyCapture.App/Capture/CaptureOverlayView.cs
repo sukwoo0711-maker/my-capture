@@ -30,6 +30,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private FrozenFrame? _frame;
     private readonly RectD _screenBounds;
     private readonly bool _showMagnifier;
+    private readonly bool _showSelectionGrid;
 
     /// <summary>
     /// Optional fixed selection size (physical pixels). When set, dragging only positions
@@ -79,6 +80,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private readonly Pen _pointerOuterPen = new(Brushes.Black, 4);
     private readonly Pen _pointerInnerPen = new(Brushes.White, 1.5);
     private readonly Pen _anchorPen;
+    private readonly Pen _gridShadowPen = new(new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)), 2);
+    private readonly Pen _gridLinePen = new(new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)), 1);
     internal int StaticRenderCount { get; private set; }
     internal int FeedbackRenderCount { get; private set; }
     internal int MagnifierUpdateCount { get; private set; }
@@ -151,12 +154,13 @@ internal sealed class CaptureOverlayView : FrameworkElement
         return ClampEdgePoint(local);
     }
 
-    internal CaptureOverlayView(FrozenFrame frame, bool showMagnifier = true)
-        : this(frame.ScreenBounds, frame, showMagnifier)
+    internal CaptureOverlayView(FrozenFrame frame, bool showMagnifier = true, bool showSelectionGrid = true)
+        : this(frame.ScreenBounds, frame, showMagnifier, showSelectionGrid)
     {
     }
 
-    internal CaptureOverlayView(RectD screenBounds, FrozenFrame? frame = null, bool showMagnifier = true)
+    internal CaptureOverlayView(RectD screenBounds, FrozenFrame? frame = null, bool showMagnifier = true,
+        bool showSelectionGrid = true)
     {
         _screenBounds = screenBounds.ToPixelBounds();
         if (_screenBounds.IsEmpty)
@@ -166,6 +170,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
         _frame = frame;
         _showMagnifier = showMagnifier;
+        _showSelectionGrid = showSelectionGrid;
         _visuals = new VisualCollection(this)
         {
             _desktopVisual, _dimmerVisual, _revealVisual, _selectionVisual,
@@ -185,6 +190,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _anchorPen = new Pen(_selectionBrush, 1.5);
         _pointerOuterPen.Freeze();
         _pointerInnerPen.Freeze();
+        _gridShadowPen.Freeze();
+        _gridLinePen.Freeze();
         if (_anchorPen.CanFreeze) _anchorPen.Freeze();
         _chromeBrush = ResourceBrush("Surface.Floating", new SolidColorBrush(Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)));
         _primaryTextBrush = ResourceBrush("Text.Primary", Brushes.White);
@@ -315,6 +322,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private void DrawSelection(DrawingContext dc, RectD pixelRect)
     {
         Rect rect = ToDipRect(pixelRect);
+        if (_showSelectionGrid) DrawSelectionGrid(dc, rect);
         var glowPen = new Pen(new SolidColorBrush(Color.FromArgb(90, 88, 199, 243)), Math.Max(3, 3 * DipPerPixelX));
         glowPen.Freeze();
         var borderPen = new Pen(_selectionBrush, Math.Max(1.25, 1.25 * DipPerPixelX));
@@ -322,6 +330,28 @@ internal sealed class CaptureOverlayView : FrameworkElement
         dc.DrawRectangle(null, glowPen, rect);
         dc.DrawRectangle(null, borderPen, rect);
         DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect);
+    }
+
+    private void DrawSelectionGrid(DrawingContext dc, Rect rect)
+    {
+        // Guides are retained selection chrome, never painted into the frozen source used
+        // by CompleteSelection/Crop. Avoid crowding a drag that has only just begun.
+        if (rect.Width < 12 || rect.Height < 12) return;
+        dc.PushClip(new RectangleGeometry(rect));
+        for (int third = 1; third <= 2; third++)
+        {
+            double x = rect.Left + rect.Width * third / 3;
+            double y = rect.Top + rect.Height * third / 3;
+            DrawGuide(new Point(x, rect.Top), new Point(x, rect.Bottom));
+            DrawGuide(new Point(rect.Left, y), new Point(rect.Right, y));
+        }
+        dc.Pop();
+
+        void DrawGuide(Point from, Point to)
+        {
+            dc.DrawLine(_gridShadowPen, from, to);
+            dc.DrawLine(_gridLinePen, from, to);
+        }
     }
 
     private void DrawDimensionLabel(DrawingContext dc, RectD pixels, Rect selectionDip)

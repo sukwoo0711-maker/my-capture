@@ -527,14 +527,14 @@ public static class ImageCodec
 
         try
         {
+            // Read the current file rather than WPF's URI cache: an edited capture can
+            // replace this path while an older bitmap is still displayed in the gallery.
+            using var stream = new FileStream(Path.GetFullPath(path), FileMode.Open, FileAccess.Read, FileShare.Read);
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
-            // Normalise to an absolute path: a relative path passes File.Exists (resolved
-            // against the CWD) but throws UriFormatException on an Absolute Uri, which would
-            // escape this method's null-on-failure contract.
-            bitmap.UriSource = new Uri(Path.GetFullPath(path), UriKind.Absolute);
+            bitmap.StreamSource = stream;
             bitmap.EndInit();
             bitmap.Freeze();
             return bitmap;
@@ -548,7 +548,7 @@ public static class ImageCodec
         {
             return null;
         }
-        catch (Exception ex) when (ex is UriFormatException or ArgumentException)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
         {
             return null;
         }

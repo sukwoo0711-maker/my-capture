@@ -19,6 +19,7 @@
     <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Tokens.xaml" LogicalName="ThemeFixture.Tokens.xaml" />
     <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Symbols.xaml" LogicalName="ThemeFixture.Symbols.xaml" />
     <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Controls.xaml" LogicalName="ThemeFixture.Controls.xaml" />
+    <EmbeddedResource Include="..\..\src\MyCapture.App\Gallery\GalleryWindow.xaml" LogicalName="GalleryFixture.Window.xaml" />
   </ItemGroup>
 
   <ItemGroup>

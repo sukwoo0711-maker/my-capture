@@ -27,6 +27,30 @@ namespace MyCapture.App.Tests;
 public sealed class CaptureLibraryFirstTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CapturedPageUrlSurvivesInitialSaveAndInterruptedPublication(bool interrupt) => StaTestHost.Run(() =>
+    {
+        const string url = "https://github.com/example/review/pull/313?diff=split#comment";
+        using var fixture = new Fixture();
+        if (interrupt) fixture.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("interrupted URL metadata publication");
+        fixture.Wait(fixture.Select(new CaptureSelectionCompletedEventArgs(fixture.Frame, fixture.Region,
+            fixture.Frame.Bitmap, "Review — Browser", recordForRepeat: false, copyToClipboardImmediately: false, sourcePageUrl: url)));
+        CaptureRecord pending = fixture.PendingRecord;
+        Assert.Equal(url, pending.SourcePageUrl);
+        Assert.Equal(MyCapture.Core.Localization.UiText.Get("Capture.WebpageTag"), pending.Tags);
+        var queue = new CaptureQueue(fixture.Paths, fixture.Settings.Queue, NullLogger<CaptureQueue>.Instance);
+        queue.Load();
+        _ = new CapturePersistenceService(queue, fixture.Paths, () => fixture.Settings.Queue, NullLogger<CapturePersistenceService>.Instance);
+        CaptureRecord reloaded = Assert.Single(queue.Records);
+        Assert.Equal(url, reloaded.SourcePageUrl);
+        Assert.Equal(pending.Tags, reloaded.Tags);
+        CaptureRecord metadata = JsonSerializer.Deserialize<CaptureRecord>(File.ReadAllText(queue.GetFilePath(reloaded, CaptureFileNames.Meta)),
+            MyCapture.Core.Serialization.JsonDefaults.Readable)!;
+        Assert.Equal(url, metadata.SourcePageUrl);
+    });
+
+    [Theory]
     [InlineData(true, "valid")]
     [InlineData(true, "missing")]
     [InlineData(true, "corrupt")]
@@ -52,7 +76,8 @@ public sealed class CaptureLibraryFirstTests
         string thumbPath = fixture.Queue.GetFilePath(pending, CaptureFileNames.Thumbnail);
         string marker = fixture.Queue.GetFilePath(pending, CaptureFileNames.OriginalPending);
         byte[] originalBytes = File.ReadAllBytes(originalPath);
-        byte[] expected = Pixels(ImageCodec.TryLoad(renderedPath)!);
+        BitmapSource initialRendered = Assert.IsAssignableFrom<BitmapSource>(ImageCodec.TryLoad(renderedPath));
+        byte[] expected = Pixels(initialRendered);
         byte[] expectedThumbnail = Pixels(ImageCodec.TryLoad(thumbPath)!);
         byte[]? validRenderedBytes = null;
         CaptureRecord journal = JsonSerializer.Deserialize<CaptureRecord>(File.ReadAllText(marker))!;
@@ -100,6 +125,11 @@ public sealed class CaptureLibraryFirstTests
         if (renderState.StartsWith("legacy-", StringComparison.Ordinal)) Assert.Null(recovered.InitialRenderShowsSourceWindowTitle);
         else Assert.Equal(showTitle, recovered.InitialRenderShowsSourceWindowTitle);
         if (validRenderedBytes is not null) Assert.Equal(validRenderedBytes, File.ReadAllBytes(renderedPath));
+        using (FileStream currentFile = File.OpenRead(renderedPath))
+        {
+            BitmapFrame onDisk = BitmapFrame.Create(currentFile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            Assert.Equal(expected, Pixels(onDisk));
+        }
         Assert.Equal(expected, Pixels(ImageCodec.TryLoad(renderedPath)!));
         Assert.Equal(expectedThumbnail, Pixels(ImageCodec.TryLoad(thumbPath)!));
         Assert.Equal(originalBytes, File.ReadAllBytes(originalPath));
@@ -114,6 +144,7 @@ public sealed class CaptureLibraryFirstTests
         _ = new CapturePersistenceService(nextQueue, fixture.Paths, () => fixture.Settings.Queue,
             NullLogger<CapturePersistenceService>.Instance);
         Assert.Equal(expected, Pixels(ImageCodec.TryLoad(renderedPath)!));
+        GC.KeepAlive(initialRendered); // Recovery must not mistake a live URI-cached image for the current file.
         if (validRenderedBytes is not null) Assert.Equal(validRenderedBytes, File.ReadAllBytes(renderedPath));
     });
 

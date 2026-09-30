@@ -18,6 +18,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly Func<bool, FrozenFrame> _acquireFrame;
     private readonly Func<RectD> _desktopBounds;
+    private readonly BrowserPageUrlService _pageUrls = new();
     private CapturePreparation? _preparation;
     private bool _disposed;
     private CaptureOverlayWindow? _activeOverlay;
@@ -95,7 +96,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Used only by the explicit advanced “capture window” command.</summary>
     internal WindowCandidateService WindowCandidates => _windowCandidates;
 
-    internal void Start(bool includeCursor, bool abortOnFocusLoss, bool showMagnifier)
+    internal void Start(bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid = true)
     {
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -114,14 +115,15 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         // Reserve the session synchronously, including when WM_HOTKEY has no WPF context.
         // Create its HWND for capture exclusion, but keep the opaque selector hidden until
         // its frozen background is ready. Showing a frameless window blacks out the desktop.
-        var preparation = new CapturePreparation();
+        var preparation = new CapturePreparation { ShowSelectionGrid = showSelectionGrid };
         _preparation = preparation;
         _log.LogInformation("Capture frame acquisition requested");
         try
         {
             RectD desktop = _desktopBounds();
+            preparation.DesktopBounds = desktop;
             preparation.SourceWindows = _windowCandidates.GetCandidates(desktop);
-            ShowOverlay(desktop, abortOnFocusLoss, showMagnifier, preparation.Elapsed, frame: null);
+            ShowOverlay(desktop, abortOnFocusLoss, showMagnifier, preparation.Elapsed, frame: null, showSelectionGrid);
         }
         catch
         {
@@ -151,14 +153,17 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 await Task.Delay(100).ConfigureAwait(false);
             }
 
-            frame = await Task.Run(() =>
+            (FrozenFrame capturedFrame, IReadOnlyList<WindowCandidate> sourceWindows) = await CapturePageContext.AcquireAsync(preparation.SourceWindows, () =>
             {
                 if (preparation.Cancelled) throw new OperationCanceledException();
                 FrozenFrame acquired = _acquireFrame(includeCursor);
                 if (!acquired.Bitmap.IsFrozen)
                     throw new InvalidOperationException("Capture acquisition must return a frozen bitmap.");
                 return acquired;
-            }).ConfigureAwait(false);
+            }, _pageUrls.ReadAsync,
+                () => _windowCandidates.GetCandidates(preparation.DesktopBounds)).ConfigureAwait(false);
+            frame = capturedFrame;
+            preparation.SourceWindows = sourceWindows;
             _log.LogInformation("Capture frame acquired after {Elapsed:0.0}ms (acquisition {Acquisition:0.0}ms)",
                 preparation.Elapsed.Elapsed.TotalMilliseconds, frame.ElapsedMilliseconds);
         }
@@ -199,6 +204,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             FrozenFrame acquired = frame ?? throw new InvalidOperationException("Capture acquisition returned no frame.");
             if (_activeOverlay is { } overlay)
             {
+                overlay.SourceWindows = preparation.SourceWindows;
                 overlay.AttachFrame(acquired);
                 if (!overlay.IsVisible)
                 {
@@ -210,7 +216,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 return;
             }
 
-            ShowOverlay(acquired.ScreenBounds, abortOnFocusLoss: false, showMagnifier: false, preparation.Elapsed, acquired);
+            ShowOverlay(acquired.ScreenBounds, abortOnFocusLoss: false, showMagnifier: false, preparation.Elapsed, acquired,
+                preparation.ShowSelectionGrid);
         }
         catch (Exception ex)
         {
@@ -230,11 +237,12 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         bool abortOnFocusLoss,
         bool showMagnifier,
         Stopwatch elapsed,
-        FrozenFrame? frame)
+        FrozenFrame? frame,
+        bool showSelectionGrid)
     {
         var overlay = frame is null
-            ? new CaptureOverlayWindow(screenBounds, abortOnFocusLoss, showMagnifier)
-            : new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier);
+            ? new CaptureOverlayWindow(screenBounds, abortOnFocusLoss, showMagnifier, showSelectionGrid: showSelectionGrid)
+            : new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier, showSelectionGrid);
         _activeOverlay = overlay;
         overlay.SourceWindows = _preparation?.SourceWindows ?? [];
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
@@ -286,7 +294,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         FrozenFrame frame,
         RectD region,
         string sourceTitle,
-        bool recordForRepeat)
+        bool recordForRepeat,
+        string sourcePageUrl = "")
     {
         ArgumentNullException.ThrowIfNull(frame);
         VerifyDispatcherAccess();
@@ -311,7 +320,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             crop,
             sourceTitle,
             recordForRepeat,
-            copyToClipboardImmediately: false);
+            copyToClipboardImmediately: false,
+            sourcePageUrl: sourcePageUrl);
 
         _log.LogInformation(
             "Opening standalone editor over region {Region} on a {Width}x{Height} frame",
@@ -352,6 +362,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     private sealed class CapturePreparation
     {
+        internal RectD DesktopBounds { get; set; }
+        internal bool ShowSelectionGrid { get; init; } = true;
         internal volatile bool Cancelled;
         internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
         internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();

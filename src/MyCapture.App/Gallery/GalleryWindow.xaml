@@ -36,8 +36,7 @@
                     BorderBrush="{DynamicResource Border.Subtle}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource Radius.Lg}"
-                    SnapsToDevicePixels="True"
-                    ToolTip="{Binding ExportToolTip}">
+                    SnapsToDevicePixels="True">
                 <Grid Margin="9">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -321,6 +320,26 @@
                         <Setter Property="Margin" Value="0" />
                         <Setter Property="Padding" Value="0" />
                         <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+                        <Setter Property="gallery:GalleryCaptionPreview.IsEnabled" Value="True" />
+                        <Setter Property="ToolTipService.InitialShowDelay" Value="350" />
+                        <Setter Property="ToolTipService.ShowDuration" Value="120000" />
+                        <Setter Property="ToolTip">
+                            <Setter.Value>
+                                <ToolTip MaxWidth="420" Placement="Bottom"
+                                         DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                    <StackPanel>
+                                        <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      Visibility="{Binding HasCaption, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="{Binding Caption}" TextWrapping="Wrap"
+                                                       FontWeight="SemiBold" Margin="0,0,0,6" />
+                                        </ScrollViewer>
+                                        <TextBlock Text="{Binding ExportToolTip}" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource Text.Secondary}" />
+                                    </StackPanel>
+                                </ToolTip>
+                            </Setter.Value>
+                        </Setter>
                         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                         <Setter Property="Template">
                             <Setter.Value>
@@ -582,6 +601,16 @@
 <StackPanel DataContext="{Binding SingleSelectedTile}"><StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></StackPanel.Style>
 <Border Height="136" Background="{DynamicResource Surface.Sunken}" CornerRadius="8"><Image x:Name="SelectedDetailThumbnail" Source="{Binding Thumbnail}" Stretch="Uniform" AutomationProperties.Name="{Binding AccessibleName}" /></Border>
 <TextBlock Text="{Binding ContextLabel}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,14,0,8" /><TextBlock Text="{Binding TagsCaption}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Secondary}" Margin="0,0,0,8" /><Button Content="{loc:Text Library.Organize.Action}" Style="{StaticResource Button.Secondary}" Click="OnOrganizeClick" ToolTip="F2" Margin="0,0,0,12" />
+<StackPanel Visibility="{Binding HasSourcePageUrl, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,14">
+    <TextBlock Text="{loc:Text Library.SourcePage.Label}" FontWeight="SemiBold" Margin="0,0,0,6" />
+    <TextBox Text="{Binding SourcePageUrl, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="104"
+             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+             AutomationProperties.Name="{loc:Text Library.SourcePage.Label}" />
+    <WrapPanel Margin="0,6,0,0">
+        <Button Content="{loc:Text Library.SourcePage.Open}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourcePageClick" Margin="0,0,6,6" />
+        <Button Content="{loc:Text Library.SourcePage.Copy}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePageClick" Margin="0,0,0,6" />
+    </WrapPanel>
+</StackPanel>
 <TextBlock Text="{Binding TimeCaption}" Foreground="{DynamicResource Text.Secondary}" />
 <TextBlock Text="{Binding DetailDimensions}" Foreground="{DynamicResource Text.Secondary}" Margin="0,6,0,0" />
 <TextBlock Text="{Binding RetentionCaption}" Foreground="{DynamicResource Text.Muted}" Margin="0,6,0,16" />

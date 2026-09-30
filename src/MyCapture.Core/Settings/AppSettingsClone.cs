@@ -78,6 +78,7 @@ public static class AppSettingsClone
         IncludeCursor = s.IncludeCursor,
         AutoDetectWindows = s.AutoDetectWindows,
         ShowMagnifier = s.ShowMagnifier,
+        ShowSelectionGrid = s.ShowSelectionGrid,
         ColorFormat = s.ColorFormat,
         DelaySeconds = s.DelaySeconds,
         AbortOnFocusLoss = s.AbortOnFocusLoss,
