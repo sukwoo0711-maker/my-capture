@@ -14,6 +14,21 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureOverlayCoordinatorTests
 {
+    [Theory]
+    [InlineData(0L, long.MinValue, false)]
+    [InlineData(12345678L, long.MinValue, false)]
+    [InlineData(long.MaxValue, long.MinValue, false)]
+    [InlineData(10000L, 10000L, true)]
+    [InlineData(10000L, 9251L, true)]
+    [InlineData(10000L, 9250L, false)]
+    [InlineData(10000L, 9249L, false)]
+    [InlineData(10000L, 10001L, false)]
+    public void PresentationSettle_OnlyWaitsForAnActualRecentDismissal(
+        long currentTick, long lastDismissedTick, bool expected)
+    {
+        Assert.Equal(expected, CaptureOverlayCoordinator.NeedsPresentationSettle(currentTick, lastDismissedTick));
+    }
+
     [Fact]
     public void PreparingFrame_LeavesDispatcherResponsiveAndReservesOneSessionUntilCancelledCaptureDrains() => RunSta(() =>
     {

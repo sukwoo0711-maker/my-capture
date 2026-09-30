@@ -71,6 +71,7 @@ public sealed class GalleryCacheMembershipTests
         vm.Refresh();
         Assert.Null(vm.FindTile(remaining[^1].Id));
         Assert.Equal(remaining.Length - 1, vm.VisibleCount);
+        // codeql[cs/path-injection] -- existence-only assertion for a locally generated GUID child of the temp root; no file content is read or written.
         Assert.False(Directory.Exists(unusedRoot));
     }
 }
