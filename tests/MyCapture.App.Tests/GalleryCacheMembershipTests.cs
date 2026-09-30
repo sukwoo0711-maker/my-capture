@@ -8,8 +8,12 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-public sealed class GalleryCacheMembershipTests
+public sealed class GalleryCacheMembershipTests : IDisposable
 {
+    private readonly string _workspace = OwnedTestDirectory.Create("MyCapture-gallery-membership-");
+
+    public void Dispose() => OwnedTestDirectory.Delete(_workspace);
+
     [Theory]
     [InlineData(GalleryFilter.All, "keep")]
     [InlineData(GalleryFilter.Images, "")]
@@ -18,8 +22,8 @@ public sealed class GalleryCacheMembershipTests
     public void FilteredRefresh_RetainsHiddenTiles_ButDropsRemovedRecords(
         GalleryFilter filter, string query)
     {
-        // No files or thumbnails are needed for queue/cache membership changes.
-        string unusedRoot = Path.Combine(Path.GetTempPath(), "gallery-membership-" + Guid.NewGuid().ToString("N"));
+        // Queue/cache membership must not create this child of the owned fixture.
+        string unusedRoot = Path.Combine(_workspace, "unused");
         var queue = new CaptureQueue(AppPaths.CreateForRoot(unusedRoot),
             new QueueSettings(), NullLogger<CaptureQueue>.Instance);
         var now = new DateTimeOffset(2026, 9, 30, 12, 0, 0, TimeSpan.Zero);
@@ -71,7 +75,6 @@ public sealed class GalleryCacheMembershipTests
         vm.Refresh();
         Assert.Null(vm.FindTile(remaining[^1].Id));
         Assert.Equal(remaining.Length - 1, vm.VisibleCount);
-        // codeql[cs/path-injection] -- existence-only assertion for a locally generated GUID child of the temp root; no file content is read or written.
         Assert.False(Directory.Exists(unusedRoot));
     }
 }
