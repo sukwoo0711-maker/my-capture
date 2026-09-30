@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Capture;
@@ -13,19 +14,21 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureSelectionGridTests
 {
-    [Fact]
-    public void SelectionPreview_RendersSyntheticDesktop() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReadyPreview_RendersSyntheticDesktop(bool enabled) => StaTestHost.Run(() =>
     {
         using var language = Core.Localization.UiText.UseLanguage("ko-KR");
         FrozenFrame frame = CreateFrame();
-        var view = new CaptureOverlayView(frame, showMagnifier: false);
+        var view = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: enabled);
         try
         {
-            SetSelection(view, new RectD(180, 120, 540, 330));
+            SetCursor(view, new PointD(360, 280));
             RenderTargetBitmap rendered = Render(view);
             Assert.Equal(900, rendered.PixelWidth);
             Assert.Equal(600, rendered.PixelHeight);
-            SaveEvidence(rendered, "selection-grid.png");
+            SaveEvidence(rendered, "ready-guides.png", enabled ? "MYCAPTURE_GRID_EVIDENCE" : "MYCAPTURE_GRID_OFF_EVIDENCE");
         }
         finally { view.ReleaseResources(); }
     });
@@ -34,40 +37,101 @@ public sealed class CaptureSelectionGridTests
     [InlineData(1.0)]
     [InlineData(1.5)]
     [InlineData(2.0)]
-    public void GridToggle_ChangesOnlySelectedPixels_AtThirdsWithoutChangingFrame(double scale) => StaTestHost.Run(() =>
+    public void ReadyGuides_FollowCursorAcrossFullAxes_WithoutChangingFrame(double scale) => StaTestHost.Run(() =>
     {
         FrozenFrame frame = CreateFrame();
         byte[] original = Pixels(frame.Bitmap);
         var on = new CaptureOverlayView(frame, showMagnifier: false); // Default must show guides.
         var off = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: false);
-        RectD selection = new(180, 120, 540, 330);
         try
         {
-            SetSelection(on, selection);
-            SetSelection(off, selection);
-            byte[] enabled = Pixels(Render(on, scale));
-            byte[] disabled = Pixels(Render(off, scale));
-            Assert.Equal(selection, on.Selection);
-            Assert.Equal(selection, off.Selection);
-            int changed = 0;
-            for (int y = 0; y < 600; y++)
-            for (int x = 0; x < 900; x++)
+            foreach (PointD cursor in new[] { new PointD(360, 280), new PointD(625, 410) })
             {
-                int offset = (y * 900 + x) * 4;
-                if (enabled.AsSpan(offset, 4).SequenceEqual(disabled.AsSpan(offset, 4))) continue;
-                changed++;
-                Assert.InRange(x, 180, 719);
-                Assert.InRange(y, 120, 449);
-                // Rasterization covers any pixel cell intersecting the 2-DIP shadow,
-                // including fractional edge coverage at 150% scale.
-                double reach = scale + 0.5;
-                Assert.True(Math.Abs(x + 0.5 - 360) <= reach || Math.Abs(x + 0.5 - 540) <= reach
-                    || Math.Abs(y + 0.5 - 230) <= reach || Math.Abs(y + 0.5 - 340) <= reach,
-                    $"Unexpected changed pixel ({x}, {y}) at scale {scale}.");
+                SetCursor(on, cursor);
+                SetCursor(off, cursor);
+                byte[] enabled = Pixels(Render(on, scale));
+                byte[] disabled = Pixels(Render(off, scale));
+                Assert.Null(on.Selection);
+                Assert.Null(off.Selection);
+                int changed = 0;
+                for (int y = 0; y < 600; y++)
+                for (int x = 0; x < 900; x++)
+                {
+                    int offset = (y * 900 + x) * 4;
+                    if (enabled.AsSpan(offset, 4).SequenceEqual(disabled.AsSpan(offset, 4))) continue;
+                    changed++;
+                    // The 3-DIP dark under-stroke can partially cover adjacent pixels.
+                    double reach = 1.5 * scale + 0.5;
+                    Assert.True(Math.Abs(x + 0.5 - cursor.X) <= reach || Math.Abs(y + 0.5 - cursor.Y) <= reach,
+                        $"Unexpected changed pixel ({x}, {y}) for cursor {cursor} at scale {scale}.");
+                }
+                Assert.InRange(changed, 1000, 15000);
+                // Both guides reach the viewport edges, rather than a selected rectangle.
+                AssertAmber(enabled, 0, (int)cursor.Y);
+                AssertAmber(enabled, 899, (int)cursor.Y);
+                AssertAmber(enabled, (int)cursor.X, 0);
+                AssertAmber(enabled, (int)cursor.X, 599);
             }
-            Assert.InRange(changed, 1000, 10000);
             Assert.Equal(original, Pixels(frame.Bitmap));
         }
+        finally { on.ReleaseResources(); off.ReleaseResources(); }
+    });
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    [InlineData(2.0)]
+    public void DragAndCompletedSelection_HideLongGuides_AndKeepPointerAndAnchor(double scale) => StaTestHost.Run(() =>
+    {
+        FrozenFrame frame = CreateFrame();
+        var on = new CaptureOverlayView(frame, showMagnifier: false);
+        var off = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: false);
+        PointD start = new(180, 120);
+        PointD end = new(720, 450);
+        try
+        {
+            SetCursor(on, start);
+            SetCursor(off, start);
+            _ = Render(on, scale);
+            _ = Render(off, scale);
+            foreach (CaptureOverlayView view in new[] { on, off })
+                InvokeInput(view, "OnMouseLeftButtonDown", new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+                    { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
+            Assert.Equal(Pixels(Render(on, scale)), Pixels(Render(off, scale)));
+            foreach (CaptureOverlayView view in new[] { on, off })
+            {
+                SetCursor(view, end);
+                InvokeInput(view, "OnMouseMove", new MouseEventArgs(Mouse.PrimaryDevice, 1)
+                    { RoutedEvent = Mouse.MouseMoveEvent });
+            }
+            byte[] dragging = Pixels(Render(on, scale));
+            Assert.Equal(dragging, Pixels(Render(off, scale)));
+            Assert.Equal(new RectD(180, 120, 540, 330), on.Selection);
+            // Existing cyan anchor ring remains distinct from the small white live pointer.
+            int anchorPixel = ((int)start.Y * 900 + (int)(start.X - 8 * scale)) * 4;
+            Assert.True(dragging[anchorPixel] > dragging[anchorPixel + 2] + 25
+                && dragging[anchorPixel + 1] > dragging[anchorPixel + 2] + 25);
+            int pointerPixel = ((int)end.Y * 900 + (int)(end.X + 8 * scale)) * 4;
+            Assert.True(dragging[pointerPixel] > 180 && dragging[pointerPixel + 1] > 180 && dragging[pointerPixel + 2] > 180);
+
+            // A completed or keyboard-set selection also has no long/interior grid lines.
+            foreach (CaptureOverlayView view in new[] { on, off })
+            {
+                FieldInfo interaction = typeof(CaptureOverlayView).GetField("_interaction", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                interaction.SetValue(view, Enum.Parse(interaction.FieldType, "None"));
+            }
+            Assert.Equal(Pixels(Render(on, scale)), Pixels(Render(off, scale)));
+        }
+        finally { on.ReleaseResources(); off.ReleaseResources(); }
+    });
+
+    [Fact]
+    public void BeforePointerInitialization_NoGuideAppearsAtAnInventedPosition() => StaTestHost.Run(() =>
+    {
+        FrozenFrame frame = CreateFrame();
+        var on = new CaptureOverlayView(frame, showMagnifier: false);
+        var off = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: false);
+        try { Assert.Equal(Pixels(Render(on)), Pixels(Render(off))); }
         finally { on.ReleaseResources(); off.ReleaseResources(); }
     });
 
@@ -85,6 +149,8 @@ public sealed class CaptureSelectionGridTests
         window.SelectionCompleted += (_, args) => completed = args;
         try
         {
+            SetCursor(view, new PointD(360, 280));
+            _ = Render(view); // Render ready-state guides before completing the capture.
             SetSelection(view, region);
             _ = Render(view);
             window.CompleteSelection(region);
@@ -132,8 +198,25 @@ public sealed class CaptureSelectionGridTests
         typeof(CaptureOverlayView).GetField("_selection", BindingFlags.Instance | BindingFlags.NonPublic)!
             .SetValue(view, selection);
 
+    private static void SetCursor(CaptureOverlayView view, PointD cursor)
+    {
+        view.ReadCursor = () => cursor;
+        view.InitializePointer();
+    }
+
+    private static void InvokeInput(CaptureOverlayView view, string method, InputEventArgs args) =>
+        typeof(CaptureOverlayView).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(view, [args]);
+
+    private static void AssertAmber(byte[] pixels, int x, int y)
+    {
+        int offset = (y * 900 + x) * 4;
+        Assert.True(pixels[offset + 2] > pixels[offset + 1] + 20 && pixels[offset + 1] > pixels[offset] + 20,
+            $"Expected amber guide at ({x}, {y}), got RGB {pixels[offset + 2]}, {pixels[offset + 1]}, {pixels[offset]}.");
+    }
+
     private static RenderTargetBitmap Render(CaptureOverlayView view, double scale = 1)
     {
+        view.InvalidateVisual();
         view.Measure(new Size(900 / scale, 600 / scale));
         view.Arrange(new Rect(0, 0, 900 / scale, 600 / scale));
         view.UpdateLayout();
@@ -142,9 +225,9 @@ public sealed class CaptureSelectionGridTests
         return image;
     }
 
-    private static void SaveEvidence(BitmapSource image, string name)
+    private static void SaveEvidence(BitmapSource image, string name, string variable = "MYCAPTURE_GRID_EVIDENCE")
     {
-        string? directory = Environment.GetEnvironmentVariable("MYCAPTURE_GRID_EVIDENCE");
+        string? directory = Environment.GetEnvironmentVariable(variable);
         if (string.IsNullOrWhiteSpace(directory)) return;
         Directory.CreateDirectory(directory);
         var encoder = new PngBitmapEncoder();

@@ -63,6 +63,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private readonly DrawingVisual _desktopVisual = new();
     private readonly DrawingVisual _dimmerVisual = new();
     private readonly DrawingVisual _revealVisual = new();
+    private readonly DrawingVisual _guideVisual = new();
     private readonly DrawingVisual _selectionVisual = new();
     private readonly DrawingVisual _instructionVisual = new();
     private readonly DrawingVisual _anchorVisual = new();
@@ -80,8 +81,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private readonly Pen _pointerOuterPen = new(Brushes.Black, 4);
     private readonly Pen _pointerInnerPen = new(Brushes.White, 1.5);
     private readonly Pen _anchorPen;
-    private readonly Pen _gridShadowPen = new(new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)), 2);
-    private readonly Pen _gridLinePen = new(new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)), 1);
+    private readonly Pen _guideShadowPen = new(new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)), 3);
+    private readonly Pen _guideLinePen = new(new SolidColorBrush(Color.FromRgb(0xFF, 0xB3, 0x47)), 1.25);
     internal int StaticRenderCount { get; private set; }
     internal int FeedbackRenderCount { get; private set; }
     internal int MagnifierUpdateCount { get; private set; }
@@ -173,7 +174,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _showSelectionGrid = showSelectionGrid;
         _visuals = new VisualCollection(this)
         {
-            _desktopVisual, _dimmerVisual, _revealVisual, _selectionVisual,
+            _desktopVisual, _dimmerVisual, _revealVisual, _guideVisual, _selectionVisual,
             _instructionVisual, _anchorVisual, _pointerVisual, _magnifierVisual,
         };
         _feedbackScheduler = new CompositionFrameScheduler(Dispatcher, RenderLayers);
@@ -190,8 +191,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _anchorPen = new Pen(_selectionBrush, 1.5);
         _pointerOuterPen.Freeze();
         _pointerInnerPen.Freeze();
-        _gridShadowPen.Freeze();
-        _gridLinePen.Freeze();
+        _guideShadowPen.Freeze();
+        _guideLinePen.Freeze();
         if (_anchorPen.CanFreeze) _anchorPen.Freeze();
         _chromeBrush = ResourceBrush("Surface.Floating", new SolidColorBrush(Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)));
         _primaryTextBrush = ResourceBrush("Text.Primary", Brushes.White);
@@ -288,6 +289,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             using DrawingContext dc = _anchorVisual.RenderOpen();
             if (anchor.HasValue) DrawPointerFeedback(dc, anchor: true);
         }
+        using (DrawingContext dc = _guideVisual.RenderOpen()) DrawStartingGuides(dc);
         using (DrawingContext dc = _pointerVisual.RenderOpen()) DrawPointerFeedback(dc, anchor: false);
         if (_showMagnifier && _pointerInitialized) UpdateMagnifier();
         using (DrawingContext dc = _magnifierVisual.RenderOpen()) DrawMagnifier(dc);
@@ -322,7 +324,6 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private void DrawSelection(DrawingContext dc, RectD pixelRect)
     {
         Rect rect = ToDipRect(pixelRect);
-        if (_showSelectionGrid) DrawSelectionGrid(dc, rect);
         var glowPen = new Pen(new SolidColorBrush(Color.FromArgb(90, 88, 199, 243)), Math.Max(3, 3 * DipPerPixelX));
         glowPen.Freeze();
         var borderPen = new Pen(_selectionBrush, Math.Max(1.25, 1.25 * DipPerPixelX));
@@ -332,25 +333,22 @@ internal sealed class CaptureOverlayView : FrameworkElement
         DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect);
     }
 
-    private void DrawSelectionGrid(DrawingContext dc, Rect rect)
+    private void DrawStartingGuides(DrawingContext dc)
     {
-        // Guides are retained selection chrome, never painted into the frozen source used
-        // by CompleteSelection/Crop. Avoid crowding a drag that has only just begun.
-        if (rect.Width < 12 || rect.Height < 12) return;
-        dc.PushClip(new RectangleGeometry(rect));
-        for (int third = 1; third <= 2; third++)
-        {
-            double x = rect.Left + rect.Width * third / 3;
-            double y = rect.Top + rect.Height * third / 3;
-            DrawGuide(new Point(x, rect.Top), new Point(x, rect.Bottom));
-            DrawGuide(new Point(rect.Left, y), new Point(rect.Right, y));
-        }
+        // Help locate the first corner before a drag. These cursor-following guides live
+        // below the pointer and instructions, never in the frozen source used by Crop.
+        if (!_showSelectionGrid || !_pointerInitialized || _ended
+            || _interaction != InteractionMode.None || _selection.HasValue) return;
+        Point p = ToDipPoint(_cursorPixel);
+        dc.PushClip(new RectangleGeometry(new Rect(RenderSize)));
+        DrawGuide(new Point(0, p.Y), new Point(ActualWidth, p.Y));
+        DrawGuide(new Point(p.X, 0), new Point(p.X, ActualHeight));
         dc.Pop();
 
         void DrawGuide(Point from, Point to)
         {
-            dc.DrawLine(_gridShadowPen, from, to);
-            dc.DrawLine(_gridLinePen, from, to);
+            dc.DrawLine(_guideShadowPen, from, to);
+            dc.DrawLine(_guideLinePen, from, to);
         }
     }
 
