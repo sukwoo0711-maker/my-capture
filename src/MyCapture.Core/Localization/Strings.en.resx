@@ -3029,6 +3029,9 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_Cancelled" xml:space="preserve"><value>Cancelled. You can calculate again.</value></data>
   <data name="MediaExport_Error" xml:space="preserve"><value>Could not export: {0}</value></data>
   <data name="MediaExport_Saved" xml:space="preserve"><value>Saved: {0}</value></data>
+  <data name="MediaExport_SavingCopy" xml:space="preserve"><value>Saving… {0}%</value></data>
+  <data name="VideoEdit_Finalizing" xml:space="preserve"><value>Finalising the saved video…</value></data>
+  <data name="VideoEdit_ImageLayerPreparing" xml:space="preserve"><value>Preparing the image layer…</value></data>
   <data name="MediaExport_Cancel" xml:space="preserve"><value>Cancel operation</value></data>
   <data name="MediaExport_SaveEdits" xml:space="preserve"><value>Save edits</value></data>
   <data name="MediaExport_ExportFormats" xml:space="preserve"><value>Export · MP4 / GIF</value></data>

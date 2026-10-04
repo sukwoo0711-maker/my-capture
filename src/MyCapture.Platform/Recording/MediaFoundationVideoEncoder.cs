@@ -149,6 +149,15 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
 
         int rowBytes = _options.Width * 4;
         int bufferBytes = rowBytes * _options.Height;
+        if (frame.Width != _options.Width || frame.Height != _options.Height
+            || frame.Stride < rowBytes
+            || frame.Pixels.Length < checked((frame.Stride * (_options.Height - 1)) + rowBytes))
+        {
+            throw new ArgumentException(
+                "Encoder frame does not match the dimensions the encoder was opened with "
+                + $"(frame {frame.Width}x{frame.Height} stride {frame.Stride}, expected {_options.Width}x{_options.Height}).",
+                nameof(frame));
+        }
 
         Check(MFCreateMemoryBuffer((uint)bufferBytes, out IMFMediaBuffer buffer), nameof(MFCreateMemoryBuffer));
         try

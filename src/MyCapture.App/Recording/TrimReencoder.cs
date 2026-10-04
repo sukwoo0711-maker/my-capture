@@ -40,6 +40,8 @@ internal static class TrimReencoder
             throw new ArgumentOutOfRangeException(nameof(bitrateBitsPerSecond));
         var options = new VideoEncoderOptions(outputPath, width, height, fps, bitrate);
         using IVideoEncoder encoder = encoderFactory(options);
+        double frameMs = 1000.0 / fps;
+        byte[]? pixelBuffer = null;
 
         int emitted = VideoFrameRenderPipeline.Render(
             new VideoFrameRenderRequest(
@@ -56,11 +58,23 @@ internal static class TrimReencoder
             (frame, outputTimestamp) =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                byte[] pixels = VideoFrameRenderPipeline.ToBgra32(frame, width, height, out int stride);
-                encoder.WriteFrame(new EncoderFrame(pixels, width, height, stride, outputTimestamp));
+                pixelBuffer = VideoFrameRenderPipeline.ToBgra32(frame, width, height, out int stride, pixelBuffer);
+                encoder.WriteFrame(new EncoderFrame(pixelBuffer, width, height, stride, outputTimestamp));
             },
             progress,
-            cancellationToken);
+            cancellationToken,
+            (decoded, index) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                // Plain trim without overlays: decoded BGRA pixels go straight to the
+                // encoder, skipping WPF composition entirely.
+                encoder.WriteFrame(new EncoderFrame(
+                    decoded.Pixels,
+                    decoded.Width,
+                    decoded.Height,
+                    decoded.Stride,
+                    index * frameMs));
+            });
 
         encoder.Complete();
         log.LogInformation(

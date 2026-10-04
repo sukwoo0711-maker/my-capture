@@ -102,7 +102,8 @@ internal sealed class VideoExportCalculation : IDisposable
         return path;
     }
 
-    internal void SaveCopy(string destination, string originalSource, CancellationToken cancellationToken)
+    internal void SaveCopy(string destination, string originalSource, CancellationToken cancellationToken,
+        IProgress<double>? progress = null)
     {
         string selected = Path.GetFullPath(destination);
         if (string.Equals(selected, Path.GetFullPath(originalSource), StringComparison.OrdinalIgnoreCase))
@@ -123,14 +124,30 @@ internal sealed class VideoExportCalculation : IDisposable
             using (var source = new FileStream(ResultPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             using (var target = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
+                // A staged MP4 can take tens of seconds to copy; throttled per-chunk
+                // reports keep the save dialog's status line honest instead of frozen at
+                // the last calculation result.
+                long totalBytes = Math.Max(1, source.Length);
+                long copied = 0;
+                DateTime nextReport = DateTime.UtcNow;
                 byte[] buffer = new byte[64 * 1024];
                 int count;
                 while ((count = source.Read(buffer)) != 0)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     target.Write(buffer, 0, count);
+                    copied += count;
+                    if (progress is not null && DateTime.UtcNow >= nextReport)
+                    {
+                        progress.Report(100.0 * copied / totalBytes);
+                        nextReport = DateTime.UtcNow + TimeSpan.FromMilliseconds(80);
+                    }
                 }
+
                 target.Flush(true);
+                // 100% means the staged copy is durable on disk; the caller's atomic
+                // replace to the chosen destination happens after this returns.
+                progress?.Report(100.0);
             }
             cancellationToken.ThrowIfCancellationRequested();
             if (File.Exists(selected)) File.Replace(temporary, selected, null, true);

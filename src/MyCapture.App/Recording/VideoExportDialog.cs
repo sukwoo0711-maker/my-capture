@@ -279,9 +279,17 @@ internal sealed class VideoExportDialog : Window
         using var cancellation = new CancellationTokenSource();
         _result = null; // The operation holds the stage until its read and atomic commit end.
         _cancellation = cancellation; SetWorking(true);
+        _status.Text = UiText.Format("MediaExport_SavingCopy", 0);
+        var copyProgress = new Progress<double>(percent =>
+        {
+            if (!_closed && revision == _settingsRevision && ReferenceEquals(_cancellation, cancellation))
+            {
+                _status.Text = UiText.Format("MediaExport_SavingCopy", (int)Math.Clamp(percent, 0, 100));
+            }
+        });
         try
         {
-            await Task.Run(() => result.SaveCopy(dialog.FileName, _recording.OutputPath, cancellation.Token));
+            await Task.Run(() => result.SaveCopy(dialog.FileName, _recording.OutputPath, cancellation.Token, copyProgress));
             if (!_closed && revision == _settingsRevision)
                 _status.Text = UiText.Format("MediaExport_Saved", Path.GetFileName(dialog.FileName));
         }
