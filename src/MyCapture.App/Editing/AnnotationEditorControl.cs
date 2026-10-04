@@ -51,7 +51,6 @@ internal sealed class AnnotationEditorControl : Grid
     private const double InspectorCompactWidth = 860;
 
     private readonly AnnotationSourceMetadata _frame;
-    private readonly RectD _cropRegion;
     private readonly BitmapSource _selectedBitmap;
     private readonly AnnotationImageStore _imageStore = new();
     private readonly AnnotationEditorController _controller;
@@ -69,8 +68,6 @@ internal sealed class AnnotationEditorControl : Grid
 
     private int _canvasWidth;
     private int _canvasHeight;
-    private readonly int _originalWidth;
-    private readonly int _originalHeight;
     private MonitorInfo? _frameMonitor;
     private double _frameElapsedMilliseconds;
     private RectD _originalCropRegion;
@@ -140,7 +137,6 @@ internal sealed class AnnotationEditorControl : Grid
         string? sourceWindowTitle = null)
     {
         _frame = AnnotationSourceMetadata.FromFrame(frame);
-        _cropRegion = bitmapRegion.Normalized();
         _selectedBitmap = selectedBitmap ?? throw new ArgumentNullException(nameof(selectedBitmap));
         _privacyRedactionService = privacyRedactionService;
         // A frame/clipboard editor has no captured window title. Preserve that explicit
@@ -153,8 +149,6 @@ internal sealed class AnnotationEditorControl : Grid
 
         _canvasWidth = Math.Max(1, selectedBitmap.PixelWidth);
         _canvasHeight = Math.Max(1, selectedBitmap.PixelHeight);
-        _originalWidth = _canvasWidth;
-        _originalHeight = _canvasHeight;
 
         // Seed decoded assets before wiring the renderer so restored image annotations draw
         // on the first paint.
@@ -166,6 +160,8 @@ internal sealed class AnnotationEditorControl : Grid
         AnnotationDocument document = initialDocument ?? AnnotationDocument.CreateFor(_canvasWidth, _canvasHeight);
         var undo = new UndoStack();
         _controller = new AnnotationEditorController(document, undo);
+        _controller.BaseWidthAtZeroTurns = selectedBitmap.PixelWidth;
+        _controller.BaseHeightAtZeroTurns = selectedBitmap.PixelHeight;
         AnnotationDefaults defaults = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
         _controller.StrokeColor = defaults.StrokeColor;
         _controller.StrokeThickness = double.IsFinite(defaults.StrokeThickness) ? Math.Clamp(defaults.StrokeThickness, 1, 24) : 3;
@@ -391,29 +387,6 @@ internal sealed class AnnotationEditorControl : Grid
         SetStatus(UiText.Get("Text_6B2C41A9E531"));
     }
 
-    private void ApplyRotatedBaseBitmap()
-    {
-        // The editor canvas is always the selected pixels at (0,0). _originalCropRegion is
-        // the capture's location on the desktop and must not be used as a hit-test origin:
-        // restoring it after a rotation shifts every click by that offset.
-        if (_rotationTurns == 0)
-        {
-            SwapBaseBitmap(_selectedBitmap, new RectD(0, 0, _originalWidth, _originalHeight));
-            return;
-        }
-
-        BitmapSource rotated = _selectedBitmap;
-        for (int pass = 0; pass < _rotationTurns; pass++)
-        {
-            rotated = RotateQuarterClockwise(rotated);
-        }
-
-        // Size the crop from the bitmap that was actually produced. Swapping the *current*
-        // canvas size `_rotationTurns` times is wrong after the first turn (180째 would keep
-        // the previous 90째 dimensions and every handle would miss the pixels).
-        SwapBaseBitmap(rotated, new RectD(0, 0, rotated.PixelWidth, rotated.PixelHeight));
-    }
-
     private void SwapBaseBitmap(BitmapSource bitmap, RectD region)
     {
         if (bitmap.CanFreeze)
@@ -502,9 +475,13 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         int step = Math.Clamp(blockSize, 4, 64);
-        int stride = _selectedBitmap.PixelWidth * 4;
-        byte[] source = new byte[stride * _selectedBitmap.PixelHeight];
-        _selectedBitmap.CopyPixels(source, stride, 0);
+        // Sample the base the user currently sees. After a rotation that base is the
+        // rotated bitmap; sampling the untouched selection would read coordinates from
+        // the rotated canvas space out of (or beside) the unrotated pixels.
+        BitmapSource mosaicBase = _surface.Frame.Bitmap;
+        int stride = mosaicBase.PixelWidth * 4;
+        byte[] source = new byte[stride * mosaicBase.PixelHeight];
+        mosaicBase.CopyPixels(source, stride, 0);
 
         int patchStride = width * 4;
         byte[] patch = new byte[patchStride * height];
@@ -823,9 +800,13 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         CommitActiveText();
-        int stride = _selectedBitmap.PixelWidth * 4;
-        byte[] source = new byte[stride * _selectedBitmap.PixelHeight];
-        _selectedBitmap.CopyPixels(source, stride, 0);
+        // Cut from the base the user currently sees. After a rotation that base is the
+        // rotated bitmap; the untouched selection would yield the wrong region (or read
+        // past its bounds, because the clamp above uses the rotated canvas size).
+        BitmapSource cropBase = _surface.Frame.Bitmap;
+        int stride = cropBase.PixelWidth * 4;
+        byte[] source = new byte[stride * cropBase.PixelHeight];
+        cropBase.CopyPixels(source, stride, 0);
 
         int x = (int)Math.Floor(normalized.X);
         int y = (int)Math.Floor(normalized.Y);
@@ -841,8 +822,8 @@ internal sealed class AnnotationEditorControl : Grid
         var cropped = BitmapSource.Create(
             width,
             height,
-            _selectedBitmap.DpiX,
-            _selectedBitmap.DpiY,
+            cropBase.DpiX,
+            cropBase.DpiY,
             System.Windows.Media.PixelFormats.Bgra32,
             null,
             crop,
@@ -888,10 +869,11 @@ internal sealed class AnnotationEditorControl : Grid
         int sourceWidth = bitmap.PixelWidth;
         int sourceHeight = bitmap.PixelHeight;
 
-        // Fit the image to at most a third of the crop, preserving aspect ratio, centred on
-        // the click.
-        double maxWidth = _cropRegion.Width / 3;
-        double maxHeight = _cropRegion.Height / 3;
+        // Fit the image to at most a third of the current canvas, preserving aspect ratio,
+        // centred on the click. The canvas tracks rotation and crop; the original capture
+        // region does not.
+        double maxWidth = _canvasWidth / 3;
+        double maxHeight = _canvasHeight / 3;
         double aspect = sourceHeight > 0 ? (double)sourceWidth / sourceHeight : 1.0;
 
         double width = Math.Min(sourceWidth, maxWidth);
@@ -1708,66 +1690,57 @@ internal sealed class AnnotationEditorControl : Grid
     private void OnHistoryChanged()
     {
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
-        SyncRotationWithDocument();
-        SyncCropWithDocument();
+        SyncBaseBitmapWithDocument();
         RefreshHistoryButtons();
         UpdateInspector();
     }
 
     /// <summary>
-    /// Re-derives the base bitmap after any undo-stack change so undoing (or redoing) a
-    /// rotation restores the matching bitmap orientation. The turn count lives on the
-    /// controller because canvas width/height cannot distinguish 0째 from 180째.
+    /// Re-derives the base bitmap after any undo-stack change so the visible pixels match
+    /// the document canvas in its current orientation: the capture rotated by the live
+    /// turn count, with any crop cut back out of it at the crop origin. Re-cutting from
+    /// the rotated base keeps crop undo/redo correct after a rotation, which the unrotated
+    /// selection alone cannot supply (its coordinate space no longer matches). The turn
+    /// count lives on the controller because canvas width/height cannot distinguish 0
+    /// from 180 degrees.
     /// </summary>
-    private void SyncRotationWithDocument()
+    private void SyncBaseBitmapWithDocument()
     {
         int turns = _controller.RotationTurns;
-        if (turns == _rotationTurns
-            && _controller.Document.CanvasWidth == _canvasWidth
-            && _controller.Document.CanvasHeight == _canvasHeight)
-        {
-            return;
-        }
-        _rotationTurns = turns;
-        ApplyRotatedBaseBitmap();
-    }
-
-    /// <summary>
-    /// Re-derives the base bitmap after a crop (or its undo) so the visible pixels match
-    /// the document canvas. Undo of a crop re-cuts from the last pre-crop bitmap kept by
-    /// <see cref="ApplyCrop"/>'s source — the full original — because the canvas size alone
-    /// cannot reconstruct pixels that were removed.
-    /// </summary>
-    private void SyncCropWithDocument()
-    {
         int width = Math.Max(1, _controller.Document.CanvasWidth);
         int height = Math.Max(1, _controller.Document.CanvasHeight);
-        if (width == _canvasWidth && height == _canvasHeight)
+        if (turns == _rotationTurns && width == _canvasWidth && height == _canvasHeight)
         {
             return;
         }
 
-        if (width <= _selectedBitmap.PixelWidth && height <= _selectedBitmap.PixelHeight)
+        _rotationTurns = turns;
+        BitmapSource rotated = _selectedBitmap;
+        for (int pass = 0; pass < turns; pass++)
         {
-            ApplyCropFromOriginal(width, height);
+            rotated = RotateQuarterClockwise(rotated);
+        }
+
+        if (width == rotated.PixelWidth && height == rotated.PixelHeight)
+        {
+            SwapBaseBitmap(rotated, new RectD(0, 0, rotated.PixelWidth, rotated.PixelHeight));
             return;
         }
 
-        // Growing back (crop undo): recut from the original capture at the current origin.
-        ApplyCropFromOriginal(width, height);
+        ApplyCropFromOriginal(width, height, rotated);
     }
 
-    private void ApplyCropFromOriginal(int width, int height)
+    private void ApplyCropFromOriginal(int width, int height, BitmapSource baseBitmap)
     {
         PointD origin = _controller.CropOrigin;
-        int stride = _selectedBitmap.PixelWidth * 4;
-        byte[] source = new byte[stride * _selectedBitmap.PixelHeight];
-        _selectedBitmap.CopyPixels(source, stride, 0);
+        int stride = baseBitmap.PixelWidth * 4;
+        byte[] source = new byte[stride * baseBitmap.PixelHeight];
+        baseBitmap.CopyPixels(source, stride, 0);
 
-        int x = Math.Clamp((int)Math.Round(origin.X), 0, _selectedBitmap.PixelWidth - 1);
-        int y = Math.Clamp((int)Math.Round(origin.Y), 0, _selectedBitmap.PixelHeight - 1);
-        width = Math.Min(width, _selectedBitmap.PixelWidth - x);
-        height = Math.Min(height, _selectedBitmap.PixelHeight - y);
+        int x = Math.Clamp((int)Math.Round(origin.X), 0, baseBitmap.PixelWidth - 1);
+        int y = Math.Clamp((int)Math.Round(origin.Y), 0, baseBitmap.PixelHeight - 1);
+        width = Math.Min(width, baseBitmap.PixelWidth - x);
+        height = Math.Min(height, baseBitmap.PixelHeight - y);
         if (width < 1 || height < 1)
         {
             return;
@@ -1783,8 +1756,8 @@ internal sealed class AnnotationEditorControl : Grid
         var cropped = BitmapSource.Create(
             width,
             height,
-            _selectedBitmap.DpiX,
-            _selectedBitmap.DpiY,
+            baseBitmap.DpiX,
+            baseBitmap.DpiY,
             System.Windows.Media.PixelFormats.Bgra32,
             null,
             crop,
@@ -1992,8 +1965,10 @@ internal sealed class AnnotationEditorControl : Grid
 
         try
         {
+            // Detect on the base the user currently sees so covers land in document space
+            // even after a rotation or crop.
             PrivacyRedactionResult result = await _privacyRedactionService.FindAsync(
-                _selectedBitmap,
+                _surface.Frame.Bitmap,
                 operation.Token);
             if (operation.IsCancellationRequested)
             {
@@ -2090,12 +2065,20 @@ internal sealed class AnnotationEditorControl : Grid
         AnnotationDocument document = _controller.Document;
         document.NormalizeZIndices();
 
-        // After a rotation the base pixels are the surface's rotated bitmap and the canvas
-        // is the rotated rectangle; committing the untouched selection here would write
-        // rotated annotations onto an unrotated image. Without a rotation the original
-        // selection stays authoritative so its crop provenance is preserved exactly.
-        BitmapSource baseBitmap = _rotationTurns == 0 ? _selectedBitmap : _surface.Frame.Bitmap;
-        RectD baseRegion = _rotationTurns == 0 ? _cropRegion : _surface.CropRegion;
+        // Flatten exactly what the editor showed: the surface's base already carries any
+        // rotation and crop, and committing the untouched selection would place transformed
+        // annotations at stale offsets (or write rotated annotations onto an unrotated
+        // image). The reported region keeps the captured desktop rect while the document is
+        // untouched, follows the crop origin once a crop shrinks the canvas, and falls back
+        // to the canvas rect under rotation where the desktop mapping no longer applies.
+        BitmapSource baseBitmap = _surface.Frame.Bitmap;
+        RectD baseRegion = _rotationTurns == 0
+            ? new RectD(
+                _originalCropRegion.X + _controller.CropOrigin.X,
+                _originalCropRegion.Y + _controller.CropOrigin.Y,
+                Math.Max(1, document.CanvasWidth),
+                Math.Max(1, document.CanvasHeight))
+            : _surface.CropRegion;
 
         IEnumerable<string> usedAssets = document.Items
             .OfType<ImageAnnotation>()
@@ -2112,7 +2095,9 @@ internal sealed class AnnotationEditorControl : Grid
             _imageStore.SourcesFor(usedAssets),
             reduceExport,
             _sourceWindowTitle,
-            _showSourceWindowTitle);
+            _showSourceWindowTitle,
+            _rotationTurns,
+            _controller.CropOrigin);
 
         // Keep the editor alive while background PNG encoding or clipboard contention
         // resolves. This guarantees Ctrl+C means copy-then-close, never close-then-copy.

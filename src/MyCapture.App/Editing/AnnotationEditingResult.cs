@@ -39,9 +39,12 @@ internal sealed class AnnotationEditingResult
         IReadOnlyDictionary<string, string> imageAssetSources,
         bool reduceExport = false,
         string? sourceWindowTitle = null,
-        bool? showSourceWindowTitle = null)
+        bool? showSourceWindowTitle = null,
+        int rotationTurns = 0,
+        PointD cropOrigin = default)
         : this(AnnotationSourceMetadata.FromFrame(frame), bitmapRegion, selectedBitmap, document,
-            action, imageAssetBitmaps, imageAssetSources, reduceExport, sourceWindowTitle, showSourceWindowTitle)
+            action, imageAssetBitmaps, imageAssetSources, reduceExport, sourceWindowTitle,
+            showSourceWindowTitle, rotationTurns, cropOrigin)
     {
     }
 
@@ -55,7 +58,9 @@ internal sealed class AnnotationEditingResult
         IReadOnlyDictionary<string, string> imageAssetSources,
         bool reduceExport = false,
         string? sourceWindowTitle = null,
-        bool? showSourceWindowTitle = null)
+        bool? showSourceWindowTitle = null,
+        int rotationTurns = 0,
+        PointD cropOrigin = default)
     {
         Frame = frame ?? throw new ArgumentNullException(nameof(frame));
         BitmapRegion = bitmapRegion;
@@ -67,6 +72,8 @@ internal sealed class AnnotationEditingResult
         ReduceExport = reduceExport;
         SourceWindowTitle = sourceWindowTitle;
         ShowSourceWindowTitle = showSourceWindowTitle;
+        RotationTurns = rotationTurns;
+        CropOrigin = cropOrigin;
     }
 
     /// <summary>Source-frame provenance, without retaining the desktop bitmap.</summary>
@@ -90,6 +97,20 @@ internal sealed class AnnotationEditingResult
 
     /// <summary>The editor's displayed option; null for callers without a preview.</summary>
     internal bool? ShowSourceWindowTitle { get; }
+
+    /// <summary>
+    /// Clockwise quarter-turns the user applied to the document relative to the source
+    /// capture. A 180° turn keeps the canvas dimensions, so consumers cannot detect it
+    /// from sizes alone.
+    /// </summary>
+    internal int RotationTurns { get; }
+
+    /// <summary>
+    /// The live canvas origin's offset within the base bitmap at the current orientation.
+    /// Non-zero once a crop has shrunk the canvas; consumers mapping document coordinates
+    /// back onto the untransformed source need this offset.
+    /// </summary>
+    internal PointD CropOrigin { get; }
 
     /// <summary>
     /// The decoded, frozen bitmap for each <see cref="ImageAnnotation.AssetFileName"/> used

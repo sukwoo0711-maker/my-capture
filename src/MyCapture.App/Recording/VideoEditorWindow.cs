@@ -1173,6 +1173,7 @@ internal sealed class VideoEditorWindow : Window
         _operationCts = operation;
         CancellationToken token = operation.Token;
         SetOperationRunning(true);
+        _statusLabel.Text = UiText.Get("VideoEdit_ImageLayerPreparing");
         try
         {
             FrameEditLayer layer = await StaThreadTask.RunAsync(() => VideoLayerAssets.CreateLayer(
@@ -1619,9 +1620,38 @@ internal sealed class VideoEditorWindow : Window
             var visual = new DrawingVisual();
             var renderer = new AnnotationRenderer(
                 AnnotationImageStore.FromDecoded(result.ImageAssetBitmaps));
-            using (DrawingContext dc = visual.RenderOpen())
+            // An unrotated document still lives in the frame's space: a crop only shifted
+            // it, so annotations map back with the crop origin and the overlay stays
+            // transparent. A rotated document has no transparent mapping onto the frame,
+            // so the committed image — rotated base pixels included — is flattened and
+            // letterboxed onto the frame (a 180° turn keeps the canvas dimensions, which
+            // is why the turn count, not the size, decides).
+            if (result.RotationTurns != 0)
             {
-                renderer.Render(dc, result.Document, pixelsPerDip: 1.0);
+                int canvasWidth = Math.Max(1, result.Document.CanvasWidth);
+                int canvasHeight = Math.Max(1, result.Document.CanvasHeight);
+                double scale = Math.Min((double)width / canvasWidth, (double)height / canvasHeight);
+                double drawWidth = canvasWidth * scale;
+                double drawHeight = canvasHeight * scale;
+                using (DrawingContext dc = visual.RenderOpen())
+                {
+                    dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
+                    dc.PushTransform(new TranslateTransform((width - drawWidth) / 2, (height - drawHeight) / 2));
+                    dc.PushTransform(new ScaleTransform(scale, scale));
+                    dc.DrawImage(result.SelectedBitmap, new Rect(0, 0, canvasWidth, canvasHeight));
+                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0);
+                    dc.Pop();
+                    dc.Pop();
+                }
+            }
+            else
+            {
+                using (DrawingContext dc = visual.RenderOpen())
+                {
+                    dc.PushTransform(new TranslateTransform(result.CropOrigin.X, result.CropOrigin.Y));
+                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0);
+                    dc.Pop();
+                }
             }
 
             var transparent = new RenderTargetBitmap(
@@ -1769,6 +1799,9 @@ internal sealed class VideoEditorWindow : Window
 
             if (VideoCommitHandler is not null)
             {
+                // The encode reached 100%, but validation, thumbnail and the staged file
+                // swap still run; labelling the tail keeps the editor from looking frozen.
+                _statusLabel.Text = UiText.Get("VideoEdit_Finalizing");
                 await VideoCommitHandler(document, outputPath, cancellationToken);
             }
 

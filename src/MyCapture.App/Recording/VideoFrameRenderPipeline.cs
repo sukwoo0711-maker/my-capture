@@ -37,7 +37,8 @@ internal static class VideoFrameRenderPipeline
         VideoFrameRenderRequest request,
         Action<BitmapSource, double> acceptFrame,
         IProgress<VideoFrameRenderProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<DecodedVideoFrame, int>? acceptRawFrame = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(acceptFrame);
@@ -62,16 +63,31 @@ internal static class VideoFrameRenderPipeline
             sourceTimes,
             (frame, index) => acceptFrame(frame, index * frameMs),
             progress,
-            cancellationToken);
+            cancellationToken,
+            acceptRawFrame);
     }
 
     /// <summary>Renders a monotonic, caller-defined source schedule in one decoder session.</summary>
+    /// <remarks>
+    /// <para>
+    /// When <paramref name="acceptRawFrame"/> is supplied and the request needs no
+    /// composition — no text overlays, no edit layers, and output at the decoded size —
+    /// decoded frames bypass WPF composition entirely. A plain trim export then pays only
+    /// decode plus encode, which is the dominant win on low-end machines.
+    /// </para>
+    /// <para>
+    /// Otherwise each composed frame goes to <paramref name="acceptFrame"/>, which must
+    /// consume it before the next call: the pipeline reuses its composition buffers across
+    /// frames so a long export does not churn the large object heap.
+    /// </para>
+    /// </remarks>
     internal static int RenderScheduled(
         VideoFrameRenderRequest request,
         IReadOnlyList<double> sourceTimes,
         Action<BitmapSource, int> acceptFrame,
         IProgress<VideoFrameRenderProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<DecodedVideoFrame, int>? acceptRawFrame = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(sourceTimes);
@@ -113,38 +129,83 @@ internal static class VideoFrameRenderPipeline
 
         IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps =
             FrameEditLayerRenderer.Decode(request.FrameEditLayers);
+
+        if (acceptRawFrame is not null
+            && CanBypassComposition(request, reader.Width, reader.Height))
+        {
+            for (int index = 0; index < sourceTimes.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                double sourceTime = sourceTimes[index];
+                DecodedVideoFrame decoded = reader.ReadFrameAt(sourceTime, cancellationToken);
+                if (decoded.Width != request.Width || decoded.Height != request.Height)
+                {
+                    // A mid-stream media-type change resized the decoder output; the raw
+                    // path cannot rescale, and feeding mismatched buffers to the encoder
+                    // would corrupt the output silently.
+                    throw new InvalidDataException(
+                        "The source video changed resolution mid-stream; a plain trim export needs a constant frame size.");
+                }
+
+                acceptRawFrame(decoded, index);
+                progress?.Report(new VideoFrameRenderProgress(index + 1, sourceTimes.Count, sourceTime));
+            }
+
+            return sourceTimes.Count;
+        }
+
+        var source = new WriteableBitmap(reader.Width, reader.Height, 96, 96, PixelFormats.Bgr32, null);
+        var visual = new DrawingVisual();
+        var target = new RenderTargetBitmap(request.Width, request.Height, 96, 96, PixelFormats.Pbgra32);
         for (int index = 0; index < sourceTimes.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             double sourceTime = sourceTimes[index];
 
             DecodedVideoFrame decoded = reader.ReadFrameAt(sourceTime, cancellationToken);
-            BitmapSource source = BitmapSource.Create(
-                decoded.Width,
-                decoded.Height,
-                96,
-                96,
-                PixelFormats.Bgr32,
-                palette: null,
-                decoded.Pixels,
-                decoded.Stride);
-            source.Freeze();
-            BitmapSource frame = RenderFrame(
-                source,
-                request.Width,
-                request.Height,
-                request.CanvasWidth,
-                request.CanvasHeight,
-                request.TextOverlays,
-                request.FrameEditLayers,
-                frameLayerBitmaps,
-                sourceTime);
+            if (decoded.Width != source.PixelWidth || decoded.Height != source.PixelHeight)
+            {
+                // A mid-stream media-type change resized the decoder output; rebuild the
+                // reusable source bitmap for the new dimensions.
+                source = new WriteableBitmap(decoded.Width, decoded.Height, 96, 96, PixelFormats.Bgr32, null);
+            }
+
+            source.WritePixels(new Int32Rect(0, 0, decoded.Width, decoded.Height), decoded.Pixels, decoded.Stride, 0);
+            using (DrawingContext dc = visual.RenderOpen())
+            {
+                DrawComposedFrame(
+                    dc,
+                    source,
+                    request.Width,
+                    request.Height,
+                    request.CanvasWidth,
+                    request.CanvasHeight,
+                    request.TextOverlays,
+                    request.FrameEditLayers,
+                    frameLayerBitmaps,
+                    sourceTime);
+            }
+
+            target.Clear();
+            target.Render(visual);
+            BitmapSource frame = new FormatConvertedBitmap(target, PixelFormats.Bgra32, null, 0);
             acceptFrame(frame, index);
             progress?.Report(new VideoFrameRenderProgress(index + 1, sourceTimes.Count, sourceTime));
         }
 
         return sourceTimes.Count;
     }
+
+    /// <summary>
+    /// True when the schedule needs no WPF composition: nothing is drawn over the frames
+    /// and the output matches the decoded size, so decoded pixels can feed the encoder
+    /// directly. Only meaningful when a raw-frame callback was supplied.
+    /// </summary>
+    internal static bool CanBypassComposition(VideoFrameRenderRequest request, int sourceWidth, int sourceHeight) =>
+        request.TextOverlays.Count == 0
+        && request.FrameEditLayers.Count == 0
+        && request.Width == sourceWidth
+        && request.Height == sourceHeight;
 
     internal static BitmapSource RenderSingleFrame(
         string sourcePath,
@@ -168,7 +229,32 @@ internal static class VideoFrameRenderPipeline
             overlays ?? [],
             frameEditLayers ?? []);
         _ = Render(request, (frame, _) => result = frame, cancellationToken: cancellationToken);
-        return result ?? throw new InvalidOperationException("No video frame was rendered.");
+        return FrozenCopy(result ?? throw new InvalidOperationException("No video frame was rendered."));
+    }
+
+    /// <summary>
+    /// Copies a composed frame into a standalone frozen bitmap. The render pipeline reuses
+    /// its composition buffers across frames, so a caller that keeps a frame beyond the
+    /// render loop (thumbnails, previews, anything crossing an STA task boundary) needs its
+    /// own pixels.
+    /// </summary>
+    internal static BitmapSource FrozenCopy(BitmapSource source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        int stride = checked(source.PixelWidth * 4);
+        byte[] pixels = new byte[checked(stride * source.PixelHeight)];
+        source.CopyPixels(pixels, stride, 0);
+        BitmapSource copy = BitmapSource.Create(
+            source.PixelWidth,
+            source.PixelHeight,
+            96,
+            96,
+            PixelFormats.Bgra32,
+            null,
+            pixels,
+            stride);
+        copy.Freeze();
+        return copy;
     }
 
     internal static VideoMediaInfo Probe(
@@ -238,7 +324,7 @@ internal static class VideoFrameRenderPipeline
         }
     }
 
-    internal static byte[] ToBgra32(BitmapSource source, int width, int height, out int stride)
+    internal static byte[] ToBgra32(BitmapSource source, int width, int height, out int stride, byte[]? destination = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         BitmapSource bgra = source.Format == PixelFormats.Bgra32
@@ -246,7 +332,9 @@ internal static class VideoFrameRenderPipeline
             : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
 
         stride = checked(width * 4);
-        byte[] buffer = new byte[checked(stride * height)];
+        byte[] buffer = destination is not null && destination.Length >= checked(stride * height)
+            ? destination
+            : new byte[checked(stride * height)];
         int copyWidth = Math.Min(width, bgra.PixelWidth);
         int copyHeight = Math.Min(height, bgra.PixelHeight);
         bgra.CopyPixels(new Int32Rect(0, 0, copyWidth, copyHeight), buffer, stride, 0);
@@ -267,32 +355,57 @@ internal static class VideoFrameRenderPipeline
         var visual = new DrawingVisual();
         using (DrawingContext dc = visual.RenderOpen())
         {
-            dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
-            dc.DrawImage(source, new Rect(0, 0, width, height));
-            double scaleX = (double)width / canvasWidth;
-            double scaleY = (double)height / canvasHeight;
-            dc.PushTransform(new ScaleTransform(scaleX, scaleY));
-            FrameEditLayerRenderer.Draw(
+            DrawComposedFrame(
                 dc,
-                frameEditLayers,
-                frameLayerBitmaps,
-                sourceTimeMs,
-                canvasWidth,
-                canvasHeight);
-            TimedTextOverlayRenderer.Draw(
-                dc,
-                overlays,
-                sourceTimeMs,
+                source,
+                width,
+                height,
                 canvasWidth,
                 canvasHeight,
-                pixelsPerDip: 1.0);
-            dc.Pop();
+                overlays,
+                frameEditLayers,
+                frameLayerBitmaps,
+                sourceTimeMs);
         }
 
         var target = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
         target.Render(visual);
         target.Freeze();
         return target;
+    }
+
+    private static void DrawComposedFrame(
+        DrawingContext dc,
+        ImageSource source,
+        int width,
+        int height,
+        int canvasWidth,
+        int canvasHeight,
+        IReadOnlyList<TimedTextOverlay> overlays,
+        IReadOnlyList<FrameEditLayer> frameEditLayers,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        double sourceTimeMs)
+    {
+        dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
+        dc.DrawImage(source, new Rect(0, 0, width, height));
+        double scaleX = (double)width / canvasWidth;
+        double scaleY = (double)height / canvasHeight;
+        dc.PushTransform(new ScaleTransform(scaleX, scaleY));
+        FrameEditLayerRenderer.Draw(
+            dc,
+            frameEditLayers,
+            frameLayerBitmaps,
+            sourceTimeMs,
+            canvasWidth,
+            canvasHeight);
+        TimedTextOverlayRenderer.Draw(
+            dc,
+            overlays,
+            sourceTimeMs,
+            canvasWidth,
+            canvasHeight,
+            pixelsPerDip: 1.0);
+        dc.Pop();
     }
 
     private static void Validate(VideoFrameRenderRequest request)

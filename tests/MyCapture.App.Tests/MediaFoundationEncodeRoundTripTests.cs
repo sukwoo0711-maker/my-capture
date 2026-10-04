@@ -341,4 +341,103 @@ public sealed class MediaFoundationEncodeRoundTripTests
             try { TestRecycleBin.DeleteDirectory(dir, recursive: true); } catch (IOException) { }
         }
     });
+
+    [Fact]
+    public void TrimReencode_FastPath_PreservesFrameContent() => RunSta(() =>
+    {
+        // The composition-bypass trim feeds decoded pixels straight to the encoder. An
+        // asymmetric, per-frame pattern makes a vertical flip, stride shift, or channel
+        // swap visible as large per-cell pixel differences against the source decode.
+        const int width = 320;
+        const int height = 240;
+        const int fps = 15;
+        const int frameCount = 45;
+
+        string dir = TestRecycleBin.CreateTempSubdirectory("mycapture-trimpixels-").FullName;
+        Directory.CreateDirectory(dir);
+        string source = Path.Combine(dir, "source.mp4");
+        string trimmed = Path.Combine(dir, "source_trim.mp4");
+
+        try
+        {
+            var options = new VideoEncoderOptions(source, width, height, fps, VideoEncoderOptions.DeriveBitrate(width, height, fps));
+            using (var encoder = new MediaFoundationVideoEncoder(options, NullLogger.Instance))
+            {
+                int stride = width * 4;
+                byte[] frame = new byte[stride * height];
+                double frameMs = 1000.0 / fps;
+                for (int i = 0; i < frameCount; i++)
+                {
+                    FillGradient(frame, width, height, stride, i);
+                    encoder.WriteFrame(new EncoderFrame(frame, width, height, stride, i * frameMs));
+                }
+
+                encoder.Complete();
+            }
+
+            (_, _, _, double srcDurationMs) = ProbeMedia(source);
+            var recording = new MyCapture.Platform.Recording.RecordingResult(source, srcDurationMs, fps, frameCount, width, height);
+            MyCapture.App.Recording.TrimReencoder.Reencode(
+                source,
+                trimmed,
+                inMs: 1000,
+                outMs: 2000,
+                recording,
+                opts => new MediaFoundationVideoEncoder(opts, NullLogger.Instance),
+                NullLogger.Instance);
+
+            using var sourceReader = new MediaFoundationVideoFrameReader(source);
+            using var trimmedReader = new MediaFoundationVideoFrameReader(trimmed);
+            foreach (double outputTimeMs in new[] { 100.0, 500.0, 900.0 })
+            {
+                DecodedVideoFrame expected = sourceReader.ReadFrameAt(outputTimeMs + 1000);
+                DecodedVideoFrame actual = trimmedReader.ReadFrameAt(outputTimeMs);
+                Assert.Equal(expected.Width, actual.Width);
+                Assert.Equal(expected.Height, actual.Height);
+                AssertCellDifferencesBelow(expected, actual, 30, $"output t={outputTimeMs}ms");
+            }
+        }
+        finally
+        {
+            try { TestRecycleBin.DeleteDirectory(dir, recursive: true); } catch (IOException) { }
+        }
+    });
+
+    /// <summary>
+    /// Compares the frames cell by cell with the mean absolute pixel difference. A lossy
+    /// re-encode stays well under the bound; a flipped, shifted, or channel-swapped frame
+    /// blows far past it because the fixture pattern is asymmetric in x, y and channel.
+    /// </summary>
+    private static void AssertCellDifferencesBelow(DecodedVideoFrame expected, DecodedVideoFrame actual,
+        double bound, string because)
+    {
+        const int cells = 4;
+        int cellWidth = expected.Width / cells;
+        int cellHeight = expected.Height / cells;
+        for (int cy = 0; cy < cells; cy++)
+        {
+            for (int cx = 0; cx < cells; cx++)
+            {
+                double total = 0;
+                long count = 0;
+                for (int y = cy * cellHeight; y < (cy + 1) * cellHeight; y += 3)
+                {
+                    int expectedRow = y * expected.Stride;
+                    int actualRow = y * actual.Stride;
+                    for (int x = cx * cellWidth; x < (cx + 1) * cellWidth; x += 3)
+                    {
+                        int e = expectedRow + (x * 4);
+                        int a = actualRow + (x * 4);
+                        total += Math.Abs(expected.Pixels[e] - actual.Pixels[a]);
+                        total += Math.Abs(expected.Pixels[e + 1] - actual.Pixels[a + 1]);
+                        total += Math.Abs(expected.Pixels[e + 2] - actual.Pixels[a + 2]);
+                        count++;
+                    }
+                }
+
+                double mean = count == 0 ? 0 : total / (count * 3);
+                Assert.True(mean < bound, $"{because}: cell ({cx},{cy}) mean |diff| {mean:F1} exceeds {bound}");
+            }
+        }
+    }
 }

@@ -159,6 +159,55 @@ internal sealed class AnnotationEditorController
     /// </summary>
     internal int RotationTurns { get; private set; }
 
+    /// <summary>
+    /// The original capture's pixel size at zero turns. Rotation must remap the crop
+    /// origin between orientations, and the canvas size alone cannot supply the rotated
+    /// base's dimensions once a crop has shrunk it. Leave both at zero to skip remapping.
+    /// </summary>
+    internal int BaseWidthAtZeroTurns { get; set; }
+
+    internal int BaseHeightAtZeroTurns { get; set; }
+
+    /// <summary>
+    /// Remaps the crop origin between canvas orientations so it keeps describing the
+    /// canvas top-left's offset within the base bitmap at the current orientation.
+    /// Rotation swaps the axes, so a crop taken before a rotation would otherwise be cut
+    /// (or undone) from the wrong region afterwards.
+    /// </summary>
+    internal void RemapCropOriginForRotation(int turns, int canvasWidthBefore, int canvasHeightBefore, bool forward)
+    {
+        if (turns == 0 || BaseWidthAtZeroTurns <= 0 || BaseHeightAtZeroTurns <= 0)
+        {
+            return;
+        }
+
+        PointD origin = CropOrigin;
+        int width = canvasWidthBefore;
+        int height = canvasHeightBefore;
+        int orientation = RotationTurns;
+        for (int step = 0; step < Math.Abs(turns); step++)
+        {
+            if (forward)
+            {
+                int baseHeight = orientation % 2 == 0 ? BaseHeightAtZeroTurns : BaseWidthAtZeroTurns;
+                origin = new PointD(baseHeight - (origin.Y + height), origin.X);
+                orientation++;
+            }
+            else
+            {
+                // Inverse of the forward step at this orientation: the pre-step canvas
+                // width is the post-step canvas width of the state we are stepping into.
+                int baseHeight = (orientation - 1) % 2 == 0 ? BaseHeightAtZeroTurns : BaseWidthAtZeroTurns;
+                origin = new PointD(origin.Y, baseHeight - origin.X - width);
+                orientation--;
+            }
+
+            (width, height) = (height, width);
+        }
+
+        CropOrigin = origin;
+    }
+
     internal void RotateDocument(int quarterTurns)
     {
         int turns = ((quarterTurns % 4) + 4) % 4;
@@ -195,7 +244,7 @@ internal sealed class AnnotationEditorController
         RaiseVisual();
     }
 
-    /// <summary>How far the live canvas origin sits from the original capture, in pixels.</summary>
+    /// <summary>How far the live canvas origin sits from the base bitmap at the current orientation, in pixels.</summary>
     internal PointD CropOrigin { get; private set; }
 
     /// <summary>Rotates the annotation document in place as one reversible command.</summary>
@@ -204,12 +253,16 @@ internal sealed class AnnotationEditorController
         private readonly AnnotationEditorController _owner;
         private readonly AnnotationDocument _document;
         private readonly RectD _region;
+        private readonly int _widthBefore;
+        private readonly int _heightBefore;
 
         public DocumentCropCommand(AnnotationEditorController owner, AnnotationDocument document, RectD region)
         {
             _owner = owner;
             _document = document;
             _region = region;
+            _widthBefore = document.CanvasWidth;
+            _heightBefore = document.CanvasHeight;
         }
 
         public string Description => UiText.Get("Tools_Crop");
@@ -222,7 +275,10 @@ internal sealed class AnnotationEditorController
 
         public void Undo()
         {
-            Apply(_document, new RectD(-_region.X, -_region.Y, _document.CanvasWidth + _region.X, _document.CanvasHeight + _region.Y));
+            // Restore the exact pre-crop canvas. Growing by the crop's right/bottom edges
+            // is only correct for a crop that reached them; a middle crop must come back
+            // to the size the canvas had before the cut.
+            Apply(_document, new RectD(-_region.X, -_region.Y, _widthBefore, _heightBefore));
             _owner.CropOrigin = new PointD(_owner.CropOrigin.X - _region.X, _owner.CropOrigin.Y - _region.Y);
         }
 
@@ -256,13 +312,19 @@ internal sealed class AnnotationEditorController
 
         public void Execute()
         {
+            int width = _document.CanvasWidth;
+            int height = _document.CanvasHeight;
             AnnotationDocumentRotator.Rotate(_document, _turns);
+            _owner.RemapCropOriginForRotation(_turns, width, height, forward: true);
             _owner.AddRotation(_turns);
         }
 
         public void Undo()
         {
+            int width = _document.CanvasWidth;
+            int height = _document.CanvasHeight;
             AnnotationDocumentRotator.Rotate(_document, -_turns);
+            _owner.RemapCropOriginForRotation(-_turns, width, height, forward: false);
             _owner.AddRotation(-_turns);
         }
     }

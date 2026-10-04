@@ -3029,6 +3029,9 @@
   <data name="MediaExport_Cancelled" xml:space="preserve"><value>작업을 취소했습니다. 다시 계산할 수 있습니다.</value></data>
   <data name="MediaExport_Error" xml:space="preserve"><value>내보내지 못했습니다: {0}</value></data>
   <data name="MediaExport_Saved" xml:space="preserve"><value>저장했습니다: {0}</value></data>
+  <data name="MediaExport_SavingCopy" xml:space="preserve"><value>저장 중… {0}%</value></data>
+  <data name="VideoEdit_Finalizing" xml:space="preserve"><value>저장 마무리 중…</value></data>
+  <data name="VideoEdit_ImageLayerPreparing" xml:space="preserve"><value>이미지 레이어를 준비하는 중…</value></data>
   <data name="MediaExport_Cancel" xml:space="preserve"><value>작업 취소</value></data>
   <data name="MediaExport_SaveEdits" xml:space="preserve"><value>편집 저장</value></data>
   <data name="MediaExport_ExportFormats" xml:space="preserve"><value>내보내기 · MP4 / GIF</value></data>
