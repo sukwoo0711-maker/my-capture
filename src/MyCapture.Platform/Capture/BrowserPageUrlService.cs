@@ -103,8 +103,20 @@ public sealed class BrowserPageUrlService
                 {
                     if (!TryValidateBrowserWindow(candidate, out uint processId)) continue;
                     automation ??= new NativeAutomation();
+                    // The control view reaches Chromium's page document in tens of
+                    // milliseconds. The raw view also contains it, but on a live Edge
+                    // window that walk took about 600 ms and the 200 ms capture budget
+                    // cancelled it before the URL could be read. Keep the raw view for
+                    // documents that are not control elements.
+                    automation.UseControlView();
                     BrowserDocumentValue? document = FindVisibleDocument(
                         automation.FromHandle(candidate.Handle), candidate.ScreenBounds, cancellation);
+                    if (document is null && !cancellation.IsCancellationRequested)
+                    {
+                        automation.UseRawView();
+                        document = FindVisibleDocument(
+                            automation.FromHandle(candidate.Handle), candidate.ScreenBounds, cancellation);
+                    }
                     if (document is null || !TryValidateBrowserWindow(candidate, out uint afterProcessId)
                         || processId != afterProcessId) continue;
                     result[candidate.Handle] = new BrowserDocumentSnapshot(processId,
@@ -216,8 +228,12 @@ public sealed class BrowserPageUrlService
     {
         private readonly HashSet<object> _owned = new(ReferenceEqualityComparer.Instance);
         private readonly IUiAutomation _automation;
-        private readonly IUiAutomationTreeWalker _walker;
-        private readonly IUiAutomationCacheRequest _cacheRequest;
+        private readonly IUiAutomationTreeWalker _controlWalker;
+        private readonly IUiAutomationTreeWalker _rawWalker;
+        private readonly IUiAutomationCacheRequest _controlCache;
+        private readonly IUiAutomationCacheRequest _rawCache;
+        private IUiAutomationTreeWalker _walker = null!;
+        private IUiAutomationCacheRequest _cacheRequest = null!;
 
         internal NativeAutomation()
         {
@@ -225,23 +241,45 @@ public sealed class BrowserPageUrlService
             {
                 Type type = Type.GetTypeFromCLSID(new Guid("FF48DBA4-60EF-4201-AA87-54103EEF594E"), true)!;
                 _automation = Own((IUiAutomation)Activator.CreateInstance(type)!);
+                _controlWalker = Own(_automation.GetControlViewWalker());
                 // Chromium can mark its root web document IsControlElement=false. The
                 // control view then removes it while retaining editable descendants.
-                _walker = Own(_automation.GetRawViewWalker());
-                // Each probe owns fresh element-only caches. Batch only the two fields read
-                // for every node; document semantics, bounds, URLs and identity stay live.
-                _cacheRequest = Own(_automation.CreateCacheRequest());
-                _cacheRequest.SetTreeScope(1); // TreeScope.Element: never prefetch descendants.
-                _cacheRequest.SetTreeFilter(Own(_automation.GetRawViewCondition()));
-                _cacheRequest.SetAutomationElementMode(1); // Full: current document queries remain available.
-                _cacheRequest.AddProperty(30022); // IsOffscreen
-                _cacheRequest.AddProperty(30003); // ControlType
+                _rawWalker = Own(_automation.GetRawViewWalker());
+                _controlCache = CreateCache(Own(_automation.GetControlViewCondition()));
+                _rawCache = CreateCache(Own(_automation.GetRawViewCondition()));
+                _walker = _controlWalker;
+                _cacheRequest = _controlCache;
             }
             catch
             {
                 Dispose();
                 throw;
             }
+        }
+
+        private IUiAutomationCacheRequest CreateCache(IUiAutomationCondition filter)
+        {
+            // Each probe owns fresh element-only caches. Batch only the two fields read
+            // for every node; document semantics, bounds, URLs and identity stay live.
+            IUiAutomationCacheRequest cache = Own(_automation.CreateCacheRequest());
+            cache.SetTreeScope(1); // TreeScope.Element: never prefetch descendants.
+            cache.SetTreeFilter(filter);
+            cache.SetAutomationElementMode(1); // Full: current document queries remain available.
+            cache.AddProperty(30022); // IsOffscreen
+            cache.AddProperty(30003); // ControlType
+            return cache;
+        }
+
+        internal void UseControlView()
+        {
+            _walker = _controlWalker;
+            _cacheRequest = _controlCache;
+        }
+
+        internal void UseRawView()
+        {
+            _walker = _rawWalker;
+            _cacheRequest = _rawCache;
         }
 
         private T Own<T>(T value) where T : class { _owned.Add(value); return value; }
@@ -308,7 +346,7 @@ public sealed class BrowserPageUrlService
         void GetContentViewWalker();
         IUiAutomationTreeWalker GetRawViewWalker();
         IUiAutomationCondition GetRawViewCondition();
-        void GetControlViewCondition();
+        IUiAutomationCondition GetControlViewCondition();
         void GetContentViewCondition();
         IUiAutomationCacheRequest CreateCacheRequest();
     }
