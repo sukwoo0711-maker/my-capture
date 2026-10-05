@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '3.1.7'
+    [string]$Version = '3.2.0'
 )
 
 Set-StrictMode -Version 2.0
