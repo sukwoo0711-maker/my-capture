@@ -1,14 +1,14 @@
 <!--
   MyCapture design tokens: primitive values -> semantic aliases -> component dimensions.
 
-  Direction (design-system/mycapture/MASTER.md, "Focus Portal"):
+  Direction (design-system/mycapture/MASTER.md, "Iris"):
     * Captured pixels stay dominant on quiet graphite surfaces with clear depth hierarchy.
-    * Focus cyan is reserved for primary actions, selection, and keyboard focus.
-    * Accent fills always use dark ink; white-on-cyan is intentionally prohibited.
+    * Electric iris is reserved for primary actions, selection, keyboard focus, and the playhead.
+    * Accent fills always use dark ink; white-on-iris is intentionally prohibited.
     * Normal UI is flat and token-driven: no decorative gradients or unowned raw colours.
 
   Compatibility: every previously shipped resource key remains available. Legacy Warm,
-  Slate, Blue, Yellow, and Violet keys alias the Focus Blue system so consuming windows and any
+  Slate, Blue, Yellow, and Violet keys alias the Iris system so consuming windows and any
   restored XAML continue to resolve without migration.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -31,12 +31,12 @@
     <Color x:Key="Primitive.Warm100">#FFF6F8FC</Color> <!-- primary text -->
     <Color x:Key="Primitive.White">#FFFFFFFF</Color>
 
-    <!-- Focus cyan brand ramp. Dark ink is the only text colour on these fills. -->
-    <Color x:Key="Primitive.Yellow300">#FF7DD7F8</Color> <!-- focus / hover -->
-    <Color x:Key="Primitive.Yellow400">#FF58C7F3</Color> <!-- primary -->
-    <Color x:Key="Primitive.Yellow500">#FF58C7F3</Color> <!-- border accent -->
-    <Color x:Key="Primitive.Yellow600">#FF38A8D8</Color> <!-- pressed -->
-    <Color x:Key="Primitive.Yellow900">#FF152F3E</Color> <!-- selected wash -->
+    <!-- Iris brand ramp. Dark ink is the only text colour on these fills. -->
+    <Color x:Key="Primitive.Yellow300">#FF9789FF</Color> <!-- focus / hover -->
+    <Color x:Key="Primitive.Yellow400">#FF7C6CFF</Color> <!-- primary -->
+    <Color x:Key="Primitive.Yellow500">#FF7C6CFF</Color> <!-- border accent -->
+    <Color x:Key="Primitive.Yellow600">#FF7A68EE</Color> <!-- pressed -->
+    <Color x:Key="Primitive.Yellow900">#FF1A1733</Color> <!-- selected wash -->
     <Color x:Key="Primitive.Ink">#FF061116</Color>
 
     <!-- Status colours stay semantically distinct from the brand yellow. -->
@@ -68,15 +68,15 @@
     <Color x:Key="Primitive.Slate300">#FFC6D0DF</Color>
     <Color x:Key="Primitive.Slate100">#FFF6F8FC</Color>
 
-    <Color x:Key="Primitive.Blue300">#FF7DD7F8</Color>
-    <Color x:Key="Primitive.Blue400">#FF58C7F3</Color>
-    <Color x:Key="Primitive.Blue500">#FF58C7F3</Color>
-    <Color x:Key="Primitive.Blue600">#FF38A8D8</Color>
-    <Color x:Key="Primitive.Blue900">#FF152F3E</Color>
-    <Color x:Key="Primitive.Violet400">#FF7DD7F8</Color>
-    <Color x:Key="Primitive.Violet500">#FF58C7F3</Color>
-    <Color x:Key="Primitive.Violet600">#FF38A8D8</Color>
-    <Color x:Key="Primitive.Violet900">#FF152F3E</Color>
+    <Color x:Key="Primitive.Blue300">#FF9789FF</Color>
+    <Color x:Key="Primitive.Blue400">#FF7C6CFF</Color>
+    <Color x:Key="Primitive.Blue500">#FF7C6CFF</Color>
+    <Color x:Key="Primitive.Blue600">#FF7A68EE</Color>
+    <Color x:Key="Primitive.Blue900">#FF1A1733</Color>
+    <Color x:Key="Primitive.Violet400">#FF9789FF</Color>
+    <Color x:Key="Primitive.Violet500">#FF7C6CFF</Color>
+    <Color x:Key="Primitive.Violet600">#FF7A68EE</Color>
+    <Color x:Key="Primitive.Violet900">#FF1A1733</Color>
     <Color x:Key="Primitive.Amber400">#FFF5B942</Color>
     <Color x:Key="Primitive.Emerald500">#FF45D6A2</Color>
 
@@ -133,8 +133,8 @@
     <!-- Video timeline semantics: layer identity, playhead, and destructive trim. -->
     <SolidColorBrush x:Key="Timeline.Background" Color="{StaticResource Primitive.Graphite950}" />
     <SolidColorBrush x:Key="Timeline.Track" Color="{StaticResource Primitive.Graphite850}" />
-    <SolidColorBrush x:Key="Timeline.TextLayer" Color="#FF3B82F6" />
-    <SolidColorBrush x:Key="Timeline.FrameLayer" Color="#FF9B7EDE" />
+    <SolidColorBrush x:Key="Timeline.TextLayer" Color="#FF8B7BFF" />
+    <SolidColorBrush x:Key="Timeline.FrameLayer" Color="#FF3FD8C9" />
     <SolidColorBrush x:Key="Timeline.Grid" Color="{StaticResource Primitive.Graphite500}" />
     <SolidColorBrush x:Key="Timeline.Playhead" Color="{StaticResource Primitive.Yellow300}" />
     <SolidColorBrush x:Key="Timeline.TrimDeleteFill" Color="#55FF6B74" />
