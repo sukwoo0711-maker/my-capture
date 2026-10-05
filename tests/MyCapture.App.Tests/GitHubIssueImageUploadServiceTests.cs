@@ -21,7 +21,7 @@ public sealed class GitHubIssueImageUploadServiceTests
 
         var service = new GitHubIssueImageUploadService(
             () => settings,
-            _ => Task.FromResult(true),
+            (_, _) => Task.FromResult(true),
             (text, _) =>
             {
                 copiedText = text;
@@ -38,7 +38,7 @@ public sealed class GitHubIssueImageUploadServiceTests
                 return Task.FromResult<string?>(
                     """<img src="https://github.com/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9"/>""");
             },
-            _ => Task.FromResult<BitmapSource?>(image),
+            _ => Task.FromResult(new ClipboardImageSnapshot(image, "")),
             NullLogger.Instance, () => 7u);
 
         GitHubIssueImageUploadResult result = await service.UploadClipboardImageAsync();
@@ -55,11 +55,11 @@ public sealed class GitHubIssueImageUploadServiceTests
     {
         var service = new GitHubIssueImageUploadService(
             () => new AppSettings(),
-            _ => Task.FromResult(true),
+            (_, _) => Task.FromResult(true),
             (_, _) => Task.FromResult(true),
             _ => true,
             (_, _, _, _) => Task.FromResult<string?>("https://github.com/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9"),
-            _ => Task.FromResult<BitmapSource?>(null),
+            _ => Task.FromResult(new ClipboardImageSnapshot(null, "")),
             NullLogger.Instance, () => 7u);
 
         GitHubIssueImageUploadResult result = await service.UploadClipboardImageAsync();
@@ -73,11 +73,11 @@ public sealed class GitHubIssueImageUploadServiceTests
         settings.GitHub.IssueUrl = "http://github.com/a/b/issues/1"; // HTTP is rejected.
         var service = new GitHubIssueImageUploadService(
             () => settings,
-            _ => Task.FromResult(true),
+            (_, _) => Task.FromResult(true),
             (_, _) => Task.FromResult(true),
             _ => true,
             (_, _, _, _) => Task.FromResult<string?>(null),
-            _ => Task.FromResult<BitmapSource?>(FrozenPixel()),
+            _ => Task.FromResult(new ClipboardImageSnapshot(FrozenPixel(), "")),
             NullLogger.Instance, () => 7u);
 
         GitHubIssueImageUploadResult result = await service.UploadClipboardImageAsync();
@@ -91,16 +91,58 @@ public sealed class GitHubIssueImageUploadServiceTests
         settings.GitHub.IssueUrl = "https://ghe.example.corp/internal/app/issues/42";
         var service = new GitHubIssueImageUploadService(
             () => settings,
-            _ => Task.FromResult(true),
+            (_, _) => Task.FromResult(true),
             (_, _) => Task.FromResult(true),
             _ => true,
             (_, _, _, _) => Task.FromResult<string?>("https://ghe.example.corp/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9"),
-            _ => Task.FromResult<BitmapSource?>(FrozenPixel()),
+            _ => Task.FromResult(new ClipboardImageSnapshot(FrozenPixel(), "")),
             NullLogger.Instance, () => 7u);
 
         GitHubIssueImageUploadResult result = await service.UploadClipboardImageAsync();
         Assert.Equal(GitHubIssueImageUploadStatus.CopiedUrl, result.Status);
         Assert.Equal("https://ghe.example.corp/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9", result.Url);
+    }
+
+    [Fact]
+    public async Task Upload_CopiesOriginLinkAfterTheAttachmentUrl()
+    {
+        const string origin = "https://example.com/docs/page";
+        const string attachment = "https://github.com/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9";
+        string? copiedText = null;
+        string? recopiedOrigin = null;
+        var service = new GitHubIssueImageUploadService(
+            () => new AppSettings(),
+            (_, sourceUrl) =>
+            {
+                recopiedOrigin = sourceUrl;
+                return Task.FromResult(true);
+            },
+            (text, _) =>
+            {
+                copiedText = text;
+                return Task.FromResult(true);
+            },
+            _ => true,
+            (_, _, _, _) => Task.FromResult<string?>(attachment),
+            _ => Task.FromResult(new ClipboardImageSnapshot(FrozenPixel(), origin)),
+            NullLogger.Instance,
+            () => 7u);
+
+        GitHubIssueImageUploadResult result = await service.UploadClipboardImageAsync();
+
+        Assert.Equal(GitHubIssueImageUploadStatus.CopiedUrl, result.Status);
+        Assert.Equal(origin, recopiedOrigin);
+        Assert.Equal(attachment + "\n\n" + origin, copiedText);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not a url")]
+    public void Compose_OmitsAnOriginThatIsNotAPageUrl(string? origin)
+    {
+        const string attachment = "https://github.com/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9";
+        Assert.Equal(attachment, GitHubUploadText.Compose(attachment, origin));
     }
 
     private static BitmapSource FrozenPixel()
@@ -120,7 +162,7 @@ public sealed class GitHubIssueImageUploadServiceTests
         uint? committedVersion = null;
         const string url = "https://github.com/user-attachments/assets/36e444a2-e629-4e04-b737-ea44dd5c0bd9";
         var service = new GitHubIssueImageUploadService(
-            () => new AppSettings(), _ => Task.FromResult(true),
+            () => new AppSettings(), (_, _) => Task.FromResult(true),
             (_, version) => { committedVersion = version; return Task.FromResult(version == currentVersion); },
             _ => { if (changeWhileOpening) currentVersion++; return true; },
             (_, version, _, _) =>
@@ -129,7 +171,7 @@ public sealed class GitHubIssueImageUploadServiceTests
                 if (!changeWhileOpening) currentVersion++; // User copies between automation and final commit.
                 return Task.FromResult<string?>(url);
             },
-            _ => Task.FromResult<BitmapSource?>(FrozenPixel()), NullLogger.Instance, () => currentVersion);
+            _ => Task.FromResult(new ClipboardImageSnapshot(FrozenPixel(), "")), NullLogger.Instance, () => currentVersion);
 
         var result = await service.UploadClipboardImageAsync();
         Assert.Equal(7u, awaitedVersion);

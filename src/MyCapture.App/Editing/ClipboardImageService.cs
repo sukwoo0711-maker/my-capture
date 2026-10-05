@@ -21,12 +21,18 @@ internal static class ClipboardImageService
     private static readonly SemaphoreSlim CopyGate = new(1, 1);
 
     /// <summary>Copies <paramref name="bitmap"/> without blocking the caller's dispatcher.</summary>
-    internal static async Task<bool> CopyImageAsync(BitmapSource bitmap)
+    internal static Task<bool> CopyImageAsync(BitmapSource bitmap) => CopyImageAsync(bitmap, sourceUrl: null);
+
+    /// <summary>
+    /// Copies <paramref name="bitmap"/> and embeds the capture's source page URL in the PNG
+    /// payload, so a paste — or a later F9 upload — keeps the capture's origin.
+    /// </summary>
+    internal static async Task<bool> CopyImageAsync(BitmapSource bitmap, string? sourceUrl)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
 
         BitmapSource frozen = Freeze(bitmap);
-        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen)).ConfigureAwait(false);
+        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen, sourceUrl)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -56,12 +62,12 @@ internal static class ClipboardImageService
         }
     }
 
-    private static async Task<bool> CopyFrozenAsync(BitmapSource frozen)
+    private static async Task<bool> CopyFrozenAsync(BitmapSource frozen, string? sourceUrl = null)
     {
         byte[] pngBytes;
         try
         {
-            pngBytes = await Task.Run(() => ImageCodec.EncodePng(frozen)).ConfigureAwait(false);
+            pngBytes = await Task.Run(() => ImageCodec.EncodePng(frozen, sourceUrl)).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException
                                    or InvalidOperationException

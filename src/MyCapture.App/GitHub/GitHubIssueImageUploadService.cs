@@ -20,19 +20,23 @@ internal enum GitHubIssueImageUploadStatus
 
 internal sealed record GitHubIssueImageUploadResult(GitHubIssueImageUploadStatus Status, string? Url = null);
 
+/// <summary>One clipboard read: the image, and the source page URL carried by its PNG.</summary>
+internal readonly record struct ClipboardImageSnapshot(BitmapSource? Image, string SourcePageUrl);
+
 /// <summary>
 /// Opens the configured GitHub issue, pastes the clipboard image into the Write box,
-/// waits for a user-attachments URL, and copies that URL.
+/// waits for a user-attachments URL, and copies that URL. A source page carried by the
+/// clipboard PNG is copied on the next paragraph.
 /// </summary>
 internal sealed class GitHubIssueImageUploadService
 {
     private readonly Func<AppSettings> _settings;
-    private readonly Func<BitmapSource, Task<bool>> _copyImageAsync;
+    private readonly Func<BitmapSource, string?, Task<bool>> _copyImageAsync;
     private readonly Func<string, uint, Task<bool>> _copyTextAsync;
     private readonly Func<string, bool> _openUrl;
     private readonly Func<string, uint, TimeSpan, CancellationToken, Task<string?>> _waitForAttachment;
     private readonly Func<uint> _clipboardVersion;
-    private readonly Func<CancellationToken, Task<BitmapSource?>> _readClipboardImage;
+    private readonly Func<CancellationToken, Task<ClipboardImageSnapshot>> _readClipboardImage;
     private readonly ILogger _log;
     private bool _inFlight;
 
@@ -53,11 +57,11 @@ internal sealed class GitHubIssueImageUploadService
 
     internal GitHubIssueImageUploadService(
         Func<AppSettings> settings,
-        Func<BitmapSource, Task<bool>> copyImageAsync,
+        Func<BitmapSource, string?, Task<bool>> copyImageAsync,
         Func<string, uint, Task<bool>> copyTextAsync,
         Func<string, bool> openUrl,
         Func<string, uint, TimeSpan, CancellationToken, Task<string?>> waitForAttachment,
-        Func<CancellationToken, Task<BitmapSource?>> readClipboardImage,
+        Func<CancellationToken, Task<ClipboardImageSnapshot>> readClipboardImage,
         ILogger log,
         Func<uint> clipboardVersion)
     {
@@ -87,13 +91,14 @@ internal sealed class GitHubIssueImageUploadService
                 return new GitHubIssueImageUploadResult(GitHubIssueImageUploadStatus.InvalidUrl);
             }
 
-            BitmapSource? image = await _readClipboardImage(cancellationToken);
-            if (image is null)
+            ClipboardImageSnapshot snapshot = await _readClipboardImage(cancellationToken);
+            if (snapshot.Image is null)
             {
                 return new GitHubIssueImageUploadResult(GitHubIssueImageUploadStatus.NeedImage);
             }
 
-            if (!await _copyImageAsync(image))
+            // Re-copy so the browser paste is a PNG. Keep the origin chunk on those bytes.
+            if (!await _copyImageAsync(snapshot.Image, snapshot.SourcePageUrl))
             {
                 return new GitHubIssueImageUploadResult(GitHubIssueImageUploadStatus.Failed);
             }
@@ -111,7 +116,7 @@ internal sealed class GitHubIssueImageUploadService
                 return new GitHubIssueImageUploadResult(GitHubIssueImageUploadStatus.Failed);
             }
 
-            if (!await _copyTextAsync(url, clipboardVersion))
+            if (!await _copyTextAsync(GitHubUploadText.Compose(url, snapshot.SourcePageUrl), clipboardVersion))
             {
                 return new GitHubIssueImageUploadResult(GitHubIssueImageUploadStatus.Failed, url);
             }
@@ -134,11 +139,11 @@ internal sealed class GitHubIssueImageUploadService
         }
     }
 
-    private static async Task<BitmapSource?> ReadClipboardImageAsync(CancellationToken cancellationToken)
+    private static async Task<ClipboardImageSnapshot> ReadClipboardImageAsync(CancellationToken cancellationToken)
     {
         _ = cancellationToken;
         Pinning.ClipboardImageReader.PinReadAttempt read = await Pinning.ClipboardImageReader.ReadPinAsync();
-        return read.Content?.Image;
+        return new ClipboardImageSnapshot(read.Content?.Image, read.Content?.SourcePageUrl ?? string.Empty);
     }
 
     private static bool OpenDefaultBrowser(string url)

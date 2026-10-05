@@ -44,6 +44,13 @@ public static class ImageCodec
         return stream.ToArray();
     }
 
+    /// <summary>
+    /// Encodes a PNG and attaches the capture's source page URL as a <c>tEXt</c> chunk, so
+    /// the origin link travels with the file bytes.
+    /// </summary>
+    public static byte[] EncodePng(BitmapSource bitmap, string? sourceUrl) =>
+        PngSourceUrlMetadata.WithSourceUrl(EncodePng(bitmap), sourceUrl);
+
     public static byte[] EncodeJpeg(BitmapSource bitmap, int quality)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
@@ -63,9 +70,14 @@ public static class ImageCodec
     /// <summary>
     /// Writes a PNG atomically and returns the byte count.
     /// </summary>
-    public static long SavePng(BitmapSource bitmap, string path)
+    public static long SavePng(BitmapSource bitmap, string path) => SavePng(bitmap, path, sourceUrl: null);
+
+    /// <summary>
+    /// Writes a PNG atomically with the source page URL embedded as a <c>tEXt</c> chunk.
+    /// </summary>
+    public static long SavePng(BitmapSource bitmap, string path, string? sourceUrl)
     {
-        byte[] bytes = EncodePng(bitmap);
+        byte[] bytes = EncodePng(bitmap, sourceUrl);
         AtomicFile.WriteAllBytes(path, bytes);
         return bytes.Length;
     }
@@ -73,9 +85,15 @@ public static class ImageCodec
     /// <summary>
     /// Writes a user-facing PNG atomically without retaining an internal recovery backup.
     /// </summary>
-    public static long SavePngExport(BitmapSource bitmap, string path)
+    public static long SavePngExport(BitmapSource bitmap, string path) => SavePngExport(bitmap, path, sourceUrl: null);
+
+    /// <summary>
+    /// Writes a user-facing PNG atomically with the source page URL embedded, and without
+    /// retaining an internal recovery backup.
+    /// </summary>
+    public static long SavePngExport(BitmapSource bitmap, string path, string? sourceUrl)
     {
-        byte[] bytes = EncodePng(bitmap);
+        byte[] bytes = EncodePng(bitmap, sourceUrl);
         AtomicFile.WriteExportBytes(path, bytes);
         return bytes.Length;
     }

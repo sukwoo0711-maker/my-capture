@@ -20,11 +20,12 @@ internal enum PinContentKind
 /// </remarks>
 internal sealed record PinContent
 {
-    private PinContent(BitmapSource image, PinContentKind kind, string? originalText)
+    private PinContent(BitmapSource image, PinContentKind kind, string? originalText, string sourcePageUrl)
     {
         Image = image ?? throw new ArgumentNullException(nameof(image));
         Kind = kind;
         OriginalText = originalText;
+        SourcePageUrl = sourcePageUrl;
     }
 
     internal BitmapSource Image { get; }
@@ -32,6 +33,13 @@ internal sealed record PinContent
     internal PinContentKind Kind { get; }
 
     internal string? OriginalText { get; }
+
+    /// <summary>
+    /// Source page URL carried by the clipboard PNG's <c>SourceURL</c> chunk, or empty when
+    /// the copied image did not come from a MyCapture export. An F9 upload reads this to keep
+    /// the origin link with the image.
+    /// </summary>
+    internal string SourcePageUrl { get; }
 
     internal bool HasOriginalText => OriginalText is not null;
 
@@ -42,8 +50,8 @@ internal sealed record PinContent
     /// </summary>
     internal bool UsesDeviceIndependentPixels => Kind is PinContentKind.Text or PinContentKind.Table;
 
-    internal static PinContent FromImage(BitmapSource image) =>
-        new(image, PinContentKind.Image, originalText: null);
+    internal static PinContent FromImage(BitmapSource image, string? sourcePageUrl = null) =>
+        new(image, PinContentKind.Image, originalText: null, sourcePageUrl ?? string.Empty);
 
     internal static PinContent FromText(BitmapSource image, string originalText, bool isTable)
     {
@@ -51,6 +59,7 @@ internal sealed record PinContent
         return new(
             image,
             isTable ? PinContentKind.Table : PinContentKind.Text,
-            originalText);
+            originalText,
+            sourcePageUrl: string.Empty);
     }
 }

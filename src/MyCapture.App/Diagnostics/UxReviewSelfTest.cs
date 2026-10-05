@@ -110,7 +110,7 @@ internal static class UxReviewSelfTest
         BitmapSource sample = CreateFixtureBitmap();
         var controller = new GalleryController(queue, logs.CreateLogger<GalleryController>());
         var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue, logs.CreateLogger<CapturePersistenceService>());
-        var commit = new CaptureCommitService(persistence, () => settings, () => paths, logs.CreateLogger<CaptureCommitService>(), _ => Task.FromResult(true));
+        var commit = new CaptureCommitService(persistence, () => settings, () => paths, logs.CreateLogger<CaptureCommitService>(), (_, _) => Task.FromResult(true));
         var videoLibrary = new VideoLibraryService(queue, paths, logs.CreateLogger<VideoLibraryService>());
         int failures = 0;
         try

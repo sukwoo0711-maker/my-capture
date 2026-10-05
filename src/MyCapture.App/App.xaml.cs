@@ -449,10 +449,13 @@ public partial class App : Application
                 var uploader = new GitHubTokenUploadService(
                     () => _settings,
                     _log ?? (Microsoft.Extensions.Logging.ILogger)Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
-                GitHubTokenUploadResult tokenResult = await uploader.UploadAsync(image);
+                string? sourcePageUrl = attempt.Content?.SourcePageUrl;
+                GitHubTokenUploadResult tokenResult = await uploader.UploadAsync(image, sourcePageUrl);
                 if (tokenResult.Success && tokenResult.Url is not null)
                 {
-                    bool copied = await GitHubClipboardCommit.CopyUrlAsync(tokenResult.Url, GitHubClipboardCommit.GetVersion());
+                    bool copied = await GitHubClipboardCommit.CopyUrlAsync(
+                        GitHubUploadText.Compose(tokenResult.Url, sourcePageUrl),
+                        GitHubClipboardCommit.GetVersion());
                     _tray?.ShowBalloon(
                         "MyCapture",
                         copied ? UiText.Get("GitHub.Done") : tokenResult.Url,
@@ -940,7 +943,7 @@ public partial class App : Application
             _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
         Task<bool>? automaticClipboardCopy = e.CopyToClipboardImmediately && _commit is not null
             ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle,
-                _pendingRecord.InitialRenderShowsSourceWindowTitle)
+                _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl)
             : null;
         try
         {

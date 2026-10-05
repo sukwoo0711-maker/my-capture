@@ -435,7 +435,7 @@ public sealed class CaptureCommitServiceTests
     }
 
     private static (CaptureCommitService Commit, CaptureQueue Queue, CaptureRecord Record, AppSettings Settings, AppPaths Paths)
-        Build(string root, Func<BitmapSource, Task<bool>>? copyImageAsync = null)
+        Build(string root, Func<BitmapSource, string?, Task<bool>>? copyImageAsync = null)
     {
         AppPaths paths = AppPaths.CreateForRoot(root);
         var settings = new AppSettings();
@@ -455,7 +455,7 @@ public sealed class CaptureCommitServiceTests
     }
 
     private static (CaptureCommitService Commit, CaptureQueue Queue, AppSettings Settings, AppPaths Paths)
-        BuildRecovery(string root, Func<BitmapSource, Task<bool>>? copyImageAsync = null)
+        BuildRecovery(string root, Func<BitmapSource, string?, Task<bool>>? copyImageAsync = null)
     {
         AppPaths paths = AppPaths.CreateForRoot(root);
         var settings = new AppSettings();
@@ -613,7 +613,7 @@ public sealed class CaptureCommitServiceTests
         try
         {
             int copies = 0;
-            var (commit, queue, record, _, _) = Build(root, _ =>
+            var (commit, queue, record, _, _) = Build(root, (_, _) =>
             {
                 copies++;
                 return Task.FromResult(true);
@@ -699,7 +699,7 @@ public sealed class CaptureCommitServiceTests
         {
             var copiedBitmaps = new List<BitmapSource>();
             int copyCalls = 0;
-            var (commit, _, record, settings, _) = Build(root, bitmap =>
+            var (commit, _, record, settings, _) = Build(root, (bitmap, _) =>
             {
                 copyCalls++;
                 copiedBitmaps.Add(bitmap);
@@ -733,7 +733,7 @@ public sealed class CaptureCommitServiceTests
         {
             var (commit, queue, record, settings, _) = Build(
                 root,
-                _ => Task.FromResult(false));
+                (_, _) => Task.FromResult(false));
             settings.Export.CopyToClipboardOnQuickSave = false;
             string directory = queue.GetDirectory(record);
             byte[] originalBefore = File.ReadAllBytes(Path.Combine(directory, CaptureFileNames.Original));
@@ -761,7 +761,7 @@ public sealed class CaptureCommitServiceTests
         {
             var (commit, queue, record, _, _) = Build(
                 root,
-                _ => Task.FromException<bool>(new ExternalException("clipboard unavailable")));
+                (_, _) => Task.FromException<bool>(new ExternalException("clipboard unavailable")));
 
             bool copied = commit.CopyCapturedRegionAsync(Solid(48, 32)).GetAwaiter().GetResult();
 
@@ -784,7 +784,7 @@ public sealed class CaptureCommitServiceTests
         {
             var copyStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var copyCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var (commit, _, record, _, _) = Build(root, _ =>
+            var (commit, _, record, _, _) = Build(root, (_, _) =>
             {
                 copyStarted.TrySetResult(true);
                 return copyCompletion.Task;
@@ -809,7 +809,7 @@ public sealed class CaptureCommitServiceTests
         string root = NewRoot();
         try
         {
-            var (commit, queue, record, _, _) = Build(root, _ => Task.FromResult(false));
+            var (commit, queue, record, _, _) = Build(root, (_, _) => Task.FromResult(false));
 
             bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.CopyToClipboard)).GetAwaiter().GetResult();
 
@@ -831,7 +831,7 @@ public sealed class CaptureCommitServiceTests
             int copyAttempts = 0;
             var (commit, queue, record, _, _) = Build(
                 root,
-                _ => Task.FromResult(Interlocked.Increment(ref copyAttempts) >= 2));
+                (_, _) => Task.FromResult(Interlocked.Increment(ref copyAttempts) >= 2));
 
             const string sessionAssetName = "inserted-session-image.png";
             BitmapSource asset = Solid(13, 11);
@@ -895,7 +895,7 @@ public sealed class CaptureCommitServiceTests
             var copyResults = new Queue<bool>([true, true, true, false]);
             var (commit, queue, settings, _) = BuildRecovery(
                 root,
-                _ => Task.FromResult(copyResults.Dequeue()));
+                (_, _) => Task.FromResult(copyResults.Dequeue()));
             Assert.Empty(queue.Records);
 
             string saveAsPath = Path.Combine(root, "recovered-save-as.png");
@@ -988,7 +988,7 @@ public sealed class CaptureCommitServiceTests
                 NullLogger<CapturePersistenceService>.Instance);
             int copies = 0;
             var commit = new CaptureCommitService(persistence, () => settings, () => paths,
-                NullLogger<CaptureCommitService>.Instance, _ => Task.FromResult(++copies > 1));
+                NullLogger<CaptureCommitService>.Instance, (_, _) => Task.FromResult(++copies > 1));
             AnnotationEditingResult result = MakeResult(EditorCommitAction.Done);
             CaptureRecord draft = CapturePersistenceService.CreatePendingRecord(result.SelectedBitmap, 1, "", "");
             int creates = 0;

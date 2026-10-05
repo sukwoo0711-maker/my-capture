@@ -589,7 +589,7 @@ public sealed class CaptureLibraryFirstTests
             Persistence = new CapturePersistenceService(Queue, Paths, () => settings.Queue,
                 NullLogger<CapturePersistenceService>.Instance);
             CommitService = new CaptureCommitService(Persistence, () => settings, () => Paths,
-                NullLogger<CaptureCommitService>.Instance, image => { CopiedImages.Add(image); return Task.FromResult(true); });
+                NullLogger<CaptureCommitService>.Instance, (image, _) => { CopiedImages.Add(image); return Task.FromResult(true); });
             Set("_queue", Queue);
             Set("_settings", settings);
             Set("_persistence", Persistence);

@@ -817,7 +817,7 @@ internal sealed partial class GalleryWindow : Window
 
         try
         {
-            if (!await ClipboardImageService.CopyImageAsync(rendered))
+            if (!await ClipboardImageService.CopyImageAsync(rendered, record.SourcePageUrl))
             {
                 ShowStatus(UiText.Get("Text_75425A6D9BE8"));
             }
@@ -921,7 +921,8 @@ internal sealed partial class GalleryWindow : Window
                 return;
             }
             _ = ImageReductionExportDialog.Show(this, image,
-                Path.Combine(_paths.QuickSaveRoot, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)));
+                Path.Combine(_paths.QuickSaveRoot, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
+                record.SourcePageUrl);
         }
         catch (Exception ex)
         {
