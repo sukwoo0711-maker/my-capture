@@ -278,6 +278,36 @@ public sealed class BrowserPageUrlServiceTests
         Assert.Equal(2, calls);
     }
 
+    [Fact]
+    public void DefaultBudget_LeavesRoomForALiveBrowserWalk_ButBoundsADispatcherStall()
+    {
+        // A live walk measured 174-199 ms. The ceiling must clear that, and stay small
+        // because advanced still captures read synchronously on the dispatcher.
+        Assert.True(BrowserPageUrlService.DefaultBudget >= TimeSpan.FromMilliseconds(300),
+            "the default budget must exceed the measured live walk");
+        Assert.True(BrowserPageUrlService.DefaultBudget <= TimeSpan.FromMilliseconds(600),
+            "the default budget must keep a hung provider from freezing the capture hotkeys");
+    }
+
+    [Fact]
+    public async Task SlowProvider_IsGivenTheFullDefaultBudget_AndReturnsItsResult()
+    {
+        using var gate = new SemaphoreSlim(1, 1);
+        var service = new BrowserPageUrlService((_, _) =>
+        {
+            // Slower than the old 200 ms ceiling, faster than the new one.
+            Thread.Sleep((int)(BrowserPageUrlService.DefaultBudget.TotalMilliseconds / 2));
+            return Result("https://visited.example/");
+        }, BrowserPageUrlService.DefaultBudget, gate);
+
+        var stopwatch = Stopwatch.StartNew();
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> result = await service.ReadAsync(Candidates);
+        stopwatch.Stop();
+
+        Assert.Equal("https://visited.example/", Assert.Single(result).Value.Url);
+        Assert.True(stopwatch.Elapsed < BrowserPageUrlService.DefaultBudget);
+    }
+
     private static IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> Result(string url) =>
         new Dictionary<IntPtr, BrowserDocumentSnapshot>
         {
