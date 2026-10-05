@@ -223,7 +223,7 @@ internal sealed class CapturePersistenceService
         // original.png — the unmodified capture.
         string originalPath = Path.Combine(directory, CaptureFileNames.Original);
         bytes += rewriteOriginal
-            ? ImageCodec.SavePng(original, originalPath)
+            ? ImageCodec.SavePng(original, originalPath, record.SourcePageUrl)
             : SafeFileLength(originalPath);
 
         // rendered.png may include the optional title; original.png remains untouched.
@@ -235,16 +235,17 @@ internal sealed class CapturePersistenceService
         }
         else if (initialRendered is not null && !ReferenceEquals(initialRendered, original))
         {
-            bytes += ImageCodec.SavePng(initialRendered, renderedPath);
+            bytes += ImageCodec.SavePng(initialRendered, renderedPath, record.SourcePageUrl);
         }
         else if (rewriteOriginal)
         {
+            // The copy inherits the tEXt source URL already embedded in original.png.
             File.Copy(originalPath, renderedPath, overwrite: true);
             bytes += SafeFileLength(renderedPath);
         }
         else
         {
-            bytes += ImageCodec.SavePng(original, renderedPath);
+            bytes += ImageCodec.SavePng(original, renderedPath, record.SourcePageUrl);
         }
 
         // layers.json — an empty document so the capture is immediately re-editable.
@@ -450,7 +451,10 @@ internal sealed class CapturePersistenceService
             // UI thread later swaps these staged files as one non-interleavable commit window.
             CanonicalizeAssets(stageDirectory, document, assetBitmaps, ref bytes);
 
-            bytes += ImageCodec.SavePng(flattened, Path.Combine(stageDirectory, CaptureFileNames.Rendered));
+            bytes += ImageCodec.SavePng(
+                flattened,
+                Path.Combine(stageDirectory, CaptureFileNames.Rendered),
+                record.SourcePageUrl);
 
             document.NormalizeZIndices();
             string layersJson = document.ToJson();

@@ -398,7 +398,7 @@ public sealed class CaptureTransactionRecoveryTests
             () => appSettings,
             () => workspace.Paths,
             NullLogger<CaptureCommitService>.Instance,
-            _ => Task.FromResult(copyResults.Dequeue()));
+            (_, _) => Task.FromResult(copyResults.Dequeue()));
         using (CaptureEditSession first = commit.BeginEditSession(record))
         using (CaptureEditSession second = commit.BeginEditSession(record))
         {

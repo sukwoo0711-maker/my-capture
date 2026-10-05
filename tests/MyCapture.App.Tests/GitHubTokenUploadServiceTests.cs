@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.GitHub;
 using MyCapture.Core.Settings;
+using MyCapture.Platform.Imaging;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -119,5 +120,33 @@ public sealed class GitHubTokenUploadServiceTests
         Assert.False(result.Success);
         Assert.Equal("no-token", result.Error);
         Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task Upload_EmbedsTheSourcePageUrlInThePngBody()
+    {
+        const string origin = "https://example.com/from-the-capture";
+        byte[]? uploaded = null;
+        var handler = new StubHandler(request =>
+        {
+            if (request.Content?.Headers.ContentType?.MediaType == "image/png")
+            {
+                uploaded = request.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+            }
+
+            return Json(new
+            {
+                upload_url = "https://upload.example.com/signed",
+                asset_id = "0f1e2d3c-1111-2222-3333-444455556666",
+            });
+        });
+        GitHubTokenUploadService service = CreateService(
+            Settings("https://github.com/acme/app/issues/7"), handler);
+
+        GitHubTokenUploadResult result = await service.UploadAsync(TinyImage(), origin);
+
+        Assert.True(result.Success, result.Error);
+        Assert.NotNull(uploaded);
+        Assert.Equal(origin, PngSourceUrlMetadata.TryReadSourceUrl(uploaded!));
     }
 }

@@ -1,12 +1,11 @@
-using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.Core.GitHub;
 using MyCapture.Core.Settings;
+using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.GitHub;
 
@@ -45,6 +44,7 @@ internal sealed class GitHubTokenUploadService
 
     internal async Task<GitHubTokenUploadResult> UploadAsync(
         BitmapSource image,
+        string? sourcePageUrl = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(image);
@@ -60,7 +60,7 @@ internal sealed class GitHubTokenUploadService
             return new GitHubTokenUploadResult(false, Error: "invalid-url");
         }
 
-        byte[] png = EncodePng(image);
+        byte[] png = ImageCodec.EncodePng(image, sourcePageUrl);
         if (png.Length == 0)
         {
             return new GitHubTokenUploadResult(false, Error: "encode-failed");
@@ -129,14 +129,5 @@ internal sealed class GitHubTokenUploadService
             _log.LogWarning(ex, "Token-based GitHub upload failed");
             return new GitHubTokenUploadResult(false, Error: ex.Message);
         }
-    }
-
-    private static byte[] EncodePng(BitmapSource image)
-    {
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(image));
-        using var stream = new MemoryStream();
-        encoder.Save(stream);
-        return stream.ToArray();
     }
 }

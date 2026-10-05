@@ -47,7 +47,7 @@ internal static class CapturePerformanceSelfTest
             NullLogger<CapturePersistenceService>.Instance);
         var commit = new CaptureCommitService(persistence, () => settings, () => paths,
             NullLogger<CaptureCommitService>.Instance,
-            _ => Task.FromResult(true)); // Acknowledge the Done copy contract without publishing to the user's clipboard.
+            (_, _) => Task.FromResult(true)); // Acknowledge the Done copy contract without publishing to the user's clipboard.
         CaptureRecord? currentRecord = null;
         CaptureEditSession? editSession = null;
         int round = -1;

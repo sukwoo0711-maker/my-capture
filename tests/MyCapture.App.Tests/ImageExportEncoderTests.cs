@@ -147,4 +147,27 @@ public sealed class ImageExportEncoderTests
         finally { dialog.Close(); }
         return true;
     });
+
+    [Fact]
+    public async Task Dialog_OriginalExportKeepsTheSourcePageUrl() => await StaThreadTask.RunAsync(() =>
+    {
+        const string origin = "https://example.com/docs/page";
+        Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
+        var dialog = new ImageReductionExportDialog(CreateImage(17, 13, noisy: true), "capture.png", origin);
+        try
+        {
+            Task pending = dialog.UpdatePreviewAsync();
+            var frame = new DispatcherFrame();
+            _ = pending.ContinueWith(_ => dispatcher.BeginInvoke(new Action(() => frame.Continue = false)), TaskScheduler.Default);
+            Dispatcher.PushFrame(frame);
+            pending.GetAwaiter().GetResult();
+
+            byte[]? exported = dialog.PreparedExportBytesForTest;
+            Assert.NotNull(exported);
+            Assert.Equal(origin, PngSourceUrlMetadata.TryReadSourceUrl(exported));
+        }
+        finally { dialog.Close(); }
+        return true;
+    });
 }

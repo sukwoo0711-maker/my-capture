@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Threading;
 using MyCapture.Core.Pin;
+using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.Pinning;
 
@@ -204,7 +205,12 @@ internal static class ClipboardImageReader
 
         if (image.Image is not null)
         {
-            return PinReadAttempt.Success(PinContent.FromImage(image.Image));
+            // The clipboard PNG may be one of our exports; its tEXt chunk carries the source
+            // page URL, which an F9 upload keeps with the image.
+            string sourcePageUrl = captured.PngBytes is { Length: > 0 } png
+                ? PngSourceUrlMetadata.TryReadSourceUrl(png)
+                : string.Empty;
+            return PinReadAttempt.Success(PinContent.FromImage(image.Image, sourcePageUrl));
         }
 
         if (HasSourceText(captured))

@@ -35,14 +35,14 @@ internal sealed class CaptureCommitService
     private readonly Func<AppSettings> _settings;
     private readonly Func<AppPaths> _paths;
     private readonly ILogger<CaptureCommitService> _log;
-    private readonly Func<BitmapSource, Task<bool>> _copyImageAsync;
+    private readonly Func<BitmapSource, string?, Task<bool>> _copyImageAsync;
 
     internal CaptureCommitService(
         CapturePersistenceService persistence,
         Func<AppSettings> settings,
         Func<AppPaths> paths,
         ILogger<CaptureCommitService> log,
-        Func<BitmapSource, Task<bool>>? copyImageAsync = null)
+        Func<BitmapSource, string?, Task<bool>>? copyImageAsync = null)
     {
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -79,14 +79,14 @@ internal sealed class CaptureCommitService
     /// clipboard writer even if the editor is later cancelled or committed with Done.
     /// </summary>
     internal async Task<bool> CopyCapturedRegionAsync(BitmapSource capturedBitmap, string? sourceWindowTitle = null,
-        bool? showSourceWindowTitle = null)
+        bool? showSourceWindowTitle = null, string? sourcePageUrl = null)
     {
         ArgumentNullException.ThrowIfNull(capturedBitmap);
 
         try
         {
             BitmapSource result = await RenderCapturedImageAsync(capturedBitmap, sourceWindowTitle, showSourceWindowTitle);
-            bool copied = await _copyImageAsync(result);
+            bool copied = await _copyImageAsync(result, sourcePageUrl);
             if (!copied)
             {
                 _log.LogWarning("Automatic captured-region clipboard copy failed");
@@ -176,7 +176,7 @@ internal sealed class CaptureCommitService
                         return false;
                     }
 
-                    return await TrySavePngAsync(flattened, chosen);
+                    return await TrySavePngAsync(flattened, chosen, exportRecord?.SourcePageUrl);
                 });
                 if (!exported)
                 {
@@ -185,18 +185,18 @@ internal sealed class CaptureCommitService
 
                 await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
-                return await CopyEditedImageAsync(flattened, "Save As");
+                return await CopyEditedImageAsync(flattened, "Save As", exportRecord?.SourcePageUrl);
 
             case EditorCommitAction.QuickSave:
                 record = await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
-                bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened, record));
+                bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened, record ?? exportRecord));
                 if (!quickSaved)
                 {
                     return false;
                 }
 
-                bool quickSaveCopied = await CopyEditedImageAsync(flattened, "Quick save");
+                bool quickSaveCopied = await CopyEditedImageAsync(flattened, "Quick save", (record ?? exportRecord)?.SourcePageUrl);
 
                 // Queue persistence is already durable, but Quick Save is an explicit export
                 // request. Keep the editor open when that request fails so the user sees the
@@ -206,7 +206,7 @@ internal sealed class CaptureCommitService
             case EditorCommitAction.CopyToClipboard:
                 await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
-                bool clipboardCopied = await _copyImageAsync(flattened);
+                bool clipboardCopied = await _copyImageAsync(flattened, exportRecord?.SourcePageUrl);
                 if (!clipboardCopied)
                 {
                     _log.LogWarning(
@@ -227,13 +227,13 @@ internal sealed class CaptureCommitService
 
                 await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
-                return await CopyEditedImageAsync(flattened, "Done");
+                return await CopyEditedImageAsync(flattened, "Done", exportRecord?.SourcePageUrl);
         }
     }
 
-    private async Task<bool> CopyEditedImageAsync(BitmapSource flattened, string operation)
+    private async Task<bool> CopyEditedImageAsync(BitmapSource flattened, string operation, string? sourcePageUrl = null)
     {
-        bool copied = await _copyImageAsync(flattened);
+        bool copied = await _copyImageAsync(flattened, sourcePageUrl);
         if (!copied)
         {
             _log.LogWarning(
@@ -252,7 +252,8 @@ internal sealed class CaptureCommitService
         return ReducedExportPrompt is not null
             ? ReducedExportPrompt(flattened, suggested)
             : ImageReductionExportDialog.Show(System.Windows.Application.Current?.Windows
-                .OfType<System.Windows.Window>().FirstOrDefault(window => window.IsActive), flattened, suggested);
+                .OfType<System.Windows.Window>().FirstOrDefault(window => window.IsActive), flattened, suggested,
+                record?.SourcePageUrl);
     }
 
     private static BitmapSource Flatten(
@@ -304,7 +305,7 @@ internal sealed class CaptureCommitService
             {
                 Directory.CreateDirectory(directory);
                 string stem = QuickSaveNaming.BuildStem(pattern, timestamp, title);
-                byte[] encoded = ImageCodec.EncodePng(flattened);
+                byte[] encoded = ImageCodec.EncodePng(flattened, record?.SourcePageUrl);
                 string savedPath = QuickSaveNaming.WriteCollisionFreeExport(directory, stem, ".png", encoded);
                 return (savedPath, encoded.LongLength);
             });
@@ -322,11 +323,11 @@ internal sealed class CaptureCommitService
         }
     }
 
-    private async Task<bool> TrySavePngAsync(BitmapSource flattened, string path)
+    private async Task<bool> TrySavePngAsync(BitmapSource flattened, string path, string? sourcePageUrl = null)
     {
         try
         {
-            long bytes = await Task.Run(() => ImageCodec.SavePngExport(flattened, path));
+            long bytes = await Task.Run(() => ImageCodec.SavePngExport(flattened, path, sourcePageUrl));
             _log.LogInformation("Saved {Bytes} bytes to {Path}", bytes, path);
             return true;
         }

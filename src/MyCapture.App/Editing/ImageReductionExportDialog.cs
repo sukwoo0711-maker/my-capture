@@ -24,6 +24,7 @@ internal sealed class ImageReductionExportDialog : Window
     private readonly Button _preview;
     private readonly Button _save;
     private readonly Button _drag;
+    private readonly string? _sourcePageUrl;
     private byte[]? _original;
     private ImageExportResult? _result;
     private OwnedImageExportStage? _stage;
@@ -32,11 +33,12 @@ internal sealed class ImageReductionExportDialog : Window
     private bool _closed;
     private Point? _dragStart;
 
-    internal ImageReductionExportDialog(BitmapSource image, string suggestedPngPath)
+    internal ImageReductionExportDialog(BitmapSource image, string suggestedPngPath, string? sourcePageUrl = null)
     {
         _image = image.IsFrozen ? image : image.Clone();
         if (!_image.IsFrozen) _image.Freeze();
         _suggestedPath = suggestedPngPath;
+        _sourcePageUrl = sourcePageUrl;
         StandardWindowTheme.Apply(this);
         Title = UiText.Get("ExportReduction_Title");
         SetResourceReference(BackgroundProperty, "Surface.Base");
@@ -106,9 +108,9 @@ internal sealed class ImageReductionExportDialog : Window
         UpdateTargetLabel();
     }
 
-    internal static bool Show(Window? owner, BitmapSource frozenImage, string suggestedPngPath)
+    internal static bool Show(Window? owner, BitmapSource frozenImage, string suggestedPngPath, string? sourcePageUrl = null)
     {
-        var dialog = new ImageReductionExportDialog(frozenImage, suggestedPngPath);
+        var dialog = new ImageReductionExportDialog(frozenImage, suggestedPngPath, sourcePageUrl);
         if (owner is not null && owner.IsVisible) dialog.Owner = owner;
         return dialog.ShowDialog() == true;
     }
@@ -120,6 +122,9 @@ internal sealed class ImageReductionExportDialog : Window
     }
 
     internal bool CanExport => _save.IsEnabled && _drag.IsEnabled;
+
+    /// <summary>Bytes the save button would write. Tests use this to see the prepared PNG.</summary>
+    internal byte[]? PreparedExportBytesForTest => _result?.Bytes;
 
     private void UpdateTargetLabel() => _targetText.Text = _target.Value == 0
         ? UiText.Get("ExportReduction_Original")
@@ -139,7 +144,7 @@ internal sealed class ImageReductionExportDialog : Window
         int target = (int)_target.Value;
         try
         {
-            byte[] original = _original ?? await Task.Run(() => ImageCodec.EncodePng(_image));
+            byte[] original = _original ?? await Task.Run(() => ImageCodec.EncodePng(_image, _sourcePageUrl));
             cancellation.Token.ThrowIfCancellationRequested();
             _original = original;
             // A single worker per dialog; changing the slider cancels between encoder calls.
