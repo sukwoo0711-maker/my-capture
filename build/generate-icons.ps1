@@ -22,9 +22,9 @@ New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $dibSizes = @(16, 20, 24, 32, 40, 48, 64)
 $pngSizes = @(128, 256)
 
-# Focus Portal palette. Tray state colours are deliberately far apart in hue;
+# Iris palette. Tray state colours are deliberately far apart in hue;
 # the tooltip/status text still carries the state so colour is never the only cue.
-$AccentFocus   = [System.Drawing.Color]::FromArgb(255, 88, 199, 243)
+$AccentFocus   = [System.Drawing.Color]::FromArgb(255, 124, 108, 255)
 $AccentAmber   = [System.Drawing.Color]::FromArgb(255, 245, 185, 66)
 $AccentEmerald = [System.Drawing.Color]::FromArgb(255, 69, 214, 162)
 $AccentCoral   = [System.Drawing.Color]::FromArgb(255, 255, 107, 116)

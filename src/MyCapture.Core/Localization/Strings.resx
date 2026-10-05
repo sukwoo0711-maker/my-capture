@@ -3067,7 +3067,6 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Video.Trim" xml:space="preserve"><value>잘라내기</value></data>
   <data name="Video.TrimIn" xml:space="preserve"><value>In 시작</value></data>
   <data name="Video.TrimOut" xml:space="preserve"><value>Out 끝</value></data>
-  <data name="Video.ApplyTrim" xml:space="preserve"><value>구간 적용</value></data>
   <data name="Video.PreviewFit" xml:space="preserve"><value>화면에 맞춤</value></data>
   <data name="Video.SourceTimeHint" xml:space="preserve"><value>원본 영상 기준 시간입니다. 초(예: 2.5) 또는 시:분:초.밀리초로 입력하세요. In부터 Out 직전까지 내보냅니다.</value></data>
   <data name="Video.TrimInputInvalid" xml:space="preserve"><value>구간을 적용하지 않았습니다. 원본 범위 안에서 In이 Out보다 최소 0.1초 앞서도록 입력해 주세요.</value></data>

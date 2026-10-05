@@ -169,7 +169,7 @@ internal sealed class RecordingControlWindow : Window
     {
         var frame = new AccessibleRegionFrame
         {
-            BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x58, 0xC7, 0xF3)),
+            BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x7C, 0x6C, 0xFF)),
             BorderThickness = new Thickness(BorderThicknessPx),
             Background = Brushes.Transparent,
             CornerRadius = new CornerRadius(2),
@@ -198,9 +198,9 @@ internal sealed class RecordingControlWindow : Window
             }
         };
         frame.GotKeyboardFocus += (_, _) =>
-            frame.BorderBrush = TryBrush("Border.Focus", Color.FromRgb(0x7D, 0xD7, 0xF8));
+            frame.BorderBrush = TryBrush("Border.Focus", Color.FromRgb(0x97, 0x89, 0xFF));
         frame.LostKeyboardFocus += (_, _) =>
-            frame.BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x58, 0xC7, 0xF3));
+            frame.BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x7C, 0x6C, 0xFF));
 
         AutomationProperties.SetName(frame, UiText.Get("Text_E7A732EAE7D5"));
         AutomationProperties.SetHelpText(

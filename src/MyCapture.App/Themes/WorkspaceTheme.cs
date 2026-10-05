@@ -57,14 +57,15 @@ internal static class WorkspaceTheme
         }
     }
 
-    internal static void Apply(ResourceDictionary resources, WorkspaceRole role, AppTheme theme)
+    /// <summary>
+    /// The inline Workspace overrides, exposed so a test can assert their contrast. This is a
+    /// third accent definition site separate from Tokens.xaml and ThemeCatalog, and it was the
+    /// only one no test covered.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> WorkspaceOverrides(WorkspaceRole role)
     {
-        AppTheme palette = theme == AppTheme.Workspace
-            ? role == WorkspaceRole.Gallery ? AppTheme.Daylight : AppTheme.Midnight : theme;
-        ThemeService.ApplyResources(palette, resources);
-        if (theme != AppTheme.Workspace) return;
         bool light = role == WorkspaceRole.Gallery;
-        var values = new Dictionary<string, string>
+        return new Dictionary<string, string>
         {
             ["Surface.Canvas"] = light ? "#edf3f2" : "#141b22",
             ["Surface.Base"] = light ? "#edf3f2" : "#141b22",
@@ -76,10 +77,10 @@ internal static class WorkspaceTheme
             ["Text.Primary"] = light ? "#10211e" : "#ffffff",
             ["Text.Secondary"] = light ? "#20342e" : "#eaf2f7",
             ["Text.Muted"] = light ? "#2f443b" : "#dce6ec",
-            ["Text.OnAccent"] = light ? "#0A0818" : "#0A0818",
+            ["Text.OnAccent"] = "#0A0818",
             ["Accent.Default"] = "#7C6CFF",
             ["Accent.Hover"] = "#9789FF",
-            ["Accent.Pressed"] = light ? "#5A48E0" : "#7A68EE",
+            ["Accent.Pressed"] = "#7A68EE",
             ["Accent.Subtle"] = light ? "#ECE9FF" : "#1A1733",
             ["Accent.Cool"] = light ? "#5A48E0" : "#9789FF",
             ["Accent.Gradient"] = "#7C6CFF",
@@ -92,6 +93,15 @@ internal static class WorkspaceTheme
             ["Timeline.TextLayer"] = light ? "#5A48E0" : "#8B7BFF",
             ["Timeline.FrameLayer"] = light ? "#118F84" : "#3FD8C9",
         };
+    }
+
+    internal static void Apply(ResourceDictionary resources, WorkspaceRole role, AppTheme theme)
+    {
+        AppTheme palette = theme == AppTheme.Workspace
+            ? role == WorkspaceRole.Gallery ? AppTheme.Daylight : AppTheme.Midnight : theme;
+        ThemeService.ApplyResources(palette, resources);
+        if (theme != AppTheme.Workspace) return;
+        var values = WorkspaceOverrides(role);
         foreach ((string key, string value) in values)
         {
             if (resources[key] is SolidColorBrush brush)

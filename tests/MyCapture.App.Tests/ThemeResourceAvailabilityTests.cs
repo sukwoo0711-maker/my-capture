@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
+using MyCapture.Core.Themes;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -217,11 +218,51 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
             Assert.Equal(brightFocus, BrushFor(theme, "Accent.Cool").Color);
             Assert.Equal(brightFocus, BrushFor(theme, "Border.Focus").Color);
             Assert.Equal(brightFocus, BrushFor(theme, "Overlay.SelectionBorder").Color);
-            Assert.Equal(brightFocus, BrushFor(theme, "Timeline.Playhead").Color);
+            // The dark themes resolve the playhead to white at runtime; the static fallback
+            // is the light-theme focus ink, so it is asserted as a contrast value, not identity.
+            AssertContrastAtLeast(theme, "Timeline.Playhead", "Surface.Base", 3.0);
             AssertContrastAtLeast(theme, "Border.Focus", "Surface.Base", 3.0);
             AssertContrastAtLeast(theme, "Border.Focus", "Surface.Raised", 3.0);
             AssertContrastAtLeast(theme, "Overlay.SelectionBorder", "Surface.Canvas", 3.0);
         });
+    }
+
+    /// <summary>
+    /// Workspace overrides its accent inline, separately from Tokens.xaml and ThemeCatalog.
+    /// This is the only place that paints the Workspace gallery primary button, so it needs
+    /// its own contrast assertion: a dark ink on the pressed accent must stay AA.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WorkspaceInlineAccentOverridesKeepDarkInkReadable(bool gallery)
+    {
+        WorkspaceRole role = gallery ? WorkspaceRole.Gallery : WorkspaceRole.VideoEditor;
+        IReadOnlyDictionary<string, string> overrides = WorkspaceTheme.WorkspaceOverrides(role);
+        ThemeColor ink = Parse(overrides["Text.OnAccent"]);
+        ThemeColor baseSurface = Parse(overrides["Surface.Base"]);
+        ThemeColor raised = Parse(overrides["Surface.Raised"]);
+
+        foreach (string key in new[] { "Accent.Default", "Accent.Hover", "Accent.Pressed" })
+        {
+            double ratio = ThemeContrast.Ratio(ink, Parse(overrides[key]));
+            Assert.True(ratio >= 4.5, $"{role} Text.OnAccent on {key} was {ratio:0.00}");
+        }
+
+        double border = ThemeContrast.Ratio(Parse(overrides["Border.Focus"]), baseSurface);
+        Assert.True(border >= 3.0, $"{role} Border.Focus on Surface.Base was {border:0.00}");
+
+        double primary = ThemeContrast.Ratio(Parse(overrides["Text.Primary"]), baseSurface);
+        Assert.True(primary >= 4.5, $"{role} Text.Primary on Surface.Base was {primary:0.00}");
+
+        double muted = ThemeContrast.Ratio(Parse(overrides["Text.Muted"]), raised);
+        Assert.True(muted >= 4.5, $"{role} Text.Muted on Surface.Raised was {muted:0.00}");
+    }
+
+    private static ThemeColor Parse(string hex)
+    {
+        Color color = (Color)ColorConverter.ConvertFromString(hex);
+        return ThemeColor.Rgb(color.R, color.G, color.B);
     }
 
     [Fact]

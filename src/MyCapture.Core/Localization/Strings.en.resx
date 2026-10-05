@@ -3067,7 +3067,6 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Video.Trim" xml:space="preserve"><value>Trim</value></data>
   <data name="Video.TrimIn" xml:space="preserve"><value>In</value></data>
   <data name="Video.TrimOut" xml:space="preserve"><value>Out</value></data>
-  <data name="Video.ApplyTrim" xml:space="preserve"><value>Apply range</value></data>
   <data name="Video.PreviewFit" xml:space="preserve"><value>Fit preview</value></data>
   <data name="Video.SourceTimeHint" xml:space="preserve"><value>Time in the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Export includes In up to, but excluding, Out.</value></data>
   <data name="Video.TrimInputInvalid" xml:space="preserve"><value>The range was not changed. Enter In and Out within the source, with In at least 0.1 seconds before Out.</value></data>

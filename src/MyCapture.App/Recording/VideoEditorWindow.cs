@@ -91,6 +91,7 @@ internal sealed class VideoEditorWindow : Window
     private double _durationMs;
     private bool _mediaReady;
     private bool _mediaFailed;
+    private bool _closing;
     private string _mediaFailure = string.Empty;
     private bool _committed;
     private bool _isPlaying;
@@ -1143,8 +1144,9 @@ internal sealed class VideoEditorWindow : Window
 
     private void ApplyTrimInputs()
     {
-        if (!_mediaReady || _operationRunning) return;
-        PausePlayback();
+        // A focus change can also mean the window is closing; never touch a closed media
+        // element, and do not stop playback just because the field lost focus.
+        if (!_mediaReady || _operationRunning || _closing) return;
         if (!SourceTimeInput.TryParse(_trimInInput.Text, out double start)
             || !SourceTimeInput.TryParse(_trimOutInput.Text, out double end)
             || !_timeline.SetTrimRange(start, end))
@@ -2068,6 +2070,9 @@ internal sealed class VideoEditorWindow : Window
 
     private void UpdateStatusForMode()
     {
+        // History buttons mirror the stack so they disable when there is nothing to undo.
+        if (_undoButton is not null) _undoButton.IsEnabled = _undo.Count > 0;
+        if (_redoButton is not null) _redoButton.IsEnabled = _redo.Count > 0;
         string trim = _timeline.IsFullClip
             ? UiText.Get("Text_424D8C634E79")
             : UiText.Format("Text_9E5B73EAD5B5", FormatMs(_timeline.SelectedDurationMs));
@@ -2135,6 +2140,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnClosedInternal(object? sender, EventArgs e)
     {
+        _closing = true;
         CancellationTokenSource? operation = Interlocked.Exchange(ref _operationCts, null);
         try
         {

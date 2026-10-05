@@ -107,10 +107,17 @@ public sealed class CaptureSelectionGridTests
             byte[] dragging = Pixels(Render(on, scale));
             Assert.Equal(dragging, Pixels(Render(off, scale)));
             Assert.Equal(new RectD(180, 120, 540, 330), on.Selection);
-            // Existing cyan anchor ring remains distinct from the small white live pointer.
-            int anchorPixel = ((int)start.Y * 900 + (int)(start.X - 8 * scale)) * 4;
-            Assert.True(dragging[anchorPixel] > dragging[anchorPixel + 2] + 25
-                && dragging[anchorPixel + 1] > dragging[anchorPixel + 2] + 25);
+            // The iris anchor ring is the only strongly blue pixel cluster near the start
+            // point; the live pointer is neutral white/grey.
+            bool irising = false;
+            for (int dx = -14; dx <= 14 && !irising; dx++)
+            for (int dy = -14; dy <= 14 && !irising; dy++)
+            {
+                int px = (((int)start.Y + dy) * 900 + (int)start.X + dx) * 4;
+                int b = dragging[px], g = dragging[px + 1], r = dragging[px + 2];
+                irising = b > g + 25 && b > r + 25;
+            }
+            Assert.True(irising, "expected an iris anchor ring near the drag start");
             int pointerPixel = ((int)end.Y * 900 + (int)(end.X + 8 * scale)) * 4;
             Assert.True(dragging[pointerPixel] > 180 && dragging[pointerPixel + 1] > 180 && dragging[pointerPixel + 2] > 180);
 
