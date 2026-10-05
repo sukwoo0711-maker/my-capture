@@ -10,6 +10,6 @@
   <rect x="1" y="1" width="22" height="22" rx="5.2" fill="#1C2028"/>
   <rect x="1" y="1" width="22" height="22" rx="5.2" fill="url(#sheen)"/>
   <rect x="1" y="1" width="22" height="22" rx="5.2" fill="none" stroke="#F6F8FC" stroke-opacity="0.28" stroke-width="0.6"/>
-  <rect x="9" y="8" width="11" height="11" rx="2.25" fill="none" stroke="#58C7F3" stroke-width="2.25"/>
+  <rect x="9" y="8" width="11" height="11" rx="2.25" fill="none" stroke="#7C6CFF" stroke-width="2.25"/>
   <rect x="4" y="4" width="11" height="11" rx="2.25" fill="none" stroke="#F6F8FC" stroke-width="2.25"/>
 </svg>

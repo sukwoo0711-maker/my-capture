@@ -4,14 +4,14 @@ MyCapture is a precision Windows capture tool. Its interface should feel quiet w
 captured pixels stay dominant, then become unmistakably branded at the moments that need
 attention: selection, focus, recording state, and the primary action.
 
-## Brand idea: Focus Portal
+## Brand idea: Iris Portal
 
 The mark is two offset panes. The rear pane represents the captured source; the forward
 pane represents the region that becomes a floating, editable MyCapture object. It remains
 recognisable at 16 px and avoids the generic four-corner crop-frame symbol.
 
-- App plate: graphite rounded square, cyan rear pane, near-white foreground pane.
-- Idle/focus: cyan `#58C7F3`.
+- App plate: graphite rounded square, iris rear pane, near-white foreground pane.
+- Idle/focus: iris `#7C6CFF`.
 - Capturing: amber `#F5B942`.
 - Busy/exporting: emerald `#45D6A2`.
 - Error: coral `#FF6B74`.
@@ -24,7 +24,7 @@ recognisable at 16 px and avoids the generic four-corner crop-frame symbol.
 - Graphite 980 `#080C12`, 950 `#0B0F17`, 900 `#101722`, 850 `#151E2B`
 - Graphite 800 `#1B2636`, 700 `#243246`, 600 `#475973`, 500 `#2B3A50`
 - Text 400 `#8E9CAF`, 300 `#C6D0DF`, 100 `#F6F8FC`
-- Focus 300 `#7DD7F8`, 400 `#58C7F3`, 600 `#38A8D8`, 900 `#152F3E`
+- Iris 300 `#9789FF`, 400 `#7C6CFF`, 600 `#7A68EE`, 900 `#1A1733`
 
 ### Semantic
 
