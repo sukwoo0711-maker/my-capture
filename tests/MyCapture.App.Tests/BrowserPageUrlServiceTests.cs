@@ -279,14 +279,14 @@ public sealed class BrowserPageUrlServiceTests
     }
 
     [Fact]
-    public void DefaultBudget_LeavesRoomForALiveBrowserWalk_ButBoundsADispatcherStall()
+    public void DefaultBudget_LeavesRoomForALiveDesktopBatch_ButStaysBounded()
     {
-        // A live walk measured 174-199 ms. The ceiling must clear that, and stay small
-        // because advanced still captures read synchronously on the dispatcher.
-        Assert.True(BrowserPageUrlService.DefaultBudget >= TimeSpan.FromMilliseconds(300),
-            "the default budget must exceed the measured live walk");
-        Assert.True(BrowserPageUrlService.DefaultBudget <= TimeSpan.FromMilliseconds(600),
-            "the default budget must keep a hung provider from freezing the capture hotkeys");
+        // A measured batch over a real desktop took about 455 ms; browser walks alone about
+        // 370 ms. The ceiling must clear that and still bound a hung provider.
+        Assert.True(BrowserPageUrlService.DefaultBudget >= TimeSpan.FromMilliseconds(600),
+            "the default budget must exceed the measured desktop batch");
+        Assert.True(BrowserPageUrlService.DefaultBudget <= TimeSpan.FromSeconds(2),
+            "the constructor rejects budgets above the two-second contract");
     }
 
     [Fact]

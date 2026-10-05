@@ -27,15 +27,15 @@ public sealed class BrowserPageUrlService
     private readonly SemaphoreSlim _gate;
 
     /// <summary>
-    /// Deadline for one probe. A live browser document walk measured 174-199 ms on the
-    /// target machine, so a 200 ms ceiling cancelled it about as often as it completed and
-    /// the capture stored no URL. The probe returns as soon as it finishes, so a ceiling
-    /// with headroom does not slow a normal capture; it only bounds a provider that hangs.
-    /// Advanced still captures read this synchronously on the dispatcher (twice, before and
-    /// after the pixels), so keep the ceiling low enough that a stuck provider cannot freeze
-    /// the capture hotkeys for long.
+    /// Deadline for one probe. The probe walks every exposed window in one pass, so its cost
+    /// grows with the desktop: a measured batch over 14 windows (2 browsers, one carrying 25
+    /// tabs) took about 455 ms, and browser walks alone about 370 ms. A ceiling below that
+    /// cancelled the batch and the capture stored no URL. The probe returns as soon as it
+    /// finishes, so the ceiling is a bound for a provider that hangs, not the normal wait.
+    /// The selector overlay is shown before this read runs, so a longer ceiling does not
+    /// delay the capture UI.
     /// </summary>
-    internal static readonly TimeSpan DefaultBudget = TimeSpan.FromMilliseconds(450);
+    internal static readonly TimeSpan DefaultBudget = TimeSpan.FromMilliseconds(900);
 
     public BrowserPageUrlService() : this(ReadNative, DefaultBudget, SharedProbeGate) { }
 
