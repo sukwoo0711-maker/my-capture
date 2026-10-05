@@ -44,7 +44,7 @@ internal sealed class PinManager
     private readonly List<PinWindow> _pins = [];
     private readonly Func<PinSettings> _settings;
     private readonly PinImageSaveService? _saveService;
-    private readonly Func<BitmapSource, Task<bool>> _copyImageAsync;
+    private readonly Func<BitmapSource, string?, Task<bool>> _copyImageAsync;
     private readonly Func<string, Task<bool>> _copyTextAsync;
     private readonly ILogger _log;
 
@@ -52,7 +52,7 @@ internal sealed class PinManager
         : this(
             settings,
             saveService: null,
-            static _ => Task.FromResult(true),
+            static (_, _) => Task.FromResult(true),
             static _ => Task.FromResult(true),
             log)
     {
@@ -74,7 +74,7 @@ internal sealed class PinManager
     internal PinManager(
         Func<PinSettings> settings,
         PinImageSaveService? saveService,
-        Func<BitmapSource, Task<bool>> copyImageAsync,
+        Func<BitmapSource, string?, Task<bool>> copyImageAsync,
         ILogger log)
         : this(
             settings,
@@ -88,7 +88,7 @@ internal sealed class PinManager
     internal PinManager(
         Func<PinSettings> settings,
         PinImageSaveService? saveService,
-        Func<BitmapSource, Task<bool>> copyImageAsync,
+        Func<BitmapSource, string?, Task<bool>> copyImageAsync,
         Func<string, Task<bool>> copyTextAsync,
         ILogger log)
     {
@@ -333,12 +333,12 @@ internal sealed class PinManager
         AreHidden = false;
     }
 
-    private async void OnPinCopyRequested(object? sender, BitmapSource image)
+    private async void OnPinCopyRequested(object? sender, PinImageCopyRequest request)
     {
         bool copied;
         try
         {
-            copied = await _copyImageAsync(image);
+            copied = await _copyImageAsync(request.Image, request.SourcePageUrl);
         }
         catch (Exception ex)
         {
@@ -420,8 +420,8 @@ internal sealed class PinManager
         try
         {
             result = e.Mode == PinSaveMode.SaveAs
-                ? await _saveService.SaveAsAsync(e.Image, pin)
-                : await _saveService.QuickSaveAsync(e.Image);
+                ? await _saveService.SaveAsAsync(e.Image, pin, e.SourcePageUrl)
+                : await _saveService.QuickSaveAsync(e.Image, e.SourcePageUrl);
         }
         catch (Exception ex)
         {

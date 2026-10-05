@@ -288,7 +288,7 @@ public sealed class PinManagerTests : KoreanCaptionTest
             PinManager manager = NewManager();
             BitmapSource? copied = null;
             PinWindow pin = manager.PinImage(SolidImage());
-            pin.CopyRequested += (_, image) => copied = image;
+            pin.CopyRequested += (_, request) => copied = request.Image;
 
             pin.SimulateCtrlSingleClickForTest();
             Assert.True(pin.IsCtrlClickTimerRunning);
@@ -341,7 +341,7 @@ public sealed class PinManagerTests : KoreanCaptionTest
             var manager = new PinManager(
                 () => new PinSettings(),
                 null,
-                _ =>
+                (_, _) =>
                 {
                     imageCopied = true;
                     return Task.FromResult(true);

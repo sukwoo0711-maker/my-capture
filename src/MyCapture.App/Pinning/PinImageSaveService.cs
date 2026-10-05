@@ -28,12 +28,17 @@ internal readonly record struct PinSaveResult(
     string? Path = null,
     string? ErrorMessage = null);
 
-internal sealed class PinSaveRequestedEventArgs(PinSaveMode mode, BitmapSource image) : EventArgs
+internal sealed class PinSaveRequestedEventArgs(PinSaveMode mode, BitmapSource image, string sourcePageUrl = "") : EventArgs
 {
     internal PinSaveMode Mode { get; } = mode;
 
     internal BitmapSource Image { get; } = image;
+
+    internal string SourcePageUrl { get; } = sourcePageUrl;
 }
+
+/// <summary>A pin image copy request: the frozen image plus the page it came from.</summary>
+internal readonly record struct PinImageCopyRequest(BitmapSource Image, string SourcePageUrl);
 
 /// <summary>
 /// Resolves pin export names and writes the frozen source image away from the UI thread.
@@ -66,7 +71,7 @@ internal sealed class PinImageSaveService
     /// </summary>
     internal Func<Window?, string, string?>? SaveAsPrompt { get; set; }
 
-    internal async Task<PinSaveResult> SaveAsAsync(BitmapSource image, Window? owner)
+    internal async Task<PinSaveResult> SaveAsAsync(BitmapSource image, Window? owner, string sourcePageUrl = "")
     {
         ArgumentNullException.ThrowIfNull(image);
 
@@ -103,11 +108,11 @@ string message = UiText.Get("Text_932DB1A4ED7F");
                 return new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: message);
             }
 
-            return await SaveToPathAsync(image, chosen);
+            return await SaveToPathAsync(image, chosen, sourcePageUrl);
         });
     }
 
-    internal async Task<PinSaveResult> QuickSaveAsync(BitmapSource image)
+    internal async Task<PinSaveResult> QuickSaveAsync(BitmapSource image, string sourcePageUrl = "")
     {
         ArgumentNullException.ThrowIfNull(image);
         return await ImageExportTransaction.RunAsync(async () =>
@@ -124,7 +129,7 @@ string message = UiText.Get("Text_932DB1A4ED7F");
                 BitmapSource frozen = Freeze(image);
                 (string path, long bytes) = await Task.Run(() =>
                 {
-                    byte[] encoded = ImageCodec.EncodePng(frozen);
+                    byte[] encoded = ImageCodec.EncodePng(frozen, sourcePageUrl);
                     string savedPath = QuickSaveNaming.WriteCollisionFreeExport(
                         directory,
                         stem,
@@ -144,13 +149,13 @@ string message = UiText.Get("Text_932DB1A4ED7F");
         });
     }
 
-    private async Task<PinSaveResult> SaveToPathAsync(BitmapSource image, string path)
+    private async Task<PinSaveResult> SaveToPathAsync(BitmapSource image, string path, string sourcePageUrl = "")
     {
         BitmapSource frozen = Freeze(image);
 
         try
         {
-            long bytes = await Task.Run(() => ImageCodec.SavePngExport(frozen, path))
+            long bytes = await Task.Run(() => ImageCodec.SavePngExport(frozen, path, sourcePageUrl))
                 .ConfigureAwait(false);
             _log.LogInformation("Saved pinned image ({Bytes} bytes) to {Path}", bytes, path);
             return new PinSaveResult(PinSaveStatus.Saved, path);

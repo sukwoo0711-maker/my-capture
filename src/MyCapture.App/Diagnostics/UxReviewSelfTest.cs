@@ -185,9 +185,9 @@ internal static class UxReviewSelfTest
                 var bounds = WindowStyleFacade.GetWindowBounds(new WindowInteropHelper(pin).Handle);
                 File.AppendAllText(inputLog, $"{DateTimeOffset.UtcNow:O} POSITION physical=[{bounds.Left},{bounds.Top}]\n");
             };
-            pin.CopyRequested += (_, image) =>
+            pin.CopyRequested += (_, request) =>
             {
-                imageCopy = ReferenceEquals(code, image);
+                imageCopy = ReferenceEquals(code, request.Image);
                 File.AppendAllText(inputLog, $"{DateTimeOffset.UtcNow:O} IMAGE identity={imageCopy}; modifiers={Keyboard.Modifiers}\n");
             };
             pin.OriginalTextCopyRequested += (_, text) =>
