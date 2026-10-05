@@ -409,7 +409,13 @@ internal sealed class RegionRecordingCoordinator
 
         _finishing = true;
         _completionInProgress = true;
-        (sender as RecordingControlWindow)?.ShowCompletionStatus(UiText.Get("Text_331C366314D0"));
+        // Finalisation already finished (RecordingFinished fires after the encoder join),
+        // so the user regains the screen immediately. Validation, thumbnail and library
+        // publication continue with the window gone; a crash or quit mid-tail is recovered
+        // from the publish-ready marker at startup. The tail keeps running with its
+        // continuations on the dispatcher, exactly like the pre-background flow, because
+        // the capture queue's index state is dispatcher-serialised.
+        (sender as RecordingControlWindow)?.CompleteAndClose();
         VideoLibraryItem item;
         try
         {

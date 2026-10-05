@@ -348,7 +348,10 @@ public sealed class RecordingFeatureTests : KoreanCaptionTest
                 Assert.True(finished, "recording completion timed out");
                 Assert.True(encoder.Completed);
                 Assert.False(window.IsRecording);
-                Assert.False(closed, "saving status must remain visible until the coordinator completes");
+                // The window stays open after finalisation; closing it is the coordinator's
+                // call once gallery registration finishes (or immediately, with the tail
+                // continuing invisibly).
+                Assert.False(closed, "the window must not close itself before the coordinator decides");
                 window.CompleteAndClose();
                 Assert.True(closed);
             }

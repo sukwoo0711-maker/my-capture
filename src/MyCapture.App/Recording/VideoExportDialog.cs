@@ -150,23 +150,14 @@ internal sealed class VideoExportDialog : Window
         _gif.Visibility = gif ? Visibility.Visible : Visibility.Collapsed;
         _targetLabel.Text = UiText.Format("MediaExport_Target", (int)_target.Value);
         double span = _document.TrimOutMs - _document.TrimInMs;
-        bool tooLong = gif && span > AnimatedGifExporter.MaximumDurationMs + 0.5;
-        _calculate.IsEnabled = !tooLong;
-        _status.Text = UiText.Get(tooLong ? "MediaExport_TrimGif" : "MediaExport_CalculateHint");
+        // No hard cap: a long GIF is allowed, but the cost grows linearly with frame count,
+        // so say so instead of silently chewing through hundreds of frames.
+        bool longGif = gif && span > LongGifHintThresholdMs;
+        _status.Text = UiText.Get(longGif ? "MediaExport_GifLongHint" : "MediaExport_CalculateHint");
     }
 
-    /// <summary>
-    /// Clamps the selection to the first 20 s (GIF hard limit) by moving Out. Returns true
-    /// when the document changed and the caller should reflect it in the editor timeline.
-    /// </summary>
-    internal bool TryAutoTrimForGif()
-    {
-        double span = _document.TrimOutMs - _document.TrimInMs;
-        if (span <= AnimatedGifExporter.MaximumDurationMs + 0.5) return false;
-        _document.TrimOutMs = _document.TrimInMs + AnimatedGifExporter.MaximumDurationMs;
-        Changed();
-        return true;
-    }
+    /// <summary>Above this span the GIF dialog warns about file size and calculation time.</summary>
+    internal const double LongGifHintThresholdMs = 20_000;
 
     internal int TargetReductionPercent
     {
