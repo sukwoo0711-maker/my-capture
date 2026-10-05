@@ -83,6 +83,7 @@ internal sealed class PinWindow : Window
         _image = content.Image;
         _contentKind = content.Kind;
         _originalText = content.OriginalText;
+        SourcePageUrl = content.SourcePageUrl;
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _settings = settings ?? (static () => new PinSettings());
         _dragInput = dragInput ?? NativePinDragInput.Instance;
@@ -187,8 +188,8 @@ internal sealed class PinWindow : Window
     /// <summary>Raised when the user asks (via this pin) to close every pin.</summary>
     internal event EventHandler? CloseAllRequested;
 
-    /// <summary>Raised when the user copies this pin's image.</summary>
-    internal event EventHandler<BitmapSource>? CopyRequested;
+    /// <summary>Raised when the user copies this pin's image, with the page it came from.</summary>
+    internal event EventHandler<PinImageCopyRequest>? CopyRequested;
 
     /// <summary>Raised when a rendered text/table pin requests its retained source text.</summary>
     internal event EventHandler<string>? OriginalTextCopyRequested;
@@ -207,6 +208,9 @@ internal sealed class PinWindow : Window
 
     /// <summary>The exact retained source string, exposed internally for verification.</summary>
     internal string? OriginalText => _originalText;
+
+    /// <summary>The source page this pin came from, if the clipboard carried one.</summary>
+    internal string SourcePageUrl { get; } = string.Empty;
 
     /// <summary>The native handle, valid after the window is shown.</summary>
     internal IntPtr Handle => _handle;
@@ -747,7 +751,7 @@ internal sealed class PinWindow : Window
     private void CopyImageToClipboard()
     {
         ShowFeedback(UiText.Get("Text_4C160257F02C"));
-        CopyRequested?.Invoke(this, _image);
+        CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl));
     }
 
     private void RequestOcr()
@@ -796,7 +800,7 @@ internal sealed class PinWindow : Window
 
         _saveInProgress = true;
         ShowFeedback(mode == PinSaveMode.SaveAs ? UiText.Get("Text_B53B72EF2371") : UiText.Get("Text_88DAAEEDFE4C"));
-        handler.Invoke(this, new PinSaveRequestedEventArgs(mode, _image));
+        handler.Invoke(this, new PinSaveRequestedEventArgs(mode, _image, SourcePageUrl));
     }
 
     private double AdjustOpacity(double delta)

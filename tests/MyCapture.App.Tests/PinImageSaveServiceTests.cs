@@ -4,6 +4,7 @@ using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Editing;
 using MyCapture.App.Pinning;
+using MyCapture.Platform.Imaging;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
@@ -69,6 +70,24 @@ public sealed class PinImageSaveServiceTests
         Assert.Contains("PNG", result.ErrorMessage, StringComparison.Ordinal);
         Assert.False(File.Exists(target));
         Assert.Empty(Directory.EnumerateFiles(temp.Path, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task QuickSaveAndSaveAs_KeepTheSourcePageUrlInThePng()
+    {
+        const string page = "https://example.com/docs/page";
+        using var temp = new TempDirectory();
+        PinImageSaveService service = CreateService(temp.Path);
+        string saveAsPath = Path.Combine(temp.Path, "saved.png");
+        service.SaveAsPrompt = (_, _) => saveAsPath;
+
+        PinSaveResult quick = await service.QuickSaveAsync(AlphaImage(), page);
+        PinSaveResult saveAs = await service.SaveAsAsync(AlphaImage(), owner: null, sourcePageUrl: page);
+
+        Assert.Equal(PinSaveStatus.Saved, quick.Status);
+        Assert.Equal(PinSaveStatus.Saved, saveAs.Status);
+        Assert.Equal(page, PngSourceUrlMetadata.TryReadSourceUrl(quick.Path!));
+        Assert.Equal(page, PngSourceUrlMetadata.TryReadSourceUrl(saveAsPath));
     }
 
     [Fact]

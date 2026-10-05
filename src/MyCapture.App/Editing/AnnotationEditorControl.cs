@@ -980,6 +980,8 @@ internal sealed class AnnotationEditorControl : Grid
             VerticalAlignment = VerticalAlignment.Center,
         };
 
+        // One primary action. Saving stays reachable through Done, Ctrl+S, and the
+        // overflow menu, so the four competing exit buttons collapse to cancel/copy/done.
         right.Children.Add(BuildSaveOverflowMenu());
         right.Children.Add(Separator());
 
@@ -1109,19 +1111,31 @@ internal sealed class AnnotationEditorControl : Grid
             Orientation = Orientation.Vertical,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
+        // Grouped by intent so shape and insertion tools no longer read as one flat list.
         AddToolButton(stack, EditorTool.Select, UiText.Get("Text_8D1A750C9351"), "V", UiText.Get("Text_8A3ADCEB89EF"), "Icon.Select", FallbackSelect);
+        AddToolButton(stack, EditorTool.Crop, UiText.Get("Tools_Crop"), "X", UiText.Get("Tools_CropHint"), "Icon.Crop", FallbackCrop);
+        stack.Children.Add(RailSeparator());
         AddToolButton(stack, EditorTool.Rectangle, UiText.Get("Text_DC0760235344"), "R", UiText.Get("Text_B659038CC17D"), "Icon.Rectangle", FallbackRectangle);
         AddToolButton(stack, EditorTool.Arrow, UiText.Get("Text_2785CE58DF74"), "A", UiText.Get("Text_D53ABD064C5E"), "Icon.Arrow", FallbackArrow);
         AddToolButton(stack, EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), "P", UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen);
         AddToolButton(stack, EditorTool.Text, UiText.Get("Text_258AD4B095A1"), "T", UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText);
+        stack.Children.Add(RailSeparator());
         AddToolButton(stack, EditorTool.Image, UiText.Get("Text_302BAE127938"), "I", UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage);
+        stack.Children.Add(RailSeparator());
         AddToolButton(stack, EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), "M", UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic);
-        AddToolButton(stack, EditorTool.Crop, UiText.Get("Tools_Crop"), "X", UiText.Get("Tools_CropHint"), "Icon.Crop", FallbackCrop);
 
         var panel = new Border { Child = stack };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
         return panel;
     }
+
+    private Border RailSeparator() => new()
+    {
+        Height = 1,
+        Width = 20,
+        Margin = new Thickness(0, 6, 0, 6),
+        Background = Brush("Border.Subtle", Colors.DimGray),
+    };
 
     private Border BuildViewport()
     {

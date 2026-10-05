@@ -462,7 +462,8 @@
                 </StackPanel>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Style="{StaticResource Button.Secondary}" Padding="12,8" Margin="0,0,8,0"
+                <!-- One primary action per state: capture is the filled button here. -->
+                <Button Style="{StaticResource Button.Primary}" Padding="12,8" Margin="0,0,8,0"
                         ToolTip="{loc:Text Text_2C20ADDA2018}"
                         AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
                         Click="OnCaptureRegionClick">
@@ -484,10 +485,11 @@
                         <TextBlock Text="{loc:Text Text_4F5AF20FAA6E}" Margin="7,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <Button Style="{StaticResource Button.Secondary}" Padding="14,8" Click="OnClearLibraryClick" ToolTip="{loc:Text LibrarySelection_ClearHint}">
+                <!-- Item count is metadata, not an action: demote it to a plain border. -->
+                <Button Style="{StaticResource Button.GhostCompact}" Padding="14,8" Click="OnClearLibraryClick" ToolTip="{loc:Text LibrarySelection_ClearHint}">
                     <TextBlock x:Name="SummaryLabel"
                                Text="{Binding SummaryText}"
-                               Foreground="{DynamicResource Text.Secondary}"
+                               Foreground="{DynamicResource Text.Muted}"
                                FontSize="{StaticResource FontSize.Body}"
                                AutomationProperties.Name="{Binding SummaryText}" />
                 </Button>
