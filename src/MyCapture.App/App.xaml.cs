@@ -314,6 +314,11 @@ public partial class App : Application
         _recorder.PrivacyRedactionService = _privacyRedactionService;
         _recorder.ShowSelectionGrid = () => _settings!.Capture.ShowSelectionGrid;
         _recorder.SessionEnded += (_, _) => RestoreTrayAfterCapture();
+        _recorder.FinishingBusyFeedback += () => _tray.ShowBalloon(
+            "MyCapture",
+            UiText.Get("Recording.FinishingBusy"),
+            TrayBalloonKind.Information,
+            playSound: false);
 
         // Add the icon first so registration failures have a non-modal place to be
         // reported. A tray utility must not interrupt logon with a message box merely

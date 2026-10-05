@@ -2994,6 +2994,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>Resolution and frame rate stay unchanged. The reduction is a target; calculate to see the actual size. Quality may decrease.</value></data>
   <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF files grow with the frame count. Choose the long edge and frame rate. Sound is not included.</value></data>
   <data name="MediaExport_GifLongHint" xml:space="preserve"><value>GIFs longer than 20 seconds can grow very large and take a while to calculate.</value></data>
+  <data name="Recording.FinishingBusy" xml:space="preserve"><value>Finishing the recording save. Please try again shortly.</value></data>
   <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF size and frame rate</value></data>
   <data name="MediaExport_Speed" xml:space="preserve"><value>Playback speed</value></data>
   <data name="MediaExport_Calculate" xml:space="preserve"><value>Calculate result</value></data>
