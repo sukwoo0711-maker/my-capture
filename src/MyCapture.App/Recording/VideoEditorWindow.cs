@@ -74,6 +74,8 @@ internal sealed class VideoEditorWindow : Window
     private readonly ListBox _overlayList;
     private TextBlock? _layerPropertiesSummary;
     private Button? _layerPropertiesEdit;
+    private Button? _undoButton;
+    private Button? _redoButton;
     private Button _trimButton = null!;
     private Button _addTextButton = null!;
     private Button _editTextButton = null!;
@@ -424,9 +426,22 @@ internal sealed class VideoEditorWindow : Window
         export.ToolTip = UiText.Get("Workspace.VideoHint");
         AutomationProperties.SetHelpText(export, UiText.Get("Workspace.VideoHint"));
         export.Click += (_, _) => OpenExport();
-        _editControls.Add(saveEdits); _editControls.Add(export);
-        exports.Children.Add(saveEdits); exports.Children.Add(export);
+        // Frame edit is a main action, not a transport icon: it takes the playhead frame
+        // into the still-image editor and returns it as a layer.
+        Button frameEdit = MakeIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"),
+            UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame);
+        frameEdit.Margin = new Thickness(0, 0, 8, 0);
+        AutomationProperties.SetHelpText(frameEdit, UiText.Get("Text_A79A9F93D479"));
+        _editControls.Add(saveEdits); _editControls.Add(export); _editControls.Add(frameEdit);
+        exports.Children.Add(frameEdit); exports.Children.Add(saveEdits); exports.Children.Add(export);
         DockPanel.SetDock(exports, Dock.Right); header.Children.Add(exports);
+        // Undo / redo belong with the commands, not buried under keyboard only.
+        var history = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 12, 0) };
+        Button undo = MakeTransportIcon("Icon.Undo", UiText.Get("Text_CE706412FA75"), "Button.Ghost", () => RestoreEdit(false));
+        Button redo = MakeTransportIcon("Icon.Redo", UiText.Get("Text_078C44D5A66E"), "Button.Ghost", () => RestoreEdit(true));
+        _undoButton = undo; _redoButton = redo;
+        history.Children.Add(undo); history.Children.Add(redo);
+        DockPanel.SetDock(history, Dock.Right); header.Children.Add(history);
         FrameworkElement tools = BuildOverlayLane();
         var fit = new ComboBox { Width = 130, MinHeight = 36, VerticalAlignment = VerticalAlignment.Center };
         fit.Items.Add(UiText.Get("Video.PreviewFit")); fit.SelectedIndex = 0;
@@ -541,6 +556,9 @@ internal sealed class VideoEditorWindow : Window
 
     private FrameworkElement BuildTrimInputs()
     {
+        // Inline precision entry only. Direct timeline dragging is the primary path, so a
+        // committed value applies immediately and there is no separate "apply" gate to
+        // forget. Enter is kept for people who type a value.
         var row = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
         row.Children.Add(new TextBlock { Text = UiText.Get("Video.Trim"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) });
         TextBox Input(string name)
@@ -549,13 +567,12 @@ internal sealed class VideoEditorWindow : Window
             var input = new TextBox { Width = 144, MinHeight = 36, Padding = new Thickness(8, 4, 8, 4), VerticalContentAlignment = VerticalAlignment.Center, ToolTip = UiText.Get("Video.SourceTimeHint") };
             AutomationProperties.SetName(input, name);
             input.PreviewKeyDown += (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; ApplyTrimInputs(); } };
+            input.LostFocus += (_, _) => ApplyTrimInputs();
             row.Children.Add(input); _editControls.Add(input);
             return input;
         }
         _trimInInput = Input(UiText.Get("Video.TrimIn"));
         _trimOutInput = Input(UiText.Get("Video.TrimOut"));
-        Button apply = MakeButton(UiText.Get("Video.ApplyTrim"), UiText.Get("Video.SourceTimeHint"), "Button.Secondary", ApplyTrimInputs);
-        row.Children.Add(apply);
         RefreshTrimInputs();
         return row;
     }
@@ -697,23 +714,25 @@ internal sealed class VideoEditorWindow : Window
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
+        // Cluster 1: transport position.
         transport.Children.Add(MakeTransportIcon("Icon.First", UiText.Get("Text_DC710AA11970"), "Button.Ghost", () => Seek(_timeline.InMs)));
         transport.Children.Add(MakeTransportIcon("Icon.Rewind", UiText.Get("Text_E166B75FADF4"), "Button.Ghost", () => StepCoarse(-1)));
-        transport.Children.Add(MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Secondary", TogglePlay));
+        // The single filled primary of this row: play/pause.
+        transport.Children.Add(MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Primary", TogglePlay));
         transport.Children.Add(MakeTransportIcon("Icon.FastForward", UiText.Get("Text_E5CAF7CFC916"), "Button.Ghost", () => StepCoarse(1)));
         transport.Children.Add(MakeTransportIcon("Icon.Last", UiText.Get("Text_DFCA22AB9F61"), "Button.Ghost", () => Seek(_timeline.OutMs)));
-        transport.Children.Add(Spacer(10));
+        transport.Children.Add(Spacer(12));
+        // Cluster 2: frame stepping.
         transport.Children.Add(MakeTransportIcon("Icon.StepBack", UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
         transport.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
-        transport.Children.Add(Spacer(8));
+        transport.Children.Add(Spacer(12));
+        // Cluster 3: timeline view and range marks.
         transport.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
         transport.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
         transport.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
         transport.Children.Add(Spacer(6));
         transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkIn"), SetInHere));
         transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkOut"), SetOutHere));
-        transport.Children.Add(Spacer(6));
-        transport.Children.Add(MakeCompactIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"), UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame));
         Grid.SetRow(transport, 0);
         controls.Children.Add(transport);
 
