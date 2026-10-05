@@ -26,11 +26,18 @@ public sealed class BrowserPageUrlService
     private readonly TimeSpan _budget;
     private readonly SemaphoreSlim _gate;
 
-    // A live browser document walk measured 174-199 ms on the target machine, so a 200 ms
-    // ceiling cancelled it about as often as it completed and the capture stored no URL.
-    // The probe returns as soon as it finishes, so the wider ceiling costs nothing on a
-    // normal capture and still bounds the wait.
-    public BrowserPageUrlService() : this(ReadNative, TimeSpan.FromMilliseconds(700), SharedProbeGate) { }
+    /// <summary>
+    /// Deadline for one probe. A live browser document walk measured 174-199 ms on the
+    /// target machine, so a 200 ms ceiling cancelled it about as often as it completed and
+    /// the capture stored no URL. The probe returns as soon as it finishes, so a ceiling
+    /// with headroom does not slow a normal capture; it only bounds a provider that hangs.
+    /// Advanced still captures read this synchronously on the dispatcher (twice, before and
+    /// after the pixels), so keep the ceiling low enough that a stuck provider cannot freeze
+    /// the capture hotkeys for long.
+    /// </summary>
+    internal static readonly TimeSpan DefaultBudget = TimeSpan.FromMilliseconds(450);
+
+    public BrowserPageUrlService() : this(ReadNative, DefaultBudget, SharedProbeGate) { }
 
     internal BrowserPageUrlService(
         Func<IReadOnlyList<WindowCandidate>, CancellationToken,
@@ -109,8 +116,9 @@ public sealed class BrowserPageUrlService
                     automation ??= new NativeAutomation();
                     // The control view reaches Chromium's page document in tens of
                     // milliseconds. The raw view also contains it, but on a live Edge
-                    // window that walk took about 600 ms. Keep the raw view for
-                    // documents that are not control elements.
+                    // window that walk took about 600 ms. Chromium can mark its root web
+                    // document IsControlElement=false, so keep the raw view as the
+                    // fallback for documents the control view drops.
                     automation.UseControlView();
                     BrowserDocumentValue? document = FindVisibleDocument(
                         automation.FromHandle(candidate.Handle), candidate.ScreenBounds, cancellation);
@@ -245,8 +253,6 @@ public sealed class BrowserPageUrlService
                 Type type = Type.GetTypeFromCLSID(new Guid("FF48DBA4-60EF-4201-AA87-54103EEF594E"), true)!;
                 _automation = Own((IUiAutomation)Activator.CreateInstance(type)!);
                 _controlWalker = Own(_automation.GetControlViewWalker());
-                // Chromium can mark its root web document IsControlElement=false. The
-                // control view then removes it while retaining editable descendants.
                 _rawWalker = Own(_automation.GetRawViewWalker());
                 _controlCache = CreateCache(Own(_automation.GetControlViewCondition()));
                 _rawCache = CreateCache(Own(_automation.GetRawViewCondition()));
