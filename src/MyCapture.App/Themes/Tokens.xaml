@@ -136,7 +136,9 @@
     <SolidColorBrush x:Key="Timeline.TextLayer" Color="#FF8B7BFF" />
     <SolidColorBrush x:Key="Timeline.FrameLayer" Color="#FF3FD8C9" />
     <SolidColorBrush x:Key="Timeline.Grid" Color="{StaticResource Primitive.Graphite500}" />
-    <SolidColorBrush x:Key="Timeline.Playhead" Color="{StaticResource Primitive.Yellow300}" />
+    <!-- Dark palettes resolve the playhead to white; light themes override it at runtime
+         with a deep iris that keeps focus-weight contrast on pale surfaces. -->
+    <SolidColorBrush x:Key="Timeline.Playhead" Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="Timeline.TrimDeleteFill" Color="#55FF6B74" />
     <SolidColorBrush x:Key="Timeline.TrimDeleteHandle" Color="{StaticResource Primitive.Red400}" />
     <SolidColorBrush x:Key="Timeline.TrimDeleteHatch" Color="#CCFFB0B6" />

@@ -203,7 +203,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.NearestNeighbor);
 
         _dimmerBrush = ResourceBrush("Overlay.Dimmer", new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)));
-        _selectionBrush = ResourceBrush("Overlay.SelectionBorder", new SolidColorBrush(Color.FromRgb(0x7D, 0xD7, 0xF8)));
+        _selectionBrush = ResourceBrush("Overlay.SelectionBorder", new SolidColorBrush(Color.FromRgb(0x97, 0x89, 0xFF)));
         _anchorPen = new Pen(_selectionBrush, 1.5);
         _pointerOuterPen.Freeze();
         _pointerInnerPen.Freeze();

@@ -57,10 +57,10 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.HighQuality);
 
         _dimmerBrush = Resource("Overlay.Dimmer", new SolidColorBrush(Color.FromArgb(115, 0, 0, 0)));
-        _selectionBrush = Resource("Accent.Default", new SolidColorBrush(Color.FromRgb(0x58, 0xC7, 0xF3)));
+        _selectionBrush = Resource("Accent.Default", new SolidColorBrush(Color.FromRgb(0x7C, 0x6C, 0xFF)));
         _handleFillBrush = Resource("Overlay.HandleFill", Brushes.White);
 
-        _handlePen = new Pen(Resource("Accent.Pressed", new SolidColorBrush(Color.FromRgb(0x38, 0xA8, 0xD8))), 1);
+        _handlePen = new Pen(Resource("Accent.Pressed", new SolidColorBrush(Color.FromRgb(0x7A, 0x68, 0xEE))), 1);
         _handlePen.Freeze();
         _selectionOutlinePen = new Pen(_selectionBrush, 1) { DashStyle = new DashStyle([4, 3], 0) };
         _selectionOutlinePen.Freeze();
