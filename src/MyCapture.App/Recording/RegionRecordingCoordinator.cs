@@ -52,6 +52,13 @@ internal sealed class RegionRecordingCoordinator
     internal Task LastSelectionPreparation { get; private set; } = Task.CompletedTask;
     internal event Action<Exception>? SelectionPreparationFailed;
 
+    /// <summary>
+    /// Raised when the Ctrl+Shift+X hotkey arrives while the post-stop tail (validation,
+    /// thumbnail, library publication) is still running and the hotkey is intentionally
+    /// ignored, so the host can surface visible feedback instead of silence.
+    /// </summary>
+    internal event Action? FinishingBusyFeedback;
+
     private sealed class SelectionPreparation
     {
         internal volatile bool Cancelled;
@@ -113,9 +120,11 @@ internal sealed class RegionRecordingCoordinator
         _dispatcher.VerifyAccess();
 
         // A stop→finalise→editor transition is in flight: ignore re-triggers so a second
-        // hotkey press can never start a brand-new recording from 0 mid-transition.
+        // hotkey press can never start a brand-new recording from 0 mid-transition. The
+        // host raises a balloon because the control window is already gone at this point.
         if (_finishing)
         {
+            FinishingBusyFeedback?.Invoke();
             ActivateExisting();
             return;
         }

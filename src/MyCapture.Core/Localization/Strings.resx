@@ -2994,6 +2994,7 @@
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>해상도와 프레임 속도는 유지합니다. 감소율은 목표이며, 실제 크기는 계산 후 확인하세요. 화질이 낮아질 수 있습니다.</value></data>
   <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF는 프레임이 많아질수록 파일이 커집니다. 긴 변과 프레임 속도를 선택하세요. 소리는 포함되지 않습니다.</value></data>
   <data name="MediaExport_GifLongHint" xml:space="preserve"><value>20초를 넘는 GIF는 파일이 매우 커지고 계산에 오래 걸릴 수 있습니다.</value></data>
+  <data name="Recording.FinishingBusy" xml:space="preserve"><value>녹화 저장을 마무리하는 중입니다. 잠시 후 다시 시도해 주세요.</value></data>
   <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF 크기 및 프레임 속도</value></data>
   <data name="MediaExport_Speed" xml:space="preserve"><value>재생 속도</value></data>
   <data name="MediaExport_Calculate" xml:space="preserve"><value>결과 계산</value></data>
