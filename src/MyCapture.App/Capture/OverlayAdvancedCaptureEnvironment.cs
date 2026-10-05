@@ -56,8 +56,8 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
 
     public WindowUnderCursor? WindowAt(PointD screenPoint) => _windowTitles.ResolveAt(screenPoint);
 
-    // Existing advanced still commands are synchronous. The bounded reader waits at most
-    // 200 ms here; its native UI Automation work always runs on its own MTA thread.
+    // Existing advanced still commands are synchronous. The bounded reader waits for its
+    // own deadline here; its native UI Automation work always runs on its own MTA thread.
     public BrowserDocumentSnapshot? ReadSourceDocument(WindowUnderCursor? window) =>
         ReadSourceDocumentAsync(window).GetAwaiter().GetResult();
 

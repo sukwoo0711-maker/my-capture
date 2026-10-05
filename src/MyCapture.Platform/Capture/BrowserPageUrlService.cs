@@ -26,7 +26,11 @@ public sealed class BrowserPageUrlService
     private readonly TimeSpan _budget;
     private readonly SemaphoreSlim _gate;
 
-    public BrowserPageUrlService() : this(ReadNative, TimeSpan.FromMilliseconds(200), SharedProbeGate) { }
+    // A live browser document walk measured 174-199 ms on the target machine, so a 200 ms
+    // ceiling cancelled it about as often as it completed and the capture stored no URL.
+    // The probe returns as soon as it finishes, so the wider ceiling costs nothing on a
+    // normal capture and still bounds the wait.
+    public BrowserPageUrlService() : this(ReadNative, TimeSpan.FromMilliseconds(700), SharedProbeGate) { }
 
     internal BrowserPageUrlService(
         Func<IReadOnlyList<WindowCandidate>, CancellationToken,
@@ -105,8 +109,7 @@ public sealed class BrowserPageUrlService
                     automation ??= new NativeAutomation();
                     // The control view reaches Chromium's page document in tens of
                     // milliseconds. The raw view also contains it, but on a live Edge
-                    // window that walk took about 600 ms and the 200 ms capture budget
-                    // cancelled it before the URL could be read. Keep the raw view for
+                    // window that walk took about 600 ms. Keep the raw view for
                     // documents that are not control elements.
                     automation.UseControlView();
                     BrowserDocumentValue? document = FindVisibleDocument(
