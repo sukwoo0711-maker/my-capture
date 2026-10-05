@@ -19,14 +19,14 @@ internal sealed record GifFrameSchedule(
 
 /// <summary>
 /// Streams a trimmed, text-composited recording to animated GIF using only Windows/WPF codecs.
-/// Product caps keep CPU, file size and palette-quantization work predictable on modest PCs.
+/// There is no hard duration cap: a long GIF is the user's call, and its cost grows linearly
+/// with frame count, so the export dialog warns beyond 20 s while the quality presets keep
+/// CPU, file size and palette-quantization work predictable on modest PCs.
 /// </summary>
 internal static class AnimatedGifExporter
 {
-    internal const double MaximumDurationMs = 20_000;
     internal const int MaximumLongEdge = 960;
     internal const int FramesPerSecond = 10;
-    internal const int MaximumFrames = 200;
 
     internal static int Export(
         RecordingResult recording,
@@ -48,12 +48,6 @@ internal static class AnimatedGifExporter
             recording.Width,
             recording.Height,
             recording.DurationMs);
-        double duration = document.TrimOutMs - document.TrimInMs;
-        if (duration > MaximumDurationMs + 0.5)
-        {
-            throw new GifExportLimitException(
-                UiText.Get("Text_9098D098B1DA"));
-        }
 
         GifFrameSchedule schedule = BuildFrameSchedule(document, playbackSpeed, quality.FramesPerSecond);
 
@@ -294,12 +288,6 @@ internal static class AnimatedGifExporter
         }
 
         int frameCount = boundaries.Count - 1;
-        if (frameCount > MaximumFrames)
-        {
-            throw new GifExportLimitException(
-                UiText.Format("Text_57B9B3F05935", MaximumFrames) +
-                UiText.Get("Text_228A9CF0DE4A"));
-        }
 
         int[] ordered = boundaries.ToArray();
         var sourceTimes = new double[frameCount];

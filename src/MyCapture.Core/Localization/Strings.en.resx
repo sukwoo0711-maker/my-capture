@@ -370,10 +370,6 @@
     <value>Playback finished</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
-  <data name="Text_228A9CF0DE4A" xml:space="preserve">
-    <value>Shorten the selection or align layer start/end times closer to the 0.1-second grid.</value>
-    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
-  </data>
   <data name="Text_22A29FBD57AD" xml:space="preserve">
     <value>Highlighter opacity</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -564,10 +560,6 @@ This cannot be undone.</value>
   <data name="Text_328D9EF717EC" xml:space="preserve">
     <value>Screen pin settings</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
-  </data>
-  <data name="Text_331C366314D0" xml:space="preserve">
-    <value>Saving recording… Preparing library and preview</value>
-    <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
   </data>
   <data name="Text_33406FC582BE" xml:space="preserve">
     <value>Selection tool</value>
@@ -946,7 +938,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_542965B456C7" xml:space="preserve">
-    <value>Recording ended · Converting video…</value>
+    <value>Recording stopped · Finalising the video file…</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_5461D9E26042" xml:space="preserve">
@@ -996,10 +988,6 @@ This cannot be undone.</value>
   <data name="Text_579BAB6C0833" xml:space="preserve">
     <value>Unpin</value>
     <comment>src\MyCapture.App\Gallery\GalleryConverters.cs</comment>
-  </data>
-  <data name="Text_57B9B3F05935" xml:space="preserve">
-    <value>The GIF exceeds {0} frames including layer timing boundaries. </value>
-    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
   </data>
   <data name="Text_5825293860A7" xml:space="preserve">
     <value>Save and export (Ctrl+S · Ctrl+Shift+S)</value>
@@ -1640,10 +1628,6 @@ This cannot be undone.</value>
   <data name="Text_90290F46A7D5" xml:space="preserve">
     <value>Recording is starting or finishing. Please try capturing again shortly.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
-  </data>
-  <data name="Text_9098D098B1DA" xml:space="preserve">
-    <value>GIF exports are limited to 20 seconds. Shorten the timeline selection.</value>
-    <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
   </data>
   <data name="Text_91390EADFAD4" xml:space="preserve">
     <value>Start</value>
@@ -3008,14 +2992,14 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_Baseline" xml:space="preserve"><value>The baseline is a standard MP4 of the current edits and selected interval. It may differ from the original file size.</value></data>
   <data name="MediaExport_TargetLabel" xml:space="preserve"><value>Target file size reduction</value></data>
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>Resolution and frame rate stay unchanged. The reduction is a target; calculate to see the actual size. Quality may decrease.</value></data>
-  <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF supports up to 20 seconds and 200 frames. Choose the maximum long edge and frame rate. Audio is not included.</value></data>
+  <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF files grow with the frame count. Choose the long edge and frame rate. Sound is not included.</value></data>
+  <data name="MediaExport_GifLongHint" xml:space="preserve"><value>GIFs longer than 20 seconds can grow very large and take a while to calculate.</value></data>
   <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF size and frame rate</value></data>
   <data name="MediaExport_Speed" xml:space="preserve"><value>Playback speed</value></data>
   <data name="MediaExport_Calculate" xml:space="preserve"><value>Calculate result</value></data>
   <data name="MediaExport_Close" xml:space="preserve"><value>Close</value></data>
   <data name="MediaExport_SaveAs" xml:space="preserve"><value>Save as</value></data>
   <data name="MediaExport_Target" xml:space="preserve"><value>Target size reduction: {0}%</value></data>
-  <data name="MediaExport_TrimGif" xml:space="preserve"><value>Trim the selected interval to 20 seconds or less to export GIF.</value></data>
   <data name="MediaExport_CalculateHint" xml:space="preserve"><value>Choose settings, then calculate the result. The original stays unchanged.</value></data>
   <data name="MediaExport_Working" xml:space="preserve"><value>Calculating the result…</value></data>
   <data name="MediaExport_Progress" xml:space="preserve"><value>{0} · {1:N0}/{2:N0} frames</value></data>
