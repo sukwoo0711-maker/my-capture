@@ -32,7 +32,10 @@ public sealed class SettingsImportPathTests
     [Fact]
     public void ImportRejectsRelativePathEvenWhenItResolvesToValidJson()
     {
-        string root = ValidatedFilePaths.CreateTemporaryDirectory();
+        // A temp directory may be on another drive on Windows CI, in which case
+        // GetRelativePath returns an absolute path and never exercises rejection.
+        string root = ValidatedFilePaths.CreateDirectory(Path.Combine(
+            Environment.CurrentDirectory, "settings-import-" + Guid.NewGuid().ToString("N")));
         string source = ValidatedFilePaths.FileWithinRoot(root, "import.json", ".json");
         File.WriteAllText(source, ImportedJson);
         string relative = Path.GetRelativePath(Environment.CurrentDirectory, source);
