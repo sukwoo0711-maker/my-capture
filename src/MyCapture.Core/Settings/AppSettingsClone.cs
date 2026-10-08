@@ -43,6 +43,8 @@ public static class AppSettingsClone
     // the clone replaces the reference rather than mutating the shared instance.
     private static HotkeySettings Clone(HotkeySettings s) => new()
     {
+        ScrollingCapture = s.ScrollingCapture,
+        DelayedCapture = s.DelayedCapture,
         Capture = s.Capture,
         OpenLibrary = s.OpenLibrary,
         PasteToScreen = s.PasteToScreen,
@@ -129,6 +131,7 @@ public static class AppSettingsClone
 
     private static GeneralSettings Clone(GeneralSettings s) => new()
     {
+        ShowQuickAccess = s.ShowQuickAccess,
         LaunchAtLogin = s.LaunchAtLogin,
         NotifyOnQuickSave = s.NotifyOnQuickSave,
         PlayCaptureSound = s.PlayCaptureSound,

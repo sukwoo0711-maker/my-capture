@@ -203,12 +203,12 @@ string message = UiText.Get("Text_932DB1A4ED7F");
 
             e.Cancel = true;
             _ = owner is null
-                ? MessageBox.Show(
+                ? MyCapture.App.Themes.ThemedDialog.Show(
                     UiText.Get("Text_932DB1A4ED7F"),
                     UiText.Get("Text_A97A3B71F038"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information)
-                : MessageBox.Show(
+                : MyCapture.App.Themes.ThemedDialog.Show(
                     owner,
                     UiText.Get("Text_932DB1A4ED7F"),
                     UiText.Get("Text_A97A3B71F038"),

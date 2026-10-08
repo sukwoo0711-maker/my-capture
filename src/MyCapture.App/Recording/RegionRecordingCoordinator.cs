@@ -233,8 +233,7 @@ internal sealed class RegionRecordingCoordinator
                     overlay.Close();
                     _log.LogError(ex, "Recording selection preparation failed");
                     if (SelectionPreparationFailed is { } reportFailure) reportFailure(ex);
-                    else MessageBox.Show(UiText.Get("Text_188B0AF9BE23") + ex.Message,
-                        UiText.Get("Text_25E15E06C2EA"), MessageBoxButton.OK, MessageBoxImage.Error);
+                    else MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_25E15E06C2EA"), ex);
                 }
                 finally
                 {
@@ -329,11 +328,7 @@ internal sealed class RegionRecordingCoordinator
             _writeSession = null;
             _finishing = false;
             _log.LogError(ex, "Could not open recording controls or allocate the pending video");
-            MessageBox.Show(
-                UiText.Get("Text_188B0AF9BE23") + ex.Message,
-                UiText.Get("Text_25E15E06C2EA"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_25E15E06C2EA"), ex);
             EndSessionIfIdle();
         }
     }
@@ -355,11 +350,7 @@ internal sealed class RegionRecordingCoordinator
         _writeSession = null;
         _completionInProgress = false;
         _finishing = false;
-        MessageBox.Show(
-            UiText.Get("Text_626745049C0B") + e.Exception.Message,
-            UiText.Get("Text_89CF3D468EC1"),
-            MessageBoxButton.OK,
-            MessageBoxImage.Error);
+        MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_89CF3D468EC1"), e.Exception);
     }
 
     private void OnControlsClosed(object? sender, EventArgs e)
@@ -441,11 +432,7 @@ internal sealed class RegionRecordingCoordinator
             _completionInProgress = false;
             _finishing = false;
             (sender as RecordingControlWindow)?.CompleteAndClose();
-            MessageBox.Show(
-                UiText.Get("Text_C5AC44062ACA") + ex.Message,
-                UiText.Get("Text_87B145D16453"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_87B145D16453"), ex);
             EndSessionIfIdle();
             return;
         }
@@ -485,11 +472,7 @@ internal sealed class RegionRecordingCoordinator
             _finishing = false;
             _log.LogError(ex, "The recording was saved, but its editor could not be opened");
             (sender as RecordingControlWindow)?.CompleteAndClose();
-            MessageBox.Show(
-                UiText.Get("Text_BA79DCE6BD5D") + ex.Message,
-                UiText.Get("Text_49020661A850"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_49020661A850"), ex);
             EndSessionIfIdle();
         }
     }

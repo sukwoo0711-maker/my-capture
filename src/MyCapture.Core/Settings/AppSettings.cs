@@ -52,6 +52,8 @@ public sealed class AppSettings
 
 public sealed class HotkeySettings
 {
+    public Hotkey ScrollingCapture { get; set; } = Hotkey.None;
+    public Hotkey DelayedCapture { get; set; } = Hotkey.None;
     /// <summary>
     /// Starts a region capture. Registered globally for as long as the app runs.
     /// </summary>
@@ -291,6 +293,7 @@ public sealed class OcrSettings
 
 public sealed class GeneralSettings
 {
+    public bool ShowQuickAccess { get; set; } = true;
     public bool LaunchAtLogin { get; set; } = true;
 
     /// <summary>

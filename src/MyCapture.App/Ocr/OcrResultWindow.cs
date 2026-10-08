@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -313,7 +313,7 @@ internal sealed class OcrResultWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _status.Text = UiText.Get("Text_75425A6D9BE8") + " " + ex.Message;
+            _status.Text = UiText.Get("Text_75425A6D9BE8") + " " + MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
         }
     }
 

@@ -118,7 +118,11 @@ internal static class CaptureSelfTest
                     Line($"    MISMATCH: {message}");
                 }
 
-                if (IsUniformlyBlank(frame.Bitmap))
+                long blankCheckStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                bool blank = IsUniformlyBlank(frame.Bitmap);
+                Line(string.Create(CultureInfo.InvariantCulture,
+                    $"    Full-frame blank check: {System.Diagnostics.Stopwatch.GetElapsedTime(blankCheckStarted).TotalMilliseconds:0.000}ms"));
+                if (blank)
                 {
                     string message = $"{monitor.DeviceName}: captured image is a single flat colour";
                     failures.Add(message);
@@ -176,6 +180,23 @@ internal static class CaptureSelfTest
             Line($"Virtual desktop FAILED: {ex.Message}");
         }
 
+        // Measure only the optional receipt's production enqueue path. Abort callbacks
+        // before pumping: no card, encoding, clipboard or file action belongs in capture.
+        var enqueueTimes = new List<double>();
+        bool inline = false;
+        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+        for (int sample = 0; sample < 102; sample++)
+        {
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var operation = Capture.QuickAccessWindow.Schedule(dispatcher, () => inline = true);
+            double elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            if (!operation.Abort()) failures.Add("Quick Access callback ran before capture returned.");
+            if (sample >= 2) enqueueTimes.Add(elapsed);
+        }
+        enqueueTimes.Sort();
+        if (inline) failures.Add("Quick Access ran synchronously in the capture path.");
+        Line(string.Create(CultureInfo.InvariantCulture,
+            $"Quick Access enqueue only: median={enqueueTimes[50]:0.0000}ms p95={enqueueTimes[94]:0.0000}ms; inline={inline}; samples=100 (2 warmups excluded)"));
         Line(string.Empty);
         Line(failures.Count == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures.Count} problem(s))");
         foreach (string failure in failures)
@@ -197,44 +218,26 @@ internal static class CaptureSelfTest
     /// protected-content window, a secure desktop, or a driver refusing the blit. It
     /// is worth flagging because the file itself looks perfectly valid.
     /// </remarks>
-    private static bool IsUniformlyBlank(BitmapSource bitmap)
+    internal static bool IsUniformlyBlank(BitmapSource bitmap)
     {
-        const int samplesPerAxis = 8;
-
+        ArgumentNullException.ThrowIfNull(bitmap);
         int width = bitmap.PixelWidth;
         int height = bitmap.PixelHeight;
-        if (width < samplesPerAxis || height < samplesPerAxis)
-        {
-            return false;
-        }
-
         var converted = new FormatConvertedBitmap(bitmap, System.Windows.Media.PixelFormats.Bgra32, null, 0);
         converted.Freeze();
-
-        byte[] first = new byte[4];
-        bool haveFirst = false;
-
-        for (int iy = 0; iy < samplesPerAxis; iy++)
+        int stride = checked(width * 4);
+        byte[] row = new byte[stride];
+        converted.CopyPixels(new System.Windows.Int32Rect(0, 0, width, 1), row, stride, 0);
+        byte blue = row[0], green = row[1], red = row[2];
+        // Scan every RGB pixel, including tiny frames and content between grid samples.
+        // One row bounds working memory; alpha is undefined in desktop BitBlt output.
+        for (int y = 0; y < height; y++)
         {
-            for (int ix = 0; ix < samplesPerAxis; ix++)
+            if (y > 0)
+                converted.CopyPixels(new System.Windows.Int32Rect(0, y, width, 1), row, stride, 0);
+            for (int offset = 0; offset < stride; offset += 4)
             {
-                int x = (int)((ix + 0.5) / samplesPerAxis * width);
-                int y = (int)((iy + 0.5) / samplesPerAxis * height);
-                x = Math.Clamp(x, 0, width - 1);
-                y = Math.Clamp(y, 0, height - 1);
-
-                byte[] pixel = new byte[4];
-                converted.CopyPixels(new System.Windows.Int32Rect(x, y, 1, 1), pixel, 4, 0);
-
-                if (!haveFirst)
-                {
-                    Array.Copy(pixel, first, 4);
-                    haveFirst = true;
-                    continue;
-                }
-
-                // Compare only the colour channels; BitBlt leaves alpha undefined.
-                if (pixel[0] != first[0] || pixel[1] != first[1] || pixel[2] != first[2])
+                if (row[offset] != blue || row[offset + 1] != green || row[offset + 2] != red)
                 {
                     return false;
                 }

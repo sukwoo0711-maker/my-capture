@@ -295,6 +295,8 @@ internal static class HotkeyCloneExtensions
     // depending on a full AppSettings clone.
     public static HotkeySettings DeepCloneHotkeys(this HotkeySettings s) => new()
     {
+        ScrollingCapture = s.ScrollingCapture,
+        DelayedCapture = s.DelayedCapture,
         Capture = s.Capture,
         OpenLibrary = s.OpenLibrary,
         PasteToScreen = s.PasteToScreen,

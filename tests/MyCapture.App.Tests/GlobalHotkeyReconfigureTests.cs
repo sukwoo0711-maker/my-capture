@@ -95,6 +95,31 @@ public sealed class GlobalHotkeyReconfigureTests
     }
 
     [Fact]
+    public void RecorderProbeLeavesBindingsIntactAndNewCaptureCommandsRegister()
+    {
+        RunSta(() =>
+        {
+            var blocked = new Hotkey(HotkeyModifiers.Control, 0x78);
+            var registrar = new FakeRegistrar([blocked]);
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance);
+            var settings = new HotkeySettings
+            {
+                ScrollingCapture = new Hotkey(HotkeyModifiers.Control, 0x76),
+                DelayedCapture = new Hotkey(HotkeyModifiers.Control, 0x77),
+            };
+            service.Initialize(settings);
+            int held = registrar.Held.Count;
+            Assert.True(service.CanRegister(settings.ScrollingCapture));
+            Assert.True(service.CanRegister(new Hotkey(HotkeyModifiers.Control, 0x79)));
+            Assert.False(service.CanRegister(blocked));
+            Assert.Equal(held, registrar.Held.Count);
+            Assert.Equal(settings.ScrollingCapture, service.GetAssigned(GlobalHotkeyCommand.ScrollingCapture));
+            Assert.Equal(settings.DelayedCapture, service.GetAssigned(GlobalHotkeyCommand.DelayedCapture));
+        });
+    }
+
+    [Fact]
     public void Reconfigure_AppliesNewSetOnSuccess()
     {
         RunSta(() =>

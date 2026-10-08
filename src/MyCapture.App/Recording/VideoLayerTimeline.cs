@@ -97,7 +97,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         _frameLayer = ResolveBrush("Timeline.FrameLayer", Color.FromRgb(0x9B, 0x7E, 0xDE));
         _foreground = ResolveBrush("Text.Badge", Colors.White);
         _textSecondary = ResolveBrush("Text.Secondary", Color.FromRgb(0xC4, 0xCF, 0xDC));
-        _muted = ResolveBrush("Text.Muted", Color.FromRgb(0x8E, 0x9C, 0xAF));
+        _muted = ResolveBrush("Text.Secondary", Color.FromRgb(0x8E, 0x9C, 0xAF));
         _gridPen = FrozenPen(ResolveBrush("Timeline.Grid", Color.FromRgb(0x2B, 0x3A, 0x50)), 1);
         _playheadPen = FrozenPen(ResolveBrush("Timeline.Playhead", Color.FromRgb(0x97, 0x89, 0xFF)), 2);
 

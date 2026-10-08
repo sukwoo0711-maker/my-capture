@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -173,7 +173,7 @@ internal sealed class ImageReductionExportDialog : Window
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or InvalidOperationException)
         {
-            if (!_closed) _status.Text = UiText.Format("ExportReduction_Error", ex.Message);
+            if (!_closed) _status.Text = UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
         }
         finally
         {
@@ -206,7 +206,7 @@ internal sealed class ImageReductionExportDialog : Window
                     if (!string.Equals(Path.GetExtension(dialog.FileName), result.Extension, StringComparison.OrdinalIgnoreCase))
                     {
                         e.Cancel = true;
-                        MessageBox.Show(this, UiText.Format("ExportReduction_Extension", result.Extension), Title);
+                        MyCapture.App.Themes.ThemedDialog.Show(this, UiText.Format("ExportReduction_Extension", result.Extension), Title);
                     }
                 };
                 if (dialog.ShowDialog(this) != true) return false;
@@ -218,7 +218,7 @@ internal sealed class ImageReductionExportDialog : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            if (!_closed) _status.Text = UiText.Format("ExportReduction_Error", ex.Message);
+            if (!_closed) _status.Text = UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
         }
         finally
         {
@@ -253,7 +253,7 @@ internal sealed class ImageReductionExportDialog : Window
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or InvalidOperationException)
         {
-            if (!_closed) _status.Text = UiText.Format("ExportReduction_Error", ex.Message);
+            if (!_closed) _status.Text = UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
         }
         finally
         {

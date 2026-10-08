@@ -1,4 +1,4 @@
-# MyCapture
+﻿# MyCapture
 
 MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, 영역 녹화를 한곳에 모은 Windows용 데스크톱 도구입니다. 캡처와 인식 결과는 기본적으로 사용자 PC 안에서 처리하며, 반복 작업은 전역 단축키와 트레이 메뉴로 빠르게 이어집니다.
 
@@ -44,8 +44,8 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, �
 | 영역 캡처 | `Ctrl+Shift+C` | 놓으면 라이브러리에 먼저 저장하고 클립보드에 복사한 뒤 편집기로 이동. Esc로 닫아도 원본 유지 |
 | 라이브러리 열기 | `Ctrl+Shift+Z` | 이미지와 동영상을 함께 조회하고 동영상을 창 안에서 재생 |
 | 영역 녹화 시작/중지 | `Ctrl+Shift+X` | 같은 키로 녹화 종료 |
-| 클립보드 이미지·텍스트·표를 화면에 고정 | `F3` | PNG 투명도와 텍스트/표 원문을 보존. F4 이후에는 추출한 GitHub 이미지 URL을 고정 |
-| 클립보드 이미지를 GitHub 첨부 URL로 | `F4` | 설정한 이슈 Write 칸에 붙여 넣고 user-attachments URL을 복사 |
+| 클립보드 이미지·텍스트·표를 화면에 고정 | `F3` | PNG 투명도와 텍스트/표 원문을 보존. F9 이후에는 추출한 GitHub 이미지 URL을 고정 |
+| 클립보드 이미지를 GitHub 첨부 URL로 | `F9` | 설정한 이슈 Write 칸에 붙여 넣고 user-attachments URL을 복사 |
 | 모든 고정 이미지 숨기기/표시 | `Shift+F3` | 일괄 전환 |
 | 편집기 빠른 저장 | `Ctrl+S` | PNG 저장 후 편집된 이미지를 클립보드에 복사 |
 | 편집기 다른 이름으로 저장 | `Ctrl+Shift+S` | PNG 저장 후 편집된 이미지를 클립보드에 복사 |
@@ -73,7 +73,7 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, �
 
 캡처 저장 폴더와 빠른 저장 폴더는 설정에서 변경할 수 있습니다. 라이브러리 이미지는 생성 후 기본 7일(168시간, 설정에서 변경 가능)이 지나면 오래된 순서대로 자동 삭제하며, 핀 고정하거나 편집 중인 이미지는 보관합니다. 동영상에는 7일 만료를 적용하지 않습니다. 따로 내보낸 파일은 관리 큐 정리 대상이 아닙니다. 개수·용량 제한은 별도로 적용됩니다.
 
-3.4.0의 변경 사항은 [릴리스 노트](docs/releases/3.4.0-release-notes.md)에서 확인할 수 있습니다. 이전 [3.2.1](docs/releases/3.2.1-release-notes.md), [3.2.0](docs/releases/3.2.0-release-notes.md), [3.1.7](docs/releases/3.1.7-release-notes.md), [3.1.5](docs/releases/3.1.5-release-notes.md), [3.1.4](docs/releases/3.1.4-release-notes.md), [3.1.3](docs/releases/3.1.3-release-notes.md), [3.1.2](docs/releases/3.1.2-release-notes.md), [3.1.1](docs/releases/3.1.1-release-notes.md), [3.1.0](docs/releases/3.1.0-release-notes.md), [3.0.0](docs/releases/3.0.0-release-notes.md), [2.4.1](docs/releases/2.4.1-release-notes.md), [2.4.0](docs/releases/2.4.0-release-notes.md), [2.3.10](docs/releases/2.3.10-release-notes.md), [2.3.9](docs/releases/2.3.9-release-notes.md), [2.3.8](docs/releases/2.3.8-release-notes.md), [2.3.7](docs/releases/2.3.7-release-notes.md), [2.3.6](docs/releases/2.3.6-release-notes.md), [2.3.5](docs/releases/2.3.5-release-notes.md), [2.3.4](docs/releases/2.3.4-release-notes.md), [2.3.3](docs/releases/2.3.3-release-notes.md), [2.3.2](docs/releases/2.3.2-release-notes.md), [2.3.1](docs/releases/2.3.1-release-notes.md), [2.3.0](docs/releases/2.3.0-release-notes.md), [2.2.2](docs/releases/2.2.2-release-notes.md), [2.2.1](docs/releases/2.2.1-release-notes.md), [2.1.1](docs/releases/2.1.1-release-notes.md), [2.1.0](docs/releases/2.1.0-release-notes.md), [2.0.0](docs/releases/2.0.0-release-notes.md), [1.9.2](docs/releases/1.9.2-release-notes.md), [1.9.0](docs/releases/1.9.0-release-notes.md) 기록도 보존합니다.
+4.0.0의 변경 사항은 [릴리스 노트](docs/releases/4.0.0-release-notes.md)에서 확인할 수 있습니다. 이전 [3.2.1](docs/releases/3.2.1-release-notes.md), [3.2.0](docs/releases/3.2.0-release-notes.md), [3.1.7](docs/releases/3.1.7-release-notes.md), [3.1.5](docs/releases/3.1.5-release-notes.md), [3.1.4](docs/releases/3.1.4-release-notes.md), [3.1.3](docs/releases/3.1.3-release-notes.md), [3.1.2](docs/releases/3.1.2-release-notes.md), [3.1.1](docs/releases/3.1.1-release-notes.md), [3.1.0](docs/releases/3.1.0-release-notes.md), [3.0.0](docs/releases/3.0.0-release-notes.md), [2.4.1](docs/releases/2.4.1-release-notes.md), [2.4.0](docs/releases/2.4.0-release-notes.md), [2.3.10](docs/releases/2.3.10-release-notes.md), [2.3.9](docs/releases/2.3.9-release-notes.md), [2.3.8](docs/releases/2.3.8-release-notes.md), [2.3.7](docs/releases/2.3.7-release-notes.md), [2.3.6](docs/releases/2.3.6-release-notes.md), [2.3.5](docs/releases/2.3.5-release-notes.md), [2.3.4](docs/releases/2.3.4-release-notes.md), [2.3.3](docs/releases/2.3.3-release-notes.md), [2.3.2](docs/releases/2.3.2-release-notes.md), [2.3.1](docs/releases/2.3.1-release-notes.md), [2.3.0](docs/releases/2.3.0-release-notes.md), [2.2.2](docs/releases/2.2.2-release-notes.md), [2.2.1](docs/releases/2.2.1-release-notes.md), [2.1.1](docs/releases/2.1.1-release-notes.md), [2.1.0](docs/releases/2.1.0-release-notes.md), [2.0.0](docs/releases/2.0.0-release-notes.md), [1.9.2](docs/releases/1.9.2-release-notes.md), [1.9.0](docs/releases/1.9.0-release-notes.md) 기록도 보존합니다.
 
 ### 1.8.3 실행 및 배포 형식 안내
 

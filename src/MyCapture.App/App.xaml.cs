@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
@@ -92,7 +92,7 @@ public partial class App : Application
         // before any capture or diagnostics code touches Windows 11-era APIs.
         if (HostRequirementGate.BlockUnsupportedHost(
             Environment.OSVersion.Version,
-            message => MessageBox.Show(message, "MyCapture", MessageBoxButton.OK, MessageBoxImage.Error),
+            message => MyCapture.App.Themes.ThemedDialog.Show(message, "MyCapture", MessageBoxButton.OK, MessageBoxImage.Error),
             Shutdown))
         {
             return;
@@ -143,11 +143,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             _log?.LogCritical(ex, "Could not initialize the resident shell");
-            MessageBox.Show(
-                UiText.Format("Text_CA6DE730BB6E", ex.Message),
-                "MyCapture",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Dialog.AppFailure"), ex);
             Shutdown(2);
             return;
         }
@@ -181,6 +177,7 @@ public partial class App : Application
 
         _tray = _services.GetRequiredService<TrayIconService>();
         _hotkeys = _services.GetRequiredService<GlobalHotkeyService>();
+        HotkeyRecorder.CanRegister = chord => _hotkeys.CanRegister(chord);
         _overlay = _services.GetRequiredService<CaptureOverlayCoordinator>();
         // Begin the one-pixel GDI/WPF warm-up before library loading and OCR setup,
         // giving first capture a head start without blocking shell initialization.
@@ -256,15 +253,15 @@ public partial class App : Application
             // conventions (grouped actions, then destinations, then settings/exit).
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_50EE4EA7C243"), null,
             [
-                new(UiText.Get("Text_2C20ADDA2018"), HandleCaptureRequested),
-                new(UiText.Get("Text_EA1FBABE64F3"), HandleCaptureWindow),
-                new(UiText.Get("Text_65BB6610ACA0"), HandleCaptureFullScreen),
-                new(_scrollCancellation is not null ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"), HandleScrollingCapture),
-                new(UiText.Get("Text_878A28AF568C"), HandleRepeatLastRegion),
-                new(UiText.Get("Text_38FF9B0AA541"), HandleDelayedCapture),
-                new(UiText.Get("Text_4F5AF20FAA6E"), HandleRecordRegion),
+                new(UiText.Get("Text_2C20ADDA2018"), HandleCaptureRequested, Gesture: _settings!.Hotkeys.Capture.ToString()),
+                new(UiText.Get("Text_EA1FBABE64F3"), HandleCaptureWindow, Gesture: _settings!.Hotkeys.CaptureWindow.ToString()),
+                new(UiText.Get("Text_65BB6610ACA0"), HandleCaptureFullScreen, Gesture: _settings!.Hotkeys.CaptureFullScreen.ToString()),
+                new(_scrollCancellation is not null ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"), HandleScrollingCapture, Gesture: _settings!.Hotkeys.ScrollingCapture.ToString()),
+                new(UiText.Get("Text_878A28AF568C"), HandleRepeatLastRegion, Gesture: _settings!.Hotkeys.RepeatLastRegion.ToString()),
+                new(UiText.Get("Text_38FF9B0AA541"), HandleDelayedCapture, Gesture: _settings!.Hotkeys.DelayedCapture.ToString()),
+                new(UiText.Get("Text_4F5AF20FAA6E"), HandleRecordRegion, Gesture: _settings!.Hotkeys.RecordRegion.ToString()),
             ]),
-            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_8739F6684453"), HandleGalleryRequested),
+            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_8739F6684453"), HandleGalleryRequested, Gesture: _settings!.Hotkeys.OpenLibrary.ToString()),
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_00480581AAB5"), HandleSettingsRequested),
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_72B6DBA8AAC5"), () => Shutdown(0)),
         ], _settings!.General.Language, ChangeTrayLanguage);
@@ -284,6 +281,10 @@ public partial class App : Application
         _tray.GalleryRequested += (_, _) => HandleGalleryRequested();
         _tray.SettingsRequested += (_, _) => HandleSettingsRequested();
         _tray.ExitRequested += (_, _) => Shutdown(0);
+        ShortcutHelpWindow.ReadHotkeys = () => _settings!.Hotkeys;
+        ShortcutHelpWindow.OpenSettings = HandleSettingsRequested;
+        EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent, new System.Windows.Input.KeyEventHandler(ShortcutHelpWindow.OnWindowKey));
+        if (_settings.General.IsFirstRun) new ShortcutHelpWindow(onboarding: true).Show();
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
         _overlay.SelectionPersistRequested = OnCaptureSelectionCompletedAsync;
         _overlay.EditingCompleted += OnAnnotationEditingCompleted;
@@ -298,7 +299,7 @@ public partial class App : Application
         _overlay.CommitRequested = HandleCommitAsync;
         _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
         _overlay.TransitionFailed += exception =>
-            _tray?.ShowBalloon(UiText.Get("Text_B4B8EE7BE3D6"), exception.Message, TrayBalloonKind.Error);
+            _tray?.ShowBalloon(UiText.Get("Text_B4B8EE7BE3D6"), MyCapture.App.Themes.ThemedDialog.RecoveryMessage(exception), TrayBalloonKind.Error);
 
         // Region video recording (Ctrl+Shift+X). Shares the capture engine and, on a
         // frame-image edit, the same persistence/commit path as still capture so recordings
@@ -379,8 +380,19 @@ public partial class App : Application
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
     {
+        if (HotkeyRecorder.Active is { } recorder && _hotkeys?.GetAssigned(e.Command) is { } recorded)
+        {
+            recorder.Accept(recorded);
+            return;
+        }
         switch (e.Command)
         {
+            case GlobalHotkeyCommand.ScrollingCapture:
+                HandleScrollingCapture();
+                break;
+            case GlobalHotkeyCommand.DelayedCapture:
+                HandleDelayedCapture();
+                break;
             case GlobalHotkeyCommand.CaptureRegion:
                 HandleCaptureRequested();
                 break;
@@ -548,7 +560,7 @@ public partial class App : Application
             _log?.LogError(ex, "Paste-to-screen failed");
             _tray?.ShowBalloon(
                 UiText.Get("Text_CE57D5CA2394"),
-                ex.Message,
+                MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                 TrayBalloonKind.Error,
                 playSound: false);
         }
@@ -599,6 +611,7 @@ public partial class App : Application
 
     private void HandleCaptureRequested()
     {
+        _quickAccess?.Close();
         _log?.LogInformation("Region capture requested");
         if (_overlay is null || _settings is null)
         {
@@ -625,7 +638,7 @@ public partial class App : Application
             _tray?.SetState(TrayIconState.Error);
             _tray?.ShowBalloon(
                 UiText.Get("Text_70EECBC7C211"),
-                ex.Message,
+                MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                 TrayBalloonKind.Error);
         }
     }
@@ -829,7 +842,7 @@ public partial class App : Application
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log?.LogError(ex, "Unhandled scrolling capture failure");
-            outcome = CaptureOutcome.Failed(ex.Message);
+            outcome = CaptureOutcome.Failed(MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
         }
         finally
         {
@@ -856,6 +869,7 @@ public partial class App : Application
 
     private bool GuardStillCapture(string mode, bool allowRetake = false)
     {
+        _quickAccess?.Close();
         _shellPresenter?.DismissForCapture();
         if ((_overlay?.IsActive == true && !(allowRetake && _overlay.CanRetake)) ||
             _activeCountdown is not null || _scrollCancellation is not null)
@@ -924,6 +938,7 @@ public partial class App : Application
     }
 
     private CaptureRecord? _pendingRecord;
+    private QuickAccessWindow? _quickAccess;
 
     private async Task OnCaptureSelectionCompletedAsync(CaptureSelectionCompletedEventArgs e)
     {
@@ -964,7 +979,7 @@ public partial class App : Application
             _log?.LogError(ex, "Could not persist the captured original");
             _tray?.ShowBalloon(
                 UiText.Get("Text_4033027EAEDB"),
-                UiText.Format("Capture.LibrarySaveFailed", ex.Message),
+                UiText.Format("Capture.LibrarySaveFailed", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex)),
                 TrayBalloonKind.Error);
         }
 
@@ -1048,6 +1063,51 @@ public partial class App : Application
             // create a persistent floating window. F3 remains the explicit paste-to-screen
             // action when the user actually wants a pin.
         }
+        if (_settings?.General.PlayCaptureSound == true)
+            System.Media.SystemSounds.Asterisk.Play();
+        if (_settings?.General.ShowQuickAccess == true && _services is not null && _currentRecord is { } receipt)
+        {
+            // Retain only selected pixels, never the full desktop frame, and schedule after
+            // the capture/editor transition. No image encoding or window creation is awaited.
+            var selected = e.SelectedBitmap;
+            _ = QuickAccessWindow.Schedule(Dispatcher,
+                new Action(() => ShowQuickAccess(receipt, selected)));
+        }
+    }
+
+    private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image)
+    {
+        if (!ReferenceEquals(_currentRecord, record)) return;
+        if (_queue is null || _commit is null || _services is null || _settings?.General.ShowQuickAccess != true) return;
+        _quickAccess?.Close();
+        IDisposable lease = _queue.AcquireEvictionLease(record.Id);
+        try
+        {
+            var saver = new PinImageSaveService(() => _settings!, () => _capturePaths!,
+                _services.GetRequiredService<ILogger<PinImageSaveService>>());
+            Task<System.Windows.Media.Imaging.BitmapSource> Render() =>
+                _commit.RenderCapturedImageAsync(image, record.SourceWindowTitle, record.InitialRenderShowsSourceWindowTitle);
+            var card = new QuickAccessWindow(image,
+                () => _commit.CopyCapturedRegionAsync(image, record.SourceWindowTitle,
+                    record.InitialRenderShowsSourceWindowTitle, record.SourcePageUrl),
+                () =>
+                {
+                    if (ReferenceEquals(_currentRecord, record) && _overlay?.ActivateCurrent() == true) return;
+                    EnsureGalleryWindow()?.OpenCapture(record.Id, edit: true);
+                },
+                async () => _pins?.PinImage(await Render()),
+                async () => (await saver.QuickSaveAsync(await Render(), record.SourcePageUrl)).Status == PinSaveStatus.Saved,
+                () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
+                () => Task.Run(() => new GalleryDragExportService(_queue).PrepareExport(record)));
+            card.Closed += (_, _) => { lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; };
+            _quickAccess = card;
+            card.Show();
+        }
+        catch (Exception ex)
+        {
+            lease.Dispose();
+            _log?.LogWarning(ex, "Could not show the optional capture receipt");
+        }
     }
 
     /// <summary>
@@ -1093,7 +1153,7 @@ public partial class App : Application
             _log?.LogError(ex, "Could not finalise the annotated capture");
             _tray?.ShowBalloon(
                 UiText.Get("Text_C1A40373A077"),
-                ex.Message,
+                MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                 TrayBalloonKind.Error);
 
             // A finalise failure keeps the editor open so the user can retry rather than
@@ -1143,7 +1203,7 @@ public partial class App : Application
             _tray?.SetState(TrayIconState.Error);
             _tray?.ShowBalloon(
                 UiText.Get("Text_48C3B6EBA637"),
-                ex.Message,
+                MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                 TrayBalloonKind.Error);
         }
     }
@@ -1201,7 +1261,7 @@ public partial class App : Application
                 _log?.LogError(ex, "Could not commit an image edited from a recorded frame");
                 _tray?.ShowBalloon(
                     UiText.Get("Text_E87551A1A39F"),
-                    ex.Message,
+                    MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                     TrayBalloonKind.Error);
                 return false;
             }
@@ -1491,6 +1551,7 @@ public partial class App : Application
         // Header toolbar commands mirror the tray entries so capture/recording are reachable
         // without the global hotkeys or the tray icon.
         window.CaptureRegionRequested = () => HandleCaptureRequested();
+        window.ReadHotkeys = () => _settings!.Hotkeys;
         window.RecordRegionRequested = HandleRecordRegion;
 
         _galleryWindow = window;
@@ -1881,18 +1942,16 @@ public partial class App : Application
         // A capture tool that dies mid-annotation loses the user's work. Failing soft
         // keeps the tray alive so the queue and any remaining windows survive.
         _tray?.SetState(TrayIconState.Error);
-        MessageBox.Show(
-            UiText.Format("Text_6A4B9316D8C2", e.Exception.Message),
-            "MyCapture",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+        MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Dialog.AppFailure"), e.Exception);
 
         e.Handled = true;
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _quickAccess?.Close();
         if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        HotkeyRecorder.CanRegister = null;
         AnnotationEditorPreferences.Read = null;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = null;
         AnnotationEditorPreferences.Write = null;
