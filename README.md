@@ -61,9 +61,9 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, �
 
 ## 설치와 실행
 
-릴리스용 `win-x64` 빌드는 설치 파일과 포터블 ZIP으로 생성됩니다. 두 배포 형식 모두 .NET 런타임을 포함하는 **self-contained** 빌드이므로 사용자 PC에 .NET을 따로 설치할 필요가 없고, 실행 중 인터넷 연결도 요구하지 않습니다. 공식 배포가 게시되면 저장소의 Releases에서 버전 태그와 체크섬을 함께 확인하세요.
+릴리스용 `win-x64` 빌드는 설치 파일과 포터블 ZIP으로 생성됩니다. 두 배포 형식 모두 .NET 런타임을 포함하는 **self-contained** 빌드이므로 사용자 PC에 .NET을 따로 설치할 필요가 없습니다. 캡처, 편집, 녹화와 OCR은 PC 안에서 처리하며, 앱이 자동으로 인터넷에 연결하는 경우는 PC에 없는 OCR 모델 파일을 내려받을 때뿐입니다. 네트워크 연결 전체 목록은 [개인정보처리방침](docs/store/PRIVACY.md)에서 확인할 수 있습니다. 공식 배포가 게시되면 저장소의 Releases에서 버전 태그와 체크섬을 함께 확인하십시오.
 
-배포 바이너리는 현재 Authenticode로 서명되지 않습니다. Windows가 “알 수 없는 게시자” 경고를 표시할 수 있으므로, 패키지와 함께 생성되는 `SHA256SUMS.txt`의 체크섬을 확인한 뒤 실행하세요. SHA-256은 파일 변조 여부를 확인하지만 게시자 신원 자체를 증명하지는 않습니다.
+배포 바이너리는 현재 Authenticode로 서명되지 않습니다. Windows가 “알 수 없는 게시자” 경고를 표시할 수 있으므로, 패키지와 함께 생성되는 `SHA256SUMS.txt`의 체크섬을 확인한 뒤 실행하십시오. SHA-256은 파일 변조 여부를 확인하지만 게시자 신원 자체를 증명하지는 않습니다.
 
 기본 사용자 데이터 위치는 다음과 같습니다.
 
@@ -79,10 +79,10 @@ MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, �
 
 - 일반 실행과 바로가기 더블클릭은 라이브러리 창을 엽니다. 로그인 자동 실행은 `--background`로 트레이에만 상주합니다.
 - 설치형과 포터블 ZIP의 앱·런타임 파일은 동일합니다. 설치형은 `%LOCALAPPDATA%\Programs\MyCapture`에 설치하고 시작 메뉴, 제거 프로그램, `install-manifest.json` 소유권 기록을 추가합니다.
-- 포터블은 ZIP 전체를 별도 폴더에 풀고 `MyCapture.exe`를 실행하세요. EXE만 옮기면 DLL과 Assets가 없어 실행할 수 없습니다. 두 형식의 기본 사용자 데이터는 `%APPDATA%\MyCapture`입니다.
-- 설치 전 다른 위치의 포터블/설치형을 트레이 메뉴에서 종료하세요. 두 복사본은 한 Windows 세션에서 동시에 상주하지 않습니다.
-- 포터블의 앱 내 업데이트는 일반 설치형으로 전환합니다. 포터블 유지 시 새 ZIP을 별도 폴더에 풀어 실행하세요. 기존 폴더와 사용자 파일은 자동 삭제하지 않습니다.
-- [1.8.3 수정 내역](docs/releases/1.8.3-release-notes.md)과 [검증 기록](docs/releases/1.8.3-validation.md)을 확인하세요.
+- 포터블은 ZIP 전체를 별도 폴더에 풀고 `MyCapture.exe`를 실행하십시오. EXE만 옮기면 DLL과 Assets가 없어 실행할 수 없습니다. 두 형식의 기본 사용자 데이터는 `%APPDATA%\MyCapture`입니다.
+- 설치 전 다른 위치의 포터블/설치형을 트레이 메뉴에서 종료하십시오. 두 복사본은 한 Windows 세션에서 동시에 상주하지 않습니다.
+- 포터블의 앱 내 업데이트는 일반 설치형으로 전환합니다. 포터블 유지 시 새 ZIP을 별도 폴더에 풀어 실행하십시오. 기존 폴더와 사용자 파일은 자동 삭제하지 않습니다.
+- [1.8.3 수정 내역](docs/releases/1.8.3-release-notes.md)과 [검증 기록](docs/releases/1.8.3-validation.md)을 확인하십시오.
 
 ## 소스에서 빌드
 
@@ -117,7 +117,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 -Configu
 dotnet run --project src\MyCapture.App\MyCapture.App.csproj
 ```
 
-앱은 트레이에 상주하므로 디버깅을 마칠 때 트레이 메뉴의 **종료**를 선택하세요.
+앱은 트레이에 상주하므로 디버깅을 마칠 때 트레이 메뉴의 **종료**를 선택하십시오.
 
 ## 자체 진단(self-test)
 
@@ -140,9 +140,9 @@ Start-Process -Wait -FilePath $exe -ArgumentList '--selftest-video-editor', $out
 
 ## 개인정보와 네트워크
 
-MyCapture는 화면 픽셀, 캡처 기록, 설정, OCR 텍스트를 로컬 파일에 저장합니다. OCR은 Windows의 온디바이스 `Windows.Media.Ocr` 엔진을 사용하며, 현재 코드에는 캡처 자동 업로드나 제품 분석 텔레메트리가 없습니다. 빠른 가리기의 탐지 결과에는 인식 문자열을 복제하지 않고 종류·좌표만 유지하며, 추가된 가림막은 저장 전에 이동·삭제·실행 취소할 수 있습니다. 민감한 화면을 캡처했다면 빠른 저장 폴더, 캡처 큐, 클립보드와 로그의 보관 정책도 함께 확인하세요.
+MyCapture는 화면 픽셀, 캡처 기록, 설정, OCR 텍스트를 로컬 파일에 저장합니다. OCR은 Windows의 온디바이스 `Windows.Media.Ocr` 엔진과 PC에 내려받은 PP-OCRv5 모델로 처리하며, 현재 코드에는 캡처 자동 업로드나 제품 분석 텔레메트리가 없습니다. 필요한 OCR 모델 파일이 PC에 없으면 앱 시작 시 ModelScope(modelscope.cn)에서 내려받고, 선택 기능인 이미지 확대 모델은 처음 사용할 때 Amazon S3에서 내려받습니다. GitHub 이미지 첨부와 업데이트 확인은 사용자가 직접 실행할 때만 연결하며, 전체 목록은 [`docs/store/PRIVACY.md`](docs/store/PRIVACY.md)에 정리되어 있습니다. 빠른 가리기의 탐지 결과에는 인식 문자열을 복제하지 않고 종류·좌표만 유지하며, 추가된 가림막은 저장 전에 이동·삭제·실행 취소할 수 있습니다. 민감한 화면을 캡처했다면 빠른 저장 폴더, 캡처 큐, 클립보드와 로그의 보관 정책도 함께 확인하십시오.
 
-보안 문제는 공개 이슈에 재현 자료를 올리지 말고 [`SECURITY.md`](SECURITY.md)의 비공개 신고 절차를 따라 주세요. 개발 참여 방법은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 참고하세요.
+보안 문제는 공개 이슈에 재현 자료를 올리지 말고 [`SECURITY.md`](SECURITY.md)의 비공개 신고 절차를 따르십시오. 개발 참여 방법은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 참고하십시오.
 
 ## 라이선스
 
@@ -150,4 +150,4 @@ MyCapture 자체 코드는 [MIT License](LICENSE)로 공개됩니다. 배포 패
 
 ---
 
-**English summary:** MyCapture is a Windows 11 screenshot, pin, enhanced local OCR, OCR-assisted privacy-redaction, unified image/video gallery, annotation, cross-monitor region-recording, timed-text video editing, and GIF-export app. Release binaries are self-contained and work without a preinstalled .NET runtime; the included bootstrap script can install the repository-pinned .NET 10 SDK for source builds without admin rights. Choose Korean, English, or the Windows display language in Settings; the saved choice applies on the next app start. Recording intentionally has no audio, and distributed binaries are not Authenticode-signed.
+**English summary:** MyCapture is a Windows 11 screenshot, pin, enhanced local OCR, OCR-assisted privacy-redaction, unified image/video gallery, annotation, cross-monitor region-recording, timed-text video editing, and GIF-export app. Release binaries are self-contained and work without a preinstalled .NET runtime. Capture, editing, recording and OCR run on the PC; the only automatic network access is downloading missing OCR model files (see [`docs/store/PRIVACY.md`](docs/store/PRIVACY.md)). The included bootstrap script can install the repository-pinned .NET 10 SDK for source builds without admin rights. Choose Korean, English, or the Windows display language in Settings; the saved choice applies on the next app start. Recording intentionally has no audio, and distributed binaries are not Authenticode-signed.
