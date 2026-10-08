@@ -4,6 +4,7 @@ using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using MyCapture.App.Editing;
+using MyCapture.Core.Diagnostics;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Imaging;
@@ -104,7 +105,7 @@ internal sealed class PinImageSaveService
             if (!HasPngExtension(chosen))
             {
 string message = UiText.Get("Text_932DB1A4ED7F");
-                _log.LogWarning("Rejected pinned-image export with a non-PNG extension: {Path}", chosen);
+                _log.LogWarning("Rejected pinned-image export with a non-PNG extension: {Path}", LogText.SingleLine(chosen));
                 return new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: message);
             }
 
@@ -138,7 +139,7 @@ string message = UiText.Get("Text_932DB1A4ED7F");
                     return (savedPath, (long)encoded.Length);
                 });
 
-                _log.LogInformation("Quick-saved pinned image ({Bytes} bytes) to {Path}", bytes, path);
+                _log.LogInformation("Quick-saved pinned image ({Bytes} bytes) to {Path}", bytes, LogText.SingleLine(path));
                 return new PinSaveResult(PinSaveStatus.Saved, path);
             }
             catch (Exception ex) when (IsExpectedSaveFailure(ex))
@@ -157,12 +158,12 @@ string message = UiText.Get("Text_932DB1A4ED7F");
         {
             long bytes = await Task.Run(() => ImageCodec.SavePngExport(frozen, path, sourcePageUrl))
                 .ConfigureAwait(false);
-            _log.LogInformation("Saved pinned image ({Bytes} bytes) to {Path}", bytes, path);
+            _log.LogInformation("Saved pinned image ({Bytes} bytes) to {Path}", bytes, LogText.SingleLine(path));
             return new PinSaveResult(PinSaveStatus.Saved, path);
         }
         catch (Exception ex) when (IsExpectedSaveFailure(ex))
         {
-            _log.LogWarning(ex, "Could not save pinned image to {Path}", path);
+            _log.LogWarning(ex, "Could not save pinned image to {Path}", LogText.SingleLine(path));
             return new PinSaveResult(PinSaveStatus.Failed, path, ex.Message);
         }
     }
