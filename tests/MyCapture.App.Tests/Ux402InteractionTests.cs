@@ -157,16 +157,15 @@ public sealed class Ux402InteractionTests
     [Fact]
     public void FailedVideoRenderCleanupRemovesOnlyItsPrivateStage() => StaTestHost.Run(() =>
     {
-        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MyCapture-render-cleanup-" + Guid.NewGuid().ToString("N"));
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
         var paths = AppPaths.CreateForRoot(root);
-        string directory = paths.GetCaptureDirectory(Guid.NewGuid(), DateTimeOffset.UtcNow);
-        System.IO.Directory.CreateDirectory(directory);
-        string source = System.IO.Path.Combine(directory, "source.mp4");
+        string directory = ValidatedFilePaths.CreateDirectory(paths.GetCaptureDirectory(Guid.NewGuid(), DateTimeOffset.UtcNow));
+        string source = ValidatedFilePaths.FileWithinRoot(root, System.IO.Path.Combine(directory, "source.mp4"), ".mp4");
         string stageName = $".render-{Guid.NewGuid():N}.mp4";
-        string stage = System.IO.Path.Combine(directory, stageName);
-        string outside = System.IO.Path.Combine(root, stageName);
-        string sibling = System.IO.Path.Combine(paths.CapturesRoot, stageName);
-        string invalidName = System.IO.Path.Combine(directory, ".render-invalid.mp4");
+        string stage = ValidatedFilePaths.FileWithinRoot(root, System.IO.Path.Combine(directory, stageName), ".mp4");
+        string outside = ValidatedFilePaths.FileWithinRoot(root, stageName, ".mp4");
+        string sibling = ValidatedFilePaths.FileWithinRoot(root, System.IO.Path.Combine(paths.CapturesRoot, stageName), ".mp4");
+        string invalidName = ValidatedFilePaths.FileWithinRoot(root, System.IO.Path.Combine(directory, ".render-invalid.mp4"), ".mp4");
         foreach (string path in new[] { source, stage, outside, sibling, invalidName }) System.IO.File.WriteAllText(path, "synthetic fixture");
         var window = new VideoEditorWindow(new RecordingResult(source, 3000, 15, 45, 640, 360), paths, NullLoggerFactory.Instance)
             { RenderStagingPathFactory = () => stage };
