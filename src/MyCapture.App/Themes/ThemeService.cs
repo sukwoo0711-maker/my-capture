@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.Core.Themes;
 
 namespace MyCapture.App.Themes;
@@ -21,10 +22,15 @@ internal static class ThemeService
         SystemParameters.StaticPropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(SystemParameters.HighContrast) || Application.Current is not { } app) return;
-            if (app.Dispatcher.CheckAccess()) ApplyCropResources(app.Resources, SystemParameters.HighContrast);
-            else app.Dispatcher.BeginInvoke(new Action(() => ApplyCropResources(app.Resources, SystemParameters.HighContrast)));
+            ScheduleCropResourceRefresh(app.Dispatcher, app.Resources, () => SystemParameters.HighContrast);
         };
     }
+
+    // Read the system palette after WPF has processed its system-color notifications.
+    internal static DispatcherOperation ScheduleCropResourceRefresh(Dispatcher dispatcher,
+        ResourceDictionary resources, Func<bool> readHighContrast) =>
+        dispatcher.BeginInvoke(DispatcherPriority.ContextIdle,
+            new Action(() => ApplyCropResources(resources, readHighContrast())));
 
     internal static void Apply(AppTheme theme)
     {

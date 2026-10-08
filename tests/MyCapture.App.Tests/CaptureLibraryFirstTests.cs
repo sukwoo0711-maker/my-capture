@@ -56,8 +56,7 @@ public sealed class CaptureLibraryFirstTests
         {
             if (path is "region" or "delay")
             {
-                var selected = new CaptureSelectionCompletedEventArgs(fixture.Frame, fixture.Region, fixture.Frame.Bitmap,
-                    copyToClipboardImmediately: true);
+                var selected = new CaptureSelectionCompletedEventArgs(fixture.Frame, fixture.Region, fixture.Frame.Bitmap);
                 // Delayed capture ends in the same manual selection callback as region capture.
                 var announce = typeof(CaptureOverlayCoordinator).GetMethod("AnnounceSelectionAndOpenEditorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
                 fixture.Wait((Task)announce.Invoke(coordinator, [selected])!);
@@ -85,7 +84,7 @@ public sealed class CaptureLibraryFirstTests
         using var fixture = new Fixture();
         if (interrupt) fixture.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("interrupted URL metadata publication");
         fixture.Wait(fixture.Select(new CaptureSelectionCompletedEventArgs(fixture.Frame, fixture.Region,
-            fixture.Frame.Bitmap, "Review — Browser", recordForRepeat: false, copyToClipboardImmediately: false, sourcePageUrl: url)));
+            fixture.Frame.Bitmap, "Review — Browser", recordForRepeat: false, sourcePageUrl: url)));
         CaptureRecord pending = fixture.PendingRecord;
         Assert.Equal(url, pending.SourcePageUrl);
         Assert.Equal(MyCapture.Core.Localization.UiText.Get("Capture.WebpageTag"), pending.Tags);
@@ -297,7 +296,7 @@ public sealed class CaptureLibraryFirstTests
         {
             SelectionPersistRequested = selection => fixture.Select(new CaptureSelectionCompletedEventArgs(
                 selection.Frame, selection.BitmapRegion, selection.SelectedBitmap, selection.SourceTitle,
-                recordForRepeat: false, copyToClipboardImmediately: true)),
+                recordForRepeat: false)),
             RequiresCaptureExclusion = () => true,
         };
         AnnotationEditorWindow? editor = null;
@@ -625,7 +624,7 @@ public sealed class CaptureLibraryFirstTests
         internal FrozenFrame Frame { get; }
         internal RectD Region { get; } = new(0, 0, 64, 48);
         internal CaptureSelectionCompletedEventArgs Selection => new(Frame, Region, Frame.Bitmap,
-            "CaptureService.cs - my-capture - Visual Studio Code", recordForRepeat: false, copyToClipboardImmediately: false);
+            "CaptureService.cs - my-capture - Visual Studio Code", recordForRepeat: false);
         internal CaptureRecord? CurrentRecord => (CaptureRecord?)Get("_currentRecord");
         internal CaptureRecord PendingRecord => (CaptureRecord)Get("_pendingRecord")!;
         internal IDisposable? CurrentEditSession => (IDisposable?)Get("_currentEditSession");

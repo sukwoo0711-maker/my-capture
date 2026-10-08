@@ -3234,4 +3234,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Crop.Instruction" xml:space="preserve"><value>틀을 이동하거나 핸들로 크기를 조절하십시오.</value></data>
   <data name="Crop.TooSmall" xml:space="preserve"><value>너비와 높이를 2px 이상으로 지정하십시오.</value></data>
   <data name="QuickAccess.ActivationUnavailable" xml:space="preserve"><value>Alt+Q가 이미 사용 중입니다. 카드 배경을 클릭하면 단축키를 사용할 수 있습니다.</value></data>
+  <data name="Crop.InvalidSizeLabel" xml:space="preserve"><value>정수 입력</value></data>
+  <data name="Crop.InvalidSize" xml:space="preserve"><value>너비와 높이에 2 이상의 정수를 입력하십시오.</value></data>
+  <data name="Capture.LibrarySaveFailedNoEditor" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 라이브러리를 확인하고 필요하면 다시 캡처하십시오. {0}</value></data>
 </root>

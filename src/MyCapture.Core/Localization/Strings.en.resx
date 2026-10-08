@@ -3234,4 +3234,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Crop.Instruction" xml:space="preserve"><value>Move the frame or drag a handle to resize.</value></data>
   <data name="Crop.TooSmall" xml:space="preserve"><value>Set the width and height to at least 2px.</value></data>
   <data name="QuickAccess.ActivationUnavailable" xml:space="preserve"><value>Alt+Q is already in use. Click the card background to use its shortcuts.</value></data>
+  <data name="Crop.InvalidSizeLabel" xml:space="preserve"><value>Whole number</value></data>
+  <data name="Crop.InvalidSize" xml:space="preserve"><value>Enter a whole number of at least 2 for width and height.</value></data>
+  <data name="Capture.LibrarySaveFailedNoEditor" xml:space="preserve"><value>Could not save to the library. Check the library and capture again if needed. {0}</value></data>
 </root>

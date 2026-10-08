@@ -991,6 +991,10 @@ public partial class App : Application
             e.Handled = _quickAccess is { CanActivateByHotkey: true } card && card.ActivateForKeyboard();
     }
 
+    internal static string LibrarySaveFailureMessage(AfterCaptureAction mode, Exception error) =>
+        UiText.Format(mode == AfterCaptureAction.Editor ? "Capture.LibrarySaveFailed" : "Capture.LibrarySaveFailedNoEditor",
+            MyCapture.App.Themes.ThemedDialog.RecoveryMessage(error));
+
     private async Task OnCaptureSelectionCompletedAsync(CaptureSelectionCompletedEventArgs e)
     {
         _log?.LogInformation(
@@ -1030,7 +1034,7 @@ public partial class App : Application
             _log?.LogError(ex, "Could not persist the captured original");
             _tray?.ShowBalloon(
                 UiText.Get("Text_4033027EAEDB"),
-                UiText.Format("Capture.LibrarySaveFailed", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex)),
+                LibrarySaveFailureMessage(_settings?.General.AfterCapture ?? AfterCaptureAction.Editor, ex),
                 TrayBalloonKind.Error);
         }
 

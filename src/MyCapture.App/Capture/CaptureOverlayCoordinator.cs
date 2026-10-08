@@ -335,7 +335,6 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             crop,
             sourceTitle,
             recordForRepeat,
-            copyToClipboardImmediately: false,
             sourcePageUrl: sourcePageUrl);
 
         _log.LogInformation(

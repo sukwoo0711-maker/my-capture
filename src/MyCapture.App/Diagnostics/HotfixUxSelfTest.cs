@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -555,6 +556,35 @@ internal static class HotfixUxSelfTest
         }
         SendKey(hwnd, 0x1B); Pump(50);
         check("native Esc cancels pending crop", window.Editor.PendingCrop is null && window.IsVisible);
+        Click(hwnd, Button("R"));
+        var swatches = (WrapPanel)typeof(AnnotationEditorControl).GetField("_swatchPanel", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window.Editor)!;
+        swatches.BringIntoView(); Pump(50);
+        check("native color swatch is visible", swatches.IsVisible);
+        Click(hwnd, swatches.Children.OfType<Button>().First());
+        check("mouse color swatch returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
+        SendKey(hwnd, 0x52); Pump(50);
+        check("native color swatch click then R selects Rectangle", ((ToggleButton)Button("R")).IsChecked == true);
+        var customInput = Ux402VisualMetrics.Descendants(window).OfType<TextBox>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
+        customInput.BringIntoView(); Pump(50);
+        Click(hwnd, customInput);
+        var customApply = Ux402VisualMetrics.Descendants(window).OfType<Button>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
+        Click(hwnd, customApply);
+        check("mouse custom color apply leaves input and returns editor focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
+        SendKey(hwnd, 0x45); Pump(50);
+        check("native custom color apply then E selects Ellipse", ((ToggleButton)Button("E")).IsChecked == true);
+        Click(hwnd, Button("X"));
+        var widthInput = (TextBox)typeof(AnnotationEditorControl).GetField("_cropWidth", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window.Editor)!;
+        var heightInput = (TextBox)typeof(AnnotationEditorControl).GetField("_cropHeight", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window.Editor)!;
+        Click(hwnd, widthInput); widthInput.Text = "240"; SendKey(hwnd, 0x0D); Pump(50);
+        check("native width Enter confirms value and preserves pending crop/input focus", window.Editor.PendingCrop?.Region.Width == 240
+            && window.Editor.CreateCurrentImageSnapshot().CanvasWidth == 320 && ReferenceEquals(Keyboard.FocusedElement, widthInput));
+        Click(hwnd, heightInput); heightInput.Text = "100"; SendKey(hwnd, 0x0D); Pump(50);
+        check("native height Enter remains editable after width Enter", window.Editor.PendingCrop?.Region.Height == 100 && ReferenceEquals(Keyboard.FocusedElement, heightInput));
+        Click(hwnd, widthInput); widthInput.Text = "abc"; SendKey(hwnd, 0x0D); Pump(50);
+        Click(hwnd, Button("Ctrl+Enter"));
+        check("native Done blocks invalid input and preserves text/error", window.IsVisible && window.Editor.PendingCrop is not null
+            && widthInput.Text == "abc" && !string.IsNullOrEmpty(AutomationProperties.GetHelpText(widthInput)));
+        SendKey(hwnd, 0x1B); Pump(50);
         Click(hwnd, Button("X")); window.Editor.PendingCrop!.SetWidth(200);
         SendKey(hwnd, 0x0D); Pump(80);
         check("native crop button click then Enter applies crop", window.Editor.PendingCrop is null && window.Editor.CreateCurrentImageSnapshot().CanvasWidth == 200);

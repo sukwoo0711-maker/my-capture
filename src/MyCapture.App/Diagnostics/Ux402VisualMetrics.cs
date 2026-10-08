@@ -64,6 +64,12 @@ internal static class Ux402VisualMetrics
     }
 
     // Composite from the text through actual template borders to the render backdrop.
+    internal static double TextContrast(TextBlock text)
+    {
+        double ink = Luminance(Pixel(text, true)), background = Luminance(Pixel(text, false));
+        return (Math.Max(ink, background) + .05) / (Math.Min(ink, background) + .05);
+    }
+
     // This accounts for disabled opacity affecting both text and button background.
     private static Rgba Pixel(TextBlock text, bool ink)
     {

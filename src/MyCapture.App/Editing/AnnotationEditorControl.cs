@@ -68,6 +68,8 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement _cropSection = null!;
     private TextBox _cropWidth = null!;
     private TextBox _cropHeight = null!;
+    private readonly HashSet<TextBox> _dirtyCropInputs = [];
+    private readonly Dictionary<TextBox, (Border Border, TextBlock Message)> _cropInputErrors = [];
     private ComboBox _cropRatio = null!;
     internal CropSelection? PendingCrop => _crop;
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _shortcutActions;
@@ -302,7 +304,7 @@ internal sealed class AnnotationEditorControl : Grid
             && modifiers == ModifierKeys.None)
         {
             if (key == Key.Escape) { CancelPendingCrop(); Focus(); return true; }
-            if (key == Key.Enter) { ChangeCropSize(cropInput); ApplyPendingCrop(); Focus(); return true; }
+            if (key == Key.Enter) { ChangeCropSize(cropInput); return true; }
         }
         if (Keyboard.FocusedElement is ButtonBase && key is Key.Space or Key.Enter
             && modifiers == ModifierKeys.None) return false;
@@ -342,6 +344,7 @@ internal sealed class AnnotationEditorControl : Grid
     internal void ApplyPendingCrop()
     {
         if (_crop is not { } crop) return;
+        if (!CommitCropInputs()) return;
         if (crop.Region.Width < 2 || crop.Region.Height < 2) { SetStatus(UiText.Get("Crop.TooSmall")); return; }
         RectD region = crop.Region;
         _crop = null; _surface.PendingCrop = null;
@@ -362,10 +365,16 @@ internal sealed class AnnotationEditorControl : Grid
     {
         _surface.PendingCrop = _crop;
         _surface.InvalidateVisual();
-        if (_crop is null || _cropWidth is null) return;
+        if (_crop is null)
+        {
+            _dirtyCropInputs.Clear();
+            foreach (var box in _cropInputErrors.Keys) SetCropInputError(box, false);
+            return;
+        }
+        if (_cropWidth is null) return;
         _syncingInspector = true;
-        _cropWidth.Text = Math.Round(_crop.Region.Width).ToString(CultureInfo.InvariantCulture);
-        _cropHeight.Text = Math.Round(_crop.Region.Height).ToString(CultureInfo.InvariantCulture);
+        if (!_dirtyCropInputs.Contains(_cropWidth)) _cropWidth.Text = Math.Round(_crop.Region.Width).ToString(CultureInfo.InvariantCulture);
+        if (!_dirtyCropInputs.Contains(_cropHeight)) _cropHeight.Text = Math.Round(_crop.Region.Height).ToString(CultureInfo.InvariantCulture);
         _syncingInspector = false;
     }
 
@@ -1280,14 +1289,19 @@ internal sealed class AnnotationEditorControl : Grid
         _cropHeight = new TextBox { MinHeight = 30 };
         foreach (var (box, key) in new[] { (_cropWidth, "Crop.Width"), (_cropHeight, "Crop.Height") })
         {
-            var field = new StackPanel(); field.Children.Add(SectionLabel(UiText.Get(key))); field.Children.Add(box); dimensions.Children.Add(field);
+            var field = new StackPanel(); field.Children.Add(SectionLabel(UiText.Get(key)));
+            var border = new Border { Child = box, BorderThickness = new Thickness(1), BorderBrush = Brushes.Transparent };
+            var error = new TextBlock { Text = UiText.Get("Crop.InvalidSizeLabel"), FontSize = 11,
+                TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+            error.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+            _cropInputErrors.Add(box, (border, error));
+            field.Children.Add(border); field.Children.Add(error); dimensions.Children.Add(field);
             AutomationName(box, UiText.Get(key));
-            box.LostKeyboardFocus += (_, _) => { ChangeCropSize(box); RefreshCrop(); };
-            box.KeyDown += (_, e) =>
+            box.TextChanged += (_, _) =>
             {
-                if (e.Key != Key.Enter || Keyboard.Modifiers != ModifierKeys.None) return;
-                ChangeCropSize(box); ApplyPendingCrop(); Focus(); e.Handled = true;
+                if (!_syncingInspector && _crop is not null) _dirtyCropInputs.Add(box);
             };
+            box.LostKeyboardFocus += (_, _) => ChangeCropSize(box);
         }
         panel.Children.Add(dimensions);
         var actions = new UniformGrid { Columns = 2 };
@@ -1299,11 +1313,33 @@ internal sealed class AnnotationEditorControl : Grid
         return panel;
     }
 
-    private void ChangeCropSize(TextBox box)
+    private bool ChangeCropSize(TextBox box)
     {
-        if (_crop is null || !double.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out double value)) return;
+        if (_crop is null || !_dirtyCropInputs.Contains(box)) return true;
+        if (!int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) || value < 2)
+        {
+            SetCropInputError(box, true);
+            SetStatus(UiText.Get("Crop.InvalidSize"));
+            return false;
+        }
+        _dirtyCropInputs.Remove(box);
+        SetCropInputError(box, false);
         if (ReferenceEquals(box, _cropWidth)) _crop.SetWidth(value); else _crop.SetHeight(value);
-        _surface.InvalidateVisual();
+        RefreshCrop();
+        if (_cropInputErrors.Values.All(error => error.Message.Visibility == Visibility.Collapsed))
+            SetStatus(ToolStatus(EditorTool.Crop));
+        return true;
+    }
+
+    private bool CommitCropInputs() => ChangeCropSize(_cropWidth) & ChangeCropSize(_cropHeight);
+
+    private void SetCropInputError(TextBox box, bool invalid)
+    {
+        var (border, message) = _cropInputErrors[box];
+        if (invalid) border.SetResourceReference(Border.BorderBrushProperty, "State.Danger");
+        else border.BorderBrush = Brushes.Transparent;
+        message.Visibility = invalid ? Visibility.Visible : Visibility.Collapsed;
+        AutomationProperties.SetHelpText(box, invalid ? UiText.Get("Crop.InvalidSize") : string.Empty);
     }
 
     private FrameworkElement BuildColorSection()
@@ -1343,6 +1379,7 @@ internal sealed class AnnotationEditorControl : Grid
                 Background = swatchColor.ToBrush(),
             };
             AutomationName(swatchButton, UiText.Format("Text_151C77170A94", swatchColor.ToHex()));
+            PreserveEditorMouseFocus(swatchButton);
             swatchButton.Click += (_, _) =>
             {
                 _controller.ApplyStrokeColor(swatchColor);
@@ -1358,6 +1395,7 @@ internal sealed class AnnotationEditorControl : Grid
         panel.Children.Add(custom);
         var apply = new Button { Content = UiText.Get("Tools.CustomColor"), MinHeight = 36 };
         AutomationName(apply, UiText.Get("Tools.CustomColor"));
+        PreserveEditorMouseFocus(apply);
         apply.Click += (_, _) =>
         {
             if (ColorRgba.TryParse(custom.Text, out ColorRgba color))
@@ -2233,9 +2271,8 @@ internal sealed class AnnotationEditorControl : Grid
             CommitActiveText();
         }
 
-        // Commit a pending numeric edit before inspecting the crop, including Ctrl+S.
-        if (_crop is not null && Keyboard.FocusedElement is TextBox sizeBox
-            && (ReferenceEquals(sizeBox, _cropWidth) || ReferenceEquals(sizeBox, _cropHeight))) ChangeCropSize(sizeBox);
+        // Validate both inputs even when the crop still spans the full image.
+        if (_crop is not null && !CommitCropInputs()) return;
         bool appliedCrop = _crop is { } pending && pending.Region != pending.Bounds;
         if (appliedCrop)
         {

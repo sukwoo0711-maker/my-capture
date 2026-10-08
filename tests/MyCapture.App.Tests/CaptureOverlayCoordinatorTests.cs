@@ -231,7 +231,7 @@ public sealed class CaptureOverlayCoordinatorTests
         Assert.True(coordinator.IsActive);
         Assert.Equal(1, persistenceCalls);
         Assert.NotNull(persistedSelection);
-        Assert.False(persistedSelection!.CopyToClipboardImmediately);
+        Assert.False(persistedSelection!.RecordForRepeat);
 
         // No overlay/editor window exists during the awaited durable write. This second call is
         // the exact race that previously started another session and overwrote App._currentRecord.
@@ -248,7 +248,7 @@ public sealed class CaptureOverlayCoordinatorTests
     });
 
     [Fact]
-    public void ManualRegionSelection_DefaultsToImmediateClipboardCopy()
+    public void ManualRegionSelection_RecordsManualRepeatMetadata()
     {
         BitmapSource bitmap = Solid(30, 18);
         var frame = new FrozenFrame(bitmap, new RectD(0, 0, 30, 18), null, 0);
@@ -258,7 +258,7 @@ public sealed class CaptureOverlayCoordinatorTests
             bitmap);
 
         Assert.True(selection.RecordForRepeat);
-        Assert.True(selection.CopyToClipboardImmediately);
+        Assert.Equal(new RectD(3, 2, 15, 9), selection.BitmapRegion);
     }
 
     private static BitmapSource Solid(int width, int height)

@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -12,6 +13,7 @@ using MyCapture.App.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Storage;
+using MyCapture.Core.Localization;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Recording;
 using Xunit;
@@ -89,7 +91,7 @@ public sealed class Ux402RevisionTests
     });
 
     [Fact]
-    public void CropInspectorEnterAppliesAndEscapeCancelsWhileComboAndButtonsOwnActivation() => StaTestHost.Run(() =>
+    public void CropInspectorEnterConfirmsOnlyAndEscapeCancelsWhileComboAndButtonsOwnActivation() => StaTestHost.Run(() =>
     {
         var editor = Editor(); var window = new Window { Content = editor, Width = 1000, Height = 620 };
         try
@@ -99,8 +101,9 @@ public sealed class Ux402RevisionTests
             width.Focus(); width.Text = "2"; width.Text = "200";
             Assert.Equal(640, editor.PendingCrop!.Region.Width);
             Assert.True(editor.HandleShortcut(Key.Enter, ModifierKeys.None));
-            Assert.Null(editor.PendingCrop); Assert.Equal(200, editor.CreateCurrentImageSnapshot().CanvasWidth);
-            editor.Focus(); editor.HandleShortcut(Key.Z, ModifierKeys.Control); editor.ShortcutActions["Crop"]();
+            Assert.NotNull(editor.PendingCrop); Assert.Equal(200, editor.PendingCrop.Region.Width);
+            Assert.Equal(640, editor.CreateCurrentImageSnapshot().CanvasWidth);
+            Assert.Same(width, Keyboard.FocusedElement);
             height.Focus(); height.Text = "100";
             Assert.Equal(360, editor.PendingCrop!.Region.Height);
             width.Focus(); Assert.Equal(100, editor.PendingCrop.Region.Height);
@@ -129,6 +132,52 @@ public sealed class Ux402RevisionTests
         }
         finally { window.Close(); }
     });
+
+    [Theory]
+    [InlineData("")] [InlineData("abc")] [InlineData("20.5")]
+    [InlineData("1")] [InlineData("-10")] [InlineData("999999999999999")]
+    public void InvalidCropTextSurvivesFocusChangesAndBlocksEveryCommitUntilCorrected(string invalid) => StaTestHost.Run(() =>
+    {
+        var editor = Editor(); var window = new Window { Content = editor, Width = 1000, Height = 620 };
+        try
+        {
+            window.Show(); window.Activate(); editor.ShortcutActions["Crop"](); window.UpdateLayout();
+            var width = Field<TextBox>(editor, "_cropWidth"); var height = Field<TextBox>(editor, "_cropHeight");
+            width.Focus(); width.Text = invalid;
+            Assert.True(editor.HandleShortcut(Key.Enter, ModifierKeys.None));
+            Assert.Equal(invalid, width.Text); Assert.Same(width, Keyboard.FocusedElement);
+            Assert.NotEmpty(AutomationProperties.GetHelpText(width));
+            Assert.Equal(UiText.Get("Crop.InvalidSize"), Field<TextBlock>(editor, "_statusText").Text);
+            AnnotationEditingResult? committed = null;
+            editor.CommitRequested = value => { committed = value; return Task.FromResult(false); };
+            // Invalid input blocks even an otherwise untouched full-image crop.
+            foreach (string command in new[] { "Done", "Copy", "Save", "SaveAs" }) editor.ShortcutActions[command]();
+            Assert.Null(committed); Assert.NotNull(editor.PendingCrop);
+            height.Focus(); height.Text = "100"; editor.HandleShortcut(Key.Enter, ModifierKeys.None);
+            Assert.Equal(invalid, width.Text); Assert.Equal(100, editor.PendingCrop.Region.Height);
+            editor.Focus(); editor.HandleShortcut(Key.Enter, ModifierKeys.None);
+            Assert.NotNull(editor.PendingCrop); Assert.Equal(640, editor.CreateCurrentImageSnapshot().CanvasWidth);
+            width.Focus(); width.Text = "240";
+            editor.HandleShortcut(Key.Enter, ModifierKeys.None);
+            Assert.NotNull(editor.PendingCrop); Assert.Empty(AutomationProperties.GetHelpText(width));
+            editor.ShortcutActions["Save"]();
+            Assert.NotNull(committed); Assert.Equal(240, committed.Document.CanvasWidth); Assert.Equal(100, committed.Document.CanvasHeight);
+            Assert.Null(editor.PendingCrop);
+        }
+        finally { window.Close(); }
+    });
+
+    [Theory]
+    [InlineData("ko", AfterCaptureAction.Editor)] [InlineData("ko", AfterCaptureAction.QuickAccess)] [InlineData("ko", AfterCaptureAction.ClipboardOnly)]
+    [InlineData("en", AfterCaptureAction.Editor)] [InlineData("en", AfterCaptureAction.QuickAccess)] [InlineData("en", AfterCaptureAction.ClipboardOnly)]
+    public void LibrarySaveFailureGuidanceMatchesConfiguredMode(string language, AfterCaptureAction mode)
+    {
+        using var culture = UiText.UseLanguage(language);
+        string message = App.LibrarySaveFailureMessage(mode, new IOException("test-save-failure"));
+        Assert.Contains(language == "ko" ? "라이브러리" : "library", message);
+        Assert.Equal(mode == AfterCaptureAction.Editor, message.Contains(language == "ko" ? "편집창" : "editor", StringComparison.Ordinal));
+        Assert.Equal(mode != AfterCaptureAction.Editor, message.Contains(language == "ko" ? "다시 캡처" : "capture again", StringComparison.Ordinal));
+    }
 
     [Fact]
     public void KeyboardFocusedButtonsKeepOnlySpaceAndEnterForActivation() => StaTestHost.Run(() =>

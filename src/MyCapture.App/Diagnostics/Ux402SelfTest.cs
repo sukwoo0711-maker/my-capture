@@ -125,6 +125,22 @@ internal static class Ux402SelfTest
                                 File.WriteAllText(Path.Combine(output, label + "-scrim.json"), JsonSerializer.Serialize(pixels, new JsonSerializerOptions { WriteIndented = true }));
                                 failures += pixels.Count(pixel => !pixel.Pass);
                                 report.AppendLine($"{label}: crop inside/outside pixels match={pixels.All(pixel => pixel.Pass)}");
+                                // Render the real validation UI in both crop sizes and every palette.
+                                var cropWidth = (TextBox)typeof(AnnotationEditorControl).GetField("_cropWidth", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(annotation.Editor)!;
+                                var changeSize = typeof(AnnotationEditorControl).GetMethod("ChangeCropSize", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                                string validWidth = cropWidth.Text;
+                                cropWidth.Text = "abc"; changeSize.Invoke(annotation.Editor, [cropWidth]); window.UpdateLayout();
+                                foreach (int dpi in new[] { 96, 144, 192 }) Render(window, Path.Combine(output, label + $"-invalid-{dpi}.png"), dpi);
+                                bool errorVisible = cropWidth.Text == "abc" && !string.IsNullOrEmpty(AutomationProperties.GetHelpText(cropWidth))
+                                    && Descendants(annotation.Editor).OfType<TextBlock>().Any(text => text.IsVisible && text.Text == UiText.Get("Crop.InvalidSizeLabel")
+                                        && text.TransformToAncestor(window).TransformBounds(new Rect(text.RenderSize)).Bottom <= window.ActualHeight);
+                                report.AppendLine($"{label}: invalid crop text/error visible={errorVisible}");
+                                if (!errorVisible) failures++;
+                                var errorText = Descendants(annotation.Editor).OfType<TextBlock>().Single(text => text.IsVisible && text.Text == UiText.Get("Crop.InvalidSizeLabel"));
+                                double errorContrast = Ux402VisualMetrics.TextContrast(errorText);
+                                report.AppendLine($"{label}: crop error contrast={errorContrast.ToString("F3", CultureInfo.InvariantCulture)}; pass={errorContrast >= 4.5}");
+                                if (errorContrast < 4.5) failures++;
+                                cropWidth.Text = validWidth; changeSize.Invoke(annotation.Editor, [cropWidth]); window.UpdateLayout();
                             }
                             ToggleButton[] tools = Descendants(annotation.Editor).OfType<ToggleButton>()
                                 .Where(tool => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(tool))).ToArray();
