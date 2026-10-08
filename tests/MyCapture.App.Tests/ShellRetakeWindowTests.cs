@@ -24,12 +24,12 @@ public sealed class ShellRetakeWindowTests
         var window = new Window { Width = 200, Height = 100, ShowInTaskbar = false };
         window.SetBinding(Window.TitleProperty, new Binding(nameof(Caption.Text)) { Source = source });
         WindowIdentity.Attach(window);
-        Assert.Equal(AppIdentity.Label + " — Settings", window.Title);
+        Assert.Equal(AppIdentity.WindowLabel + " — Settings", window.Title);
         Assert.True(BindingOperations.IsDataBound(window, Window.TitleProperty));
         source.Text = "Gallery — capture.png";
-        Assert.Equal(AppIdentity.Label + " — Gallery — capture.png", window.Title);
+        Assert.Equal(AppIdentity.WindowLabel + " — Gallery — capture.png", window.Title);
         WindowIdentity.Attach(window);
-        Assert.Equal(AppIdentity.Label + " — Gallery — capture.png", window.Title);
+        Assert.Equal(AppIdentity.WindowLabel + " — Gallery — capture.png", window.Title);
         window.Close();
     });
 

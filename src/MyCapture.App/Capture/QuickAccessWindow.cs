@@ -54,7 +54,7 @@ internal sealed class QuickAccessWindow : Window
         RectD? capturedRegion = null, MonitorInfo? targetMonitor = null)
     {
         Title = UiText.Get("QuickAccess.Title");
-        Width = 280;
+        Width = 296;
         _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
@@ -62,10 +62,17 @@ internal sealed class QuickAccessWindow : Window
         ShowActivated = false;
         Topmost = true;
         WindowStartupLocation = WindowStartupLocation.Manual;
-        StandardWindowTheme.Apply(this);
-        SetResourceReference(BackgroundProperty, "Surface.Raised");
+        WindowStyle = WindowStyle.None;
+        AllowsTransparency = true;
+        Background = Brushes.Transparent;
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var panel = new StackPanel { Margin = new Thickness(8) };
+        var close = Button("Dialog.Close", Close);
+        close.Content = Glyph("Icon.Close");
+        close.Width = 26; close.Height = 26; close.MinHeight = 0; close.MinWidth = 0;
+        close.Padding = new Thickness(4); close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.SetResourceReference(StyleProperty, "Button.Ghost");
+        panel.Children.Add(close);
         var row = new DockPanel { LastChildFill = true };
         _keep = new ToggleButton { Content = Glyph("Icon.Unlock"), Width = 24, Height = 30, MinWidth = 0, MinHeight = 0,
             Padding = new Thickness(2), Focusable = false, ToolTip = UiText.Get("QuickAccess.Keep") };
@@ -119,9 +126,15 @@ internal sealed class QuickAccessWindow : Window
         _dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight}";
         _dimensions.FontSize = 10; _dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         footer.Children.Add(_dimensions); panel.Children.Add(footer);
+        _keyboardTargets.Remove(close);
+        _keyboardTargets.Add(close);
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         panel.Children.Add(_status); panel.Children.Add(_remaining);
-        Content = panel;
+        var surface = new Border { Child = panel, Margin = new Thickness(8), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1) };
+        surface.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
+        surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        surface.SetResourceReference(EffectProperty, "Shadow.Card");
+        Content = surface;
         ToolTip = UiText.Get("QuickAccess.KeyboardHint");
         SourceInitialized += (_, _) =>
         {

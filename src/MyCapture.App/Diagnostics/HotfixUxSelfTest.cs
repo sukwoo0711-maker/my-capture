@@ -142,7 +142,7 @@ internal static class HotfixUxSelfTest
                         if (available) probe.Unregister(0x7103);
                         Check($"Alt+Q available to a separate registration iff kept={kept}", available == kept);
                     }
-                    var mouseRow = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().First();
+                    var mouseRow = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().First();
                     var mouseActions = mouseRow.Children.OfType<UniformGrid>().Single().Children.OfType<Button>().ToArray();
                     Click(inputHandle, mouseActions[0]);
                     Check("copy click preserves external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && copies == 1);
@@ -173,7 +173,7 @@ internal static class HotfixUxSelfTest
                         Check($"{(library ? "library" : "edit")} click invokes action without activating card", invoked == 1 && GetForegroundWindow() == inputHandle && !actionCard.IsVisible);
                     }
                     // Kept cards enter only by a non-action background click.
-                    var dimensions = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single();
+                    var dimensions = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single();
                     Click(inputHandle, dimensions);
                     Check("background click activates the kept card", keyboardCard.IsActive && keyboardCard.IsKeyboardFocusWithin);
                     SendKey(cardHandle, 0x43); Pump(80);
@@ -189,7 +189,7 @@ internal static class HotfixUxSelfTest
                     SendKey(cardHandle, 0x53); Pump(80);
                     Check("focused card S invokes save", saves == 2);
                     // Observe real pointer-triggered tooltips on this owned foreground HWND.
-                    var cardRow = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().First();
+                    var cardRow = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().First();
                     var tooltipTargets = cardRow.Children.OfType<UniformGrid>().Single().Children.OfType<ButtonBase>()
                         .Concat(cardRow.Children.OfType<ToggleButton>()).ToArray();
                     foreach (ButtonBase target in tooltipTargets)
@@ -243,7 +243,7 @@ internal static class HotfixUxSelfTest
                 ThemeService.Apply(theme);
                 var receipt = Card(sample); owned.Add(receipt); receipt.IsKept = true;
                 receipt.Show(); Pump(70); receipt.UpdateLayout();
-                var keep = ((StackPanel)receipt.Content).Children.OfType<DockPanel>().First().Children.OfType<ToggleButton>().Single();
+                var keep = ((StackPanel)((Border)receipt.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<ToggleButton>().Single();
                 string locked = ((System.Windows.Shapes.Path)keep.Content).Data.ToString();
                 receipt.IsKept = false;
                 string unlocked = ((System.Windows.Shapes.Path)keep.Content).Data.ToString();
@@ -251,7 +251,7 @@ internal static class HotfixUxSelfTest
                     locked != unlocked && locked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString()
                     && unlocked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString());
                 receipt.IsKept = true;
-                var grid = ((StackPanel)receipt.Content).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
+                var grid = ((StackPanel)((Border)receipt.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
                 foreach (Button button in grid.Children.OfType<Button>())
                 {
                     var content = (Grid)button.Content;
@@ -327,7 +327,7 @@ internal static class HotfixUxSelfTest
             Render(updatedCard, Path.Combine(output, "preview-before-update.png"), 96);
             updatedCard.UpdatePreview(expected); updatedCard.UpdateLayout();
             Render(updatedCard, Path.Combine(output, "preview-after-update.png"), 96);
-            Check("preview dimensions reflect edited crop", ((StackPanel)updatedCard.Content).Children.OfType<DockPanel>().Last()
+            Check("preview dimensions reflect edited crop", ((StackPanel)((Border)updatedCard.Content).Child).Children.OfType<DockPanel>().Last()
                 .Children.OfType<TextBlock>().Single().Text == "230 × 130");
             updatedCard.Close();
             string? saved = null; BitmapSource? pinned = null; byte[]? clipboardPng = null;
