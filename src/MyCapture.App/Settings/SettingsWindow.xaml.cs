@@ -56,8 +56,9 @@ internal sealed partial class SettingsWindow : Window
         _apply = apply ?? throw new ArgumentNullException(nameof(apply));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _settingsStore = settingsStore;
-        _showSaveFailureMessage = showSaveFailureMessage ?? (message => MessageBox.Show(
-            this, message, UiText.Get("Text_13A717215F51"), MessageBoxButton.OK, MessageBoxImage.Warning));
+        _showSaveFailureMessage = showSaveFailureMessage ?? (message => MyCapture.App.Themes.ThemedDialog.Show(
+            this, UiText.Get("Dialog.Storage"), UiText.Get("Text_13A717215F51"), MessageBoxButton.OK,
+            MessageBoxImage.Warning, details: message));
 
         InitializeComponent();
         InitializeUpdates();
@@ -245,7 +246,8 @@ internal sealed partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            SetStatusMessage(ex.Message);
+            MyCapture.App.Themes.ThemedDialog.Error(this, UiText.Get("Settings_Export"), ex,
+                () => OnExportSettings(sender, e), UiText.Get("Dialog.ChooseLocation"));
         }
     }
 
@@ -288,9 +290,9 @@ internal sealed partial class SettingsWindow : Window
         catch (Exception ex)
         {
             string failure = UiText.Get("Settings_ImportFailed");
-            SetStatusMessage(string.Equals(failure, ex.Message, StringComparison.Ordinal)
-                ? failure
-                : failure + " " + ex.Message);
+            _log.LogWarning(ex, "Could not import settings");
+            SetStatusMessage(ex is System.IO.InvalidDataException ? failure
+                : $"{failure} {System.IO.Path.GetFileName(path)} · {ThemedDialog.RecoveryMessage(ex)}");
         }
     }
 
@@ -325,7 +327,7 @@ internal sealed partial class SettingsWindow : Window
 
         if (result.Messages.Count > 0)
         {
-            MessageBox.Show(
+            MyCapture.App.Themes.ThemedDialog.Show(
                 this,
                 string.Join(Environment.NewLine, result.Messages),
                 UiText.Get("Text_93CBE1538A34"),

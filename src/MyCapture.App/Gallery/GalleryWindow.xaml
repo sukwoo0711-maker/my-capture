@@ -51,7 +51,9 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding TimeCaption}" Foreground="{DynamicResource Text.Secondary}" FontFamily="{StaticResource Font.Mono}" />
-                        <TextBlock Grid.Column="1" Text="{Binding RetentionCaption}" Foreground="{DynamicResource Text.Muted}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource FontSize.Caption}" />
+                        <Border Grid.Column="1" CornerRadius="4" Padding="5,2" BorderThickness="1" BorderBrush="{DynamicResource State.Warning}" Visibility="{Binding IsExpiringSoon, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding RetentionCaption}" Foreground="{DynamicResource Text.Primary}" FontSize="{StaticResource FontSize.Caption}" />
+                        </Border>
                     </Grid>
                     <!-- Capture time is always above the image. -->
                     <Border Grid.Row="1"
@@ -455,7 +457,7 @@
                 <Image Style="{StaticResource Brand.AppIcon}" Margin="0,1,12,0"
                        AutomationProperties.Name="MyCapture" />
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}" Style="{DynamicResource Text.Display}" FontSize="26" />
+                    <TextBlock Text="{loc:Text Text_37AD4F28D422}" Style="{DynamicResource Text.Display}" FontSize="26" />
                     <TextBlock Text="{loc:Text Text_13036A090EBA}"
                                Style="{DynamicResource Text.MutedBlock}" Margin="0,5,0,0" MaxWidth="500" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                HorizontalAlignment="Left" />
@@ -472,6 +474,7 @@
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.4" StrokeLineJoin="Round" Fill="Transparent" />
                         <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="7,0,0,0" VerticalAlignment="Center" />
+                        <TextBlock x:Name="CaptureShortcut" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="11" />
                     </StackPanel>
                 </Button>
                 <Button Style="{StaticResource Button.Secondary}" Padding="12,8" Margin="0,0,8,0"
@@ -483,6 +486,7 @@
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.4" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         <TextBlock Text="{loc:Text Text_4F5AF20FAA6E}" Margin="7,0,0,0" VerticalAlignment="Center" />
+                        <TextBlock x:Name="RecordShortcut" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="11" />
                     </StackPanel>
                 </Button>
                 <!-- Item count is metadata, not an action: demote it to a plain border. -->

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -100,6 +100,7 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        Loaded += (_, _) => { CaptureShortcut.Text = ReadHotkeys().Capture.ToString(); RecordShortcut.Text = ReadHotkeys().RecordRegion.ToString(); };
         MyCapture.App.Themes.WorkspaceTheme.Attach(this, MyCapture.App.Themes.WorkspaceRole.Gallery, resourcesLoaded: true);
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
@@ -133,6 +134,14 @@ internal sealed partial class GalleryWindow : Window
     /// <summary>Header toolbar commands, wired by the shell: region capture and region recording.</summary>
     internal Action? CaptureRegionRequested { get; set; }
     internal Action? RecordRegionRequested { get; set; }
+    internal Func<HotkeySettings> ReadHotkeys { get; set; } = () => new HotkeySettings();
+
+    internal void OpenCapture(Guid id, bool edit)
+    {
+        ShowGallery();
+        _viewModel.Select(id);
+        if (edit && _viewModel.FindTile(id) is { } tile) OpenReedit(tile);
+    }
 
     /// <summary>
     /// Shows the window and brings it forward, rebuilding the view from the current queue so a
@@ -140,6 +149,8 @@ internal sealed partial class GalleryWindow : Window
     /// </summary>
     internal void ShowGallery()
     {
+        CaptureShortcut.Text = ReadHotkeys().Capture.ToString();
+        RecordShortcut.Text = ReadHotkeys().RecordRegion.ToString();
         _viewModel.Refresh();
         RefreshOcrCoverageBanner();
 
@@ -576,7 +587,7 @@ internal sealed partial class GalleryWindow : Window
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Could not open the video player for {Id}", record.Id);
-            ShowStatus(UiText.Get("Text_EBC9F14582AD") + ex.Message);
+            MyCapture.App.Themes.ThemedDialog.Error(this, UiText.Get("Dialog.AppFailure"), ex);
         }
     }
 
@@ -763,7 +774,7 @@ internal sealed partial class GalleryWindow : Window
         try
         {
             string prompt = UiText.Format(entireLibrary ? "LibrarySelection_ClearConfirm" : "LibrarySelection_DeleteConfirm", targets.Length);
-            if (MessageBox.Show(this, prompt, UiText.Get("LibrarySelection_Delete"), MessageBoxButton.OKCancel,
+            if (MyCapture.App.Themes.ThemedDialog.Show(this, prompt, UiText.Get("LibrarySelection_Delete"), MessageBoxButton.OKCancel,
                 MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
             CloseInlinePlayer(); // MediaElement must release its source before directory cleanup.
             foreach (Guid id in targets) _viewModel.FindTile(id)?.SetThumbnailLoadingEnabled(false);
@@ -928,7 +939,7 @@ internal sealed partial class GalleryWindow : Window
         {
             _log.LogWarning(ex, "Could not prepare reduced export for {Id}", record.Id);
             if (IsVisible && visibilityGeneration == _visibilityGeneration)
-                ShowStatus(UiText.Format("ExportReduction_Error", ex.Message));
+                MyCapture.App.Themes.ThemedDialog.Error(this, UiText.Get("Dialog.AppFailure"), ex);
         }
         finally { _imagePreparationInProgress = false; _openEditors.Remove(record.Id); }
     }
@@ -1001,7 +1012,7 @@ internal sealed partial class GalleryWindow : Window
             {
                 // The generic message alone gives a user nothing to report back; include
                 // the concrete fault so a support conversation can start from evidence.
-                ShowStatus(UiText.Format("Text_BCA2A41F7457", ex.Message));
+                MyCapture.App.Themes.ThemedDialog.Error(this, UiText.Get("Dialog.AppFailure"), ex);
             }
         }
         finally
@@ -1092,7 +1103,7 @@ internal sealed partial class GalleryWindow : Window
         catch (Exception ex)
         {
             _log.LogError(ex, "Could not open video editor for {Id}", record.Id);
-            ShowStatus(UiText.Get("Text_FB0A09B025D3") + ex.Message);
+            MyCapture.App.Themes.ThemedDialog.Error(this, UiText.Get("Dialog.AppFailure"), ex);
         }
         finally
         {
@@ -1190,7 +1201,7 @@ internal sealed partial class GalleryWindow : Window
     };
 
     private void ShowStatus(string message) =>
-        MessageBox.Show(this, message, "MyCapture", MessageBoxButton.OK, MessageBoxImage.Information);
+        MyCapture.App.Themes.ThemedDialog.Show(this, message, "MyCapture", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private void RaiseCaptureChanged() => CaptureChanged?.Invoke(this, EventArgs.Empty);
 }

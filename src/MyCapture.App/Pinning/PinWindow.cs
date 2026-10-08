@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -155,7 +155,7 @@ internal sealed class PinWindow : Window
         AutomationProperties.SetHelpText(
             this,
             _originalText is null
-                ? UiText.Get("Text_E22E2C953A8B")
+                ? UiText.Format("Text_E22E2C953A8B", ClickThroughRecoveryHint())
                 : UiText.Get("Text_55694B0252DB"));
 
         BuildContextMenu();
@@ -293,7 +293,7 @@ internal sealed class PinWindow : Window
             WindowStyleFacade.SetClickThrough(_handle, enabled);
         }
 
-        ShowFeedback(enabled ? UiText.Get("Text_41216A109463") : UiText.Get("Text_FA24C3FC395F"));
+        ShowFeedback(enabled ? UiText.Format("Text_41216A109463", ClickThroughRecoveryHint()) : UiText.Get("Text_FA24C3FC395F"));
     }
 
     /// <summary>Toggles click-through and returns the new state.</summary>
@@ -992,13 +992,21 @@ internal sealed class PinWindow : Window
         menu.Items.Add(MenuItemFor(
             UiText.Get("Text_67FE4AF7D334"),
             (_, _) => ToggleClickThrough(),
-            UiText.Get("Text_BE3D621D8A32"),
+            UiText.Format("Text_BE3D621D8A32", ClickThroughRecoveryHint()),
             "Icon.Select"));
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor(UiText.Get("Text_A925E80E33B3"), (_, _) => Close(), iconResourceKey: "Icon.Close"));
         menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
 
         ContextMenu = menu;
+    }
+
+    private static string ClickThroughRecoveryHint()
+    {
+        HotkeySettings keys = ShortcutHelpWindow.ReadHotkeys();
+        return keys.ToggleClickThrough.IsAssigned ? keys.ToggleClickThrough.ToString()
+            : keys.HideAllPins.IsAssigned ? UiText.Format("Hotkey.Twice", keys.HideAllPins)
+            : UiText.Get("Hotkey.TrayRestore");
     }
 
     private static MenuItem MenuItemFor(

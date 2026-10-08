@@ -339,6 +339,8 @@ internal sealed class AnnotationEditorController
                 BeginSelectGesture(point);
                 break;
             case EditorTool.Rectangle:
+            case EditorTool.Ellipse:
+            case EditorTool.Highlighter:
             case EditorTool.Arrow:
             case EditorTool.Pen:
                 BeginDraftGesture(point);
@@ -346,6 +348,9 @@ internal sealed class AnnotationEditorController
             case EditorTool.Text:
             case EditorTool.Image:
                 // Placed via a single click, handled by the view (TextBox / OpenFileDialog).
+                break;
+            case EditorTool.StepNumber:
+                AddStepNumber(point);
                 break;
         }
     }
@@ -591,6 +596,9 @@ internal sealed class AnnotationEditorController
             case PenAnnotation pen:
                 PushProperty(pen, UiText.Get("Text_D1B87ACB2D22"), static (s, v) => s.Stroke = v, pen.Stroke, color);
                 break;
+            case TextAnnotation { IsStepNumber: true } badge:
+                PushProperty(badge, UiText.Get("Text_D1B87ACB2D22"), static (s, v) => s.Background = v, badge.Background, color);
+                break;
             case TextAnnotation text:
                 PushProperty(text, UiText.Get("Text_D1B87ACB2D22"), static (s, v) => s.Foreground = v, text.Foreground, color);
                 break;
@@ -750,14 +758,15 @@ internal sealed class AnnotationEditorController
         _gestureStart = point;
         _gestureLast = point;
 
-        if (_tool == EditorTool.Pen)
+        if (_tool is EditorTool.Pen or EditorTool.Highlighter)
         {
             _draftPoints = [point];
             var pen = new PenAnnotation
             {
+                IsHighlighter = _tool == EditorTool.Highlighter,
                 Points = [point],
                 Stroke = StrokeColor,
-                StrokeThickness = StrokeThickness,
+                StrokeThickness = _tool == EditorTool.Highlighter ? Math.Max(12, StrokeThickness) : StrokeThickness,
             };
             _draftItem = pen;
             _document.Add(pen);
@@ -769,6 +778,12 @@ internal sealed class AnnotationEditorController
         _gesture = Gesture.Create;
         AnnotationItem draft = _tool switch
         {
+            EditorTool.Ellipse => new EllipseAnnotation
+            {
+                Rect = new RectD(point.X, point.Y, 0, 0), Stroke = StrokeColor,
+                StrokeThickness = StrokeThickness, StrokeStyle = StrokeStyle,
+                Fill = ShapeAnnotation.FillForTransparency(StrokeColor, FillTransparency), FillMatchesStroke = true,
+            },
             EditorTool.Rectangle => new RectangleAnnotation
             {
                 Rect = new RectD(point.X, point.Y, 0, 0),
@@ -791,7 +806,7 @@ internal sealed class AnnotationEditorController
     {
         switch (_draftItem)
         {
-            case RectangleAnnotation rect:
+            case ShapeAnnotation rect:
                 rect.Rect = RectD.FromCorners(_gestureStart, point);
                 break;
             case PolylineAnnotation line:
@@ -850,6 +865,20 @@ internal sealed class AnnotationEditorController
         // completed stroke unselected so a selection polygon/adorner does not interrupt
         // the next stroke. The user can still press V or right-click to enter selection.
         SetSelected(null);
+    }
+
+    internal TextAnnotation AddStepNumber(PointD point)
+    {
+        int number = _document.Items.OfType<TextAnnotation>().Where(t => t.IsStepNumber)
+            .Select(t => int.TryParse(t.Text, out int n) ? n : 0).DefaultIfEmpty(0).Max() + 1;
+        double size = Math.Max(32, DefaultFontSize * 2);
+        var badge = new TextAnnotation { IsStepNumber = true, Text = number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Rect = new RectD(point.X, point.Y, size, size), FontSize = Math.Max(16, DefaultFontSize),
+            Background = StrokeColor, Foreground = ColorRgba.White, Bold = true, HasOutline = true };
+        _undo.Execute(new AddAnnotationCommand(_document, badge));
+        SetSelected(badge);
+        RaiseVisual();
+        return badge;
     }
 
     private static bool IsDegenerate(AnnotationItem item)

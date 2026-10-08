@@ -39,6 +39,8 @@ internal class AnnotationEditorWindow : Window
         Background = Application.Current?.TryFindResource("Surface.Base") as Brush
             ?? new SolidColorBrush(Color.FromRgb(0x0B, 0x0F, 0x17));
         Foreground = Application.Current?.TryFindResource("Text.Primary") as Brush ?? Brushes.White;
+        SetResourceReference(BackgroundProperty, "Surface.Base");
+        SetResourceReference(ForegroundProperty, "Text.Primary");
         FontFamily = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");
         WindowStartupLocation = WindowStartupLocation.CenterScreen;

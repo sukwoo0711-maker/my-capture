@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -657,7 +657,6 @@ internal sealed class VideoEditorWindow : Window
         };
         inspectorContent.Children.Add(_layerPropertiesSummary);
         _layerPropertiesEdit = MakeButton(UiText.Get("Workspace.EditProperties"), UiText.Get("Workspace.EditProperties"), "Button.Secondary", EditSelectedOverlay);
-        inspectorContent.Children.Add(_layerPropertiesEdit);
         var inspectorScroll = new ScrollViewer
         {
             Content = inspectorContent, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -672,13 +671,24 @@ internal sealed class VideoEditorWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0),
         };
-        _addTextButton = MakeIconButton("Icon.Text", UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_991A1A1FF9ED"), "Button.Secondary", AddTextOverlay);
+        var addMenu = new ContextMenu();
+        foreach ((string key, Action add) in new (string, Action)[]
+        {
+            ("Text_258AD4B095A1", AddTextOverlay), ("Text_DC0760235344", () => AddShapeLayer(false)),
+            ("Text_C19FD6787279", () => AddShapeLayer(true)), ("Text_302BAE127938", AddImageLayer),
+        })
+        {
+            var item = new MenuItem { Header = UiText.Get(key) };
+            item.Click += (_, _) => add();
+            addMenu.Items.Add(item);
+        }
+        _addTextButton = MakeButton(UiText.Get("Video.AddLayer"), UiText.Get("Video.AddLayer"), "Button.Secondary", () => addMenu.IsOpen = true);
+        _addTextButton.ContextMenu = addMenu;
+        addMenu.PlacementTarget = _addTextButton;
         _editTextButton = MakeTransportIcon("Icon.Edit", UiText.Get("Text_AEB8B9AA4E6F"), "Button.Ghost", EditSelectedOverlay);
         _deleteTextButton = MakeTransportIcon("Icon.Delete", UiText.Get("Text_9163C86EDB22"), "Button.Ghost", DeleteSelectedOverlay);
         actions.Children.Add(_addTextButton);
-        actions.Children.Add(MakeButton(UiText.Get("Text_DC0760235344"), UiText.Get("Text_D8F5F6738520"), "Button.Secondary", () => AddShapeLayer(false)));
-        actions.Children.Add(MakeButton(UiText.Get("Text_C19FD6787279"), UiText.Get("Text_29C79CAFC1D7"), "Button.Secondary", () => AddShapeLayer(true)));
-        actions.Children.Add(MakeButton(UiText.Get("Text_302BAE127938"), UiText.Get("Text_21C405702C2B"), "Button.Secondary", AddImageLayer));
+        actions.Children.Add(_layerPropertiesEdit);
         var selectedActions = new StackPanel { Orientation = Orientation.Horizontal };
         selectedActions.Children.Add(_editTextButton);
         selectedActions.Children.Add(_deleteTextButton);
@@ -984,7 +994,7 @@ internal sealed class VideoEditorWindow : Window
 
         if (IsLoaded)
         {
-            _statusLabel.Text = UiText.Get("Text_483B0F23F316") + exception.Message;
+            _statusLabel.Text = UiText.Get("Text_483B0F23F316") + MyCapture.App.Themes.ThemedDialog.RecoveryMessage(exception);
             _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         }
     }
@@ -1207,7 +1217,7 @@ internal sealed class VideoEditorWindow : Window
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Image layer import failed");
-            _statusLabel.Text = UiText.Get("Text_690A5972C5C2") + ex.Message;
+            _statusLabel.Text = UiText.Get("Text_690A5972C5C2") + MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
         }
         finally
         {
@@ -1233,7 +1243,7 @@ internal sealed class VideoEditorWindow : Window
         try { VideoLayerResourceBudget.Validate(layers); return true; }
         catch (VideoLayerLimitException ex)
         {
-            _statusLabel.Text = ex.Message;
+            _statusLabel.Text = MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
             _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
             return false;
         }
@@ -1584,7 +1594,7 @@ internal sealed class VideoEditorWindow : Window
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Exact seek before frame edit failed");
-            _statusLabel.Text = UiText.Get("Text_B0B5252B194F") + ex.Message;
+            _statusLabel.Text = UiText.Get("Text_B0B5252B194F") + MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
             _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
             return;
         }
@@ -1715,7 +1725,7 @@ internal sealed class VideoEditorWindow : Window
         catch (Exception ex)
         {
             _log.LogError(ex, "Creating a non-destructive frame layer failed");
-            _statusLabel.Text = UiText.Get("Text_E3B50B06C736") + ex.Message;
+            _statusLabel.Text = UiText.Get("Text_E3B50B06C736") + MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
             _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         }
     }
@@ -1841,7 +1851,7 @@ internal sealed class VideoEditorWindow : Window
         {
             DeletePrivateRenderStage(outputPath);
             _log.LogError(ex, "Video re-render failed");
-            _statusLabel.Text = UiText.Get("Text_2DC82774E99B") + ex.Message;
+            _statusLabel.Text = UiText.Get("Text_2DC82774E99B") + MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
             _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         }
         finally

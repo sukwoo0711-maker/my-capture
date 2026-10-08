@@ -264,7 +264,9 @@ internal sealed class AnnotationRenderer
             MaxTextHeight = Math.Max(1, box.Height),
         };
 
-        var origin = new Point(box.Left, box.Top);
+        var origin = text.IsStepNumber
+            ? new Point(box.Left + Math.Max(0, (box.Width - formatted.Width) / 2), box.Top + Math.Max(0, (box.Height - formatted.Height) / 2))
+            : new Point(box.Left, box.Top);
         if (text.HasOutline)
         {
             Geometry geometry = formatted.BuildGeometry(origin);

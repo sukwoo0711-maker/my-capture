@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
@@ -32,7 +32,7 @@ namespace MyCapture.App.Editing;
 /// <para>
 /// Layout follows the warm-yellow/charcoal desktop UX direction: a calm top command bar
 /// (document context and Undo/Redo on the left, a save overflow menu plus Cancel/Copy/Done
-/// on the right), a fixed 52px left rail of vector-icon buttons, a central image-only
+/// on the right), a fixed 72px left rail of vector-icon buttons, a central image-only
 /// viewport, a 232px contextual inspector, and a bottom live-status region. There is no
 /// horizontal toolbar scrolling. Every icon control carries a label, tooltip, automation
 /// name, and keyboard route, and the status region is an automation live region so screen
@@ -43,7 +43,7 @@ internal sealed class AnnotationEditorControl : Grid
 {
     private EditorTool _preferredTool = EditorTool.Rectangle;
     private bool _preferencesReady;
-    private const double ToolRailWidth = 52;
+    private const double ToolRailWidth = 72;
     private const double InspectorWidth = 232;
 
     // Below this width the inspector collapses before it can squeeze the image workspace.
@@ -184,7 +184,7 @@ internal sealed class AnnotationEditorControl : Grid
             SourceWindowTitle = _showSourceWindowTitle ? _sourceWindowTitle : null,
         };
 
-        Background = Brush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
+        SetResourceReference(BackgroundProperty, "Surface.Base");
         Focusable = true;
         FocusVisualStyle = null;
 
@@ -267,6 +267,7 @@ internal sealed class AnnotationEditorControl : Grid
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
+        if (_activeTextBox is null && Keyboard.FocusedElement is TextBox) return false;
         if (_commitInProgress)
         {
             // The snapshot being persisted must remain immutable until the operation either
@@ -333,6 +334,21 @@ internal sealed class AnnotationEditorControl : Grid
             case Key.Delete:
             case Key.Back:
                 DeleteSelected();
+                return true;
+            case Key.M when modifiers == ModifierKeys.None:
+                SelectTool(EditorTool.Mosaic);
+                return true;
+            case Key.X when modifiers == ModifierKeys.None:
+                SelectTool(EditorTool.Crop);
+                return true;
+            case Key.E when modifiers == ModifierKeys.None:
+                SelectTool(EditorTool.Ellipse);
+                return true;
+            case Key.H when modifiers == ModifierKeys.None:
+                SelectTool(EditorTool.Highlighter);
+                return true;
+            case Key.N when modifiers == ModifierKeys.None:
+                SelectTool(EditorTool.StepNumber);
                 return true;
             case Key.V:
                 SelectTool(EditorTool.Select);
@@ -856,7 +872,7 @@ internal sealed class AnnotationEditorControl : Grid
         (BitmapSource Bitmap, string AssetFileName)? loaded = _imageStore.LoadFromFile(dialog.FileName);
         if (loaded is null)
         {
-            MessageBox.Show(
+            MyCapture.App.Themes.ThemedDialog.Show(
                 UiText.Get("Text_5DD4908475B6"),
                 "MyCapture",
                 MessageBoxButton.OK,
@@ -931,6 +947,7 @@ internal sealed class AnnotationEditorControl : Grid
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(2, 0, 10, 0),
         };
+        document.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         left.Children.Add(document);
         left.Children.Add(Separator());
 
@@ -1004,7 +1021,7 @@ internal sealed class AnnotationEditorControl : Grid
         Grid.SetColumn(right, 1);
         grid.Children.Add(right);
 
-        return new Border
+        return ThemedBorder(new Border
         {
             Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
             BorderBrush = Brush("Border.Subtle", Colors.Gray),
@@ -1012,7 +1029,7 @@ internal sealed class AnnotationEditorControl : Grid
             Padding = new Thickness(12, 8, 12, 8),
             Child = grid,
             SnapsToDevicePixels = true,
-        };
+        }, "Surface.Raised");
     }
 
     private Button BuildSaveOverflowMenu()
@@ -1089,6 +1106,7 @@ internal sealed class AnnotationEditorControl : Grid
         _inspectorColumn = new ColumnDefinition { Width = new GridLength(InspectorWidth) };
         grid.ColumnDefinitions.Add(_inspectorColumn);
 
+        grid.SetResourceReference(Panel.BackgroundProperty, "Surface.Base");
         UIElement toolRail = BuildToolRail();
         Grid.SetColumn(toolRail, 0);
         grid.Children.Add(toolRail);
@@ -1116,15 +1134,18 @@ internal sealed class AnnotationEditorControl : Grid
         AddToolButton(stack, EditorTool.Crop, UiText.Get("Tools_Crop"), "X", UiText.Get("Tools_CropHint"), "Icon.Crop", FallbackCrop);
         stack.Children.Add(RailSeparator());
         AddToolButton(stack, EditorTool.Rectangle, UiText.Get("Text_DC0760235344"), "R", UiText.Get("Text_B659038CC17D"), "Icon.Rectangle", FallbackRectangle);
+        AddToolButton(stack, EditorTool.Ellipse, UiText.Get("Tools.Ellipse"), "E", UiText.Get("Tools.Ellipse"), "Icon.Ellipse", () => new EllipseGeometry(new Rect(3, 3, 14, 14)));
         AddToolButton(stack, EditorTool.Arrow, UiText.Get("Text_2785CE58DF74"), "A", UiText.Get("Text_D53ABD064C5E"), "Icon.Arrow", FallbackArrow);
         AddToolButton(stack, EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), "P", UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen);
+        AddToolButton(stack, EditorTool.Highlighter, UiText.Get("Tools.Highlighter"), "H", UiText.Get("Tools.Highlighter"), "Icon.Highlighter", () => Geometry.Parse("M4,14 L13,3 L17,7 L8,18 Z M2,18 H12"));
         AddToolButton(stack, EditorTool.Text, UiText.Get("Text_258AD4B095A1"), "T", UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText);
+        AddToolButton(stack, EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), "N", UiText.Get("Tools.StepNumber"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13"));
         stack.Children.Add(RailSeparator());
         AddToolButton(stack, EditorTool.Image, UiText.Get("Text_302BAE127938"), "I", UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage);
         stack.Children.Add(RailSeparator());
         AddToolButton(stack, EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), "M", UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic);
 
-        var panel = new Border { Child = stack };
+        var panel = new Border { Child = new ScrollViewer { Name = "AnnotationToolRailScroll", Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled } };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
         return panel;
     }
@@ -1139,13 +1160,13 @@ internal sealed class AnnotationEditorControl : Grid
 
     private Border BuildViewport()
     {
-        _viewport.Background = Brush("Surface.Sunken", Colors.Black);
+        _viewport.SetResourceReference(Panel.BackgroundProperty, "Surface.Sunken");
         _viewport.Children.Add(_surface);
         _overlayCanvas.IsHitTestVisible = true;
         _overlayCanvas.Background = null;
         _viewport.Children.Add(_overlayCanvas);
 
-        return new Border
+        return ThemedBorder(new Border
         {
             Background = Brush("Surface.Sunken", Colors.Black),
             BorderBrush = Brush("Border.Subtle", Colors.DimGray),
@@ -1154,7 +1175,7 @@ internal sealed class AnnotationEditorControl : Grid
             Margin = new Thickness(12),
             ClipToBounds = true,
             Child = _viewport,
-        };
+        }, "Surface.Sunken");
     }
 
     private Border BuildInspector()
@@ -1177,7 +1198,9 @@ internal sealed class AnnotationEditorControl : Grid
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 6, 0, 0),
         };
+        _inspectorTitle.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         stack.Children.Add(_inspectorTitle);
+        _inspectorInstruction.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         stack.Children.Add(_inspectorInstruction);
 
         _colorSection = BuildColorSection();
@@ -1196,7 +1219,7 @@ internal sealed class AnnotationEditorControl : Grid
         _deleteButton.Margin = new Thickness(0, 16, 0, 0);
         stack.Children.Add(_deleteButton);
 
-        return new Border
+        return ThemedBorder(new Border
         {
             Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
             BorderBrush = Brush("Border.Subtle", Colors.Gray),
@@ -1210,7 +1233,7 @@ internal sealed class AnnotationEditorControl : Grid
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             },
             SnapsToDevicePixels = true,
-        };
+        }, "Surface.Raised");
     }
 
     private FrameworkElement BuildColorSection()
@@ -1260,6 +1283,22 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         panel.Children.Add(_swatchPanel);
+        var custom = new TextBox { Text = _controller.StrokeColor.ToHex(), MinHeight = 32, Margin = new Thickness(0, 4, 0, 4) };
+        AutomationName(custom, UiText.Get("Tools.CustomColor"));
+        panel.Children.Add(custom);
+        var apply = new Button { Content = UiText.Get("Tools.CustomColor"), MinHeight = 36 };
+        AutomationName(apply, UiText.Get("Tools.CustomColor"));
+        apply.Click += (_, _) =>
+        {
+            if (ColorRgba.TryParse(custom.Text, out ColorRgba color))
+            {
+                _controller.ApplyStrokeColor(color);
+                RememberPreferences();
+                SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
+            }
+            else SetStatus(UiText.Get("Tools.InvalidColor"));
+        };
+        panel.Children.Add(apply);
         return panel;
     }
 
@@ -1418,6 +1457,7 @@ internal sealed class AnnotationEditorControl : Grid
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _statusText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetLiveSetting(_statusText, AutomationLiveSetting.Polite);
         AutomationName(_statusText, UiText.Get("Text_4D6051F71010"));
         Grid.SetColumn(_statusText, 0);
@@ -1433,10 +1473,11 @@ internal sealed class AnnotationEditorControl : Grid
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(16, 0, 0, 0),
         };
+        dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         Grid.SetColumn(dimensions, 1);
         grid.Children.Add(dimensions);
 
-        return new Border
+        return ThemedBorder(new Border
         {
             Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
             BorderBrush = Brush("Border.Subtle", Colors.Gray),
@@ -1444,7 +1485,7 @@ internal sealed class AnnotationEditorControl : Grid
             Padding = new Thickness(12, 6, 12, 7),
             Child = grid,
             SnapsToDevicePixels = true,
-        };
+        }, "Surface.Raised");
     }
 
     // ---- Tool rail / command helpers -----------------------------------------------
@@ -1539,14 +1580,16 @@ internal sealed class AnnotationEditorControl : Grid
         Background = Brush("Border.Subtle", Colors.Gray),
     };
 
-    private static TextBlock SectionLabel(string text) => new()
+    private static TextBlock SectionLabel(string text)
     {
-        Text = text,
-        FontSize = 12,
-        FontWeight = FontWeights.SemiBold,
-        Foreground = Application.Current?.TryFindResource("Text.Muted") as Brush ?? Brushes.Gray,
-        Margin = new Thickness(0, 0, 0, 4),
-    };
+        var label = new TextBlock
+        {
+            Text = text, FontSize = 12, FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        return label;
+    }
 
     /// <summary>
     /// Renders every shared glyph on its authored 20x20 grid. A fixed canvas prevents WPF's
@@ -1824,7 +1867,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         bool colorApplies = ColorApplies(selected, _controller.Tool);
         bool thicknessApplies = ThicknessApplies(selected, _controller.Tool);
-        bool shapeApplies = selected is ShapeAnnotation || (selected is null && _controller.Tool == EditorTool.Rectangle);
+        bool shapeApplies = selected is ShapeAnnotation || (selected is null && _controller.Tool is EditorTool.Rectangle or EditorTool.Ellipse);
         bool fontSizeApplies = selected is TextAnnotation || (selected is null && _controller.Tool == EditorTool.Text);
 
         _colorSection.Visibility = colorApplies ? Visibility.Visible : Visibility.Collapsed;
@@ -1838,7 +1881,7 @@ internal sealed class AnnotationEditorControl : Grid
             if (thicknessApplies)
             {
                 AnnotationStrokeStyle style = (selected as ShapeAnnotation)?.StrokeStyle ?? _controller.StrokeStyle;
-                _thicknessSlider.Minimum = (selected is ShapeAnnotation || (selected is null && _controller.Tool == EditorTool.Rectangle))
+                _thicknessSlider.Minimum = (selected is ShapeAnnotation || (selected is null && _controller.Tool is EditorTool.Rectangle or EditorTool.Ellipse))
                     && style == AnnotationStrokeStyle.ThickDashed ? 6 : 1;
                 SyncThicknessFromSelection(selected);
             }
@@ -1890,7 +1933,7 @@ internal sealed class AnnotationEditorControl : Grid
             return selected is ShapeAnnotation or PolylineAnnotation or PenAnnotation or TextAnnotation;
         }
 
-        return tool is EditorTool.Rectangle or EditorTool.Arrow or EditorTool.Pen or EditorTool.Text;
+        return tool is EditorTool.Rectangle or EditorTool.Ellipse or EditorTool.Arrow or EditorTool.Pen or EditorTool.Highlighter or EditorTool.StepNumber or EditorTool.Text;
     }
 
     private static bool ThicknessApplies(AnnotationItem? selected, EditorTool tool)
@@ -1900,11 +1943,14 @@ internal sealed class AnnotationEditorControl : Grid
             return selected is ShapeAnnotation or PolylineAnnotation or PenAnnotation;
         }
 
-        return tool is EditorTool.Rectangle or EditorTool.Arrow or EditorTool.Pen;
+        return tool is EditorTool.Rectangle or EditorTool.Ellipse or EditorTool.Arrow or EditorTool.Pen or EditorTool.Highlighter;
     }
 
     private static string ToolName(EditorTool tool) => tool switch
     {
+        EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
+        EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
+        EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
         EditorTool.Select => UiText.Get("Text_33406FC582BE"),
         EditorTool.Rectangle => UiText.Get("Text_4A48782E904C"),
         EditorTool.Arrow => UiText.Get("Text_D5A82B3B1F83"),
@@ -1916,6 +1962,9 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static string ToolInstruction(EditorTool tool) => tool switch
     {
+        EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
+        EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
+        EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
         EditorTool.Select => UiText.Get("Text_563638D54DBC"),
         EditorTool.Rectangle => UiText.Get("Text_205E8D74A1C2"),
         EditorTool.Arrow => UiText.Get("Text_2AE708D62044"),
@@ -1927,6 +1976,9 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static string ToolStatus(EditorTool tool) => tool switch
     {
+        EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
+        EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
+        EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
         EditorTool.Select => UiText.Get("Text_FEFD9D67E873"),
         EditorTool.Rectangle => UiText.Get("Text_93103CC109A3"),
         EditorTool.Arrow => UiText.Get("Text_190A3BE20786"),
@@ -2155,6 +2207,13 @@ internal sealed class AnnotationEditorControl : Grid
     }
 
     // ---- Resource helpers ----------------------------------------------------------
+
+    private static Border ThemedBorder(Border border, string background)
+    {
+        border.SetResourceReference(Border.BackgroundProperty, background);
+        border.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        return border;
+    }
 
     private static Brush Brush(string key, Color fallback) =>
         Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);

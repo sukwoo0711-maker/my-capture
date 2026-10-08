@@ -113,7 +113,7 @@ public sealed class EnglishLayoutTests
             var connector = Assert.Single(Descendants(layout).OfType<TimelineRenderSurface>(), surface => !surface.IsHitTestVisible);
             Assert.True(connector.ActualHeight >= 18, "Connector hint must reserve a complete text line");
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
-            foreach (string caption in new[] { "Text", "Rectangle", "Circle", "Image", "Save edits", "Export · MP4 / GIF" })
+            foreach (string caption in new[] { "Add layer", UiText.Get("Workspace.EditProperties"), "Save edits", "Export · MP4 / GIF" })
             {
                 Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);
@@ -125,6 +125,9 @@ public sealed class EnglishLayoutTests
                 foreach (TextBlock text in Descendants(button).OfType<TextBlock>())
                     Assert.True(text.ActualWidth + text.Margin.Left + text.Margin.Right + 0.5 >= text.DesiredSize.Width, $"Clipped {caption}");
             }
+            Button addLayer = Assert.Single(buttons, b => Equals(b.Content, "Add layer"));
+            Assert.Equal(new[] { "Text", "Rectangle", "Circle", "Image" },
+                addLayer.ContextMenu.Items.OfType<MenuItem>().Select(item => (string)item.Header));
             foreach (string key in new[]
             {
                 "Text_AEB8B9AA4E6F", "Text_9163C86EDB22", // selected layer edit/delete

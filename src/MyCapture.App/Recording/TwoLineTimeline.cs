@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -90,7 +90,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _surfaceScrim = ResolveBrush("Surface.Scrim", Color.FromArgb(0xC2, 0x08, 0x0C, 0x12));
         _textPrimary = ResolveBrush("Text.Primary", Colors.White);
         _textSecondary = ResolveBrush("Text.Secondary", Colors.LightGray);
-        _textMuted = ResolveBrush("Text.Muted", Colors.Gray);
+        _textMuted = ResolveBrush("Text.Secondary", Colors.Gray);
         _borderSubtle = ResolveBrush("Border.Subtle", Colors.DimGray);
         _accent = ResolveBrush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF));
         _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromRgb(0x15, 0x2F, 0x3E));
@@ -1091,13 +1091,17 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         return panel;
     }
 
-    private TextBlock BuildCaption() => new()
+    private TextBlock BuildCaption()
     {
-        Foreground = _textPrimary,
-        FontSize = 13,
-        FontWeight = FontWeights.SemiBold,
-        Margin = new Thickness(2, 0, 0, 5),
-    };
+        var caption = new TextBlock
+        {
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(2, 0, 0, 5),
+        };
+        caption.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        return caption;
+    }
 
     private static string FormatMs(double ms)
     {

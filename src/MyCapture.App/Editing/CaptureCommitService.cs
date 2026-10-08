@@ -389,7 +389,7 @@ internal sealed class CaptureCommitService
             }
 
             e.Cancel = true;
-            _ = System.Windows.MessageBox.Show(
+            _ = MyCapture.App.Themes.ThemedDialog.Show(
                 UiText.Get("Text_932DB1A4ED7F"),
                 UiText.Get("Text_57950AFF46BC"),
                 System.Windows.MessageBoxButton.OK,

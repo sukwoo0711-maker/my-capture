@@ -445,12 +445,15 @@ internal sealed class PinManager
         string detail = string.IsNullOrWhiteSpace(result.ErrorMessage)
             ? UiText.Get("Text_B651C2B6BDA9")
             : result.ErrorMessage;
-        _ = MessageBox.Show(
+        _ = MyCapture.App.Themes.ThemedDialog.Show(
             pin,
-            UiText.Format("Text_A862C01DBF76", detail),
+            UiText.Get("Dialog.Storage"),
             UiText.Get("Text_A97A3B71F038"),
             MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+            MessageBoxImage.Warning,
+            details: detail,
+            recovery: () => LastSaveOperationForTest = SavePinAsync(pin, new PinSaveRequestedEventArgs(PinSaveMode.SaveAs, e.Image, e.SourcePageUrl)),
+            recoveryLabel: UiText.Get("Dialog.ChooseLocation"));
         return result;
     }
 

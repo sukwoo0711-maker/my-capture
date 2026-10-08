@@ -19,6 +19,8 @@ public enum GlobalHotkeyCommand
     CaptureFullScreen,
     RecordRegion,
     UploadGitHubImage,
+    ScrollingCapture,
+    DelayedCapture,
 }
 
 /// <summary>
@@ -123,6 +125,17 @@ public sealed class GlobalHotkeyService : IDisposable
     public IReadOnlyList<HotkeyRegistrationFailure> Failures => _failures;
 
     public IReadOnlyCollection<GlobalHotkeyCommand> RegisteredCommands => _idsByCommand.Keys;
+
+    public Hotkey? GetAssigned(GlobalHotkeyCommand command) => _assignedByCommand.GetValueOrDefault(command);
+
+    public bool CanRegister(Hotkey hotkey)
+    {
+        if (!hotkey.IsAssigned || _assignedByCommand.Values.Contains(hotkey)) return true;
+        const int probeId = FirstHotkeyId + 127;
+        if (!_registrar.TryRegister(probeId, hotkey, out _, out _)) return false;
+        _registrar.Unregister(probeId);
+        return true;
+    }
 
     public void Initialize(HotkeySettings settings)
     {
@@ -270,6 +283,8 @@ public sealed class GlobalHotkeyService : IDisposable
         yield return (GlobalHotkeyCommand.CaptureFullScreen, settings.CaptureFullScreen);
         yield return (GlobalHotkeyCommand.RecordRegion, settings.RecordRegion);
         yield return (GlobalHotkeyCommand.UploadGitHubImage, settings.UploadGitHubImage);
+        yield return (GlobalHotkeyCommand.ScrollingCapture, settings.ScrollingCapture);
+        yield return (GlobalHotkeyCommand.DelayedCapture, settings.DelayedCapture);
     }
 
     private static int IdFor(GlobalHotkeyCommand command) => FirstHotkeyId + (int)command;

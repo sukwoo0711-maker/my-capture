@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.Core.Capture;
@@ -97,7 +97,7 @@ internal sealed class AdvancedCaptureService
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log.LogError(ex, "Full-screen capture failed");
-            return CaptureOutcome.Failed(ex.Message);
+            return CaptureOutcome.Failed(MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
         }
     }
 
@@ -130,7 +130,7 @@ internal sealed class AdvancedCaptureService
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log.LogError(ex, "Window capture failed");
-            return CaptureOutcome.Failed(ex.Message);
+            return CaptureOutcome.Failed(MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
         }
     }
 
@@ -169,7 +169,7 @@ internal sealed class AdvancedCaptureService
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log.LogError(ex, "Fixed-size capture failed");
-            return CaptureOutcome.Failed(ex.Message);
+            return CaptureOutcome.Failed(MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
         }
     }
 
@@ -208,7 +208,7 @@ internal sealed class AdvancedCaptureService
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log.LogError(ex, "Repeat-last-region failed");
-            return CaptureOutcome.Failed(ex.Message);
+            return CaptureOutcome.Failed(MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
         }
     }
 
@@ -361,7 +361,7 @@ internal sealed class AdvancedCaptureService
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log.LogError(ex, "Scrolling capture failed");
-            return CaptureOutcome.Failed(ex.Message);
+            return CaptureOutcome.Failed(MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
         }
     }
 

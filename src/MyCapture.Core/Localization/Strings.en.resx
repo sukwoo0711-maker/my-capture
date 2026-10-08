@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -29,7 +29,7 @@
     <comment>Language selection</comment>
   </data>
   <data name="Text_00480581AAB5" xml:space="preserve">
-    <value>Settings (&amp;O)</value>
+    <value>Settings </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_009548FC2109" xml:space="preserve">
@@ -482,7 +482,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_2C20ADDA2018" xml:space="preserve">
-    <value>Region capture (&amp;R)	Ctrl+Shift+C</value>
+    <value>Region capture </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_2C4E0E8262AF" xml:space="preserve">
@@ -654,7 +654,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_38FF9B0AA541" xml:space="preserve">
-    <value>Delayed capture (&amp;D)</value>
+    <value>Delayed capture </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_39B10B03FD99" xml:space="preserve">
@@ -714,7 +714,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_41216A109463" xml:space="preserve">
-    <value>Click-through on · Press Shift+F3 twice to turn off</value>
+    <value>Click-through on · Restore: {0}</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_41F81C272691" xml:space="preserve">
@@ -858,7 +858,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_4DBA30197C0A" xml:space="preserve">
-    <value>Scrolling capture (&amp;S)</value>
+    <value>Scrolling capture </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_4DCACB688866" xml:space="preserve">
@@ -1160,7 +1160,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
   </data>
   <data name="Text_65BB6610ACA0" xml:space="preserve">
-    <value>Full-screen capture (&amp;F)</value>
+    <value>Full-screen capture </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_66069CEAD9AE" xml:space="preserve">
@@ -1168,7 +1168,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_669D90D96A45" xml:space="preserve">
-    <value>Examples: Ctrl+Shift+C, F3, Shift+F3. Leave blank to leave a command unassigned. The capture shortcut cannot be blank.</value>
+    <value>Select a shortcut, then press the key combination. Esc cancels recording. The capture shortcut cannot be empty.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_66BA5DCDA810" xml:space="preserve">
@@ -1342,7 +1342,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_72B6DBA8AAC5" xml:space="preserve">
-    <value>Exit (&amp;X)</value>
+    <value>Exit </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_733011719B1C" xml:space="preserve">
@@ -1378,7 +1378,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_756622E6954E" xml:space="preserve">
-    <value>Ctrl+Shift+C captures your dragged region without snapping to windows. Release the mouse to open the editor.</value>
+    <value>{0} captures the dragged region without snapping to windows. Release the mouse to open the editor.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_764879D98E25" xml:space="preserve">
@@ -1530,7 +1530,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_8739F6684453" xml:space="preserve">
-    <value>Library (&amp;G)	Ctrl+Shift+Z</value>
+    <value>Library </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_875917AFD6EF" xml:space="preserve">
@@ -1546,7 +1546,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_878A28AF568C" xml:space="preserve">
-    <value>Repeat last region (&amp;L)</value>
+    <value>Repeat last region </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_87B0ACEF85A7" xml:space="preserve">
@@ -2170,7 +2170,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_BE3D621D8A32" xml:space="preserve">
-    <value>Pass mouse input to the window underneath. Press Shift+F3 twice to turn this off.</value>
+    <value>Pass mouse input to the window below. Restore: {0}</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_BE4215610EBC" xml:space="preserve">
@@ -2614,7 +2614,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_E22E2C953A8B" xml:space="preserve">
-    <value>A pinned screen image. Ctrl+C copies the image; Ctrl+double-click copies text. Use the context menu or Ctrl+S to save the original PNG, or Ctrl+Shift+S to choose a destination. Drag to move, scroll to zoom, Ctrl+scroll to adjust opacity, and Esc or Delete to close. To disable click-through, press Shift+F3 twice.</value>
+    <value>A pinned screen image. Ctrl+C copies the image; Ctrl+double-click copies text. Use the context menu or Ctrl+S to save the original PNG, or Ctrl+Shift+S to choose a destination. Drag to move, scroll to zoom, Ctrl+scroll to adjust opacity, and Esc or Delete to close. Restore click-through: {0}</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_E2395EBF6C65" xml:space="preserve">
@@ -2702,7 +2702,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_E8B876F98CD8" xml:space="preserve">
-    <value>Cancel scrolling capture (&amp;S)</value>
+    <value>Cancel scrolling capture </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_E8DF95164C87" xml:space="preserve">
@@ -2714,7 +2714,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_EA1FBABE64F3" xml:space="preserve">
-    <value>Window capture (&amp;W)</value>
+    <value>Window capture </value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_EA33C8FF45A0" xml:space="preserve">
@@ -3059,14 +3059,14 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="GitHub.Failed" xml:space="preserve"><value>Could not obtain the image URL. Sign in to GitHub and show the configured issue's comment or description field, then copy an image and press F9. Keep that tab and clipboard unchanged during upload.</value></data>
   <data name="GitHub.InvalidUrl" xml:space="preserve"><value>Settings need a valid GitHub issue URL.</value></data>
   <data name="GitHub.Busy" xml:space="preserve"><value>A GitHub upload is already running.</value></data>
-  <data name="Video.MarkIn" xml:space="preserve"><value>In</value></data>
-  <data name="Video.MarkOut" xml:space="preserve"><value>Out</value></data>
+  <data name="Video.MarkIn" xml:space="preserve"><value>Start</value></data>
+  <data name="Video.MarkOut" xml:space="preserve"><value>End</value></data>
   <data name="Video.Layers" xml:space="preserve"><value>Layers</value></data>
   <data name="Video.EditTextHint" xml:space="preserve"><value>Double-click text on the preview to edit it.</value></data>
   <data name="Capture.DisplayChanged" xml:space="preserve"><value>The monitor configuration changed. Please start region selection again.</value></data>
   <data name="Video.Trim" xml:space="preserve"><value>Trim</value></data>
-  <data name="Video.TrimIn" xml:space="preserve"><value>In</value></data>
-  <data name="Video.TrimOut" xml:space="preserve"><value>Out</value></data>
+  <data name="Video.TrimIn" xml:space="preserve"><value>Start</value></data>
+  <data name="Video.TrimOut" xml:space="preserve"><value>End</value></data>
   <data name="Video.PreviewFit" xml:space="preserve"><value>Fit preview</value></data>
   <data name="Video.SourceTimeHint" xml:space="preserve"><value>Time in the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Export includes In up to, but excluding, Out.</value></data>
   <data name="Video.TrimInputInvalid" xml:space="preserve"><value>The range was not changed. Enter In and Out within the source, with In at least 0.1 seconds before Out.</value></data>
@@ -3155,4 +3155,60 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Library.SourcePage.OpenFailed" xml:space="preserve"><value>Could not open the webpage.</value></data>
   <data name="Library.SourcePage.CopyFailed" xml:space="preserve"><value>Could not copy the webpage URL. Please try again.</value></data>
   <data name="Capture.WebpageTag" xml:space="preserve"><value>Webpage</value></data>
+  <data name="QuickAccess.Copied" xml:space="preserve"><value>Copied</value></data>
+  <data name="QuickAccess.Copy" xml:space="preserve"><value>Copy</value></data>
+  <data name="QuickAccess.Drag" xml:space="preserve"><value>Drag into another app</value></data>
+  <data name="QuickAccess.Edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="QuickAccess.Enabled" xml:space="preserve"><value>Show quick access after capture</value></data>
+  <data name="QuickAccess.Failed" xml:space="preserve"><value>The action could not be completed. Try again.</value></data>
+  <data name="QuickAccess.Keep" xml:space="preserve"><value>Keep open</value></data>
+  <data name="QuickAccess.Library" xml:space="preserve"><value>Open in library</value></data>
+  <data name="QuickAccess.Pin" xml:space="preserve"><value>Pin</value></data>
+  <data name="QuickAccess.Pinned" xml:space="preserve"><value>Pinned</value></data>
+  <data name="QuickAccess.Ready" xml:space="preserve"><value>Saved to library</value></data>
+  <data name="QuickAccess.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="QuickAccess.Saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="QuickAccess.Sound" xml:space="preserve"><value>Play capture sound</value></data>
+  <data name="QuickAccess.Title" xml:space="preserve"><value>Capture quick access</value></data>
+  <data name="Hotkey.Clear" xml:space="preserve"><value>Clear</value></data>
+  <data name="Hotkey.Delay" xml:space="preserve"><value>Delayed capture</value></data>
+  <data name="Hotkey.Record" xml:space="preserve"><value>Record shortcut</value></data>
+  <data name="Hotkey.Reset" xml:space="preserve"><value>Default</value></data>
+  <data name="Hotkey.Scroll" xml:space="preserve"><value>Scrolling capture</value></data>
+  <data name="Hotkey.Unassigned" xml:space="preserve"><value>Unassigned</value></data>
+  <data name="Hotkey.Unavailable" xml:space="preserve"><value>This shortcut is in use by another app or Windows. Choose another key.</value></data>
+  <data name="Hotkey.Waiting" xml:space="preserve"><value>Press a shortcut · Esc to cancel</value></data>
+  <data name="Tools.CustomColor" xml:space="preserve"><value>Apply custom color</value></data>
+  <data name="Tools.Ellipse" xml:space="preserve"><value>Ellipse</value></data>
+  <data name="Tools.Highlighter" xml:space="preserve"><value>Highlighter</value></data>
+  <data name="Tools.InvalidColor" xml:space="preserve"><value>Enter a color as #RRGGBB or #AARRGGBB.</value></data>
+  <data name="Tools.StepNumber" xml:space="preserve"><value>Step number</value></data>
+  <data name="Dialog.Access" xml:space="preserve"><value>The selected file or folder cannot be accessed. Check permissions or choose another location.</value></data>
+  <data name="Dialog.AppFailure" xml:space="preserve"><value>Unable to complete the action</value></data>
+  <data name="Dialog.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Dialog.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Dialog.Details" xml:space="preserve"><value>Details</value></data>
+  <data name="Dialog.No" xml:space="preserve"><value>No</value></data>
+  <data name="Dialog.OK" xml:space="preserve"><value>OK</value></data>
+  <data name="Dialog.Return" xml:space="preserve"><value>Go back</value></data>
+  <data name="Dialog.Storage" xml:space="preserve"><value>The file could not be read or saved. Check the location and available space, then try again.</value></data>
+  <data name="Dialog.Unexpected" xml:space="preserve"><value>The requested action could not be completed. Return to the workspace and try again.</value></data>
+  <data name="Dialog.Unsupported" xml:space="preserve"><value>This format is not supported. Choose another file or format.</value></data>
+  <data name="Dialog.Yes" xml:space="preserve"><value>Yes</value></data>
+  <data name="Dialog.ChooseLocation" xml:space="preserve"><value>Choose another location</value></data>
+  <data name="Help.Annotation" xml:space="preserve"><value>Annotation editor</value></data>
+  <data name="Help.Capture" xml:space="preserve"><value>Capture</value></data>
+  <data name="Help.Frame" xml:space="preserve"><value>Previous / next frame</value></data>
+  <data name="Help.Next" xml:space="preserve"><value>Next</value></data>
+  <data name="Help.Play" xml:space="preserve"><value>Play / pause</value></data>
+  <data name="Help.Search" xml:space="preserve"><value>Search shortcuts</value></data>
+  <data name="Help.Settings" xml:space="preserve"><value>Change shortcuts</value></data>
+  <data name="Help.Start" xml:space="preserve"><value>Start</value></data>
+  <data name="Help.Title" xml:space="preserve"><value>Keyboard shortcuts</value></data>
+  <data name="Help.Video" xml:space="preserve"><value>Video editor</value></data>
+  <data name="Help.Welcome" xml:space="preserve"><value>Welcome to MyCapture</value></data>
+  <data name="Video.AddLayer" xml:space="preserve"><value>Add layer</value></data>
+  <data name="Help.Gif" xml:space="preserve"><value>Export GIF</value></data>
+  <data name="Hotkey.Twice" xml:space="preserve"><value>{0} twice</value></data>
+  <data name="Hotkey.TrayRestore" xml:space="preserve"><value>Hide all pins from the tray, then show them again</value></data>
 </root>

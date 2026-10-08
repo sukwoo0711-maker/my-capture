@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -41,6 +41,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _launchAtLogin;
     private bool _notifyOnQuickSave;
     private bool _playCaptureSound;
+    private bool _showQuickAccess;
 
     // ----- Capture -----
     private bool _includeCursor;
@@ -60,6 +61,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _recordingPresetWidth = "0";
     private string _recordingPresetHeight = "0";
 
+    private string _scrollingCaptureHotkey = string.Empty;
+    private string _delayedCaptureHotkey = string.Empty;
     // ----- Hotkeys -----
     private string _captureHotkey = string.Empty;
     private string _openLibraryHotkey = string.Empty;
@@ -137,6 +140,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     public bool LaunchAtLogin { get => _launchAtLogin; set => Set(ref _launchAtLogin, value); }
     public bool NotifyOnQuickSave { get => _notifyOnQuickSave; set => Set(ref _notifyOnQuickSave, value); }
     public bool PlayCaptureSound { get => _playCaptureSound; set => Set(ref _playCaptureSound, value); }
+    public bool ShowQuickAccess { get => _showQuickAccess; set => Set(ref _showQuickAccess, value); }
 
     // ================= Capture =================
 
@@ -212,6 +216,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _recordingPresetHeight, value)) ValidateInt(value, SettingsRanges.ThumbnailLongEdge); }
     }
 
+    public string ScrollingCaptureHotkey { get => _scrollingCaptureHotkey; set { if (Set(ref _scrollingCaptureHotkey, value)) ValidateAllHotkeys(); } }
+    public string DelayedCaptureHotkey { get => _delayedCaptureHotkey; set { if (Set(ref _delayedCaptureHotkey, value)) ValidateAllHotkeys(); } }
     // ================= Hotkeys =================
 
     public string CaptureHotkey
@@ -435,6 +441,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _launchAtLogin = s.General.LaunchAtLogin;
         _notifyOnQuickSave = s.General.NotifyOnQuickSave;
         _playCaptureSound = s.General.PlayCaptureSound;
+        _showQuickAccess = s.General.ShowQuickAccess;
 
         _includeCursor = s.Capture.IncludeCursor;
         _autoDetectWindows = s.Capture.AutoDetectWindows;
@@ -461,6 +468,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _captureWindowHotkey = s.Hotkeys.CaptureWindow.ToString();
         _captureFullScreenHotkey = s.Hotkeys.CaptureFullScreen.ToString();
         _recordRegionHotkey = s.Hotkeys.RecordRegion.ToString();
+        _scrollingCaptureHotkey = s.Hotkeys.ScrollingCapture.ToString();
+        _delayedCaptureHotkey = s.Hotkeys.DelayedCapture.ToString();
         _uploadGitHubImageHotkey = s.Hotkeys.UploadGitHubImage.ToString();
 
         _maxItems = Int(s.Queue.MaxItems);
@@ -544,6 +553,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 LaunchAtLogin = _launchAtLogin,
                 NotifyOnQuickSave = _notifyOnQuickSave,
                 PlayCaptureSound = _playCaptureSound,
+                ShowQuickAccess = _showQuickAccess,
                 Language = _language,
                 Theme = AppThemeNames.ToSetting(AppThemeNames.Parse(_theme)),
                 ThemeRevision = 1,
@@ -583,6 +593,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 CaptureWindow = ParseHotkey(_captureWindowHotkey),
                 CaptureFullScreen = ParseHotkey(_captureFullScreenHotkey),
                 RecordRegion = ParseHotkey(_recordRegionHotkey),
+                ScrollingCapture = ParseHotkey(_scrollingCaptureHotkey),
+                DelayedCapture = ParseHotkey(_delayedCaptureHotkey),
                 UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
             },
             Queue =
@@ -660,6 +672,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         CaptureWindow = ParseHotkey(_captureWindowHotkey),
         CaptureFullScreen = ParseHotkey(_captureFullScreenHotkey),
         RecordRegion = ParseHotkey(_recordRegionHotkey),
+        ScrollingCapture = ParseHotkey(_scrollingCaptureHotkey),
+        DelayedCapture = ParseHotkey(_delayedCaptureHotkey),
         UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
         OpenLibrary = ParseHotkey(_openLibraryHotkey),
     };
@@ -895,6 +909,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             (nameof(CaptureWindowHotkey), _captureWindowHotkey),
             (nameof(CaptureFullScreenHotkey), _captureFullScreenHotkey),
             (nameof(RecordRegionHotkey), _recordRegionHotkey),
+            (nameof(ScrollingCaptureHotkey), _scrollingCaptureHotkey),
+            (nameof(DelayedCaptureHotkey), _delayedCaptureHotkey),
             (nameof(UploadGitHubImageHotkey), _uploadGitHubImageHotkey),
         ];
 
@@ -920,8 +936,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 continue;
             }
 
-            if (seen.ContainsKey(hotkey))
+            if (seen.TryGetValue(hotkey, out string? firstProperty))
             {
+                SetError(firstProperty, UiText.Format("Text_AD823133F009", hotkey));
                 SetError(property, UiText.Format("Text_AD823133F009", hotkey));
             }
             else

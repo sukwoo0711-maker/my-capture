@@ -378,7 +378,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();
     }
 
-    private bool ActivateCurrent()
+    internal bool ActivateCurrent()
     {
         Window? active = _activeEditor ?? (Window?)_activeOverlay;
         if (active is null)

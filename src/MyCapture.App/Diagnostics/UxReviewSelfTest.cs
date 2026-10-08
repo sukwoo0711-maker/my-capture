@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -15,6 +15,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Editing;
+using MyCapture.App.Capture;
 using MyCapture.App.Gallery;
 using MyCapture.App.Ocr;
 using MyCapture.App.Pinning;
@@ -84,6 +85,7 @@ internal static class UxReviewSelfTest
         bool mixed = monitors.Count > 1 && monitors.Select(monitor => monitor.Dpi).Distinct().Count() > 1;
         report.AppendLine($"Native mixed-DPI topology available: {mixed}");
         report.AppendLine("PNG density 96/144/192 is offscreen raster density, not an OS monitor DPI switch. Native pointer crossing remains a separate interactive check.");
+        report.AppendLine("Transparent DWM backdrops are composited over the current Surface.Base token for offscreen PNGs; desktop wallpaper/acrylic is not included.");
 
         bool? oldMotion = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = false;
@@ -92,6 +94,9 @@ internal static class UxReviewSelfTest
         // Render every palette: the gallery filter rail radios and details text must stay
         // readable in dark themes (midnight / glass / workspace editor) and light themes alike.
         AppTheme? oldTheme = ThemeService.IsAppliedForTest;
+        // Normal startup applies a palette before constructing code-created controls.
+        // Do the same here so initial frozen token brushes are made live before capture.
+        ThemeService.Apply(oldTheme ?? AppTheme.Midnight);
         IReadOnlyList<AppTheme> themesToReview =
         [
             AppTheme.Midnight,
@@ -113,6 +118,7 @@ internal static class UxReviewSelfTest
         var commit = new CaptureCommitService(persistence, () => settings, () => paths, logs.CreateLogger<CaptureCommitService>(), (_, _) => Task.FromResult(true));
         var videoLibrary = new VideoLibraryService(queue, paths, logs.CreateLogger<VideoLibraryService>());
         int failures = 0;
+        int receiptCopies = 0;
         try
         {
             // Fixed wall clock: gallery time captions, retention countdowns, and date-group
@@ -154,8 +160,28 @@ internal static class UxReviewSelfTest
             windows.Add(("settings", new SettingsWindow(() => settings,
                 _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance,
                 settingsStore: null)));
+            var hotkeySettings = new SettingsWindow(() => settings,
+                _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance);
+            hotkeySettings.CategoryTabs.SelectedItem = hotkeySettings.CategoryTabs.Items.OfType<TabItem>()
+                .Single(tab => Equals(tab.Header, UiText.Get("Text_086F41200B47")));
+            windows.Add(("hotkeys", hotkeySettings));
+            windows.Add(("quick-access", new QuickAccessWindow(sample, () => { receiptCopies++; return Task.FromResult(true); }, () => { },
+                () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("fixture.png")) { IsKept = true }));
+            windows.Add(("error", new ThemedDialog(UiText.Get("Dialog.Storage"), UiText.Get("Dialog.AppFailure"),
+                MessageBoxButton.OK, MessageBoxResult.OK, "Synthetic diagnostic details — 0x80070070")));
+            windows.Add(("shortcuts", new ShortcutHelpWindow()));
+            windows.Add(("onboarding", new ShortcutHelpWindow(onboarding: true)));
             var region = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
-            windows.Add(("annotation", new AnnotationEditorWindow(new FrozenFrame(sample, region, null, 0), region, sample)));
+            var annotations = MyCapture.Core.Annotations.AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight);
+            var annotationController = new AnnotationEditorController(annotations, new MyCapture.Core.Undo.UndoStack());
+            annotationController.Tool = EditorTool.Ellipse;
+            annotationController.PointerDown(new PointD(20, 28)); annotationController.PointerMove(new PointD(320, 88)); annotationController.PointerUp(new PointD(320, 88));
+            annotationController.Tool = EditorTool.Highlighter;
+            annotationController.ApplyStrokeColor(ColorRgba.FromRgb(255, 193, 7));
+            annotationController.PointerDown(new PointD(72, 160)); annotationController.PointerMove(new PointD(248, 160)); annotationController.PointerUp(new PointD(248, 160));
+            annotationController.ApplyStrokeColor(ColorRgba.FromRgb(124, 108, 255));
+            annotationController.AddStepNumber(new PointD(370, 200));
+            windows.Add(("annotation", new AnnotationEditorWindow(new FrozenFrame(sample, region, null, 0), region, sample, initialDocument: annotations)));
             windows.Add(("image-export", new ImageReductionExportDialog(sample, Path.Combine(paths.QuickSaveRoot, "review.png"))));
             RecordingResult recording = CreateFixtureVideo(Path.Combine(paths.DataRoot, "synthetic.mp4"), sample);
             var document = VideoEditDocument.CreateFor(recording.Width, recording.Height, recording.DurationMs);
@@ -210,6 +236,19 @@ internal static class UxReviewSelfTest
                     window.ShowActivated = false;
                     window.Show();
                     Pump(TimeSpan.FromMilliseconds(name == "video" ? 1800 : 180));
+                    if (window is QuickAccessWindow receipt)
+                    {
+                        foreach (MonitorInfo monitor in monitors)
+                        {
+                            receipt.PlaceOnMonitor(monitor);
+                            Pump(TimeSpan.FromMilliseconds(50));
+                            var bounds = WindowStyleFacade.GetWindowBounds(new WindowInteropHelper(receipt).Handle);
+                            bool fits = bounds.Left >= monitor.WorkArea.Left && bounds.Top >= monitor.WorkArea.Top
+                                && bounds.Right <= monitor.WorkArea.Right && bounds.Bottom <= monitor.WorkArea.Bottom;
+                            report.AppendLine($"Quick Access native placement {monitor.DeviceName}: fits={fits}; bounds={bounds}");
+                            if (!fits) failures++;
+                        }
+                    }
                     // Per-theme render sweep: the first pass keeps the initial palette; the
                     // remaining palettes are applied live so the same fixture is captured
                     // in every theme without recreating the window.
@@ -269,7 +308,7 @@ internal static class UxReviewSelfTest
                     if (window is VideoEditorWindow video)
                         report.AppendLine($"Video media ready={video.IsMediaReadyForTest}; failed={video.HasMediaFailedForTest}");
                     double normalWidth = window.Width;
-                    double normalHeight = window.Height;
+                    double normalHeight = double.IsNaN(window.Height) ? window.ActualHeight : window.Height;
                     foreach (AppTheme reviewTheme in renderThemes)
                     {
                         ThemeService.Apply(reviewTheme);
@@ -277,8 +316,9 @@ internal static class UxReviewSelfTest
                         string themeLabel = AppThemeNames.ToSetting(reviewTheme);
                         foreach (bool compact in new[] { false, true })
                         {
-                            window.Width = compact ? Math.Max(window.MinWidth, name is "pin-code" or "image-export" ? normalWidth : 780) : normalWidth;
-                            window.Height = compact ? Math.Max(window.MinHeight, name is "pin-code" or "image-export" ? normalHeight : 560) : normalHeight;
+                            bool fixedCard = name is "pin-code" or "image-export" or "quick-access" or "error" or "onboarding";
+                            window.Width = compact ? Math.Max(window.MinWidth, fixedCard ? normalWidth : 780) : normalWidth;
+                            window.Height = compact ? Math.Max(window.MinHeight, fixedCard ? normalHeight : 560) : normalHeight;
                             // Exercise the new dialog at its true minimum, not a wider generic fixture.
                             if (compact && window is GalleryOrganizationDialog)
                             {
@@ -310,6 +350,16 @@ internal static class UxReviewSelfTest
                                 });
                                 report.AppendLine($"Organization [{themeLabel}] compact={compact}; save/cancel fully visible={visibleActions}");
                                 if (!visibleActions) failures++;
+                            }
+                            if (window is VideoEditorWindow)
+                            {
+                                Button properties = Descendants(window).OfType<Button>().Single(button =>
+                                    Equals(button.Content, UiText.Get("Workspace.EditProperties")));
+                                Rect bounds = properties.TransformToAncestor(window).TransformBounds(new Rect(properties.RenderSize));
+                                bool fits = bounds.Top >= 0 && bounds.Bottom <= window.ActualHeight
+                                    && bounds.Left >= 0 && bounds.Right <= window.ActualWidth;
+                                report.AppendLine($"Video properties [{themeLabel}] compact={compact}; fully visible={fits}");
+                                if (!fits) failures++;
                             }
                             string label = name + (compact ? "-compact" : "-normal") + "-" + themeLabel;
                             foreach (int dpi in new[] { 96, 144, 192 })
@@ -376,12 +426,37 @@ internal static class UxReviewSelfTest
                                 if (tabs.ItemContainerGenerator.ContainerFromIndex(index) is TabItem tab) tab.BringIntoView();
                                 window.UpdateLayout();
                                 Pump(TimeSpan.FromMilliseconds(80));
-                                Render(window, Path.Combine(outputDirectory, $"settings-page-{index + 1}-compact-144dpi.png"), 144);
-                                WriteLayoutInventory(window, Path.Combine(outputDirectory, $"settings-page-{index + 1}-layout.json"));
+                                Render(window, Path.Combine(outputDirectory, $"{name}-page-{index + 1}-compact-144dpi.png"), 144);
+                                WriteLayoutInventory(window, Path.Combine(outputDirectory, $"{name}-page-{index + 1}-layout.json"));
                             }
                     }
                     bool focusMoved = window.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
                     report.AppendLine($"Focus {name}: moved={focusMoved}; target={Keyboard.FocusedElement?.GetType().Name ?? "none"}");
+                    if (name == "quick-access")
+                    {
+                        Button copyButton = Descendants(window).OfType<Button>().Single(button => Equals(button.Content, UiText.Get("QuickAccess.Copy")));
+                        window.Activate(); copyButton.Focus();
+                        PressSpace(copyButton, window);
+                        Pump(TimeSpan.FromMilliseconds(60));
+                        report.AppendLine($"Quick Access routed keyboard Space copy: {receiptCopies == 1}; fixture clipboard sink only");
+                        if (receiptCopies != 1) failures++;
+                    }
+                    if (name == "hotkeys")
+                    {
+                        var preferences = (SettingsWindow)window;
+                        preferences.CategoryTabs.SelectedItem = preferences.CategoryTabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Text_086F41200B47")));
+                        window.UpdateLayout();
+                        HotkeyRecorder recorder = Descendants(window).OfType<HotkeyRecorder>().Single(control =>
+                            control.GetBindingExpression(HotkeyRecorder.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.CaptureHotkey));
+                        Button recordButton = Descendants(recorder).OfType<Button>().Single(button => button.Content is WrapPanel);
+                        recordButton.BringIntoView();
+                        Pump(TimeSpan.FromMilliseconds(60));
+                        window.Activate(); recordButton.Focus(); PressSpace(recordButton, window);
+                        recordButton.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), Environment.TickCount, Key.F8) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+                        bool recorded = recorder.Text == "F8";
+                        report.AppendLine($"Hotkey recorder routed keyboard Space then F8: {recorded}; isolated draft only");
+                        if (!recorded) failures++;
+                    }
                     window.Hide();
                 }
                 catch (Exception ex)
@@ -419,6 +494,12 @@ internal static class UxReviewSelfTest
         report.AppendLine(failures == 0 ? "RESULT: PASS (fixture rendering and command checks; manual visual review required)" : $"RESULT: FAIL ({failures})");
         File.WriteAllText(Path.Combine(outputDirectory, "ux-review-selftest-report.txt"), report.ToString(), new UTF8Encoding(false));
         return failures == 0 ? 0 : 1;
+    }
+
+    private static void PressSpace(UIElement target, Window window)
+    {
+        foreach (RoutedEvent routed in new[] { Keyboard.KeyDownEvent, Keyboard.KeyUpEvent })
+            target.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), Environment.TickCount, Key.Space) { RoutedEvent = routed });
     }
 
     /// <summary>
@@ -531,6 +612,11 @@ internal static class UxReviewSelfTest
         double scale = dpi / 96.0;
         var bitmap = new RenderTargetBitmap(Math.Max(1, (int)Math.Ceiling(window.ActualWidth * scale)),
             Math.Max(1, (int)Math.Ceiling(window.ActualHeight * scale)), dpi, dpi, PixelFormats.Pbgra32);
+        var backdrop = new DrawingVisual();
+        using (DrawingContext drawing = backdrop.RenderOpen())
+            drawing.DrawRectangle(window.TryFindResource("Surface.Base") as Brush ?? Brushes.Black, null,
+                new Rect(0, 0, window.ActualWidth, window.ActualHeight));
+        bitmap.Render(backdrop);
         bitmap.Render(window);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));

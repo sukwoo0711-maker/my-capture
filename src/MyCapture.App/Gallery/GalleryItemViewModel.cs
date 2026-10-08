@@ -150,6 +150,10 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     internal Func<DateTimeOffset> Clock { get; set; } = static () => DateTimeOffset.Now;
 
+    public bool IsExpiringSoon => IsImage && !IsPinned && CaptureRetention.Remaining(
+        Record.CreatedAt, CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = RetentionHours() }),
+        Clock()) < TimeSpan.FromHours(24);
+
     /// <summary>TTL countdown matching the configured gallery retention.</summary>
     public string RetentionCaption => CaptureRetention.FormatCountdown(
         Record.CreatedAt,
@@ -207,6 +211,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(ContextLabel));
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));
+        Raise(nameof(IsExpiringSoon));
     }
 
     /// <summary>Notifies the view that pin/meta changed without re-decoding the image.</summary>
@@ -221,6 +226,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));
+        Raise(nameof(IsExpiringSoon));
     }
 
     private void EnsureThumbnail()

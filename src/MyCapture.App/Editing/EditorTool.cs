@@ -35,4 +35,7 @@ internal enum EditorTool
 
     /// <summary>Drag the area to keep; Enter applies the crop as one undoable step.</summary>
     Crop,
+    Ellipse,
+    Highlighter,
+    StepNumber,
 }

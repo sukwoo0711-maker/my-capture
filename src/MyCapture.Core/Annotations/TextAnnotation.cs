@@ -13,6 +13,8 @@ namespace MyCapture.Core.Annotations;
 /// </remarks>
 public sealed class TextAnnotation : AnnotationItem
 {
+    /// <summary>Optional numbered badge; remains a text layer for older readers.</summary>
+    public bool IsStepNumber { get; set; }
     private RectD _rect;
     private string _text = string.Empty;
     private ColorRgba _foreground = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
@@ -145,6 +147,7 @@ public sealed class TextAnnotation : AnnotationItem
     {
         var clone = new TextAnnotation
         {
+            IsStepNumber = IsStepNumber,
             Rect = Rect,
             Text = Text,
             Foreground = Foreground,

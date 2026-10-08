@@ -13,7 +13,7 @@ namespace MyCapture.App;
 internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : IDisposable
 {
     private Window? _toast;
-    private Window? _help;
+
 
     /// <summary>Raised whenever a tray-owned surface (command menu) has just left the screen,
     /// so a capture starting immediately afterwards can wait out the dismissal.</summary>
@@ -22,7 +22,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(5) };
 
     /// <summary>A command or a submenu branch in the tray tree. A null Action marks a branch.</summary>
-    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null);
+    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "");
 
     internal void ShowNotification(string title, string message, TrayBalloonKind kind)
     {
@@ -92,7 +92,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
                 continue;
             }
 
-            var item = new MenuItem { Header = entry.Label, MinHeight = 36 };
+            var item = new MenuItem { Header = entry.Label, MinHeight = 36, InputGestureText = entry.Gesture };
             Action action = entry.Action ?? (() => { });
             item.Click += (_, _) =>
             {
@@ -106,19 +106,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         }
     }
 
-    private void ShowHelp()
-    {
-        if (_help is not null) { _help.Activate(); return; }
-        var text = new TextBlock { Text = UiText.Get("Shell.HelpText"), TextWrapping = TextWrapping.Wrap, LineHeight = 25 };
-        var window = CreateWindow(text, UiText.Get("Shell.Help"));
-        StandardWindowTheme.Apply(window);
-        window.Width = 560;
-        window.Height = 360;
-        window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        window.Closed += (_, _) => _help = null;
-        _help = window;
-        window.Show();
-    }
+    private void ShowHelp() => ShortcutHelpWindow.ShowHelp();
 
     private static Window CreateWindow(UIElement child, string title)
     {
@@ -138,6 +126,6 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         _menu = null;
     }
 
-    internal void DismissForCapture() { Dismiss(); _help?.Close(); }
+    internal void DismissForCapture() { Dismiss();  }
     public void Dispose() { DismissForCapture(); _timer.Tick -= OnTimeout; }
 }

@@ -1,4 +1,5 @@
 using System;
+using MyCapture.Core.Localization;
 using System.IO;
 using System.Threading;
 using System.Windows;
@@ -130,12 +131,17 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
                 Assert.InRange(strip.TranslatePoint(new Point(0, 0), timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
                 Assert.InRange(strip.TranslatePoint(new Point(0, strip.ActualHeight), timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
             }
+            Button addLayer = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, UiText.Get("Video.AddLayer")));
+            Point addBottom = addLayer.TranslatePoint(new Point(0, addLayer.ActualHeight), layout);
+            Assert.True(addLayer.IsVisible && addBottom.Y <= layout.ActualHeight);
+            addLayer.ContextMenu.IsOpen = true;
+            PumpFor(TimeSpan.FromMilliseconds(40));
             foreach (string label in new[] { "사각형", "원", "이미지" })
             {
-                Button add = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, label));
-                Point bottom = add.TranslatePoint(new Point(0, add.ActualHeight), layout);
-                Assert.True(add.IsVisible && bottom.Y <= layout.ActualHeight, $"{label} add tool is hidden in compact editor");
+                MenuItem add = addLayer.ContextMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, label));
+                Assert.True(add.IsVisible && add.IsEnabled, $"{label} add tool is hidden in compact editor");
             }
+            addLayer.ContextMenu.IsOpen = false;
 
             // Pump the dispatcher until ready or failed, bounded. The editor guarantees it
             // resolves within its own open-timeout fallback (~5s) even if MediaOpened is slow.
@@ -148,8 +154,8 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             Assert.False(editor.HasMediaFailedForTest, "editor reported media failure: " + editor.MediaFailureForTest);
             Assert.True(editor.IsMediaReadyForTest, "editor did not become ready for the 2s clip");
             Assert.True(editor.DurationMsForTest > 0, "editor reported a non-positive duration");
-            Button shape = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, "사각형"));
-            shape.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            MenuItem shape = addLayer.ContextMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "사각형"));
+            shape.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             editor.UpdateLayout();
             Assert.InRange(layerTracks.TranslatePoint(layerTracks.SelectedBarBounds.BottomRight, timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
             var canvas = Descendants(layout).OfType<VideoLayerCanvas>().Single();
