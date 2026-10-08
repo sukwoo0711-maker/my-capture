@@ -71,6 +71,13 @@ jobs:
           try { .\build\package.ps1 -Version $env:PACKAGE_VERSION }
           finally { Stop-Transcript | Out-Null }
 
+      - name: Build Microsoft Store package from the same publish folder
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Start-Transcript -Path artifacts/validation/hosted/package-store.log | Out-Null
+          try { .\build\package-store.ps1 -Version $env:PACKAGE_VERSION -LocalTest }
+          finally { Stop-Transcript | Out-Null }
+
       - name: Run all seven packaged self-tests
         run: |
           $ErrorActionPreference = 'Stop'

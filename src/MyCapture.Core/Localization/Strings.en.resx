@@ -3237,4 +3237,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Crop.InvalidSizeLabel" xml:space="preserve"><value>Whole number</value></data>
   <data name="Crop.InvalidSize" xml:space="preserve"><value>Enter a whole number of at least 2 for width and height.</value></data>
   <data name="Capture.LibrarySaveFailedNoEditor" xml:space="preserve"><value>Could not save to the library. Check the library and capture again if needed. {0}</value></data>
+  <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store keeps this copy of MyCapture up to date. Check for new versions in the Library of the Microsoft Store app.</value></data>
+  <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>MyCapture is turned off in the Windows startup apps. Turn it on in Settings &gt; Apps &gt; Startup.</value></data>
+  <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>An organization policy manages this startup setting.</value></data>
 </root>

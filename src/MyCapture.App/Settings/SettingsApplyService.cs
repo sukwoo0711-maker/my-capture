@@ -51,7 +51,7 @@ public sealed class SettingsApplyService
     private readonly Func<AppSettings> _current;
     private readonly CaptureQueue? _queue;
     private readonly GlobalHotkeyService _hotkeys;
-    private readonly StartupRegistrationService _startup;
+    private readonly IStartupRegistration _startup;
     private readonly ILogger _log;
 
     public SettingsApplyService(
@@ -60,7 +60,7 @@ public sealed class SettingsApplyService
         Action<AppSettings> publish,
         CaptureQueue? queue,
         GlobalHotkeyService hotkeys,
-        StartupRegistrationService startup,
+        IStartupRegistration startup,
         ILogger log)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));

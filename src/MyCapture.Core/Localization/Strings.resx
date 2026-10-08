@@ -3237,4 +3237,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Crop.InvalidSizeLabel" xml:space="preserve"><value>정수 입력</value></data>
   <data name="Crop.InvalidSize" xml:space="preserve"><value>너비와 높이에 2 이상의 정수를 입력하십시오.</value></data>
   <data name="Capture.LibrarySaveFailedNoEditor" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 라이브러리를 확인하고 필요하면 다시 캡처하십시오. {0}</value></data>
+  <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store에서 설치한 MyCapture는 Microsoft Store가 업데이트합니다. 새 버전은 Microsoft Store 앱의 라이브러리에서 확인할 수 있습니다.</value></data>
+  <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>Windows 설정에서 MyCapture 시작 앱이 꺼져 있습니다. 설정 &gt; 앱 &gt; 시작 프로그램에서 켜십시오.</value></data>
+  <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>조직 정책이 시작 프로그램 설정을 관리합니다.</value></data>
 </root>
