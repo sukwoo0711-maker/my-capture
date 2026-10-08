@@ -112,6 +112,7 @@ public sealed class Ocr410ExtractionTests
     [InlineData("C#", "public class Sample {\n    public void Run() {\n        Console.WriteLine(1);\n    }\n}")]
     [InlineData("JavaScript", "const value = 1;\nfunction run() {\n    console.log(value);\n}")]
     [InlineData("Python", "def run(value):\n    if value is None:\n        print(True)\n    return value")]
+    [InlineData("Python", "def calculate_total(prices):\n    total = 0\n    for price in prices:\n        total += price\n    return total")]
     [InlineData("SQL", "SELECT name, amount\nFROM orders\nWHERE amount > 10\nORDER BY amount")]
     public void Code_RestoresIndentationAndEstimatesLanguageAndMonospace(string language, string source)
     {

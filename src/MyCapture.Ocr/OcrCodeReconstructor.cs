@@ -66,7 +66,7 @@ internal static class OcrCodeReconstructor
         [
             ("C#", @"\b(namespace|using|public|private|internal|protected|async|Task|Console|IEnumerable)\b|=>"),
             ("JavaScript", @"\b(function|const|let|var|console|document|require|export|import)\b|===|!=="),
-            ("Python", @"\b(def|elif|lambda|self|None|True|False|print|import|from)\b|^\s*#"),
+            ("Python", @"\b(def|elif|lambda|self|None|True|False|print|import|from)\b|^\s*#|^\s*for\s+[^\r\n]+\s+in\s+[^\r\n]+:\s*$"),
             ("SQL", @"\b(SELECT|FROM|WHERE|JOIN|INSERT|UPDATE|DELETE|CREATE|GROUP\s+BY|ORDER\s+BY|VALUES)\b"),
         ];
         var scores = languages.Select(language => (language.Name, Score: Regex.Matches(sample,
