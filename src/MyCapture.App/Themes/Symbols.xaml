@@ -87,6 +87,10 @@
                   Figures="M3.75,10.5 L3.75,16.25 L16.25,16.25 L16.25,10.5 M10,13 L10,3.75 M10,3.75 L6.75,7 M10,3.75 L13.25,7" />
     <PathGeometry x:Key="Icon.Pin"
                   Figures="M10,17.5 L10,12.25 M6.25,12.25 L13.75,12.25 L12.5,8.5 L13,3.75 L7,3.75 L7.5,8.5 Z" />
+    <PathGeometry x:Key="Icon.Lock"
+                  Figures="M4,9 H16 V18 H4 Z M6,9 V6 A4,4 0 0 1 14,6 V9 M10,12 V15" />
+    <PathGeometry x:Key="Icon.Unlock"
+                  Figures="M4,9 H16 V18 H4 Z M6,9 V6 A4,4 0 0 1 14,6 M10,12 V15" />
     <PathGeometry x:Key="Icon.Edit"
                   Figures="M3.75,16.25 L4.45,12.65 L12.25,4.85 A1.65,1.65 0 0 1 14.6,7.2 L6.8,15 Z M11.1,6 L13.45,8.35 M3.75,17 L16.25,17" />
     <PathGeometry x:Key="Icon.Ocr"

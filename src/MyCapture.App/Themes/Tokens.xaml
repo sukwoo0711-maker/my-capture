@@ -92,6 +92,9 @@
     <SolidColorBrush x:Key="Surface.Hover" Color="{StaticResource Primitive.Warm800}" />
     <SolidColorBrush x:Key="Surface.Pressed" Color="{StaticResource Primitive.Warm700}" />
     <SolidColorBrush x:Key="Surface.Scrim" Color="#C2080C12" />
+    <SolidColorBrush x:Key="Crop.Scrim" Color="#99080C12" />
+    <SolidColorBrush x:Key="Crop.Frame" Color="White" />
+    <SolidColorBrush x:Key="Crop.FrameShadow" Color="Black" />
     <SolidColorBrush x:Key="Surface.Badge" Color="#E6080C12" />
     <SolidColorBrush x:Key="Surface.BadgeStrong" Color="#F2080C12" />
 

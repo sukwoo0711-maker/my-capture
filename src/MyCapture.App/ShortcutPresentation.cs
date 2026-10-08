@@ -17,7 +17,7 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
 
     internal static TextBlock Hint(ShortcutScope scope, string command)
     {
-        var hint = new TextBlock { Text = ShortcutCatalog.Get(scope, command).Hint, FontSize = 9, HorizontalAlignment = HorizontalAlignment.Center };
+        var hint = new TextBlock { Text = ShortcutCatalog.Get(scope, command).Hint, FontSize = 10, HorizontalAlignment = HorizontalAlignment.Center };
         hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         hint.SetBinding(UIElement.VisibilityProperty, new Binding(nameof(HintVisibility)) { Source = Current });
         return hint;
@@ -29,10 +29,13 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         button.Content = null;
         UIElement content = previous as UIElement ?? new TextBlock { Text = previous?.ToString() ?? string.Empty, HorizontalAlignment = HorizontalAlignment.Center };
         var hint = Hint(scope, command);
-        // Filled primary actions use their on-accent text token for AA contrast.
-        // Secondary text remains appropriate on ordinary surface buttons.
-        if (button.TryFindResource("Button.Primary") is Style primary && ReferenceEquals(button.Style, primary))
-            hint.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
+        hint.FontSize = corner ? 10 : scope is ShortcutScope.Annotation or ShortcutScope.Crop ? 11 : 9;
+        hint.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
+        // Keep annotation shortcuts readable even when their commands are unavailable.
+        // A local binding supersedes the shared template's 48% disabled opacity.
+        if (scope is ShortcutScope.Annotation or ShortcutScope.Crop)
+            button.SetBinding(UIElement.OpacityProperty, new Binding(nameof(UIElement.IsEnabled))
+            { Source = button, Converter = new ShortcutOpacityConverter() });
         if (corner)
         {
             var grid = new Grid { Width = 32, Height = 32 };
@@ -52,5 +55,11 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         string suffix = $"({ShortcutCatalog.Get(scope, command).Hint})";
         button.ToolTip = label.EndsWith(suffix, StringComparison.Ordinal) ? label : $"{label} {suffix}";
         AutomationProperties.SetAcceleratorKey(button, ShortcutCatalog.Get(scope, command).Hint);
+    }
+
+    private sealed class ShortcutOpacityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => value is true ? 1.0 : 0.72;
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => throw new NotSupportedException();
     }
 }

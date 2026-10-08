@@ -113,6 +113,18 @@ internal static class Ux402SelfTest
                         File.WriteAllText(Path.Combine(output, label + ".json"), JsonSerializer.Serialize(inventory, new JsonSerializerOptions { WriteIndented = true }));
                         if (!before && window is AnnotationEditorWindow annotation)
                         {
+                            var metrics = Ux402VisualMetrics.Shortcuts(window);
+                            File.WriteAllText(Path.Combine(output, label + "-contrast.json"), JsonSerializer.Serialize(metrics, new JsonSerializerOptions { WriteIndented = true }));
+                            int contrastFailures = metrics.Count(metric => !metric.Pass);
+                            report.AppendLine($"{label}: shortcut contrast/layout failures={contrastFailures}");
+                            failures += contrastFailures;
+                            if (name.StartsWith("crop", StringComparison.Ordinal))
+                            {
+                                var pixels = Ux402VisualMetrics.CropPixels(window);
+                                File.WriteAllText(Path.Combine(output, label + "-scrim.json"), JsonSerializer.Serialize(pixels, new JsonSerializerOptions { WriteIndented = true }));
+                                failures += pixels.Count(pixel => !pixel.Pass);
+                                report.AppendLine($"{label}: crop inside/outside pixels match={pixels.All(pixel => pixel.Pass)}");
+                            }
                             ToggleButton[] tools = Descendants(annotation.Editor).OfType<ToggleButton>()
                                 .Where(tool => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(tool))).ToArray();
                             bool fits = tools.Length == 11 && tools.All(tool =>
@@ -122,6 +134,16 @@ internal static class Ux402SelfTest
                             });
                             report.AppendLine($"{label}: all 11 tools visible={fits}");
                             if (!fits) failures++;
+                        }
+                        if (!before && window is QuickAccessWindow card)
+                        {
+                            var geometry = Ux402VisualMetrics.CardGeometry(card);
+                            File.WriteAllText(Path.Combine(output, label + "-geometry.json"), JsonSerializer.Serialize(geometry, new JsonSerializerOptions { WriteIndented = true }));
+                            report.AppendLine($"{label}: client fits content={geometry.Fits}; unused client height={geometry.UnusedClientHeight}");
+                            if (!geometry.Fits) failures++;
+                            card.IsKept = false;
+                            foreach (int dpi in new[] { 96, 144, 192 }) Render(card, Path.Combine(output, label + $"-unlocked-{dpi}.png"), dpi);
+                            card.IsKept = true;
                         }
                     }
                     window.Hide();
@@ -180,8 +202,13 @@ internal static class Ux402SelfTest
     }
     private static void Render(Window window, string path, int dpi)
     {
+        window.UpdateLayout();
         double scale = dpi / 96.0;
-        var target = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth * scale), (int)Math.Ceiling(window.ActualHeight * scale), dpi, dpi, PixelFormats.Pbgra32);
+        // WPF renders the client at (0,0); ActualHeight also includes native chrome.
+        // Match both baseline and candidate canvases to GetClientRect, avoiding a blank
+        // nonclient-height strip at the bottom of these visual-tree renders.
+        Size client = Ux402VisualMetrics.ClientSize(window);
+        var target = new RenderTargetBitmap((int)Math.Ceiling(client.Width * scale), (int)Math.Ceiling(client.Height * scale), dpi, dpi, PixelFormats.Pbgra32);
         var backdrop = new DrawingVisual();
         using (var dc = backdrop.RenderOpen()) dc.DrawRectangle(window.TryFindResource("Surface.Base") as Brush ?? Brushes.Black, null, new Rect(window.RenderSize));
         target.Render(backdrop); target.Render(window);

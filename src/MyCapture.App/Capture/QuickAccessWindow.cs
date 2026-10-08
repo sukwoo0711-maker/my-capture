@@ -67,10 +67,11 @@ internal sealed class QuickAccessWindow : Window
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var panel = new StackPanel { Margin = new Thickness(8) };
         var row = new DockPanel { LastChildFill = true };
-        _keep = new ToggleButton { Content = Glyph("Icon.Pin"), Width = 24, Height = 30, MinWidth = 0, MinHeight = 0,
+        _keep = new ToggleButton { Content = Glyph("Icon.Unlock"), Width = 24, Height = 30, MinWidth = 0, MinHeight = 0,
             Padding = new Thickness(2), Focusable = false, ToolTip = UiText.Get("QuickAccess.Keep") };
         _keyboardTargets.Add(_keep);
         AutomationProperties.SetName(_keep, UiText.Get("QuickAccess.Keep"));
+        ShortToolTip(_keep);
         DockPanel.SetDock(_keep, Dock.Right); row.Children.Add(_keep);
         var preview = _preview = new Image { Source = bitmap, Width = 52, Height = 48, Stretch = Stretch.Uniform,
             ToolTip = UiText.Get("QuickAccess.Drag"), Margin = new Thickness(0, 0, 6, 0) };
@@ -106,6 +107,8 @@ internal sealed class QuickAccessWindow : Window
             button.Content = Glyph("Icon." + action);
             button.MinWidth = 0; button.MinHeight = 0; button.Height = 42; button.Padding = new Thickness(1); button.Margin = new Thickness(1);
             ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action, corner: true);
+            AutomationProperties.SetName(button, (string)button.ToolTip);
+            ShortToolTip(button);
             actions.Children.Add(button);
         }
         row.Children.Add(actions); panel.Children.Add(row);
@@ -147,9 +150,10 @@ internal sealed class QuickAccessWindow : Window
         SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
         Closed += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); _activationKey = null; };
         IsVisibleChanged += (_, _) => UpdateActivationHotkey();
-        _keep.Checked += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); };
+        _keep.Checked += (_, _) => { _keep.Content = Glyph("Icon.Lock"); _timer.Stop(); UpdateActivationHotkey(); };
         _keep.Unchecked += (_, _) =>
         {
+            _keep.Content = Glyph("Icon.Unlock");
             if (IsVisible) { _lastTick = Stopwatch.GetTimestamp(); _timer.Start(); }
             UpdateActivationHotkey();
         };
@@ -167,6 +171,13 @@ internal sealed class QuickAccessWindow : Window
             foreach (Control target in _keyboardTargets) target.Focusable = false;
             if (IsVisible) WindowStyleFacade.SetNoActivate(new WindowInteropHelper(this).Handle, true);
         };
+    }
+
+    private static void ShortToolTip(DependencyObject control)
+    {
+        ToolTipService.SetInitialShowDelay(control, 100);
+        ToolTipService.SetBetweenShowDelay(control, 0);
+        ToolTipService.SetShowOnDisabled(control, true);
     }
 
     private void UpdateActivationHotkey()

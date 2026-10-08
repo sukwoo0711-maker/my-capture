@@ -3161,7 +3161,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="QuickAccess.Edit" xml:space="preserve"><value>편집</value></data>
   <data name="QuickAccess.Enabled" xml:space="preserve"><value>캡처 후 빠른 작업 표시</value></data>
   <data name="QuickAccess.Failed" xml:space="preserve"><value>작업을 완료하지 못했습니다. 다시 시도하십시오.</value></data>
-  <data name="QuickAccess.Keep" xml:space="preserve"><value>유지</value></data>
+  <data name="QuickAccess.Keep" xml:space="preserve"><value>카드 유지</value></data>
   <data name="QuickAccess.Library" xml:space="preserve"><value>라이브러리에서 열기</value></data>
   <data name="QuickAccess.Pin" xml:space="preserve"><value>화면 고정</value></data>
   <data name="QuickAccess.Pinned" xml:space="preserve"><value>화면에 고정됨</value></data>

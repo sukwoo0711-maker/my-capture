@@ -153,6 +153,28 @@ internal static class HotfixUxSelfTest
                     Check("Alt+Q activates an automatic card", keyboardCard.IsActive && keyboardCard.IsKeyboardFocusWithin);
                     SendKey(cardHandle, 0x53); Pump(80);
                     Check("focused card S invokes save", saves == 1);
+                    // Observe real pointer-triggered tooltips on this owned foreground HWND.
+                    var cardRow = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().First();
+                    var tooltipTargets = cardRow.Children.OfType<UniformGrid>().Single().Children.OfType<ButtonBase>()
+                        .Concat(cardRow.Children.OfType<ToggleButton>()).ToArray();
+                    foreach (ButtonBase target in tooltipTargets)
+                    {
+                        Point center = target.PointToScreen(new Point(target.ActualWidth / 2, target.ActualHeight / 2));
+                        var latency = Stopwatch.StartNew();
+                        double? openedAt = null;
+                        ToolTipEventHandler opened = (_, _) => openedAt = latency.Elapsed.TotalMilliseconds;
+                        target.ToolTipOpening += opened;
+                        MoveCursor(cardHandle, (int)center.X, (int)center.Y); Pump(300);
+                        target.ToolTipOpening -= opened;
+                        // The service creates a ToolTip popup for a string-valued tooltip;
+                        // IsOpen lives on that ToolTip, not on the owner button.
+                        bool visible = PresentationSource.CurrentSources.OfType<HwndSource>()
+                            .Where(source => source.RootVisual is not null)
+                            .SelectMany(source => Ux402VisualMetrics.Descendants(source.RootVisual))
+                            .OfType<ToolTip>().Any(tooltip => tooltip.IsOpen && Equals(tooltip.Content, target.ToolTip));
+                        Check($"card tooltip {target.ToolTip}: visible={visible}, latency={openedAt:0}ms",
+                            visible && openedAt is >= 0 and <= 300);
+                    }
                     // Exercise the safety gate without injecting anything into a foreign window.
                     bool guarded = false;
                     try { RequireForeground(inputHandle); } catch (InvalidOperationException) { guarded = true; }
@@ -178,6 +200,14 @@ internal static class HotfixUxSelfTest
                 ThemeService.Apply(theme);
                 var receipt = Card(sample); owned.Add(receipt); receipt.IsKept = true;
                 receipt.Show(); Pump(70); receipt.UpdateLayout();
+                var keep = ((StackPanel)receipt.Content).Children.OfType<DockPanel>().First().Children.OfType<ToggleButton>().Single();
+                string locked = ((System.Windows.Shapes.Path)keep.Content).Data.ToString();
+                receipt.IsKept = false;
+                string unlocked = ((System.Windows.Shapes.Path)keep.Content).Data.ToString();
+                Check($"{language}/{theme}: keep on/off glyphs differ from each other and screen pin",
+                    locked != unlocked && locked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString()
+                    && unlocked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString());
+                receipt.IsKept = true;
                 var grid = ((StackPanel)receipt.Content).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
                 foreach (Button button in grid.Children.OfType<Button>())
                 {
@@ -412,7 +442,8 @@ internal static class HotfixUxSelfTest
     private static void Render(Window window, string path, int dpi)
     {
         window.UpdateLayout(); double scale = dpi / 96d;
-        var image = new RenderTargetBitmap(Math.Max(1, (int)Math.Ceiling(window.ActualWidth * scale)), Math.Max(1, (int)Math.Ceiling(window.ActualHeight * scale)), dpi, dpi, PixelFormats.Pbgra32);
+        Size client = Ux402VisualMetrics.ClientSize(window);
+        var image = new RenderTargetBitmap(Math.Max(1, (int)Math.Ceiling(client.Width * scale)), Math.Max(1, (int)Math.Ceiling(client.Height * scale)), dpi, dpi, PixelFormats.Pbgra32);
         image.Render(window); ImageCodec.SavePng(image, path);
     }
     private static void Pump(int milliseconds)

@@ -50,6 +50,12 @@ internal static class ThemeService
                 }
             }
         }
+        // Crop masks always darken discarded pixels, including in light themes.
+        // High contrast follows the user's system palette without a translucent wash.
+        bool highContrast = SystemParameters.HighContrast || theme == AppTheme.HighContrast;
+        resources["Crop.Scrim"] = highContrast ? SystemColors.WindowBrush : new SolidColorBrush(Color.FromArgb(153, 8, 12, 18));
+        resources["Crop.Frame"] = highContrast ? SystemColors.WindowTextBrush : Brushes.White;
+        resources["Crop.FrameShadow"] = highContrast ? SystemColors.WindowBrush : Brushes.Black;
     }
 
     internal static void ApplyFromSettings(string? themeId) => Apply(AppThemeNames.Parse(themeId));
