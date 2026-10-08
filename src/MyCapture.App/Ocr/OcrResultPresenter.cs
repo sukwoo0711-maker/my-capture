@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.Ocr;
 
@@ -34,6 +35,7 @@ internal sealed class OcrResultPresenter : IDisposable
     private string _currentContext = string.Empty;
     private Action<OcrResult>? _onFreshResult;
     private bool _disposed;
+    private long _presentationVersion;
 
     internal OcrResultPresenter(
         IOcrService service,
@@ -48,6 +50,7 @@ internal sealed class OcrResultPresenter : IDisposable
 
         _window = new OcrResultWindow();
         _window.RerunRequested += (_, _) => Rerun();
+        _window.GeometryRequested += (_, _) => Rerun();
         _window.Dismissed += (_, _) =>
         {
             // Dismissing a busy reusable window is a real user cancellation, not merely a visual
@@ -79,7 +82,9 @@ internal sealed class OcrResultPresenter : IDisposable
         _currentRequestFactory = requestFactory ?? throw new ArgumentNullException(nameof(requestFactory));
         _currentContext = contextLabel ?? string.Empty;
         _onFreshResult = onFreshResult;
+        long version = _presentationVersion;
         _window.ShowResult(cachedResult, _currentContext);
+        if (version == _presentationVersion) _ = LoadCachedImageAsync(requestFactory, version);
     }
 
     /// <summary>
@@ -102,11 +107,11 @@ internal sealed class OcrResultPresenter : IDisposable
     {
         if (_currentRequestFactory is not null)
         {
-            Run();
+            Run(preserveSelection: true);
         }
     }
 
-    private void Run()
+    private void Run(bool preserveSelection = false)
     {
         if (_currentRequestFactory is null)
         {
@@ -134,18 +139,22 @@ internal sealed class OcrResultPresenter : IDisposable
         var cts = new CancellationTokenSource();
         _inFlight = cts;
 
-        _window.ShowBusy(_currentContext);
+        _window.ShowBusy(_currentContext, preserveSelection);
         _setBusy(true);
 
-        _ = RecognizeAsync(request, cts);
+        _ = RecognizeAsync(request, cts, preserveSelection);
     }
 
-    private async Task RecognizeAsync(OcrRequest request, CancellationTokenSource cts)
+    private async Task RecognizeAsync(OcrRequest request, CancellationTokenSource cts, bool preserveSelection)
     {
         OcrResult result;
+        BitmapSource? source = null;
         try
         {
-            result = await _service.RecognizeAsync(request, cts.Token).ConfigureAwait(true);
+            source = await OcrSourceSnapshot.LoadAsync(request, cts.Token).ConfigureAwait(true);
+            result = source is null ? OcrResult.Failed(UiText.Get("Text_475D185DC33B"))
+                : await _service.RecognizeAsync(OcrSourceSnapshot.WindowsRequest(request, source), cts.Token)
+                    .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -171,7 +180,7 @@ internal sealed class OcrResultPresenter : IDisposable
 
             if (result.Status != OcrStatus.Cancelled)
             {
-                _window.ShowResult(result, _currentContext);
+                _window.ShowResult(result, _currentContext, source, preserveSelection);
 
                 if (result.Status == OcrStatus.Success)
                 {
@@ -184,8 +193,28 @@ internal sealed class OcrResultPresenter : IDisposable
         }));
     }
 
+    private async Task LoadCachedImageAsync(Func<OcrRequest> requestFactory, long version)
+    {
+        try
+        {
+            OcrRequest request = requestFactory();
+            BitmapSource? source = await OcrSourceSnapshot.LoadAsync(request, CancellationToken.None)
+                .ConfigureAwait(false);
+            _ = _dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                if (!_disposed && version == _presentationVersion) _window.SetSourceImage(source);
+            }));
+        }
+        catch (Exception error)
+        {
+            // The cached text remains usable if its source was moved or removed.
+            _log.LogWarning(error, "Could not load the cached OCR image");
+        }
+    }
+
     private void CancelInFlight()
     {
+        _presentationVersion++;
         CancellationTokenSource? previous = _inFlight;
         _inFlight = null;
         if (previous is not null)

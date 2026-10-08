@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -3251,4 +3251,27 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Capture410.GuideColorHex" xml:space="preserve"><value>HEX</value></data>
   <data name="Capture410.GuideColorSwatch" xml:space="preserve"><value>캡처 가이드 색 견본</value></data>
   <data name="Capture410.GuideColorInvalid" xml:space="preserve"><value>HEX 색을 #RRGGBB 형식으로 입력하십시오.</value></data>
+  <data name="OCR410_ExtractionMode" xml:space="preserve"><value>추출 형식</value></data>
+  <data name="OCR410_Table" xml:space="preserve"><value>표</value></data>
+  <data name="OCR410_Code" xml:space="preserve"><value>코드</value></data>
+  <data name="OCR410_Text" xml:space="preserve"><value>텍스트</value></data>
+  <data name="OCR410_OriginalImage" xml:space="preserve"><value>원본 이미지</value></data>
+  <data name="OCR410_SelectionHelp" xml:space="preserve"><value>영역을 끌어서 선택합니다. 화살표 키로 영역을 이동하고 Enter 키로 선택합니다.</value></data>
+  <data name="OCR410_JoinLines" xml:space="preserve"><value>줄 합치기</value></data>
+  <data name="OCR410_FirstRowHeader" xml:space="preserve"><value>첫 행 머리글</value></data>
+  <data name="OCR410_ClearSelection" xml:space="preserve"><value>선택 해제</value></data>
+  <data name="OCR410_ImageUnavailable" xml:space="preserve"><value>원본 이미지 없음</value></data>
+  <data name="OCR410_ResizePanes" xml:space="preserve"><value>원본·결과 너비 조절</value></data>
+  <data name="OCR410_OpenExcel" xml:space="preserve"><value>Excel로 열기</value></data>
+  <data name="OCR410_CopyCsv" xml:space="preserve"><value>CSV 복사</value></data>
+  <data name="OCR410_CopyMarkdown" xml:space="preserve"><value>Markdown 표 복사</value></data>
+  <data name="OCR410_CopyTsv" xml:space="preserve"><value>탭 구분 복사</value></data>
+  <data name="OCR410_UnknownLanguage" xml:space="preserve"><value>언어 미지정</value></data>
+  <data name="OCR410_EstimatedLanguage" xml:space="preserve"><value>{0} 추정</value></data>
+  <data name="OCR410_Monospace" xml:space="preserve"><value>고정폭 추정</value></data>
+  <data name="OCR410_Proportional" xml:space="preserve"><value>가변폭 추정</value></data>
+  <data name="OCR410_UnknownFont" xml:space="preserve"><value>글자 폭 미지정</value></data>
+  <data name="OCR410_ExcelFailed" xml:space="preserve"><value>Excel 파일을 열지 못했습니다.</value></data>
+  <data name="OCR410_Copied" xml:space="preserve"><value>복사됨</value></data>
+  <data name="OCR410_ResultStatus" xml:space="preserve"><value>{0} · {1}</value></data>
 </root>
