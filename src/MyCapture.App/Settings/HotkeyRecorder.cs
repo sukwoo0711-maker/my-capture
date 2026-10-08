@@ -45,11 +45,8 @@ public sealed class HotkeyRecorder : StackPanel
         _record.PreviewKeyDown += (_, e) =>
         {
             if (Active != this) return;
-            e.Handled = true;
-            Key key = e.Key == Key.System ? e.SystemKey : e.Key;
-            if (key == Key.Escape) { Stop(); return; }
-            Hotkey? chord = FromKey(key, Keyboard.Modifiers);
-            if (chord is not null) Accept(chord);
+            Key key = NormalizeKey(e);
+            e.Handled = HandleRecordedKey(key, Keyboard.Modifiers);
         };
         _record.LostKeyboardFocus += (_, _) => Stop();
         Unloaded += (_, _) => Stop();
@@ -66,24 +63,52 @@ public sealed class HotkeyRecorder : StackPanel
     internal static Hotkey? FromKey(Key key, ModifierKeys modifiers)
     {
         if (key is Key.None or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
-            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.System) return null;
+            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.System or Key.ImeProcessed or Key.DeadCharProcessed) return null;
         HotkeyModifiers flags = HotkeyModifiers.None;
         if (modifiers.HasFlag(ModifierKeys.Control)) flags |= HotkeyModifiers.Control;
         if (modifiers.HasFlag(ModifierKeys.Alt)) flags |= HotkeyModifiers.Alt;
         if (modifiers.HasFlag(ModifierKeys.Shift)) flags |= HotkeyModifiers.Shift;
         if (modifiers.HasFlag(ModifierKeys.Windows)) flags |= HotkeyModifiers.Windows;
-        return new Hotkey(flags, (uint)KeyInterop.VirtualKeyFromKey(key));
+        var chord = new Hotkey(flags, (uint)KeyInterop.VirtualKeyFromKey(key));
+        return chord.IsAssigned && chord.IsSafeGlobalShortcut ? chord : null;
+    }
+
+    internal static Key NormalizeKey(KeyEventArgs e) => e.Key switch
+    {
+        Key.System => e.SystemKey,
+        Key.ImeProcessed => e.ImeProcessedKey,
+        Key.DeadCharProcessed => e.DeadCharProcessedKey,
+        _ => e.Key,
+    };
+
+    internal bool HandleRecordedKey(Key key, ModifierKeys modifiers)
+    {
+        if (key == Key.Tab) { Stop(); return false; }
+        if (key == Key.Escape) { Stop(); return true; }
+        if (modifiers == ModifierKeys.None && key is Key.Back or Key.Delete)
+        {
+            SetCurrentValue(TextProperty, string.Empty);
+            GetBindingExpression(TextProperty)?.UpdateSource();
+            Stop();
+            return true;
+        }
+        Hotkey? chord = FromKey(key, modifiers);
+        if (chord is not null) Accept(chord);
+        else if (key is not (Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin))
+            _conflict.Text = UiText.Get("Hotkey.ModifierRequired");
+        return true;
     }
 
     internal void Accept(Hotkey chord)
     {
+        if (!chord.IsSafeGlobalShortcut) { _conflict.Text = UiText.Get("Hotkey.ModifierRequired"); return; }
         SetCurrentValue(TextProperty, chord.ToString());
         GetBindingExpression(TextProperty)?.UpdateSource();
         Stop();
         CheckConflict();
     }
 
-    private void Stop() { if (Active == this) Active = null; Refresh(); }
+    private void Stop() { if (Active == this) Active = null; Refresh(); CheckConflict(); }
 
     private void OnErrorsChanged(object? sender, DataErrorsChangedEventArgs e) => CheckConflict();
 

@@ -923,6 +923,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 continue;
             }
 
+            if (!hotkey.IsSafeGlobalShortcut)
+            {
+                SetError(property, UiText.Get("Hotkey.ModifierRequired"));
+                continue;
+            }
+
             parsed[property] = hotkey;
             ClearError(property);
         }

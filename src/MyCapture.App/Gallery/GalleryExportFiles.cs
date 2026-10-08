@@ -66,6 +66,25 @@ internal static class GalleryExportFiles
         }
     }
 
+    internal static void Write(string destination, byte[] bytes)
+    {
+        using DirectoryLease parents = DirectoryLease.Open(Path.GetDirectoryName(destination)!, create: true);
+        bool created = false;
+        try
+        {
+            using SafeFileHandle handle = OpenRegularFile(destination, 0x40000000, CreateNew);
+            created = true;
+            using var stream = new FileStream(handle, FileAccess.Write);
+            stream.Write(bytes);
+            stream.Flush(flushToDisk: true);
+        }
+        catch
+        {
+            if (created) DeleteBestEffort(destination);
+            throw;
+        }
+    }
+
     internal static void ValidateSource(string path)
     {
         using DirectoryLease parents = DirectoryLease.Open(Path.GetDirectoryName(path)!, create: false);

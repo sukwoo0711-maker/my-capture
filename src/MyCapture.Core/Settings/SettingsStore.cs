@@ -44,22 +44,38 @@ public sealed class SettingsStore
     /// </summary>
     public IReadOnlyList<string> LastLoadWarnings { get; private set; } = [];
 
+    /// <summary>True only on the launch that repairs and persists unsafe legacy hotkeys.</summary>
+    public bool LastLoadMigratedUnsafeHotkeys { get; private set; }
+
     public AppSettings Load()
     {
-        _paths.EnsureCreated();
-        AtomicFile.CleanUpTemp(_paths.SettingsFile);
-
+        string settingsFile;
         var warnings = new List<string>();
-
-        string? text = AtomicFile.ReadAllTextWithRecovery(
-            _paths.SettingsFile,
-            candidate => TryDeserialize(candidate, out _));
+        string? text;
+        try
+        {
+            settingsFile = ValidatedFilePaths.SettingsFileWithinRoot(_paths.DataRoot, _paths.SettingsFile);
+            _paths.EnsureCreated();
+            AtomicFile.CleanUpTemp(settingsFile);
+            text = AtomicFile.ReadAllTextWithRecovery(settingsFile, candidate => TryDeserialize(candidate, out _));
+        }
+        catch (Exception error) when (error is IOException or ArgumentException or NotSupportedException or UnauthorizedAccessException)
+        {
+            warnings.Add(UiText.Get("Text_2CD093B673E5"));
+            _log.LogWarning("Settings path could not be read; using defaults");
+            // Do not trigger welcome-card persistence or compatibility writes to an invalid path.
+            var defaults = new AppSettings { General = { IsFirstRun = false } };
+            Sanitize(defaults, warnings);
+            LastLoadMigratedUnsafeHotkeys = false;
+            LastLoadWarnings = warnings;
+            return defaults;
+        }
 
         AppSettings settings;
 
         if (text is null)
         {
-            bool existed = File.Exists(_paths.SettingsFile);
+            bool existed = File.Exists(settingsFile);
             if (existed)
             {
                 warnings.Add(UiText.Get("Text_2CD093B673E5"));
@@ -81,16 +97,16 @@ public sealed class SettingsStore
             settings = new AppSettings();
         }
 
-        Sanitize(settings, warnings);
+        LastLoadMigratedUnsafeHotkeys = Sanitize(settings, warnings);
         LastLoadWarnings = warnings;
 
         // A token written by 2.4.0 sits in plaintext on disk. Re-save it once so the
         // DPAPI converter rewrites it encrypted; a marker in the text means it already is.
-        if (settings.GitHub.Token.Length > 0
+        if (LastLoadMigratedUnsafeHotkeys || (settings.GitHub.Token.Length > 0
             && text is not null
-            && !text.Contains(DpapiSecretConverter.EncryptedPrefix, StringComparison.Ordinal))
+            && !text.Contains(DpapiSecretConverter.EncryptedPrefix, StringComparison.Ordinal)))
         {
-            _log.LogInformation("Re-encrypting the GitHub token at rest");
+            _log.LogInformation("Persisting settings compatibility repairs");
             Save(settings);
         }
 
@@ -105,6 +121,14 @@ public sealed class SettingsStore
         AtomicFile.WriteAllText(_paths.SettingsFile, json);
 
         _log.LogDebug("Settings saved to {Path}", LogText.SingleLine(_paths.SettingsFile));
+    }
+
+    /// <summary>Creates the settings file only after the welcome card is dismissed.</summary>
+    public void CompleteFirstRun(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        Save(settings);
+        settings.General.IsFirstRun = false;
     }
 
     /// <summary>
@@ -179,7 +203,7 @@ public sealed class SettingsStore
     /// <summary>
     /// Forces every value into a range the app can actually operate in.
     /// </summary>
-    private static void Sanitize(AppSettings s, List<string> warnings)
+    private static bool Sanitize(AppSettings s, List<string> warnings)
     {
         if (s.SchemaVersion < 3)
         {
@@ -308,6 +332,28 @@ public sealed class SettingsStore
             s.Ocr.PreferredLanguages = ["ko-KR", "en-US"];
         }
 
+        // Sanitize before OS registration, and persist once on load so an unsafe
+        // 4.0.0 binding cannot return after restart. Missing properties retain defaults;
+        // explicit unassigned optional commands remain unassigned.
+        bool migratedUnsafeHotkeys = false;
+        Hotkey Safe(Hotkey value)
+        {
+            if (value.IsSafeGlobalShortcut) return value;
+            migratedUnsafeHotkeys = true;
+            return Hotkey.None;
+        }
+        s.Hotkeys.Capture = Safe(s.Hotkeys.Capture);
+        s.Hotkeys.OpenLibrary = Safe(s.Hotkeys.OpenLibrary);
+        s.Hotkeys.PasteToScreen = Safe(s.Hotkeys.PasteToScreen);
+        s.Hotkeys.HideAllPins = Safe(s.Hotkeys.HideAllPins);
+        s.Hotkeys.ToggleClickThrough = Safe(s.Hotkeys.ToggleClickThrough);
+        s.Hotkeys.RepeatLastRegion = Safe(s.Hotkeys.RepeatLastRegion);
+        s.Hotkeys.CaptureWindow = Safe(s.Hotkeys.CaptureWindow);
+        s.Hotkeys.CaptureFullScreen = Safe(s.Hotkeys.CaptureFullScreen);
+        s.Hotkeys.RecordRegion = Safe(s.Hotkeys.RecordRegion);
+        s.Hotkeys.UploadGitHubImage = Safe(s.Hotkeys.UploadGitHubImage);
+        s.Hotkeys.ScrollingCapture = Safe(s.Hotkeys.ScrollingCapture);
+        s.Hotkeys.DelayedCapture = Safe(s.Hotkeys.DelayedCapture);
         // --- Hotkeys ---
         // A capture hotkey that cannot be pressed makes the app inert, so an
         // unassigned value is restored rather than respected.
@@ -315,12 +361,25 @@ public sealed class SettingsStore
         {
             s.Hotkeys.Capture = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
             warnings.Add(UiText.Get("Text_CFACAAC223E9"));
+            Hotkey WithoutCaptureConflict(Hotkey value)
+            {
+                if (value != s.Hotkeys.Capture) return value;
+                migratedUnsafeHotkeys = true;
+                return Hotkey.None;
+            }
+            s.Hotkeys.OpenLibrary = WithoutCaptureConflict(s.Hotkeys.OpenLibrary);
+            s.Hotkeys.PasteToScreen = WithoutCaptureConflict(s.Hotkeys.PasteToScreen);
+            s.Hotkeys.HideAllPins = WithoutCaptureConflict(s.Hotkeys.HideAllPins);
+            s.Hotkeys.ToggleClickThrough = WithoutCaptureConflict(s.Hotkeys.ToggleClickThrough);
+            s.Hotkeys.RepeatLastRegion = WithoutCaptureConflict(s.Hotkeys.RepeatLastRegion);
+            s.Hotkeys.CaptureWindow = WithoutCaptureConflict(s.Hotkeys.CaptureWindow);
+            s.Hotkeys.CaptureFullScreen = WithoutCaptureConflict(s.Hotkeys.CaptureFullScreen);
+            s.Hotkeys.RecordRegion = WithoutCaptureConflict(s.Hotkeys.RecordRegion);
+            s.Hotkeys.UploadGitHubImage = WithoutCaptureConflict(s.Hotkeys.UploadGitHubImage);
+            s.Hotkeys.ScrollingCapture = WithoutCaptureConflict(s.Hotkeys.ScrollingCapture);
+            s.Hotkeys.DelayedCapture = WithoutCaptureConflict(s.Hotkeys.DelayedCapture);
         }
-
-        if (!s.Hotkeys.UploadGitHubImage.IsAssigned)
-        {
-            s.Hotkeys.UploadGitHubImage = new Hotkey(HotkeyModifiers.None, Hotkey.VkF9);
-        }
+        if (migratedUnsafeHotkeys) warnings.Add(UiText.Get("Hotkey.Migrated"));
 
         if (!MyCapture.Core.GitHub.GitHubIssueImageUrl.TryNormalize(s.GitHub.IssueUrl, out string issueUrl))
         {
@@ -340,6 +399,7 @@ public sealed class SettingsStore
         }
         s.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(
             MyCapture.Core.Themes.AppThemeNames.Parse(s.General.Theme));
+        return migratedUnsafeHotkeys;
     }
 
     private static int ClampWithWarning(int value, int min, int max, string name, List<string> warnings)

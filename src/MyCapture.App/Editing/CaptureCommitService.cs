@@ -256,7 +256,7 @@ internal sealed class CaptureCommitService
                 record?.SourcePageUrl);
     }
 
-    private static BitmapSource Flatten(
+    internal static BitmapSource Flatten(
         BitmapSource selectedBitmap,
         AnnotationDocument document,
         IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
@@ -338,7 +338,7 @@ internal sealed class CaptureCommitService
         }
     }
 
-    private static AnnotationDocument CreatePersistenceSnapshot(AnnotationDocument liveDocument)
+    internal static AnnotationDocument CreatePersistenceSnapshot(AnnotationDocument liveDocument)
     {
         AnnotationDocument snapshot = liveDocument.Clone();
         for (int index = 0; index < snapshot.Items.Count; index++)

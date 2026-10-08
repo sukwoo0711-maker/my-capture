@@ -25,6 +25,18 @@ namespace MyCapture.Platform.Display;
 /// </remarks>
 public static class WindowStyleFacade
 {
+    /// <summary>Changes only activation behavior; mouse hit testing stays enabled.</summary>
+    public static void SetNoActivate(IntPtr hwnd, bool enabled)
+    {
+        if (hwnd == IntPtr.Zero) throw new ArgumentException("A valid window handle is required.", nameof(hwnd));
+        long style = NativeMethods.GetWindowLongPtr(hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+        long updated = enabled ? style | NativeMethods.WS_EX_NOACTIVATE : style & ~NativeMethods.WS_EX_NOACTIVATE;
+        _ = NativeMethods.SetWindowLongPtr(hwnd, NativeMethods.GWL_EXSTYLE, new IntPtr(updated));
+        _ = NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE |
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_FRAMECHANGED);
+    }
+
     /// <summary>
     /// Turns click-through on or off for <paramref name="hwnd"/>.
     /// </summary>

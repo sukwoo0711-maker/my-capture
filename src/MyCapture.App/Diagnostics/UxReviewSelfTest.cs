@@ -435,7 +435,7 @@ internal static class UxReviewSelfTest
                     if (name == "quick-access")
                     {
                         Button copyButton = Descendants(window).OfType<Button>().Single(button => Equals(button.Content, UiText.Get("QuickAccess.Copy")));
-                        window.Activate(); copyButton.Focus();
+                        ((QuickAccessWindow)window).ActivateForKeyboard(); copyButton.Focus();
                         PressSpace(copyButton, window);
                         Pump(TimeSpan.FromMilliseconds(60));
                         report.AppendLine($"Quick Access routed keyboard Space copy: {receiptCopies == 1}; fixture clipboard sink only");

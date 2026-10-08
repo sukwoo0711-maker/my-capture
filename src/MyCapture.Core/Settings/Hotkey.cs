@@ -51,6 +51,13 @@ public sealed record Hotkey
     [JsonIgnore]
     public bool IsAssigned => VirtualKey != 0;
 
+    /// <summary>Plain typing/navigation keys must never be captured system-wide.</summary>
+    [JsonIgnore]
+    public bool IsSafeGlobalShortcut => !IsAssigned ||
+        (VirtualKey is >= 1 and <= 0xFE && VirtualKey is not (0x10 or 0x11 or 0x12 or 0x15 or 0x19 or 0x5B or 0x5C or >= 0xA0 and <= 0xA5 or 0xE5) &&
+         (Modifiers & ~(HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift | HotkeyModifiers.Windows)) == 0 &&
+         ((Modifiers & (HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Windows)) != 0 || VirtualKey is >= 0x70 and <= 0x87 or 0x2C));
+
     // Virtual-key codes used by the defaults and by the parser's friendly names.
     public const uint VkC = 0x43;
     public const uint VkX = 0x58;
@@ -110,7 +117,7 @@ public sealed record Hotkey
                     continue;
             }
 
-            if (!TryParseKeyName(rawPart, out key))
+            if (key != 0 || !TryParseKeyName(rawPart, out key))
             {
                 return false;
             }
@@ -129,6 +136,14 @@ public sealed record Hotkey
     {
         virtualKey = 0;
         string upper = name.ToUpperInvariant();
+
+        if (upper.StartsWith("VK_0X", StringComparison.Ordinal) &&
+            uint.TryParse(upper.AsSpan(5), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint numeric)
+            && numeric is >= 1 and <= 0xFE)
+        {
+            virtualKey = numeric;
+            return true;
+        }
 
         // Single letter or digit maps directly: VK_A..VK_Z and VK_0..VK_9 share
         // their ASCII values.
