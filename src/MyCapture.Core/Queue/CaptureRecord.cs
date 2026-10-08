@@ -119,6 +119,21 @@ public sealed class CaptureRecord
     /// <summary>User-managed, comma-separated local search tags; empty for legacy indexes.</summary>
     public string Tags { get; set; } = string.Empty;
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? FolderId { get; set; }
+
+    public long FolderSequence { get; set; }
+
+    /// <summary>Restores the user's pin after leaving a folder; IsPinned protects older apps.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? FolderPinBeforeAssignment { get; set; }
+
+    [JsonIgnore]
+    public bool IsManuallyPinned => FolderId is not null ? FolderPinBeforeAssignment ?? IsPinned : IsPinned;
+
+    [JsonIgnore]
+    internal bool FolderDestinationResolved { get; set; }
+
     /// <summary>
     /// Title of the foreground window at capture time.
     /// </summary>

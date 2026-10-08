@@ -16,6 +16,9 @@ internal sealed class CaptureIndexFile
     public int SchemaVersion { get; set; } = 2;
 
     public List<CaptureRecord> Records { get; set; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CaptureFolderState? FolderState { get; set; }
 }
 
 /// <summary>
@@ -52,7 +55,7 @@ public sealed record CaptureBatchRemovalResult(int RemovedCount, int CleanupPend
 /// condition so the UI can say so.
 /// </para>
 /// </remarks>
-public sealed class CaptureQueue
+public sealed partial class CaptureQueue
 {
     private static readonly JsonSerializerOptions SerializerOptions = JsonDefaults.Compact;
 
@@ -136,7 +139,10 @@ public sealed class CaptureQueue
     public void UpdateLimits(QueueSettings limits)
     {
         _limits = limits ?? throw new ArgumentNullException(nameof(limits));
+        if (_folderStateActivated && _limits.DefaultCaptureFolderId is { } folderId && FindFolder(folderId) is null)
+            _limits.DefaultCaptureFolderId = null;
         EnforceLimits();
+        if (_folderStateActivated) Save();
     }
 
     /// <summary>Expires managed history in creation order. Pins and active editors retain ownership.
@@ -151,7 +157,7 @@ public sealed class CaptureQueue
         TimeSpan ttl = CaptureRetention.TimeToLive(_limits);
         CaptureRecord[] expired = _records
             .Where(record => record.IsImage && record.CreatedAt <= now - ttl
-                             && !record.IsPinned && !IsEvictionLeased(record.Id))
+                             && !record.IsPinned && record.FolderId is null && !IsEvictionLeased(record.Id))
             .OrderBy(record => record.CreatedAt)
             .ToArray();
         foreach (CaptureRecord record in expired)
@@ -182,10 +188,12 @@ public sealed class CaptureQueue
             candidate => TryParseIndex(candidate, out _));
 
         List<CaptureRecord> records;
+        CaptureFolderState? loadedFolderState = null;
 
         if (text is not null && TryParseIndex(text, out CaptureIndexFile? index) && index is not null)
         {
             records = index.Records;
+            loadedFolderState = index.FolderState;
             HashSet<Guid> indexedIds = records.Select(record => record.Id).ToHashSet();
             // A v1 build did not understand video records and could rewrite index.json without
             // them. On the first v2 load, merge every durable meta sidecar once; later v2 loads
@@ -234,6 +242,7 @@ public sealed class CaptureQueue
             .OrderByDescending(r => r.CreatedAt)
             .ToList();
 
+        RestoreFolderState(loadedFolderState, records);
         _records.Clear();
         foreach (CaptureRecord record in records)
         {
@@ -268,6 +277,7 @@ public sealed class CaptureQueue
                 nameof(record));
         }
 
+        PrepareNewCaptureFolder(record);
         _records.Insert(0, record);
         _totalBytes += record.TotalBytes;
 
@@ -320,8 +330,8 @@ public sealed class CaptureQueue
         int cleanupPending = 0;
         lock (_writeGate)
         {
-            string json = JsonSerializer.Serialize(new CaptureIndexFile { Records = [.. _records] }, SerializerOptions);
-            publication = EnqueuePublication(reservation, [(_paths.IndexFile, json)], () =>
+            string json = JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions);
+            publication = EnqueuePublication(reservation, BuildIndexWrites(json), () =>
             {
                 foreach (CaptureRecord record in removed)
                 {
@@ -352,8 +362,8 @@ public sealed class CaptureQueue
             Task correction;
             lock (_writeGate)
             {
-                string json = JsonSerializer.Serialize(new CaptureIndexFile { Records = [.. _records] }, SerializerOptions);
-                correction = EnqueuePublication(null, [(_paths.IndexFile, json)]);
+                string json = JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions);
+                correction = EnqueuePublication(null, BuildIndexWrites(json));
             }
             try { await correction; }
             catch (Exception correctionFailure)
@@ -389,12 +399,14 @@ public sealed class CaptureQueue
             return false;
         }
 
-        record.IsPinned = !record.IsPinned;
+        bool pinned = !record.IsManuallyPinned;
+        if (record.FolderId is not null) record.FolderPinBeforeAssignment = pinned;
+        else record.IsPinned = pinned;
         record.UpdatedAt = DateTimeOffset.Now;
 
         // Unpinning can make the queue evictable again.
         EnforceLimits();
-        return record.IsPinned;
+        return pinned;
     }
 
     /// <summary>
@@ -428,9 +440,9 @@ public sealed class CaptureQueue
         Task publication;
         lock (_writeGate)
         {
-            var index = new CaptureIndexFile { Records = [.. _records] };
+            var index = CreateIndexSnapshot();
             string json = JsonSerializer.Serialize(index, SerializerOptions);
-            publication = EnqueuePublication(null, [(_paths.IndexFile, json)]);
+            publication = EnqueuePublication(null, BuildIndexWrites(json));
         }
         // The writer never needs this gate or the caller dispatcher. This is also the exit drain.
         publication.GetAwaiter().GetResult();
@@ -500,8 +512,8 @@ public sealed class CaptureQueue
         {
             string path = GetFilePath(record, CaptureFileNames.Meta);
             string metadata = JsonSerializer.Serialize(record, MetaSerializerOptions);
-            string index = JsonSerializer.Serialize(new CaptureIndexFile { Records = [.. _records] }, SerializerOptions);
-            return EnqueuePublication(reservation, [(path, metadata), (_paths.IndexFile, index)]);
+            string index = JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions);
+            return EnqueuePublication(reservation, [(path, metadata), .. BuildIndexWrites(index)]);
         }
     }
 
@@ -718,7 +730,7 @@ public sealed class CaptureQueue
         int unpinnedCount = 0;
         foreach (CaptureRecord record in _records)
         {
-            if (record.IsPinned)
+            if (record.IsPinned || record.FolderId is not null)
             {
                 continue;
             }

@@ -105,6 +105,7 @@ internal sealed partial class GalleryWindow : Window
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
         DataContext = _viewModel;
+        InitializeFolderActions();
         PreviewMouseLeftButtonUp += OnDragButtonUp;
         PreviewMouseMove += OnTileMouseMove;
         LostMouseCapture += (_, _) => { if (Mouse.Captured != this) ResetDragGesture(); };
@@ -117,7 +118,7 @@ internal sealed partial class GalleryWindow : Window
         };
 
         // F2 edits the selected capture's searchable title/tags without altering pixels.
-        InputBindings.Add(new KeyBinding(new RelayCommand(() => OnOrganizeClick(this, new RoutedEventArgs())),
+        InputBindings.Add(new KeyBinding(new RelayCommand(RenameSelectedFolderOrCapture),
             new KeyGesture(Key.F2)));
         // Ctrl+F focuses the search box from anywhere in the window.
         InputBindings.Add(new KeyBinding(
@@ -415,7 +416,10 @@ internal sealed partial class GalleryWindow : Window
             _dragArmed = false;
             if (Mouse.Captured == this) Mouse.Capture(null);
             prepared.MarkPublished();
-            DragDrop.DoDragDrop(this, GalleryDragExportService.CreateFileDropData(prepared.Paths), DragDropEffects.Copy);
+            DataObject data = GalleryDragExportService.CreateFileDropData(prepared.Paths);
+            data.SetData(GalleryFolderDragPayload.Format,
+                new GalleryFolderDragPayload(_folderDragOwner, records.Select(record => record.Id).ToArray(), null), false);
+            DragDrop.DoDragDrop(this, data, DragDropEffects.Copy | DragDropEffects.Move);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -510,6 +514,10 @@ internal sealed partial class GalleryWindow : Window
                 {
                     OpenReedit(tile);
                 }
+                e.Handled = true;
+                break;
+            case Key.M when Keyboard.Modifiers == ModifierKeys.None:
+                OnMoveCapturesClick(this, new RoutedEventArgs());
                 e.Handled = true;
                 break;
             case Key.Delete:

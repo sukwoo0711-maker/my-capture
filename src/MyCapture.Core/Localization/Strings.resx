@@ -3274,4 +3274,49 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="OCR410_ExcelFailed" xml:space="preserve"><value>Excel 파일을 열지 못했습니다.</value></data>
   <data name="OCR410_Copied" xml:space="preserve"><value>복사됨</value></data>
   <data name="OCR410_ResultStatus" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="Folder410.Title" xml:space="preserve"><value>폴더</value></data>
+  <data name="Folder410.NewFolder" xml:space="preserve"><value>새 폴더</value></data>
+  <data name="Folder410.Name" xml:space="preserve"><value>폴더 이름</value></data>
+  <data name="Folder410.Create" xml:space="preserve"><value>만들기</value></data>
+  <data name="Folder410.Rename" xml:space="preserve"><value>이름 변경</value></data>
+  <data name="Folder410.MoveCaptures" xml:space="preserve"><value>폴더로 이동</value></data>
+  <data name="Folder410.MoveFolder" xml:space="preserve"><value>폴더 이동</value></data>
+  <data name="Folder410.Destination" xml:space="preserve"><value>이동 위치</value></data>
+  <data name="Folder410.Unassigned" xml:space="preserve"><value>폴더 미지정 (캡처 날짜)</value></data>
+  <data name="Folder410.RootLocation" xml:space="preserve"><value>최상위 (폴더 생성일)</value></data>
+  <data name="Folder410.CurrentFolderOption" xml:space="preserve"><value>새 캡처를 현재 폴더에 저장</value></data>
+  <data name="Folder410.DestinationHeader" xml:space="preserve"><value>새 캡처 저장 위치: {0}</value></data>
+  <data name="Folder410.DefaultDestination" xml:space="preserve"><value>날짜별 라이브러리</value></data>
+  <data name="Folder410.StopDestination" xml:space="preserve"><value>끄기</value></data>
+  <data name="Folder410.Delete" xml:space="preserve"><value>폴더와 캡처 삭제</value></data>
+  <data name="Folder410.DeleteDate" xml:space="preserve"><value>날짜의 폴더와 캡처 삭제</value></data>
+  <data name="Folder410.DeleteTitle" xml:space="preserve"><value>폴더 삭제</value></data>
+  <data name="Folder410.DeleteConfirm" xml:space="preserve"><value>{0}
+하위 폴더 {1}개 · 이미지 {2}개 · 동영상 {3}개를 삭제합니다.</value></data>
+  <data name="Folder410.DeleteResult" xml:space="preserve"><value>폴더 {0}개 · 캡처 {1}개 삭제 · 남은 캡처 {2}개</value></data>
+  <data name="Folder410.FolderExport" xml:space="preserve"><value>폴더로 내보내기…</value></data>
+  <data name="Folder410.ZipExport" xml:space="preserve"><value>ZIP으로 내보내기…</value></data>
+  <data name="Folder410.ExportDestination" xml:space="preserve"><value>내보내기 위치</value></data>
+  <data name="Folder410.ExportPreparing" xml:space="preserve"><value>내보내기 준비 중</value></data>
+  <data name="Folder410.ExportProgress" xml:space="preserve"><value>{0}/{1}개 내보내는 중</value></data>
+  <data name="Folder410.ExportDone" xml:space="preserve"><value>캡처 {0}개 내보내기 완료</value></data>
+  <data name="Folder410.ExportFailed" xml:space="preserve"><value>내보내지 못했습니다. 캡처 상태와 저장 위치를 확인하십시오.</value></data>
+  <data name="Folder410.NameInvalid" xml:space="preserve"><value>폴더 이름을 확인하십시오. 중복되는 이름이나 파일 경로 문자를 사용할 수 없습니다.</value></data>
+  <data name="Folder410.OperationFailed" xml:space="preserve"><value>변경 사항을 저장하지 못했습니다. 다시 시도하십시오.</value></data>
+  <data name="Folder410.MoveDone" xml:space="preserve"><value>캡처 {0}개 이동</value></data>
+  <data name="Folder410.SearchInFolder" xml:space="preserve"><value>{0} 안에서 검색</value></data>
+  <data name="Folder410.TreeAll" xml:space="preserve"><value>모든 날짜</value></data>
+  <data name="Folder410.Count" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="Folder410.RetentionHint" xml:space="preserve"><value>폴더에 넣은 캡처는 자동으로 정리하지 않습니다.</value></data>
+  <data name="Folder410.RetentionKept" xml:space="preserve"><value>폴더에 보관</value></data>
+  <data name="Folder410.PrefixLabel" xml:space="preserve"><value>폴더 안 캡처 이름 접두어</value></data>
+  <data name="Folder410.PrefixHint" xml:space="preserve"><value>제목이 없는 캡처에 접두어와 순번을 붙입니다.</value></data>
+  <data name="Folder410.PrefixInvalid" xml:space="preserve"><value>접두어는 경로 문자가 없는 1~40자로 입력하십시오.</value></data>
+  <data name="Folder410.Sort" xml:space="preserve"><value>정렬</value></data>
+  <data name="Folder410.Newest" xml:space="preserve"><value>최신순</value></data>
+  <data name="Folder410.Oldest" xml:space="preserve"><value>오래된순</value></data>
+  <data name="Folder410.ByName" xml:space="preserve"><value>이름순</value></data>
+  <data name="Folder410.InvalidMove" xml:space="preserve"><value>이 위치로 이동할 수 없습니다.</value></data>
+  <data name="Folder410.EmptyFolder" xml:space="preserve"><value>폴더에 캡처가 없습니다.</value></data>
+  <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>캡처를 끌어 넣거나 새 캡처 저장 위치로 지정하십시오.</value></data>
 </root>

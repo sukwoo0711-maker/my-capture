@@ -82,6 +82,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _thumbnailLongEdge = string.Empty;
     private string _capturesDirectoryOverride = string.Empty;
     private string _imageRetentionHours = string.Empty;
+    private string _folderFilePrefix = MyCapture.Core.Queue.CaptureFolderNaming.DefaultPrefix;
+    private bool _useCurrentFolderForNewCaptures;
+    private Guid? _defaultCaptureFolderId;
     private string _gitHubIssueUrl = GitHubIssueImageUrl.DefaultIssueUrl;
     private string _gitHubToken = string.Empty;
     private string _theme = AppThemeNames.Midnight;
@@ -310,6 +313,18 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _capturesDirectoryOverride, value)) ValidateOptionalDirectory(value, nameof(CapturesDirectoryOverride)); }
     }
 
+    public string FolderFilePrefix
+    {
+        get => _folderFilePrefix;
+        set { if (Set(ref _folderFilePrefix, value)) ValidateFolderFilePrefix(value); }
+    }
+
+    public bool UseCurrentFolderForNewCaptures
+    {
+        get => _useCurrentFolderForNewCaptures;
+        set => Set(ref _useCurrentFolderForNewCaptures, value);
+    }
+
     public string ImageRetentionHours
     {
         get => _imageRetentionHours;
@@ -513,6 +528,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             s.Queue.CapturesDirectoryOverride,
             AppPaths.CreateDefault().CapturesRoot);
         _imageRetentionHours = Int(s.Queue.ImageRetentionHours);
+        _folderFilePrefix = s.Queue.FolderFilePrefix;
+        _useCurrentFolderForNewCaptures = s.Queue.UseCurrentFolderForNewCaptures;
+        _defaultCaptureFolderId = s.Queue.DefaultCaptureFolderId;
 
         _quickSaveDirectoryOverride = DisplayDirectory(
             s.Export.QuickSaveDirectoryOverride,
@@ -645,6 +663,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                     _capturesDirectoryOverride,
                     AppPaths.CreateDefault().CapturesRoot),
                 ImageRetentionHours = ParseInt(_imageRetentionHours),
+                FolderFilePrefix = MyCapture.Core.Queue.CaptureFolderNaming.NormalizePrefix(_folderFilePrefix),
+                UseCurrentFolderForNewCaptures = _useCurrentFolderForNewCaptures,
+                DefaultCaptureFolderId = _useCurrentFolderForNewCaptures ? _defaultCaptureFolderId : null,
             },
             GitHub =
             {
@@ -752,6 +773,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ValidateMaxGiB(_maxGiB);
         ValidateInt(_thumbnailLongEdge, SettingsRanges.ThumbnailLongEdge, nameof(ThumbnailLongEdge));
         ValidateInt(_imageRetentionHours, SettingsRanges.ImageRetentionHours, nameof(ImageRetentionHours));
+        ValidateFolderFilePrefix(_folderFilePrefix);
         ValidateOptionalDirectory(_capturesDirectoryOverride, nameof(CapturesDirectoryOverride));
         ValidateOptionalDirectory(_quickSaveDirectoryOverride, nameof(QuickSaveDirectoryOverride));
         ValidateGitHubIssueUrl(_gitHubIssueUrl);
@@ -823,6 +845,14 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             nameof(MaxGiB),
             ok,
             string.Format(CultureInfo.InvariantCulture, UiText.Get("Text_3862727D2DCB"), minGiB, maxGiB));
+    }
+
+    private void ValidateFolderFilePrefix(string value)
+    {
+        bool valid;
+        try { _ = MyCapture.Core.Queue.CaptureFolderNaming.NormalizePrefix(value); valid = true; }
+        catch (ArgumentException) { valid = false; }
+        SetErrorState(nameof(FolderFilePrefix), valid, UiText.Get("Folder410.PrefixInvalid"));
     }
 
     private void ValidateFileNamePattern(string value)

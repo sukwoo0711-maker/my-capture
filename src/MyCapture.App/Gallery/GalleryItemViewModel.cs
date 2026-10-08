@@ -93,7 +93,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         internal set { if (_isSelected != value) { _isSelected = value; Raise(); } }
     }
 
-    public bool IsPinned => Record.IsPinned;
+    public bool IsPinned => Record.IsManuallyPinned;
+    internal Func<CaptureRecord, string>? FolderFileName { get; set; }
 
     public bool HasAnnotations => Record.HasAnnotations;
 
@@ -116,6 +117,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     /// <summary>Primary caption line. Blank captures intentionally have no visible title.</summary>
     public string Caption =>
         !string.IsNullOrWhiteSpace(Record.Title) ? Record.Title
+        : Record.FolderId is not null ? Path.GetFileNameWithoutExtension(FolderFileName?.Invoke(Record)
+            ?? CaptureFolderNaming.SequenceName(CaptureFolderNaming.DefaultPrefix, Record.FolderSequence) + (IsVideo ? ".mp4" : ".png"))
         : !string.IsNullOrWhiteSpace(Record.SourceWindowTitle) ? Record.SourceWindowTitle
         : string.Empty;
 
@@ -140,7 +143,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         get
         {
             string time = Record.CreatedAt.DateTime.ToString("yyyy-MM-dd HH:mm");
-            string pin = Record.IsPinned ? UiText.Get("Text_E485D788C2BE") : string.Empty;
+            string pin = IsPinned ? UiText.Get("Text_E485D788C2BE") : string.Empty;
             string media = IsVideo ? UiText.Format("Text_DFB3664A9A08", DurationCaption) : UiText.Get("Text_AA3D7105289A");
             return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}";
         }
@@ -150,7 +153,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     internal Func<DateTimeOffset> Clock { get; set; } = static () => DateTimeOffset.Now;
 
-    public bool IsExpiringSoon => IsImage && !IsPinned && CaptureRetention.Remaining(
+    public bool IsExpiringSoon => IsImage && !IsPinned && Record.FolderId is null && CaptureRetention.Remaining(
         Record.CreatedAt, CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = RetentionHours() }),
         Clock()) < TimeSpan.FromHours(24);
 
@@ -160,7 +163,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = RetentionHours() }),
         Clock(),
         IsImage,
-        IsPinned);
+        IsPinned,
+        Record.FolderId is not null);
 
     /// <summary>Secondary caption line: capture time.</summary>
     // Keep the wall-clock time captured with the record's stored offset. LocalDateTime

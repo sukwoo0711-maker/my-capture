@@ -233,6 +233,10 @@ public sealed class SettingsStore
         }
 
         // --- Queue ---
+        try { s.Queue.FolderFilePrefix = MyCapture.Core.Queue.CaptureFolderNaming.NormalizePrefix(s.Queue.FolderFilePrefix); }
+        catch (ArgumentException) { s.Queue.FolderFilePrefix = MyCapture.Core.Queue.CaptureFolderNaming.DefaultPrefix; }
+        if (s.Queue.DefaultCaptureFolderId == Guid.Empty) s.Queue.DefaultCaptureFolderId = null;
+
         // The floor of 10 is not arbitrary: below that, capturing a handful of
         // screenshots in a row would start evicting work the user is still using.
         s.Queue.MaxItems = ClampWithWarning(

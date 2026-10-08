@@ -112,6 +112,10 @@ public sealed class HotkeySettings
 
 public sealed class QueueSettings
 {
+    public string FolderFilePrefix { get; set; } = MyCapture.Core.Queue.CaptureFolderNaming.DefaultPrefix;
+    public bool UseCurrentFolderForNewCaptures { get; set; }
+    public Guid? DefaultCaptureFolderId { get; set; }
+
     /// <summary>
     /// Maximum number of retained captures. Oldest unpinned entries are evicted.
     /// </summary>

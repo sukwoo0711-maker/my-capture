@@ -596,6 +596,16 @@
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Folder410.PrefixLabel}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Folder410.PrefixHint}" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" MaxLength="40"
+                                     AutomationProperties.Name="{loc:Text Folder410.PrefixLabel}"
+                                     Text="{Binding FolderFilePrefix, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            <CheckBox Content="{loc:Text Folder410.CurrentFolderOption}" Margin="0,12,0,0"
+                                      IsChecked="{Binding UseCurrentFolderForNewCaptures}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.GitHubIssueUrl}" />
                             <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.GitHubIssueUrlHint}" />
                             <TextBox Style="{StaticResource Settings.TextBox}"

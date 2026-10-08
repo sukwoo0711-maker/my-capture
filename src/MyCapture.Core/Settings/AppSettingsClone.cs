@@ -64,6 +64,9 @@ public static class AppSettingsClone
         CapturesDirectoryOverride = s.CapturesDirectoryOverride,
         ThumbnailLongEdge = s.ThumbnailLongEdge,
         ImageRetentionHours = s.ImageRetentionHours,
+        FolderFilePrefix = s.FolderFilePrefix,
+        UseCurrentFolderForNewCaptures = s.UseCurrentFolderForNewCaptures,
+        DefaultCaptureFolderId = s.DefaultCaptureFolderId,
     };
 
     private static ExportSettings Clone(ExportSettings s) => new()

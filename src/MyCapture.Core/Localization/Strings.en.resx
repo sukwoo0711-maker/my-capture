@@ -3274,4 +3274,49 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="OCR410_ExcelFailed" xml:space="preserve"><value>Could not open the Excel file.</value></data>
   <data name="OCR410_Copied" xml:space="preserve"><value>Copied</value></data>
   <data name="OCR410_ResultStatus" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="Folder410.Title" xml:space="preserve"><value>Folders</value></data>
+  <data name="Folder410.NewFolder" xml:space="preserve"><value>New folder</value></data>
+  <data name="Folder410.Name" xml:space="preserve"><value>Folder name</value></data>
+  <data name="Folder410.Create" xml:space="preserve"><value>Create</value></data>
+  <data name="Folder410.Rename" xml:space="preserve"><value>Rename</value></data>
+  <data name="Folder410.MoveCaptures" xml:space="preserve"><value>Move to folder</value></data>
+  <data name="Folder410.MoveFolder" xml:space="preserve"><value>Move folder</value></data>
+  <data name="Folder410.Destination" xml:space="preserve"><value>Destination</value></data>
+  <data name="Folder410.Unassigned" xml:space="preserve"><value>Unassigned (capture date)</value></data>
+  <data name="Folder410.RootLocation" xml:space="preserve"><value>Top level (folder creation date)</value></data>
+  <data name="Folder410.CurrentFolderOption" xml:space="preserve"><value>Save new captures in the selected folder</value></data>
+  <data name="Folder410.DestinationHeader" xml:space="preserve"><value>New capture destination: {0}</value></data>
+  <data name="Folder410.DefaultDestination" xml:space="preserve"><value>Library by date</value></data>
+  <data name="Folder410.StopDestination" xml:space="preserve"><value>Turn off</value></data>
+  <data name="Folder410.Delete" xml:space="preserve"><value>Delete folder and captures</value></data>
+  <data name="Folder410.DeleteDate" xml:space="preserve"><value>Delete date and captures</value></data>
+  <data name="Folder410.DeleteTitle" xml:space="preserve"><value>Delete folder</value></data>
+  <data name="Folder410.DeleteConfirm" xml:space="preserve"><value>{0}
+Delete {1} subfolders, {2} images and {3} videos.</value></data>
+  <data name="Folder410.DeleteResult" xml:space="preserve"><value>Deleted {0} folders and {1} captures; {2} captures remain</value></data>
+  <data name="Folder410.FolderExport" xml:space="preserve"><value>Export to folder…</value></data>
+  <data name="Folder410.ZipExport" xml:space="preserve"><value>Export as ZIP…</value></data>
+  <data name="Folder410.ExportDestination" xml:space="preserve"><value>Export destination</value></data>
+  <data name="Folder410.ExportPreparing" xml:space="preserve"><value>Preparing export</value></data>
+  <data name="Folder410.ExportProgress" xml:space="preserve"><value>Exporting {0} of {1}</value></data>
+  <data name="Folder410.ExportDone" xml:space="preserve"><value>Exported {0} captures</value></data>
+  <data name="Folder410.ExportFailed" xml:space="preserve"><value>Export failed. Check the captures and destination.</value></data>
+  <data name="Folder410.NameInvalid" xml:space="preserve"><value>Check the folder name. Duplicate names and path characters are not allowed.</value></data>
+  <data name="Folder410.OperationFailed" xml:space="preserve"><value>Could not save the changes. Try again.</value></data>
+  <data name="Folder410.MoveDone" xml:space="preserve"><value>Moved {0} captures</value></data>
+  <data name="Folder410.SearchInFolder" xml:space="preserve"><value>Search in {0}</value></data>
+  <data name="Folder410.TreeAll" xml:space="preserve"><value>All dates</value></data>
+  <data name="Folder410.Count" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="Folder410.RetentionHint" xml:space="preserve"><value>Captures in folders are excluded from automatic cleanup.</value></data>
+  <data name="Folder410.RetentionKept" xml:space="preserve"><value>Kept in folder</value></data>
+  <data name="Folder410.PrefixLabel" xml:space="preserve"><value>Capture filename prefix in folders</value></data>
+  <data name="Folder410.PrefixHint" xml:space="preserve"><value>Captures without titles use this prefix and a sequence number.</value></data>
+  <data name="Folder410.PrefixInvalid" xml:space="preserve"><value>Enter a prefix of 1–40 characters without path characters.</value></data>
+  <data name="Folder410.Sort" xml:space="preserve"><value>Sort</value></data>
+  <data name="Folder410.Newest" xml:space="preserve"><value>Newest first</value></data>
+  <data name="Folder410.Oldest" xml:space="preserve"><value>Oldest first</value></data>
+  <data name="Folder410.ByName" xml:space="preserve"><value>Name</value></data>
+  <data name="Folder410.InvalidMove" xml:space="preserve"><value>Cannot move to this location.</value></data>
+  <data name="Folder410.EmptyFolder" xml:space="preserve"><value>This folder has no captures.</value></data>
+  <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>Drag captures here or select this folder for new captures.</value></data>
 </root>
