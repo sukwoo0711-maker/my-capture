@@ -26,6 +26,55 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureLibraryFirstTests
 {
+    public static IEnumerable<object[]> CapturePathsAndModes() =>
+        from path in new[] { "region", "window", "full", "repeat", "delay", "scroll" }
+        from mode in Enum.GetValues<AfterCaptureAction>()
+        select new object[] { path, mode };
+
+    [Theory]
+    [MemberData(nameof(CapturePathsAndModes))]
+    public void EveryCapturePathCopiesExactlyOnceInEveryMode(string path, AfterCaptureAction mode) => StaTestHost.Run(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Settings.General.AfterCapture = mode;
+        fixture.Settings.Export.CopyToClipboardOnQuickSave = false;
+        // The clipboard writer must start before storage publication for every path.
+        // Hold its completion until storage commits: serial execution deadlocks/fails.
+        var clipboardRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.CopyCompletion = clipboardRelease.Task;
+        fixture.Persistence.BeforeRecordMetadataCommit = _ =>
+        {
+            PumpUntil(() => fixture.CopiedImages.Count > 0);
+            Assert.Single(fixture.CopiedImages);
+            clipboardRelease.SetResult(true);
+        };
+        using var coordinator = new CaptureOverlayCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
+            new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance);
+        coordinator.SelectionPersistRequested = fixture.Select;
+        coordinator.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(mode, fixture.CurrentRecord is not null) == AfterCaptureAction.Editor;
+        try
+        {
+            if (path is "region" or "delay")
+            {
+                var selected = new CaptureSelectionCompletedEventArgs(fixture.Frame, fixture.Region, fixture.Frame.Bitmap);
+                // Delayed capture ends in the same manual selection callback as region capture.
+                var announce = typeof(CaptureOverlayCoordinator).GetMethod("AnnounceSelectionAndOpenEditorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                fixture.Wait((Task)announce.Invoke(coordinator, [selected])!);
+            }
+            else
+            {
+                // Window/full/repeat/stitched scrolling frames all enter this production seam.
+                Assert.True(coordinator.StartWithSelection(fixture.Frame, fixture.Region, path, recordForRepeat: false));
+                fixture.Wait(coordinator.LastTransitionForTest);
+            }
+            Assert.Single(fixture.Queue.Records);
+            BitmapSource copied = Assert.Single(fixture.CopiedImages);
+            Assert.Equal(Pixels(fixture.Frame.Bitmap), Pixels(copied));
+            Assert.Equal(mode == AfterCaptureAction.Editor, coordinator.CurrentEditor is not null);
+        }
+        finally { coordinator.Cancel(); }
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -35,7 +84,7 @@ public sealed class CaptureLibraryFirstTests
         using var fixture = new Fixture();
         if (interrupt) fixture.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("interrupted URL metadata publication");
         fixture.Wait(fixture.Select(new CaptureSelectionCompletedEventArgs(fixture.Frame, fixture.Region,
-            fixture.Frame.Bitmap, "Review — Browser", recordForRepeat: false, copyToClipboardImmediately: false, sourcePageUrl: url)));
+            fixture.Frame.Bitmap, "Review — Browser", recordForRepeat: false, sourcePageUrl: url)));
         CaptureRecord pending = fixture.PendingRecord;
         Assert.Equal(url, pending.SourcePageUrl);
         Assert.Equal(MyCapture.Core.Localization.UiText.Get("Capture.WebpageTag"), pending.Tags);
@@ -221,7 +270,7 @@ public sealed class CaptureLibraryFirstTests
         Assert.Equal(0, publications);
         Assert.Equal(0, pending.ContentRevision);
         Assert.Equal(markerBeforeCancel, File.ReadAllBytes(marker));
-        Assert.Empty(fixture.CopiedImages);
+        Assert.Single(fixture.CopiedImages); // Initial capture copied; cancelled Save As added nothing.
         accepted = true;
         Assert.True(fixture.Wait(fixture.Commit(result)));
         Assert.Equal(2, prompts);
@@ -247,7 +296,7 @@ public sealed class CaptureLibraryFirstTests
         {
             SelectionPersistRequested = selection => fixture.Select(new CaptureSelectionCompletedEventArgs(
                 selection.Frame, selection.BitmapRegion, selection.SelectedBitmap, selection.SourceTitle,
-                recordForRepeat: false, copyToClipboardImmediately: true)),
+                recordForRepeat: false)),
             RequiresCaptureExclusion = () => true,
         };
         AnnotationEditorWindow? editor = null;
@@ -571,10 +620,11 @@ public sealed class CaptureLibraryFirstTests
         internal CaptureCommitService CommitService { get; }
         internal AppSettings Settings { get; } = new();
         internal List<BitmapSource> CopiedImages { get; } = [];
+        internal Task<bool>? CopyCompletion { get; set; }
         internal FrozenFrame Frame { get; }
         internal RectD Region { get; } = new(0, 0, 64, 48);
         internal CaptureSelectionCompletedEventArgs Selection => new(Frame, Region, Frame.Bitmap,
-            "CaptureService.cs - my-capture - Visual Studio Code", recordForRepeat: false, copyToClipboardImmediately: false);
+            "CaptureService.cs - my-capture - Visual Studio Code", recordForRepeat: false);
         internal CaptureRecord? CurrentRecord => (CaptureRecord?)Get("_currentRecord");
         internal CaptureRecord PendingRecord => (CaptureRecord)Get("_pendingRecord")!;
         internal IDisposable? CurrentEditSession => (IDisposable?)Get("_currentEditSession");
@@ -589,7 +639,7 @@ public sealed class CaptureLibraryFirstTests
             Persistence = new CapturePersistenceService(Queue, Paths, () => settings.Queue,
                 NullLogger<CapturePersistenceService>.Instance);
             CommitService = new CaptureCommitService(Persistence, () => settings, () => Paths,
-                NullLogger<CaptureCommitService>.Instance, (image, _) => { CopiedImages.Add(image); return Task.FromResult(true); });
+                NullLogger<CaptureCommitService>.Instance, (image, _) => { CopiedImages.Add(image); return CopyCompletion ?? Task.FromResult(true); });
             Set("_queue", Queue);
             Set("_settings", settings);
             Set("_persistence", Persistence);

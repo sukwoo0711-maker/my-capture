@@ -46,6 +46,8 @@ namespace MyCapture.App.Recording;
 /// </remarks>
 internal sealed class VideoEditorWindow : Window
 {
+    private readonly Dictionary<string, Action> _shortcutActions = [];
+    internal IReadOnlyDictionary<string, Action> ShortcutActions => _shortcutActions;
     private readonly RecordingResult _recording;
     private readonly AppPaths _paths;
     private readonly ILoggerFactory _loggerFactory;
@@ -265,6 +267,7 @@ internal sealed class VideoEditorWindow : Window
         };
         _playbackTimer.Tick += OnPlaybackTick;
 
+        BuildShortcutActions();
         Content = BuildLayout();
 
         // Controls start DISABLED until the media is ready; a click during load must do nothing.
@@ -431,6 +434,7 @@ internal sealed class VideoEditorWindow : Window
         // into the still-image editor and returns it as a layer.
         Button frameEdit = MakeIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"),
             UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame);
+        ShortcutPresentation.Attach(frameEdit, ShortcutScope.Video, "FrameEdit");
         frameEdit.Margin = new Thickness(0, 0, 8, 0);
         AutomationProperties.SetHelpText(frameEdit, UiText.Get("Text_A79A9F93D479"));
         _editControls.Add(saveEdits); _editControls.Add(export); _editControls.Add(frameEdit);
@@ -448,6 +452,7 @@ internal sealed class VideoEditorWindow : Window
         fit.Items.Add(UiText.Get("Video.PreviewFit")); fit.SelectedIndex = 0;
         AutomationProperties.SetName(fit, UiText.Get("Video.PreviewFit"));
         header.Children.Add(fit);
+        header.SizeChanged += (_, _) => fit.Visibility = header.ActualWidth < 580 ? Visibility.Collapsed : Visibility.Visible;
         workspace.Children.Add(header);
         Grid.SetRow(previewStack, 1); workspace.Children.Add(previewStack);
         var preview = new Border
@@ -456,7 +461,7 @@ internal sealed class VideoEditorWindow : Window
             BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x2B, 0x3A, 0x50)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(8),
+            Padding = new Thickness(8, 6, 8, 6),
             Child = workspace,
         };
         Grid.SetRow(preview, 0);
@@ -464,7 +469,7 @@ internal sealed class VideoEditorWindow : Window
         upper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star), MinWidth = 300 });
         upper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 220, MaxWidth = 330 });
         upper.Children.Add(preview);
-        var layerPanel = new Border { Name = "VideoLayersPanel", Child = tools, Padding = new Thickness(8), Margin = new Thickness(8, 0, 0, 0), BorderThickness = new Thickness(1) };
+        var layerPanel = new Border { Name = "VideoLayersPanel", Child = tools, Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(8, 0, 0, 0), BorderThickness = new Thickness(1) };
         layerPanel.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
         layerPanel.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         Grid.SetColumn(layerPanel, 1); upper.Children.Add(layerPanel);
@@ -679,6 +684,7 @@ internal sealed class VideoEditorWindow : Window
         })
         {
             var item = new MenuItem { Header = UiText.Get(key) };
+            if (key == "Text_258AD4B095A1") item.InputGestureText = ShortcutCatalog.Get(ShortcutScope.Video, "AddText").Hint;
             item.Click += (_, _) => add();
             addMenu.Items.Add(item);
         }
@@ -732,18 +738,18 @@ internal sealed class VideoEditorWindow : Window
         transport.Children.Add(MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Primary", TogglePlay));
         transport.Children.Add(MakeTransportIcon("Icon.FastForward", UiText.Get("Text_E5CAF7CFC916"), "Button.Ghost", () => StepCoarse(1)));
         transport.Children.Add(MakeTransportIcon("Icon.Last", UiText.Get("Text_DFCA22AB9F61"), "Button.Ghost", () => Seek(_timeline.OutMs)));
-        transport.Children.Add(Spacer(12));
+        transport.Children.Add(Spacer(6));
         // Cluster 2: frame stepping.
         transport.Children.Add(MakeTransportIcon("Icon.StepBack", UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
         transport.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
-        transport.Children.Add(Spacer(12));
+        transport.Children.Add(Spacer(6));
         // Cluster 3: timeline view and range marks.
         transport.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
         transport.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
         transport.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
         transport.Children.Add(Spacer(6));
-        transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkIn"), SetInHere));
-        transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkOut"), SetOutHere));
+        transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkIn"), "In", SetInHere));
+        transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkOut"), "Out", SetOutHere));
         Grid.SetRow(transport, 0);
         controls.Children.Add(transport);
 
@@ -767,6 +773,7 @@ internal sealed class VideoEditorWindow : Window
         };
         AutomationProperties.SetName(_cancelOperationButton, UiText.Get("Text_79B3DB1CD566"));
         AutomationProperties.SetHelpText(_cancelOperationButton, UiText.Get("Text_3DEFBAD62044"));
+        ShortcutPresentation.Attach(_cancelOperationButton, ShortcutScope.Video, "Cancel");
         _cancelOperationButton.Click += (_, _) => _operationCts?.Cancel();
         _cancelOperationButton.HorizontalAlignment = HorizontalAlignment.Center;
 
@@ -1963,9 +1970,21 @@ internal sealed class VideoEditorWindow : Window
 
         try
         {
-            if (File.Exists(path))
+            // Only the library-owned render stage for this recording may be removed.
+            // A factory being present does not make its returned path safe to delete.
+            string fullPath = ValidatedFilePaths.FileWithinRoot(_paths.CapturesRoot, path, ".mp4");
+            string name = Path.GetFileName(fullPath);
+            if (!name.StartsWith(".render-", StringComparison.Ordinal)
+                || !Guid.TryParseExact(name[8..^4], "N", out _)
+                || !string.Equals(Path.GetDirectoryName(fullPath),
+                    Path.GetDirectoryName(Path.GetFullPath(_recording.OutputPath)), StringComparison.Ordinal))
             {
-                File.Delete(path);
+                return;
+            }
+
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
             }
         }
         catch (IOException)
@@ -1974,108 +1993,48 @@ internal sealed class VideoEditorWindow : Window
         catch (UnauthorizedAccessException)
         {
         }
+        catch (ArgumentException)
+        {
+        }
     }
 
     // ---- keyboard ----
 
+    private void BuildShortcutActions()
+    {
+        _shortcutActions["Play"] = TogglePlay;
+        _shortcutActions["In"] = SetInHere; _shortcutActions["Out"] = SetOutHere;
+        _shortcutActions["FrameEdit"] = EditCurrentFrame;
+        _shortcutActions["First"] = () => Seek(_timeline.InMs);
+        _shortcutActions["Last"] = () => Seek(_timeline.OutMs);
+        _shortcutActions["Previous"] = () => StepCoarse(-1);
+        _shortcutActions["Next"] = () => StepCoarse(1);
+        _shortcutActions["PreviousFrame"] = () => StepFrames(-1);
+        _shortcutActions["NextFrame"] = () => StepFrames(1);
+        _shortcutActions["ZoomIn"] = () => _timeline.ZoomAroundPlayhead(0.8);
+        _shortcutActions["ZoomOut"] = () => _timeline.ZoomAroundPlayhead(1.25);
+        _shortcutActions["Undo"] = () => RestoreEdit(false);
+        _shortcutActions["Redo"] = () => RestoreEdit(true);
+        _shortcutActions["Gif"] = ExportGif;
+        _shortcutActions["AddText"] = AddTextOverlay;
+        _shortcutActions["EditLayer"] = () => { if (_overlayList.SelectedItem is not null) EditSelectedOverlay(); };
+        _shortcutActions["DeleteLayer"] = () => { if (SelectedLayerId() is not null) DeleteSelectedOverlay(); };
+        _shortcutActions["Cancel"] = () => { try { _operationCts?.Cancel(); } catch (ObjectDisposedException) { } };
+    }
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (!_mediaReady || Keyboard.FocusedElement is TextBox)
-        {
-            return;
-        }
+        if (!_mediaReady || Keyboard.FocusedElement is TextBox) return;
+        e.Handled = HandleShortcut(e.Key, Keyboard.Modifiers);
+    }
 
-        // New mapping (per user request): plain Left/Right jump in LARGE steps; Ctrl or Shift
-        // + Left/Right nudge by a SINGLE frame. This removes the old frame-step toggle.
-        bool fine = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
-        switch (e.Key)
-        {
-            case Key.Escape when _operationRunning:
-                e.Handled = true;
-                try
-                {
-                    _operationCts?.Cancel();
-                }
-                catch (ObjectDisposedException)
-                {
-                }
-
-                break;
-            case Key.T when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
-                e.Handled = true;
-                AddTextOverlay();
-                break;
-            case Key.G:
-                e.Handled = true;
-                ExportGif();
-                break;
-            case Key.F2 when _overlayList.SelectedItem is not null:
-                e.Handled = true;
-                EditSelectedOverlay();
-                break;
-            case Key.Z when Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && !_operationRunning:
-                e.Handled = true; RestoreEdit(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)); break;
-            case Key.Y when Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && !_operationRunning:
-                e.Handled = true; RestoreEdit(true); break;
-            case Key.Delete when SelectedLayerId() is not null:
-                e.Handled = true;
-                DeleteSelectedOverlay();
-                break;
-            case Key.Left:
-                e.Handled = true;
-                if (fine) { StepFrames(-1); } else { StepCoarse(-1); }
-                break;
-            case Key.Right:
-                e.Handled = true;
-                if (fine) { StepFrames(1); } else { StepCoarse(1); }
-                break;
-            case Key.Space:
-                e.Handled = true;
-                TogglePlay();
-                break;
-            case Key.I:
-                e.Handled = true;
-                SetInHere();
-                break;
-            case Key.O:
-                e.Handled = true;
-                SetOutHere();
-                break;
-            case Key.E:
-                e.Handled = true;
-                EditCurrentFrame();
-                break;
-            case Key.Home:
-                e.Handled = true;
-                Seek(_timeline.InMs);
-                break;
-            case Key.End:
-                e.Handled = true;
-                Seek(_timeline.OutMs);
-                break;
-            case Key.OemPlus when (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) ==
-                                      (ModifierKeys.Control | ModifierKeys.Shift):
-            case Key.Add when (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) ==
-                                  (ModifierKeys.Control | ModifierKeys.Shift):
-                e.Handled = true;
-                _timeline.ZoomAroundPlayhead(0.8);
-                break;
-            case Key.OemMinus when (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) ==
-                                       (ModifierKeys.Control | ModifierKeys.Shift):
-            case Key.Subtract when (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) ==
-                                   (ModifierKeys.Control | ModifierKeys.Shift):
-                e.Handled = true;
-                _timeline.ZoomAroundPlayhead(1.25);
-                break;
-            case Key.OemComma:   // ',' previous frame (Camtasia/ScreenToGif convention)
-                e.Handled = true;
-                StepFrames(-1);
-                break;
-            case Key.OemPeriod:  // '.' next frame
-                e.Handled = true;
-                StepFrames(1);
-                break;
-        }
+    internal bool HandleShortcut(Key key, ModifierKeys modifiers)
+    {
+        string? command = ShortcutCatalog.Match(ShortcutScope.Video, key, modifiers);
+        if (command is null || (command == "Cancel" && !_operationRunning)) return false;
+        if (_operationRunning && command != "Cancel")
+            return command is "Play" or "Previous" or "Next" or "PreviousFrame" or "NextFrame";
+        return ShortcutCatalog.Execute(ShortcutScope.Video, key, modifiers, _shortcutActions);
     }
 
     private void UpdateStatusForMode()
@@ -2219,9 +2178,10 @@ internal sealed class VideoEditorWindow : Window
         return button;
     }
 
-    private Button MakeMarkButton(string content, Action onClick)
+    private Button MakeMarkButton(string content, string command, Action onClick)
     {
-        Button button = MakeCompactButton(content, content, "Button.Ghost", onClick);
+        Button button = MakeCompactButton(content, content, "Button.Ghost", _shortcutActions[command]);
+        ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
         button.MinWidth = 36;
         button.Padding = new Thickness(6, 4, 6, 4);
         button.Margin = new Thickness(0, 0, 4, 0);
@@ -2251,10 +2211,18 @@ internal sealed class VideoEditorWindow : Window
 
     private Button MakeTransportIcon(string iconKey, string automationName, string styleKey, Action onClick)
     {
-        Button button = MakeButton(BuildIconLabel(iconKey, string.Empty), automationName, styleKey, onClick);
-        button.Width = button.MinWidth = button.MinHeight = 36;
-        button.Padding = new Thickness(4);
-        button.Margin = new Thickness(0, 0, 4, 0);
+        string? command = iconKey switch
+        {
+            "Icon.Undo" => "Undo", "Icon.Redo" => "Redo", "Icon.Edit" => "EditLayer", "Icon.Delete" => "DeleteLayer",
+            "Icon.First" => "First", "Icon.Rewind" => "Previous", "Icon.Play" => "Play", "Icon.FastForward" => "Next",
+            "Icon.Last" => "Last", "Icon.StepBack" => "PreviousFrame", "Icon.StepForward" => "NextFrame",
+            "Icon.ZoomIn" => "ZoomIn", "Icon.ZoomOut" => "ZoomOut", _ => null,
+        };
+        Button button = MakeButton(BuildIconLabel(iconKey, string.Empty), automationName, styleKey,
+            command is null ? onClick : _shortcutActions[command]);
+        button.MinWidth = 36; button.MinHeight = 42;
+        button.Padding = new Thickness(4); button.Margin = new Thickness(0, 0, 3, 0);
+        if (command is not null) ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
         return button;
     }
 

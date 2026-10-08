@@ -44,7 +44,7 @@ internal sealed class AnnotationEditorControl : Grid
 {
     private EditorTool _preferredTool = EditorTool.Rectangle;
     private bool _preferencesReady;
-    private const double ToolRailWidth = 72;
+    private const double ToolRailWidth = 94;
     private const double InspectorWidth = 232;
 
     // Below this width the inspector collapses before it can squeeze the image workspace.
@@ -64,8 +64,17 @@ internal sealed class AnnotationEditorControl : Grid
     private readonly Dictionary<EditorTool, ToggleButton> _toolButtons = new();
     private bool _mosaicDragging;
     private PointD _mosaicStart;
-    private bool _cropDragging;
-    private PointD _cropStart;
+    private CropSelection? _crop;
+    private FrameworkElement _cropSection = null!;
+    private TextBox _cropWidth = null!;
+    private TextBox _cropHeight = null!;
+    private readonly HashSet<TextBox> _dirtyCropInputs = [];
+    private readonly Dictionary<TextBox, (Border Border, TextBlock Message)> _cropInputErrors = [];
+    private ComboBox _cropRatio = null!;
+    internal CropSelection? PendingCrop => _crop;
+    internal IReadOnlyDictionary<string, Action> ShortcutActions => _shortcutActions;
+    private readonly Dictionary<string, Action> _shortcutActions = [];
+    private readonly Dictionary<string, Action> _cropActions = [];
 
     private int _canvasWidth;
     private int _canvasHeight;
@@ -96,6 +105,7 @@ internal sealed class AnnotationEditorControl : Grid
     private TextBlock _inspectorTitle = null!;
     private TextBlock _inspectorInstruction = null!;
     private TextBlock _statusText = null!;
+    private TextBlock _dimensionsText = null!;
     private bool _inspectorCompact;
 
     private TextBox? _activeTextBox;
@@ -170,7 +180,7 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize) ? Math.Clamp(defaults.FontSize, 8, 200) : 18;
         _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
-        if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool;
+        if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool == EditorTool.Crop ? EditorTool.Select : lastTool;
         _imageStore.PruneToReachable(document, undo);
         var renderer = new AnnotationRenderer(_imageStore);
 
@@ -189,6 +199,7 @@ internal sealed class AnnotationEditorControl : Grid
         Focusable = true;
         FocusVisualStyle = null;
 
+        BuildShortcutActions();
         BuildLayout();
 
         _controller.SelectionChanged += (_, _) => OnSelectionChanged();
@@ -280,116 +291,91 @@ internal sealed class AnnotationEditorControl : Grid
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
-        if (_activeTextBox is null && Keyboard.FocusedElement is TextBox) return false;
-        if (_commitInProgress)
-        {
-            // The snapshot being persisted must remain immutable until the operation either
-            // succeeds or reports that the editor should stay open.
-            return true;
-        }
-
-        // While typing in a text box, only Escape/Ctrl+Enter are editor shortcuts.
+        if (_commitInProgress) return true;
         if (_activeTextBox is not null)
         {
-            if (key == Key.Escape)
-            {
-                CommitActiveText();
-                return true;
-            }
-
-            if (key == Key.Enter && modifiers.HasFlag(ModifierKeys.Control))
-            {
-                CommitActiveText();
-                Commit(EditorCommitAction.Done);
-                return true;
-            }
-
+            string? command = ShortcutCatalog.Match(ShortcutScope.Annotation, key, modifiers);
+            if (command == "Cancel") { CommitActiveText(); return true; }
+            if (command == "Done") { CommitActiveText(); Commit(EditorCommitAction.Done); return true; }
             return false;
         }
-
-        bool ctrl = modifiers.HasFlag(ModifierKeys.Control);
-        bool shift = modifiers.HasFlag(ModifierKeys.Shift);
-
-        switch (key)
+        if (_crop is not null && Keyboard.FocusedElement is TextBox cropInput
+            && (ReferenceEquals(cropInput, _cropWidth) || ReferenceEquals(cropInput, _cropHeight))
+            && modifiers == ModifierKeys.None)
         {
-            case Key.Enter when ctrl:
-                Commit(EditorCommitAction.Done);
-                return true;
-            case Key.C when ctrl:
-                Commit(EditorCommitAction.CopyToClipboard);
-                return true;
-            case Key.S when ctrl && shift:
-                Commit(EditorCommitAction.SaveAs);
-                return true;
-            case Key.S when ctrl:
-                Commit(EditorCommitAction.QuickSave);
-                return true;
-            case Key.R when ctrl && shift:
-                _ = ApplyPrivacyRedactionsAsync();
-                return true;
-            case Key.Escape:
-                Cancel();
-                return true;
-            case Key.Z when ctrl:
-                if (_controller.PerformUndo())
-                {
-                    SetStatus(UiText.Get("Text_DAF93C3AA95D"));
-                }
-
-                return true;
-            case Key.Y when ctrl:
-                if (_controller.PerformRedo())
-                {
-                    SetStatus(UiText.Get("Text_8B22B7BBB0CD"));
-                }
-
-                return true;
-            case Key.Delete:
-            case Key.Back:
-                DeleteSelected();
-                return true;
-            case Key.M when modifiers == ModifierKeys.None:
-                SelectTool(EditorTool.Mosaic);
-                return true;
-            case Key.X when modifiers == ModifierKeys.None:
-                SelectTool(EditorTool.Crop);
-                return true;
-            case Key.E when modifiers == ModifierKeys.None:
-                SelectTool(EditorTool.Ellipse);
-                return true;
-            case Key.H when modifiers == ModifierKeys.None:
-                SelectTool(EditorTool.Highlighter);
-                return true;
-            case Key.N when modifiers == ModifierKeys.None:
-                SelectTool(EditorTool.StepNumber);
-                return true;
-            case Key.V:
-                SelectTool(EditorTool.Select);
-                return true;
-            case Key.R:
-                SelectTool(EditorTool.Rectangle);
-                return true;
-            case Key.A:
-                SelectTool(EditorTool.Arrow);
-                return true;
-            case Key.P:
-                SelectTool(EditorTool.Pen);
-                return true;
-            case Key.T:
-                SelectTool(EditorTool.Text);
-                return true;
-            case Key.I:
-                SelectTool(EditorTool.Image);
-                return true;
-            case Key.Q:
-                RotateCapture(-1);
-                return true;
-            case Key.W:
-                RotateCapture(1);
-                return true;
+            if (key == Key.Escape) { CancelPendingCrop(); Focus(); return true; }
+            if (key == Key.Enter) { ChangeCropSize(cropInput); return true; }
         }
+        if (Keyboard.FocusedElement is ButtonBase && key is Key.Space or Key.Enter
+            && modifiers == ModifierKeys.None) return false;
+        if (Keyboard.FocusedElement is TextBoxBase or ComboBox or ComboBoxItem
+            && (modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) == 0) return false;
+        if (_crop is not null && ShortcutCatalog.Execute(ShortcutScope.Crop, key, modifiers, _cropActions)) return true;
+        if (Keyboard.FocusedElement is TextBox box
+            && !(_crop is not null && (ReferenceEquals(box, _cropWidth) || ReferenceEquals(box, _cropHeight))
+                && ShortcutCatalog.Match(ShortcutScope.Annotation, key, modifiers) is "Done" or "Save" or "SaveAs")) return false;
+        return ShortcutCatalog.Execute(ShortcutScope.Annotation, key, modifiers, _shortcutActions);
+    }
 
-        return false;
+    private void BuildShortcutActions()
+    {
+        foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
+        _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
+        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.CopyToClipboard);
+        _shortcutActions["Save"] = () => Commit(EditorCommitAction.QuickSave);
+        _shortcutActions["SaveAs"] = () => Commit(EditorCommitAction.SaveAs);
+        _shortcutActions["Privacy"] = () => _ = ApplyPrivacyRedactionsAsync();
+        _shortcutActions["Cancel"] = Cancel;
+        _shortcutActions["Undo"] = () => { if (_controller.PerformUndo()) SetStatus(UiText.Get("Text_DAF93C3AA95D")); };
+        _shortcutActions["Redo"] = () => { if (_controller.PerformRedo()) SetStatus(UiText.Get("Text_8B22B7BBB0CD")); };
+        _shortcutActions["Delete"] = DeleteSelected;
+        _shortcutActions["RotateLeft"] = () => RotateCapture(-1);
+        _shortcutActions["RotateRight"] = () => RotateCapture(1);
+        _cropActions["Apply"] = ApplyPendingCrop;
+        _cropActions["Cancel"] = CancelPendingCrop;
+        foreach (var (name, x, y) in new[] { ("Left", -1, 0), ("Right", 1, 0), ("Up", 0, -1), ("Down", 0, 1) })
+        {
+            _cropActions[name] = () => { _crop?.Nudge(x, y); RefreshCrop(); };
+            _cropActions[name + "Fast"] = () => { _crop?.Nudge(x * 10, y * 10); RefreshCrop(); };
+        }
+    }
+
+    internal IReadOnlyDictionary<string, Action> CropShortcutActions => _cropActions;
+    internal void ApplyPendingCrop()
+    {
+        if (_crop is not { } crop) return;
+        if (!CommitCropInputs()) return;
+        if (crop.Region.Width < 2 || crop.Region.Height < 2) { SetStatus(UiText.Get("Crop.TooSmall")); return; }
+        RectD region = crop.Region;
+        _crop = null; _surface.PendingCrop = null;
+        ReleasePointer();
+        ApplyCrop(region);
+        SelectTool(EditorTool.Select);
+        SetStatus(UiText.Get("Crop.Applied"));
+    }
+    internal void CancelPendingCrop()
+    {
+        if (_crop is null) return;
+        _crop = null; _surface.PendingCrop = null;
+        ReleasePointer(); _surface.InvalidateVisual();
+        SelectTool(EditorTool.Select);
+        SetStatus(UiText.Get("Crop.Cancelled"));
+    }
+    private void RefreshCrop()
+    {
+        _surface.PendingCrop = _crop;
+        _surface.InvalidateVisual();
+        if (_crop is null)
+        {
+            _dirtyCropInputs.Clear();
+            foreach (var box in _cropInputErrors.Keys) SetCropInputError(box, false);
+            return;
+        }
+        if (_cropWidth is null) return;
+        _syncingInspector = true;
+        if (!_dirtyCropInputs.Contains(_cropWidth)) _cropWidth.Text = Math.Round(_crop.Region.Width).ToString(CultureInfo.InvariantCulture);
+        if (!_dirtyCropInputs.Contains(_cropHeight)) _cropHeight.Text = Math.Round(_crop.Region.Height).ToString(CultureInfo.InvariantCulture);
+        _syncingInspector = false;
     }
 
     // ---- Rotation ------------------------------------------------------------------
@@ -471,9 +457,15 @@ internal sealed class AnnotationEditorControl : Grid
                 e.Handled = true;
                 return;
             case EditorTool.Crop:
-                _cropDragging = true;
-                _cropStart = image;
-                CapturePointer();
+                if (_crop is not null)
+                {
+                    if (e.ClickCount == 2 && _crop.Contains(image)) { ApplyPendingCrop(); e.Handled = true; return; }
+                    double scale = Math.Max(double.Epsilon, _surface.DipPerPixel);
+                    _crop.Begin(image, 7 / scale, SystemParameters.MinimumHorizontalDragDistance / scale,
+                        SystemParameters.MinimumVerticalDragDistance / scale);
+                    RefreshCrop();
+                    CapturePointer();
+                }
                 e.Handled = true;
                 return;
             default:
@@ -598,6 +590,24 @@ internal sealed class AnnotationEditorControl : Grid
         Point dip = e.GetPosition(_surface);
         PointD image = _surface.ToImagePoint(dip);
 
+        if (_crop is not null)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed && _crop.IsDragging)
+            {
+                _crop.Drag(image, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+                RefreshCrop();
+            }
+            Cursor = _crop.HitTest(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel)) switch
+            {
+                CropGrip.Move => Cursors.SizeAll,
+                CropGrip.TopLeft or CropGrip.BottomRight => Cursors.SizeNWSE,
+                CropGrip.TopRight or CropGrip.BottomLeft => Cursors.SizeNESW,
+                CropGrip.Top or CropGrip.Bottom => Cursors.SizeNS,
+                CropGrip.Left or CropGrip.Right => Cursors.SizeWE,
+                _ => Cursors.Cross,
+            };
+            return;
+        }
         if (e.LeftButton == MouseButtonState.Pressed)
         {
             _controller.PointerMove(image);
@@ -632,13 +642,10 @@ internal sealed class AnnotationEditorControl : Grid
             return;
         }
 
-        if (_cropDragging)
+        if (_crop is { IsDragging: true })
         {
-            _cropDragging = false;
-            ReleasePointer();
-            Point cropDip = e.GetPosition(_surface);
-            PointD cropEnd = _surface.ToImagePoint(cropDip);
-            ApplyCrop(new RectD(_cropStart.X, _cropStart.Y, cropEnd.X - _cropStart.X, cropEnd.Y - _cropStart.Y));
+            _crop.Drag(_surface.ToImagePoint(e.GetPosition(_surface)), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            _crop.End(); ReleasePointer(); RefreshCrop();
             e.Handled = true;
             return;
         }
@@ -842,8 +849,8 @@ internal sealed class AnnotationEditorControl : Grid
     /// </summary>
     internal void ApplyCrop(RectD region)
     {
-        RectD normalized = region.Normalized().ClampTo(new RectD(0, 0, _canvasWidth, _canvasHeight));
-        if (normalized.Width < 8 || normalized.Height < 8)
+        RectD normalized = region.Normalized().ClampTo(new RectD(0, 0, _canvasWidth, _canvasHeight)).ToPixelBounds();
+        if (normalized.Width < 2 || normalized.Height < 2)
         {
             SelectTool(EditorTool.Select);
             return;
@@ -963,26 +970,13 @@ internal sealed class AnnotationEditorControl : Grid
 
     private Border BuildCommandBar()
     {
-        var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var grid = new CommandGroupsPanel();
 
         var left = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var document = new TextBlock
-        {
-            Text = UiText.Get("Text_3E409AB1A37C"),
-            Foreground = Brush("Text.Primary", Colors.White),
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 14,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(2, 0, 10, 0),
-        };
-        document.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
-        left.Children.Add(document);
         left.Children.Add(Separator());
 
         _undoButton = IconButton(UiText.Get("Text_CE706412FA75"), UiText.Get("Text_C61A081610C9"), "Icon.Undo", FallbackUndo, () =>
@@ -1033,7 +1027,9 @@ internal sealed class AnnotationEditorControl : Grid
 
         // One primary action. Saving stays reachable through Done, Ctrl+S, and the
         // overflow menu, so the four competing exit buttons collapse to cancel/copy/done.
-        right.Children.Add(BuildSaveOverflowMenu());
+        var save = BuildSaveOverflowMenu();
+        ShortcutPresentation.Attach(save, ShortcutScope.Annotation, "Save");
+        right.Children.Add(save);
         right.Children.Add(Separator());
 
         Button cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("Text_22B802C1B7FF"), "Button.GhostCompact", Cancel);
@@ -1049,6 +1045,14 @@ internal sealed class AnnotationEditorControl : Grid
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         done.MinWidth = 78;
 
+        ShortcutPresentation.Attach(cancel, ShortcutScope.Annotation, "Cancel");
+        ShortcutPresentation.Attach(copy, ShortcutScope.Annotation, "Copy");
+        ShortcutPresentation.Attach(done, ShortcutScope.Annotation, "Done");
+        foreach (var (button, command) in new[] { (_undoButton, "Undo"), (_redoButton, "Redo"), (_rotateLeftButton, "RotateLeft"), (_rotateRightButton, "RotateRight"), (_redactButton, "Privacy") })
+        {
+            button.Width = double.NaN; button.Height = double.NaN; button.MinHeight = 42;
+            ShortcutPresentation.Attach(button, ShortcutScope.Annotation, command);
+        }
         right.Children.Add(cancel);
         right.Children.Add(copy);
         right.Children.Add(done);
@@ -1073,7 +1077,7 @@ internal sealed class AnnotationEditorControl : Grid
         var quickSave = new MenuItem
         {
             Header = UiText.Get("Text_DFC084A111D0"),
-            InputGestureText = "Ctrl+S",
+            InputGestureText = ShortcutCatalog.Get(ShortcutScope.Annotation, "Save").Hint,
             Icon = BuildIcon("Icon.Save", FallbackSave, 16),
         };
         quickSave.Click += (_, _) => Commit(EditorCommitAction.QuickSave);
@@ -1082,7 +1086,7 @@ internal sealed class AnnotationEditorControl : Grid
         var saveAs = new MenuItem
         {
             Header = UiText.Get("Text_57950AFF46BC"),
-            InputGestureText = "Ctrl+Shift+S",
+            InputGestureText = ShortcutCatalog.Get(ShortcutScope.Annotation, "SaveAs").Hint,
             Icon = BuildIcon("Icon.SaveAs", FallbackSaveAs, 16),
         };
         saveAs.Click += (_, _) => Commit(EditorCommitAction.SaveAs);
@@ -1120,6 +1124,7 @@ internal sealed class AnnotationEditorControl : Grid
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
         AutomationName(button, UiText.Get("Text_EA33C8FF45A0"));
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) =>
         {
             menu.PlacementTarget = button;
@@ -1158,28 +1163,21 @@ internal sealed class AnnotationEditorControl : Grid
 
     private Border BuildToolRail()
     {
-        var stack = new StackPanel
-        {
-            Orientation = Orientation.Vertical,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
+        var stack = new UniformGrid { Columns = 2, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(2, 4, 2, 0) };
         // Grouped by intent so shape and insertion tools no longer read as one flat list.
-        AddToolButton(stack, EditorTool.Select, UiText.Get("Text_8D1A750C9351"), "V", UiText.Get("Text_8A3ADCEB89EF"), "Icon.Select", FallbackSelect);
-        AddToolButton(stack, EditorTool.Crop, UiText.Get("Tools_Crop"), "X", UiText.Get("Tools_CropHint"), "Icon.Crop", FallbackCrop);
-        stack.Children.Add(RailSeparator());
-        AddToolButton(stack, EditorTool.Rectangle, UiText.Get("Text_DC0760235344"), "R", UiText.Get("Text_B659038CC17D"), "Icon.Rectangle", FallbackRectangle);
-        AddToolButton(stack, EditorTool.Ellipse, UiText.Get("Tools.Ellipse"), "E", UiText.Get("Tools.Ellipse"), "Icon.Ellipse", () => new EllipseGeometry(new Rect(3, 3, 14, 14)));
-        AddToolButton(stack, EditorTool.Arrow, UiText.Get("Text_2785CE58DF74"), "A", UiText.Get("Text_D53ABD064C5E"), "Icon.Arrow", FallbackArrow);
-        AddToolButton(stack, EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), "P", UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen);
-        AddToolButton(stack, EditorTool.Highlighter, UiText.Get("Tools.Highlighter"), "H", UiText.Get("Tools.Highlighter"), "Icon.Highlighter", () => Geometry.Parse("M4,14 L13,3 L17,7 L8,18 Z M2,18 H12"));
-        AddToolButton(stack, EditorTool.Text, UiText.Get("Text_258AD4B095A1"), "T", UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText);
-        AddToolButton(stack, EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), "N", UiText.Get("Tools.StepNumber"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13"));
-        stack.Children.Add(RailSeparator());
-        AddToolButton(stack, EditorTool.Image, UiText.Get("Text_302BAE127938"), "I", UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage);
-        stack.Children.Add(RailSeparator());
-        AddToolButton(stack, EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), "M", UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic);
+        AddToolButton(stack, EditorTool.Select, UiText.Get("Text_8D1A750C9351"), UiText.Get("Text_8A3ADCEB89EF"), "Icon.Select", FallbackSelect);
+        AddToolButton(stack, EditorTool.Crop, UiText.Get("Tools_Crop"), UiText.Get("Tools_CropHint"), "Icon.Crop", FallbackCrop);
+        AddToolButton(stack, EditorTool.Rectangle, UiText.Get("Text_DC0760235344"), UiText.Get("Text_B659038CC17D"), "Icon.Rectangle", FallbackRectangle);
+        AddToolButton(stack, EditorTool.Ellipse, UiText.Get("Tools.Ellipse"), UiText.Get("Tools.Ellipse"), "Icon.Ellipse", () => new EllipseGeometry(new Rect(3, 3, 14, 14)));
+        AddToolButton(stack, EditorTool.Arrow, UiText.Get("Text_2785CE58DF74"), UiText.Get("Text_D53ABD064C5E"), "Icon.Arrow", FallbackArrow);
+        AddToolButton(stack, EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen);
+        AddToolButton(stack, EditorTool.Highlighter, UiText.Get("Tools.Highlighter"), UiText.Get("Tools.Highlighter"), "Icon.Highlighter", () => Geometry.Parse("M4,14 L13,3 L17,7 L8,18 Z M2,18 H12"));
+        AddToolButton(stack, EditorTool.Text, UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText);
+        AddToolButton(stack, EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), UiText.Get("Tools.StepNumber"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13"));
+        AddToolButton(stack, EditorTool.Image, UiText.Get("Text_302BAE127938"), UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage);
+        AddToolButton(stack, EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic);
 
-        var panel = new Border { Child = new ScrollViewer { Name = "AnnotationToolRailScroll", Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled } };
+        var panel = new Border { Name = "AnnotationToolRail", Child = stack };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
         return panel;
     }
@@ -1246,6 +1244,8 @@ internal sealed class AnnotationEditorControl : Grid
         stack.Children.Add(_shapeStyleSection);
         _fontSizeSection = BuildFontSizeSection();
         stack.Children.Add(_fontSizeSection);
+        _cropSection = BuildCropSection();
+        stack.Children.Add(_cropSection);
 
         _deleteButton = TextButton(UiText.Get("Text_0DED92FCE6B0"), UiText.Get("Text_7DFFA4D81765"), "Button.Danger", DeleteSelected);
         _deleteButton.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -1268,6 +1268,78 @@ internal sealed class AnnotationEditorControl : Grid
             },
             SnapsToDevicePixels = true,
         }, "Surface.Raised");
+    }
+
+    private FrameworkElement BuildCropSection()
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        panel.Children.Add(SectionLabel(UiText.Get("Crop.Ratio")));
+        _cropRatio = new ComboBox { MinHeight = 30 };
+        foreach (string label in new[] { UiText.Get("Crop.Free"), UiText.Get("Crop.Original"), "1:1", "4:3", "16:9", "9:16" }) _cropRatio.Items.Add(label);
+        AutomationName(_cropRatio, UiText.Get("Crop.Ratio"));
+        _cropRatio.SelectedIndex = 0;
+        _cropRatio.SelectionChanged += (_, _) =>
+        {
+            _crop?.SetRatio(_cropRatio.SelectedIndex switch { 1 => (double)_canvasWidth / _canvasHeight, 2 => 1, 3 => 4.0 / 3, 4 => 16.0 / 9, 5 => 9.0 / 16, _ => null });
+            RefreshCrop();
+        };
+        panel.Children.Add(_cropRatio);
+        var dimensions = new UniformGrid { Columns = 2, Margin = new Thickness(0, 10, 0, 10) };
+        _cropWidth = new TextBox { MinHeight = 30, Margin = new Thickness(0, 0, 4, 0) };
+        _cropHeight = new TextBox { MinHeight = 30 };
+        foreach (var (box, key) in new[] { (_cropWidth, "Crop.Width"), (_cropHeight, "Crop.Height") })
+        {
+            var field = new StackPanel(); field.Children.Add(SectionLabel(UiText.Get(key)));
+            var border = new Border { Child = box, BorderThickness = new Thickness(1), BorderBrush = Brushes.Transparent };
+            var error = new TextBlock { Text = UiText.Get("Crop.InvalidSizeLabel"), FontSize = 11,
+                TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+            error.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+            _cropInputErrors.Add(box, (border, error));
+            field.Children.Add(border); field.Children.Add(error); dimensions.Children.Add(field);
+            AutomationName(box, UiText.Get(key));
+            box.TextChanged += (_, _) =>
+            {
+                if (!_syncingInspector && _crop is not null) _dirtyCropInputs.Add(box);
+            };
+            box.LostKeyboardFocus += (_, _) => ChangeCropSize(box);
+        }
+        panel.Children.Add(dimensions);
+        var actions = new UniformGrid { Columns = 2 };
+        var apply = TextButton(UiText.Get("Crop.Apply"), UiText.Get("Crop.Apply"), "Button.Primary", ApplyPendingCrop);
+        var cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("Text_BE876433993A"), "Button.GhostCompact", CancelPendingCrop);
+        ShortcutPresentation.Attach(apply, ShortcutScope.Crop, "Apply");
+        ShortcutPresentation.Attach(cancel, ShortcutScope.Crop, "Cancel");
+        actions.Children.Add(apply); actions.Children.Add(cancel); panel.Children.Add(actions);
+        return panel;
+    }
+
+    private bool ChangeCropSize(TextBox box)
+    {
+        if (_crop is null || !_dirtyCropInputs.Contains(box)) return true;
+        if (!int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) || value < 2)
+        {
+            SetCropInputError(box, true);
+            SetStatus(UiText.Get("Crop.InvalidSize"));
+            return false;
+        }
+        _dirtyCropInputs.Remove(box);
+        SetCropInputError(box, false);
+        if (ReferenceEquals(box, _cropWidth)) _crop.SetWidth(value); else _crop.SetHeight(value);
+        RefreshCrop();
+        if (_cropInputErrors.Values.All(error => error.Message.Visibility == Visibility.Collapsed))
+            SetStatus(ToolStatus(EditorTool.Crop));
+        return true;
+    }
+
+    private bool CommitCropInputs() => ChangeCropSize(_cropWidth) & ChangeCropSize(_cropHeight);
+
+    private void SetCropInputError(TextBox box, bool invalid)
+    {
+        var (border, message) = _cropInputErrors[box];
+        if (invalid) border.SetResourceReference(Border.BorderBrushProperty, "State.Danger");
+        else border.BorderBrush = Brushes.Transparent;
+        message.Visibility = invalid ? Visibility.Visible : Visibility.Collapsed;
+        AutomationProperties.SetHelpText(box, invalid ? UiText.Get("Crop.InvalidSize") : string.Empty);
     }
 
     private FrameworkElement BuildColorSection()
@@ -1307,6 +1379,7 @@ internal sealed class AnnotationEditorControl : Grid
                 Background = swatchColor.ToBrush(),
             };
             AutomationName(swatchButton, UiText.Format("Text_151C77170A94", swatchColor.ToHex()));
+            PreserveEditorMouseFocus(swatchButton);
             swatchButton.Click += (_, _) =>
             {
                 _controller.ApplyStrokeColor(swatchColor);
@@ -1322,6 +1395,7 @@ internal sealed class AnnotationEditorControl : Grid
         panel.Children.Add(custom);
         var apply = new Button { Content = UiText.Get("Tools.CustomColor"), MinHeight = 36 };
         AutomationName(apply, UiText.Get("Tools.CustomColor"));
+        PreserveEditorMouseFocus(apply);
         apply.Click += (_, _) =>
         {
             if (ColorRgba.TryParse(custom.Text, out ColorRgba color))
@@ -1497,7 +1571,7 @@ internal sealed class AnnotationEditorControl : Grid
         Grid.SetColumn(_statusText, 0);
         grid.Children.Add(_statusText);
 
-        var dimensions = new TextBlock
+        var dimensions = _dimensionsText = new TextBlock
         {
             Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight),
             Foreground = Brush("Text.Muted", Colors.Gray),
@@ -1528,7 +1602,6 @@ internal sealed class AnnotationEditorControl : Grid
         Panel parent,
         EditorTool tool,
         string label,
-        string shortcut,
         string tooltip,
         string iconResourceKey,
         Func<Geometry> fallbackGeometry)
@@ -1536,10 +1609,12 @@ internal sealed class AnnotationEditorControl : Grid
         var button = new ToggleButton
         {
             Content = BuildIcon(iconResourceKey, fallbackGeometry, 20),
-            ToolTip = tooltip,
+            ToolTip = tooltip, Width = 40, Height = 38, MinHeight = 0, MinWidth = 0, Padding = new Thickness(2), Margin = new Thickness(1),
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");
-        AutomationName(button, UiText.Format("Text_1BA9F7001237", label, shortcut));
+        AutomationName(button, UiText.Format("Text_1BA9F7001237", label, ShortcutCatalog.Get(ShortcutScope.Annotation, tool.ToString()).Hint));
+        ShortcutPresentation.Attach(button, ShortcutScope.Annotation, tool.ToString(), corner: true);
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) => SelectTool(tool);
         _toolButtons[tool] = button;
         parent.Children.Add(button);
@@ -1563,6 +1638,7 @@ internal sealed class AnnotationEditorControl : Grid
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
         AutomationName(button, automationName);
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) => onClick();
         return button;
     }
@@ -1588,6 +1664,7 @@ internal sealed class AnnotationEditorControl : Grid
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
         AutomationName(button, label);
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) => onClick();
         return button;
     }
@@ -1603,8 +1680,23 @@ internal sealed class AnnotationEditorControl : Grid
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, styleKey);
         AutomationName(button, label);
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) => onClick();
         return button;
+    }
+
+    private void PreserveEditorMouseFocus(ButtonBase button)
+    {
+        // Mouse commands leave shortcuts on the canvas. Tab and automation can
+        // still focus the same button and activate it with Space or Enter.
+        button.PreviewGotKeyboardFocus += (_, e) =>
+        {
+            if (ReferenceEquals(e.NewFocus, button) && Mouse.LeftButton == MouseButtonState.Pressed)
+            {
+                e.Handled = true;
+                Focus();
+            }
+        };
     }
 
     private Border Separator() => new()
@@ -1696,7 +1788,7 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static Geometry FallbackMosaic() => Geometry.Parse("M3,4 H17 V16 H3 Z M3,9 H9 V4 M9,9 H15 M9,9 V16 M15,9 V14 A2,2 0 0 1 13,16");
 
-    private static Geometry FallbackCrop() => Geometry.Parse("M5,3 V13 H17 M17,13 L14,10 M17,13 L14,16 M3,5 A2,2 0 0 1 5,3");
+    private static Geometry FallbackCrop() => Geometry.Parse("M5,2 V14 A1,1 0 0 0 6,15 H18 M2,5 H14 A1,1 0 0 1 15,6 V18");
 
     private static Geometry FallbackUndo() => Geometry.Parse("M8,6 L4,10 L8,14 M4,10 H13 A4,4 0 0 1 13,18");
 
@@ -1725,13 +1817,22 @@ internal sealed class AnnotationEditorControl : Grid
             CommitActiveText();
         }
 
+        bool cancelledCrop = _crop is not null && tool != EditorTool.Crop;
+        if (cancelledCrop) { _crop = null; ReleasePointer(); }
         _controller.Tool = tool;
-        if (tool != EditorTool.Select) _preferredTool = tool;
+        if (tool == EditorTool.Crop && _crop is null)
+        {
+            _controller.SetSelected(null);
+            _crop = new CropSelection(_canvasWidth, _canvasHeight);
+            _cropRatio.SelectedIndex = 0;
+        }
+        RefreshCrop();
+        if (tool is not (EditorTool.Select or EditorTool.Crop)) _preferredTool = tool;
         RememberPreferences();
         SyncToolButtons();
         Cursor = tool == EditorTool.Select ? Cursors.Arrow : Cursors.Cross;
         UpdateInspector();
-        SetStatus(ToolStatus(tool));
+        SetStatus(cancelledCrop ? UiText.Get("Crop.Cancelled") : ToolStatus(tool));
     }
 
     private void RememberPreferences()
@@ -1782,6 +1883,8 @@ internal sealed class AnnotationEditorControl : Grid
     {
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncBaseBitmapWithDocument();
+        _dimensionsText.Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight);
+        if (_crop is not null) { _crop = new CropSelection(_canvasWidth, _canvasHeight); _cropRatio.SelectedIndex = 0; RefreshCrop(); }
         RefreshHistoryButtons();
         UpdateInspector();
     }
@@ -1904,6 +2007,10 @@ internal sealed class AnnotationEditorControl : Grid
         bool shapeApplies = selected is ShapeAnnotation || (selected is null && _controller.Tool is EditorTool.Rectangle or EditorTool.Ellipse);
         bool fontSizeApplies = selected is TextAnnotation || (selected is null && _controller.Tool == EditorTool.Text);
 
+        bool cropping = _crop is not null;
+        _cropSection.Visibility = cropping ? Visibility.Visible : Visibility.Collapsed;
+        _deleteButton.Visibility = cropping ? Visibility.Collapsed : Visibility.Visible;
+        _inspectorInstruction.Visibility = cropping ? Visibility.Collapsed : Visibility.Visible;
         _colorSection.Visibility = colorApplies ? Visibility.Visible : Visibility.Collapsed;
         _thicknessSection.Visibility = thicknessApplies ? Visibility.Visible : Visibility.Collapsed;
         _shapeStyleSection.Visibility = shapeApplies ? Visibility.Visible : Visibility.Collapsed;
@@ -1982,6 +2089,7 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static string ToolName(EditorTool tool) => tool switch
     {
+        EditorTool.Crop => UiText.Get("Tools_Crop"),
         EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
         EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
         EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
@@ -2010,6 +2118,7 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static string ToolStatus(EditorTool tool) => tool switch
     {
+        EditorTool.Crop => UiText.Get("Crop.Instruction"),
         EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
         EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
         EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
@@ -2162,6 +2271,15 @@ internal sealed class AnnotationEditorControl : Grid
             CommitActiveText();
         }
 
+        // Validate both inputs even when the crop still spans the full image.
+        if (_crop is not null && !CommitCropInputs()) return;
+        bool appliedCrop = _crop is { } pending && pending.Region != pending.Bounds;
+        if (appliedCrop)
+        {
+            ApplyPendingCrop();
+            if (_crop is not null) return; // An invalid tiny crop stays editable.
+        }
+
         AnnotationDocument document = _controller.Document;
         document.NormalizeZIndices();
 
@@ -2203,7 +2321,8 @@ internal sealed class AnnotationEditorControl : Grid
         // resolves. This guarantees Ctrl+C means copy-then-close, never close-then-copy.
         _commitInProgress = true;
         IsHitTestVisible = false;
-        SetStatus(action == EditorCommitAction.CopyToClipboard ? UiText.Get("Text_78666F37A521") : UiText.Get("Text_88DAAEEDFE4C"));
+        string commitStatus = action == EditorCommitAction.CopyToClipboard ? UiText.Get("Text_78666F37A521") : UiText.Get("Text_88DAAEEDFE4C");
+        SetStatus(appliedCrop ? UiText.Get("Crop.Applied") + " · " + commitStatus : commitStatus);
         bool shouldClose;
         try
         {

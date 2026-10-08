@@ -29,6 +29,12 @@ namespace MyCapture.App.Editing;
 internal sealed class AnnotationEditorSurface : FrameworkElement
 {
     private const double HandlePixels = 8;
+    private static readonly DependencyProperty CropScrimProperty = DependencyProperty.Register(
+        "CropScrim", typeof(Brush), typeof(AnnotationEditorSurface), new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
+    private static readonly DependencyProperty CropFrameProperty = DependencyProperty.Register(
+        "CropFrame", typeof(Brush), typeof(AnnotationEditorSurface), new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender));
+    private static readonly DependencyProperty CropFrameShadowProperty = DependencyProperty.Register(
+        "CropFrameShadow", typeof(Brush), typeof(AnnotationEditorSurface), new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
 
     private FrozenFrame _frame;
     private RectD _cropRegion;
@@ -55,6 +61,9 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.HighQuality);
+        SetResourceReference(CropScrimProperty, "Crop.Scrim");
+        SetResourceReference(CropFrameProperty, "Crop.Frame");
+        SetResourceReference(CropFrameShadowProperty, "Crop.FrameShadow");
 
         _dimmerBrush = Resource("Overlay.Dimmer", new SolidColorBrush(Color.FromArgb(115, 0, 0, 0)));
         _selectionBrush = Resource("Accent.Default", new SolidColorBrush(Color.FromRgb(0x7C, 0x6C, 0xFF)));
@@ -73,6 +82,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     internal FrozenFrame Frame => _frame;
 
     internal string? SourceWindowTitle { get; set; }
+    internal CropSelection? PendingCrop { get; set; }
 
     /// <summary>
     /// Replaces the base bitmap and crop (a rotation swaps width and height) and repaints.
@@ -219,38 +229,69 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         cropPen.Freeze();
         dc.DrawRectangle(null, cropPen, CropRectDip);
 
-        DrawSelectionAdorner(dc);
+        if (PendingCrop is { } pending) DrawPendingCrop(dc, pending);
+        else DrawSelectionAdorner(dc);
     }
 
-    private void DrawDimmerOutside(DrawingContext dc, Rect crop)
+    private void DrawPendingCrop(DrawingContext dc, CropSelection pending)
     {
+        Rect bounds = ToSurfaceRect(pending.Region);
+        DrawDimmerOutside(dc, bounds, (Brush)GetValue(CropScrimProperty));
+        var frame = (Brush)GetValue(CropFrameProperty);
+        var shadow = (Brush)GetValue(CropFrameShadowProperty);
+        var outline = new Pen(frame, 1);
+        dc.DrawRectangle(null, new Pen(shadow, 3), bounds);
+        dc.DrawRectangle(null, outline, bounds);
+        if (pending.IsDragging)
+        {
+            for (int index = 1; index <= 2; index++)
+            {
+                double x = bounds.Left + bounds.Width * index / 3;
+                double y = bounds.Top + bounds.Height * index / 3;
+                dc.DrawLine(outline, new Point(x, bounds.Top), new Point(x, bounds.Bottom));
+                dc.DrawLine(outline, new Point(bounds.Left, y), new Point(bounds.Right, y));
+            }
+        }
+        foreach (Point center in HandleCenters(bounds))
+            dc.DrawRectangle(frame, new Pen(shadow, 1), new Rect(center.X - 4, center.Y - 4, 8, 8));
+        var label = new FormattedText($"{Math.Round(pending.Region.Width)} × {Math.Round(pending.Region.Height)} px",
+            UiText.Culture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 12, frame, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        double left = Math.Clamp(bounds.Left + (bounds.Width - label.Width) / 2, 4, Math.Max(4, ActualWidth - label.Width - 12));
+        double top = bounds.Bottom + 10 + label.Height < ActualHeight ? bounds.Bottom + 10 : Math.Max(4, bounds.Bottom - label.Height - 14);
+        dc.DrawRoundedRectangle(shadow, null, new Rect(left - 5, top - 3, label.Width + 10, label.Height + 6), 3, 3);
+        dc.DrawText(label, new Point(left, top));
+    }
+
+    private void DrawDimmerOutside(DrawingContext dc, Rect crop, Brush? scrim = null)
+    {
+        Brush brush = scrim ?? _dimmerBrush;
         Rect bounds = new(0, 0, ActualWidth, ActualHeight);
         Rect visibleCrop = Rect.Intersect(bounds, crop);
         if (visibleCrop.IsEmpty)
         {
-            dc.DrawRectangle(_dimmerBrush, null, bounds);
+            dc.DrawRectangle(brush, null, bounds);
             return;
         }
 
-        DrawIfPositive(dc, new Rect(0, 0, ActualWidth, visibleCrop.Top));
+        DrawIfPositive(dc, new Rect(0, 0, ActualWidth, visibleCrop.Top), brush);
         DrawIfPositive(dc, new Rect(
             0,
             visibleCrop.Bottom,
             ActualWidth,
-            Math.Max(0, ActualHeight - visibleCrop.Bottom)));
-        DrawIfPositive(dc, new Rect(0, visibleCrop.Top, visibleCrop.Left, visibleCrop.Height));
+            Math.Max(0, ActualHeight - visibleCrop.Bottom)), brush);
+        DrawIfPositive(dc, new Rect(0, visibleCrop.Top, visibleCrop.Left, visibleCrop.Height), brush);
         DrawIfPositive(dc, new Rect(
             visibleCrop.Right,
             visibleCrop.Top,
             Math.Max(0, ActualWidth - visibleCrop.Right),
-            visibleCrop.Height));
+            visibleCrop.Height), brush);
     }
 
-    private void DrawIfPositive(DrawingContext dc, Rect rect)
+    private static void DrawIfPositive(DrawingContext dc, Rect rect, Brush brush)
     {
         if (rect.Width > 0 && rect.Height > 0)
         {
-            dc.DrawRectangle(_dimmerBrush, null, rect);
+            dc.DrawRectangle(brush, null, rect);
         }
     }
 

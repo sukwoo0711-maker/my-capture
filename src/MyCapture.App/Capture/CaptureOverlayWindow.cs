@@ -286,7 +286,6 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
         System.Windows.Media.Imaging.BitmapSource selectedBitmap,
         string sourceTitle = "",
         bool recordForRepeat = true,
-        bool copyToClipboardImmediately = true,
         string sourcePageUrl = "")
     {
         Frame = frame;
@@ -294,7 +293,6 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
         SelectedBitmap = selectedBitmap;
         SourceTitle = sourceTitle ?? string.Empty;
         RecordForRepeat = recordForRepeat;
-        CopyToClipboardImmediately = copyToClipboardImmediately;
         SourcePageUrl = MyCapture.Core.Capture.SourcePageUrl.Normalize(sourcePageUrl);
     }
 
@@ -304,12 +302,6 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
 
     /// <summary>True only for an explicitly completed manual-region drag.</summary>
     internal bool RecordForRepeat { get; }
-
-    /// <summary>
-    /// True for the explicit free-region selector. This is intentionally independent of repeat
-    /// history so future history-policy changes cannot silently disable Ctrl+Shift+C copying.
-    /// </summary>
-    internal bool CopyToClipboardImmediately { get; }
 
     internal System.Windows.Media.Imaging.BitmapSource SelectedBitmap { get; }
 

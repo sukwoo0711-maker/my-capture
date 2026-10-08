@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.Core.Themes;
 
 namespace MyCapture.App.Themes;
@@ -15,6 +16,21 @@ internal static class ThemeService
     /// <summary>Null until the first Apply; lets diagnostics restore the pre-fixture state.</summary>
     internal static AppTheme? IsAppliedForTest => _applied ? Current : null;
     private static bool _applied;
+
+    static ThemeService()
+    {
+        SystemParameters.StaticPropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(SystemParameters.HighContrast) || Application.Current is not { } app) return;
+            ScheduleCropResourceRefresh(app.Dispatcher, app.Resources, () => SystemParameters.HighContrast);
+        };
+    }
+
+    // Read the system palette after WPF has processed its system-color notifications.
+    internal static DispatcherOperation ScheduleCropResourceRefresh(Dispatcher dispatcher,
+        ResourceDictionary resources, Func<bool> readHighContrast) =>
+        dispatcher.BeginInvoke(DispatcherPriority.ContextIdle,
+            new Action(() => ApplyCropResources(resources, readHighContrast())));
 
     internal static void Apply(AppTheme theme)
     {
@@ -50,6 +66,18 @@ internal static class ThemeService
                 }
             }
         }
+        // Crop masks always darken discarded pixels, including in light themes.
+        // High contrast follows the user's system palette without a translucent wash.
+        resources["Text.Disabled"] = new SolidColorBrush(theme is AppTheme.Daylight or AppTheme.GlassLight
+            ? Color.FromRgb(0x74, 0x7C, 0x89) : Color.FromRgb(0x7A, 0x82, 0x90));
+        ApplyCropResources(resources, SystemParameters.HighContrast);
+    }
+
+    internal static void ApplyCropResources(ResourceDictionary resources, bool highContrast)
+    {
+        resources["Crop.Scrim"] = highContrast ? SystemColors.WindowBrush : new SolidColorBrush(Color.FromArgb(153, 8, 12, 18));
+        resources["Crop.Frame"] = highContrast ? SystemColors.WindowTextBrush : Brushes.White;
+        resources["Crop.FrameShadow"] = highContrast ? SystemColors.WindowBrush : Brushes.Black;
     }
 
     internal static void ApplyFromSettings(string? themeId) => Apply(AppThemeNames.Parse(themeId));

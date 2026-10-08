@@ -41,7 +41,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _launchAtLogin;
     private bool _notifyOnQuickSave;
     private bool _playCaptureSound;
-    private bool _showQuickAccess;
+    private AfterCaptureAction _afterCapture;
+    private bool _showShortcutHints;
 
     // ----- Capture -----
     private bool _includeCursor;
@@ -140,7 +141,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     public bool LaunchAtLogin { get => _launchAtLogin; set => Set(ref _launchAtLogin, value); }
     public bool NotifyOnQuickSave { get => _notifyOnQuickSave; set => Set(ref _notifyOnQuickSave, value); }
     public bool PlayCaptureSound { get => _playCaptureSound; set => Set(ref _playCaptureSound, value); }
-    public bool ShowQuickAccess { get => _showQuickAccess; set => Set(ref _showQuickAccess, value); }
+    public AfterCaptureAction AfterCapture { get => _afterCapture; set => Set(ref _afterCapture, value); }
+    public bool ShowShortcutHints { get => _showShortcutHints; set => Set(ref _showShortcutHints, value); }
 
     // ================= Capture =================
 
@@ -441,7 +443,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _launchAtLogin = s.General.LaunchAtLogin;
         _notifyOnQuickSave = s.General.NotifyOnQuickSave;
         _playCaptureSound = s.General.PlayCaptureSound;
-        _showQuickAccess = s.General.ShowQuickAccess;
+        _afterCapture = s.General.AfterCapture;
+        _showShortcutHints = s.General.ShowShortcutHints;
 
         _includeCursor = s.Capture.IncludeCursor;
         _autoDetectWindows = s.Capture.AutoDetectWindows;
@@ -553,7 +556,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 LaunchAtLogin = _launchAtLogin,
                 NotifyOnQuickSave = _notifyOnQuickSave,
                 PlayCaptureSound = _playCaptureSound,
-                ShowQuickAccess = _showQuickAccess,
+                AfterCapture = _afterCapture,
+                ShowShortcutHints = _showShortcutHints,
                 Language = _language,
                 Theme = AppThemeNames.ToSetting(AppThemeNames.Parse(_theme)),
                 ThemeRevision = 1,

@@ -35,6 +35,8 @@ internal sealed class OcrResultWindow : Window
     private readonly Button _rerunButton;
 
     private bool _allowClose;
+    private readonly Dictionary<string, Action> _shortcutActions = [];
+    internal IReadOnlyDictionary<string, Action> ShortcutActions => _shortcutActions;
 
     internal OcrResultWindow()
     {
@@ -49,15 +51,15 @@ internal sealed class OcrResultWindow : Window
         ShowInTaskbar = true;
         AutomationProperties.SetName(this, UiText.Get("Text_E5F541120733"));
 
-        // Uniform dark root: one calm surface frames the whole window so the recognised text is
-        // the only thing that stands out. The window Style already sets this, but making it
-        // explicit keeps the surface consistent even if the default style is ever overridden.
+        // Keep the reusable window's surfaces synchronized when settings previews a theme.
         Background = ResourceBrush("Surface.Base", new SolidColorBrush(Color.FromRgb(0x0B, 0x0F, 0x17)));
+        SetResourceReference(BackgroundProperty, "Surface.Base");
 
         var root = new Grid
         {
             Background = ResourceBrush("Surface.Base", new SolidColorBrush(Color.FromRgb(0x0B, 0x0F, 0x17))),
         };
+        root.SetResourceReference(Panel.BackgroundProperty, "Surface.Base");
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -65,14 +67,16 @@ internal sealed class OcrResultWindow : Window
         // Sentence-case Korean heading only — no decorative English eyebrow. A quiet status line
         // sits directly beneath it as compact secondary text.
         var heading = new StackPanel { Margin = new Thickness(24, 22, 24, 16) };
-        heading.Children.Add(new TextBlock
+        var title = new TextBlock
         {
             Text = UiText.Get("Text_A7C9AFB5B1AF"),
             Foreground = ResourceBrush("Text.Primary", Brushes.White),
             FontFamily = Application.Current?.TryFindResource("Font.Display") as FontFamily ?? new FontFamily("Segoe UI"),
             FontSize = 24,
             FontWeight = FontWeights.SemiBold,
-        });
+        };
+        title.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        heading.Children.Add(title);
 
         _status = new LiveTextBlock
         {
@@ -81,6 +85,7 @@ internal sealed class OcrResultWindow : Window
             Foreground = ResourceBrush("Text.Secondary", Brushes.LightGray),
             FontSize = 12,
         };
+        _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetName(_status, UiText.Get("Text_9E53B74AE062"));
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         heading.Children.Add(_status);
@@ -92,6 +97,7 @@ internal sealed class OcrResultWindow : Window
             Background = ResourceBrush("Surface.Base", new SolidColorBrush(Color.FromRgb(0x0B, 0x0F, 0x17))),
             Child = heading,
         };
+        header.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
         Grid.SetRow(header, 0);
         root.Children.Add(header);
 
@@ -109,6 +115,8 @@ internal sealed class OcrResultWindow : Window
             Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x08, 0x0C, 0x12))),
             BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
         };
+        _textBox.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");
+        _textBox.SetResourceReference(Control.BorderBrushProperty, "Border.Subtle");
         AutomationProperties.SetName(_textBox, UiText.Get("Text_B75AA3DC8AFB"));
         AutomationProperties.SetHelpText(
             _textBox, UiText.Get("Text_F73E8EBF6CE0"));
@@ -124,6 +132,8 @@ internal sealed class OcrResultWindow : Window
             ClipToBounds = true,
             Child = _textBox,
         };
+        textFrame.SetResourceReference(Border.BackgroundProperty, "Surface.Sunken");
+        textFrame.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         Grid.SetRow(textFrame, 1);
         root.Children.Add(textFrame);
 
@@ -160,15 +170,17 @@ internal sealed class OcrResultWindow : Window
             Padding = new Thickness(24, 14, 24, 18),
             Child = buttons,
         };
+        footer.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
         Grid.SetRow(footer, 2);
         root.Children.Add(footer);
 
         Content = root;
 
-        _ = InputBindings.Add(new KeyBinding(
-            new RelayUiCommand(CopyText), new KeyGesture(Key.C, ModifierKeys.Control)));
-        _ = InputBindings.Add(new KeyBinding(
-            new RelayUiCommand(ExportText), new KeyGesture(Key.S, ModifierKeys.Control)));
+        _shortcutActions["Copy"] = CopyText;
+        _shortcutActions["Export"] = ExportText;
+        _shortcutActions["Close"] = Close;
+        ShortcutPresentation.Attach(_copyButton, ShortcutScope.Ocr, "Copy");
+        ShortcutPresentation.Attach(exportButton, ShortcutScope.Ocr, "Export");
         PreviewKeyDown += OnPreviewKeyDown;
     }
 
@@ -319,11 +331,10 @@ internal sealed class OcrResultWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
-        {
-            Close();
-            e.Handled = true;
-        }
+        string? command = ShortcutCatalog.Match(ShortcutScope.Ocr, e.Key, Keyboard.Modifiers);
+        // Preserve native selected-text copy; the button / unselected Ctrl+C copies all.
+        if (command == "Copy" && _textBox.IsKeyboardFocusWithin && _textBox.SelectionLength > 0) return;
+        e.Handled = ShortcutCatalog.Execute(ShortcutScope.Ocr, e.Key, Keyboard.Modifiers, _shortcutActions);
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

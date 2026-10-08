@@ -73,10 +73,10 @@ internal sealed class CaptureCommitService
         new(record, _persistence.AcquireEditLease(record.Id));
 
     /// <summary>
-    /// Copies the untouched pixels produced by the explicit free-region capture command.
-    /// This path is deliberately independent of quick-save preferences and editor actions:
-    /// once the user releases the capture drag, the image is offered to the shared exact-PNG
-    /// clipboard writer even if the editor is later cancelled or committed with Done.
+    /// Copies every completed capture through the shared exact-PNG clipboard writer,
+    /// adding the source title when enabled. App starts this once alongside library
+    /// persistence in every after-capture mode, independently of quick-save preferences
+    /// and later editor actions.
     /// </summary>
     internal async Task<bool> CopyCapturedRegionAsync(BitmapSource capturedBitmap, string? sourceWindowTitle = null,
         bool? showSourceWindowTitle = null, string? sourcePageUrl = null)

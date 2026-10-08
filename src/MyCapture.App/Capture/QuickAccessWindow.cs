@@ -10,7 +10,9 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Display;
+using MyCapture.Platform.Shell;
 
 namespace MyCapture.App.Capture;
 
@@ -20,7 +22,7 @@ internal sealed class QuickAccessWindow : Window
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly ProgressBar _remaining = new() { Minimum = 0, Maximum = 100, Value = 100, Height = 3 };
     private readonly ToggleButton _keep;
-    private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _status = new() { FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, Visibility = Visibility.Collapsed };
     private TimeSpan _elapsed;
     private long _lastTick;
     private bool _busy;
@@ -31,17 +33,29 @@ internal sealed class QuickAccessWindow : Window
     private bool _keyboardAccess;
     private readonly Image _preview;
     private readonly TextBlock _dimensions = new() { VerticalAlignment = VerticalAlignment.Center };
-    internal static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(8);
+    private readonly RectD? _capturedRegion;
+    private readonly MonitorInfo? _targetMonitor;
+    private MonitorInfo? _placementMonitor;
+    private NativeHotkeyRegistrar? _activationKey;
+    private bool _activationRegistered;
+    private const int ActivationKeyId = 0x7102;
+    private readonly Dictionary<string, Action> _actions = [];
+    internal IReadOnlyDictionary<string, Action> ShortcutActions => _actions;
+    internal static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(6);
     internal static DispatcherOperation Schedule(Dispatcher dispatcher, Action show) =>
         dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, show);
     internal bool IsKept { get => _keep.IsChecked == true; set => _keep.IsChecked = value; }
+    internal bool CanActivateByHotkey => IsVisible && _timer.IsEnabled && !IsKept;
+    internal bool IsPointerOver => IsVisible && WindowStyleFacade.IsPointerOverWindow(new WindowInteropHelper(this).Handle);
     internal string TimeoutStateForTest => $"enabled={_timer.IsEnabled}; elapsed={_elapsed.TotalSeconds:0.000}; keep={IsKept}; keyboard={_keyboardInteracting}/{IsKeyboardFocusWithin}; busy={_busy}";
 
     internal QuickAccessWindow(BitmapSource bitmap, Func<Task<bool>> copy, Action edit,
-        Func<Task> pin, Func<Task<bool>> save, Action library, Func<Task<string>> export, bool excludeFromCapture = true)
+        Func<Task> pin, Func<Task<bool>> save, Action library, Func<Task<string>> export, bool excludeFromCapture = true,
+        RectD? capturedRegion = null, MonitorInfo? targetMonitor = null)
     {
         Title = UiText.Get("QuickAccess.Title");
-        Width = 340;
+        Width = 280;
+        _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
@@ -51,18 +65,17 @@ internal sealed class QuickAccessWindow : Window
         StandardWindowTheme.Apply(this);
         SetResourceReference(BackgroundProperty, "Surface.Raised");
         SetResourceReference(ForegroundProperty, "Text.Primary");
-        var panel = new StackPanel { Margin = new Thickness(16) };
-        var header = new DockPanel { LastChildFill = true };
-        _keep = new ToggleButton { Content = UiText.Get("QuickAccess.Keep"), MinHeight = 32, Margin = new Thickness(8, 0, 0, 8), Focusable = false };
+        var panel = new StackPanel { Margin = new Thickness(8) };
+        var row = new DockPanel { LastChildFill = true };
+        _keep = new ToggleButton { Content = Glyph("Icon.Unlock"), Width = 24, Height = 30, MinWidth = 0, MinHeight = 0,
+            Padding = new Thickness(2), Focusable = false, ToolTip = UiText.Get("QuickAccess.Keep") };
         _keyboardTargets.Add(_keep);
         AutomationProperties.SetName(_keep, UiText.Get("QuickAccess.Keep"));
-        DockPanel.SetDock(_keep, Dock.Right);
-        header.Children.Add(_keep);
-        _dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight}";
-        header.Children.Add(_dimensions);
-        panel.Children.Add(header);
-        var preview = _preview = new Image { Source = bitmap, Height = 150, Stretch = Stretch.Uniform,
-            ToolTip = UiText.Get("QuickAccess.Drag"), Margin = new Thickness(0, 0, 0, 12) };
+        ShortToolTip(_keep);
+        DockPanel.SetDock(_keep, Dock.Right); row.Children.Add(_keep);
+        var preview = _preview = new Image { Source = bitmap, Width = 52, Height = 48, Stretch = Stretch.Uniform,
+            ToolTip = UiText.Get("QuickAccess.Drag"), Margin = new Thickness(0, 0, 6, 0) };
+        DockPanel.SetDock(preview, Dock.Left); row.Children.Add(preview);
         AutomationProperties.SetName(preview, UiText.Get("QuickAccess.Drag"));
         preview.MouseLeftButtonDown += (_, e) => { _dragStart = e.GetPosition(preview); _dragArmed = true; };
         preview.MouseLeftButtonUp += (_, _) => _dragArmed = false;
@@ -81,18 +94,33 @@ internal sealed class QuickAccessWindow : Window
                 return true;
             }, "QuickAccess.Ready");
         };
-        panel.Children.Add(preview);
-        var actions = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 12) };
-        actions.Children.Add(Button("QuickAccess.Copy", async () => await RunAsync(copy, "QuickAccess.Copied")));
-        actions.Children.Add(Button("QuickAccess.Edit", () => { edit(); Close(); }));
-        actions.Children.Add(Button("QuickAccess.Pin", async () => await RunAsync(async () => { await pin(); return true; }, "QuickAccess.Pinned")));
-        actions.Children.Add(Button("QuickAccess.Save", async () => await RunAsync(save, "QuickAccess.Saved")));
-        panel.Children.Add(actions);
-        _status.Text = UiText.Get("QuickAccess.Ready");
+        _actions["Copy"] = async () => await RunAsync(copy, "QuickAccess.Copied");
+        _actions["Edit"] = () => { edit(); Close(); };
+        _actions["Pin"] = async () => await RunAsync(async () => { await pin(); return true; }, "QuickAccess.Pinned");
+        _actions["Save"] = async () => await RunAsync(save, "QuickAccess.Saved");
+        _actions["Close"] = Close;
+        _actions["Activate"] = () => ActivateForKeyboard();
+        var actions = new UniformGrid { Columns = 4, VerticalAlignment = VerticalAlignment.Center };
+        foreach (string action in new[] { "Copy", "Edit", "Pin", "Save" })
+        {
+            Button button = Button("QuickAccess." + action, _actions[action]);
+            button.Content = Glyph("Icon." + action);
+            button.MinWidth = 0; button.MinHeight = 0; button.Height = 42; button.Padding = new Thickness(1); button.Margin = new Thickness(1);
+            ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action, corner: true);
+            ShortToolTip(button);
+            actions.Children.Add(button);
+        }
+        row.Children.Add(actions); panel.Children.Add(row);
+        var footer = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
+        var libraryButton = Button("QuickAccess.Library", () => { library(); Close(); });
+        libraryButton.MinHeight = 0; libraryButton.Padding = new Thickness(2); libraryButton.FontSize = 11;
+        libraryButton.SetResourceReference(StyleProperty, "Button.Ghost");
+        DockPanel.SetDock(libraryButton, Dock.Right); footer.Children.Add(libraryButton);
+        _dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight}";
+        _dimensions.FontSize = 10; _dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        footer.Children.Add(_dimensions); panel.Children.Add(footer);
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
-        panel.Children.Add(_status);
-        panel.Children.Add(Button("QuickAccess.Library", () => { library(); Close(); }));
-        panel.Children.Add(_remaining);
+        panel.Children.Add(_status); panel.Children.Add(_remaining);
         Content = panel;
         ToolTip = UiText.Get("QuickAccess.KeyboardHint");
         SourceInitialized += (_, _) =>
@@ -106,19 +134,39 @@ internal sealed class QuickAccessWindow : Window
         };
         Loaded += (_, _) =>
         {
-            PlaceOnMonitor(MonitorEnumerator.GetFromCursor());
+            PlaceOnMonitor(_targetMonitor ?? MonitorEnumerator.GetFromCursor());
             _lastTick = Stopwatch.GetTimestamp();
-            _timer.Start();
+            if (!IsKept) _timer.Start();
+            UpdateActivationHotkey();
         };
         _timer.Tick += (_, _) =>
         {
             long now = Stopwatch.GetTimestamp();
             TimeSpan elapsed = Stopwatch.GetElapsedTime(_lastTick, now);
             _lastTick = now;
-            Advance(elapsed, IsMouseOver || (_keyboardInteracting && IsKeyboardFocusWithin) || _busy);
+            Advance(elapsed, IsPointerOver || (_keyboardInteracting && IsKeyboardFocusWithin) || _busy);
         };
-        Closed += (_, _) => _timer.Stop();
-        PreviewKeyDown += (_, e) => { if (!_keyboardAccess) return; _keyboardInteracting = true; if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
+        SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
+        Closed += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); _activationKey = null; };
+        IsVisibleChanged += (_, _) => UpdateActivationHotkey();
+        _keep.Checked += (_, _) => { _keep.Content = Glyph("Icon.Lock"); _timer.Stop(); UpdateActivationHotkey(); };
+        _keep.Unchecked += (_, _) =>
+        {
+            _keep.Content = Glyph("Icon.Unlock");
+            if (IsVisible) { _lastTick = Stopwatch.GetTimestamp(); _timer.Start(); }
+            UpdateActivationHotkey();
+        };
+        PreviewMouseDown += (_, e) =>
+        {
+            if (!_keyboardAccess && e.ChangedButton == MouseButton.Left && IsKeyboardEntryBackground(e.OriginalSource as DependencyObject))
+                ActivateForKeyboard();
+        };
+        PreviewKeyDown += (_, e) =>
+        {
+            if (!_keyboardAccess || !IsKeyboardFocusWithin) return;
+            _keyboardInteracting = true;
+            e.Handled = HandleShortcut(e.Key == Key.System ? e.SystemKey : e.Key, Keyboard.Modifiers);
+        };
         Deactivated += (_, _) =>
         {
             _keyboardAccess = false;
@@ -128,22 +176,79 @@ internal sealed class QuickAccessWindow : Window
         };
     }
 
+    private static void ShortToolTip(DependencyObject control)
+    {
+        ToolTipService.SetInitialShowDelay(control, 100);
+        ToolTipService.SetBetweenShowDelay(control, 0);
+        ToolTipService.SetShowOnDisabled(control, true);
+    }
+
+    private void UpdateActivationHotkey()
+    {
+        if (!CanActivateByHotkey)
+        {
+            if (_activationRegistered) _activationKey?.Unregister(ActivationKeyId);
+            _activationRegistered = false;
+            return;
+        }
+        if (_activationRegistered) return;
+        _activationKey ??= new NativeHotkeyRegistrar(new WindowInteropHelper(this).Handle);
+        ShortcutDefinition activation = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Activate");
+        _activationRegistered = _activationKey.TryRegister(ActivationKeyId,
+            new Hotkey((HotkeyModifiers)activation.Modifiers, (uint)KeyInterop.VirtualKeyFromKey(activation.Key)), out _, out _);
+        ToolTip = UiText.Get(_activationRegistered ? "QuickAccess.KeyboardHint" : "QuickAccess.ActivationUnavailable");
+    }
+
+    internal bool HandleShortcut(Key key, ModifierKeys modifiers) => ShortcutCatalog.Execute(ShortcutScope.QuickAccess, key, modifiers, _actions);
+
+    private FrameworkElement Glyph(string key)
+    {
+        Geometry geometry = TryFindResource(key) as Geometry ?? Geometry.Parse("M4,4 H16 V16 H4 Z");
+        var path = new System.Windows.Shapes.Path { Data = geometry, StrokeThickness = 1.6, Stretch = Stretch.Uniform, Width = 18, Height = 18 };
+        path.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Text.Primary");
+        return path;
+    }
+
     private IntPtr NoActivateHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message == 0x0021 && !_keyboardAccess) // WM_MOUSEACTIVATE / MA_NOACTIVATE
-        { handled = true; return new IntPtr(3); }
+        if (message == 0x0312 && wParam.ToInt32() == ActivationKeyId && CanActivateByHotkey)
+        {
+            handled = true;
+            _ = Dispatcher.BeginInvoke(new Action(() => { if (CanActivateByHotkey) ActivateForKeyboard(); }));
+            return IntPtr.Zero;
+        }
+        if (message == 0x0021 && !_keyboardAccess) // WM_MOUSEACTIVATE
+        {
+            handled = true;
+            return new IntPtr(3); // MA_NOACTIVATE: action clicks and drag keep the destination active.
+        }
         return IntPtr.Zero;
     }
 
     internal bool ActivateForKeyboard()
     {
         if (!IsVisible) return false;
+        EnableKeyboardAccess();
+        if (!Activate()) return false;
+        return MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+    }
+
+    private bool IsKeyboardEntryBackground(DependencyObject? source)
+    {
+        for (DependencyObject? current = source; current is not null && current != this;
+            current = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current))
+        {
+            if (current is ButtonBase || ReferenceEquals(current, _preview)) return false;
+        }
+        return source is not null;
+    }
+
+    private void EnableKeyboardAccess()
+    {
         _keyboardAccess = true;
         _keyboardInteracting = true;
         WindowStyleFacade.SetNoActivate(new WindowInteropHelper(this).Handle, false);
         foreach (Control target in _keyboardTargets) target.Focusable = true;
-        if (!Activate()) return false;
-        return MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
     }
 
     internal void UpdatePreview(BitmapSource image)
@@ -161,15 +266,26 @@ internal sealed class QuickAccessWindow : Window
 
     internal void PlaceOnMonitor(MonitorInfo monitor)
     {
-        Rect position = Position(monitor.WorkArea, monitor.ScaleFactor, ActualWidth, ActualHeight);
+        _placementMonitor = monitor;
+        Rect position = Position(monitor.WorkArea, monitor.ScaleFactor, ActualWidth, ActualHeight, _capturedRegion);
         PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(this).Handle,
             new RectD(position.Left * monitor.ScaleFactor, position.Top * monitor.ScaleFactor,
                 ActualWidth * monitor.ScaleFactor, ActualHeight * monitor.ScaleFactor));
     }
 
-    internal static Rect Position(RectD work, double scale, double width, double height) =>
-        new(Math.Max(work.Left / scale, work.Right / scale - width - 16),
-            Math.Max(work.Top / scale, work.Bottom / scale - height - 16), width, height);
+    internal static Rect Position(RectD work, double scale, double width, double height, RectD? capturedRegion = null)
+    {
+        double left = work.Left / scale, top = work.Top / scale, right = work.Right / scale, bottom = work.Bottom / scale;
+        double x = right - width - 12, y = bottom - height - 12;
+        if (capturedRegion is { } region && (region.Width < work.Width || region.Height < work.Height))
+        {
+            x = region.Right / scale + 8;
+            y = region.Bottom / scale + 8;
+            if (x + width > right - 4) x = region.Right / scale - width;
+            if (y + height > bottom - 4) y = region.Bottom / scale - height - 8;
+        }
+        return new Rect(Math.Clamp(x, left, Math.Max(left, right - width)), Math.Clamp(y, top, Math.Max(top, bottom - height)), width, height);
+    }
 
     internal void Advance(TimeSpan time, bool interacting)
     {
@@ -192,6 +308,7 @@ internal sealed class QuickAccessWindow : Window
     {
         if (_busy) return;
         _busy = true;
+        _status.Visibility = Visibility.Visible;
         try { _status.Text = UiText.Get(await action() ? success : "QuickAccess.Failed"); }
         catch (Exception error) { _status.Text = UserFacingError.GetMessage(error) ?? UiText.Get("QuickAccess.Failed"); }
         finally { _busy = false; }

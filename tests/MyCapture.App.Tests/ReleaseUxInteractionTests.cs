@@ -60,14 +60,14 @@ public sealed class ReleaseUxInteractionTests
     public void OlderSettings_DefaultsAndNewOptionsRoundTrip()
     {
         var old = JsonSerializer.Deserialize<AppSettings>("{}", JsonDefaults.Compact)!;
-        Assert.True(old.General.ShowQuickAccess);
+        Assert.Equal(AfterCaptureAction.Editor, old.General.AfterCapture);
         Assert.False(old.General.PlayCaptureSound);
         Assert.False(old.Hotkeys.ScrollingCapture.IsAssigned);
         Assert.False(old.Hotkeys.DelayedCapture.IsAssigned);
-        var draft = new SettingsDraft(old) { ShowQuickAccess = false, PlayCaptureSound = true,
+        var draft = new SettingsDraft(old) { AfterCapture = AfterCaptureAction.QuickAccess, PlayCaptureSound = true,
             ScrollingCaptureHotkey = "Ctrl+Shift+F8", DelayedCaptureHotkey = "Ctrl+Shift+F7" };
         AppSettings saved = draft.ToAppSettings().DeepClone();
-        Assert.False(saved.General.ShowQuickAccess);
+        Assert.Equal(AfterCaptureAction.QuickAccess, saved.General.AfterCapture);
         Assert.True(saved.General.PlayCaptureSound);
         Assert.Equal("Ctrl+Shift+F8", saved.Hotkeys.ScrollingCapture.ToString());
         Assert.Equal("Ctrl+Shift+F7", saved.Hotkeys.DelayedCapture.ToString());
@@ -157,14 +157,14 @@ public sealed class ReleaseUxInteractionTests
             var card = new QuickAccessWindow(Image(), () => { copied++; return Task.FromResult(true); }, () => { },
                 () => { pinned++; return Task.CompletedTask; }, () => { saved++; return Task.FromResult(true); }, () => { }, () => Task.FromResult("unused.png"));
             var panel = Assert.IsType<StackPanel>(card.Content);
-            var actions = panel.Children.OfType<UniformGrid>().Single();
+            var actions = panel.Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
             foreach (int index in new[] { 0, 2, 3 })
                 ((Button)actions.Children[index]).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.Equal((1, 1, 1), (copied, pinned, saved));
             var progress = panel.Children.OfType<ProgressBar>().Single();
             card.Advance(TimeSpan.FromSeconds(9), interacting: true);
             Assert.Equal(100, progress.Value);
-            card.Advance(TimeSpan.FromSeconds(4), interacting: false);
+            card.Advance(QuickAccessWindow.Lifetime / 2, interacting: false);
             Assert.Equal(50, progress.Value);
             card.Close();
         });

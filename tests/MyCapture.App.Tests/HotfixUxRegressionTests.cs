@@ -86,8 +86,8 @@ public sealed class HotfixUxRegressionTests
             Assert.False(card.IsActive);
             Assert.Same(before, Keyboard.FocusedElement);
             Assert.NotEqual(0, GetWindowLongPtrW(new WindowInteropHelper(card).Handle, -20).ToInt64() & 0x08000000L);
-            var actions = ((StackPanel)card.Content).Children.OfType<UniformGrid>().Single();
-            Assert.Equal(2, actions.Columns);
+            var actions = ((StackPanel)card.Content).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
+            Assert.Equal(4, actions.Columns);
             Assert.All(actions.Children.OfType<Button>(), button => Assert.False(button.Focusable));
             card.Advance(TimeSpan.FromSeconds(9), false);
             Assert.False(card.IsVisible);
@@ -202,7 +202,7 @@ public sealed class HotfixUxRegressionTests
     {
         var card = Card();
         card.UpdatePreview(new CroppedBitmap(Image(), new Int32Rect(0, 0, 16, 12)));
-        Assert.Equal("16 × 12", ((StackPanel)card.Content).Children.OfType<DockPanel>().Single().Children.OfType<TextBlock>().Single().Text);
+        Assert.Equal("16 × 12", ((StackPanel)card.Content).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single().Text);
         card.Close();
     });
 

@@ -434,7 +434,7 @@ internal static class UxReviewSelfTest
                     report.AppendLine($"Focus {name}: moved={focusMoved}; target={Keyboard.FocusedElement?.GetType().Name ?? "none"}");
                     if (name == "quick-access")
                     {
-                        Button copyButton = Descendants(window).OfType<Button>().Single(button => Equals(button.Content, UiText.Get("QuickAccess.Copy")));
+                        Button copyButton = Descendants(window).OfType<Button>().Single(button => AutomationProperties.GetName(button) == UiText.Get("QuickAccess.Copy"));
                         ((QuickAccessWindow)window).ActivateForKeyboard(); copyButton.Focus();
                         PressSpace(copyButton, window);
                         Pump(TimeSpan.FromMilliseconds(60));

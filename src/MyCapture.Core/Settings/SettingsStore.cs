@@ -391,6 +391,7 @@ public sealed class SettingsStore
             s.GitHub.IssueUrl = issueUrl;
         }
 
+        if (!Enum.IsDefined(s.General.AfterCapture)) s.General.AfterCapture = AfterCaptureAction.Editor;
         if (s.General.ThemeRevision < 1)
         {
             if (MyCapture.Core.Themes.AppThemeNames.Parse(s.General.Theme) == MyCapture.Core.Themes.AppTheme.Midnight)

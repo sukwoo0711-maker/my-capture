@@ -269,6 +269,7 @@ public partial class App : Application
         // uses this to decide whether the frozen frame must wait it out.
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
         AnnotationEditorPreferences.Read = () => _settings!.Annotation;
+        ShortcutPresentation.ReadEnabled = () => _settings!.General.ShowShortcutHints;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = () => _settings!.Export.ShowSourceWindowTitle;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
@@ -299,6 +300,7 @@ public partial class App : Application
         }
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
         _overlay.SelectionPersistRequested = OnCaptureSelectionCompletedAsync;
+        _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
         _overlay.EditingCompleted += OnAnnotationEditingCompleted;
         _overlay.OverlayClosed += (_, _) =>
         {
@@ -356,7 +358,7 @@ public partial class App : Application
         _settingsApply = new SettingsApplyService(
             _services.GetRequiredService<SettingsStore>(),
             () => _settings!,
-            updated => _settings = updated,
+            updated => { _settings = updated; ShortcutPresentation.Refresh(); },
             _queue,
             _hotkeys,
             _startupService,
@@ -956,10 +958,12 @@ public partial class App : Application
 
     private CaptureRecord? _pendingRecord;
     private QuickAccessWindow? _quickAccess;
+    private Guid? _latestReceipt;
     private bool _preparingAdvancedCapture;
 
     private void DismissQuickAccessForCapture()
     {
+        _latestReceipt = null;
         _quickAccess?.DismissForCapture(() => _overlay?.NoteForegroundDismissal());
     }
 
@@ -983,9 +987,13 @@ public partial class App : Application
     {
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true || HotkeyRecorder.Active is not null) return;
         var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
-        if (key == System.Windows.Input.Key.Q && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Alt)
-            e.Handled = _quickAccess?.ActivateForKeyboard() == true;
+        if (ShortcutCatalog.Match(ShortcutScope.QuickAccess, key, System.Windows.Input.Keyboard.Modifiers) == "Activate")
+            e.Handled = _quickAccess is { CanActivateByHotkey: true } card && card.ActivateForKeyboard();
     }
+
+    internal static string LibrarySaveFailureMessage(AfterCaptureAction mode, Exception error) =>
+        UiText.Format(mode == AfterCaptureAction.Editor ? "Capture.LibrarySaveFailed" : "Capture.LibrarySaveFailedNoEditor",
+            MyCapture.App.Themes.ThemedDialog.RecoveryMessage(error));
 
     private async Task OnCaptureSelectionCompletedAsync(CaptureSelectionCompletedEventArgs e)
     {
@@ -1003,7 +1011,7 @@ public partial class App : Application
             sourcePageUrl: e.SourcePageUrl);
         if (_pendingRecord.SourcePageUrl.Length > 0)
             _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
-        Task<bool>? automaticClipboardCopy = e.CopyToClipboardImmediately && _commit is not null
+        Task<bool>? automaticClipboardCopy = _commit is not null
             ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle,
                 _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl)
             : null;
@@ -1026,7 +1034,7 @@ public partial class App : Application
             _log?.LogError(ex, "Could not persist the captured original");
             _tray?.ShowBalloon(
                 UiText.Get("Text_4033027EAEDB"),
-                UiText.Format("Capture.LibrarySaveFailed", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex)),
+                LibrarySaveFailureMessage(_settings?.General.AfterCapture ?? AfterCaptureAction.Editor, ex),
                 TrayBalloonKind.Error);
         }
 
@@ -1066,16 +1074,16 @@ public partial class App : Application
             _log?.LogWarning(ex, "Could not update capture history or tray count");
         }
 
-        // Copy the explicit-region result with its optional title before the editor can be cancelled
-        // or committed with any action, and do not consult the quick-save clipboard preference.
-        // Advanced capture modes opt out when they synthesize their editor selection.
-        if (e.CopyToClipboardImmediately)
+        // Every capture starts one clipboard operation alongside persistence and
+        // joins that same operation before presenting the result.
+        bool copiedToClipboard = false;
+        if (_commit is not null)
         {
             bool copied = false;
             try
             {
-                copied = automaticClipboardCopy is not null
-                         && await automaticClipboardCopy;
+                copied = await (automaticClipboardCopy ?? _commit.CopyCapturedRegionAsync(e.SelectedBitmap,
+                    e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl));
             }
             catch (Exception ex)
             {
@@ -1085,6 +1093,7 @@ public partial class App : Application
                 _log?.LogWarning(ex, "Automatic region-capture clipboard copy failed unexpectedly");
             }
 
+            copiedToClipboard = copied;
             if (!copied)
             {
                 string message = _currentRecord is null
@@ -1112,21 +1121,38 @@ public partial class App : Application
         }
         if (_settings?.General.PlayCaptureSound == true)
             System.Media.SystemSounds.Asterisk.Play();
-        if (_settings?.General.ShowQuickAccess == true && _services is not null && _currentRecord is { } receipt)
+        if (_services is not null && _currentRecord is { } receipt)
         {
-            // Retain only selected pixels, never the full desktop frame, and schedule after
-            // the capture/editor transition. No image encoding or window creation is awaited.
+            _latestReceipt = receipt.Id;
             var selected = e.SelectedBitmap;
-            _ = QuickAccessWindow.Schedule(Dispatcher,
-                new Action(() => ShowQuickAccess(receipt, selected)));
+            var region = new Core.Primitives.RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
+                e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
+            var monitor = e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor();
+            // Clipboard-only and card modes release the edit session once persistence ends.
+            // Hold the receipt until the deferred presentation owns its own lease.
+            IDisposable? pendingReceipt = _queue?.AcquireEvictionLease(receipt.Id);
+            bool copied = copiedToClipboard;
+            _ = QuickAccessWindow.Schedule(Dispatcher, new Action(() =>
+            {
+                try
+                {
+                    if (_latestReceipt != receipt.Id || _preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
+                    if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess) ShowQuickAccess(receipt, selected, region, monitor);
+                    else if (_settings?.General.AfterCapture == AfterCaptureAction.ClipboardOnly)
+                        _shellPresenter?.ShowCaptureReceipt(UiText.Get(copied ? "Capture.CopiedAndSaved" : "Capture.Saved"),
+                            () => EnsureGalleryWindow()?.OpenCapture(receipt.Id, edit: false));
+                }
+                finally { pendingReceipt?.Dispose(); }
+            }));
         }
     }
 
-    private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image)
+    private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
+        Core.Primitives.RectD region, MonitorInfo monitor)
     {
-        if (!ReferenceEquals(_currentRecord, record)) return;
+        if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
-        if (_queue is null || _commit is null || _services is null || _settings?.General.ShowQuickAccess != true) return;
+        if (_queue is null || _commit is null || _services is null || _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess) return;
         _quickAccess?.Close();
         IDisposable lease = _queue.AcquireEvictionLease(record.Id);
         try
@@ -1159,7 +1185,7 @@ public partial class App : Application
                 actions.PinAsync,
                 actions.SaveAsync,
                 () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
-                actions.ExportAsync);
+                actions.ExportAsync, capturedRegion: region, targetMonitor: monitor);
             card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; };
             _quickAccess = card;
             card.Show();
@@ -1736,6 +1762,11 @@ public partial class App : Application
             return RunSelfTest(outputDirectory, "capture-performance-report.txt", CapturePerformanceSelfTest.Run);
         }
 
+        if (FindSwitch(args, Ux402SelfTest.CommandLineSwitch) >= 0)
+        {
+            Shutdown(Ux402SelfTest.Run());
+            return true;
+        }
         int uxIndex = FindSwitch(args, UxReviewSelfTest.CommandLineSwitch);
         if (uxIndex >= 0)
         {
@@ -2021,6 +2052,7 @@ public partial class App : Application
         HotkeyRecorder.CanRegister = null;
         ShortcutHelpWindow.CanShowHelp = () => true;
         AnnotationEditorPreferences.Read = null;
+        ShortcutPresentation.ReadEnabled = null;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = null;
         AnnotationEditorPreferences.Write = null;
         _shellPresenter?.Dispose();
