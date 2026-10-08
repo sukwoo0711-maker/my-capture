@@ -9,6 +9,11 @@ namespace MyCapture.App.Tests;
 
 public sealed class StaThreadTaskTests
 {
+    // Hang guard only: every wait below ends on a completion or handshake signal. The first
+    // WPF dispatcher/imaging use in a cold test process loads native rendering components, and
+    // on loaded hosted runners that startup has exceeded a 5 s budget without any hang.
+    private static readonly TimeSpan HangCeiling = TimeSpan.FromMinutes(2);
+
     [Fact]
     public async Task CompletionWaitsForWorkerDispatcherShutdown()
     {
@@ -21,18 +26,18 @@ public sealed class StaThreadTaskTests
             dispatcher.ShutdownStarted += (_, _) =>
             {
                 shuttingDown.Set();
-                if (!allowShutdown.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException();
+                if (!allowShutdown.Wait(HangCeiling)) throw new TimeoutException();
             };
             dispatcher.ShutdownFinished += (_, _) => finished = true;
             return 42;
         });
         try
         {
-            Assert.True(shuttingDown.Wait(TimeSpan.FromSeconds(5)));
+            Assert.True(shuttingDown.Wait(HangCeiling));
             Assert.False(operation.IsCompleted);
         }
         finally { allowShutdown.Set(); }
-        Assert.Equal(42, await operation.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(42, await operation.WaitAsync(HangCeiling));
         Assert.True(finished);
     }
 
@@ -40,21 +45,20 @@ public sealed class StaThreadTaskTests
     public void FrozenRenderedBitmapRemainsReadable_AndCallerDispatcherIsUntouched() => StaTestHost.Run(() =>
     {
         Dispatcher caller = Dispatcher.CurrentDispatcher;
-        bool workerShutdown = false;
-        BitmapSource bitmap = StaThreadTask.RunAsync(() =>
+        var probe = new WorkerProbe();
+        BitmapSource bitmap = probe.Await(StaThreadTask.RunAsync(() =>
         {
-            Dispatcher worker = Dispatcher.CurrentDispatcher;
+            Dispatcher worker = probe.Enter();
             Assert.NotSame(caller, worker);
-            worker.ShutdownFinished += (_, _) => workerShutdown = true;
             var visual = new DrawingVisual();
             using (DrawingContext drawing = visual.RenderOpen())
                 drawing.DrawRectangle(Brushes.Red, null, new Rect(0, 0, 8, 6));
             var image = new RenderTargetBitmap(8, 6, 96, 96, PixelFormats.Pbgra32);
             image.Render(visual);
             image.Freeze();
-            return image;
-        }).WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
-        Assert.True(workerShutdown);
+            return probe.Return(image);
+        }));
+        Assert.True(probe.ShutdownFinished);
         Assert.False(caller.HasShutdownStarted);
         Assert.True(bitmap.IsFrozen);
         var pixels = new byte[8 * 6 * 4];
@@ -73,7 +77,7 @@ public sealed class StaThreadTaskTests
             throw expected;
         });
         Exception actual = Assert.Throws<InvalidOperationException>(() =>
-            operation.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult());
+            operation.WaitAsync(HangCeiling).GetAwaiter().GetResult());
         Assert.Same(expected, actual);
         Assert.True(finished);
     }
@@ -94,28 +98,27 @@ public sealed class StaThreadTaskTests
         if (actionFails)
         {
             AggregateException failure = Assert.Throws<AggregateException>(() =>
-                operation.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult());
+                operation.WaitAsync(HangCeiling).GetAwaiter().GetResult());
             Assert.Equal(new Exception[] { actionFailure, cleanupFailure }, failure.InnerExceptions);
         }
         else
         {
             Assert.Same(cleanupFailure, Assert.Throws<InvalidOperationException>(() =>
-                operation.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult()));
+                operation.WaitAsync(HangCeiling).GetAwaiter().GetResult()));
         }
     }
 
     [Fact]
     public void NonFrozenBitmapIsRejectedBeforeLeavingWorker()
     {
-        bool shutdown = false;
+        var probe = new WorkerProbe();
         Task<WriteableBitmap> operation = StaThreadTask.RunAsync(() =>
         {
-            Dispatcher.CurrentDispatcher.ShutdownFinished += (_, _) => shutdown = true;
-            return new WriteableBitmap(2, 2, 96, 96, PixelFormats.Bgra32, null);
+            probe.Enter();
+            return probe.Return(new WriteableBitmap(2, 2, 96, 96, PixelFormats.Bgra32, null));
         });
-        Assert.Throws<InvalidOperationException>(() =>
-            operation.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult());
-        Assert.True(shutdown);
+        Assert.Throws<InvalidOperationException>(() => probe.Await(operation));
+        Assert.True(probe.ShutdownFinished);
     }
 
     [Fact]
@@ -125,7 +128,46 @@ public sealed class StaThreadTaskTests
         {
             Assert.Null(Dispatcher.FromThread(Thread.CurrentThread));
             return Thread.CurrentThread;
-        }).WaitAsync(TimeSpan.FromSeconds(5));
+        }).WaitAsync(HangCeiling);
         Assert.Null(Dispatcher.FromThread(worker));
+    }
+
+    /// <summary>
+    /// Records how far an imaging worker progressed so a ceiling hit reports whether the
+    /// worker never started, stalled inside WPF imaging, or stalled in dispatcher teardown.
+    /// </summary>
+    private sealed class WorkerProbe
+    {
+        private volatile string _phase = "queued; worker thread has not entered the action";
+        private volatile bool _shutdownFinished;
+
+        public bool ShutdownFinished => _shutdownFinished;
+
+        public Dispatcher Enter()
+        {
+            _phase = "entered the action; WPF imaging has not returned";
+            Dispatcher worker = Dispatcher.CurrentDispatcher;
+            worker.ShutdownFinished += (_, _) => _shutdownFinished = true;
+            return worker;
+        }
+
+        public T Return<T>(T value)
+        {
+            _phase = "action returned; dispatcher shutdown has not completed";
+            return value;
+        }
+
+        public T Await<T>(Task<T> operation)
+        {
+            try
+            {
+                return operation.WaitAsync(HangCeiling).GetAwaiter().GetResult();
+            }
+            catch (TimeoutException) when (!operation.IsCompleted)
+            {
+                throw new TimeoutException(
+                    $"STA worker did not complete within {HangCeiling}. Last phase: {_phase}.");
+            }
+        }
     }
 }
