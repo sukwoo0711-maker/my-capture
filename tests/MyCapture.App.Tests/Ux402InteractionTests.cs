@@ -154,6 +154,37 @@ public sealed class Ux402InteractionTests
         finally { window.CloseForExit(); }
     });
 
+    [Fact]
+    public void FailedVideoRenderCleanupRemovesOnlyItsPrivateStage() => StaTestHost.Run(() =>
+    {
+        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MyCapture-render-cleanup-" + Guid.NewGuid().ToString("N"));
+        var paths = AppPaths.CreateForRoot(root);
+        string directory = paths.GetCaptureDirectory(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        System.IO.Directory.CreateDirectory(directory);
+        string source = System.IO.Path.Combine(directory, "source.mp4");
+        string stageName = $".render-{Guid.NewGuid():N}.mp4";
+        string stage = System.IO.Path.Combine(directory, stageName);
+        string outside = System.IO.Path.Combine(root, stageName);
+        string sibling = System.IO.Path.Combine(paths.CapturesRoot, stageName);
+        string invalidName = System.IO.Path.Combine(directory, ".render-invalid.mp4");
+        foreach (string path in new[] { source, stage, outside, sibling, invalidName }) System.IO.File.WriteAllText(path, "synthetic fixture");
+        var window = new VideoEditorWindow(new RecordingResult(source, 3000, 15, 45, 640, 360), paths, NullLoggerFactory.Instance)
+            { RenderStagingPathFactory = () => stage };
+        var cleanup = typeof(VideoEditorWindow).GetMethod("DeletePrivateRenderStage", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        try
+        {
+            foreach (string path in new[] { source, outside, sibling, invalidName })
+            {
+                cleanup.Invoke(window, [path]);
+                Assert.True(System.IO.File.Exists(path), path);
+            }
+            cleanup.Invoke(window, [stage]);
+            Assert.False(System.IO.File.Exists(stage));
+            Assert.True(System.IO.File.Exists(source));
+        }
+        finally { window.Close(); }
+    });
+
     [Theory]
     [InlineData(1.0)] [InlineData(1.5)] [InlineData(2.0)]
     public void CardStaysNearRegionAndInsideNegativeCoordinateMonitor(double scale)

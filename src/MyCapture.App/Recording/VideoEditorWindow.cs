@@ -1970,15 +1970,30 @@ internal sealed class VideoEditorWindow : Window
 
         try
         {
-            if (File.Exists(path))
+            // Only the library-owned render stage for this recording may be removed.
+            // A factory being present does not make its returned path safe to delete.
+            string fullPath = ValidatedFilePaths.FileWithinRoot(_paths.CapturesRoot, path, ".mp4");
+            string name = Path.GetFileName(fullPath);
+            if (!name.StartsWith(".render-", StringComparison.Ordinal)
+                || !Guid.TryParseExact(name[8..^4], "N", out _)
+                || !string.Equals(Path.GetDirectoryName(fullPath),
+                    Path.GetDirectoryName(Path.GetFullPath(_recording.OutputPath)), StringComparison.Ordinal))
             {
-                File.Delete(path);
+                return;
+            }
+
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
             }
         }
         catch (IOException)
         {
         }
         catch (UnauthorizedAccessException)
+        {
+        }
+        catch (ArgumentException)
         {
         }
     }
