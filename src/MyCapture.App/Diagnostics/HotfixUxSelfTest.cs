@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -45,7 +46,7 @@ internal static class HotfixUxSelfTest
         }
         Console.WriteLine("HOTFIX_UX_OUTPUT=" + output);
         var report = new StringBuilder($"MyCapture {typeof(HotfixUxSelfTest).Assembly.GetName().Version} real WPF/native QA\nUTC: {DateTimeOffset.UtcNow:O}\n");
-        report.AppendLine("Production windows and command paths. Bounded synthetic keys target an isolated external PowerShell/WinForms text process and the receipt only. Every key/cursor injection checks its expected foreground HWND; foreground loss aborts. Cursor is restored only while that target remains foreground. Fresh profile; no user settings/queue or startup registry access. Clipboard writer is isolated to an in-memory sink; the user clipboard is untouched.");
+        report.AppendLine("Production windows and command paths. Bounded synthetic input targets owned editors/cards and an isolated external PowerShell/WinForms image-paste/file-drop process. Every injection checks its expected foreground HWND; foreground loss aborts. Cursor is restored only while an owned target remains foreground. Fresh profile; no user settings/queue or startup registry access. The card copy/paste check writes a synthetic 320x180 image through the production Windows clipboard writer.");
         List<Window> owned = [];
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
         AppTheme? oldTheme = ThemeService.IsAppliedForTest;
@@ -63,6 +64,7 @@ internal static class HotfixUxSelfTest
             FluidMotion.AnimationsEnabledOverrideForTest = false;
             ThemeService.Apply(AppTheme.Midnight);
             BitmapSource sample = Sample();
+            VerifyEditorMouseShortcuts(sample, owned, Check);
             var rect = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
             var doc = AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight);
             doc.Items.Add(new RectangleAnnotation { Rect = new RectD(30, 30, 160, 90), Stroke = ColorRgba.FromRgb(255, 0, 0), StrokeThickness = 8 });
@@ -99,16 +101,21 @@ internal static class HotfixUxSelfTest
             Pump(50); Check("Esc closes editor", !editor.IsVisible);
 
             // A separate application/process owns the input. It has no capture-card code,
-            // global shortcuts, user document, profile, or clipboard access.
+            // global shortcuts, user document, or profile. Its paste/drop handlers
+            // accept only the synthetic data supplied by this diagnostic.
             using (var external = ExternalInputFixture.Start())
             {
                 IntPtr inputHandle = external.Handle;
                 Check($"external text fixture PID={external.Id}, HWND={inputHandle}; separate process", external.Id != Environment.ProcessId);
                 int copies = 0, saves = 0;
-                var keyboardCard = new QuickAccessWindow(sample, () => { copies++; return Task.FromResult(true); }, () => { },
-                    () => Task.CompletedTask, () => { saves++; return Task.FromResult(true); }, () => { }, () => Task.FromResult("unused.png"));
+                Task<bool>? lastCopy = null;
+                string dragPath = ValidatedFilePaths.FileWithinRoot(output, "native-card-drag.png", ".png");
+                ImageCodec.SavePng(sample, dragPath);
+                var keyboardCard = new QuickAccessWindow(sample, () => { copies++; return lastCopy = ClipboardImageService.CopyImageAsync(sample); }, () => { },
+                    () => Task.CompletedTask, () => { saves++; return Task.FromResult(true); }, () => { }, () => Task.FromResult(dragPath));
                 owned.Add(keyboardCard); keyboardCard.Show(); Pump(100);
                 IntPtr cardHandle = new WindowInteropHelper(keyboardCard).Handle;
+                report.AppendLine($"Native input targets: external={inputHandle}; card={cardHandle}");
                 try
                 {
                     var bounds = WindowStyleFacade.GetWindowBounds(cardHandle);
@@ -134,15 +141,42 @@ internal static class HotfixUxSelfTest
                         if (available) probe.Unregister(0x7103);
                         Check($"Alt+Q available to a separate registration iff kept={kept}", available == kept);
                     }
-                    // Kept cards enter by a real mouse click, with no global Alt+Q claim.
-                    Point click = ((FrameworkElement)keyboardCard.Content).PointToScreen(new Point(20, 20));
-                    MoveCursor(inputHandle, (int)click.X, (int)click.Y);
-                    MouseButton(inputHandle, 0x0002); // Left down is delivered only after we pump.
-                    MouseButton(inputHandle, 0x0004);
-                    Pump(100);
-                    Check("click activates the kept card", keyboardCard.IsActive && keyboardCard.IsKeyboardFocusWithin);
+                    var mouseRow = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().First();
+                    var mouseActions = mouseRow.Children.OfType<UniformGrid>().Single().Children.OfType<Button>().ToArray();
+                    Click(inputHandle, mouseActions[0]);
+                    Check("copy click preserves external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && copies == 1);
+                    Check("card writes actual Windows image clipboard", lastCopy is not null && Await(lastCopy));
+                    InjectKey(inputHandle, 0x11, 0); SendKey(inputHandle, 0x56); InjectKey(inputHandle, 0x11, 2); Pump(200);
+                    Check("Ctrl+V pastes image in external app without refocusing", external.Text.EndsWith("[image:320x180]", StringComparison.Ordinal));
+                    Click(inputHandle, mouseActions[2]); Click(inputHandle, mouseActions[3]);
+                    Check("pin/save clicks preserve external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && saves == 1);
+                    var preview = mouseRow.Children.OfType<Image>().Single();
+                    Click(inputHandle, preview);
+                    Check("thumbnail click preserves external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive);
+                    DragToExternal(inputHandle, preview);
+                    Check($"native thumbnail file drop reaches external app and preserves foreground; text={external.Text}; foreground={GetForegroundWindow()}",
+                        external.Text.EndsWith("[drop:" + dragPath + "]", StringComparison.Ordinal) && GetForegroundWindow() == inputHandle && !keyboardCard.IsActive);
+                    var keepButton = mouseRow.Children.OfType<ToggleButton>().Single();
+                    Click(inputHandle, keepButton); Click(inputHandle, keepButton);
+                    Check("keep toggle clicks preserve external foreground", GetForegroundWindow() == inputHandle && keyboardCard.IsKept && !keyboardCard.IsActive);
+                    foreach (bool library in new[] { false, true })
+                    {
+                        int invoked = 0;
+                        var actionCard = new QuickAccessWindow(sample, () => Task.FromResult(true), () => invoked++,
+                            () => Task.CompletedTask, () => Task.FromResult(true), () => invoked++, () => Task.FromResult(dragPath)) { IsKept = true };
+                        owned.Add(actionCard); actionCard.Show(); Pump(80);
+                        var action = Ux402VisualMetrics.Descendants(actionCard).OfType<Button>().Single(b => library
+                            ? AutomationProperties.GetName(b) == UiText.Get("QuickAccess.Library")
+                            : AutomationProperties.GetAcceleratorKey(b) == "E");
+                        Click(inputHandle, action);
+                        Check($"{(library ? "library" : "edit")} click invokes action without activating card", invoked == 1 && GetForegroundWindow() == inputHandle && !actionCard.IsVisible);
+                    }
+                    // Kept cards enter only by a non-action background click.
+                    var dimensions = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single();
+                    Click(inputHandle, dimensions);
+                    Check("background click activates the kept card", keyboardCard.IsActive && keyboardCard.IsKeyboardFocusWithin);
                     SendKey(cardHandle, 0x43); Pump(80);
-                    Check("focused card C invokes copy", copies == 1);
+                    Check("focused card C invokes copy", copies == 2 && lastCopy is not null && Await(lastCopy));
 
                     keyboardCard.IsKept = false;
                     external.Activate(); Pump(100);
@@ -152,7 +186,7 @@ internal static class HotfixUxSelfTest
                     Pump(120);
                     Check("Alt+Q activates an automatic card", keyboardCard.IsActive && keyboardCard.IsKeyboardFocusWithin);
                     SendKey(cardHandle, 0x53); Pump(80);
-                    Check("focused card S invokes save", saves == 1);
+                    Check("focused card S invokes save", saves == 2);
                     // Observe real pointer-triggered tooltips on this owned foreground HWND.
                     var cardRow = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().First();
                     var tooltipTargets = cardRow.Children.OfType<UniformGrid>().Single().Children.OfType<ButtonBase>()
@@ -182,6 +216,14 @@ internal static class HotfixUxSelfTest
                     SendKey(cardHandle, 0x1B); Pump(80);
                     Check("focused card Esc closes it", !keyboardCard.IsVisible);
                     external.Activate(); Pump(80);
+                    var timed = Card(sample); owned.Add(timed); timed.Show(); Pump(100);
+                    var timedCopy = Ux402VisualMetrics.Descendants(timed).OfType<Button>().Single(b => AutomationProperties.GetAcceleratorKey(b) == "C");
+                    Click(inputHandle, timedCopy);
+                    Check("automatic card remains passive after copy click", GetForegroundWindow() == inputHandle && !timed.IsActive);
+                    MoveCursor(inputHandle, 70, 100);
+                    var closeWatch = Stopwatch.StartNew();
+                    while (timed.IsVisible && closeWatch.Elapsed < TimeSpan.FromSeconds(8)) Pump(100);
+                    Check($"passive clicked card closes after pointer leaves ({closeWatch.Elapsed.TotalSeconds:0.00}s)", !timed.IsVisible && GetForegroundWindow() == inputHandle);
                     MoveCursor(inputHandle, originalCursor.X, originalCursor.Y);
                     report.AppendLine($"External input measurement: PID={external.Id}; final text={external.Text}; 4 scenarios x C/E/P/S/Esc; all key and pointer events foreground-guarded.");
                 }
@@ -473,6 +515,58 @@ internal static class HotfixUxSelfTest
             throw new InvalidOperationException($"Input aborted: expected foreground {expected}, actual {actual}.");
     }
     private static void SendKey(IntPtr target, byte key) { InjectKey(target, key, 0); InjectKey(target, key, 2); }
+    private static void Click(IntPtr foreground, FrameworkElement control)
+    {
+        Point point = control.PointToScreen(new Point(control.ActualWidth / 2, control.ActualHeight / 2));
+        MoveCursor(foreground, (int)point.X, (int)point.Y);
+        MouseButton(foreground, 0x0002); MouseButton(foreground, 0x0004); Pump(100);
+    }
+
+    private static void DragToExternal(IntPtr foreground, FrameworkElement preview)
+    {
+        Point start = preview.PointToScreen(new Point(preview.ActualWidth / 2, preview.ActualHeight / 2));
+        MoveCursor(foreground, (int)start.X, (int)start.Y); MouseButton(foreground, 0x0002); Pump(50);
+        // OLE's drag loop can suspend dispatcher timers. The bounded native input
+        // worker remains independent of that loop and never traverses other apps.
+        Task gesture = Task.Run(() =>
+        {
+            MoveCursor(foreground, (int)start.X + 12, (int)start.Y + 2);
+            Thread.Sleep(150);
+            MoveCursor(foreground, 120, 110);
+            Thread.Sleep(150);
+            MouseButton(foreground, 0x0004);
+        });
+        Await(gesture); Pump(200);
+    }
+
+    private static void VerifyEditorMouseShortcuts(BitmapSource sample, List<Window> owned, Action<string, bool> check)
+    {
+        var rect = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
+        var window = new AnnotationEditorWindow(new FrozenFrame(sample, rect, null, 0), rect, sample);
+        owned.Add(window); window.Show(); Pump(150); window.Activate(); window.Editor.Focus();
+        IntPtr hwnd = new WindowInteropHelper(window).Handle;
+        ButtonBase Button(string key) => Ux402VisualMetrics.Descendants(window).OfType<ButtonBase>().Single(b => AutomationProperties.GetAcceleratorKey(b) == key);
+        Click(hwnd, Button("A"));
+        check("mouse rail click returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
+        foreach (var (key, hint) in new[] { ((byte)0x52, "R"), ((byte)0x45, "E"), ((byte)0x58, "X") })
+        {
+            SendKey(hwnd, key); Pump(60);
+            check($"native rail click then {hint} selects tool", ((ToggleButton)Button(hint)).IsChecked == true);
+        }
+        SendKey(hwnd, 0x1B); Pump(50);
+        check("native Esc cancels pending crop", window.Editor.PendingCrop is null && window.IsVisible);
+        Click(hwnd, Button("X")); window.Editor.PendingCrop!.SetWidth(200);
+        SendKey(hwnd, 0x0D); Pump(80);
+        check("native crop button click then Enter applies crop", window.Editor.PendingCrop is null && window.Editor.CreateCurrentImageSnapshot().CanvasWidth == 200);
+        Click(hwnd, Button("X")); SendKey(hwnd, 0x1B); Pump(50);
+        check("native crop button click then Esc cancels", window.Editor.PendingCrop is null && window.IsVisible);
+        window.Editor.Focus(); SendKey(hwnd, 0x09); Pump(50);
+        check("native Tab retains button keyboard navigation", Keyboard.FocusedElement is ButtonBase);
+        Click(hwnd, Button("W"));
+        check("mouse top command returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
+        SendKey(hwnd, 0x1B); Pump(80);
+        check("native top button click then Esc closes editor", !window.IsVisible);
+    }
     private static void InjectKey(IntPtr target, byte key, uint flags)
     {
         RequireForeground(target);
@@ -505,7 +599,10 @@ internal static class HotfixUxSelfTest
                 "$f=New-Object System.Windows.Forms.Form; $f.Text='MyCapture external input measurement'; " +
                 "$f.Width=340; $f.Height=160; $f.StartPosition='Manual'; $f.Left=40; $f.Top=40; " +
                 "$t=New-Object System.Windows.Forms.TextBox; $t.Multiline=$true; $t.Dock='Fill'; $f.Controls.Add($t); " +
-                "$f.Add_Shown({[System.Windows.Forms.InputLanguage]::CurrentInputLanguage=[System.Windows.Forms.InputLanguage]::FromCulture([System.Globalization.CultureInfo]::GetCultureInfo('en-US')); $f.Activate(); $t.Focus()}); " +
+                "$t.AllowDrop=$true; $t.Add_DragEnter({param($sender,$e) if($e.Data.GetDataPresent('FileDrop')){$e.Effect=[System.Windows.Forms.DragDropEffects]::Copy}}); " +
+                "$t.Add_DragDrop({param($sender,$e) $t.AppendText('[drop:'+($e.Data.GetData('FileDrop')[0])+']')}); " +
+                "$t.Add_KeyDown({param($sender,$e) if($e.Control -and $e.KeyCode -eq 'V' -and [System.Windows.Forms.Clipboard]::ContainsImage()){$img=[System.Windows.Forms.Clipboard]::GetImage(); $t.AppendText('[image:'+$img.Width+'x'+$img.Height+']'); $img.Dispose(); $e.SuppressKeyPress=$true}}); " +
+                "$f.Add_Shown({[System.Windows.Forms.InputLanguage]::CurrentInputLanguage=[System.Windows.Forms.InputLanguage]::FromCulture([System.Globalization.CultureInfo]::GetCultureInfo('en-US')); $f.Activate(); $t.Focus(); $f.Text='MyCapture external input measurement ready'}); " +
                 "[System.Windows.Forms.Application]::Run($f)");
             Process process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start external input fixture.");
             try
@@ -517,6 +614,9 @@ internal static class HotfixUxSelfTest
                     if (process.HasExited) throw new InvalidOperationException("External fixture exited before showing its window.");
                     if (process.MainWindowHandle is var hwnd && hwnd != IntPtr.Zero)
                     {
+                        var title = new StringBuilder(128);
+                        _ = SendMessage(hwnd, 0x000D, new IntPtr(title.Capacity), title);
+                        if (!title.ToString().EndsWith(" ready", StringComparison.Ordinal)) { Pump(50); continue; }
                         if (GetForegroundWindow() != hwnd) _ = SetForegroundWindow(hwnd);
                         if (GetForegroundWindow() == hwnd) return new ExternalInputFixture(process, hwnd);
                     }

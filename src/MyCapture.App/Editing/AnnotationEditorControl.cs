@@ -297,7 +297,16 @@ internal sealed class AnnotationEditorControl : Grid
             if (command == "Done") { CommitActiveText(); Commit(EditorCommitAction.Done); return true; }
             return false;
         }
-        if (Keyboard.FocusedElement is TextBoxBase or ComboBox or ComboBoxItem or ButtonBase
+        if (_crop is not null && Keyboard.FocusedElement is TextBox cropInput
+            && (ReferenceEquals(cropInput, _cropWidth) || ReferenceEquals(cropInput, _cropHeight))
+            && modifiers == ModifierKeys.None)
+        {
+            if (key == Key.Escape) { CancelPendingCrop(); Focus(); return true; }
+            if (key == Key.Enter) { ChangeCropSize(cropInput); ApplyPendingCrop(); Focus(); return true; }
+        }
+        if (Keyboard.FocusedElement is ButtonBase && key is Key.Space or Key.Enter
+            && modifiers == ModifierKeys.None) return false;
+        if (Keyboard.FocusedElement is TextBoxBase or ComboBox or ComboBoxItem
             && (modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) == 0) return false;
         if (_crop is not null && ShortcutCatalog.Execute(ShortcutScope.Crop, key, modifiers, _cropActions)) return true;
         if (Keyboard.FocusedElement is TextBox box
@@ -1106,6 +1115,7 @@ internal sealed class AnnotationEditorControl : Grid
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
         AutomationName(button, UiText.Get("Text_EA33C8FF45A0"));
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) =>
         {
             menu.PlacementTarget = button;
@@ -1276,7 +1286,7 @@ internal sealed class AnnotationEditorControl : Grid
             box.KeyDown += (_, e) =>
             {
                 if (e.Key != Key.Enter || Keyboard.Modifiers != ModifierKeys.None) return;
-                ChangeCropSize(box); RefreshCrop(); e.Handled = true;
+                ChangeCropSize(box); ApplyPendingCrop(); Focus(); e.Handled = true;
             };
         }
         panel.Children.Add(dimensions);
@@ -1566,6 +1576,7 @@ internal sealed class AnnotationEditorControl : Grid
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");
         AutomationName(button, UiText.Format("Text_1BA9F7001237", label, ShortcutCatalog.Get(ShortcutScope.Annotation, tool.ToString()).Hint));
         ShortcutPresentation.Attach(button, ShortcutScope.Annotation, tool.ToString(), corner: true);
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) => SelectTool(tool);
         _toolButtons[tool] = button;
         parent.Children.Add(button);
@@ -1589,6 +1600,7 @@ internal sealed class AnnotationEditorControl : Grid
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
         AutomationName(button, automationName);
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) => onClick();
         return button;
     }
@@ -1614,6 +1626,7 @@ internal sealed class AnnotationEditorControl : Grid
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
         AutomationName(button, label);
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) => onClick();
         return button;
     }
@@ -1629,8 +1642,23 @@ internal sealed class AnnotationEditorControl : Grid
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, styleKey);
         AutomationName(button, label);
+        PreserveEditorMouseFocus(button);
         button.Click += (_, _) => onClick();
         return button;
+    }
+
+    private void PreserveEditorMouseFocus(ButtonBase button)
+    {
+        // Mouse commands leave shortcuts on the canvas. Tab and automation can
+        // still focus the same button and activate it with Space or Enter.
+        button.PreviewGotKeyboardFocus += (_, e) =>
+        {
+            if (ReferenceEquals(e.NewFocus, button) && Mouse.LeftButton == MouseButtonState.Pressed)
+            {
+                e.Handled = true;
+                Focus();
+            }
+        };
     }
 
     private Border Separator() => new()

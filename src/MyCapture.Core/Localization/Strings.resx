@@ -307,7 +307,7 @@
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_1DCD20923815" xml:space="preserve">
-    <value>영상 이미지 데이터가 너무 큽니다. 전체 레이어 데이터는 64MB 이하여야 합니다. 이미지 크기나 레이어 수를 줄여 주세요.</value>
+    <value>영상 이미지 데이터가 너무 큽니다. 전체 레이어 데이터는 64MB 이하여야 합니다. 이미지 크기나 레이어 수를 줄이십시오.</value>
     <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
   </data>
   <data name="Text_1DFB8FE69D78" xml:space="preserve">
@@ -574,7 +574,7 @@
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_339D1C10FD24" xml:space="preserve">
-    <value>GIF는 최대 20초입니다. 시작·끝 지점을 조정해야 합니다.</value>
+    <value>GIF는 최대 20초입니다. 시작·끝 지점을 조정해 20초 이내로 줄이십시오.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_33EFD44366A7" xml:space="preserve">
@@ -758,7 +758,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_460404601E2D" xml:space="preserve">
-    <value>이미지 레이어 데이터의 헤더에 공백이 너무 많습니다. 이미지를 다시 추가해 주세요.</value>
+    <value>이미지 레이어 데이터의 헤더에 공백이 너무 많습니다. 이미지를 다시 추가하십시오.</value>
     <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
   </data>
   <data name="Text_4667ECA4EE5B" xml:space="preserve">
@@ -942,7 +942,7 @@
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_5461D9E26042" xml:space="preserve">
-    <value>숫자를 입력해 주세요 (허용 범위 {0}).</value>
+    <value>숫자를 입력하십시오 (허용 범위 {0}).</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_54A00B1A2FDB" xml:space="preserve">
@@ -1266,7 +1266,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_6D9F1A20DDCC" xml:space="preserve">
-    <value>GIF 시간 해상도는 0.01초입니다. 0.01초보다 짧은 시간 텍스트 구간을 늘려 주세요.</value>
+    <value>GIF 시간 해상도는 0.01초입니다. 0.01초보다 짧은 시간 텍스트 구간을 늘리십시오.</value>
     <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
   </data>
   <data name="Text_6DDE7DF5BF97" xml:space="preserve">
@@ -1414,7 +1414,7 @@
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_798E080A9262" xml:space="preserve">
-    <value>드래그해 캡처할 영역을 선택하세요  ·  Shift 정밀 이동  ·  놓으면 확정  ·  Esc 취소</value>
+    <value>드래그해 캡처할 영역을 선택하십시오  ·  Shift 정밀 이동  ·  놓으면 확정  ·  Esc 취소</value>
     <comment>src\MyCapture.App\Capture\CaptureOverlayView.cs</comment>
   </data>
   <data name="Text_79B3DB1CD566" xml:space="preserve">
@@ -1670,7 +1670,7 @@
     <comment>src\MyCapture.App\Editing\CaptureCommitService.cs</comment>
   </data>
   <data name="Text_93B88ACD46F6" xml:space="preserve">
-    <value>영상 그래픽 레이어는 최대 100개입니다. 레이어를 줄여 주세요.</value>
+    <value>영상 그래픽 레이어는 최대 100개입니다. 레이어를 줄이십시오.</value>
     <comment>src\MyCapture.App\Recording\VideoLayerResourceBudget.cs</comment>
   </data>
   <data name="Text_93CBE1538A34" xml:space="preserve">
@@ -1754,7 +1754,7 @@
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_9A6259D8B7CF" xml:space="preserve">
-    <value>정수를 입력해 주세요 (허용 범위 {0}).</value>
+    <value>정수를 입력하십시오 (허용 범위 {0}).</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_9A9C87658130" xml:space="preserve">
@@ -2822,7 +2822,7 @@
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_F2F36C2D52F6" xml:space="preserve">
-    <value>GIF 시간 해상도는 0.01초입니다. 프레임 레이어 표시 구간을 0.01초 이상으로 늘려 주세요.</value>
+    <value>GIF 시간 해상도는 0.01초입니다. 프레임 레이어 표시 구간을 0.01초 이상으로 늘리십시오.</value>
     <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
   </data>
   <data name="Text_F371688B8EE8" xml:space="preserve">
@@ -2957,9 +2957,9 @@
   <data name="ExportReduction_Save" xml:space="preserve"><value>다른 이름으로 저장…</value></data>
   <data name="ExportReduction_Drag" xml:space="preserve"><value>폴더로 드래그</value></data>
   <data name="ExportReduction_Cancel" xml:space="preserve"><value>닫기</value></data>
-  <data name="ExportReduction_Description" xml:space="preserve"><value>기준 크기는 현재 편집된 이미지를 PNG로 인코딩한 크기이며 가져온 파일 크기와 다를 수 있습니다. 목표 감소율을 선택하고 결과를 계산하세요. 불투명 이미지는 JPEG로 변환할 수 있으며 픽셀 크기는 유지됩니다.</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>기준 크기는 현재 편집된 이미지를 PNG로 인코딩한 크기이며 가져온 파일 크기와 다를 수 있습니다. 목표 감소율을 선택하고 결과를 계산하십시오. 불투명 이미지는 JPEG로 변환할 수 있으며 픽셀 크기는 유지됩니다.</value></data>
   <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>목표 용량 절감률</value></data>
-  <data name="ExportReduction_UpdateRequired" xml:space="preserve"><value>결과 계산을 눌러 실제 용량을 확인하세요.</value></data>
+  <data name="ExportReduction_UpdateRequired" xml:space="preserve"><value>결과 계산을 눌러 실제 용량을 확인하십시오.</value></data>
   <data name="ExportReduction_Original" xml:space="preserve"><value>원본 품질 · 0% 절감 목표</value></data>
   <data name="ExportReduction_Target" xml:space="preserve"><value>목표: 원본 PNG보다 {0}% 작은 용량</value></data>
   <data name="ExportReduction_Working" xml:space="preserve"><value>이미지 용량을 계산하고 있습니다…</value></data>
@@ -2967,7 +2967,7 @@
 실제 절감률 {2}% · {3}</value></data>
   <data name="ExportReduction_Transparent" xml:space="preserve"><value>투명 배경을 보존하기 위해 원본 PNG를 유지했습니다. JPEG 절감은 적용하지 않았습니다.</value></data>
   <data name="ExportReduction_Unmet" xml:space="preserve"><value>픽셀 크기를 유지하면서 목표 용량에 도달하지 못했습니다. 표시된 실제 결과로 내보냅니다.</value></data>
-  <data name="ExportReduction_Ready" xml:space="preserve"><value>계산 완료. 저장하거나 버튼을 폴더로 드래그하세요.</value></data>
+  <data name="ExportReduction_Ready" xml:space="preserve"><value>계산 완료. 저장하거나 버튼을 폴더로 드래그하십시오.</value></data>
   <data name="ExportReduction_Error" xml:space="preserve"><value>내보내기 실패: {0}</value></data>
   <data name="ExportReduction_Extension" xml:space="preserve"><value>이 결과는 {0} 확장자로 저장해야 합니다.</value></data>
   <data name="ShellRetake_ReadyTitle" xml:space="preserve"><value>{0} 준비 완료</value></data>
@@ -3146,7 +3146,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Search.Reset" xml:space="preserve"><value>검색·필터 초기화</value></data>
   <data name="Library.Empty.Start" xml:space="preserve"><value>나의 캡처 작업 공간</value></data>
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>일치하는 캡처가 없습니다</value></data>
-  <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 편집창에서 저장을 눌러 다시 시도하세요. {0}</value></data>
+  <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 편집창에서 저장을 눌러 다시 시도하십시오. {0}</value></data>
   <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>드래그 전 커서 보조선 표시</value></data>
   <data name="Library.SourcePage.Label" xml:space="preserve"><value>원본 웹페이지</value></data>
   <data name="Library.SourcePage.Open" xml:space="preserve"><value>페이지 열기</value></data>
@@ -3212,7 +3212,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Hotkey.Twice" xml:space="preserve"><value>{0} 두 번</value></data>
   <data name="Hotkey.TrayRestore" xml:space="preserve"><value>트레이의 모든 화면 숨기기 후 다시 표시</value></data>
   <data name="Hotkey.ModifierRequired" xml:space="preserve"><value>문자·숫자·이동 키는 Ctrl, Alt 또는 Win과 함께 지정하십시오. F1–F24와 PrintScreen은 단독 또는 Shift 조합으로 지정할 수 있습니다.</value></data>
-  <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>카드를 클릭하거나 Alt+Q로 진입한 후 C·E·P·S·Esc로 조작합니다. 유지 중인 카드는 클릭으로 진입합니다.</value></data>
+  <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>카드 배경을 클릭하거나 Alt+Q로 진입한 뒤 C·E·P·S·Esc를 사용합니다. 유지 중인 카드는 배경 클릭으로 진입합니다.</value></data>
   <data name="Video.InvalidImage" xml:space="preserve"><value>이미지를 읽을 수 없습니다. 올바른 PNG, JPEG 또는 BMP 파일을 선택하십시오.</value></data>
   <data name="Hotkey.MigratedTitle" xml:space="preserve"><value>단축키 변경</value></data>
   <data name="Hotkey.Migrated" xml:space="preserve"><value>입력을 방해하거나 복원된 캡처 단축키와 겹치는 단축키를 해제했습니다. 필요한 경우 캡처를 Ctrl+Shift+C로 복원했습니다.</value></data>
@@ -3232,7 +3232,6 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Crop.Applied" xml:space="preserve"><value>자르기 적용됨</value></data>
   <data name="Crop.Cancelled" xml:space="preserve"><value>미적용 자르기 취소됨</value></data>
   <data name="Crop.Instruction" xml:space="preserve"><value>틀을 이동하거나 핸들로 크기를 조절하십시오.</value></data>
-  <data name="QuickAccess.KeyboardUnavailable" xml:space="preserve"><value>키보드 단축키를 사용할 수 없습니다. 버튼을 누르십시오.</value></data>
   <data name="Crop.TooSmall" xml:space="preserve"><value>너비와 높이를 2px 이상으로 지정하십시오.</value></data>
-  <data name="QuickAccess.ActivationUnavailable" xml:space="preserve"><value>Alt+Q가 이미 사용 중입니다. 카드를 클릭하면 단축키를 사용할 수 있습니다.</value></data>
+  <data name="QuickAccess.ActivationUnavailable" xml:space="preserve"><value>Alt+Q가 이미 사용 중입니다. 카드 배경을 클릭하면 단축키를 사용할 수 있습니다.</value></data>
 </root>

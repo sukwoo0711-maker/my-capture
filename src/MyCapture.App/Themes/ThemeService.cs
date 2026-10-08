@@ -16,6 +16,16 @@ internal static class ThemeService
     internal static AppTheme? IsAppliedForTest => _applied ? Current : null;
     private static bool _applied;
 
+    static ThemeService()
+    {
+        SystemParameters.StaticPropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(SystemParameters.HighContrast) || Application.Current is not { } app) return;
+            if (app.Dispatcher.CheckAccess()) ApplyCropResources(app.Resources, SystemParameters.HighContrast);
+            else app.Dispatcher.BeginInvoke(new Action(() => ApplyCropResources(app.Resources, SystemParameters.HighContrast)));
+        };
+    }
+
     internal static void Apply(AppTheme theme)
     {
         Current = theme;
@@ -52,7 +62,13 @@ internal static class ThemeService
         }
         // Crop masks always darken discarded pixels, including in light themes.
         // High contrast follows the user's system palette without a translucent wash.
-        bool highContrast = SystemParameters.HighContrast || theme == AppTheme.HighContrast;
+        resources["Text.Disabled"] = new SolidColorBrush(theme is AppTheme.Daylight or AppTheme.GlassLight
+            ? Color.FromRgb(0x74, 0x7C, 0x89) : Color.FromRgb(0x7A, 0x82, 0x90));
+        ApplyCropResources(resources, SystemParameters.HighContrast);
+    }
+
+    internal static void ApplyCropResources(ResourceDictionary resources, bool highContrast)
+    {
         resources["Crop.Scrim"] = highContrast ? SystemColors.WindowBrush : new SolidColorBrush(Color.FromArgb(153, 8, 12, 18));
         resources["Crop.Frame"] = highContrast ? SystemColors.WindowTextBrush : Brushes.White;
         resources["Crop.FrameShadow"] = highContrast ? SystemColors.WindowBrush : Brushes.Black;

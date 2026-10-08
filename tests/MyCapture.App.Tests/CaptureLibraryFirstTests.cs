@@ -38,6 +38,16 @@ public sealed class CaptureLibraryFirstTests
         using var fixture = new Fixture();
         fixture.Settings.General.AfterCapture = mode;
         fixture.Settings.Export.CopyToClipboardOnQuickSave = false;
+        // The clipboard writer must start before storage publication for every path.
+        // Hold its completion until storage commits: serial execution deadlocks/fails.
+        var clipboardRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.CopyCompletion = clipboardRelease.Task;
+        fixture.Persistence.BeforeRecordMetadataCommit = _ =>
+        {
+            PumpUntil(() => fixture.CopiedImages.Count > 0);
+            Assert.Single(fixture.CopiedImages);
+            clipboardRelease.SetResult(true);
+        };
         using var coordinator = new CaptureOverlayCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance);
         coordinator.SelectionPersistRequested = fixture.Select;
@@ -611,6 +621,7 @@ public sealed class CaptureLibraryFirstTests
         internal CaptureCommitService CommitService { get; }
         internal AppSettings Settings { get; } = new();
         internal List<BitmapSource> CopiedImages { get; } = [];
+        internal Task<bool>? CopyCompletion { get; set; }
         internal FrozenFrame Frame { get; }
         internal RectD Region { get; } = new(0, 0, 64, 48);
         internal CaptureSelectionCompletedEventArgs Selection => new(Frame, Region, Frame.Bitmap,
@@ -629,7 +640,7 @@ public sealed class CaptureLibraryFirstTests
             Persistence = new CapturePersistenceService(Queue, Paths, () => settings.Queue,
                 NullLogger<CapturePersistenceService>.Instance);
             CommitService = new CaptureCommitService(Persistence, () => settings, () => Paths,
-                NullLogger<CaptureCommitService>.Instance, (image, _) => { CopiedImages.Add(image); return Task.FromResult(true); });
+                NullLogger<CaptureCommitService>.Instance, (image, _) => { CopiedImages.Add(image); return CopyCompletion ?? Task.FromResult(true); });
             Set("_queue", Queue);
             Set("_settings", settings);
             Set("_persistence", Persistence);

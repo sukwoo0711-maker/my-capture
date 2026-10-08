@@ -39,6 +39,7 @@ internal static class Ux402SelfTest
         string output = Directory.CreateTempSubdirectory("MyCapture-ux402-").FullName;
         Console.WriteLine("UX402_OUTPUT=" + output);
         var report = new StringBuilder();
+        report.AppendLine($"SystemHighContrast={SystemParameters.HighContrast}");
         bool before = typeof(AnnotationEditorControl).GetProperty("PendingCrop", BindingFlags.Instance | BindingFlags.NonPublic) is null;
         report.AppendLine($"Assembly: {typeof(AnnotationEditorWindow).Assembly.Location}; version={typeof(AnnotationEditorWindow).Assembly.GetName().Version}; baseline={before}");
         report.AppendLine("Real native WPF windows rendered at 96/144/192 raster density. OS monitor DPI is unchanged. Synthetic image/video and isolated settings only.");

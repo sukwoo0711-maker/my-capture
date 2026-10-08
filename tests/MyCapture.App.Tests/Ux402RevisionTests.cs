@@ -89,7 +89,7 @@ public sealed class Ux402RevisionTests
     });
 
     [Fact]
-    public void CropInspectorCommitsNumbersOnlyOnEnterOrFocusLossAndOwnsItsKeys() => StaTestHost.Run(() =>
+    public void CropInspectorEnterAppliesAndEscapeCancelsWhileComboAndButtonsOwnActivation() => StaTestHost.Run(() =>
     {
         var editor = Editor(); var window = new Window { Content = editor, Width = 1000, Height = 620 };
         try
@@ -98,13 +98,13 @@ public sealed class Ux402RevisionTests
             var width = Field<TextBox>(editor, "_cropWidth"); var height = Field<TextBox>(editor, "_cropHeight");
             width.Focus(); width.Text = "2"; width.Text = "200";
             Assert.Equal(640, editor.PendingCrop!.Region.Width);
-            Assert.False(editor.HandleShortcut(Key.Enter, ModifierKeys.None));
-            RaiseKey(width, Key.Enter);
-            Assert.Equal(200, editor.PendingCrop.Region.Width); Assert.NotNull(editor.PendingCrop);
+            Assert.True(editor.HandleShortcut(Key.Enter, ModifierKeys.None));
+            Assert.Null(editor.PendingCrop); Assert.Equal(200, editor.CreateCurrentImageSnapshot().CanvasWidth);
+            editor.Focus(); editor.HandleShortcut(Key.Z, ModifierKeys.Control); editor.ShortcutActions["Crop"]();
             height.Focus(); height.Text = "100";
-            Assert.Equal(360, editor.PendingCrop.Region.Height);
+            Assert.Equal(360, editor.PendingCrop!.Region.Height);
             width.Focus(); Assert.Equal(100, editor.PendingCrop.Region.Height);
-            width.Text = "9999"; RaiseKey(width, Key.Enter);
+            width.Text = "9999"; height.Focus();
             Assert.Equal(640, editor.PendingCrop.Region.Width); Assert.Equal(100, editor.PendingCrop.Region.Height);
             var combo = Field<ComboBox>(editor, "_cropRatio"); combo.Focus();
             Assert.False(editor.HandleShortcut(Key.Down, ModifierKeys.None));
@@ -118,11 +118,37 @@ public sealed class Ux402RevisionTests
             Assert.Null(editor.PendingCrop);
             Assert.Equal(640, editor.CreateCurrentImageSnapshot().CanvasWidth);
             editor.ShortcutActions["Crop"](); width.Focus(); width.Text = "240";
+            Assert.True(editor.HandleShortcut(Key.Escape, ModifierKeys.None));
+            Assert.Null(editor.PendingCrop); Assert.Equal(640, editor.CreateCurrentImageSnapshot().CanvasWidth);
+            editor.ShortcutActions["Crop"](); width.Focus(); width.Text = "240";
             AnnotationEditingResult? saved = null;
             editor.CommitRequested = value => { saved = value; return Task.FromResult(false); };
             Assert.True(editor.HandleShortcut(Key.S, ModifierKeys.Control));
             Assert.NotNull(saved); Assert.Equal(240, saved.Document.CanvasWidth);
             Assert.Null(editor.PendingCrop);
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void KeyboardFocusedButtonsKeepOnlySpaceAndEnterForActivation() => StaTestHost.Run(() =>
+    {
+        var editor = Editor(); var window = new Window { Content = editor, Width = 1000, Height = 620 };
+        try
+        {
+            window.Show(); window.Activate(); window.UpdateLayout();
+            var button = Descendants(editor).OfType<ToggleButton>().First();
+            Assert.True(button.Focus());
+            Assert.False(editor.HandleShortcut(Key.Space, ModifierKeys.None));
+            Assert.False(editor.HandleShortcut(Key.Enter, ModifierKeys.None));
+            foreach (var (key, tool) in new[] { (Key.R, "Rectangle"), (Key.E, "Ellipse"), (Key.X, "Crop") })
+            {
+                Assert.True(editor.HandleShortcut(key, ModifierKeys.None));
+                Assert.Equal(tool, Descendants(editor).OfType<ToggleButton>().Single(b => b.IsChecked == true)
+                    .GetValue(System.Windows.Automation.AutomationProperties.AcceleratorKeyProperty) switch
+                    { "R" => "Rectangle", "E" => "Ellipse", "X" => "Crop", _ => "unexpected" });
+            }
+            Assert.True(editor.HandleShortcut(Key.Escape, ModifierKeys.None)); Assert.Null(editor.PendingCrop);
         }
         finally { window.Close(); }
     });

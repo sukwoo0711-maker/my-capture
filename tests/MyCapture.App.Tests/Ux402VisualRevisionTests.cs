@@ -31,7 +31,8 @@ public sealed class Ux402VisualRevisionTests
             foreach (var (button, expected) in actions.Zip(new[] { copy, edit, pin, save }))
             {
                 Assert.Equal(expected, button.ToolTip);
-                Assert.Equal(expected, new ButtonAutomationPeer(button).GetName());
+                Assert.Equal(expected[..expected.LastIndexOf(" (", StringComparison.Ordinal)], new ButtonAutomationPeer(button).GetName());
+                Assert.Equal(expected[^2].ToString(), AutomationProperties.GetAcceleratorKey(button));
                 Assert.InRange(ToolTipService.GetInitialShowDelay(button), 0, 150);
                 Assert.Equal(0, ToolTipService.GetBetweenShowDelay(button));
             }

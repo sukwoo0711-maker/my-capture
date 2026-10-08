@@ -1007,7 +1007,7 @@ public partial class App : Application
             sourcePageUrl: e.SourcePageUrl);
         if (_pendingRecord.SourcePageUrl.Length > 0)
             _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
-        Task<bool>? automaticClipboardCopy = e.CopyToClipboardImmediately && _commit is not null
+        Task<bool>? automaticClipboardCopy = _commit is not null
             ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle,
                 _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl)
             : null;
@@ -1070,8 +1070,8 @@ public partial class App : Application
             _log?.LogWarning(ex, "Could not update capture history or tray count");
         }
 
-        // Region selection starts copying immediately. Synthesized full/window/repeat/
-        // scroll results copy here after persistence, in every after-capture mode.
+        // Every capture starts one clipboard operation alongside persistence and
+        // joins that same operation before presenting the result.
         bool copiedToClipboard = false;
         if (_commit is not null)
         {

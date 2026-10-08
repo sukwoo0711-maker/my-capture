@@ -31,11 +31,19 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         var hint = Hint(scope, command);
         hint.FontSize = corner ? 10 : scope is ShortcutScope.Annotation or ShortcutScope.Crop ? 11 : 9;
         hint.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
-        // Keep annotation shortcuts readable even when their commands are unavailable.
-        // A local binding supersedes the shared template's 48% disabled opacity.
+        // Neutral disabled colours remove the action accent without fading small
+        // shortcuts below 3:1. Keep the shared template's opacity from fading them again.
         if (scope is ShortcutScope.Annotation or ShortcutScope.Crop)
-            button.SetBinding(UIElement.OpacityProperty, new Binding(nameof(UIElement.IsEnabled))
-            { Source = button, Converter = new ShortcutOpacityConverter() });
+        {
+            button.Opacity = 1;
+            var style = new Style(button.GetType(), button.Style);
+            var disabled = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabled.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("Text.Disabled")));
+            disabled.Setters.Add(new Setter(Control.BackgroundProperty, new DynamicResourceExtension("Surface.Sunken")));
+            disabled.Setters.Add(new Setter(Control.BorderBrushProperty, new DynamicResourceExtension("Border.Subtle")));
+            style.Triggers.Add(disabled);
+            button.Style = style;
+        }
         if (corner)
         {
             var grid = new Grid { Width = 32, Height = 32 };
@@ -57,9 +65,4 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         AutomationProperties.SetAcceleratorKey(button, ShortcutCatalog.Get(scope, command).Hint);
     }
 
-    private sealed class ShortcutOpacityConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => value is true ? 1.0 : 0.72;
-        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => throw new NotSupportedException();
-    }
 }

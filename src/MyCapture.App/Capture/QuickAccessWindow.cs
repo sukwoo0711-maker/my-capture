@@ -107,7 +107,6 @@ internal sealed class QuickAccessWindow : Window
             button.Content = Glyph("Icon." + action);
             button.MinWidth = 0; button.MinHeight = 0; button.Height = 42; button.Padding = new Thickness(1); button.Margin = new Thickness(1);
             ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action, corner: true);
-            AutomationProperties.SetName(button, (string)button.ToolTip);
             ShortToolTip(button);
             actions.Children.Add(button);
         }
@@ -157,7 +156,11 @@ internal sealed class QuickAccessWindow : Window
             if (IsVisible) { _lastTick = Stopwatch.GetTimestamp(); _timer.Start(); }
             UpdateActivationHotkey();
         };
-        PreviewMouseDown += (_, _) => { if (!_keyboardAccess) ActivateForKeyboard(); };
+        PreviewMouseDown += (_, e) =>
+        {
+            if (!_keyboardAccess && e.ChangedButton == MouseButton.Left && IsKeyboardEntryBackground(e.OriginalSource as DependencyObject))
+                ActivateForKeyboard();
+        };
         PreviewKeyDown += (_, e) =>
         {
             if (!_keyboardAccess || !IsKeyboardFocusWithin) return;
@@ -214,12 +217,10 @@ internal sealed class QuickAccessWindow : Window
             _ = Dispatcher.BeginInvoke(new Action(() => { if (CanActivateByHotkey) ActivateForKeyboard(); }));
             return IntPtr.Zero;
         }
-        if (message == 0x0021 && !_keyboardAccess) // WM_MOUSEACTIVATE: explicit click, including native chrome.
+        if (message == 0x0021 && !_keyboardAccess) // WM_MOUSEACTIVATE
         {
-            EnableKeyboardAccess();
-            _ = Dispatcher.BeginInvoke(new Action(() => ActivateForKeyboard()));
             handled = true;
-            return new IntPtr(1); // MA_ACTIVATE; Show itself still uses WS_EX_NOACTIVATE.
+            return new IntPtr(3); // MA_NOACTIVATE: action clicks and drag keep the destination active.
         }
         return IntPtr.Zero;
     }
@@ -230,6 +231,16 @@ internal sealed class QuickAccessWindow : Window
         EnableKeyboardAccess();
         if (!Activate()) return false;
         return MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+    }
+
+    private bool IsKeyboardEntryBackground(DependencyObject? source)
+    {
+        for (DependencyObject? current = source; current is not null && current != this;
+            current = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current))
+        {
+            if (current is ButtonBase || ReferenceEquals(current, _preview)) return false;
+        }
+        return source is not null;
     }
 
     private void EnableKeyboardAccess()

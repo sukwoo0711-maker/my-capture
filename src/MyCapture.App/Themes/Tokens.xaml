@@ -104,6 +104,7 @@
     <SolidColorBrush x:Key="Text.Primary" Color="{StaticResource Primitive.Warm100}" />
     <SolidColorBrush x:Key="Text.Secondary" Color="{StaticResource Primitive.Warm300}" />
     <SolidColorBrush x:Key="Text.Muted" Color="{StaticResource Primitive.Warm400}" />
+    <SolidColorBrush x:Key="Text.Disabled" Color="#FF7A8290" />
     <SolidColorBrush x:Key="Text.OnAccent" Color="{StaticResource Primitive.Ink}" />
     <SolidColorBrush x:Key="Text.Badge" Color="{StaticResource Primitive.White}" />
 

@@ -8,6 +8,23 @@ namespace MyCapture.App.Tests;
 
 public sealed class ThemeOpacityTests
 {
+    [Fact]
+    public void CropMaskFollowsWindowsHighContrastAndUpdatesLiveResources() => StaTestHost.Run(() =>
+    {
+        var resources = new ResourceDictionary();
+        ThemeService.ApplyResources(AppTheme.HighContrast, resources);
+        Assert.Equal(SystemParameters.HighContrast ? SystemColors.WindowBrush.Color : Color.FromArgb(153, 8, 12, 18),
+            ((SolidColorBrush)resources["Crop.Scrim"]).Color);
+        var surface = new System.Windows.Controls.Border { Resources = resources };
+        surface.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "Crop.Scrim");
+        ThemeService.ApplyCropResources(resources, true);
+        Assert.Equal(SystemColors.WindowBrush.Color, ((SolidColorBrush)surface.Background).Color);
+        Assert.Same(SystemColors.WindowTextBrush, resources["Crop.Frame"]);
+        ThemeService.ApplyCropResources(resources, false);
+        Assert.Equal(Color.FromArgb(153, 8, 12, 18), ((SolidColorBrush)surface.Background).Color);
+        Assert.Same(Brushes.White, resources["Crop.Frame"]);
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
