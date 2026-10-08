@@ -42,30 +42,92 @@ public sealed class ValidatedFilePathsWindowsTests
         UpdatePathsTests.CreateJunction(link, outside);
         Assert.Throws<IOException>(() => ValidatedFilePaths.CreateDirectory(Path.Combine(link, "new-output")));
         Assert.Throws<IOException>(() => ValidatedFilePaths.FileWithinRoot(owner, Path.Combine(link, "report.txt"), ".txt"));
-        Assert.Throws<IOException>(() => ValidatedFilePaths.SelectedFile(Path.Combine(link, "image.png"), ".png"));
-        var store = new SettingsStore(AppPaths.CreateForRoot(link), NullLogger<SettingsStore>.Instance);
-        InvalidDataException error = Assert.Throws<InvalidDataException>(() => store.Load());
-        Assert.Equal(UiText.Get("Text_2CD093B673E5"), error.Message);
         Assert.Equal(1, HotfixUxSelfTest.Run(Path.Combine(link, "diagnostic")));
         Assert.Empty(Directory.EnumerateFileSystemEntries(outside));
     }
 
     [WindowsFileSymlinkFact]
-    public void LinkedSelectedFileAndSettingsFileAreRejectedAndTargetPreserved()
+    public async Task LinkedSelectedFileAndSettingsFileAreReadableAndTargetsPreserved()
     {
         string owner = ValidatedFilePaths.CreateTemporaryDirectory();
         string outside = ValidatedFilePaths.CreateTemporaryDirectory();
         string target = ValidatedFilePaths.FileWithinRoot(outside, "keep.png", ".png");
-        File.WriteAllText(target, "unrelated");
+        await WriteAndReadImage(target);
+        byte[] original = File.ReadAllBytes(target);
         string imageLink = Path.Combine(owner, "image.png");
         File.CreateSymbolicLink(imageLink, target);
-        Assert.Throws<IOException>(() => ValidatedFilePaths.SelectedFile(imageLink, ".png"));
+        Assert.Equal(imageLink, ValidatedFilePaths.SelectedFile(imageLink, ".png"));
+        await AssertImageDecodes(imageLink);
         Assert.Throws<IOException>(() => ValidatedFilePaths.FileWithinRoot(owner, imageLink, ".png"));
         var paths = AppPaths.CreateForRoot(owner);
-        File.CreateSymbolicLink(paths.SettingsFile, target);
-        Assert.Throws<InvalidDataException>(() => new SettingsStore(paths, NullLogger<SettingsStore>.Instance).Load());
-        Assert.Equal("unrelated", File.ReadAllText(target));
+        string settings = ValidatedFilePaths.FileWithinRoot(outside, "settings.json", ".json");
+        const string json = "{\"schemaVersion\":4,\"general\":{\"isFirstRun\":false},\"capture\":{\"delaySeconds\":17}}";
+        File.WriteAllText(settings, json);
+        File.CreateSymbolicLink(paths.SettingsFile, settings);
+        Assert.Equal(17, new SettingsStore(paths, NullLogger<SettingsStore>.Instance).Load().Capture.DelaySeconds);
+        Assert.Equal(json, File.ReadAllText(settings));
+        Assert.Equal(original, File.ReadAllBytes(target));
     }
+
+    [Fact]
+    public async Task RedirectedProfileLoadsSettingsAndSelectedImageThroughJunctionAncestor()
+    {
+        string owner = ValidatedFilePaths.CreateTemporaryDirectory();
+        string target = ValidatedFilePaths.CreateTemporaryDirectory();
+        string link = Path.Combine(owner, "redirected-profile");
+        UpdatePathsTests.CreateJunction(link, target);
+        string profile = ValidatedFilePaths.CreateDirectory(Path.Combine(target, "MyCapture"));
+        string settings = ValidatedFilePaths.FileWithinRoot(profile, "settings.json", ".json");
+        File.WriteAllText(settings, "{\"schemaVersion\":4,\"general\":{\"isFirstRun\":false},\"capture\":{\"delaySeconds\":17}}");
+        var store = new SettingsStore(AppPaths.CreateForRoot(Path.Combine(link, "MyCapture")), NullLogger<SettingsStore>.Instance);
+        Assert.Equal(17, store.Load().Capture.DelaySeconds);
+        Assert.Empty(store.LastLoadWarnings);
+        await WriteAndReadImage(ValidatedFilePaths.FileWithinRoot(target, "image.png", ".png"));
+        await AssertImageDecodes(Path.Combine(link, "image.png"));
+    }
+
+    [Theory]
+    [InlineData("NUL")]
+    [InlineData("blocked:stream")]
+    public void InvalidSettingsPathReturnsDefaultsAndWarningWithoutWriting(string name)
+    {
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
+        var store = new SettingsStore(AppPaths.CreateForRoot(Path.Combine(root, name)), NullLogger<SettingsStore>.Instance);
+        AppSettings settings = store.Load();
+        Assert.False(settings.General.IsFirstRun);
+        Assert.False(store.LastLoadMigratedUnsafeHotkeys);
+        Assert.Contains(UiText.Get("Text_2CD093B673E5"), store.LastLoadWarnings);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(root));
+    }
+
+    [Fact]
+    public void RedirectedOsTempRootIsResolvedBeforeStrictFixtureChecks()
+    {
+        string owner = ValidatedFilePaths.CreateTemporaryDirectory();
+        string target = ValidatedFilePaths.CreateTemporaryDirectory();
+        string link = Path.Combine(owner, "redirected-temp");
+        UpdatePathsTests.CreateJunction(link, target);
+        string fixture = ValidatedFilePaths.CreateTemporaryDirectory(link);
+        Assert.StartsWith(Path.Combine(target, "MyCapture", "Diagnostics") + Path.DirectorySeparatorChar, fixture);
+        string report = ValidatedFilePaths.FileWithinRoot(fixture, "report.txt", ".txt");
+        File.WriteAllText(report, "isolated");
+        Assert.Equal("isolated", File.ReadAllText(report));
+    }
+
+    private static Task<bool> WriteAndReadImage(string path) => StaThreadTask.RunAsync(() =>
+    {
+        var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(1, 1, 96, 96,
+            System.Windows.Media.PixelFormats.Bgra32, null, new byte[] { 0, 0, 255, 255 }, 4);
+        ImageCodec.SavePng(bitmap, path);
+        Assert.Equal(1, VideoLayerAssets.ReadImage(path, CancellationToken.None).PixelWidth);
+        return true;
+    }, "Linked image fixture");
+
+    private static Task<bool> AssertImageDecodes(string path) => StaThreadTask.RunAsync(() =>
+    {
+        Assert.Equal(1, VideoLayerAssets.ReadImage(path, CancellationToken.None).PixelWidth);
+        return true;
+    }, "Linked selected image");
 
     [Theory]
     [InlineData("missing.png")]

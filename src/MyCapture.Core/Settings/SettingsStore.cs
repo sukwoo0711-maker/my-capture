@@ -50,17 +50,26 @@ public sealed class SettingsStore
     public AppSettings Load()
     {
         string settingsFile;
-        try { settingsFile = ValidatedFilePaths.FileWithinRoot(_paths.DataRoot, _paths.SettingsFile, ".json"); }
-        catch (Exception error) when (error is IOException or ArgumentException or NotSupportedException)
-        { throw new InvalidDataException(UiText.Get("Text_2CD093B673E5"), error); }
-        _paths.EnsureCreated();
-        AtomicFile.CleanUpTemp(settingsFile);
-
         var warnings = new List<string>();
-
-        string? text = AtomicFile.ReadAllTextWithRecovery(
-            settingsFile,
-            candidate => TryDeserialize(candidate, out _));
+        string? text;
+        try
+        {
+            settingsFile = ValidatedFilePaths.SettingsFileWithinRoot(_paths.DataRoot, _paths.SettingsFile);
+            _paths.EnsureCreated();
+            AtomicFile.CleanUpTemp(settingsFile);
+            text = AtomicFile.ReadAllTextWithRecovery(settingsFile, candidate => TryDeserialize(candidate, out _));
+        }
+        catch (Exception error) when (error is IOException or ArgumentException or NotSupportedException or UnauthorizedAccessException)
+        {
+            warnings.Add(UiText.Get("Text_2CD093B673E5"));
+            _log.LogWarning("Settings path could not be read; using defaults");
+            // Do not trigger welcome-card persistence or compatibility writes to an invalid path.
+            var defaults = new AppSettings { General = { IsFirstRun = false } };
+            Sanitize(defaults, warnings);
+            LastLoadMigratedUnsafeHotkeys = false;
+            LastLoadWarnings = warnings;
+            return defaults;
+        }
 
         AppSettings settings;
 

@@ -21,9 +21,20 @@ public static class ValidatedFilePaths
     }
 
     /// <summary>Creates a GUID-isolated fixture directory below the OS temporary directory.</summary>
-    public static string CreateTemporaryDirectory()
+    public static string CreateTemporaryDirectory() => CreateTemporaryDirectory(Path.GetTempPath());
+
+    internal static string CreateTemporaryDirectory(string temporaryRoot)
     {
-        string root = CreateDirectory(Path.Combine(Path.GetTempPath(), "MyCapture", "Diagnostics"));
+        // The OS-selected temp root may itself be redirected. Resolve that trusted
+        // location before applying the strict fixture policy to our own descendants.
+        string resolved = Path.GetPathRoot(Path.GetFullPath(temporaryRoot))!;
+        foreach (string segment in Path.GetFullPath(temporaryRoot)[resolved.Length..].Split(
+                     [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var directory = new DirectoryInfo(Path.Combine(resolved, segment));
+            resolved = directory.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? directory.FullName;
+        }
+        string root = CreateDirectory(Path.Combine(resolved, "MyCapture", "Diagnostics"));
         string path = Path.GetFullPath(Path.Combine(root, Guid.NewGuid().ToString("N")));
         if (!IsWithinRoot(root, path) || !IsPlainDirectory(path))
             throw new IOException("The temporary directory escaped its approved root.");
@@ -45,6 +56,24 @@ public static class ValidatedFilePaths
         return fullPath;
     }
 
+    /// <summary>Confines settings lexically while allowing redirected user profiles and linked settings.</summary>
+    public static string SettingsFileWithinRoot(string directory, string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if (!HasUnambiguousSegments(directory) || !HasUnambiguousSegments(path))
+            throw new IOException("Ambiguous settings path.");
+        string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+        if (Path.IsPathRooted(path) && !Path.IsPathFullyQualified(path))
+            throw new IOException("Drive-relative paths are not permitted.");
+        string fullPath = Path.GetFullPath(path, root);
+        string prefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(prefix, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+            || !string.Equals(Path.GetExtension(fullPath), ".json", StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Settings must remain within the data root and use the JSON extension.");
+        return fullPath;
+    }
+
     /// <summary>The file chooser grants access to this exact file, rather than to arbitrary sibling paths.</summary>
     public static string SelectedFile(string selectedPath, params string[] extensions)
     {
@@ -53,10 +82,15 @@ public static class ValidatedFilePaths
         if (!Path.IsPathFullyQualified(selectedPath))
             throw new IOException("A selected file must have an absolute path.");
         string fullPath = Path.GetFullPath(selectedPath);
-        if (!IsRegularFile(fullPath, mustExist: true, extensions))
+        if (!IsUnambiguousPath(fullPath) || !extensions.Contains(Path.GetExtension(fullPath), StringComparer.OrdinalIgnoreCase)
+            || !File.Exists(fullPath)
+            || !IsSelectedFileType(File.GetAttributes(fullPath)))
             throw new IOException("The selected file must be an existing regular file with an allowed extension.");
         return fullPath;
     }
+
+    internal static bool IsSelectedFileType(FileAttributes attributes) =>
+        (attributes & (FileAttributes.Directory | FileAttributes.Device)) == 0;
 
     private static bool IsWithinRoot(string root, string path)
     {

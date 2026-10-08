@@ -76,4 +76,35 @@ public sealed class ValidatedFilePathsTests
     [InlineData(@"\\.\C:\image.png")]
     public void RejectsDeviceNamespaces(string path) =>
         Assert.Throws<IOException>(() => ValidatedFilePaths.SelectedFile(path, ".png"));
+
+    [Theory]
+    [InlineData(@"..\settings.json")]
+    [InlineData(@"nested\..\..\settings.json")]
+    [InlineData("settings.exe")]
+    [InlineData("settings.json:stream")]
+    [InlineData("C:settings.json")]
+    public void SettingsPathsStillRejectEscapesAndInvalidExtensions(string path)
+    {
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
+        Assert.Throws<IOException>(() => ValidatedFilePaths.SettingsFileWithinRoot(root, path));
+        Assert.Throws<IOException>(() => ValidatedFilePaths.SettingsFileWithinRoot(root, root + "-sibling\\settings.json"));
+    }
+
+    [Fact]
+    public void SettingsPathsAllowNormalizedContainedTraversalAndWindowsCasing()
+    {
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
+        string file = Path.Combine(root, "settings.JSON");
+        Assert.Equal(file, ValidatedFilePaths.SettingsFileWithinRoot(root, @"nested\..\settings.JSON"));
+        if (OperatingSystem.IsWindows())
+            Assert.Equal(file.ToUpperInvariant(), ValidatedFilePaths.SettingsFileWithinRoot(root, file.ToUpperInvariant()));
+    }
+
+    [Theory]
+    [InlineData(FileAttributes.ReparsePoint | FileAttributes.Archive, true)]
+    [InlineData(FileAttributes.ReparsePoint | FileAttributes.Offline | (FileAttributes)0x00400000, true)]
+    [InlineData(FileAttributes.ReparsePoint | FileAttributes.Directory, false)]
+    [InlineData(FileAttributes.ReparsePoint | FileAttributes.Device, false)]
+    public void SelectedFileTypeAllowsCloudPlaceholderAttributesButRejectsDirectoriesAndDevices(FileAttributes attributes, bool allowed) =>
+        Assert.Equal(allowed, ValidatedFilePaths.IsSelectedFileType(attributes));
 }
