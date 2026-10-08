@@ -9,6 +9,8 @@ public sealed class CropSelection
 {
     private PointD _start;
     private RectD _initial;
+    private double _minimumX, _minimumY;
+    private bool _newDragStarted;
     public CropSelection(int width, int height)
     {
         Bounds = new RectD(0, 0, Math.Max(1, width), Math.Max(1, height));
@@ -36,11 +38,13 @@ public sealed class CropSelection
     }
 
     public bool Contains(PointD p) => p.X >= Region.Left && p.X <= Region.Right && p.Y >= Region.Top && p.Y <= Region.Bottom;
-    public void Begin(PointD point, double tolerance)
+    public void Begin(PointD point, double tolerance, double minimumX = 0, double minimumY = 0)
     {
         Grip = HitTest(point, tolerance);
         _start = Clamp(point);
         _initial = Region;
+        _minimumX = Math.Max(0, minimumX); _minimumY = Math.Max(0, minimumY);
+        _newDragStarted = false;
         IsDragging = true;
     }
 
@@ -48,6 +52,11 @@ public sealed class CropSelection
     {
         if (!IsDragging) return;
         PointD p = Clamp(point);
+        if (Grip == CropGrip.New && !_newDragStarted)
+        {
+            if (Math.Abs(p.X - _start.X) < _minimumX && Math.Abs(p.Y - _start.Y) < _minimumY) return;
+            _newDragStarted = true;
+        }
         if (Grip == CropGrip.Move)
         {
             Region = MoveWithin(_initial, p.X - _start.X, p.Y - _start.Y);
@@ -98,8 +107,12 @@ public sealed class CropSelection
     private void Resize(double width, double height)
     {
         if (!double.IsFinite(width) || !double.IsFinite(height) || width < 1 || height < 1) return;
-        double scale = Math.Min(1, Math.Min(Bounds.Width / width, Bounds.Height / height));
-        width *= scale; height *= scale;
+        if (Ratio.HasValue)
+        {
+            double scale = Math.Min(1, Math.Min(Bounds.Width / width, Bounds.Height / height));
+            width *= scale; height *= scale;
+        }
+        else { width = Math.Min(width, Bounds.Width); height = Math.Min(height, Bounds.Height); }
         Region = new RectD(Math.Clamp(Region.Center.X - width / 2, 0, Bounds.Width - width),
             Math.Clamp(Region.Center.Y - height / 2, 0, Bounds.Height - height), width, height);
     }

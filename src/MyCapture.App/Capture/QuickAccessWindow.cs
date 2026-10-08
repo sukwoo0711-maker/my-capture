@@ -36,8 +36,8 @@ internal sealed class QuickAccessWindow : Window
     private readonly RectD? _capturedRegion;
     private readonly MonitorInfo? _targetMonitor;
     private MonitorInfo? _placementMonitor;
-    private TransientKeyboardListener? _keys;
     private NativeHotkeyRegistrar? _activationKey;
+    private bool _activationRegistered;
     private const int ActivationKeyId = 0x7102;
     private readonly Dictionary<string, Action> _actions = [];
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _actions;
@@ -45,6 +45,7 @@ internal sealed class QuickAccessWindow : Window
     internal static DispatcherOperation Schedule(Dispatcher dispatcher, Action show) =>
         dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, show);
     internal bool IsKept { get => _keep.IsChecked == true; set => _keep.IsChecked = value; }
+    internal bool CanActivateByHotkey => IsVisible && _timer.IsEnabled && !IsKept;
     internal bool IsPointerOver => IsVisible && WindowStyleFacade.IsPointerOverWindow(new WindowInteropHelper(this).Handle);
     internal string TimeoutStateForTest => $"enabled={_timer.IsEnabled}; elapsed={_elapsed.TotalSeconds:0.000}; keep={IsKept}; keyboard={_keyboardInteracting}/{IsKeyboardFocusWithin}; busy={_busy}";
 
@@ -132,35 +133,9 @@ internal sealed class QuickAccessWindow : Window
         Loaded += (_, _) =>
         {
             PlaceOnMonitor(_targetMonitor ?? MonitorEnumerator.GetFromCursor());
-            if (_activationKey is null)
-            {
-                _activationKey = new NativeHotkeyRegistrar(new WindowInteropHelper(this).Handle);
-                ShortcutDefinition activation = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Activate");
-                if (!_activationKey.TryRegister(ActivationKeyId,
-                    new Hotkey((HotkeyModifiers)activation.Modifiers, (uint)KeyInterop.VirtualKeyFromKey(activation.Key)), out _, out _))
-                    ToolTip = UiText.Get("QuickAccess.ActivationUnavailable");
-            }
-            try
-            {
-                _keys ??= new TransientKeyboardListener(virtualKey =>
-                {
-                    var key = KeyInterop.KeyFromVirtualKey(virtualKey);
-                    ModifierKeys modifiers = ModifierKeys.None;
-                    if (TransientKeyboardListener.IsKeyDown(0x10)) modifiers |= ModifierKeys.Shift;
-                    if (TransientKeyboardListener.IsKeyDown(0x11)) modifiers |= ModifierKeys.Control;
-                    if (TransientKeyboardListener.IsKeyDown(0x12)) modifiers |= ModifierKeys.Alt;
-                    if (TransientKeyboardListener.IsKeyDown(0x5B) || TransientKeyboardListener.IsKeyDown(0x5C)) modifiers |= ModifierKeys.Windows;
-                    string? command = ShortcutCatalog.Match(ShortcutScope.QuickAccess, key, modifiers);
-                    // Alt+Q uses RegisterHotKey so the foreground app cannot interpret
-                    // the remaining Alt press/release as entering its native menu loop.
-                    if (command is null or "Activate" || !IsVisible || !IsPointerOver || _keyboardAccess) return false;
-                    _ = Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) _actions[command](); }));
-                    return true;
-                });
-            }
-            catch (System.ComponentModel.Win32Exception) { ToolTip = UiText.Get("QuickAccess.KeyboardUnavailable"); }
             _lastTick = Stopwatch.GetTimestamp();
-            _timer.Start();
+            if (!IsKept) _timer.Start();
+            UpdateActivationHotkey();
         };
         _timer.Tick += (_, _) =>
         {
@@ -170,10 +145,18 @@ internal sealed class QuickAccessWindow : Window
             Advance(elapsed, IsPointerOver || (_keyboardInteracting && IsKeyboardFocusWithin) || _busy);
         };
         SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
-        Closed += (_, _) => { _timer.Stop(); _keys?.Dispose(); _keys = null; _activationKey?.Unregister(ActivationKeyId); _activationKey = null; };
+        Closed += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); _activationKey = null; };
+        IsVisibleChanged += (_, _) => UpdateActivationHotkey();
+        _keep.Checked += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); };
+        _keep.Unchecked += (_, _) =>
+        {
+            if (IsVisible) { _lastTick = Stopwatch.GetTimestamp(); _timer.Start(); }
+            UpdateActivationHotkey();
+        };
+        PreviewMouseDown += (_, _) => { if (!_keyboardAccess) ActivateForKeyboard(); };
         PreviewKeyDown += (_, e) =>
         {
-            if (!_keyboardAccess) return;
+            if (!_keyboardAccess || !IsKeyboardFocusWithin) return;
             _keyboardInteracting = true;
             e.Handled = HandleShortcut(e.Key == Key.System ? e.SystemKey : e.Key, Keyboard.Modifiers);
         };
@@ -184,6 +167,22 @@ internal sealed class QuickAccessWindow : Window
             foreach (Control target in _keyboardTargets) target.Focusable = false;
             if (IsVisible) WindowStyleFacade.SetNoActivate(new WindowInteropHelper(this).Handle, true);
         };
+    }
+
+    private void UpdateActivationHotkey()
+    {
+        if (!CanActivateByHotkey)
+        {
+            if (_activationRegistered) _activationKey?.Unregister(ActivationKeyId);
+            _activationRegistered = false;
+            return;
+        }
+        if (_activationRegistered) return;
+        _activationKey ??= new NativeHotkeyRegistrar(new WindowInteropHelper(this).Handle);
+        ShortcutDefinition activation = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Activate");
+        _activationRegistered = _activationKey.TryRegister(ActivationKeyId,
+            new Hotkey((HotkeyModifiers)activation.Modifiers, (uint)KeyInterop.VirtualKeyFromKey(activation.Key)), out _, out _);
+        ToolTip = UiText.Get(_activationRegistered ? "QuickAccess.KeyboardHint" : "QuickAccess.ActivationUnavailable");
     }
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers) => ShortcutCatalog.Execute(ShortcutScope.QuickAccess, key, modifiers, _actions);
@@ -198,26 +197,36 @@ internal sealed class QuickAccessWindow : Window
 
     private IntPtr NoActivateHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message == 0x0312 && wParam.ToInt32() == ActivationKeyId)
+        if (message == 0x0312 && wParam.ToInt32() == ActivationKeyId && CanActivateByHotkey)
         {
             handled = true;
-            _ = Dispatcher.BeginInvoke(new Action(() => ActivateForKeyboard()));
+            _ = Dispatcher.BeginInvoke(new Action(() => { if (CanActivateByHotkey) ActivateForKeyboard(); }));
             return IntPtr.Zero;
         }
-        if (message == 0x0021 && !_keyboardAccess) // WM_MOUSEACTIVATE / MA_NOACTIVATE
-        { handled = true; return new IntPtr(3); }
+        if (message == 0x0021 && !_keyboardAccess) // WM_MOUSEACTIVATE: explicit click, including native chrome.
+        {
+            EnableKeyboardAccess();
+            _ = Dispatcher.BeginInvoke(new Action(() => ActivateForKeyboard()));
+            handled = true;
+            return new IntPtr(1); // MA_ACTIVATE; Show itself still uses WS_EX_NOACTIVATE.
+        }
         return IntPtr.Zero;
     }
 
     internal bool ActivateForKeyboard()
     {
         if (!IsVisible) return false;
+        EnableKeyboardAccess();
+        if (!Activate()) return false;
+        return MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+    }
+
+    private void EnableKeyboardAccess()
+    {
         _keyboardAccess = true;
         _keyboardInteracting = true;
         WindowStyleFacade.SetNoActivate(new WindowInteropHelper(this).Handle, false);
         foreach (Control target in _keyboardTargets) target.Focusable = true;
-        if (!Activate()) return false;
-        return MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
     }
 
     internal void UpdatePreview(BitmapSource image)

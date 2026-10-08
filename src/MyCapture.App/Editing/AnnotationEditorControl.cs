@@ -178,7 +178,7 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize) ? Math.Clamp(defaults.FontSize, 8, 200) : 18;
         _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
-        if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool;
+        if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool == EditorTool.Crop ? EditorTool.Select : lastTool;
         _imageStore.PruneToReachable(document, undo);
         var renderer = new AnnotationRenderer(_imageStore);
 
@@ -297,9 +297,12 @@ internal sealed class AnnotationEditorControl : Grid
             if (command == "Done") { CommitActiveText(); Commit(EditorCommitAction.Done); return true; }
             return false;
         }
-        if (_crop is not null && (Keyboard.FocusedElement is not TextBox || key is Key.Enter or Key.Escape)
-            && ShortcutCatalog.Execute(ShortcutScope.Crop, key, modifiers, _cropActions)) return true;
-        if (Keyboard.FocusedElement is TextBox) return false;
+        if (Keyboard.FocusedElement is TextBoxBase or ComboBox or ComboBoxItem or ButtonBase
+            && (modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) == 0) return false;
+        if (_crop is not null && ShortcutCatalog.Execute(ShortcutScope.Crop, key, modifiers, _cropActions)) return true;
+        if (Keyboard.FocusedElement is TextBox box
+            && !(_crop is not null && (ReferenceEquals(box, _cropWidth) || ReferenceEquals(box, _cropHeight))
+                && ShortcutCatalog.Match(ShortcutScope.Annotation, key, modifiers) is "Done" or "Save" or "SaveAs")) return false;
         return ShortcutCatalog.Execute(ShortcutScope.Annotation, key, modifiers, _shortcutActions);
     }
 
@@ -439,7 +442,9 @@ internal sealed class AnnotationEditorControl : Grid
                 if (_crop is not null)
                 {
                     if (e.ClickCount == 2 && _crop.Contains(image)) { ApplyPendingCrop(); e.Handled = true; return; }
-                    _crop.Begin(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel));
+                    double scale = Math.Max(double.Epsilon, _surface.DipPerPixel);
+                    _crop.Begin(image, 7 / scale, SystemParameters.MinimumHorizontalDragDistance / scale,
+                        SystemParameters.MinimumVerticalDragDistance / scale);
                     RefreshCrop();
                     CapturePointer();
                 }
@@ -947,24 +952,13 @@ internal sealed class AnnotationEditorControl : Grid
 
     private Border BuildCommandBar()
     {
-        var grid = new WrapPanel();
+        var grid = new CommandGroupsPanel();
 
         var left = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var document = new TextBlock
-        {
-            Text = UiText.Get("Text_3E409AB1A37C"),
-            Foreground = Brush("Text.Primary", Colors.White),
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 14,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(2, 0, 10, 0),
-        };
-        document.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
-
         left.Children.Add(Separator());
 
         _undoButton = IconButton(UiText.Get("Text_CE706412FA75"), UiText.Get("Text_C61A081610C9"), "Icon.Undo", FallbackUndo, () =>
@@ -1279,12 +1273,15 @@ internal sealed class AnnotationEditorControl : Grid
             var field = new StackPanel(); field.Children.Add(SectionLabel(UiText.Get(key))); field.Children.Add(box); dimensions.Children.Add(field);
             AutomationName(box, UiText.Get(key));
             box.LostKeyboardFocus += (_, _) => { ChangeCropSize(box); RefreshCrop(); };
-            box.TextChanged += (_, _) => { if (!_syncingInspector) ChangeCropSize(box); };
+            box.KeyDown += (_, e) =>
+            {
+                if (e.Key != Key.Enter || Keyboard.Modifiers != ModifierKeys.None) return;
+                ChangeCropSize(box); RefreshCrop(); e.Handled = true;
+            };
         }
         panel.Children.Add(dimensions);
         var actions = new UniformGrid { Columns = 2 };
         var apply = TextButton(UiText.Get("Crop.Apply"), UiText.Get("Crop.Apply"), "Button.Primary", ApplyPendingCrop);
-        apply.IsDefault = true;
         var cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("Text_BE876433993A"), "Button.GhostCompact", CancelPendingCrop);
         ShortcutPresentation.Attach(apply, ShortcutScope.Crop, "Apply");
         ShortcutPresentation.Attach(cancel, ShortcutScope.Crop, "Cancel");
@@ -1569,7 +1566,6 @@ internal sealed class AnnotationEditorControl : Grid
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");
         AutomationName(button, UiText.Format("Text_1BA9F7001237", label, ShortcutCatalog.Get(ShortcutScope.Annotation, tool.ToString()).Hint));
         ShortcutPresentation.Attach(button, ShortcutScope.Annotation, tool.ToString(), corner: true);
-        button.ToolTip = $"{label} ({ShortcutCatalog.Get(ShortcutScope.Annotation, tool.ToString()).Hint})";
         button.Click += (_, _) => SelectTool(tool);
         _toolButtons[tool] = button;
         parent.Children.Add(button);
@@ -1765,7 +1761,7 @@ internal sealed class AnnotationEditorControl : Grid
             _cropRatio.SelectedIndex = 0;
         }
         RefreshCrop();
-        if (tool != EditorTool.Select) _preferredTool = tool;
+        if (tool is not (EditorTool.Select or EditorTool.Crop)) _preferredTool = tool;
         RememberPreferences();
         SyncToolButtons();
         Cursor = tool == EditorTool.Select ? Cursors.Arrow : Cursors.Cross;
@@ -2209,6 +2205,16 @@ internal sealed class AnnotationEditorControl : Grid
             CommitActiveText();
         }
 
+        // Commit a pending numeric edit before inspecting the crop, including Ctrl+S.
+        if (_crop is not null && Keyboard.FocusedElement is TextBox sizeBox
+            && (ReferenceEquals(sizeBox, _cropWidth) || ReferenceEquals(sizeBox, _cropHeight))) ChangeCropSize(sizeBox);
+        bool appliedCrop = _crop is { } pending && pending.Region != pending.Bounds;
+        if (appliedCrop)
+        {
+            ApplyPendingCrop();
+            if (_crop is not null) return; // An invalid tiny crop stays editable.
+        }
+
         AnnotationDocument document = _controller.Document;
         document.NormalizeZIndices();
 
@@ -2250,7 +2256,8 @@ internal sealed class AnnotationEditorControl : Grid
         // resolves. This guarantees Ctrl+C means copy-then-close, never close-then-copy.
         _commitInProgress = true;
         IsHitTestVisible = false;
-        SetStatus(action == EditorCommitAction.CopyToClipboard ? UiText.Get("Text_78666F37A521") : UiText.Get("Text_88DAAEEDFE4C"));
+        string commitStatus = action == EditorCommitAction.CopyToClipboard ? UiText.Get("Text_78666F37A521") : UiText.Get("Text_88DAAEEDFE4C");
+        SetStatus(appliedCrop ? UiText.Get("Crop.Applied") + " · " + commitStatus : commitStatus);
         bool shouldClose;
         try
         {

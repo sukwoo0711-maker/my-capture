@@ -72,7 +72,7 @@ internal static class Ux402SelfTest
                     object? crop = typeof(AnnotationEditorControl).GetProperty("PendingCrop", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(editor.Editor);
                     if (crop is not null)
                     {
-                        crop.GetType().GetMethod("Begin")!.Invoke(crop, [new PointD(640, 360), 8.0]);
+                        crop.GetType().GetMethod("Begin")!.Invoke(crop, [new PointD(640, 360), 8.0, 4.0, 4.0]);
                         crop.GetType().GetMethod("Drag")!.Invoke(crop, [new PointD(510, 286), false]);
                         typeof(AnnotationEditorControl).GetMethod("RefreshCrop", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor.Editor, null);
                     }

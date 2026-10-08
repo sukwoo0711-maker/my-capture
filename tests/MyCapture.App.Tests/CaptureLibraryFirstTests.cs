@@ -26,6 +26,46 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureLibraryFirstTests
 {
+    public static IEnumerable<object[]> CapturePathsAndModes() =>
+        from path in new[] { "region", "window", "full", "repeat", "delay", "scroll" }
+        from mode in Enum.GetValues<AfterCaptureAction>()
+        select new object[] { path, mode };
+
+    [Theory]
+    [MemberData(nameof(CapturePathsAndModes))]
+    public void EveryCapturePathCopiesExactlyOnceInEveryMode(string path, AfterCaptureAction mode) => StaTestHost.Run(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Settings.General.AfterCapture = mode;
+        fixture.Settings.Export.CopyToClipboardOnQuickSave = false;
+        using var coordinator = new CaptureOverlayCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
+            new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance);
+        coordinator.SelectionPersistRequested = fixture.Select;
+        coordinator.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(mode, fixture.CurrentRecord is not null) == AfterCaptureAction.Editor;
+        try
+        {
+            if (path is "region" or "delay")
+            {
+                var selected = new CaptureSelectionCompletedEventArgs(fixture.Frame, fixture.Region, fixture.Frame.Bitmap,
+                    copyToClipboardImmediately: true);
+                // Delayed capture ends in the same manual selection callback as region capture.
+                var announce = typeof(CaptureOverlayCoordinator).GetMethod("AnnounceSelectionAndOpenEditorAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                fixture.Wait((Task)announce.Invoke(coordinator, [selected])!);
+            }
+            else
+            {
+                // Window/full/repeat/stitched scrolling frames all enter this production seam.
+                Assert.True(coordinator.StartWithSelection(fixture.Frame, fixture.Region, path, recordForRepeat: false));
+                fixture.Wait(coordinator.LastTransitionForTest);
+            }
+            Assert.Single(fixture.Queue.Records);
+            BitmapSource copied = Assert.Single(fixture.CopiedImages);
+            Assert.Equal(Pixels(fixture.Frame.Bitmap), Pixels(copied));
+            Assert.Equal(mode == AfterCaptureAction.Editor, coordinator.CurrentEditor is not null);
+        }
+        finally { coordinator.Cancel(); }
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -221,7 +261,7 @@ public sealed class CaptureLibraryFirstTests
         Assert.Equal(0, publications);
         Assert.Equal(0, pending.ContentRevision);
         Assert.Equal(markerBeforeCancel, File.ReadAllBytes(marker));
-        Assert.Empty(fixture.CopiedImages);
+        Assert.Single(fixture.CopiedImages); // Initial capture copied; cancelled Save As added nothing.
         accepted = true;
         Assert.True(fixture.Wait(fixture.Commit(result)));
         Assert.Equal(2, prompts);

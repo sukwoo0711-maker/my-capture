@@ -988,7 +988,7 @@ public partial class App : Application
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true || HotkeyRecorder.Active is not null) return;
         var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
         if (ShortcutCatalog.Match(ShortcutScope.QuickAccess, key, System.Windows.Input.Keyboard.Modifiers) == "Activate")
-            e.Handled = _quickAccess?.ActivateForKeyboard() == true;
+            e.Handled = _quickAccess is { CanActivateByHotkey: true } card && card.ActivateForKeyboard();
     }
 
     private async Task OnCaptureSelectionCompletedAsync(CaptureSelectionCompletedEventArgs e)
@@ -1070,17 +1070,16 @@ public partial class App : Application
             _log?.LogWarning(ex, "Could not update capture history or tray count");
         }
 
-        // Copy the explicit-region result with its optional title before the editor can be cancelled
-        // or committed with any action, and do not consult the quick-save clipboard preference.
-        // Advanced capture modes opt out when they synthesize their editor selection.
+        // Region selection starts copying immediately. Synthesized full/window/repeat/
+        // scroll results copy here after persistence, in every after-capture mode.
         bool copiedToClipboard = false;
-        if (e.CopyToClipboardImmediately)
+        if (_commit is not null)
         {
             bool copied = false;
             try
             {
-                copied = automaticClipboardCopy is not null
-                         && await automaticClipboardCopy;
+                copied = await (automaticClipboardCopy ?? _commit.CopyCapturedRegionAsync(e.SelectedBitmap,
+                    e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl));
             }
             catch (Exception ex)
             {

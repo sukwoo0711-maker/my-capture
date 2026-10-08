@@ -47,9 +47,10 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             stack.Children.Add(content);
             stack.Children.Add(hint); button.Content = stack;
         }
-        string label = AutomationProperties.GetName(button);
+        string label = button.ToolTip as string ?? AutomationProperties.GetName(button);
         if (string.IsNullOrEmpty(label)) label = previous as string ?? command;
-        button.ToolTip = $"{label} ({ShortcutCatalog.Get(scope, command).Hint})";
+        string suffix = $"({ShortcutCatalog.Get(scope, command).Hint})";
+        button.ToolTip = label.EndsWith(suffix, StringComparison.Ordinal) ? label : $"{label} {suffix}";
         AutomationProperties.SetAcceleratorKey(button, ShortcutCatalog.Get(scope, command).Hint);
     }
 }

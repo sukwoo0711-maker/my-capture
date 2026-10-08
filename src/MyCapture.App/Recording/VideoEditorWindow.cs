@@ -2031,7 +2031,9 @@ internal sealed class VideoEditorWindow : Window
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
         string? command = ShortcutCatalog.Match(ShortcutScope.Video, key, modifiers);
-        if (command is null || (_operationRunning && command != "Cancel")) return false;
+        if (command is null || (command == "Cancel" && !_operationRunning)) return false;
+        if (_operationRunning && command != "Cancel")
+            return command is "Play" or "Previous" or "Next" or "PreviousFrame" or "NextFrame";
         return ShortcutCatalog.Execute(ShortcutScope.Video, key, modifiers, _shortcutActions);
     }
 

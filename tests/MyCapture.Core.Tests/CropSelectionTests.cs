@@ -9,6 +9,33 @@ namespace MyCapture.Core.Tests;
 
 public sealed class CropSelectionTests
 {
+    [Fact]
+    public void NewFrameWaitsForDragThresholdAndPreservesPreviousFrameOnClick()
+    {
+        var crop = new CropSelection(640, 360);
+        crop.SetWidth(200); crop.SetHeight(100);
+        var before = crop.Region;
+        crop.Begin(new PointD(10, 10), 4, 4, 4);
+        Assert.Equal(CropGrip.New, crop.Grip);
+        crop.Drag(new PointD(10, 10), false);
+        crop.Drag(new PointD(13.9, 13.9), false); crop.End();
+        Assert.Equal(before, crop.Region);
+        crop.Begin(new PointD(10, 10), 4, 4, 4);
+        crop.Drag(new PointD(70, 50), false); crop.End();
+        Assert.Equal(new RectD(10, 10, 60, 40), crop.Region);
+    }
+
+    [Fact]
+    public void FreeRatioClampsOnlyTheEditedAxis()
+    {
+        var crop = new CropSelection(640, 360);
+        crop.SetWidth(200); crop.SetHeight(100);
+        crop.SetWidth(10000);
+        Assert.Equal(640, crop.Region.Width); Assert.Equal(100, crop.Region.Height);
+        crop.SetWidth(200); crop.SetHeight(10000);
+        Assert.Equal(200, crop.Region.Width); Assert.Equal(360, crop.Region.Height);
+    }
+
     [Theory]
     [InlineData(true)] [InlineData(false)]
     public void LegacyReceiptFlagAlwaysStartsInEditorAndIsNeverWritten(bool legacy)

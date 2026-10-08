@@ -26,6 +26,7 @@ using MyCapture.Core.Themes;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 using MyCapture.Platform.Imaging;
+using MyCapture.Platform.Shell;
 
 namespace MyCapture.App.Diagnostics;
 
@@ -44,16 +45,17 @@ internal static class HotfixUxSelfTest
         }
         Console.WriteLine("HOTFIX_UX_OUTPUT=" + output);
         var report = new StringBuilder($"MyCapture {typeof(HotfixUxSelfTest).Assembly.GetName().Version} real WPF/native QA\nUTC: {DateTimeOffset.UtcNow:O}\n");
-        report.AppendLine("Production windows and command paths. Bounded synthetic keys target the owned foreground input fixture and receipt only; cursor is restored. Fresh profile; no user settings/queue or startup registry access. Clipboard writer is isolated to an in-memory sink; the user clipboard is untouched.");
+        report.AppendLine("Production windows and command paths. Bounded synthetic keys target an isolated external PowerShell/WinForms text process and the receipt only. Every key/cursor injection checks its expected foreground HWND; foreground loss aborts. Cursor is restored only while that target remains foreground. Fresh profile; no user settings/queue or startup registry access. Clipboard writer is isolated to an in-memory sink; the user clipboard is untouched.");
         List<Window> owned = [];
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
         AppTheme? oldTheme = ThemeService.IsAppliedForTest;
         Func<bool> oldCanShow = ShortcutHelpWindow.CanShowHelp;
         int result = 1;
+        var originalCursor = WindowStyleFacade.GetCursorPosition();
         void Check(string label, bool passed)
         {
             report.AppendLine($"{(passed ? "PASS" : "FAIL")}: {label}");
-            File.WriteAllText(ValidatedFilePaths.FileWithinRoot(output, "hotfix-ux-report.txt", ".txt"), report.ToString(), new UTF8Encoding(false));
+            Console.WriteLine($"{(passed ? "PASS" : "FAIL")}: {label}");
             if (!passed) throw new InvalidOperationException(label);
         }
         try
@@ -66,6 +68,9 @@ internal static class HotfixUxSelfTest
             doc.Items.Add(new RectangleAnnotation { Rect = new RectD(30, 30, 160, 90), Stroke = ColorRgba.FromRgb(255, 0, 0), StrokeThickness = 8 });
             var editor = new AnnotationEditorWindow(new FrozenFrame(sample, rect, null, 0), rect, sample, initialDocument: doc);
             owned.Add(editor); editor.Show(); Pump(200); editor.Activate(); editor.Editor.Focus();
+            var editorBounds = WindowStyleFacade.GetWindowBounds(new WindowInteropHelper(editor).Handle);
+            MoveCursor(new WindowInteropHelper(editor).Handle, (editorBounds.Left + editorBounds.Right) / 2,
+                (editorBounds.Top + editorBounds.Bottom) / 2);
             var card = Card(sample); owned.Add(card);
             IInputElement? focus = Keyboard.FocusedElement;
             IntPtr foreground = GetForegroundWindow();
@@ -93,39 +98,78 @@ internal static class HotfixUxSelfTest
             Check("editor Esc command accepted", editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
             Pump(50); Check("Esc closes editor", !editor.IsVisible);
 
-            // Verify the scoped native keyboard listener against an owned foreground
-            // text box; callbacks are fixture sinks and never touch the real clipboard.
-            var inputBox = new TextBox();
-            int foregroundCopyKeys = 0;
-            inputBox.PreviewKeyDown += (_, key) => { if (key.Key == Key.C || key.ImeProcessedKey == Key.C) foregroundCopyKeys++; };
-            var inputHost = new Window { Content = inputBox, Width = 260, Height = 120, Left = 40, Top = 40,
-                WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
-            owned.Add(inputHost); inputHost.Show(); inputHost.Activate(); inputBox.Focus(); Pump(100);
-            int hoverCopies = 0, keyboardSaves = 0;
-            var keyboardCard = new QuickAccessWindow(sample, () => { hoverCopies++; return Task.FromResult(true); }, () => { },
-                () => Task.CompletedTask, () => { keyboardSaves++; return Task.FromResult(true); }, () => { }, () => Task.FromResult("unused.png")) { IsKept = true };
-            owned.Add(keyboardCard); keyboardCard.Show(); Pump(100);
-            var oldCursor = WindowStyleFacade.GetCursorPosition();
-            try
+            // A separate application/process owns the input. It has no capture-card code,
+            // global shortcuts, user document, profile, or clipboard access.
+            using (var external = ExternalInputFixture.Start())
             {
-                var bounds = WindowStyleFacade.GetWindowBounds(new WindowInteropHelper(keyboardCard).Handle);
-                Check("move pointer to receipt for bounded hover-key fixture", SetCursorPos(bounds.Left + 20, bounds.Top + 20)); Pump(100);
-                report.AppendLine($"Hover evidence: cardBounds={bounds}; cursor={WindowStyleFacade.GetCursorPosition()}; mouseOver={keyboardCard.IsMouseOver}; active={keyboardCard.IsActive}; foreground={GetForegroundWindow()}; card={new WindowInteropHelper(keyboardCard).Handle}; fixture={new WindowInteropHelper(inputHost).Handle}");
-                Check("receipt pointer hover is observed without activation", keyboardCard.IsPointerOver && !keyboardCard.IsActive);
-                Check("owned keyboard fixture still has foreground before input", GetForegroundWindow() == new WindowInteropHelper(inputHost).Handle);
-                SendKey(0x43); Pump(120);
-                Check("hover C invokes copy without sending C to the foreground text box", hoverCopies == 1 && foregroundCopyKeys == 0 && inputHost.IsActive);
-                Check("move pointer away from receipt", SetCursorPos(60, 60)); Pump(80);
-                SendKey(0x43); Pump(100);
-                Check("C outside receipt stays with the foreground app", hoverCopies == 1 && foregroundCopyKeys == 1);
-                KeyEvent(0x12, 0, 0, UIntPtr.Zero); SendKey(0x51); KeyEvent(0x12, 0, 2, UIntPtr.Zero); Pump(120);
-                Check("Alt+Q explicitly activates receipt from owned foreground app", keyboardCard.IsActive);
-                SendKey(0x53); Pump(100);
-                Check("keyboard S reaches receipt save command", keyboardSaves == 1);
-                SendKey(0x1B); Pump(100);
-                Check("keyboard Esc closes receipt", !keyboardCard.IsVisible);
+                IntPtr inputHandle = external.Handle;
+                Check($"external text fixture PID={external.Id}, HWND={inputHandle}; separate process", external.Id != Environment.ProcessId);
+                int copies = 0, saves = 0;
+                var keyboardCard = new QuickAccessWindow(sample, () => { copies++; return Task.FromResult(true); }, () => { },
+                    () => Task.CompletedTask, () => { saves++; return Task.FromResult(true); }, () => { }, () => Task.FromResult("unused.png"));
+                owned.Add(keyboardCard); keyboardCard.Show(); Pump(100);
+                IntPtr cardHandle = new WindowInteropHelper(keyboardCard).Handle;
+                try
+                {
+                    var bounds = WindowStyleFacade.GetWindowBounds(cardHandle);
+                    foreach (bool kept in new[] { false, true })
+                    {
+                        keyboardCard.IsKept = kept;
+                        foreach (bool hover in new[] { false, true })
+                        {
+                            MoveCursor(inputHandle, hover ? bounds.Left + 20 : 60, hover ? bounds.Top + 20 : 60);
+                            Pump(80);
+                            Check($"kept={kept}/hover={hover}: external foreground preserved", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive);
+                            Check($"kept={kept}/hover={hover}: native pointer state", keyboardCard.IsPointerOver == hover);
+                            string before = external.Text;
+                            foreach (byte key in new byte[] { 0x43, 0x45, 0x50, 0x53 }) { SendKey(inputHandle, key); Pump(50); }
+                            SendKey(inputHandle, 0x1B); Pump(50);
+                            Check($"kept={kept}/hover={hover}: external C/E/P/S unchanged; text={external.Text}", external.Text == before + "ceps");
+                            Check($"kept={kept}/hover={hover}: no card action or Esc dismissal", copies == 0 && saves == 0 && keyboardCard.IsVisible);
+                        }
+                        // RegisterHotKey cannot target a HWND owned by another process.
+                        // A separate thread registration proves the card released the global chord.
+                        var probe = new NativeHotkeyRegistrar(IntPtr.Zero);
+                        bool available = probe.TryRegister(0x7103, new Hotkey(HotkeyModifiers.Alt, 0x51), out _, out _);
+                        if (available) probe.Unregister(0x7103);
+                        Check($"Alt+Q available to a separate registration iff kept={kept}", available == kept);
+                    }
+                    // Kept cards enter by a real mouse click, with no global Alt+Q claim.
+                    Point click = ((FrameworkElement)keyboardCard.Content).PointToScreen(new Point(20, 20));
+                    MoveCursor(inputHandle, (int)click.X, (int)click.Y);
+                    MouseButton(inputHandle, 0x0002); // Left down is delivered only after we pump.
+                    MouseButton(inputHandle, 0x0004);
+                    Pump(100);
+                    Check("click activates the kept card", keyboardCard.IsActive && keyboardCard.IsKeyboardFocusWithin);
+                    SendKey(cardHandle, 0x43); Pump(80);
+                    Check("focused card C invokes copy", copies == 1);
+
+                    keyboardCard.IsKept = false;
+                    external.Activate(); Pump(100);
+                    InjectKey(inputHandle, 0x12, 0);
+                    SendKey(inputHandle, 0x51);
+                    InjectKey(inputHandle, 0x12, 2);
+                    Pump(120);
+                    Check("Alt+Q activates an automatic card", keyboardCard.IsActive && keyboardCard.IsKeyboardFocusWithin);
+                    SendKey(cardHandle, 0x53); Pump(80);
+                    Check("focused card S invokes save", saves == 1);
+                    // Exercise the safety gate without injecting anything into a foreign window.
+                    bool guarded = false;
+                    try { RequireForeground(inputHandle); } catch (InvalidOperationException) { guarded = true; }
+                    Check("foreground mismatch aborts injection", guarded);
+                    SendKey(cardHandle, 0x1B); Pump(80);
+                    Check("focused card Esc closes it", !keyboardCard.IsVisible);
+                    external.Activate(); Pump(80);
+                    MoveCursor(inputHandle, originalCursor.X, originalCursor.Y);
+                    report.AppendLine($"External input measurement: PID={external.Id}; final text={external.Text}; 4 scenarios x C/E/P/S/Esc; all key and pointer events foreground-guarded.");
+                }
+                finally
+                {
+                    IntPtr current = GetForegroundWindow();
+                    if (current == inputHandle || current == cardHandle) MoveCursor(current, originalCursor.X, originalCursor.Y);
+                    keyboardCard.Close();
+                }
             }
-            finally { _ = SetCursorPos(oldCursor.X, oldCursor.Y); keyboardCard.Close(); inputHost.Close(); }
 
             foreach (string language in new[] { "ko", "en" })
             using (MyCapture.Core.Localization.UiText.UseLanguage(language))
@@ -391,7 +435,91 @@ internal static class HotfixUxSelfTest
         return false;
     }
     [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
-    private static void SendKey(byte key) { KeyEvent(key, 0, 0, UIntPtr.Zero); KeyEvent(key, 0, 2, UIntPtr.Zero); }
+    private static void RequireForeground(IntPtr expected)
+    {
+        IntPtr actual = GetForegroundWindow();
+        if (expected == IntPtr.Zero || actual != expected)
+            throw new InvalidOperationException($"Input aborted: expected foreground {expected}, actual {actual}.");
+    }
+    private static void SendKey(IntPtr target, byte key) { InjectKey(target, key, 0); InjectKey(target, key, 2); }
+    private static void InjectKey(IntPtr target, byte key, uint flags)
+    {
+        RequireForeground(target);
+        KeyEvent(key, 0, flags, UIntPtr.Zero);
+    }
+    private static void MoveCursor(IntPtr target, int x, int y)
+    {
+        RequireForeground(target);
+        if (!SetCursorPos(x, y)) throw new InvalidOperationException("Diagnostic cursor move failed.");
+    }
+    private static void MouseButton(IntPtr target, uint flags)
+    {
+        RequireForeground(target);
+        MouseEvent(flags, 0, 0, 0, UIntPtr.Zero);
+    }
+    [DllImport("user32.dll", EntryPoint = "mouse_event")] private static extern void MouseEvent(uint flags, uint x, uint y, uint data, UIntPtr extra);
+
+    private sealed class ExternalInputFixture : IDisposable
+    {
+        private readonly Process _process;
+        internal IntPtr Handle { get; }
+        internal int Id => _process.Id;
+        private ExternalInputFixture(Process process, IntPtr handle) { _process = process; Handle = handle; }
+        internal static ExternalInputFixture Start()
+        {
+            var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"))
+                { UseShellExecute = false, CreateNoWindow = true };
+            start.ArgumentList.Add("-NoProfile"); start.ArgumentList.Add("-STA"); start.ArgumentList.Add("-Command");
+            start.ArgumentList.Add("Add-Type -AssemblyName System.Windows.Forms; " +
+                "$f=New-Object System.Windows.Forms.Form; $f.Text='MyCapture external input measurement'; " +
+                "$f.Width=340; $f.Height=160; $f.StartPosition='Manual'; $f.Left=40; $f.Top=40; " +
+                "$t=New-Object System.Windows.Forms.TextBox; $t.Multiline=$true; $t.Dock='Fill'; $f.Controls.Add($t); " +
+                "$f.Add_Shown({[System.Windows.Forms.InputLanguage]::CurrentInputLanguage=[System.Windows.Forms.InputLanguage]::FromCulture([System.Globalization.CultureInfo]::GetCultureInfo('en-US')); $f.Activate(); $t.Focus()}); " +
+                "[System.Windows.Forms.Application]::Run($f)");
+            Process process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start external input fixture.");
+            try
+            {
+                var timeout = Stopwatch.StartNew();
+                while (timeout.Elapsed < TimeSpan.FromSeconds(15))
+                {
+                    process.Refresh();
+                    if (process.HasExited) throw new InvalidOperationException("External fixture exited before showing its window.");
+                    if (process.MainWindowHandle is var hwnd && hwnd != IntPtr.Zero)
+                    {
+                        if (GetForegroundWindow() != hwnd) _ = SetForegroundWindow(hwnd);
+                        if (GetForegroundWindow() == hwnd) return new ExternalInputFixture(process, hwnd);
+                    }
+                    Pump(50);
+                }
+                throw new TimeoutException($"External fixture HWND={process.MainWindowHandle}, foreground={GetForegroundWindow()} did not acquire foreground; no input was injected.");
+            }
+            catch { if (!process.HasExited) process.Kill(); process.Dispose(); throw; }
+        }
+        internal string Text
+        {
+            get
+            {
+                var text = new StringBuilder(1024);
+                _ = SendMessage(GetWindow(Handle, 5 /* GW_CHILD */), 0x000D /* WM_GETTEXT */, new IntPtr(text.Capacity), text);
+                return text.ToString();
+            }
+        }
+        internal void Activate()
+        {
+            if (!SetForegroundWindow(Handle)) throw new InvalidOperationException("External fixture activation failed.");
+        }
+        public void Dispose()
+        {
+            if (!_process.HasExited)
+            {
+                _process.CloseMainWindow();
+                if (!_process.WaitForExit(3000)) _process.Kill();
+            }
+            _process.Dispose();
+        }
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr SendMessage(IntPtr hwnd, uint message, IntPtr wParam, StringBuilder text);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll", EntryPoint = "keybd_event")] private static extern void KeyEvent(byte key, byte scan, uint flags, UIntPtr extra);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
