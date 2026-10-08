@@ -71,7 +71,7 @@ public sealed class CaptureFolderTests
         var capture = f.Add(DateTimeOffset.Now);
         await f.Queue.MoveCapturesAsync([capture.Id], folder.Id);
         await f.Queue.SetNewCaptureFolderAsync(folder.Id, true);
-        JsonObject legacy = JsonNode.Parse(File.ReadAllText(f.Paths.IndexFile))!.AsObject();
+        JsonObject legacy = JsonNode.Parse(File.ReadAllText(f.IndexFile))!.AsObject();
         Assert.Equal(2, legacy["schemaVersion"]!.GetValue<int>());
         legacy.Remove("folderState");
         foreach (JsonObject record in legacy["records"]!.AsArray().OfType<JsonObject>())
@@ -79,7 +79,7 @@ public sealed class CaptureFolderTests
             Assert.True(record["isPinned"]!.GetValue<bool>());
             record.Remove("folderId"); record.Remove("folderSequence"); record.Remove("folderPinBeforeAssignment");
         }
-        File.WriteAllText(f.Paths.IndexFile, legacy.ToJsonString());
+        File.WriteAllText(f.IndexFile, legacy.ToJsonString());
         CaptureQueue restored = f.Reload();
         Assert.Equal(2, restored.Folders.Count);
         Assert.Equal(folder.Id, restored.Find(capture.Id)!.FolderId);
@@ -87,7 +87,7 @@ public sealed class CaptureFolderTests
         Assert.Equal(folder.Id, restored.DefaultCaptureFolderId);
         restored.Save();
         await restored.RenameFolderAsync(folder.Id, "latest");
-        File.WriteAllText(f.Paths.IndexFile, "{invalid");
+        File.WriteAllText(f.IndexFile, "{invalid");
         CaptureQueue recovered = f.Reload();
         Assert.Equal(2, recovered.Folders.Count);
         Assert.Equal(folder.Id, recovered.Find(capture.Id)!.FolderId);
@@ -173,7 +173,7 @@ public sealed class CaptureFolderTests
         int failures = 0;
         f.Queue.BeforePublicationWriteForTest = (path, _) =>
         {
-            if (path == f.Paths.IndexFile && Interlocked.Increment(ref failures) == 1)
+            if (path == f.IndexFile && Interlocked.Increment(ref failures) == 1)
                 throw new IOException("synthetic folder index failure");
         };
         await Assert.ThrowsAsync<IOException>(() => f.Queue.MoveCapturesAsync([record.Id], folder.Id));
@@ -239,10 +239,10 @@ public sealed class CaptureFolderTests
         var folder = await f.Queue.CreateFolderAsync("cancel");
         var record = f.Add(DateTimeOffset.Now);
         await f.Queue.MoveCapturesAsync([record.Id], folder.Id);
-        string before = File.ReadAllText(f.Paths.IndexFile);
+        string before = File.ReadAllText(f.IndexFile);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => f.Queue.DeleteFolderScopeAsync(
             CaptureFolderScope.ForFolder(folder.Id), cancellationToken: new CancellationToken(true)));
-        Assert.Equal(before, File.ReadAllText(f.Paths.IndexFile));
+        Assert.Equal(before, File.ReadAllText(f.IndexFile));
         Assert.NotNull(f.Queue.Find(record.Id));
     }
 
@@ -295,7 +295,7 @@ public sealed class CaptureFolderTests
         int writes = 0;
         f.Queue.BeforePublicationWriteForTest = (path, _) =>
         {
-            if (path != f.Paths.IndexFile || Interlocked.Increment(ref writes) != 1) return;
+            if (path != f.IndexFile || Interlocked.Increment(ref writes) != 1) return;
             entered.Set();
             if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
             throw new IOException("synthetic rename failure");
@@ -339,10 +339,20 @@ public sealed class CaptureFolderTests
         var record = f.Add(DateTimeOffset.Now);
         await f.Queue.MoveCapturesAsync([record.Id], folder.Id);
         var imported = new Fixture();
-        foreach (string directory in Directory.EnumerateDirectories(f.Paths.DataRoot, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(Path.Combine(imported.Paths.DataRoot, Path.GetRelativePath(f.Paths.DataRoot, directory)));
-        foreach (string file in Directory.EnumerateFiles(f.Paths.DataRoot, "*", SearchOption.AllDirectories))
-            File.Copy(file, Path.Combine(imported.Paths.DataRoot, Path.GetRelativePath(f.Paths.DataRoot, file)));
+        string sourceRoot = ValidatedFilePaths.DirectoryRoot(f.Paths.DataRoot);
+        string destinationRoot = ValidatedFilePaths.DirectoryRoot(imported.Paths.DataRoot);
+        foreach (string directory in Directory.EnumerateDirectories(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            string source = ValidatedFilePaths.DirectoryWithinRoot(sourceRoot, directory);
+            string destination = ValidatedFilePaths.DirectoryWithinRoot(destinationRoot, Path.GetRelativePath(sourceRoot, source));
+            Directory.CreateDirectory(destination);
+        }
+        foreach (string file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            string source = ValidatedFilePaths.FileWithinRoot(sourceRoot, file);
+            string destination = ValidatedFilePaths.FileWithinRoot(destinationRoot, Path.GetRelativePath(sourceRoot, source));
+            File.Copy(source, destination);
+        }
         CaptureQueue queue = imported.Reload();
         Assert.Equal(2, queue.Folders.Count);
         Assert.Equal(folder.Id, Assert.Single(queue.Records).FolderId);
@@ -354,12 +364,13 @@ public sealed class CaptureFolderTests
     private sealed class Fixture
     {
         internal AppPaths Paths { get; }
+        internal string IndexFile => ValidatedFilePaths.FileWithinRoot(Paths.DataRoot, Paths.IndexFile, ".json");
         internal CaptureQueue Queue { get; }
         internal Fixture()
         {
             string root = Environment.GetEnvironmentVariable("MYCAPTURE_DATA_ROOT") ??
                 Path.Combine(Path.GetTempPath(), "MyCapture-Folder410-tests");
-            Paths = AppPaths.CreateForRoot(Path.Combine(root, "core-" + Guid.NewGuid().ToString("N")));
+            Paths = AppPaths.CreateForRoot(ValidatedFilePaths.DirectoryWithinRoot(root, "core-" + Guid.NewGuid().ToString("N")));
             Paths.EnsureCreated();
             Queue = NewQueue();
             // Retain every synthetic payload for diagnostics, including logically removed ones.

@@ -113,15 +113,15 @@ public sealed class GalleryFolderTests
         await f.Queue.MoveCapturesAsync([capture.Id], folder.Id);
         var exporter = f.Exporter();
         using var prepared = await exporter.PrepareAsync(exporter.BuildPlan(CaptureFolderScope.ForFolder(folder.Id)));
-        string destination = Path.Combine(f.Root, "exports");
-        Directory.CreateDirectory(Path.Combine(destination, "2026-10-08"));
-        string keep = Path.Combine(destination, "2026-10-08", "keep.txt");
+        string destination = ValidatedFilePaths.DirectoryWithinRoot(f.Root, "exports");
+        Directory.CreateDirectory(ValidatedFilePaths.DirectoryWithinRoot(destination, "2026-10-08"));
+        string keep = ValidatedFilePaths.FileWithinRoot(destination, Path.Combine("2026-10-08", "keep.txt"), ".txt");
         File.WriteAllText(keep, "keep");
         IReadOnlyList<string> paths = await GalleryFolderExportService.ExportDirectoryAsync(prepared, destination);
         Assert.EndsWith("2026-10-08-02", Assert.Single(paths));
         Assert.Equal("keep", File.ReadAllText(keep));
         Assert.Equal(f.RenderedBytes(capture), File.ReadAllBytes(Path.Combine(paths[0], "Review", "Decision.png")));
-        string zipPath = Path.Combine(destination, "review.zip");
+        string zipPath = ValidatedFilePaths.FileWithinRoot(destination, "review.zip", ".zip");
         await GalleryFolderExportService.ExportZipAsync(prepared, zipPath);
         using (var archive = ZipFile.OpenRead(zipPath))
         {
@@ -141,7 +141,7 @@ public sealed class GalleryFolderTests
     public void AtomicArchivePublicationHidesPartialContentAndPreservesConcurrentDestinations()
     {
         var f = new Fixture();
-        string target = Path.Combine(f.Root, "race.zip");
+        string target = ValidatedFilePaths.FileWithinRoot(f.Root, "race.zip", ".zip");
         Assert.Throws<IOException>(() => GalleryExportFiles.WriteStreamNew(target, stream =>
         {
             stream.Write([1, 2, 3]);
@@ -151,7 +151,7 @@ public sealed class GalleryFolderTests
         Assert.Equal("preserve the concurrent destination", File.ReadAllText(target, Encoding.UTF8));
         Assert.Empty(Directory.EnumerateFiles(f.Root, ".mycapture-folder-*.zip.partial"));
 
-        string cancelled = Path.Combine(f.Root, "cancelled.zip");
+        string cancelled = ValidatedFilePaths.FileWithinRoot(f.Root, "cancelled.zip", ".zip");
         using var cancellation = new CancellationTokenSource();
         Assert.Throws<OperationCanceledException>(() => GalleryExportFiles.WriteStreamNew(cancelled, stream =>
         {
@@ -257,14 +257,15 @@ public sealed class GalleryFolderTests
         var record = f.Add(DateTimeOffset.Now);
         await f.Queue.MoveCapturesAsync([record.Id], folder.Id);
         using var prepared = await f.Exporter().PrepareAsync(f.Exporter().BuildPlan(CaptureFolderScope.ForFolder(folder.Id)));
-        string outside = Path.Combine(f.Root, "outside");
+        string outside = ValidatedFilePaths.DirectoryWithinRoot(f.Root, "outside");
         Directory.CreateDirectory(outside);
-        File.WriteAllText(Path.Combine(outside, "keep.txt"), "keep");
+        string sentinel = ValidatedFilePaths.FileWithinRoot(outside, "keep.txt", ".txt");
+        File.WriteAllText(sentinel, "keep");
         string link = Path.Combine(f.Root, "destination-link");
         UpdatePathsTests.CreateJunction(link, outside);
         await Assert.ThrowsAsync<IOException>(() => GalleryFolderExportService.ExportDirectoryAsync(prepared, link));
         await Assert.ThrowsAsync<IOException>(() => GalleryFolderExportService.ExportZipAsync(prepared, Path.Combine(link, "capture.zip")));
-        Assert.Equal("keep", File.ReadAllText(Path.Combine(outside, "keep.txt")));
+        Assert.Equal("keep", File.ReadAllText(sentinel));
         Assert.Single(Directory.EnumerateFileSystemEntries(outside));
     }
 
@@ -278,16 +279,51 @@ public sealed class GalleryFolderTests
         var exporter = f.Exporter();
         var prepared = await exporter.PrepareAsync(exporter.BuildPlan(CaptureFolderScope.ForFolder(folder.Id)));
         string batchName = Path.GetFileName(prepared.BatchRoot);
-        Directory.Move(f.Staging, f.Staging + "-retained");
-        string outside = Path.Combine(f.Root, "replacement");
-        Directory.CreateDirectory(Path.Combine(outside, batchName));
-        string keep = Path.Combine(outside, batchName, "keep.png");
+        Directory.Move(f.Staging, ValidatedFilePaths.DirectoryWithinRoot(f.Root, "staging-retained"));
+        string outside = ValidatedFilePaths.DirectoryWithinRoot(f.Root, "replacement");
+        Directory.CreateDirectory(ValidatedFilePaths.DirectoryWithinRoot(outside, batchName));
+        string keep = ValidatedFilePaths.FileWithinRoot(outside, Path.Combine(batchName, "keep.png"), ".png");
         File.WriteAllText(keep, "unrelated");
         UpdatePathsTests.CreateJunction(f.Staging, outside);
         prepared.Dispose();
         GalleryExportFiles.CleanupFolderBatches(f.Staging, DateTimeOffset.Now.AddDays(1));
         Assert.Equal("unrelated", File.ReadAllText(keep));
         Assert.True(f.Queue.Remove(record.Id));
+    }
+
+    [Fact]
+    public void FolderBatchCleanupRemovesOnlyExpiredOwnedBatchesAndPreservesSiblingSentinel()
+    {
+        var f = new Fixture();
+        Directory.CreateDirectory(f.Staging);
+        string expired = ValidatedFilePaths.DirectoryWithinRoot(f.Staging, GalleryExportFiles.FolderBatchPrefix + Guid.NewGuid().ToString("N"));
+        string recent = ValidatedFilePaths.DirectoryWithinRoot(f.Staging, GalleryExportFiles.FolderBatchPrefix + Guid.NewGuid().ToString("N"));
+        string unowned = ValidatedFilePaths.DirectoryWithinRoot(f.Staging, GalleryExportFiles.FolderBatchPrefix + "not-a-guid");
+        string sibling = ValidatedFilePaths.DirectoryWithinRoot(f.Root, "staging-sibling");
+        string expiredFile = WriteBatchFixture(expired, "expired");
+        string recentFile = WriteBatchFixture(recent, "recent");
+        string unownedFile = WriteBatchFixture(unowned, "unowned");
+        string sentinel = WriteBatchFixture(sibling, "external sentinel");
+        DateTimeOffset cutoff = DateTimeOffset.UtcNow.AddDays(-2);
+        Directory.SetLastWriteTimeUtc(expired, cutoff.AddDays(-1).UtcDateTime);
+        Directory.SetLastWriteTimeUtc(unowned, cutoff.AddDays(-1).UtcDateTime);
+
+        GalleryExportFiles.CleanupFolderBatches(f.Staging, cutoff);
+
+        Assert.False(File.Exists(expiredFile));
+        Assert.False(Directory.Exists(expired));
+        Assert.Equal("recent", File.ReadAllText(recentFile));
+        Assert.Equal("unowned", File.ReadAllText(unownedFile));
+        Assert.Equal("external sentinel", File.ReadAllText(sentinel));
+        Assert.Equal(2, Directory.EnumerateDirectories(f.Staging).Count());
+    }
+
+    private static string WriteBatchFixture(string root, string content)
+    {
+        root = ValidatedFilePaths.CreateDirectory(root);
+        string file = ValidatedFilePaths.FileWithinRoot(root, "keep.png", ".png");
+        File.WriteAllText(file, content);
+        return file;
     }
 
     [Fact]
@@ -345,13 +381,14 @@ public sealed class GalleryFolderTests
     private sealed class Fixture
     {
         internal string Root { get; }
-        internal string Staging => Path.Combine(Root, "staging");
+        internal string Staging { get; }
         internal CaptureQueue Queue { get; }
         internal Fixture(QueueSettings? settings = null)
         {
             string data = Environment.GetEnvironmentVariable("MYCAPTURE_DATA_ROOT") ??
                 Path.Combine(Path.GetTempPath(), "MyCapture-Folder410-tests");
-            Root = Path.Combine(data, "app-" + Guid.NewGuid().ToString("N"));
+            Root = ValidatedFilePaths.DirectoryWithinRoot(data, "app-" + Guid.NewGuid().ToString("N"));
+            Staging = ValidatedFilePaths.DirectoryWithinRoot(Root, "staging");
             var paths = AppPaths.CreateForRoot(Root);
             paths.EnsureCreated();
             Queue = new CaptureQueue(paths, settings ?? new QueueSettings(), NullLogger<CaptureQueue>.Instance);

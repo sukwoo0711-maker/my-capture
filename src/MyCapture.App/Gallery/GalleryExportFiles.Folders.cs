@@ -163,9 +163,10 @@ internal static partial class GalleryExportFiles
     {
         try
         {
-            using DirectoryLease parents = DirectoryLease.Open(root, create: false);
-            foreach (string directory in Directory.EnumerateDirectories(root, FolderBatchPrefix + "*"))
-                DeleteFolderBatchBestEffort(WithinRoot(root, directory), cutoff);
+            string approvedRoot = MyCapture.Core.Storage.ValidatedFilePaths.DirectoryRoot(root);
+            using DirectoryLease parents = DirectoryLease.Open(approvedRoot, create: false);
+            foreach (string directory in Directory.EnumerateDirectories(approvedRoot, FolderBatchPrefix + "*"))
+                DeleteFolderBatchBestEffort(WithinRoot(approvedRoot, directory), cutoff);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

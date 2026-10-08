@@ -42,6 +42,20 @@ public static class ValidatedFilePaths
         return DirectoryRoot(path);
     }
 
+    /// <summary>Confines a child directory to its approved root before creation or enumeration.</summary>
+    public static string DirectoryWithinRoot(string directory, string path)
+    {
+        string root = DirectoryRoot(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if (!HasUnambiguousSegments(path)) throw new IOException("Ambiguous directory name.");
+        if (Path.IsPathRooted(path) && !Path.IsPathFullyQualified(path))
+            throw new IOException("Drive-relative paths are not permitted.");
+        string fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path, root));
+        if (!IsWithinRoot(root, fullPath) || !IsPlainDirectory(fullPath))
+            throw new IOException("The directory must remain within its approved root without reparse points.");
+        return fullPath;
+    }
+
     /// <summary>Resolves relative names against an approved root; rejects escapes and linked/special files.</summary>
     public static string FileWithinRoot(string directory, string path, params string[] extensions)
     {

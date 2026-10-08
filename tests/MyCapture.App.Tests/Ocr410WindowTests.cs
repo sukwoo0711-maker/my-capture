@@ -259,7 +259,7 @@ public sealed class Ocr410WindowTests
     {
         string root = Environment.GetEnvironmentVariable("MYCAPTURE_DATA_ROOT")
             ?? Path.Combine(Path.GetTempPath(), "MyCapture-Ocr410-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        root = MyCapture.Core.Storage.ValidatedFilePaths.CreateDirectory(root);
         var table = new OcrTable([new([new("=1+1", default, default)])], [new(false)], false);
         ProcessStartInfo? observed = null;
         string path = OcrExcelExport.Open(table, start =>

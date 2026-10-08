@@ -164,7 +164,10 @@ public sealed class SettingsStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
 
-        string text = File.ReadAllText(sourcePath);
+        // The chooser authorizes an existing JSON file, including linked or cloud-backed
+        // files. Keep that policy distinct from strict app-owned temporary directories.
+        string selectedFile = ValidatedFilePaths.SelectedFile(sourcePath, ".json");
+        string text = File.ReadAllText(selectedFile);
         if (!TryDeserialize(text, out AppSettings? parsed) || parsed is null)
         {
             throw new InvalidDataException(UiText.Get("Settings_ImportFailed"));
@@ -172,7 +175,7 @@ public sealed class SettingsStore
 
         var warnings = new List<string>();
         Sanitize(parsed, warnings);
-        _log.LogInformation("Settings imported from {Path}", LogText.SingleLine(sourcePath));
+        _log.LogInformation("Settings imported from {Path}", LogText.SingleLine(selectedFile));
         return parsed;
     }
 
