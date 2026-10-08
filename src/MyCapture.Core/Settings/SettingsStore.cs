@@ -49,20 +49,24 @@ public sealed class SettingsStore
 
     public AppSettings Load()
     {
+        string settingsFile;
+        try { settingsFile = ValidatedFilePaths.FileWithinRoot(_paths.DataRoot, _paths.SettingsFile, ".json"); }
+        catch (Exception error) when (error is IOException or ArgumentException or NotSupportedException)
+        { throw new InvalidDataException(UiText.Get("Text_2CD093B673E5"), error); }
         _paths.EnsureCreated();
-        AtomicFile.CleanUpTemp(_paths.SettingsFile);
+        AtomicFile.CleanUpTemp(settingsFile);
 
         var warnings = new List<string>();
 
         string? text = AtomicFile.ReadAllTextWithRecovery(
-            _paths.SettingsFile,
+            settingsFile,
             candidate => TryDeserialize(candidate, out _));
 
         AppSettings settings;
 
         if (text is null)
         {
-            bool existed = File.Exists(_paths.SettingsFile);
+            bool existed = File.Exists(settingsFile);
             if (existed)
             {
                 warnings.Add(UiText.Get("Text_2CD093B673E5"));

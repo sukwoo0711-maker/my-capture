@@ -36,7 +36,12 @@ internal static class HotfixUxSelfTest
 
     internal static int Run(string output)
     {
-        Directory.CreateDirectory(output);
+        try { output = ValidatedFilePaths.CreateDirectory(output); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            Trace.TraceError("{0}: {1}", UiText.Get("Dialog.Storage"), error);
+            return 1;
+        }
         Console.WriteLine("HOTFIX_UX_OUTPUT=" + output);
         var report = new StringBuilder($"MyCapture 4.0.1 real WPF/native QA\nUTC: {DateTimeOffset.UtcNow:O}\n");
         report.AppendLine("Production windows and command paths, driven in-process; no synthetic desktop keyboard/mouse input. Fresh profile; no user settings/queue or startup registry access. Clipboard writer is isolated to an in-memory sink; the user clipboard is untouched.");
@@ -164,7 +169,7 @@ internal static class HotfixUxSelfTest
             BitmapSource expected = Await(edit.RenderCurrentImageAsync());
             ImageCodec.SavePng(expected, Path.Combine(output, "edited-expected.png"));
             var settings = new AppSettings();
-            AppPaths paths = AppPaths.CreateForRoot(Path.Combine(output, "profile"));
+            AppPaths paths = AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory());
             var saver = new PinImageSaveService(() => settings, () => paths, NullLogger<PinImageSaveService>.Instance);
             var updatedCard = Card(sample); owned.Add(updatedCard); updatedCard.IsKept = true; updatedCard.Show(); Pump(70);
             Render(updatedCard, Path.Combine(output, "preview-before-update.png"), 96);
@@ -187,7 +192,7 @@ internal static class HotfixUxSelfTest
                     var pin = new PinWindow(PinContent.FromImage(bitmap), new PinViewState(bitmap.PixelWidth, bitmap.PixelHeight, 1, 1, 0.1), 100, 100, () => settings.Pin);
                     owned.Add(pin); pin.Show(); Pump(100); Render(pin, Path.Combine(output, "edited-pin-window.png"), 96); pin.Close();
                 }, async bitmap => { PinSaveResult save = await saver.QuickSaveAsync(bitmap); saved = save.Path; return save.Status == PinSaveStatus.Saved; },
-                exportService: new GalleryDragExportService(Path.Combine(output, "DragExports")));
+                exportService: new GalleryDragExportService(ValidatedFilePaths.CreateTemporaryDirectory()));
             Check("edited receipt copy uses production PNG payload with isolated clipboard sink", Await(actions.CopyAsync()) && clipboardPng is not null);
             using var png = new MemoryStream(clipboardPng!);
             BitmapSource copied = BitmapDecoder.Create(png, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
@@ -222,7 +227,7 @@ internal static class HotfixUxSelfTest
                 var changedOverlay = new CaptureOverlayWindow(new FrozenFrame(sample, rect, null, 0), abortOnFocusLoss: false);
                 owned.Add(changedOverlay);
                 Exception changed = Failure(() => changedOverlay.AttachFrame(new FrozenFrame(sample, new RectD(1, 1, rect.Width, rect.Height), null, 0)));
-                string badImage = Path.Combine(output, "invalid-image.png"); File.WriteAllText(badImage, "invalid local QA fixture");
+                string badImage = ValidatedFilePaths.FileWithinRoot(paths.DataRoot, "invalid-image.png", ".png"); File.WriteAllText(badImage, "invalid local QA fixture");
                 Exception invalid = Failure(() => VideoLayerAssets.ReadImage(badImage, CancellationToken.None));
                 foreach (Exception error in new Exception[] { limit, invalid, changed }) Check("localized error body preserved: " + error.Message, ThemedDialog.RecoveryMessage(error) == error.Message);
                 var close = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
@@ -293,7 +298,16 @@ internal static class HotfixUxSelfTest
             FluidMotion.AnimationsEnabledOverrideForTest = motion;
             if (oldTheme is AppTheme theme) ThemeService.Apply(theme);
             report.AppendLine(result == 0 ? "RESULT: PASS" : "RESULT: FAIL");
-            File.WriteAllText(Path.Combine(output, "hotfix-ux-report.txt"), report.ToString(), new UTF8Encoding(false));
+            try
+            {
+                File.WriteAllText(ValidatedFilePaths.FileWithinRoot(output, "hotfix-ux-report.txt", ".txt"),
+                    report.ToString(), new UTF8Encoding(false));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                Trace.TraceError("{0}: {1}", UiText.Get("Dialog.Storage"), error);
+                result = 1;
+            }
         }
         return result;
     }

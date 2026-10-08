@@ -65,9 +65,10 @@ public sealed class HotfixHotkeyTests
     [Fact]
     public void Version400UnsafeSettingsArePersistedOnceAndDoNotReturnOnRestart()
     {
-        var paths = AppPaths.CreateForRoot(Path.Combine(Path.GetTempPath(), "MyCapture-hotkey-migration-" + Guid.NewGuid().ToString("N")));
+        var paths = AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory());
         paths.EnsureCreated();
-        File.WriteAllText(paths.SettingsFile, """
+        string settingsFile = ValidatedFilePaths.FileWithinRoot(paths.DataRoot, "settings.json", ".json");
+        File.WriteAllText(settingsFile, """
             {"schemaVersion":4,"general":{"launchAtLogin":false},"hotkeys":{
               "capture":"Shift+C","openLibrary":"A","pasteToScreen":"Shift+F3",
               "hideAllPins":"F8","toggleClickThrough":"Space","repeatLastRegion":"Shift+Left",
@@ -87,7 +88,7 @@ public sealed class HotfixHotkeyTests
         Assert.All(new[] { repaired.Hotkeys.OpenLibrary, repaired.Hotkeys.ToggleClickThrough,
             repaired.Hotkeys.RepeatLastRegion, repaired.Hotkeys.CaptureWindow,
             repaired.Hotkeys.CaptureFullScreen, repaired.Hotkeys.UploadGitHubImage }, key => Assert.Equal(Hotkey.None, key));
-        string persisted = File.ReadAllText(paths.SettingsFile);
+        string persisted = File.ReadAllText(ValidatedFilePaths.FileWithinRoot(paths.DataRoot, "settings.json", ".json"));
         Assert.DoesNotContain("Shift+Space", persisted);
         for (int restart = 0; restart < 2; restart++)
         {
@@ -97,7 +98,7 @@ public sealed class HotfixHotkeyTests
             Assert.Equal(Hotkey.None, loaded.Hotkeys.UploadGitHubImage);
             Assert.Equal(Hotkey.None, loaded.Hotkeys.OpenLibrary);
             Assert.Equal("Ctrl+Shift+C", loaded.Hotkeys.Capture.ToString());
-            Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
+            Assert.Equal(persisted, File.ReadAllText(ValidatedFilePaths.FileWithinRoot(paths.DataRoot, "settings.json", ".json")));
         }
     }
 
@@ -106,7 +107,7 @@ public sealed class HotfixHotkeyTests
     [InlineData("")]
     public void RestoredCaptureClearsOptionalConflictsAndPersistsOnce(string capture)
     {
-        var paths = AppPaths.CreateForRoot(Path.Combine(Path.GetTempPath(), "MyCapture-hotkey-conflict-" + Guid.NewGuid().ToString("N")));
+        var paths = AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory());
         var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
         Hotkey.TryParse(capture, out Hotkey previous);
         var source = new AppSettings();
@@ -144,7 +145,7 @@ public sealed class HotfixHotkeyTests
     [Fact]
     public void WelcomeCompletion_SurvivesTwoFreshSettingsLoads()
     {
-        string root = Path.Combine(Path.GetTempPath(), "MyCapture-first-run-" + Guid.NewGuid().ToString("N"));
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
         var paths = AppPaths.CreateForRoot(root);
         var firstStore = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
         AppSettings first = firstStore.Load();

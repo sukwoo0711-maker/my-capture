@@ -19,6 +19,7 @@ using MyCapture.Core.Annotations;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Imaging;
 using MyCapture.Platform.Shell;
@@ -102,7 +103,7 @@ public sealed class HotfixUxRegressionTests
         Assert.Equal(limit.Message, ThemedDialog.RecoveryMessage(limit));
         var changed = UserFacingError.Mark(new InvalidOperationException(UiText.Get("Capture.DisplayChanged")));
         Assert.Equal(changed.Message, ThemedDialog.RecoveryMessage(changed));
-        string bad = Path.Combine(Path.GetTempPath(), "MyCapture-invalid-image-" + Guid.NewGuid().ToString("N") + ".png");
+        string bad = ValidatedFilePaths.FileWithinRoot(ValidatedFilePaths.CreateTemporaryDirectory(), "invalid.png", ".png");
         File.WriteAllText(bad, "not an image");
         var invalid = Assert.Throws<InvalidDataException>(() => VideoLayerAssets.ReadImage(bad, CancellationToken.None));
         Assert.Equal(UiText.Get("Video.InvalidImage"), ThemedDialog.RecoveryMessage(invalid));
@@ -129,7 +130,7 @@ public sealed class HotfixUxRegressionTests
         var actions = new QuickAccessImageActions(() => Task.FromResult(current),
             image => { outputs.Add(image); return Task.FromResult(true); }, outputs.Add,
             image => { outputs.Add(image); return Task.FromResult(true); },
-            exportService: new GalleryDragExportService(Path.Combine(Path.GetTempPath(), "MyCapture-hotfix-drag-" + Guid.NewGuid().ToString("N"))));
+            exportService: new GalleryDragExportService(ValidatedFilePaths.CreateTemporaryDirectory()));
         Assert.True(actions.CopyAsync().GetAwaiter().GetResult());
         actions.PinAsync().GetAwaiter().GetResult();
         Assert.True(actions.SaveAsync().GetAwaiter().GetResult());
@@ -165,7 +166,7 @@ public sealed class HotfixUxRegressionTests
     [Fact]
     public void RenderedExportsReuseTimestampSuffixAndDeleteExpiredFiles() => Sta(() =>
     {
-        string root = Path.Combine(Path.GetTempPath(), "MyCapture-hotfix-exports-" + Guid.NewGuid().ToString("N"));
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
         DateTimeOffset now = new(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
         var exports = new GalleryDragExportService(root, () => now);
         string first = exports.PrepareExport(Image());

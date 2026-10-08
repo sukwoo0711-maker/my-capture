@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.Core.Recording;
+using MyCapture.Core.Storage;
 
 namespace MyCapture.App.Recording;
 
@@ -27,12 +28,14 @@ internal static class VideoLayerAssets
     internal static BitmapSource ReadImage(string path, CancellationToken cancellationToken)
     {
         try { return ReadImageCore(path, cancellationToken); }
-        catch (Exception ex) when (ex is NotSupportedException or FileFormatException)
+        catch (Exception ex) when ((ex is NotSupportedException or IOException or ArgumentException)
+            && Themes.UserFacingError.GetMessage(ex) is null)
         { throw Themes.UserFacingError.Mark(new InvalidDataException(UiText.Get("Video.InvalidImage"), ex)); }
     }
 
     private static BitmapSource ReadImageCore(string path, CancellationToken cancellationToken)
     {
+        path = ValidatedFilePaths.SelectedFile(path, ".png", ".jpg", ".jpeg", ".bmp");
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         if (stream.Length > 24 * 1024 * 1024) { throw Themes.UserFacingError.Mark(new InvalidDataException(UiText.Get("Text_9C4458907087"))); }
         if (stream.Length >= 33)
