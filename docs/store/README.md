@@ -30,13 +30,26 @@ GitHub 릴리스와 같은 self-contained 게시본을 MSIX로 묶어 Microsoft 
    - `Package/Identity/Publisher` (`CN=`으로 시작)
    - `Package/Properties/PublisherDisplayName`
 
+### 등록된 제품 정보
+
+2026-10-09에 `MyCapture` 이름으로 예약했습니다. 아래 값은 설치된 패키지에서도 보이는 공개 식별 정보입니다.
+
+| 항목 | 값 |
+|---|---|
+| Store ID | `9PB33MC095VR` |
+| Store 주소 | https://apps.microsoft.com/detail/9PB33MC095VR |
+| `Package/Identity/Name` | `sukwoo0711.MyCapture` |
+| `Package/Identity/Publisher` | `CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474` |
+| `Package/Properties/PublisherDisplayName` | `sukwoo0711` |
+| 패키지 패밀리 이름 | `sukwoo0711.MyCapture_n98e1tgx2qxb2` |
+
 ## 2. 패키지 만들기
 
 릴리스 커밋의 깨끗한 작업 트리에서 실행합니다. `package-store.ps1`은 `package.ps1`이 검증한 게시 폴더(`artifacts\release\<버전>\publish-win-x64`)를 그대로 사용합니다. 따라서 GitHub 릴리스와 Store 패키지의 바이너리가 같습니다.
 
 ```powershell
 .\build\package.ps1 -Version 4.0.2
-.\build\package-store.ps1 -IdentityName '<Package/Identity/Name>' -Publisher '<CN=...>' -PublisherDisplayName '<게시자 표시 이름>'
+.\build\package-store.ps1 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
 ```
 
 - **결과물**: `artifacts\store\<버전>\` 아래에 다음 파일이 생깁니다.

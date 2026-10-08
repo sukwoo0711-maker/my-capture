@@ -4,7 +4,7 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 
 ## 공통 항목
 
-- **제품 이름**: 예약한 이름. 기본값은 `MyCapture`입니다.
+- **제품 이름**: `MyCapture` (Store ID `9PB33MC095VR`, https://apps.microsoft.com/detail/9PB33MC095VR)
 - **범주**: 생산성 또는 사진 및 비디오
 - **가격**: 무료
 - **개인정보처리방침 URL**: `https://github.com/sukwoo0711-maker/my-capture/blob/main/docs/store/PRIVACY.md` (main에 병합된 뒤 사용)
