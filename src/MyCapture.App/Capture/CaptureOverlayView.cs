@@ -207,7 +207,18 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _horizontalGuideVisual.Clip = _horizontalGuideClip;
         _verticalGuideVisual.Clip = _verticalGuideClip;
         _horizontalGuideVisual.Opacity = _verticalGuideVisual.Opacity = 0;
-        Unloaded += (_, _) => _feedbackScheduler.CancelPending();
+        Loaded += (_, _) =>
+        {
+            if (_released) return;
+            ThemeService.CaptureGuideChanged -= OnGuidePaletteChanged;
+            ThemeService.CaptureGuideChanged += OnGuidePaletteChanged;
+            OnGuidePaletteChanged();
+        };
+        Unloaded += (_, _) =>
+        {
+            ThemeService.CaptureGuideChanged -= OnGuidePaletteChanged;
+            _feedbackScheduler.CancelPending();
+        };
 
         Focusable = true;
         Cursor = Cursors.Cross;
@@ -218,7 +229,6 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _guideDpi = VisualTreeHelper.GetDpi(this);
         _guidePalette = CaptureGuidePalette.Resolve();
         ApplyGuideBrushes();
-        ThemeService.CaptureGuideChanged += OnGuidePaletteChanged;
 
         FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");

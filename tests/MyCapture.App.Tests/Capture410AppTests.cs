@@ -23,6 +23,30 @@ namespace MyCapture.App.Tests;
 public sealed class Capture410AppTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InactiveOverlayDoesNotReceiveAnotherDispatcherThemeRefresh(bool previouslyLoaded) => StaTestHost.Run(() =>
+    {
+        var view = new CaptureOverlayView(Frame(), showMagnifier: false);
+        try
+        {
+            if (previouslyLoaded)
+            {
+                view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+                view.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+            }
+            StaTestHost.Run(() =>
+            {
+                var dispatcher = Dispatcher.CurrentDispatcher;
+                var refresh = ThemeService.ScheduleCropResourceRefresh(dispatcher, new ResourceDictionary(), () => false);
+                dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                Assert.Equal(DispatcherOperationStatus.Completed, refresh.Status);
+            });
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Theory]
     [InlineData("Rectangle")]
     [InlineData("Pen")]
     [InlineData("Text")]
