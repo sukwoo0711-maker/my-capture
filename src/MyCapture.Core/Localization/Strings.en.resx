@@ -3215,5 +3215,5 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>Keyboard access: press Alt+Q in the editor</value></data>
   <data name="Video.InvalidImage" xml:space="preserve"><value>The image could not be read. Select a valid PNG, JPEG or BMP file.</value></data>
   <data name="Hotkey.MigratedTitle" xml:space="preserve"><value>Shortcuts updated</value></data>
-  <data name="Hotkey.Migrated" xml:space="preserve"><value>Previous shortcuts that could interfere with typing were cleared. An affected capture shortcut was restored to Ctrl+Shift+C. You can review shortcuts in Settings.</value></data>
+  <data name="Hotkey.Migrated" xml:space="preserve"><value>Unsafe shortcuts and restored-capture conflicts were cleared. Capture was reset to Ctrl+Shift+C if needed.</value></data>
 </root>

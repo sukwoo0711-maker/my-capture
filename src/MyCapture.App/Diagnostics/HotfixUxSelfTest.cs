@@ -236,6 +236,49 @@ internal static class HotfixUxSelfTest
                 };
                 close.Start(); ThemedDialog.Error(null, "MyCapture QA", changed);
                 Check("ownerless error is active and taskbar visible, without persistent Topmost", visible);
+                void VerifyTopmostDialog(Window obstruction, bool explicitOwner, bool escape)
+                {
+                    owned.Add(obstruction); obstruction.Show(); Pump(100); obstruction.Activate();
+                    Check($"{obstruction.GetType().Name}: excluded only from fallback owners", !ThemedDialog.IsSuitableOwner(obstruction));
+                    bool above = false, dismissed = false;
+                    var dismiss = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                    dismiss.Tick += (_, _) =>
+                    {
+                        dismiss.Stop();
+                        ThemedDialog dialog = Application.Current.Windows.OfType<ThemedDialog>().Single(window => window.IsVisible);
+                        above = dialog.IsActive && GetForegroundWindow() == new WindowInteropHelper(dialog).Handle
+                            && (explicitOwner ? ReferenceEquals(dialog.Owner, obstruction) : dialog.Owner is null && dialog.Topmost)
+                            && IsAbove(new WindowInteropHelper(dialog).Handle, new WindowInteropHelper(obstruction).Handle);
+                        Render(dialog, Path.Combine(output, $"dialog-above-{obstruction.GetType().Name}-{explicitOwner}.png"), 96);
+                        if (escape)
+                        {
+                            var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(dialog), Environment.TickCount, Key.Escape)
+                                { RoutedEvent = Keyboard.KeyDownEvent, Source = dialog };
+                            InputManager.Current.ProcessInput(key);
+                        }
+                        else
+                        {
+                            var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
+                            Button button = panel.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().Single();
+                            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        }
+                        dismissed = !dialog.IsVisible;
+                        if (!dismissed) dialog.Close();
+                    };
+                    dismiss.Start();
+                    if (explicitOwner) ThemedDialog.Error(obstruction, "MyCapture QA", changed);
+                    else ThemedDialog.ShowUnhandled(changed);
+                    Check($"{obstruction.GetType().Name}: dialog remains above visible topmost UI; explicitOwner={explicitOwner}", above);
+                    Check($"{obstruction.GetType().Name}: dialog dismissed by {(escape ? "Esc" : "button")}", dismissed);
+                    obstruction.Close();
+                }
+                VerifyTopmostDialog(new CaptureOverlayWindow(new FrozenFrame(sample, rect, null, 0), abortOnFocusLoss: false), false, true);
+                VerifyTopmostDialog(new PinWindow(PinContent.FromImage(sample), new PinViewState(320, 180, 1, 1, 0.1), 100, 100, () => settings.Pin), true, false);
+                VerifyTopmostDialog(new PinWindow(PinContent.FromImage(sample), new PinViewState(320, 180, 1, 1, 0.1), 100, 100, () => settings.Pin), false, false);
+                VerifyTopmostDialog(new RecordingControlWindow(new RectD(100, 100, 640, 360), new MyCapture.Core.Recording.RecordingSettings(),
+                    () => throw new InvalidOperationException("Recording must not start in this dialog diagnostic."),
+                    () => Path.Combine(output, "unused-recording.mp4"), NullLogger.Instance), false, false);
+                VerifyTopmostDialog(new CountdownWindow(60), false, false);
                 string? fallback = null;
                 ThemedDialog.ShowUnhandled(changed, _ => throw new InvalidOperationException("injected theme failure"), (text, _) => fallback = text);
                 Check("theme failure reaches MessageBox fallback boundary with localized body", fallback == changed.Message);
@@ -292,6 +335,13 @@ internal static class HotfixUxSelfTest
         task.GetAwaiter().GetResult();
     }
     private static T Await<T>(Task<T> task) { Await((Task)task); return task.GetAwaiter().GetResult(); }
+    private static bool IsAbove(IntPtr dialog, IntPtr obstruction)
+    {
+        for (IntPtr window = GetWindow(dialog, 2 /* GW_HWNDNEXT */); window != IntPtr.Zero; window = GetWindow(window, 2))
+            if (window == obstruction) return true;
+        return false;
+    }
+    [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(IntPtr hwnd);
 }

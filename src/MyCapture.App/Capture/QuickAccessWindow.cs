@@ -193,7 +193,7 @@ internal sealed class QuickAccessWindow : Window
         if (_busy) return;
         _busy = true;
         try { _status.Text = UiText.Get(await action() ? success : "QuickAccess.Failed"); }
-        catch (Exception) { _status.Text = UiText.Get("QuickAccess.Failed"); }
+        catch (Exception error) { _status.Text = UserFacingError.GetMessage(error) ?? UiText.Get("QuickAccess.Failed"); }
         finally { _busy = false; }
     }
 }

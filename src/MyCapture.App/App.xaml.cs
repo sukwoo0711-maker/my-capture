@@ -1726,7 +1726,7 @@ public partial class App : Application
         int hotfixIndex = FindSwitch(args, HotfixUxSelfTest.CommandLineSwitch);
         if (hotfixIndex >= 0)
         {
-            string output = OutputDirectoryAfter(args, hotfixIndex, "MyCapture-hotfix-ux");
+            string output = OutputDirectoryAfter(args, hotfixIndex, "MyCapture-hotfix-ux-" + Guid.NewGuid().ToString("N"));
             return RunSelfTest(output, "hotfix-ux-report.txt", HotfixUxSelfTest.Run);
         }
         int capturePerformanceIndex = FindSwitch(args, CapturePerformanceSelfTest.CommandLineSwitch);

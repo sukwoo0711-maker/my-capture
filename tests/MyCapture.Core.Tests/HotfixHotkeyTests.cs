@@ -101,6 +101,46 @@ public sealed class HotfixHotkeyTests
         }
     }
 
+    [Theory]
+    [InlineData("Shift+C")]
+    [InlineData("")]
+    public void RestoredCaptureClearsOptionalConflictsAndPersistsOnce(string capture)
+    {
+        var paths = AppPaths.CreateForRoot(Path.Combine(Path.GetTempPath(), "MyCapture-hotkey-conflict-" + Guid.NewGuid().ToString("N")));
+        var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
+        Hotkey.TryParse(capture, out Hotkey previous);
+        var source = new AppSettings();
+        source.Hotkeys.Capture = previous;
+        Hotkey duplicate = new(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
+        var optional = typeof(HotkeySettings).GetProperties().Where(property => property.Name != nameof(HotkeySettings.Capture)).ToArray();
+        foreach (var property in optional) property.SetValue(source.Hotkeys, duplicate);
+        store.Save(source);
+        AppSettings repaired = store.Load();
+        Assert.Equal(duplicate, repaired.Hotkeys.Capture);
+        Assert.All(optional, property => Assert.Equal(Hotkey.None, property.GetValue(repaired.Hotkeys)));
+        Assert.True(store.LastLoadMigratedUnsafeHotkeys);
+        Assert.Contains(MyCapture.Core.Localization.UiText.Get("Hotkey.Migrated"), store.LastLoadWarnings);
+        var next = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
+        AppSettings reloaded = next.Load();
+        Assert.Equal(duplicate, reloaded.Hotkeys.Capture);
+        Assert.All(optional, property => Assert.Equal(Hotkey.None, property.GetValue(reloaded.Hotkeys)));
+        Assert.False(next.LastLoadMigratedUnsafeHotkeys);
+    }
+
+    [Theory]
+    [InlineData("ko")]
+    [InlineData("en")]
+    public void CombinedRegistrationAndMigrationNoticeFitsNativeBalloon(string language)
+    {
+        using var scope = MyCapture.Core.Localization.UiText.UseLanguage(language);
+        var longestChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift | HotkeyModifiers.Windows, 0xFE);
+        string suffix = MyCapture.Core.Localization.UiText.Format("Text_646F2DBF1852", int.MaxValue);
+        string message = MyCapture.Core.Localization.UiText.Format("Text_114E1105C3EE", longestChord, suffix)
+            + "\n" + MyCapture.Core.Localization.UiText.Get("Hotkey.Migrated");
+        Assert.InRange(message.Length, 1, 255);
+        Assert.DoesNotContain("주세요", message);
+    }
+
     [Fact]
     public void WelcomeCompletion_SurvivesTwoFreshSettingsLoads()
     {

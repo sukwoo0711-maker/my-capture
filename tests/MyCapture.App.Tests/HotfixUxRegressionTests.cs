@@ -163,7 +163,7 @@ public sealed class HotfixUxRegressionTests
     });
 
     [Fact]
-    public void RenderedExportsReuseTimestampSuffixAndRecycleExpiredFiles() => Sta(() =>
+    public void RenderedExportsReuseTimestampSuffixAndDeleteExpiredFiles() => Sta(() =>
     {
         string root = Path.Combine(Path.GetTempPath(), "MyCapture-hotfix-exports-" + Guid.NewGuid().ToString("N"));
         DateTimeOffset now = new(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
@@ -179,6 +179,21 @@ public sealed class HotfixUxRegressionTests
         Assert.True(File.Exists(second));
         Assert.Equal(Pixels(Image()), Pixels(ImageCodec.TryLoad(second)!));
         Assert.Equal(Path.Combine(Path.GetTempPath(), "MyCapture", "DragExports"), new GalleryDragExportService().StagingRoot);
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CardShowsOnlyMarkedUserFacingErrors(bool userFacing) => Sta(() =>
+    {
+        var card = Card();
+        Exception error = new InvalidOperationException("private diagnostic detail");
+        if (userFacing) error = UserFacingError.Mark(new InvalidOperationException(UiText.Get("Text_D0FD12A01E4A")));
+        var run = typeof(QuickAccessWindow).GetMethod("RunAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        ((Task)run.Invoke(card, new object[] { (Func<Task<bool>>)(() => Task.FromException<bool>(error)), "QuickAccess.Copied" })!).GetAwaiter().GetResult();
+        TextBlock status = ((StackPanel)card.Content).Children.OfType<TextBlock>().Single();
+        Assert.Equal(UiText.Get(userFacing ? "Text_D0FD12A01E4A" : "QuickAccess.Failed"), status.Text);
+        card.Close();
     });
 
     [Fact]

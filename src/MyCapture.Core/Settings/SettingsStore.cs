@@ -341,7 +341,6 @@ public sealed class SettingsStore
         s.Hotkeys.UploadGitHubImage = Safe(s.Hotkeys.UploadGitHubImage);
         s.Hotkeys.ScrollingCapture = Safe(s.Hotkeys.ScrollingCapture);
         s.Hotkeys.DelayedCapture = Safe(s.Hotkeys.DelayedCapture);
-        if (migratedUnsafeHotkeys) warnings.Add(UiText.Get("Hotkey.Migrated"));
         // --- Hotkeys ---
         // A capture hotkey that cannot be pressed makes the app inert, so an
         // unassigned value is restored rather than respected.
@@ -349,7 +348,25 @@ public sealed class SettingsStore
         {
             s.Hotkeys.Capture = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
             warnings.Add(UiText.Get("Text_CFACAAC223E9"));
+            Hotkey WithoutCaptureConflict(Hotkey value)
+            {
+                if (value != s.Hotkeys.Capture) return value;
+                migratedUnsafeHotkeys = true;
+                return Hotkey.None;
+            }
+            s.Hotkeys.OpenLibrary = WithoutCaptureConflict(s.Hotkeys.OpenLibrary);
+            s.Hotkeys.PasteToScreen = WithoutCaptureConflict(s.Hotkeys.PasteToScreen);
+            s.Hotkeys.HideAllPins = WithoutCaptureConflict(s.Hotkeys.HideAllPins);
+            s.Hotkeys.ToggleClickThrough = WithoutCaptureConflict(s.Hotkeys.ToggleClickThrough);
+            s.Hotkeys.RepeatLastRegion = WithoutCaptureConflict(s.Hotkeys.RepeatLastRegion);
+            s.Hotkeys.CaptureWindow = WithoutCaptureConflict(s.Hotkeys.CaptureWindow);
+            s.Hotkeys.CaptureFullScreen = WithoutCaptureConflict(s.Hotkeys.CaptureFullScreen);
+            s.Hotkeys.RecordRegion = WithoutCaptureConflict(s.Hotkeys.RecordRegion);
+            s.Hotkeys.UploadGitHubImage = WithoutCaptureConflict(s.Hotkeys.UploadGitHubImage);
+            s.Hotkeys.ScrollingCapture = WithoutCaptureConflict(s.Hotkeys.ScrollingCapture);
+            s.Hotkeys.DelayedCapture = WithoutCaptureConflict(s.Hotkeys.DelayedCapture);
         }
+        if (migratedUnsafeHotkeys) warnings.Add(UiText.Get("Hotkey.Migrated"));
 
         if (!MyCapture.Core.GitHub.GitHubIssueImageUrl.TryNormalize(s.GitHub.IssueUrl, out string issueUrl))
         {
