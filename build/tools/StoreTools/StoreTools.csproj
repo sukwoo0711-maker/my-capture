@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Restore-only carrier for the pinned Windows SDK packaging tools (makeappx, makepri) used by
+    build\package-store.ps1. It is never built, and ExcludeAssets keeps the package's MSBuild
+    targets out of any project.
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" ExcludeAssets="all" />
+  </ItemGroup>
+</Project>

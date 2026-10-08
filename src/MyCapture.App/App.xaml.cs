@@ -72,7 +72,7 @@ public partial class App : Application
     private OcrResultPresenter? _ocrPresenter;
     private IPrivacyRedactionService? _privacyRedactionService;
     private SettingsWindow? _settingsWindow;
-    private StartupRegistrationService? _startupService;
+    private IStartupRegistration? _startupService;
     private SettingsApplyService? _settingsApply;
     private bool _pasteToScreenInFlight;
     private bool _gitHubUploadInFlight;
@@ -106,6 +106,11 @@ public partial class App : Application
             return;
         }
 
+        // A sign-in launch stays quiet. The Store build's startup task carries no command line,
+        // so its activation kind stands in for the Run key's --background switch.
+        bool quietLaunch = FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) >= 0 ||
+            MyCapture.Core.Platform.AppPackage.IsStartupTaskActivation();
+
         // Publish the signal before claiming ownership: a second launch can queue
         // activation even while the first process is loading a large library.
         _activationSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName);
@@ -116,7 +121,7 @@ public partial class App : Application
 
         if (!isFirstInstance)
         {
-            if (FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) < 0)
+            if (!quietLaunch)
             {
                 NativeMessageWindow.AllowResidentForegroundActivation();
                 _activationSignal.Set();
@@ -155,7 +160,7 @@ public partial class App : Application
         {
             _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
         }
-        else if (FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) < 0)
+        else if (!quietLaunch)
         {
             _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
         }
@@ -344,11 +349,16 @@ public partial class App : Application
 
         // Launch-at-login: reconcile a stale/moved Run entry to this build's path on
         // startup, best-effort. Never mutates the Run key on this machine during tests
-        // because the self-test path returns before InitializeShell runs.
-        _startupService = _services.GetRequiredService<StartupRegistrationService>();
+        // because the self-test path returns before InitializeShell runs. Windows owns the
+        // Store build's startup task, so there the setting mirrors the task instead.
+        _startupService = _services.GetRequiredService<IStartupRegistration>();
         try
         {
             _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
+            if (_startupService is PackagedStartupRegistration)
+            {
+                _settings.General.LaunchAtLogin = _startupService.IsEnabled();
+            }
         }
         catch (Exception ex)
         {
@@ -1991,12 +2001,20 @@ public partial class App : Application
             serviceProvider.GetRequiredService<NeuralOcrEngine>(),
             serviceProvider.GetRequiredService<ILogger<CaptureOcrService>>()));
 
-        // Launch-at-login through the per-user Run key. The registry adapter is the only
-        // Windows-specific piece; the service logic is fully testable against a fake store.
-        services.AddSingleton<IRunKeyStore, RegistryRunKeyStore>();
-        services.AddSingleton(serviceProvider => new StartupRegistrationService(
-            serviceProvider.GetRequiredService<IRunKeyStore>(),
-            ResolveExecutablePath()));
+        // Launch-at-login through the per-user Run key, or through the manifest startup task
+        // in the Microsoft Store build, whose Run key writes are virtualized and never run.
+        // The adapters are the only Windows-specific pieces; the logic is tested with fakes.
+        if (MyCapture.Core.Platform.AppPackage.IsPackaged)
+        {
+            services.AddSingleton<IStartupRegistration>(_ => new PackagedStartupRegistration(new WindowsStartupTask()));
+        }
+        else
+        {
+            services.AddSingleton<IRunKeyStore, RegistryRunKeyStore>();
+            services.AddSingleton<IStartupRegistration>(serviceProvider => new StartupRegistrationService(
+                serviceProvider.GetRequiredService<IRunKeyStore>(),
+                ResolveExecutablePath()));
+        }
 
         return services.BuildServiceProvider();
     }

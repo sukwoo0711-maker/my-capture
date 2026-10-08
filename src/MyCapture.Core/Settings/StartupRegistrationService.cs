@@ -53,7 +53,7 @@ public sealed record StartupApplyResult(bool Succeeded, bool DesiredEnabled, str
 /// settings file would claim a state the system does not have.
 /// </para>
 /// </remarks>
-public sealed class StartupRegistrationService
+public sealed class StartupRegistrationService : IStartupRegistration
 {
     /// <summary>The Run value name. Stable across versions so an upgrade updates in place.</summary>
     public const string RunValueName = "MyCapture";

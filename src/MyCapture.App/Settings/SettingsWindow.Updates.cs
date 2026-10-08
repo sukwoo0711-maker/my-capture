@@ -26,6 +26,17 @@ internal sealed partial class SettingsWindow
         UpdateVersionLabel.Text = MyCapture.Core.Platform.AppIdentity.Label + " · " + UpdateStrings.Current(CurrentUpdateVersion);
         UpdateCancel.Content = UpdateStrings.Cancel;
         AutomationProperties.SetName(UpdateCancel, UpdateStrings.Cancel);
+        if (MyCapture.Core.Platform.AppPackage.IsPackaged)
+        {
+            // The Store updates the packaged build. Its install folder has no installer
+            // manifest, so the GitHub path would treat it as portable and install a second,
+            // unpackaged copy beside it. Without a target, OnUpdateAction stays inert.
+            UpdateDescription.Text = UpdateStrings.StoreManaged;
+            UpdateDownloadProgress.Visibility = Visibility.Collapsed;
+            UpdateAction.Visibility = Visibility.Collapsed;
+            UpdateCancel.Visibility = Visibility.Collapsed;
+            return;
+        }
         try
         {
             _updateTarget = UpdateTarget.Resolve(AppContext.BaseDirectory, UpdateTarget.DefaultRoot);

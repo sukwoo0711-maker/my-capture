@@ -32,10 +32,17 @@ internal sealed class GalleryDragExportService
     internal GalleryDragExportService(string? stagingRoot = null, Func<DateTimeOffset>? clock = null)
     {
         _stagingRoot = stagingRoot is null
-            ? GalleryExportFiles.Child(GalleryExportFiles.Child(Path.GetTempPath(), "MyCapture"), "DragExports")
+            ? GalleryExportFiles.Child(GalleryExportFiles.Child(DefaultTemporaryRoot(), "MyCapture"), "DragExports")
             : Path.GetFullPath(stagingRoot);
         _clock = clock ?? (() => DateTimeOffset.Now);
     }
+
+    // Drop targets open these files from another process. The Store build stages them in its
+    // real TempState so a virtualized temp write can never hand Explorer a path it cannot see.
+    private static string DefaultTemporaryRoot() =>
+        MyCapture.Core.Platform.AppPackage.TryGetDataFolders(out _, out _, out string temporary)
+            ? temporary
+            : Path.GetTempPath();
 
     internal string StagingRoot => _stagingRoot;
 

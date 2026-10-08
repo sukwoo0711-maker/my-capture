@@ -8,16 +8,37 @@
 # 256x256 DIB entry alone is 256KB.
 #
 # Usage:  powershell -NoProfile -ExecutionPolicy Bypass -File build\generate-icons.ps1
+#
+# Store mode (MSIX logo assets for the Microsoft Store package):
+#   powershell -NoProfile -File build\generate-icons.ps1 -StoreAssetsDir <dir> [-StoreListingIconPath <file.png>]
+# Writes only the PNG logo set (StoreLogo, Square44x44Logo, Square150x150Logo), each size
+# drawn natively with the app.ico plate look, into <dir>, plus an optional 300x300
+# Partner Center listing icon. No .ico files are written and the Assets folder is not touched.
 
 param(
-    [string]$OutDir = (Join-Path $PSScriptRoot '..\src\MyCapture.App\Assets')
+    [string]$OutDir = (Join-Path $PSScriptRoot '..\src\MyCapture.App\Assets'),
+
+    # Store mode: when set, only the MSIX PNG logo set is written to this directory
+    # and no .ico file is produced.
+    [string]$StoreAssetsDir,
+
+    # Store mode only: also write a 300x300 plate PNG to exactly this file path
+    # (the Partner Center listing tile icon).
+    [string]$StoreListingIconPath
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
-$OutDir = [System.IO.Path]::GetFullPath($OutDir)
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+$StoreMode = -not [string]::IsNullOrWhiteSpace($StoreAssetsDir)
+if (-not $StoreMode -and -not [string]::IsNullOrWhiteSpace($StoreListingIconPath)) {
+    throw '-StoreListingIconPath requires -StoreAssetsDir.'
+}
+
+if (-not $StoreMode) {
+    $OutDir = [System.IO.Path]::GetFullPath($OutDir)
+    New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+}
 
 $dibSizes = @(16, 20, 24, 32, 40, 48, 64)
 $pngSizes = @(128, 256)
@@ -291,12 +312,137 @@ function Save-Ico {
         [System.IO.Path]::GetFileName($Path), (Get-Item $Path).Length, $Mode, $entries.Count)
 }
 
-Write-Host "Generating icons into $OutDir"
+function Resolve-OutputPath {
+    param([string]$Path)
+    # Resolve against the PowerShell location rather than the process working directory.
+    $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+}
 
-Save-Ico -Path (Join-Path $OutDir 'app.ico')            -Accent $AccentFocus   -Mode Plate
-Save-Ico -Path (Join-Path $OutDir 'tray-idle.ico')      -Accent $AccentFocus   -Mode Glyph
-Save-Ico -Path (Join-Path $OutDir 'tray-capturing.ico') -Accent $AccentAmber   -Mode Glyph
-Save-Ico -Path (Join-Path $OutDir 'tray-busy.ico')      -Accent $AccentEmerald -Mode Glyph
-Save-Ico -Path (Join-Path $OutDir 'tray-error.ico')     -Accent $AccentCoral   -Mode Glyph
+# Rounds half away from zero so 62.5 -> 63 and 187.5 -> 188 (Math.Round defaults to banker's rounding).
+function Get-RoundedSize {
+    param([double]$Value)
+    [int][Math]::Round($Value, [MidpointRounding]::AwayFromZero)
+}
+
+# Draws the app.ico plate at its native pixel size. When -CanvasSize is larger, the plate is
+# composited 1:1 (no resampling) at the centre of a transparent canvas, which gives the
+# padding that tile logos need. The icon is never resized from another bitmap.
+function Save-Png {
+    param(
+        [string]$Path,
+        [int]$Size,
+        [int]$CanvasSize = 0
+    )
+
+    $icon = $null
+    $canvas = $null
+    $g = $null
+    try {
+        $icon = Draw-Icon -Size $Size -Accent $AccentFocus -Mode Plate
+        $target = $icon
+        $detail = ''
+
+        if ($CanvasSize -gt $Size) {
+            $canvas = New-Object System.Drawing.Bitmap($CanvasSize, $CanvasSize, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $g = [System.Drawing.Graphics]::FromImage($canvas)
+            # SourceCopy onto the transparent canvas keeps the plate's alpha channel exact;
+            # SourceOver would re-blend anti-aliased edge pixels and shift their alpha by 1.
+            $g.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+            $g.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+            $g.Clear([System.Drawing.Color]::Transparent)
+
+            $offset = [int][Math]::Floor(($CanvasSize - $Size) / 2)
+            $g.DrawImage($icon, $offset, $offset, $Size, $Size)
+
+            $target = $canvas
+            $detail = "  plate {0}px centered" -f $Size
+        }
+
+        $dir = [System.IO.Path]::GetDirectoryName($Path)
+        if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        [System.IO.File]::WriteAllBytes($Path, [byte[]](Get-PngBytes -Bitmap $target))
+
+        Write-Host ("  {0,-56} {1,7:N0} bytes  {2,3}x{2,-3}{3}" -f `
+            [System.IO.Path]::GetFileName($Path), (Get-Item $Path).Length, $target.Width, $detail)
+    }
+    finally {
+        if ($g)      { $g.Dispose() }
+        if ($canvas) { $canvas.Dispose() }
+        if ($icon)   { $icon.Dispose() }
+    }
+}
+
+# Writes an identical-content copy of an already generated PNG (altform variants).
+function Copy-Png {
+    param([string]$Source, [string]$Path)
+
+    [System.IO.File]::Copy($Source, $Path, $true)
+    $info = Get-Item $Path
+    $dims = [System.Drawing.Image]::FromFile($Path)
+    try { $px = $dims.Width } finally { $dims.Dispose() }
+    Write-Host ("  {0,-56} {1,7:N0} bytes  {2,3}x{2,-3}  copy" -f $info.Name, $info.Length, $px)
+}
+
+function Save-StoreAssets {
+    param([string]$Dir, [string]$ListingPath)
+
+    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+
+    $scales = @(100, 125, 150, 200, 400)
+
+    # Plate fills the image.
+    foreach ($scale in $scales) {
+        $size = Get-RoundedSize (50.0 * $scale / 100)
+        Save-Png -Path (Join-Path $Dir "StoreLogo.scale-$scale.png") -Size $size
+    }
+
+    foreach ($scale in $scales) {
+        $size = Get-RoundedSize (44.0 * $scale / 100)
+        Save-Png -Path (Join-Path $Dir "Square44x44Logo.scale-$scale.png") -Size $size
+    }
+
+    # Taskbar / Start list sizes. The unplated and light-unplated forms reuse the plated
+    # image so the plate stays the brand mark on every system theme.
+    foreach ($n in @(16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256)) {
+        $plated = Join-Path $Dir "Square44x44Logo.targetsize-$n.png"
+        Save-Png -Path $plated -Size $n
+        Copy-Png -Source $plated -Path (Join-Path $Dir "Square44x44Logo.targetsize-${n}_altform-unplated.png")
+        Copy-Png -Source $plated -Path (Join-Path $Dir "Square44x44Logo.targetsize-${n}_altform-lightunplated.png")
+    }
+
+    # Medium tile: the plate is 60% of the tile and centred on a transparent canvas.
+    foreach ($scale in $scales) {
+        $canvasSize = Get-RoundedSize (150.0 * $scale / 100)
+        $plateSize = Get-RoundedSize (0.6 * $canvasSize)
+        Save-Png -Path (Join-Path $Dir "Square150x150Logo.scale-$scale.png") -Size $plateSize -CanvasSize $canvasSize
+    }
+
+    if ($ListingPath) {
+        Save-Png -Path $ListingPath -Size 300
+    }
+}
+
+if ($StoreMode) {
+    $StoreAssetsDir = Resolve-OutputPath $StoreAssetsDir
+    $listingPath = $null
+    if (-not [string]::IsNullOrWhiteSpace($StoreListingIconPath)) {
+        $listingPath = Resolve-OutputPath $StoreListingIconPath
+    }
+
+    Write-Host "Generating Microsoft Store assets into $StoreAssetsDir"
+    Save-StoreAssets -Dir $StoreAssetsDir -ListingPath $listingPath
+}
+else {
+    Write-Host "Generating icons into $OutDir"
+
+    Save-Ico -Path (Join-Path $OutDir 'app.ico')            -Accent $AccentFocus   -Mode Plate
+    Save-Ico -Path (Join-Path $OutDir 'tray-idle.ico')      -Accent $AccentFocus   -Mode Glyph
+    Save-Ico -Path (Join-Path $OutDir 'tray-capturing.ico') -Accent $AccentAmber   -Mode Glyph
+    Save-Ico -Path (Join-Path $OutDir 'tray-busy.ico')      -Accent $AccentEmerald -Mode Glyph
+    Save-Ico -Path (Join-Path $OutDir 'tray-error.ico')     -Accent $AccentCoral   -Mode Glyph
+}
 
 Write-Host "Done."

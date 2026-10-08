@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -3319,4 +3319,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Folder410.InvalidMove" xml:space="preserve"><value>Cannot move to this location.</value></data>
   <data name="Folder410.EmptyFolder" xml:space="preserve"><value>This folder has no captures.</value></data>
   <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>Drag captures here or select this folder for new captures.</value></data>
+  <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store keeps this copy of MyCapture up to date. Check for new versions in the Library of the Microsoft Store app.</value></data>
+  <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>MyCapture is turned off in the Windows startup apps. Turn it on in Settings &gt; Apps &gt; Startup.</value></data>
+  <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>An organization policy manages this startup setting.</value></data>
 </root>

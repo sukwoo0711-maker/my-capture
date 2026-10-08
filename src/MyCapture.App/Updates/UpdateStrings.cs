@@ -17,6 +17,7 @@ internal static class UpdateStrings
     internal static string Starting => UiText.Get("Text_5C2CD3EFE79B");
     internal static string Failed => UiText.Get("Text_B0F8B4B6D520");
     internal static string HelperFailed => UiText.Get("Text_42DA25F8F77F");
+    internal static string StoreManaged => UiText.Get("Update.StoreManaged");
     internal static string TargetDescription(UpdateTarget target) => Description + Environment.NewLine + Environment.NewLine +
         (target.IsPortableMigration
             ? UiText.Format("Text_195F0315EBCE", target.InstallRoot, Environment.NewLine)
