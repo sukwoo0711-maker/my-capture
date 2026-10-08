@@ -1,3 +1,5 @@
+using MyCapture.Core.Platform;
+
 namespace MyCapture.Core.Storage;
 
 /// <summary>
@@ -60,16 +62,21 @@ public sealed class AppPaths
     public string LogsRoot => Path.Combine(DataRoot, "logs");
 
     /// <summary>
-    /// Standard per-user locations.
+    /// Standard per-user locations, or the package's own folders for the Microsoft Store build.
     /// </summary>
     public static AppPaths CreateDefault()
     {
-        string appData = Environment.GetFolderPath(
-            Environment.SpecialFolder.ApplicationData,
-            Environment.SpecialFolderOption.Create);
-
         string pictures = Environment.GetFolderPath(
             Environment.SpecialFolder.MyPictures,
+            Environment.SpecialFolderOption.Create);
+
+        if (AppPackage.TryGetDataFolders(out string localState, out string localCache, out _))
+        {
+            return CreateForPackage(localState, localCache, pictures);
+        }
+
+        string appData = Environment.GetFolderPath(
+            Environment.SpecialFolder.ApplicationData,
             Environment.SpecialFolderOption.Create);
 
         // Fall back to the data root when the Pictures folder cannot be resolved,
@@ -91,6 +98,24 @@ public sealed class AppPaths
             capturesRoot: Path.Combine(dataRoot, "captures"),
             quickSaveRoot: Path.Combine(quickSaveBase, "Captures"),
             ocrModelsRoot: ocrModelsRoot);
+    }
+
+    /// <summary>
+    /// Microsoft Store build. New files under %APPDATA% would be virtualized into a package
+    /// store that Explorer, viewers and drop targets cannot open, so the library lives in the
+    /// package's real LocalState and downloaded models in its LocalCache. Quick-save exports
+    /// stay in Pictures, which is not virtualized.
+    /// </summary>
+    internal static AppPaths CreateForPackage(string localState, string localCache, string? pictures)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(localState);
+        ArgumentException.ThrowIfNullOrWhiteSpace(localCache);
+
+        return new AppPaths(
+            dataRoot: localState,
+            capturesRoot: Path.Combine(localState, "captures"),
+            quickSaveRoot: Path.Combine(string.IsNullOrEmpty(pictures) ? localState : pictures, "Captures"),
+            ocrModelsRoot: Path.Combine(localCache, "ocr-models"));
     }
 
     /// <summary>
