@@ -546,7 +546,8 @@ internal static class HotfixUxSelfTest
         var window = new AnnotationEditorWindow(new FrozenFrame(sample, rect, null, 0), rect, sample);
         owned.Add(window); window.Show(); Pump(150); window.Activate(); window.Editor.Focus();
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
-        ButtonBase Button(string key) => Ux402VisualMetrics.Descendants(window).OfType<ButtonBase>().Single(b => AutomationProperties.GetAcceleratorKey(b) == key);
+        ButtonBase Button(string key) => Ux402VisualMetrics.Descendants(window).OfType<ButtonBase>()
+            .Single(b => AutomationProperties.GetAcceleratorKey(b) == key && (key != "X" || b is ToggleButton));
         Click(hwnd, Button("A"));
         check("mouse rail click returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
         foreach (var (key, hint) in new[] { ((byte)0x52, "R"), ((byte)0x45, "E"), ((byte)0x58, "X") })
@@ -585,9 +586,11 @@ internal static class HotfixUxSelfTest
         check("native Done blocks invalid input and preserves text/error", window.IsVisible && window.Editor.PendingCrop is not null
             && widthInput.Text == "abc" && !string.IsNullOrEmpty(AutomationProperties.GetHelpText(widthInput)));
         SendKey(hwnd, 0x1B); Pump(50);
-        Click(hwnd, Button("X")); window.Editor.PendingCrop!.SetWidth(200);
+        var topCrop = Ux402VisualMetrics.Descendants(window).OfType<Button>()
+            .Single(b => AutomationProperties.GetAcceleratorKey(b) == "X");
+        Click(hwnd, topCrop); window.Editor.PendingCrop!.SetWidth(200);
         SendKey(hwnd, 0x0D); Pump(80);
-        check("native crop button click then Enter applies crop", window.Editor.PendingCrop is null && window.Editor.CreateCurrentImageSnapshot().CanvasWidth == 200);
+        check("native top crop button click then Enter applies crop", window.Editor.PendingCrop is null && window.Editor.CreateCurrentImageSnapshot().CanvasWidth == 200);
         Click(hwnd, Button("X")); SendKey(hwnd, 0x1B); Pump(50);
         check("native crop button click then Esc cancels", window.Editor.PendingCrop is null && window.IsVisible);
         window.Editor.Focus(); SendKey(hwnd, 0x09); Pump(50);
