@@ -56,7 +56,7 @@ public sealed record Hotkey
     public bool IsSafeGlobalShortcut => !IsAssigned ||
         (VirtualKey is >= 1 and <= 0xFE && VirtualKey is not (0x10 or 0x11 or 0x12 or 0x15 or 0x19 or 0x5B or 0x5C or >= 0xA0 and <= 0xA5 or 0xE5) &&
          (Modifiers & ~(HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift | HotkeyModifiers.Windows)) == 0 &&
-         (Modifiers != HotkeyModifiers.None || VirtualKey is >= 0x70 and <= 0x87 or 0x2C));
+         ((Modifiers & (HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Windows)) != 0 || VirtualKey is >= 0x70 and <= 0x87 or 0x2C));
 
     // Virtual-key codes used by the defaults and by the parser's friendly names.
     public const uint VkC = 0x43;

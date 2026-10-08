@@ -22,6 +22,7 @@ internal sealed class ShortcutHelpWindow : Window
         Width = onboarding ? 480 : 660; Height = onboarding ? 360 : 560;
         MinWidth = 420; MinHeight = 300;
         StandardWindowTheme.Apply(this);
+        SourceInitialized += (_, _) => CaptureWindowExclusion.DisableTransitions(this);
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         WindowStartupLocation = WindowStartupLocation.CenterScreen;

@@ -3211,7 +3211,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Help.Gif" xml:space="preserve"><value>GIF 내보내기</value></data>
   <data name="Hotkey.Twice" xml:space="preserve"><value>{0} 두 번</value></data>
   <data name="Hotkey.TrayRestore" xml:space="preserve"><value>트레이의 모든 화면 숨기기 후 다시 표시</value></data>
-  <data name="Hotkey.ModifierRequired" xml:space="preserve"><value>문자·숫자·이동 키는 Ctrl, Alt, Shift 또는 Win 키와 함께 지정하십시오. F1–F24와 PrintScreen은 단독으로 사용할 수 있습니다.</value></data>
+  <data name="Hotkey.ModifierRequired" xml:space="preserve"><value>문자·숫자·이동 키는 Ctrl, Alt 또는 Win과 함께 지정하십시오. F1–F24와 PrintScreen은 단독 또는 Shift 조합으로 지정할 수 있습니다.</value></data>
   <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>키보드 조작: 편집기에서 Alt+Q</value></data>
   <data name="Video.InvalidImage" xml:space="preserve"><value>이미지를 읽을 수 없습니다. 올바른 PNG, JPEG 또는 BMP 파일을 선택하십시오.</value></data>
+  <data name="Hotkey.MigratedTitle" xml:space="preserve"><value>단축키 변경</value></data>
+  <data name="Hotkey.Migrated" xml:space="preserve"><value>입력을 방해할 수 있는 이전 단축키를 해제했습니다. 캡처 단축키가 해당하는 경우 Ctrl+Shift+C로 복원했습니다. 설정에서 단축키를 확인할 수 있습니다.</value></data>
 </root>

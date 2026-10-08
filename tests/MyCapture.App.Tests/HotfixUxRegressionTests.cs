@@ -10,6 +10,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
+using MyCapture.App.Gallery;
+using System.Reflection;
 using MyCapture.App.Recording;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
@@ -126,7 +128,8 @@ public sealed class HotfixUxRegressionTests
         List<BitmapSource> outputs = [];
         var actions = new QuickAccessImageActions(() => Task.FromResult(current),
             image => { outputs.Add(image); return Task.FromResult(true); }, outputs.Add,
-            image => { outputs.Add(image); return Task.FromResult(true); });
+            image => { outputs.Add(image); return Task.FromResult(true); },
+            exportService: new GalleryDragExportService(Path.Combine(Path.GetTempPath(), "MyCapture-hotfix-drag-" + Guid.NewGuid().ToString("N"))));
         Assert.True(actions.CopyAsync().GetAwaiter().GetResult());
         actions.PinAsync().GetAwaiter().GetResult();
         Assert.True(actions.SaveAsync().GetAwaiter().GetResult());
@@ -134,6 +137,105 @@ public sealed class HotfixUxRegressionTests
         outputs.Add(ImageCodec.TryLoad(exported)!);
         Assert.Equal(4, outputs.Count);
         Assert.All(outputs, bitmap => Assert.Equal(Pixels(current), Pixels(bitmap)));
+    });
+
+    [Theory]
+    [InlineData(Key.A)] [InlineData(Key.D1)] [InlineData(Key.Space)]
+    [InlineData(Key.Enter)] [InlineData(Key.Left)]
+    public void RecorderRejectsShiftOnlyTyping(Key key) => Assert.Null(HotkeyRecorder.FromKey(key, ModifierKeys.Shift));
+
+    [Fact]
+    public void RecorderModifierAndCancelDoNotLeaveStaleValidation() => Sta(() =>
+    {
+        var recorder = new HotkeyRecorder { Text = "F8" };
+        TextBlock message = recorder.Children.OfType<TextBlock>().Single();
+        recorder.HandleRecordedKey(Key.LWin, ModifierKeys.Windows);
+        recorder.HandleRecordedKey(Key.RWin, ModifierKeys.Windows);
+        Assert.Empty(message.Text);
+        foreach (Key cancel in new[] { Key.Escape, Key.Tab })
+        {
+            recorder.HandleRecordedKey(Key.A, ModifierKeys.Shift);
+            Assert.NotEmpty(message.Text);
+            Assert.Equal(cancel != Key.Tab, recorder.HandleRecordedKey(cancel, ModifierKeys.None));
+            Assert.Empty(message.Text);
+            Assert.Equal("F8", recorder.Text);
+        }
+    });
+
+    [Fact]
+    public void RenderedExportsReuseTimestampSuffixAndRecycleExpiredFiles() => Sta(() =>
+    {
+        string root = Path.Combine(Path.GetTempPath(), "MyCapture-hotfix-exports-" + Guid.NewGuid().ToString("N"));
+        DateTimeOffset now = new(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
+        var exports = new GalleryDragExportService(root, () => now);
+        string first = exports.PrepareExport(Image());
+        string second = exports.PrepareExport(Image());
+        Assert.Equal(Path.Combine(root, "MyCapture_20261008_120000.png"), first);
+        Assert.Equal(Path.Combine(root, "MyCapture_20261008_120000-02.png"), second);
+        File.SetLastWriteTimeUtc(first, now.UtcDateTime.AddDays(-3));
+        File.SetLastWriteTimeUtc(second, now.UtcDateTime.AddDays(-1));
+        exports.CleanupExpiredBestEffort(now - GalleryDragExportService.DefaultRetention);
+        Assert.False(File.Exists(first));
+        Assert.True(File.Exists(second));
+        Assert.Equal(Pixels(Image()), Pixels(ImageCodec.TryLoad(second)!));
+        Assert.Equal(Path.Combine(Path.GetTempPath(), "MyCapture", "DragExports"), new GalleryDragExportService().StagingRoot);
+    });
+
+    [Fact]
+    public void CardPreviewUpdatesDimensions() => Sta(() =>
+    {
+        var card = Card();
+        card.UpdatePreview(new CroppedBitmap(Image(), new Int32Rect(0, 0, 16, 12)));
+        Assert.Equal("16 × 12", ((StackPanel)card.Content).Children.OfType<DockPanel>().Single().Children.OfType<TextBlock>().Single().Text);
+        card.Close();
+    });
+
+    [Fact]
+    public void CurrentImageSnapshotKeepsLiveTextAndUndoStateUntouched() => Sta(() =>
+    {
+        BitmapSource image = Image();
+        var region = new RectD(0, 0, 32, 32);
+        var editor = new AnnotationEditorControl(new FrozenFrame(image, region, null, 0), region, image, null, null);
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var controller = (AnnotationEditorController)typeof(AnnotationEditorControl).GetField("_controller", flags)!.GetValue(editor)!;
+        typeof(AnnotationEditorControl).GetMethod("PlaceTextBox", flags)!.Invoke(editor, [new PointD(2, 2)]);
+        var box = (TextBox)typeof(AnnotationEditorControl).GetField("_activeTextBox", flags)!.GetValue(editor)!;
+        box.Text = "Edited";
+        TextAnnotation live = controller.Document.Items.OfType<TextAnnotation>().Single();
+        live.ZIndex = 40;
+        RectD before = live.Rect;
+        AnnotationDocument snapshot = editor.CreateCurrentImageSnapshot();
+        TextAnnotation copy = snapshot.Items.OfType<TextAnnotation>().Single();
+        Assert.Equal("Edited", copy.Text);
+        Assert.Equal(0, copy.ZIndex);
+        Assert.Equal(string.Empty, live.Text);
+        Assert.Equal(40, live.ZIndex);
+        Assert.Equal(before, live.Rect);
+        Assert.True(controller.IsCreatingText);
+        Assert.Same(box, typeof(AnnotationEditorControl).GetField("_activeTextBox", flags)!.GetValue(editor));
+        typeof(AnnotationEditorControl).GetField("_redactionInProgress", flags)!.SetValue(editor, true);
+        Assert.Throws<InvalidOperationException>(() => { _ = editor.RenderCurrentImageAsync(); });
+        Assert.True(controller.IsCreatingText);
+        Assert.True(controller.PerformUndo());
+        Assert.Empty(controller.Document.Items);
+    });
+
+    [Fact]
+    public void IsolatedClipboardWriterReceivesExactPngAndBitmapWithoutSystemClipboard() => Sta(() =>
+    {
+        byte[]? png = null;
+        bool hasBitmap = false;
+        bool copied = ClipboardImageService.CopyImageAsync(Image(), null, data =>
+        {
+            hasBitmap = data.GetDataPresent(DataFormats.Bitmap);
+            using var bytes = new MemoryStream();
+            ((Stream)data.GetData("PNG")!).CopyTo(bytes);
+            png = bytes.ToArray();
+        }).GetAwaiter().GetResult();
+        Assert.True(copied && hasBitmap);
+        using var stream = new MemoryStream(png!);
+        BitmapSource bitmap = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
+        Assert.Equal(Pixels(Image()), Pixels(bitmap));
     });
 
     private static QuickAccessWindow Card() => new(Image(), () => Task.FromResult(true), () => { },

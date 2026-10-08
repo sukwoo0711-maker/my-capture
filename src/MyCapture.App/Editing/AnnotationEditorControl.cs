@@ -11,6 +11,7 @@ using System.Windows.Shapes;
 using System.Globalization;
 using Microsoft.Win32;
 using MyCapture.App.Ocr;
+using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Undo;
@@ -238,8 +239,7 @@ internal sealed class AnnotationEditorControl : Grid
     internal Task<BitmapSource> RenderCurrentImageAsync()
     {
         Dispatcher.VerifyAccess();
-        if (_activeTextBox is not null) CommitActiveText();
-        AnnotationDocument snapshot = CaptureCommitService.CreatePersistenceSnapshot(_controller.Document);
+        AnnotationDocument snapshot = CreateCurrentImageSnapshot();
         var assets = _imageStore.DecodedFor(snapshot.Items.OfType<ImageAnnotation>().Select(item => item.AssetFileName));
         BitmapSource bitmap = _surface.Frame.Bitmap;
         string? title = _showSourceWindowTitle ? _sourceWindowTitle : null;
@@ -778,6 +778,36 @@ internal sealed class AnnotationEditorControl : Grid
             VisualTreeHelper.GetDpi(this).PixelsPerDip);
     }
 
+    internal AnnotationDocument CreateCurrentImageSnapshot()
+    {
+        Dispatcher.VerifyAccess();
+        if (_redactionInProgress)
+            throw UserFacingError.Mark(new InvalidOperationException(UiText.Get("Text_D0FD12A01E4A")));
+        AnnotationDocument snapshot = CaptureCommitService.CreatePersistenceSnapshot(_controller.Document);
+        if (_activeTextBox is { } box && _editingText is { } editing
+            && snapshot.Items.OfType<TextAnnotation>().FirstOrDefault(item => item.Id == editing.Id) is { } text)
+        {
+            if (string.IsNullOrEmpty(box.Text)) snapshot.Remove(text);
+            else { text.Text = box.Text; text.Rect = MeasureCommittedTextRect(box, editing); }
+        }
+        snapshot.NormalizeZIndices();
+        return snapshot;
+    }
+
+    private RectD MeasureCommittedTextRect(TextBox box, TextAnnotation annotation)
+    {
+        // Shrink-wrap to the typed text in image-pixel space so a wide live box does not
+        // leave a huge empty plate after commit.
+        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        PointD imageOrigin = _surface.ToImagePoint(new Point(Canvas.GetLeft(box), Canvas.GetTop(box)));
+        FormattedText measured = MeasureLiveText(box);
+        double width = Math.Max(annotation.FontSize, (measured.Width + box.Padding.Left + box.Padding.Right + 8) / dipPerPixel);
+        double height = Math.Max(annotation.FontSize * 1.4, (measured.Height + box.Padding.Top + box.Padding.Bottom + 4) / dipPerPixel);
+        width = Math.Min(width, Math.Max(1, _canvasWidth - imageOrigin.X));
+        height = Math.Min(height, Math.Max(1, _canvasHeight - imageOrigin.Y));
+        return new RectD(imageOrigin.X, imageOrigin.Y, width, height);
+    }
+
     private void CommitActiveText()
     {
         if (_activeTextBox is null || _editingText is null)
@@ -793,16 +823,7 @@ internal sealed class AnnotationEditorControl : Grid
         box.TextChanged -= OnLiveTextBoxTextChanged;
         _overlayCanvas.Children.Remove(box);
 
-        // Shrink-wrap to the typed text in image-pixel space so a wide live box does not
-        // leave a huge empty plate after commit.
-        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        PointD imageOrigin = _surface.ToImagePoint(new Point(Canvas.GetLeft(box), Canvas.GetTop(box)));
-        FormattedText measured = MeasureLiveText(box);
-        double width = Math.Max(annotation.FontSize, (measured.Width + box.Padding.Left + box.Padding.Right + 8) / dipPerPixel);
-        double height = Math.Max(annotation.FontSize * 1.4, (measured.Height + box.Padding.Top + box.Padding.Bottom + 4) / dipPerPixel);
-        width = Math.Min(width, Math.Max(1, _canvasWidth - imageOrigin.X));
-        height = Math.Min(height, Math.Max(1, _canvasHeight - imageOrigin.Y));
-        RectD finalRect = new(imageOrigin.X, imageOrigin.Y, width, height);
+        RectD finalRect = MeasureCommittedTextRect(box, annotation);
         if (finalRect != annotation.Rect)
         {
             annotation.Rect = finalRect;

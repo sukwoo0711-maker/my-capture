@@ -1,5 +1,7 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Media.Imaging;
+using MyCapture.Platform.Imaging;
 using MyCapture.Core.Queue;
 
 namespace MyCapture.App.Gallery;
@@ -13,7 +15,8 @@ internal sealed class GalleryDragExportService
     internal const string PreferredDropEffectFormat = "Preferred DropEffect";
     internal static readonly TimeSpan DefaultRetention = TimeSpan.FromDays(2);
 
-    private readonly CaptureQueue _queue;
+    private readonly CaptureQueue? _queue;
+    private CaptureQueue Queue => _queue ?? throw new InvalidOperationException("This exporter has no capture queue.");
     private readonly string _stagingRoot;
     private readonly Func<DateTimeOffset> _clock;
 
@@ -21,8 +24,13 @@ internal sealed class GalleryDragExportService
         CaptureQueue queue,
         string? stagingRoot = null,
         Func<DateTimeOffset>? clock = null)
+        : this(stagingRoot, clock)
     {
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
+    }
+
+    internal GalleryDragExportService(string? stagingRoot = null, Func<DateTimeOffset>? clock = null)
+    {
         _stagingRoot = stagingRoot is null
             ? GalleryExportFiles.Child(GalleryExportFiles.Child(Path.GetTempPath(), "MyCapture"), "DragExports")
             : Path.GetFullPath(stagingRoot);
@@ -49,19 +57,25 @@ internal sealed class GalleryDragExportService
         return StageSource(ResolveSource(record), record.IsVideo, _clock(), CancellationToken.None);
     }
 
+    internal string PrepareExport(BitmapSource image, string? sourceUrl = null)
+    {
+        byte[] png = ImageCodec.EncodePng(image, sourceUrl);
+        return Stage(_clock(), false, null, path => GalleryExportFiles.Write(path, png));
+    }
+
     private string ResolveSource(CaptureRecord record)
     {
         string sourcePath;
         if (record.IsVideo)
         {
-            string rendered = _queue.GetFilePath(record, CaptureFileNames.VideoRendered);
+            string rendered = Queue.GetFilePath(record, CaptureFileNames.VideoRendered);
             sourcePath = File.Exists(rendered)
                 ? rendered
-                : _queue.GetFilePath(record, CaptureFileNames.VideoSource);
+                : Queue.GetFilePath(record, CaptureFileNames.VideoSource);
         }
         else
         {
-            sourcePath = _queue.GetFilePath(record, CaptureFileNames.Rendered);
+            sourcePath = Queue.GetFilePath(record, CaptureFileNames.Rendered);
         }
         return sourcePath;
     }
@@ -81,6 +95,12 @@ internal sealed class GalleryDragExportService
             return Path.GetFullPath(sourcePath);
         }
 
+        return Stage(timestamp, isVideo, uniqueSuffix,
+            path => GalleryExportFiles.Copy(sourcePath, path, cancellationToken));
+    }
+
+    private string Stage(DateTimeOffset timestamp, bool isVideo, string? uniqueSuffix, Action<string> write)
+    {
         if (uniqueSuffix is null) CleanupExpiredBestEffort(_clock() - DefaultRetention);
 
         string baseName = BuildBaseFileName(timestamp, isVideo ? CaptureMediaKind.Video : CaptureMediaKind.Image);
@@ -97,7 +117,7 @@ internal sealed class GalleryDragExportService
 
             try
             {
-                GalleryExportFiles.Copy(sourcePath, destination, cancellationToken);
+                write(destination);
                 return destination;
             }
             catch (IOException) when (File.Exists(destination))
@@ -137,8 +157,8 @@ internal sealed class GalleryDragExportService
         {
             var plans = records.Select(record =>
             {
-                if (_queue.Find(record.Id) != record) throw new InvalidOperationException("Capture is no longer available.");
-                leases.Add(_queue.AcquireEvictionLease(record.Id));
+                if (Queue.Find(record.Id) != record) throw new InvalidOperationException("Capture is no longer available.");
+                leases.Add(Queue.AcquireEvictionLease(record.Id));
                 return (Source: ResolveSource(record), Video: record.IsVideo, Timestamp: _clock());
             }).ToArray();
             string batchId = Guid.NewGuid().ToString("N");
@@ -183,7 +203,7 @@ internal sealed class GalleryDragExportService
     internal DragDropEffects BeginDrag(DependencyObject dragSource, CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(dragSource);
-        using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
+        using IDisposable evictionLease = Queue.AcquireEvictionLease(record.Id);
         string stagedPath = PrepareExport(record);
         DataObject data = CreateFileDropData(stagedPath);
         return DragDrop.DoDragDrop(dragSource, data, DragDropEffects.Copy);

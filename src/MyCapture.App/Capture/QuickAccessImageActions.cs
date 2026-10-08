@@ -1,6 +1,5 @@
-using System.IO;
 using System.Windows.Media.Imaging;
-using MyCapture.Platform.Imaging;
+using MyCapture.App.Gallery;
 
 namespace MyCapture.App.Capture;
 
@@ -10,7 +9,7 @@ internal sealed class QuickAccessImageActions(
     Func<BitmapSource, Task<bool>> copy,
     Action<BitmapSource> pin,
     Func<BitmapSource, Task<bool>> save,
-    string? sourceUrl = null)
+    string? sourceUrl = null, GalleryDragExportService? exportService = null)
 {
     internal async Task<bool> CopyAsync() => await copy(await render());
     internal async Task PinAsync() => pin(await render());
@@ -18,14 +17,6 @@ internal sealed class QuickAccessImageActions(
     internal async Task<string> ExportAsync()
     {
         BitmapSource image = await render();
-        return await Task.Run(() =>
-        {
-            string directory = Directory.CreateTempSubdirectory("MyCapture-QuickAccess-").FullName;
-            string path = Path.Combine(directory, "MyCapture.png");
-            byte[] png = ImageCodec.EncodePng(image, sourceUrl);
-            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
-            stream.Write(png);
-            return path;
-        });
+        return await Task.Run(() => (exportService ?? new GalleryDragExportService()).PrepareExport(image, sourceUrl));
     }
 }

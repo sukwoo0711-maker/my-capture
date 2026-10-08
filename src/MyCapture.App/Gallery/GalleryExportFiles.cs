@@ -8,7 +8,7 @@ namespace MyCapture.App.Gallery;
 /// <summary>Opens drag-export files without following links or allowing parent replacement.</summary>
 internal static class GalleryExportFiles
 {
-    private const uint ListDirectory = 0x1, ReadAttributes = 0x80, DeleteAccess = 0x10000;
+    private const uint ListDirectory = 0x1, ReadAttributes = 0x80;
     private const uint OpenExisting = 3, CreateNew = 1;
     private const uint OpenReparsePoint = 0x00200000, BackupSemantics = 0x02000000;
 
@@ -66,6 +66,25 @@ internal static class GalleryExportFiles
         }
     }
 
+    internal static void Write(string destination, byte[] bytes)
+    {
+        using DirectoryLease parents = DirectoryLease.Open(Path.GetDirectoryName(destination)!, create: true);
+        bool created = false;
+        try
+        {
+            using SafeFileHandle handle = OpenRegularFile(destination, 0x40000000, CreateNew);
+            created = true;
+            using var stream = new FileStream(handle, FileAccess.Write);
+            stream.Write(bytes);
+            stream.Flush(flushToDisk: true);
+        }
+        catch
+        {
+            if (created) DeleteBestEffort(destination);
+            throw;
+        }
+    }
+
     internal static void ValidateSource(string path)
     {
         using DirectoryLease parents = DirectoryLease.Open(Path.GetDirectoryName(path)!, create: false);
@@ -77,14 +96,15 @@ internal static class GalleryExportFiles
         try
         {
             using DirectoryLease parents = DirectoryLease.Open(Path.GetDirectoryName(path)!, create: false);
-            using SafeFileHandle file = OpenRegularFile(path, ReadAttributes | DeleteAccess, OpenExisting);
-            FileInformation info = Information(file);
-            long timestamp = ((long)info.LastWriteTimeHigh << 32) | info.LastWriteTimeLow;
-            if (cutoff is not null && DateTime.FromFileTimeUtc(timestamp) >= cutoff.Value.UtcDateTime) return;
-            // Delete the validated file object itself, not a path that could name a new object.
-            int delete = 1;
-            if (!SetFileInformationByHandle(file, 4 /* FileDispositionInfo */, ref delete, sizeof(int)))
-                throw NativeError("Could not remove a drag export.");
+            using (SafeFileHandle file = OpenRegularFile(path, ReadAttributes, OpenExisting))
+            {
+                FileInformation info = Information(file);
+                long timestamp = ((long)info.LastWriteTimeHigh << 32) | info.LastWriteTimeLow;
+                if (cutoff is not null && DateTime.FromFileTimeUtc(timestamp) >= cutoff.Value.UtcDateTime) return;
+            }
+            // Parent leases remain pinned throughout the shell operation. A linked file is
+            // rejected above. RECYCLEONDELETE forbids permanent deletion on unsupported media.
+            GalleryExportRecycleBin.Recycle(Path.GetFullPath(path));
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -206,8 +226,4 @@ internal static class GalleryExportFiles
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetFileInformationByHandle(SafeFileHandle file, out FileInformation information);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetFileInformationByHandle(SafeFileHandle file, int informationClass,
-        ref int information, int size);
 }

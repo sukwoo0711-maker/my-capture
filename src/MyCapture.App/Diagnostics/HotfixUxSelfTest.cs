@@ -13,6 +13,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
+using MyCapture.App.Gallery;
 using MyCapture.App.Pinning;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
@@ -33,12 +34,12 @@ internal static class HotfixUxSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-hotfix-ux";
 
-    internal static int Run()
+    internal static int Run(string output)
     {
-        string output = Directory.CreateTempSubdirectory("MyCapture-hotfix-ux-").FullName;
+        Directory.CreateDirectory(output);
         Console.WriteLine("HOTFIX_UX_OUTPUT=" + output);
         var report = new StringBuilder($"MyCapture 4.0.1 real WPF/native QA\nUTC: {DateTimeOffset.UtcNow:O}\n");
-        report.AppendLine("Production windows and command paths, driven in-process; no synthetic desktop keyboard/mouse input. Fresh profile; no user settings/queue or startup registry access.");
+        report.AppendLine("Production windows and command paths, driven in-process; no synthetic desktop keyboard/mouse input. Fresh profile; no user settings/queue or startup registry access. Clipboard writer is isolated to an in-memory sink; the user clipboard is untouched.");
         List<Window> owned = [];
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
         AppTheme? oldTheme = ThemeService.IsAppliedForTest;
@@ -124,13 +125,22 @@ internal static class HotfixUxSelfTest
                 ImageCodec.SavePng(baseline.Bitmap, Path.Combine(output, $"display{display}-baseline.png"));
                 foreach (string mode in new[] { "region", "window", "full" })
                 {
-                    var receipt = Card(sample); owned.Add(receipt); receipt.IsKept = true; receipt.Show(); Pump(70); receipt.PlaceOnMonitor(monitor); Pump(80);
+                    var receipt = Card(sample, excludeFromCapture: false); owned.Add(receipt); receipt.IsKept = true; receipt.Show(); Pump(70); receipt.PlaceOnMonitor(monitor); Pump(80);
                     var (left, top, right, bottom) = WindowStyleFacade.GetWindowBounds(new WindowInteropHelper(receipt).Handle);
                     RectD cardBounds = new(left, top, right - left, bottom - top);
+                    BitmapSource before = engine.CaptureRegion(cardBounds, false);
+                    BitmapSource behind = ScreenCaptureEngine.Crop(baseline,
+                        new RectD(cardBounds.X - monitor.Bounds.X, cardBounds.Y - monitor.Bounds.Y, cardBounds.Width, cardBounds.Height));
+                    ImageCodec.SavePng(before, Path.Combine(output, $"display{display}-{mode}-before-card.png"));
+                    Check($"display{display}/{mode}: exclusion disabled, card visible in capture before dismissal", !Pixels(before).SequenceEqual(Pixels(behind)));
+                    IntPtr receiptHandle = new WindowInteropHelper(receipt).Handle;
+                    var dismissal = Stopwatch.StartNew();
                     receipt.DismissForCapture(coordinator.NoteForegroundDismissal);
+                    Check($"display{display}/{mode}: dismissal closes HWND before capture", !receipt.IsVisible && !IsWindow(receiptHandle));
                     Task settle = coordinator.WaitForPresentationDismissalAsync();
                     Check($"display{display}/{mode}: production dismissal requests compositor settle", !settle.IsCompleted);
                     Await(settle);
+                    Check($"display{display}/{mode}: presentation wait completed after {dismissal.Elapsed.TotalMilliseconds:0.0}ms", dismissal.Elapsed.TotalMilliseconds >= 95);
                     BitmapSource captured = mode switch
                     {
                         "region" => engine.CaptureRegion(cardBounds, false),
@@ -156,17 +166,30 @@ internal static class HotfixUxSelfTest
             var settings = new AppSettings();
             AppPaths paths = AppPaths.CreateForRoot(Path.Combine(output, "profile"));
             var saver = new PinImageSaveService(() => settings, () => paths, NullLogger<PinImageSaveService>.Instance);
-            string? saved = null; BitmapSource? pinned = null;
-            var actions = new QuickAccessImageActions(edit.RenderCurrentImageAsync, bitmap => ClipboardImageService.CopyImageAsync(bitmap),
+            var updatedCard = Card(sample); owned.Add(updatedCard); updatedCard.IsKept = true; updatedCard.Show(); Pump(70);
+            Render(updatedCard, Path.Combine(output, "preview-before-update.png"), 96);
+            updatedCard.UpdatePreview(expected); updatedCard.UpdateLayout();
+            Render(updatedCard, Path.Combine(output, "preview-after-update.png"), 96);
+            Check("preview dimensions reflect edited crop", ((StackPanel)updatedCard.Content).Children.OfType<DockPanel>().Single()
+                .Children.OfType<TextBlock>().Single().Text == "230 × 130");
+            updatedCard.Close();
+            string? saved = null; BitmapSource? pinned = null; byte[]? clipboardPng = null;
+            var actions = new QuickAccessImageActions(edit.RenderCurrentImageAsync,
+                bitmap => ClipboardImageService.CopyImageAsync(bitmap, null, data =>
+                {
+                    using var sink = new MemoryStream();
+                    ((Stream)data.GetData("PNG")!).CopyTo(sink);
+                    clipboardPng = sink.ToArray();
+                }),
                 bitmap =>
                 {
                     pinned = bitmap;
                     var pin = new PinWindow(PinContent.FromImage(bitmap), new PinViewState(bitmap.PixelWidth, bitmap.PixelHeight, 1, 1, 0.1), 100, 100, () => settings.Pin);
                     owned.Add(pin); pin.Show(); Pump(100); Render(pin, Path.Combine(output, "edited-pin-window.png"), 96); pin.Close();
-                }, async bitmap => { PinSaveResult save = await saver.QuickSaveAsync(bitmap); saved = save.Path; return save.Status == PinSaveStatus.Saved; });
-            Check("edited receipt copies to actual Windows clipboard", Await(actions.CopyAsync()));
-            object? clipboard = Clipboard.GetData("PNG");
-            using var png = clipboard switch { MemoryStream stream => stream, byte[] bytes => new MemoryStream(bytes), _ => throw new InvalidDataException("Clipboard PNG is missing.") };
+                }, async bitmap => { PinSaveResult save = await saver.QuickSaveAsync(bitmap); saved = save.Path; return save.Status == PinSaveStatus.Saved; },
+                exportService: new GalleryDragExportService(Path.Combine(output, "DragExports")));
+            Check("edited receipt copy uses production PNG payload with isolated clipboard sink", Await(actions.CopyAsync()) && clipboardPng is not null);
+            using var png = new MemoryStream(clipboardPng!);
             BitmapSource copied = BitmapDecoder.Create(png, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
             ImageCodec.SavePng(copied, Path.Combine(output, "edited-clipboard.png"));
             Await(actions.PinAsync()); Check("edited receipt saves PNG", Await(actions.SaveAsync()));
@@ -208,11 +231,11 @@ internal static class HotfixUxSelfTest
                 {
                     close.Stop();
                     var dialog = Application.Current.Windows.OfType<ThemedDialog>().Single(w => w.IsVisible);
-                    visible = dialog.ShowInTaskbar && dialog.Owner is null && dialog.Topmost && dialog.IsActive;
+                    visible = dialog.ShowInTaskbar && dialog.Owner is null && !dialog.Topmost && dialog.IsActive;
                     Render(dialog, Path.Combine(output, "ownerless-localized-error.png"), 96); dialog.Close();
                 };
                 close.Start(); ThemedDialog.Error(null, "MyCapture QA", changed);
-                Check("ownerless error is active, topmost and taskbar visible", visible);
+                Check("ownerless error is active and taskbar visible, without persistent Topmost", visible);
                 string? fallback = null;
                 ThemedDialog.ShowUnhandled(changed, _ => throw new InvalidOperationException("injected theme failure"), (text, _) => fallback = text);
                 Check("theme failure reaches MessageBox fallback boundary with localized body", fallback == changed.Message);
@@ -232,7 +255,7 @@ internal static class HotfixUxSelfTest
         return result;
     }
 
-    private static QuickAccessWindow Card(BitmapSource image) => new(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"));
+    private static QuickAccessWindow Card(BitmapSource image, bool excludeFromCapture = true) => new(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"), excludeFromCapture);
     private static Exception Failure(Action action)
     {
         try { action(); } catch (Exception error) { return error; }
@@ -270,4 +293,5 @@ internal static class HotfixUxSelfTest
     }
     private static T Await<T>(Task<T> task) { Await((Task)task); return task.GetAwaiter().GetResult(); }
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(IntPtr hwnd);
 }

@@ -27,12 +27,14 @@ internal static class ClipboardImageService
     /// Copies <paramref name="bitmap"/> and embeds the capture's source page URL in the PNG
     /// payload, so a paste — or a later F9 upload — keeps the capture's origin.
     /// </summary>
-    internal static async Task<bool> CopyImageAsync(BitmapSource bitmap, string? sourceUrl)
+    internal static Task<bool> CopyImageAsync(BitmapSource bitmap, string? sourceUrl) => CopyImageAsync(bitmap, sourceUrl, null);
+
+    internal static async Task<bool> CopyImageAsync(BitmapSource bitmap, string? sourceUrl, Action<IDataObject>? writeData)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
 
         BitmapSource frozen = Freeze(bitmap);
-        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen, sourceUrl)).ConfigureAwait(false);
+        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen, sourceUrl, writeData)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -62,7 +64,7 @@ internal static class ClipboardImageService
         }
     }
 
-    private static async Task<bool> CopyFrozenAsync(BitmapSource frozen, string? sourceUrl = null)
+    private static async Task<bool> CopyFrozenAsync(BitmapSource frozen, string? sourceUrl, Action<IDataObject>? writeData)
     {
         byte[] pngBytes;
         try
@@ -83,7 +85,7 @@ internal static class ClipboardImageService
             // can synchronously sleep, so run the single operation on an isolated STA instead
             // of stacking another retry loop on the UI dispatcher.
             return await StaThreadTask.RunAsync(
-                () => TrySetOnce(frozen, pngBytes),
+                () => TrySetOnce(frozen, pngBytes, writeData),
                 "MyCapture clipboard writer").ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is COMException or ExternalException)
@@ -106,7 +108,7 @@ internal static class ClipboardImageService
         }
     }
 
-    private static bool TrySetOnce(BitmapSource frozen, byte[] pngBytes)
+    private static bool TrySetOnce(BitmapSource frozen, byte[] pngBytes, Action<IDataObject>? writeData)
     {
         try
         {
@@ -117,7 +119,8 @@ internal static class ClipboardImageService
 
             // copy:true materialises the delayed formats before this method and the stream
             // return, so clipboard content remains after MyCapture exits.
-            Clipboard.SetDataObject(data, copy: true);
+            if (writeData is null) Clipboard.SetDataObject(data, copy: true);
+            else writeData(data);
             return true;
         }
         catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen)

@@ -72,6 +72,9 @@ internal sealed class ThemedDialog : Window
         return button;
     }
 
+    internal static bool IsSuitableOwner(Window? window) => window?.IsVisible == true
+        && window is not (Capture.QuickAccessWindow or Capture.CaptureOverlayWindow or Capture.CountdownWindow or Pinning.PinWindow);
+
     internal static string RecoveryMessage(Exception error) => UserFacingError.GetMessage(error)
         ?? (error is Recording.VideoLayerLimitException ? error.Message : null)
         ?? UiText.Get(error switch
@@ -114,10 +117,16 @@ internal sealed class ThemedDialog : Window
         string? details = null, Action? recovery = null, string? recoveryLabel = null)
     {
         var dialog = new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel);
-        owner = owner?.IsVisible == true ? owner : Application.Current?.Windows.OfType<Window>()
-            .FirstOrDefault(window => window.IsActive && window.IsVisible && window is not Capture.QuickAccessWindow);
+        owner = IsSuitableOwner(owner) ? owner : Application.Current?.Windows.OfType<Window>()
+            .FirstOrDefault(window => window.IsActive && IsSuitableOwner(window));
         if (owner is not null) { dialog.Owner = owner; dialog.ShowInTaskbar = false; }
-        else { dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen; dialog.Topmost = true; }
+        else
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            // Raise an error initially, then return to normal window ordering.
+            dialog.Topmost = icon == MessageBoxImage.Error;
+            dialog.ContentRendered += (_, _) => { dialog.Activate(); dialog.Topmost = false; };
+        }
         dialog.ShowDialog();
         return dialog.Result;
     }

@@ -94,7 +94,7 @@ public sealed class HotkeyRecorder : StackPanel
         }
         Hotkey? chord = FromKey(key, modifiers);
         if (chord is not null) Accept(chord);
-        else if (key is not (Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift))
+        else if (key is not (Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin))
             _conflict.Text = UiText.Get("Hotkey.ModifierRequired");
         return true;
     }
@@ -108,7 +108,7 @@ public sealed class HotkeyRecorder : StackPanel
         CheckConflict();
     }
 
-    private void Stop() { if (Active == this) Active = null; Refresh(); }
+    private void Stop() { if (Active == this) Active = null; Refresh(); CheckConflict(); }
 
     private void OnErrorsChanged(object? sender, DataErrorsChangedEventArgs e) => CheckConflict();
 

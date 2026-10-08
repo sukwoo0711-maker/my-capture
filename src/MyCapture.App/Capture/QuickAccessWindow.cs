@@ -30,6 +30,7 @@ internal sealed class QuickAccessWindow : Window
     private readonly List<Control> _keyboardTargets = [];
     private bool _keyboardAccess;
     private readonly Image _preview;
+    private readonly TextBlock _dimensions = new() { VerticalAlignment = VerticalAlignment.Center };
     internal static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(8);
     internal static DispatcherOperation Schedule(Dispatcher dispatcher, Action show) =>
         dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, show);
@@ -37,7 +38,7 @@ internal sealed class QuickAccessWindow : Window
     internal string TimeoutStateForTest => $"enabled={_timer.IsEnabled}; elapsed={_elapsed.TotalSeconds:0.000}; keep={IsKept}; keyboard={_keyboardInteracting}/{IsKeyboardFocusWithin}; busy={_busy}";
 
     internal QuickAccessWindow(BitmapSource bitmap, Func<Task<bool>> copy, Action edit,
-        Func<Task> pin, Func<Task<bool>> save, Action library, Func<Task<string>> export)
+        Func<Task> pin, Func<Task<bool>> save, Action library, Func<Task<string>> export, bool excludeFromCapture = true)
     {
         Title = UiText.Get("QuickAccess.Title");
         Width = 340;
@@ -57,7 +58,8 @@ internal sealed class QuickAccessWindow : Window
         AutomationProperties.SetName(_keep, UiText.Get("QuickAccess.Keep"));
         DockPanel.SetDock(_keep, Dock.Right);
         header.Children.Add(_keep);
-        header.Children.Add(new TextBlock { Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight}", VerticalAlignment = VerticalAlignment.Center });
+        _dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight}";
+        header.Children.Add(_dimensions);
         panel.Children.Add(header);
         var preview = _preview = new Image { Source = bitmap, Height = 150, Stretch = Stretch.Uniform,
             ToolTip = UiText.Get("QuickAccess.Drag"), Margin = new Thickness(0, 0, 0, 12) };
@@ -100,7 +102,7 @@ internal sealed class QuickAccessWindow : Window
             // Native close fades can outlive the HWND and appear in the next screenshot.
             CaptureWindowExclusion.DisableTransitions(this);
             HwndSource.FromHwnd(hwnd)?.AddHook(NoActivateHook);
-            CaptureWindowExclusion.TryApply(this);
+            if (excludeFromCapture) CaptureWindowExclusion.TryApply(this);
         };
         Loaded += (_, _) =>
         {
@@ -144,7 +146,11 @@ internal sealed class QuickAccessWindow : Window
         return MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
     }
 
-    internal void UpdatePreview(BitmapSource image) => _preview.Source = image;
+    internal void UpdatePreview(BitmapSource image)
+    {
+        _preview.Source = image;
+        _dimensions.Text = $"{image.PixelWidth} × {image.PixelHeight}";
+    }
 
     internal void DismissForCapture(Action foregroundDismissed)
     {

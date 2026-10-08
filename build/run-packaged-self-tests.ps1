@@ -48,7 +48,8 @@ $tests = @(
     [pscustomobject]@{ Name = 'settings'; Switch = '--selftest-settings'; Report = 'settings-selftest-report.txt' },
     [pscustomobject]@{ Name = 'ocr'; Switch = '--selftest-ocr'; Report = 'ocr-selftest-report.txt' },
     [pscustomobject]@{ Name = 'recording'; Switch = '--selftest-recording'; Report = 'recording-selftest-report.txt' },
-    [pscustomobject]@{ Name = 'video-editor'; Switch = '--selftest-video-editor'; Report = 'video-editor-selftest-report.txt' }
+    [pscustomobject]@{ Name = 'video-editor'; Switch = '--selftest-video-editor'; Report = 'video-editor-selftest-report.txt' },
+    [pscustomobject]@{ Name = 'hotfix-ux'; Switch = '--selftest-hotfix-ux'; Report = 'hotfix-ux-report.txt' }
 )
 
 $failures = New-Object 'System.Collections.Generic.List[string]'
@@ -63,7 +64,7 @@ else {
 }
 
 try {
-    # This runner is the seven-test release gate, not the optional 50-iteration soak.
+    # This runner is the eight-test release gate, not the optional 50-iteration soak.
     [Environment]::SetEnvironmentVariable(
         $iterationsVariable,
         '1',

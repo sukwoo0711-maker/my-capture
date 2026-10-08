@@ -373,15 +373,20 @@ public partial class App : Application
 
             _tray.ShowBalloon(
                 UiText.Get("Text_5564316AA7EB"),
-                UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix),
+                UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix)
+                    + (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys ? "\n" + UiText.Get("Hotkey.Migrated") : string.Empty),
                 TrayBalloonKind.Warning);
         }
         else
         {
             try
             {
-                _readyNotification.Notify(true, _settings.Hotkeys.Capture,
-                    (title, message) => _tray.ShowBalloon(title, message, TrayBalloonKind.Information, playSound: false));
+                if (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys)
+                    _tray.ShowBalloon(UiText.Get("Hotkey.MigratedTitle"), UiText.Get("Hotkey.Migrated"),
+                        TrayBalloonKind.Information, playSound: false);
+                else
+                    _readyNotification.Notify(true, _settings.Hotkeys.Capture,
+                        (title, message) => _tray.ShowBalloon(title, message, TrayBalloonKind.Information, playSound: false));
             }
             catch (Exception ex)
             {
@@ -1143,7 +1148,7 @@ public partial class App : Application
                 bitmap => ClipboardImageService.CopyImageAsync(bitmap, record.SourcePageUrl),
                 bitmap => _pins?.PinImage(bitmap),
                 async bitmap => (await saver.QuickSaveAsync(bitmap, record.SourcePageUrl)).Status == PinSaveStatus.Saved,
-                record.SourcePageUrl);
+                record.SourcePageUrl, new GalleryDragExportService(_queue));
             card = new QuickAccessWindow(image,
                 actions.CopyAsync,
                 () =>
@@ -1718,10 +1723,11 @@ public partial class App : Application
 
     private bool TryRunSelfTest(string[] args)
     {
-        if (FindSwitch(args, HotfixUxSelfTest.CommandLineSwitch) >= 0)
+        int hotfixIndex = FindSwitch(args, HotfixUxSelfTest.CommandLineSwitch);
+        if (hotfixIndex >= 0)
         {
-            Shutdown(HotfixUxSelfTest.Run());
-            return true;
+            string output = OutputDirectoryAfter(args, hotfixIndex, "MyCapture-hotfix-ux");
+            return RunSelfTest(output, "hotfix-ux-report.txt", HotfixUxSelfTest.Run);
         }
         int capturePerformanceIndex = FindSwitch(args, CapturePerformanceSelfTest.CommandLineSwitch);
         if (capturePerformanceIndex >= 0)

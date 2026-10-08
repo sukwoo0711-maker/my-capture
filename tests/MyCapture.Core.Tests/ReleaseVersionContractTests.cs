@@ -159,7 +159,7 @@ public sealed class ReleaseVersionContractTests
     }
 
     [Fact]
-    public void PackagedSelfTestRunner_RequiresExitZeroAndAnExactPassFromAllSevenTests()
+    public void PackagedSelfTestRunner_RequiresExitZeroAndAnExactPassFromAllEightTests()
     {
         string runner = Read("build/run-packaged-self-tests.ps1");
 
@@ -172,6 +172,7 @@ public sealed class ReleaseVersionContractTests
             "--selftest-ocr",
             "--selftest-recording",
             "--selftest-video-editor",
+            "--selftest-hotfix-ux",
         ];
 
         foreach (string commandLineSwitch in switches)
