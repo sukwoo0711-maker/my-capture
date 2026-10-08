@@ -12,7 +12,7 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 - **웹 사이트**: `https://github.com/sukwoo0711-maker/my-capture`
 - **저작권**: `Copyright (c) 2026 MyCapture contributors`
 - **앱 타일 아이콘(선택)**: 패키징 결과물 `StoreListingIcon-300.png`
-- **스크린샷**: `docs/guides/shots/`의 라이브러리, 주석 편집기, 영상 편집기, 설정 화면
+- **스크린샷**: `--selftest-store-shots`로 만든 언어별 10장 (만드는 방법은 [`README.md`](README.md#store-스크린샷-만들기))
 - **시스템 요구 사항**: Windows 11 버전 21H2(빌드 22000) 이상, x64
 
 ## 한국어 (ko-KR)
@@ -77,4 +77,4 @@ Partner Center의 Submission options > Restricted capabilities에 영어로 입�
 
 ## 인증 참고 사항 (Notes for certification)
 
-> MyCapture runs in the notification area after launch and opens its library window. Default shortcuts: Ctrl+Shift+C region capture, Ctrl+Shift+X start or stop region recording, Ctrl+Shift+Z open the library, F3 pin clipboard content. All features work offline except optional OCR model downloads and the optional GitHub image attachment, which requires the user's own GitHub account. Launch at sign-in is off by default and can be turned on in Settings > General. Updates are delivered only through the Microsoft Store; the in-app GitHub updater is disabled in the Store package.
+> MyCapture runs in the notification area after launch and opens its library window. Default shortcuts: Ctrl+Shift+C region capture, Ctrl+Shift+X start or stop region recording, Ctrl+Shift+Z open the library, F3 pin clipboard content. Capture, editing, recording and OCR run on the PC. The only automatic network access is downloading missing OCR model files from modelscope.cn at startup; the optional GitHub image attachment requires the user's own GitHub account. Launch at sign-in is off by default and can be turned on in Settings > General. Updates are delivered only through the Microsoft Store; the in-app GitHub updater is disabled in the Store package.

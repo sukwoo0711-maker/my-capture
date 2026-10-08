@@ -1777,6 +1777,14 @@ public partial class App : Application
             Shutdown(Ux402SelfTest.Run());
             return true;
         }
+        int storeShotsIndex = FindSwitch(args, StoreScreenshotSelfTest.CommandLineSwitch);
+        if (storeShotsIndex >= 0)
+        {
+            string output = OutputDirectoryAfter(args, storeShotsIndex, "MyCapture-store-shots-" + Guid.NewGuid().ToString("N"));
+            string? language = storeShotsIndex + 2 < args.Length ? args[storeShotsIndex + 2] : null;
+            return RunSelfTest(output, "store-screenshots-report.txt", directory => StoreScreenshotSelfTest.Run(directory, language));
+        }
+
         int uxIndex = FindSwitch(args, UxReviewSelfTest.CommandLineSwitch);
         if (uxIndex >= 0)
         {
