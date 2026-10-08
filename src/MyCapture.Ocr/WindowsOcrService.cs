@@ -162,7 +162,7 @@ public sealed class WindowsOcrService : IOcrService
             }
 
             stopwatch.Stop();
-            return BuildResult(best, stopwatch.Elapsed);
+            return BuildResult(best, stopwatch.Elapsed, source.PixelWidth, source.PixelHeight);
         }
         catch (OperationCanceledException)
         {
@@ -317,6 +317,10 @@ public sealed class WindowsOcrService : IOcrService
         int originalHeight)
     {
         var lines = new List<OcrLine>(recognized.Lines.Count);
+        // Language merging must use the recognizer's reading axes. Map only the winning
+        // result back to the source image after row/word merging has finished.
+        int readingWidth = rotation is 90 or 270 ? originalHeight : originalWidth;
+        int readingHeight = rotation is 90 or 270 ? originalWidth : originalHeight;
 
         foreach (RecognizedLine line in recognized.Lines)
         {
@@ -334,7 +338,7 @@ public sealed class WindowsOcrService : IOcrService
 
                 OcrRect bounds = word.Bounds
                     .Unscale(scale)
-                    .MapFromClockwiseRotation(rotation, originalWidth, originalHeight);
+                    .MapFromClockwiseRotation(0, readingWidth, readingHeight);
                 words.Add(new OcrWord(wordText, bounds));
                 wordTexts.Add(wordText);
                 lineBounds = OcrRect.Union(lineBounds, bounds);
@@ -354,13 +358,27 @@ public sealed class WindowsOcrService : IOcrService
         return lines;
     }
 
-    private static OcrResult BuildResult(OrientationResult recognized, TimeSpan elapsed)
+    private static OcrResult BuildResult(OrientationResult recognized, TimeSpan elapsed,
+        int originalWidth, int originalHeight)
     {
         string blockText = OcrPlanner.BuildBlockText(recognized.Lines.Select(line => line.Text));
+        if (blockText.Length == 0) return OcrResult.NoText(recognized.LanguageTag, elapsed);
 
-        return blockText.Length == 0
-            ? OcrResult.NoText(recognized.LanguageTag, elapsed)
-            : OcrResult.Success(blockText, recognized.LanguageTag, recognized.Lines, elapsed);
+        var orientation = new OcrReadingOrientation(recognized.Rotation, originalWidth, originalHeight);
+        var lines = recognized.Lines.Select(line =>
+        {
+            // Clipped word boxes still need source axes even when one dimension is zero.
+            OcrWord[] words = line.Words.Select(word => word with
+            {
+                Bounds = word.Bounds.MapFromClockwiseRotation(recognized.Rotation, originalWidth, originalHeight),
+            }).ToArray();
+            return line with
+            {
+                Words = words,
+                Bounds = words.Select(word => word.Bounds).Aggregate(default(OcrRect), OcrRect.Union),
+            };
+        }).ToArray();
+        return OcrResult.Success(blockText, recognized.LanguageTag, lines, elapsed, orientation);
     }
 
     private static BitmapSource Rotate(BitmapSource source, int clockwiseDegrees)

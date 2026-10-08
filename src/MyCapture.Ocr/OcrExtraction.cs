@@ -32,7 +32,7 @@ public sealed record OcrExtraction(OcrTable Table, OcrCode Code,
         string.Join(joinLines ? " " : "\n", paragraph.Lines)));
 }
 
-/// <summary>All geometry remains in original image pixels, including partial extractions.</summary>
+/// <summary>Reconstructs in reading axes; returned geometry always uses original image pixels.</summary>
 public static class OcrExtractionAnalyzer
 {
     public static OcrExtraction Analyze(OcrResult result, OcrRect? selection = null)
@@ -55,17 +55,18 @@ public static class OcrExtractionAnalyzer
                 null, 1, []), paragraphs, false);
         }
 
+        OcrReadingOrientation orientation = result.ReadingOrientation;
         OcrWord[] words = selection is null ? allWords : allWords
             .Where(word => OcrGeometry.IsValid(selection.Value)
                 && OcrGeometry.Contains(selection.Value, word.Bounds.X + word.Bounds.Width / 2,
                     word.Bounds.Y + word.Bounds.Height / 2)).ToArray();
-        var rows = OcrLayoutRow.Build(words);
+        var rows = OcrLayoutRow.Build(ReadingWords(words, orientation));
         var table = OcrTableReconstructor.Build(rows);
         var codeRows = SelectCodeRows(rows, table);
         IReadOnlyList<OcrLayoutRow> referenceRows = codeRows;
         if (selection is not null && codeRows.Count > 0)
         {
-            var allRows = OcrLayoutRow.Build(allWords);
+            var allRows = OcrLayoutRow.Build(ReadingWords(allWords, orientation));
             var fullCodeRows = SelectCodeRows(allRows, OcrTableReconstructor.Build(allRows));
             // A selection inside the original code block retains its indentation and language
             // context. A selection in a different region does not inherit that code's language.
@@ -74,8 +75,34 @@ public static class OcrExtractionAnalyzer
                 referenceRows = fullCodeRows;
         }
         double origin = referenceRows.Count == 0 ? 0 : referenceRows.Min(row => row.Bounds.X);
-        return new(table, OcrCodeReconstructor.Build(codeRows, origin, referenceRows),
-            OcrTextReconstructor.Build(rows), true);
+        return ToOriginal(new(table, OcrCodeReconstructor.Build(codeRows, origin, referenceRows),
+            OcrTextReconstructor.Build(rows), true), orientation);
+    }
+
+    private static IEnumerable<OcrWord> ReadingWords(IEnumerable<OcrWord> words,
+        OcrReadingOrientation orientation) => orientation.IsRotated
+            ? words.Select(word => word with { Bounds = orientation.ToReading(word.Bounds) }) : words;
+
+    private static OcrExtraction ToOriginal(OcrExtraction extraction, OcrReadingOrientation orientation)
+    {
+        if (!orientation.IsRotated) return extraction;
+        return extraction with
+        {
+            Table = extraction.Table with
+            {
+                Rows = extraction.Table.Rows.Select(row => new OcrTableRow(row.Cells.Select(cell => cell with
+                {
+                    Bounds = orientation.ToOriginal(cell.Bounds),
+                    Region = orientation.ToOriginal(cell.Region),
+                }).ToArray())).ToArray(),
+            },
+            Code = extraction.Code with
+            {
+                Regions = extraction.Code.Regions.Select(orientation.ToOriginal).ToArray(),
+            },
+            Paragraphs = extraction.Paragraphs.Select(paragraph => paragraph with
+                { Bounds = orientation.ToOriginal(paragraph.Bounds) }).ToArray(),
+        };
     }
 
     private static List<OcrLayoutRow> SelectCodeRows(List<OcrLayoutRow> rows, OcrTable table)

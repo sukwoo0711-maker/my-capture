@@ -8,7 +8,8 @@ internal static class OcrTableReconstructor
     {
         if (source.Count == 0) return OcrTable.Empty;
         double height = OcrGeometry.Median(source.Select(row => row.Bounds.Height));
-        double gap = Math.Max(height * .7, OcrGeometry.CharacterWidth(source.SelectMany(row => row.Words)) * 2.5);
+        double characterWidth = OcrGeometry.CharacterWidth(source.SelectMany(row => row.Words));
+        double gap = Math.Max(height * .7, characterWidth * 2.5);
         List<List<OcrLayoutRow>> groups = [[]];
         foreach (OcrLayoutRow row in source)
         {
@@ -20,7 +21,7 @@ internal static class OcrTableReconstructor
             .ThenByDescending(rows => rows.Count).First();
         int first = group.FindIndex(row => row.Runs(gap).Count >= 2);
         int last = group.FindLastIndex(row => row.Runs(gap).Count >= 2);
-        // A table may have an empty cell in an intermediate row. Do not collapse its columns.
+        // Infer columns from the dense core before considering sparse boundary rows.
         var rows = first >= 0 && last > first ? group.Skip(first).Take(last - first + 1).ToList()
             : source.ToList();
         var runs = rows.Select(row => row.Runs(gap)).ToList();
@@ -29,6 +30,18 @@ internal static class OcrTableReconstructor
             .Select(grouping => grouping.Key).FirstOrDefault(1);
         var reference = runs.FirstOrDefault(row => row.Count == count) ?? runs[0];
         count = reference.Count;
+        if (first >= 0 && last > first)
+        {
+            double pitch = OcrGeometry.Median(rows.Skip(1).Select((row, index) =>
+                CenterY(row.Bounds) - CenterY(rows[index].Bounds)), height * 1.5);
+            double tolerance = Math.Max(height * .5, characterWidth);
+            while (first > 0 && IsSparseBoundaryRow(group[first - 1], group[first],
+                       reference, gap, pitch, tolerance)) first--;
+            while (last + 1 < group.Count && IsSparseBoundaryRow(group[last + 1], group[last],
+                       reference, gap, pitch, tolerance)) last++;
+            rows = group.Skip(first).Take(last - first + 1).ToList();
+            runs = rows.Select(row => row.Runs(gap)).ToList();
+        }
         var cells = new List<OcrTableCell[]>();
         foreach (var row in runs)
         {
@@ -78,6 +91,31 @@ internal static class OcrTableReconstructor
                 && rows[0].Bounds.Height > OcrGeometry.Median(rows.Skip(1).Select(row => row.Bounds.Height)) * 1.15));
         return new(cells.Select(row => new OcrTableRow(row)).ToArray(), columns, header);
     }
+
+    private static bool IsSparseBoundaryRow(OcrLayoutRow row, OcrLayoutRow adjacent,
+        IReadOnlyList<OcrLayoutRun> reference, double gap, double pitch, double tolerance)
+    {
+        double spacing = Math.Abs(CenterY(row.Bounds) - CenterY(adjacent.Bounds));
+        if (Math.Abs(spacing - pitch) > Math.Max(pitch * .25, tolerance)) return false;
+        var runs = row.Runs(gap);
+        if (runs.Count != 1) return false;
+        OcrRect bounds = runs[0].Bounds;
+        for (int column = 0; column < reference.Count; column++)
+        {
+            OcrRect anchor = reference[column].Bounds;
+            // Alignment alone would admit a spanning title that starts at the first column.
+            // The candidate must also fit one column's lane, allowing normal glyph variation.
+            double left = column == 0 ? double.NegativeInfinity
+                : (reference[column - 1].Bounds.Right + anchor.X) / 2;
+            double right = column == reference.Count - 1 ? double.PositiveInfinity
+                : (anchor.Right + reference[column + 1].Bounds.X) / 2;
+            if (Distance(bounds, anchor) <= tolerance
+                && bounds.X >= left - tolerance && bounds.Right <= right + tolerance) return true;
+        }
+        return false;
+    }
+
+    private static double CenterY(OcrRect bounds) => bounds.Y + bounds.Height / 2;
 
     private static double Distance(OcrRect value, OcrRect anchor) =>
         Math.Min(Math.Abs(value.X - anchor.X), Math.Min(Math.Abs(value.Right - anchor.Right),
