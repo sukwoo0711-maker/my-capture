@@ -25,9 +25,12 @@ public sealed class Ux410PolishTests
     [Theory]
     [InlineData("ko")]
     [InlineData("en")]
-    public void WelcomeUsesFixedChromeAndAccessibleKeycaps(string language) => StaTestHost.Run(() =>
+    public void HelpAndWelcomeUseFixedChromeAndAccessibleKeycaps(string language) => StaTestHost.Run(() =>
     {
         using var locale = UiText.UseLanguage(language);
+        var help = new ShortcutHelpWindow();
+        Assert.Equal(ResizeMode.NoResize, help.ResizeMode);
+        help.Close();
         var welcome = new ShortcutHelpWindow(true);
         Assert.Equal(ResizeMode.NoResize, welcome.ResizeMode);
         var panel = ((DockPanel)welcome.Content).Children.OfType<StackPanel>().Single();

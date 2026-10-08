@@ -23,7 +23,7 @@ internal sealed class ShortcutHelpWindow : Window
         Title = UiText.Get(onboarding ? "Help.Welcome" : "Help.Title");
         Width = onboarding ? 480 : 660; Height = onboarding ? 410 : 600;
         MinWidth = 420; MinHeight = 300;
-        if (onboarding) ResizeMode = ResizeMode.NoResize;
+        ResizeMode = ResizeMode.NoResize;
         StandardWindowTheme.Apply(this);
         SourceInitialized += (_, _) => CaptureWindowExclusion.DisableTransitions(this);
         SetResourceReference(BackgroundProperty, "Surface.Base");
