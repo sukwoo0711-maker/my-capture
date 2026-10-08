@@ -48,6 +48,20 @@ public sealed class Capture410AppTests
     });
 
     [Fact]
+    public void FractionalEdgeDragShowsThePixelDimensionsThatEnterActuallyProduces() => StaTestHost.Run(() =>
+    {
+        var editor = Editor();
+        Assert.True(editor.TryBeginEdgeCrop(new PointD(160, 120)));
+        Assert.True(editor.ContinueEdgeCrop(new PointD(100.2, 80.2), false));
+        editor.PendingCrop!.End();
+        Assert.Equal("101", Field<TextBox>(editor, "_cropWidth").Text);
+        Assert.Equal("81", Field<TextBox>(editor, "_cropHeight").Text);
+        Assert.True(editor.HandleShortcut(Key.Enter, ModifierKeys.None));
+        Assert.Equal(101, editor.DisplayedBitmap.PixelWidth);
+        Assert.Equal(81, editor.DisplayedBitmap.PixelHeight);
+    });
+
+    [Fact]
     public void EdgeCropRetainsRatioNumericEnterUndoRedoAndX() => StaTestHost.Run(() =>
     {
         var editor = Editor();

@@ -386,8 +386,9 @@ internal sealed class AnnotationEditorControl : Grid
         }
         if (_cropWidth is null) return;
         _syncingInspector = true;
-        if (!_dirtyCropInputs.Contains(_cropWidth)) _cropWidth.Text = Math.Round(_crop.Region.Width).ToString(CultureInfo.InvariantCulture);
-        if (!_dirtyCropInputs.Contains(_cropHeight)) _cropHeight.Text = Math.Round(_crop.Region.Height).ToString(CultureInfo.InvariantCulture);
+        RectD pixels = _crop.Region.ToPixelBounds();
+        if (!_dirtyCropInputs.Contains(_cropWidth)) _cropWidth.Text = pixels.Width.ToString(CultureInfo.InvariantCulture);
+        if (!_dirtyCropInputs.Contains(_cropHeight)) _cropHeight.Text = pixels.Height.ToString(CultureInfo.InvariantCulture);
         _syncingInspector = false;
     }
 
