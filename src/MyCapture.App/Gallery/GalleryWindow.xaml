@@ -27,6 +27,22 @@
             <Setter Property="Margin" Value="4,0,0,0" />
         </Style>
 
+        <ContextMenu x:Key="Gallery.FolderContextMenu" x:Shared="False" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="{loc:Text Folder410.NewFolder}" CommandParameter="{Binding}"
+                      InputGestureText="Ctrl+Shift+N" Click="OnNewFolderClick" />
+            <MenuItem Header="{loc:Text Folder410.Rename}" CommandParameter="{Binding}"
+                      IsEnabled="{Binding IsFolder}" InputGestureText="F2" Click="OnRenameFolderClick" />
+            <MenuItem Header="{loc:Text Folder410.MoveFolder}" CommandParameter="{Binding}"
+                      IsEnabled="{Binding IsFolder}" InputGestureText="M" Click="OnMoveFolderClick" />
+            <Separator />
+            <MenuItem Header="{loc:Text Folder410.FolderExport}" CommandParameter="{Binding}" Click="OnExportFolderClick" />
+            <MenuItem Header="{loc:Text Folder410.ZipExport}" CommandParameter="{Binding}" Click="OnExportFolderZipClick" />
+            <Separator />
+            <MenuItem Header="{loc:Text Folder410.Delete}" CommandParameter="{Binding}"
+                      InputGestureText="Delete" Foreground="{DynamicResource State.DangerHover}"
+                      Click="OnDeleteFolderClick" />
+        </ContextMenu>
+
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
             <!-- A 244px tile plus 6px margins occupies a 256px track, matching
                  GalleryRowBuilder.TileTrackWidth. Four cards now fill the default window
@@ -627,14 +643,16 @@
                         <TextBlock Text="{loc:Text Workspace.Library}" FontWeight="SemiBold" Margin="4,6,0,8" />
                         <TextBlock Text="{Binding ResultCountText}" Foreground="{DynamicResource Text.Muted}"
                                    TextWrapping="Wrap" Margin="4,0,0,12" AutomationProperties.LiveSetting="Polite" />
+                        <UniformGrid Columns="2" Margin="0,0,0,4">
                         <RadioButton x:Name="AllLibraryFilter" Content="{loc:Text Workspace.All}" Tag="All"
-                                     GroupName="LibraryFilter" IsChecked="True" Checked="OnLibraryFilterChanged" Margin="0,0,0,10" />
+                                     GroupName="LibraryFilter" IsChecked="True" Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
                         <RadioButton Content="{loc:Text Text_302BAE127938}" Tag="Images" GroupName="LibraryFilter"
-                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,10" />
+                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
                         <RadioButton Content="{loc:Text Text_C11734267E6B}" Tag="Videos" GroupName="LibraryFilter"
-                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,10" />
+                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
                         <RadioButton Content="{loc:Text Workspace.Pinned}" Tag="Pinned" GroupName="LibraryFilter"
-                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,12" />
+                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
+                        </UniformGrid>
                         <Button x:Name="NewFolderButton" Content="{loc:Text Folder410.NewFolder}" Style="{StaticResource Button.Secondary}"
                                 Click="OnNewFolderClick" ToolTip="Ctrl+Shift+N" Margin="0,0,0,8" />
                         <Button Content="{loc:Text Folder410.TreeAll}" Style="{StaticResource Button.GhostCompact}"
@@ -643,42 +661,30 @@
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
                         <TextBlock Text="{loc:Text Folder410.RetentionHint}" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource Text.Muted}" FontSize="12" />
-                        <TextBlock Text="{loc:Text Workspace.RetentionHint}" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,6,0,0" />
+                                   Foreground="{DynamicResource Text.Muted}" FontSize="12" ToolTip="{loc:Text Workspace.RetentionHint}" />
                     </StackPanel>
                     <TreeView x:Name="FolderTree" ItemsSource="{Binding FolderNodes}" Background="Transparent" BorderThickness="0"
+                              Foreground="{DynamicResource Text.Primary}"
                               AutomationProperties.Name="{loc:Text Folder410.Title}" ItemTemplate="{StaticResource Gallery.FolderNodeTemplate}"
                               ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"
                               VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling"
                               SelectedItemChanged="OnFolderSelected" PreviewKeyDown="OnFolderTreeKeyDown"
                               PreviewMouseLeftButtonDown="OnFolderPointerDown" PreviewMouseMove="OnFolderPointerMove"
                               AllowDrop="True" DragOver="OnFolderDragOver" Drop="OnFolderDrop">
+                        <TreeView.Resources>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="{Binding Color, Source={StaticResource Accent.Default}}" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="{Binding Color, Source={StaticResource Text.OnAccent}}" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="{Binding Color, Source={StaticResource Accent.Subtle}}" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="{Binding Color, Source={StaticResource Text.Primary}}" />
+                        </TreeView.Resources>
                         <TreeView.ItemContainerStyle>
                             <Style TargetType="TreeViewItem">
                                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
                                 <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
                                 <Setter Property="AutomationProperties.Name" Value="{Binding Caption}" />
                                 <Setter Property="MinHeight" Value="30" />
-                                <Setter Property="ContextMenu">
-                                    <Setter.Value>
-                                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                            <MenuItem Header="{loc:Text Folder410.NewFolder}" CommandParameter="{Binding}"
-                                                      InputGestureText="Ctrl+Shift+N" Click="OnNewFolderClick" />
-                                            <MenuItem Header="{loc:Text Folder410.Rename}" CommandParameter="{Binding}"
-                                                      IsEnabled="{Binding IsFolder}" InputGestureText="F2" Click="OnRenameFolderClick" />
-                                            <MenuItem Header="{loc:Text Folder410.MoveFolder}" CommandParameter="{Binding}"
-                                                      IsEnabled="{Binding IsFolder}" InputGestureText="M" Click="OnMoveFolderClick" />
-                                            <Separator />
-                                            <MenuItem Header="{loc:Text Folder410.FolderExport}" CommandParameter="{Binding}" Click="OnExportFolderClick" />
-                                            <MenuItem Header="{loc:Text Folder410.ZipExport}" CommandParameter="{Binding}" Click="OnExportFolderZipClick" />
-                                            <Separator />
-                                            <MenuItem Header="{loc:Text Folder410.Delete}" CommandParameter="{Binding}"
-                                                      InputGestureText="Delete" Foreground="{DynamicResource State.DangerHover}"
-                                                      Click="OnDeleteFolderClick" />
-                                        </ContextMenu>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                                <Setter Property="ContextMenu" Value="{StaticResource Gallery.FolderContextMenu}" />
                             </Style>
                         </TreeView.ItemContainerStyle>
                     </TreeView>

@@ -57,7 +57,7 @@ internal sealed partial class GalleryWindow
         {
             try { await _queue.SetNewCaptureFolderAsync(scope.FolderId, true); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or AggregateException)
-            { ShowStatus(UiText.Get("Folder410.OperationFailed")); }
+            { LibraryActionStatus.Text = UiText.Get("Folder410.OperationFailed"); }
             _viewModel.Refresh();
         }
     }
@@ -73,7 +73,7 @@ internal sealed partial class GalleryWindow
             await _queue.SetNewCaptureFolderAsync(enabled ? _viewModel.SelectedScope.FolderId : null, enabled);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or AggregateException)
-        { ShowStatus(UiText.Get("Folder410.OperationFailed")); }
+        { LibraryActionStatus.Text = UiText.Get("Folder410.OperationFailed"); }
         finally { _viewModel.Refresh(); }
     }
 
@@ -148,7 +148,7 @@ internal sealed partial class GalleryWindow
             var dialog = GalleryFolderEditDialog.ForMove(_queue, null, _viewModel.SelectedScope.FolderId, async destination =>
             {
                 int moved = await _queue.MoveCapturesAsync(ids, destination);
-                ShowStatus(UiText.Format("Folder410.MoveDone", moved));
+                LibraryActionStatus.Text = UiText.Format("Folder410.MoveDone", moved);
             });
             dialog.Owner = this;
             if (dialog.ShowDialog() == true) RaiseCaptureChanged();
@@ -163,7 +163,7 @@ internal sealed partial class GalleryWindow
         if (scope.FolderId is { } staleId && _queue.FindFolder(staleId) is null)
         {
             _viewModel.Refresh();
-            ShowStatus(UiText.Get("Folder410.OperationFailed"));
+            LibraryActionStatus.Text = UiText.Get("Folder410.OperationFailed");
             return;
         }
         Guid[] captureIds = _queue.RecordsInScope(scope).Select(record => record.Id).ToArray();
@@ -187,12 +187,12 @@ internal sealed partial class GalleryWindow
                 result.RemovedCaptures, result.RemainingCaptures);
             if (result.CleanupPendingCount > 0)
                 status += "\n" + UiText.Format("LibrarySelection_CleanupPending", result.CleanupPendingCount);
-            ShowStatus(status);
+            LibraryActionStatus.Text = status;
         }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Could not complete folder deletion");
-            ShowStatus(UiText.Get("Folder410.OperationFailed"));
+            LibraryActionStatus.Text = UiText.Get("Folder410.OperationFailed");
         }
         finally
         {
@@ -227,7 +227,7 @@ internal sealed partial class GalleryWindow
         {
             _log.LogWarning(ex, "The selected folder export scope is no longer available");
             _viewModel.Refresh();
-            ShowStatus(UiText.Get("Folder410.ExportFailed"));
+            LibraryActionStatus.Text = UiText.Get("Folder410.ExportFailed");
             return;
         }
         if (plan.RootNames.Count == 0 || plan.Entries.Any(entry => !EnsureRecordReady(entry.Record.Id))) return;
@@ -251,24 +251,24 @@ internal sealed partial class GalleryWindow
         using var cancellation = new CancellationTokenSource();
         _archiveCancellation = cancellation;
         ArchiveExportButton.IsEnabled = false; ArchiveCancelButton.Visibility = Visibility.Visible;
-        ShowStatus(UiText.Get("Folder410.ExportPreparing"));
+        LibraryActionStatus.Text = UiText.Get("Folder410.ExportPreparing");
         try
         {
             using var prepared = await exporter.PrepareAsync(plan, cancellation.Token);
             var progress = new Progress<int>(done =>
             {
                 if (ReferenceEquals(_archiveCancellation, cancellation))
-                    ShowStatus(UiText.Format("Folder410.ExportProgress", done, plan.Entries.Count));
+                    LibraryActionStatus.Text = UiText.Format("Folder410.ExportProgress", done, plan.Entries.Count);
             });
             if (zip) await GalleryFolderExportService.ExportZipAsync(prepared, destination, progress, cancellation.Token);
             else await GalleryFolderExportService.ExportDirectoryAsync(prepared, destination, progress, cancellation.Token);
-            ShowStatus(UiText.Format("Folder410.ExportDone", plan.Entries.Count));
+            LibraryActionStatus.Text = UiText.Format("Folder410.ExportDone", plan.Entries.Count);
         }
-        catch (OperationCanceledException) { ShowStatus(UiText.Get("Library.Archive.Cancelled")); }
+        catch (OperationCanceledException) { LibraryActionStatus.Text = UiText.Get("Library.Archive.Cancelled"); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             _log.LogWarning(ex, "Could not export a virtual folder tree");
-            ShowStatus(UiText.Get("Folder410.ExportFailed"));
+            LibraryActionStatus.Text = UiText.Get("Folder410.ExportFailed");
         }
         finally
         {
@@ -315,11 +315,11 @@ internal sealed partial class GalleryWindow
             if (node.FolderId is { } id)
                 data.SetData(GalleryFolderDragPayload.Format, new GalleryFolderDragPayload(_folderDragOwner, [], id), false);
             prepared.MarkPublished();
-            _ = DragDrop.DoDragDrop(this, data, DragDropEffects.Copy | DragDropEffects.Move);
+            _ = DragDrop.DoDragDrop(this, data, DragDropEffects.Copy);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        { ShowStatus(UiText.Get("Folder410.ExportFailed")); }
+        { LibraryActionStatus.Text = UiText.Get("Folder410.ExportFailed"); }
         finally { _folderDragCancellation = null; _folderDragNode = null; }
     }
 
@@ -358,9 +358,11 @@ internal sealed partial class GalleryWindow
         return true;
     }
 
+    // The OLE payload exposes rendered copies only. Internal drops move metadata
+    // explicitly, while negotiating Copy keeps external receivers from consuming staging.
     private void OnFolderDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = TryFolderDrop(e, out _, out _) ? DragDropEffects.Move : DragDropEffects.None;
+        e.Effects = TryFolderDrop(e, out _, out _) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
@@ -368,7 +370,7 @@ internal sealed partial class GalleryWindow
     {
         bool allowed = TryFolderDrop(e, out var payload, out var target);
         e.Handled = true;
-        e.Effects = allowed ? DragDropEffects.Move : DragDropEffects.None;
+        e.Effects = allowed ? DragDropEffects.Copy : DragDropEffects.None;
         if (!allowed || payload is null) return;
         _foldersBusy = true;
         try
@@ -377,13 +379,13 @@ internal sealed partial class GalleryWindow
             else
             {
                 int moved = await _queue.MoveCapturesAsync(payload.Captures, target.FolderId);
-                ShowStatus(UiText.Format("Folder410.MoveDone", moved));
+                LibraryActionStatus.Text = UiText.Format("Folder410.MoveDone", moved);
             }
             RaiseCaptureChanged();
         }
-        catch (ArgumentException) { ShowStatus(UiText.Get("Folder410.InvalidMove")); }
+        catch (ArgumentException) { LibraryActionStatus.Text = UiText.Get("Folder410.InvalidMove"); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or AggregateException)
-        { ShowStatus(UiText.Get("Folder410.OperationFailed")); }
+        { LibraryActionStatus.Text = UiText.Get("Folder410.OperationFailed"); }
         finally { _foldersBusy = false; _viewModel.Refresh(); }
     }
 }

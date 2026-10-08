@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -419,7 +419,7 @@ internal sealed partial class GalleryWindow : Window
             DataObject data = GalleryDragExportService.CreateFileDropData(prepared.Paths);
             data.SetData(GalleryFolderDragPayload.Format,
                 new GalleryFolderDragPayload(_folderDragOwner, records.Select(record => record.Id).ToArray(), null), false);
-            DragDrop.DoDragDrop(this, data, DragDropEffects.Copy | DragDropEffects.Move);
+            DragDrop.DoDragDrop(this, data, DragDropEffects.Copy);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
