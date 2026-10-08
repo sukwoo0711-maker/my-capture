@@ -131,7 +131,8 @@ public static class AppSettingsClone
 
     private static GeneralSettings Clone(GeneralSettings s) => new()
     {
-        ShowQuickAccess = s.ShowQuickAccess,
+        AfterCapture = s.AfterCapture,
+        ShowShortcutHints = s.ShowShortcutHints,
         LaunchAtLogin = s.LaunchAtLogin,
         NotifyOnQuickSave = s.NotifyOnQuickSave,
         PlayCaptureSound = s.PlayCaptureSound,

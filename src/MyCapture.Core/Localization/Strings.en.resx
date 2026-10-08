@@ -33,7 +33,7 @@
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_009548FC2109" xml:space="preserve">
-    <value>{0} × {1} px  ·  Ctrl+C Copy  ·  Ctrl+S Save  ·  Esc Cancel</value>
+    <value>{0} × {1} px</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_01EC445E93F5" xml:space="preserve">
@@ -3216,4 +3216,23 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Video.InvalidImage" xml:space="preserve"><value>The image could not be read. Select a valid PNG, JPEG or BMP file.</value></data>
   <data name="Hotkey.MigratedTitle" xml:space="preserve"><value>Shortcuts updated</value></data>
   <data name="Hotkey.Migrated" xml:space="preserve"><value>Unsafe shortcuts and restored-capture conflicts were cleared. Capture was reset to Ctrl+Shift+C if needed.</value></data>
+  <data name="Capture.AfterAction" xml:space="preserve"><value>After capture</value></data>
+  <data name="Capture.AfterEditor" xml:space="preserve"><value>Open editor</value></data>
+  <data name="Capture.AfterCard" xml:space="preserve"><value>Quick Access card</value></data>
+  <data name="Capture.AfterClipboard" xml:space="preserve"><value>Copy to clipboard only</value></data>
+  <data name="Capture.CopiedAndSaved" xml:space="preserve"><value>Copied to clipboard · Saved to library</value></data>
+  <data name="Capture.Saved" xml:space="preserve"><value>Saved to library</value></data>
+  <data name="Shortcuts.ShowHints" xml:space="preserve"><value>Show shortcuts on buttons</value></data>
+  <data name="Crop.Ratio" xml:space="preserve"><value>Aspect ratio</value></data>
+  <data name="Crop.Free" xml:space="preserve"><value>Free</value></data>
+  <data name="Crop.Original" xml:space="preserve"><value>Original</value></data>
+  <data name="Crop.Width" xml:space="preserve"><value>Width (px)</value></data>
+  <data name="Crop.Height" xml:space="preserve"><value>Height (px)</value></data>
+  <data name="Crop.Apply" xml:space="preserve"><value>Apply</value></data>
+  <data name="Crop.Applied" xml:space="preserve"><value>Crop applied</value></data>
+  <data name="Crop.Cancelled" xml:space="preserve"><value>Pending crop cancelled</value></data>
+  <data name="Crop.Instruction" xml:space="preserve"><value>Move the frame or drag a handle to resize.</value></data>
+  <data name="QuickAccess.KeyboardUnavailable" xml:space="preserve"><value>Keyboard shortcuts are unavailable. Use the buttons.</value></data>
+  <data name="Crop.TooSmall" xml:space="preserve"><value>Set the width and height to at least 2px.</value></data>
+  <data name="QuickAccess.ActivationUnavailable" xml:space="preserve"><value>Alt+Q is already in use. Hover over the card to use its shortcuts, or use the buttons.</value></data>
 </root>

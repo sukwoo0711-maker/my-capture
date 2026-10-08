@@ -56,6 +56,33 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
 
     private void OnTimeout(object? sender, EventArgs e) => Dismiss();
 
+    internal void ShowCaptureReceipt(string message, Action openLibrary)
+    {
+        Dismiss();
+        if (suppressNotification()) return;
+        var action = new Button { Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+            Padding = new Thickness(12), ToolTip = UiText.Get("QuickAccess.Library") };
+        action.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
+        action.Click += (_, _) => { Dismiss(); openLibrary(); };
+        var window = CreateWindow(action, UiText.Get("QuickAccess.Title"));
+        window.Width = 320; window.SizeToContent = SizeToContent.Height;
+        window.ShowActivated = false; window.Topmost = true; window.WindowStyle = WindowStyle.None;
+        window.SourceInitialized += (_, _) =>
+        {
+            MyCapture.Platform.Display.WindowStyleFacade.SetNoActivate(new System.Windows.Interop.WindowInteropHelper(window).Handle, true);
+            CaptureWindowExclusion.DisableTransitions(window); CaptureWindowExclusion.TryApply(window);
+        };
+        window.Loaded += (_, _) =>
+        {
+            var monitor = MyCapture.Platform.Display.MonitorEnumerator.GetFromCursor();
+            Rect position = QuickAccessWindow.Position(monitor.WorkArea, monitor.ScaleFactor, window.ActualWidth, window.ActualHeight);
+            MyCapture.Platform.Display.PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new System.Windows.Interop.WindowInteropHelper(window).Handle,
+                new MyCapture.Core.Primitives.RectD(position.X * monitor.ScaleFactor, position.Y * monitor.ScaleFactor, position.Width * monitor.ScaleFactor, position.Height * monitor.ScaleFactor));
+        };
+        _toast = window; _timer.Tick -= OnTimeout; _timer.Tick += OnTimeout;
+        window.Show(); _timer.Start();
+    }
+
     internal void ShowMenu(IEnumerable<MenuEntry> commands, string language, Action<string> chooseLanguage)
     {
         Dismiss();

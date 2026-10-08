@@ -1,6 +1,7 @@
 ﻿<Window x:Class="MyCapture.App.Settings.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:settings="clr-namespace:MyCapture.App.Settings"
+        xmlns:coreSettings="clr-namespace:MyCapture.Core.Settings;assembly=MyCapture.Core"
         xmlns:loc="clr-namespace:MyCapture.App.Localization"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:ClassModifier="internal"
@@ -274,7 +275,14 @@
                                   AutomationProperties.Name="{loc:Text Text_98F1681CB686}"
                                   AutomationProperties.HelpText="{loc:Text Text_F3C7FE27A258}"
                                   IsChecked="{Binding LaunchAtLogin}" />
-                        <CheckBox Style="{StaticResource Settings.CheckBox}" Content="{loc:Text QuickAccess.Enabled}" IsChecked="{Binding ShowQuickAccess}" />
+                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture.AfterAction}" Margin="0,12,0,0" />
+                        <ComboBox SelectedValue="{Binding AfterCapture}" SelectedValuePath="Tag" MinWidth="250" HorizontalAlignment="Left"
+                                  AutomationProperties.Name="{loc:Text Capture.AfterAction}" Margin="0,4,0,8">
+                            <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.Editor}" Content="{loc:Text Capture.AfterEditor}" />
+                            <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.QuickAccess}" Content="{loc:Text Capture.AfterCard}" />
+                            <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.ClipboardOnly}" Content="{loc:Text Capture.AfterClipboard}" />
+                        </ComboBox>
+                        <CheckBox Style="{StaticResource Settings.CheckBox}" Content="{loc:Text Shortcuts.ShowHints}" IsChecked="{Binding ShowShortcutHints}" />
                         <CheckBox Style="{StaticResource Settings.CheckBox}" Content="{loc:Text QuickAccess.Sound}" IsChecked="{Binding PlayCaptureSound}" />
                         <TextBlock Style="{StaticResource Settings.Description}"
                                    Text="{loc:Text Text_963745AB00F4}" />

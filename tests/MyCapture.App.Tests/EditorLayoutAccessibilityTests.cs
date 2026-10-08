@@ -38,16 +38,16 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             Assert.Equal(GridUnitType.Star, root.RowDefinitions[1].Height.GridUnitType);
             Assert.Equal(GridUnitType.Auto, root.RowDefinitions[2].Height.GridUnitType);
 
-            // The body grid (row 1) has three columns: 72px tool rail, star viewport,
+            // The body grid (row 1) has three columns: 94px tool rail, star viewport,
             // and a 232px inspector at the default expanded width.
             Grid body = FindDescendants<Grid>(root)
                 .Single(g => g.ColumnDefinitions.Count == 3
                              && g.ColumnDefinitions[0].Width.IsAbsolute
-                             && g.ColumnDefinitions[0].Width.Value == 72
+                             && g.ColumnDefinitions[0].Width.Value == 94
                              && g.ColumnDefinitions[1].Width.IsStar
                              && g.ColumnDefinitions[2].Width.IsAbsolute
                              && g.ColumnDefinitions[2].Width.Value == 232);
-            Assert.Equal(72, body.ColumnDefinitions[0].Width.Value);
+            Assert.Equal(94, body.ColumnDefinitions[0].Width.Value);
             Assert.True(body.ColumnDefinitions[1].Width.IsStar);
             Assert.Equal(232, body.ColumnDefinitions[2].Width.Value);
         });
@@ -72,7 +72,7 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void OnlyInspectorAndToolRailScrollVertically_SoToolbarNeverScrollsHorizontally()
+    public void OnlyInspectorScrolls_ToolRailNeverScrolls()
     {
         StaTestHost.Run(() =>
         {
@@ -82,13 +82,11 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             ScrollViewer inspector = Assert.Single(scrollViewers, viewer => viewer.Name == "AnnotationInspectorScroll");
             Assert.Equal(ScrollBarVisibility.Disabled, inspector.HorizontalScrollBarVisibility);
             Assert.Equal(ScrollBarVisibility.Auto, inspector.VerticalScrollBarVisibility);
-            ScrollViewer rail = Assert.Single(scrollViewers, viewer => viewer.Name == "AnnotationToolRailScroll");
-            Assert.Equal(ScrollBarVisibility.Disabled, rail.HorizontalScrollBarVisibility);
-            Assert.Equal(ScrollBarVisibility.Auto, rail.VerticalScrollBarVisibility);
+            Assert.DoesNotContain(scrollViewers, viewer => viewer.Name == "AnnotationToolRailScroll");
             // Native ComboBox templates can own their own dropdown ScrollViewer. All such
             // viewers must remain inside the inspector, never in the command bar or canvas.
             List<ScrollViewer> inspectorChildren = FindDescendants<ScrollViewer>(inspector).ToList();
-            Assert.All(scrollViewers.Where(viewer => !ReferenceEquals(viewer, inspector) && !ReferenceEquals(viewer, rail)),
+            Assert.All(scrollViewers.Where(viewer => !ReferenceEquals(viewer, inspector)),
                 viewer => Assert.Contains(viewer, inspectorChildren));
         });
     }
@@ -103,7 +101,7 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             // Tool-rail toggle buttons (Select/Rectangle/Arrow/Pen/Text/Image/Mosaic/Crop)
             // and every command bar button carry a name; icon-bearing controls also carry a tooltip.
             IReadOnlyList<ToggleButton> tools = FindDescendants<ToggleButton>(host.Editor)
-                .Where(button => button.Content is Viewbox).ToList();
+                .Where(button => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))).ToList();
             Assert.Equal(11, tools.Count);
             foreach (ToggleButton tool in tools)
             {
@@ -111,7 +109,7 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
                     "A tool-rail button is missing an automation name.");
                 Assert.NotNull(tool.ToolTip);
 
-                Viewbox icon = Assert.IsType<Viewbox>(tool.Content);
+                Viewbox icon = Assert.Single(FindDescendants<Viewbox>(tool));
                 Canvas coordinateGrid = Assert.IsType<Canvas>(icon.Child);
                 Assert.Equal(20, coordinateGrid.Width);
                 Assert.Equal(20, coordinateGrid.Height);

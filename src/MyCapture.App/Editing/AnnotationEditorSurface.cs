@@ -73,6 +73,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     internal FrozenFrame Frame => _frame;
 
     internal string? SourceWindowTitle { get; set; }
+    internal CropSelection? PendingCrop { get; set; }
 
     /// <summary>
     /// Replaces the base bitmap and crop (a rotation swaps width and height) and repaints.
@@ -219,7 +220,35 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         cropPen.Freeze();
         dc.DrawRectangle(null, cropPen, CropRectDip);
 
-        DrawSelectionAdorner(dc);
+        if (PendingCrop is { } pending) DrawPendingCrop(dc, pending);
+        else DrawSelectionAdorner(dc);
+    }
+
+    private void DrawPendingCrop(DrawingContext dc, CropSelection pending)
+    {
+        Rect bounds = ToSurfaceRect(pending.Region);
+        DrawDimmerOutside(dc, bounds);
+        var outline = new Pen(Brushes.White, 1);
+        dc.DrawRectangle(null, new Pen(Brushes.Black, 3), bounds);
+        dc.DrawRectangle(null, outline, bounds);
+        if (pending.IsDragging)
+        {
+            for (int index = 1; index <= 2; index++)
+            {
+                double x = bounds.Left + bounds.Width * index / 3;
+                double y = bounds.Top + bounds.Height * index / 3;
+                dc.DrawLine(outline, new Point(x, bounds.Top), new Point(x, bounds.Bottom));
+                dc.DrawLine(outline, new Point(bounds.Left, y), new Point(bounds.Right, y));
+            }
+        }
+        foreach (Point center in HandleCenters(bounds))
+            dc.DrawRectangle(Brushes.White, new Pen(Brushes.Black, 1), new Rect(center.X - 4, center.Y - 4, 8, 8));
+        var label = new FormattedText($"{Math.Round(pending.Region.Width)} × {Math.Round(pending.Region.Height)} px",
+            UiText.Culture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 12, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        double left = Math.Clamp(bounds.Left + (bounds.Width - label.Width) / 2, 4, Math.Max(4, ActualWidth - label.Width - 12));
+        double top = bounds.Bottom + 10 + label.Height < ActualHeight ? bounds.Bottom + 10 : Math.Max(4, bounds.Bottom - label.Height - 14);
+        dc.DrawRoundedRectangle(Brushes.Black, null, new Rect(left - 5, top - 3, label.Width + 10, label.Height + 6), 3, 3);
+        dc.DrawText(label, new Point(left, top));
     }
 
     private void DrawDimmerOutside(DrawingContext dc, Rect crop)

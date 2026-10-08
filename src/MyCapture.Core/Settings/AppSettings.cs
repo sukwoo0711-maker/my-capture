@@ -291,9 +291,16 @@ public sealed class OcrSettings
     public bool CacheResults { get; set; } = true;
 }
 
+public enum AfterCaptureAction { Editor, QuickAccess, ClipboardOnly }
+
 public sealed class GeneralSettings
 {
-    public bool ShowQuickAccess { get; set; } = true;
+    // 4.0.x wrote both values without an explicit post-capture choice. Consume the
+    // legacy field without changing the new default or writing it back out.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ShowQuickAccess { get => null; set { } }
+    public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.Editor;
+    public bool ShowShortcutHints { get; set; } = true;
     public bool LaunchAtLogin { get; set; } = true;
 
     /// <summary>

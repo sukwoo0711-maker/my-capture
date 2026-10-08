@@ -123,6 +123,15 @@ public static class WindowStyleFacade
             : (0, 0);
     }
 
+    /// <summary>Tests the actual top-level input target, including nonactivating windows.
+    /// Unlike a bounds-only check, an obscured window cannot intercept the foreground key.</summary>
+    public static bool IsPointerOverWindow(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || !NativeMethods.GetCursorPos(out NativeMethods.POINT point)) return false;
+        IntPtr target = NativeMethods.WindowFromPoint(point);
+        return target != IntPtr.Zero && NativeMethods.GetAncestor(target, NativeMethods.GA_ROOT) == hwnd;
+    }
+
     /// <summary>
     /// The physical-pixel bounds of <paramref name="hwnd"/>, or all zeros if unavailable.
     /// </summary>

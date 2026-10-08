@@ -43,8 +43,8 @@ internal static class HotfixUxSelfTest
             return 1;
         }
         Console.WriteLine("HOTFIX_UX_OUTPUT=" + output);
-        var report = new StringBuilder($"MyCapture 4.0.1 real WPF/native QA\nUTC: {DateTimeOffset.UtcNow:O}\n");
-        report.AppendLine("Production windows and command paths, driven in-process; no synthetic desktop keyboard/mouse input. Fresh profile; no user settings/queue or startup registry access. Clipboard writer is isolated to an in-memory sink; the user clipboard is untouched.");
+        var report = new StringBuilder($"MyCapture {typeof(HotfixUxSelfTest).Assembly.GetName().Version} real WPF/native QA\nUTC: {DateTimeOffset.UtcNow:O}\n");
+        report.AppendLine("Production windows and command paths. Bounded synthetic keys target the owned foreground input fixture and receipt only; cursor is restored. Fresh profile; no user settings/queue or startup registry access. Clipboard writer is isolated to an in-memory sink; the user clipboard is untouched.");
         List<Window> owned = [];
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
         AppTheme? oldTheme = ThemeService.IsAppliedForTest;
@@ -53,6 +53,7 @@ internal static class HotfixUxSelfTest
         void Check(string label, bool passed)
         {
             report.AppendLine($"{(passed ? "PASS" : "FAIL")}: {label}");
+            File.WriteAllText(ValidatedFilePaths.FileWithinRoot(output, "hotfix-ux-report.txt", ".txt"), report.ToString(), new UTF8Encoding(false));
             if (!passed) throw new InvalidOperationException(label);
         }
         try
@@ -92,6 +93,40 @@ internal static class HotfixUxSelfTest
             Check("editor Esc command accepted", editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
             Pump(50); Check("Esc closes editor", !editor.IsVisible);
 
+            // Verify the scoped native keyboard listener against an owned foreground
+            // text box; callbacks are fixture sinks and never touch the real clipboard.
+            var inputBox = new TextBox();
+            int foregroundCopyKeys = 0;
+            inputBox.PreviewKeyDown += (_, key) => { if (key.Key == Key.C || key.ImeProcessedKey == Key.C) foregroundCopyKeys++; };
+            var inputHost = new Window { Content = inputBox, Width = 260, Height = 120, Left = 40, Top = 40,
+                WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
+            owned.Add(inputHost); inputHost.Show(); inputHost.Activate(); inputBox.Focus(); Pump(100);
+            int hoverCopies = 0, keyboardSaves = 0;
+            var keyboardCard = new QuickAccessWindow(sample, () => { hoverCopies++; return Task.FromResult(true); }, () => { },
+                () => Task.CompletedTask, () => { keyboardSaves++; return Task.FromResult(true); }, () => { }, () => Task.FromResult("unused.png")) { IsKept = true };
+            owned.Add(keyboardCard); keyboardCard.Show(); Pump(100);
+            var oldCursor = WindowStyleFacade.GetCursorPosition();
+            try
+            {
+                var bounds = WindowStyleFacade.GetWindowBounds(new WindowInteropHelper(keyboardCard).Handle);
+                Check("move pointer to receipt for bounded hover-key fixture", SetCursorPos(bounds.Left + 20, bounds.Top + 20)); Pump(100);
+                report.AppendLine($"Hover evidence: cardBounds={bounds}; cursor={WindowStyleFacade.GetCursorPosition()}; mouseOver={keyboardCard.IsMouseOver}; active={keyboardCard.IsActive}; foreground={GetForegroundWindow()}; card={new WindowInteropHelper(keyboardCard).Handle}; fixture={new WindowInteropHelper(inputHost).Handle}");
+                Check("receipt pointer hover is observed without activation", keyboardCard.IsPointerOver && !keyboardCard.IsActive);
+                Check("owned keyboard fixture still has foreground before input", GetForegroundWindow() == new WindowInteropHelper(inputHost).Handle);
+                SendKey(0x43); Pump(120);
+                Check("hover C invokes copy without sending C to the foreground text box", hoverCopies == 1 && foregroundCopyKeys == 0 && inputHost.IsActive);
+                Check("move pointer away from receipt", SetCursorPos(60, 60)); Pump(80);
+                SendKey(0x43); Pump(100);
+                Check("C outside receipt stays with the foreground app", hoverCopies == 1 && foregroundCopyKeys == 1);
+                KeyEvent(0x12, 0, 0, UIntPtr.Zero); SendKey(0x51); KeyEvent(0x12, 0, 2, UIntPtr.Zero); Pump(120);
+                Check("Alt+Q explicitly activates receipt from owned foreground app", keyboardCard.IsActive);
+                SendKey(0x53); Pump(100);
+                Check("keyboard S reaches receipt save command", keyboardSaves == 1);
+                SendKey(0x1B); Pump(100);
+                Check("keyboard Esc closes receipt", !keyboardCard.IsVisible);
+            }
+            finally { _ = SetCursorPos(oldCursor.X, oldCursor.Y); keyboardCard.Close(); inputHost.Close(); }
+
             foreach (string language in new[] { "ko", "en" })
             using (MyCapture.Core.Localization.UiText.UseLanguage(language))
             foreach (AppTheme theme in new[] { AppTheme.Midnight, AppTheme.Glass, AppTheme.Workspace, AppTheme.Daylight, AppTheme.GlassLight, AppTheme.HighContrast })
@@ -99,14 +134,14 @@ internal static class HotfixUxSelfTest
                 ThemeService.Apply(theme);
                 var receipt = Card(sample); owned.Add(receipt); receipt.IsKept = true;
                 receipt.Show(); Pump(70); receipt.UpdateLayout();
-                var grid = ((StackPanel)receipt.Content).Children.OfType<UniformGrid>().Single();
+                var grid = ((StackPanel)receipt.Content).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
                 foreach (Button button in grid.Children.OfType<Button>())
                 {
-                    var text = new FormattedText((string)button.Content, System.Globalization.CultureInfo.CurrentUICulture,
-                        FlowDirection.LeftToRight, new Typeface(button.FontFamily, button.FontStyle, button.FontWeight, button.FontStretch),
-                        button.FontSize, Brushes.Black, 1);
-                    Check($"{language}/{theme}/{button.Content}: text={text.WidthIncludingTrailingWhitespace:0.##}, available={button.ActualWidth - button.Padding.Left - button.Padding.Right - button.BorderThickness.Left - button.BorderThickness.Right:0.##}",
-                        text.WidthIncludingTrailingWhitespace <= button.ActualWidth - button.Padding.Left - button.Padding.Right - button.BorderThickness.Left - button.BorderThickness.Right);
+                    var content = (Grid)button.Content;
+                    var hint = content.Children.OfType<TextBlock>().Single();
+                    Check($"{language}/{theme}/{hint.Text}: icon and shortcut fit the action",
+                        content.ActualWidth <= button.ActualWidth && content.ActualHeight <= button.ActualHeight
+                        && hint.ActualWidth <= content.ActualWidth && hint.ActualHeight <= content.ActualHeight);
                 }
                 foreach (int dpi in new[] { 96, 144, 192 }) Render(receipt, Path.Combine(output, $"card-{language}-{theme}-{dpi}.png"), dpi);
                 receipt.Close();
@@ -175,7 +210,7 @@ internal static class HotfixUxSelfTest
             Render(updatedCard, Path.Combine(output, "preview-before-update.png"), 96);
             updatedCard.UpdatePreview(expected); updatedCard.UpdateLayout();
             Render(updatedCard, Path.Combine(output, "preview-after-update.png"), 96);
-            Check("preview dimensions reflect edited crop", ((StackPanel)updatedCard.Content).Children.OfType<DockPanel>().Single()
+            Check("preview dimensions reflect edited crop", ((StackPanel)updatedCard.Content).Children.OfType<DockPanel>().Last()
                 .Children.OfType<TextBlock>().Single().Text == "230 × 130");
             updatedCard.Close();
             string? saved = null; BitmapSource? pinned = null; byte[]? clipboardPng = null;
@@ -356,6 +391,9 @@ internal static class HotfixUxSelfTest
         return false;
     }
     [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+    private static void SendKey(byte key) { KeyEvent(key, 0, 0, UIntPtr.Zero); KeyEvent(key, 0, 2, UIntPtr.Zero); }
+    [DllImport("user32.dll", EntryPoint = "keybd_event")] private static extern void KeyEvent(byte key, byte scan, uint flags, UIntPtr extra);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(IntPtr hwnd);
 }

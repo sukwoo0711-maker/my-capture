@@ -54,6 +54,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     }
 
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
+    internal Func<bool> OpenEditorAfterCapture { get; set; } = () => true;
 
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
     internal Func<bool>? RequiresCaptureExclusion { get; set; }
@@ -451,6 +452,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 _log.LogInformation("Editor opening cancelled after selection persistence");
                 return;
             }
+
+            if (!OpenEditorAfterCapture()) return;
 
             var editor = new AnnotationEditorWindow(
                 selection.Frame,
