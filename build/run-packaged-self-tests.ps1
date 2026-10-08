@@ -91,6 +91,9 @@ try {
                 PassThru = $true
             }
             $process = Start-Process @startParameters
+            # Keep the native handle alive so Windows PowerShell can read the exit code
+            # even when the process terminates before WaitForExit starts.
+            $processHandle = $process.Handle
 
             if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
                 $timedOut = $true
@@ -98,6 +101,9 @@ try {
                 $process.WaitForExit()
             }
             else {
+                if ($null -eq $process.ExitCode) {
+                    throw 'The self-test process exit code was not observed.'
+                }
                 $exitCode = [int]$process.ExitCode
             }
         }

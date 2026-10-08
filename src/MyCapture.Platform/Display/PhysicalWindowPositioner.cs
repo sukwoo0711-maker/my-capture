@@ -18,6 +18,12 @@ public static class PhysicalWindowPositioner
         PlaceTopmost(hwnd, screenBounds, Win32PhysicalWindowNativeApi.Instance);
     }
 
+    /// <summary>Places a passive topmost surface without taking the foreground window.</summary>
+    public static void PlaceTopmostWithoutActivation(IntPtr hwnd, RectD screenBounds) =>
+        Place(hwnd, screenBounds, Win32PhysicalWindowNativeApi.Instance,
+            NativeMethods.SWP_SHOWWINDOW | NativeMethods.SWP_NOACTIVATE,
+            compareSize: true, skipIfUnchanged: false);
+
     /// <summary>
     /// Moves an already-shown topmost window. Skips the native call when the pixel position
     /// is unchanged, and does not restack, resize, or force a show on every pointer sample.

@@ -16,7 +16,7 @@ internal sealed class ThemedDialog : Window
         SizeToContent = SizeToContent.Height;
         MaxHeight = SystemParameters.WorkArea.Height - 40;
         ResizeMode = ResizeMode.NoResize;
-        ShowInTaskbar = false;
+        ShowInTaskbar = true;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         StandardWindowTheme.Apply(this);
         SetResourceReference(BackgroundProperty, "Surface.Raised");
@@ -72,13 +72,34 @@ internal sealed class ThemedDialog : Window
         return button;
     }
 
-    internal static string RecoveryMessage(Exception error) => UiText.Get(error switch
+    internal static string RecoveryMessage(Exception error) => UserFacingError.GetMessage(error)
+        ?? (error is Recording.VideoLayerLimitException ? error.Message : null)
+        ?? UiText.Get(error switch
     {
         UnauthorizedAccessException => "Dialog.Access",
         IOException => "Dialog.Storage",
         NotSupportedException => "Dialog.Unsupported",
         _ => "Dialog.Unexpected",
     });
+
+    internal static void ShowUnhandled(Exception error, Action<Exception>? showThemed = null,
+        Action<string, string>? showFallback = null)
+    {
+        try
+        {
+            if (showThemed is not null) showThemed(error);
+            else Error(null, UiText.Get("Dialog.AppFailure"), error);
+        }
+        catch (Exception)
+        {
+            string title = "MyCapture";
+            string message;
+            try { message = RecoveryMessage(error); }
+            catch (Exception) { message = "An error occurred. Close this message and try again."; }
+            if (showFallback is not null) showFallback(message, title);
+            else MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     internal static MessageBoxResult Error(Window? owner, string title, Exception error,
         Action? recovery = null, string? recoveryLabel = null) => Show(owner, RecoveryMessage(error), title,
@@ -93,8 +114,10 @@ internal sealed class ThemedDialog : Window
         string? details = null, Action? recovery = null, string? recoveryLabel = null)
     {
         var dialog = new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel);
-        if (owner?.IsVisible == true) dialog.Owner = owner;
-        else dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        owner = owner?.IsVisible == true ? owner : Application.Current?.Windows.OfType<Window>()
+            .FirstOrDefault(window => window.IsActive && window.IsVisible && window is not Capture.QuickAccessWindow);
+        if (owner is not null) { dialog.Owner = owner; dialog.ShowInTaskbar = false; }
+        else { dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen; dialog.Topmost = true; }
         dialog.ShowDialog();
         return dialog.Result;
     }

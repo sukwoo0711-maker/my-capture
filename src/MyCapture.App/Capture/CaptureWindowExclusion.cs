@@ -14,6 +14,15 @@ internal static class CaptureWindowExclusion
         return handle != IntPtr.Zero && SetWindowDisplayAffinity(handle, 0x11);
     }
 
+    internal static void DisableTransitions(Window window)
+    {
+        int disabled = 1;
+        _ = DwmSetWindowAttribute(new WindowInteropHelper(window).EnsureHandle(), 3, ref disabled, sizeof(int));
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowDisplayAffinity(IntPtr window, uint affinity);

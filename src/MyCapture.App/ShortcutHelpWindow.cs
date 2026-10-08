@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
+using MyCapture.App.Capture;
 using MyCapture.Core.Settings;
 
 namespace MyCapture.App;
@@ -12,6 +13,7 @@ internal sealed class ShortcutHelpWindow : Window
 {
     internal static Func<HotkeySettings> ReadHotkeys { get; set; } = () => new HotkeySettings();
     internal static Action? OpenSettings { get; set; }
+    internal static Func<bool> CanShowHelp { get; set; } = () => true;
     private static ShortcutHelpWindow? _open;
 
     internal ShortcutHelpWindow(bool onboarding = false)
@@ -54,7 +56,8 @@ internal sealed class ShortcutHelpWindow : Window
             [
                 ("Help.Capture", [("Text_096A13A757DB", Display(keys.Capture)), ("Text_75306DAE2E60", Display(keys.RecordRegion)),
                     ("Text_66BA5DCDA810", Display(keys.OpenLibrary)), ("Text_36458FABBDBB", Display(keys.CaptureWindow)),
-                    ("Text_254C836B9ED2", Display(keys.CaptureFullScreen)), ("Hotkey.Scroll", Display(keys.ScrollingCapture)), ("Hotkey.Delay", Display(keys.DelayedCapture))]),
+                    ("Text_254C836B9ED2", Display(keys.CaptureFullScreen)), ("Hotkey.Scroll", Display(keys.ScrollingCapture)), ("Hotkey.Delay", Display(keys.DelayedCapture)),
+                    ("QuickAccess.Title", "Alt+Q")]),
                 ("Help.Annotation", [("Text_DC0760235344", "R"), ("Tools.Ellipse", "E"), ("Text_2785CE58DF74", "A"),
                     ("Text_37DB9D0B1C8E", "P"), ("Tools.Highlighter", "H"), ("Text_258AD4B095A1", "T"), ("Tools.StepNumber", "N"),
                     ("Text_3F8046019B32", "M"), ("Tools_Crop", "X"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
@@ -87,6 +90,7 @@ internal sealed class ShortcutHelpWindow : Window
 
     internal static void ShowHelp()
     {
+        if (!CanShowHelp()) return;
         if (_open is not null) { _open.Activate(); return; }
         _open = new ShortcutHelpWindow();
         _open.Closed += (_, _) => _open = null;
@@ -95,9 +99,20 @@ internal sealed class ShortcutHelpWindow : Window
 
     internal static void OnWindowKey(object sender, KeyEventArgs e)
     {
-        if (sender is ShortcutHelpWindow || HotkeyRecorder.Active is not null) return;
-        if (e.Key == Key.F1 || (e.Key == Key.OemQuestion && Keyboard.Modifiers == ModifierKeys.Shift && Keyboard.FocusedElement is not TextBox))
+        if (sender is ShortcutHelpWindow or CaptureOverlayWindow || HotkeyRecorder.Active is not null || !CanShowHelp()) return;
+        if (IsHelpKey(e.Key, Keyboard.Modifiers, Keyboard.FocusedElement))
         { e.Handled = true; ShowHelp(); }
+    }
+
+    internal static bool IsHelpKey(Key key, ModifierKeys modifiers, IInputElement? focused) =>
+        key == Key.F1 || (key == Key.OemQuestion && modifiers == ModifierKeys.Shift && focused is not (TextBoxBase or PasswordBox));
+
+    internal static bool DismissForCapture()
+    {
+        Window[] windows = Application.Current?.Windows.OfType<ShortcutHelpWindow>().Where(w => w.IsVisible).ToArray() ?? [];
+        foreach (Window window in windows) window.Close();
+        if (_open?.IsVisible == true) { _open.Close(); return true; }
+        return windows.Length > 0;
     }
 
     private static string Display(Hotkey key) => key.IsAssigned ? key.ToString() : UiText.Get("Hotkey.Unassigned");

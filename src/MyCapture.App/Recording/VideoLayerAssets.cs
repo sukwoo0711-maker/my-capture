@@ -26,8 +26,15 @@ internal static class VideoLayerAssets
 
     internal static BitmapSource ReadImage(string path, CancellationToken cancellationToken)
     {
+        try { return ReadImageCore(path, cancellationToken); }
+        catch (Exception ex) when (ex is NotSupportedException or FileFormatException)
+        { throw Themes.UserFacingError.Mark(new InvalidDataException(UiText.Get("Video.InvalidImage"), ex)); }
+    }
+
+    private static BitmapSource ReadImageCore(string path, CancellationToken cancellationToken)
+    {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        if (stream.Length > 24 * 1024 * 1024) { throw new InvalidDataException(UiText.Get("Text_9C4458907087")); }
+        if (stream.Length > 24 * 1024 * 1024) { throw Themes.UserFacingError.Mark(new InvalidDataException(UiText.Get("Text_9C4458907087"))); }
         if (stream.Length >= 33)
         {
             Span<byte> header = stackalloc byte[33];
@@ -35,7 +42,7 @@ internal static class VideoLayerAssets
             stream.Position = 0;
             if (header[0] == 137 && header[1] == 80 && !FrameEditLayerRenderer.HasSafePngDimensions(header))
             {
-                throw new InvalidDataException(UiText.Get("Text_6C7D2ADB7EB3"));
+                throw Themes.UserFacingError.Mark(new InvalidDataException(UiText.Get("Text_6C7D2ADB7EB3")));
             }
         }
         var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
@@ -43,7 +50,7 @@ internal static class VideoLayerAssets
         if (frame.PixelWidth is <= 0 or > 8192 || frame.PixelHeight is <= 0 or > 8192
             || (long)frame.PixelWidth * frame.PixelHeight > 16_777_216)
         {
-            throw new InvalidDataException(UiText.Get("Text_2B7B1B697484"));
+            throw Themes.UserFacingError.Mark(new InvalidDataException(UiText.Get("Text_2B7B1B697484")));
         }
         cancellationToken.ThrowIfCancellationRequested();
         var converted = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
@@ -65,7 +72,7 @@ internal static class VideoLayerAssets
         string encoded = Convert.ToBase64String(stream.ToArray());
         if (encoded.Length > VideoEditDocument.MaximumFrameLayerEncodedLength)
         {
-            throw new InvalidDataException(UiText.Get("Text_E1E40E743D3B"));
+            throw Themes.UserFacingError.Mark(new InvalidDataException(UiText.Get("Text_E1E40E743D3B")));
         }
         double layerWidth = Math.Min(width * 0.4, image.PixelWidth);
         double layerHeight = layerWidth * image.PixelHeight / image.PixelWidth;

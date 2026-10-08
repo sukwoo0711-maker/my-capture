@@ -80,6 +80,11 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal Task LastPreparationForTest { get; private set; } = Task.CompletedTask;
 
     internal ScreenCaptureEngine Engine => _captureEngine;
+    internal bool IsSelecting => _preparation is not null || _activeOverlay is not null;
+    internal AnnotationEditorControl? CurrentEditor => _activeEditor?.Editor;
+    internal Task WaitForPresentationDismissalAsync() =>
+        NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick)
+            ? Task.Delay(100) : Task.CompletedTask;
 
     internal bool CanRetake => !_disposed && _activeEditor is not null && !_activeEditor.Editor.IsCommitInProgress &&
         _preparation is null && !_isOpeningEditor;

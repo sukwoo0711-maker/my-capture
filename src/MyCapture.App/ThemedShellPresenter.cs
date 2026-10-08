@@ -126,6 +126,11 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         _menu = null;
     }
 
-    internal void DismissForCapture() { Dismiss();  }
+    internal void DismissForCapture()
+    {
+        bool visible = _toast?.IsVisible == true || _menu?.IsOpen == true;
+        Dismiss();
+        if (ShortcutHelpWindow.DismissForCapture() || visible) ForegroundDismissed?.Invoke();
+    }
     public void Dispose() { DismissForCapture(); _timer.Tick -= OnTimeout; }
 }

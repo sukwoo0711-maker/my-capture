@@ -3211,4 +3211,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Help.Gif" xml:space="preserve"><value>Export GIF</value></data>
   <data name="Hotkey.Twice" xml:space="preserve"><value>{0} twice</value></data>
   <data name="Hotkey.TrayRestore" xml:space="preserve"><value>Hide all pins from the tray, then show them again</value></data>
+  <data name="Hotkey.ModifierRequired" xml:space="preserve"><value>Combine letters, numbers and navigation keys with Ctrl, Alt, Shift or Win. F1–F24 and PrintScreen can be used alone.</value></data>
+  <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>Keyboard access: press Alt+Q in the editor</value></data>
+  <data name="Video.InvalidImage" xml:space="preserve"><value>The image could not be read. Select a valid PNG, JPEG or BMP file.</value></data>
 </root>

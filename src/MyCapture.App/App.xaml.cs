@@ -283,8 +283,20 @@ public partial class App : Application
         _tray.ExitRequested += (_, _) => Shutdown(0);
         ShortcutHelpWindow.ReadHotkeys = () => _settings!.Hotkeys;
         ShortcutHelpWindow.OpenSettings = HandleSettingsRequested;
+        ShortcutHelpWindow.CanShowHelp = () => !_preparingAdvancedCapture && _overlay?.IsSelecting != true;
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent, new System.Windows.Input.KeyEventHandler(ShortcutHelpWindow.OnWindowKey));
-        if (_settings.General.IsFirstRun) new ShortcutHelpWindow(onboarding: true).Show();
+        EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent,
+            new System.Windows.Input.KeyEventHandler(OnQuickAccessKeyboardRequested));
+        if (_settings.General.IsFirstRun)
+        {
+            var welcome = new ShortcutHelpWindow(onboarding: true);
+            welcome.Closed += (_, _) =>
+            {
+                try { _services?.GetRequiredService<SettingsStore>().CompleteFirstRun(_settings!); }
+                catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
+            };
+            welcome.Show();
+        }
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
         _overlay.SelectionPersistRequested = OnCaptureSelectionCompletedAsync;
         _overlay.EditingCompleted += OnAnnotationEditingCompleted;
@@ -611,7 +623,7 @@ public partial class App : Application
 
     private void HandleCaptureRequested()
     {
-        _quickAccess?.Close();
+        DismissQuickAccessForCapture();
         _log?.LogInformation("Region capture requested");
         if (_overlay is null || _settings is null)
         {
@@ -647,7 +659,7 @@ public partial class App : Application
     /// Full-monitor capture: acquires the monitor under the cursor and opens the editor with
     /// no drag. Reports the typed outcome through the shared feedback path.
     /// </summary>
-    private void HandleCaptureFullScreen()
+    private async void HandleCaptureFullScreen()
     {
         if (_advancedCapture is null || !GuardStillCapture(UiText.Get("Text_254C836B9ED2")))
         {
@@ -655,14 +667,14 @@ public partial class App : Application
         }
 
         _tray?.SetState(TrayIconState.Capturing);
-        ReportOutcome(_advancedCapture.CaptureFullScreen(), UiText.Get("Text_254C836B9ED2"));
+        await CompleteAdvancedCaptureAsync(_advancedCapture.CaptureFullScreen, UiText.Get("Text_254C836B9ED2"));
     }
 
     /// <summary>
     /// Window capture: hit-tests the window under the cursor, crops it out of the monitor
     /// frame, and opens the editor. A missing window is reported, not thrown.
     /// </summary>
-    private void HandleCaptureWindow()
+    private async void HandleCaptureWindow()
     {
         if (_advancedCapture is null || !GuardStillCapture(UiText.Get("Text_36458FABBDBB")))
         {
@@ -670,14 +682,14 @@ public partial class App : Application
         }
 
         _tray?.SetState(TrayIconState.Capturing);
-        ReportOutcome(_advancedCapture.CaptureWindow(), UiText.Get("Text_36458FABBDBB"));
+        await CompleteAdvancedCaptureAsync(_advancedCapture.CaptureWindow, UiText.Get("Text_36458FABBDBB"));
     }
 
     /// <summary>
     /// Repeat-last-region: replays the most recent confirmed region with no overlay. Shows a
     /// balloon when there is no region to repeat yet.
     /// </summary>
-    private void HandleRepeatLastRegion()
+    private async void HandleRepeatLastRegion()
     {
         if (_advancedCapture is null || !GuardStillCapture(UiText.Get("Text_92E815063265")))
         {
@@ -685,7 +697,7 @@ public partial class App : Application
         }
 
         _tray?.SetState(TrayIconState.Capturing);
-        ReportOutcome(_advancedCapture.RepeatLastRegion(), UiText.Get("Text_92E815063265"));
+        await CompleteAdvancedCaptureAsync(_advancedCapture.RepeatLastRegion, UiText.Get("Text_92E815063265"));
     }
 
     /// <summary>
@@ -869,9 +881,9 @@ public partial class App : Application
 
     private bool GuardStillCapture(string mode, bool allowRetake = false)
     {
-        _quickAccess?.Close();
+        DismissQuickAccessForCapture();
         _shellPresenter?.DismissForCapture();
-        if ((_overlay?.IsActive == true && !(allowRetake && _overlay.CanRetake)) ||
+        if (_preparingAdvancedCapture || (_overlay?.IsActive == true && !(allowRetake && _overlay.CanRetake)) ||
             _activeCountdown is not null || _scrollCancellation is not null)
             return false;
         if (_recorder?.IsActive != true || _recorder.CanCaptureStill)
@@ -939,6 +951,36 @@ public partial class App : Application
 
     private CaptureRecord? _pendingRecord;
     private QuickAccessWindow? _quickAccess;
+    private bool _preparingAdvancedCapture;
+
+    private void DismissQuickAccessForCapture()
+    {
+        _quickAccess?.DismissForCapture(() => _overlay?.NoteForegroundDismissal());
+    }
+
+    private async Task CompleteAdvancedCaptureAsync(Func<CaptureOutcome> capture, string mode)
+    {
+        _preparingAdvancedCapture = true;
+        try
+        {
+            if (_overlay is not null) await _overlay.WaitForPresentationDismissalAsync();
+            if (!Dispatcher.HasShutdownStarted) ReportOutcome(capture(), mode);
+        }
+        catch (Exception ex)
+        {
+            _log?.LogError(ex, "Advanced capture transition failed");
+            ReportOutcome(CaptureOutcome.Failed(ThemedDialog.RecoveryMessage(ex)), mode);
+        }
+        finally { _preparingAdvancedCapture = false; }
+    }
+
+    private void OnQuickAccessKeyboardRequested(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (_preparingAdvancedCapture || _overlay?.IsSelecting == true || HotkeyRecorder.Active is not null) return;
+        var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
+        if (key == System.Windows.Input.Key.Q && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Alt)
+            e.Handled = _quickAccess?.ActivateForKeyboard() == true;
+    }
 
     private async Task OnCaptureSelectionCompletedAsync(CaptureSelectionCompletedEventArgs e)
     {
@@ -1078,6 +1120,7 @@ public partial class App : Application
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image)
     {
         if (!ReferenceEquals(_currentRecord, record)) return;
+        if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
         if (_queue is null || _commit is null || _services is null || _settings?.General.ShowQuickAccess != true) return;
         _quickAccess?.Close();
         IDisposable lease = _queue.AcquireEvictionLease(record.Id);
@@ -1085,21 +1128,34 @@ public partial class App : Application
         {
             var saver = new PinImageSaveService(() => _settings!, () => _capturePaths!,
                 _services.GetRequiredService<ILogger<PinImageSaveService>>());
-            Task<System.Windows.Media.Imaging.BitmapSource> Render() =>
-                _commit.RenderCapturedImageAsync(image, record.SourceWindowTitle, record.InitialRenderShowsSourceWindowTitle);
-            var card = new QuickAccessWindow(image,
-                () => _commit.CopyCapturedRegionAsync(image, record.SourceWindowTitle,
-                    record.InitialRenderShowsSourceWindowTitle, record.SourcePageUrl),
+            QuickAccessWindow? card = null;
+            async Task<System.Windows.Media.Imaging.BitmapSource> Render()
+            {
+                using IDisposable actionLease = _queue.AcquireEvictionLease(record.Id);
+                var rendered = ReferenceEquals(_currentRecord, record) && _overlay?.CurrentEditor is { } editor
+                    ? await editor.RenderCurrentImageAsync()
+                    : await Task.Run(() => MyCapture.Platform.Imaging.ImageCodec.TryLoad(_queue.GetFilePath(record, CaptureFileNames.Rendered))
+                        ?? throw new IOException("The current rendered capture is unavailable."));
+                if (card?.IsVisible == true) card.UpdatePreview(rendered);
+                return rendered;
+            }
+            var actions = new QuickAccessImageActions(Render,
+                bitmap => ClipboardImageService.CopyImageAsync(bitmap, record.SourcePageUrl),
+                bitmap => _pins?.PinImage(bitmap),
+                async bitmap => (await saver.QuickSaveAsync(bitmap, record.SourcePageUrl)).Status == PinSaveStatus.Saved,
+                record.SourcePageUrl);
+            card = new QuickAccessWindow(image,
+                actions.CopyAsync,
                 () =>
                 {
                     if (ReferenceEquals(_currentRecord, record) && _overlay?.ActivateCurrent() == true) return;
                     EnsureGalleryWindow()?.OpenCapture(record.Id, edit: true);
                 },
-                async () => _pins?.PinImage(await Render()),
-                async () => (await saver.QuickSaveAsync(await Render(), record.SourcePageUrl)).Status == PinSaveStatus.Saved,
+                actions.PinAsync,
+                actions.SaveAsync,
                 () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
-                () => Task.Run(() => new GalleryDragExportService(_queue).PrepareExport(record)));
-            card.Closed += (_, _) => { lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; };
+                actions.ExportAsync);
+            card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; };
             _quickAccess = card;
             card.Show();
         }
@@ -1187,7 +1243,7 @@ public partial class App : Application
     private void HandleRecordRegion()
     {
         _shellPresenter?.DismissForCapture();
-        if (_recorder is null || (!_recorder.IsActive && (_overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)))
+        if (_recorder is null || (!_recorder.IsActive && (_preparingAdvancedCapture || _overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)))
         {
             return;
         }
@@ -1662,6 +1718,11 @@ public partial class App : Application
 
     private bool TryRunSelfTest(string[] args)
     {
+        if (FindSwitch(args, HotfixUxSelfTest.CommandLineSwitch) >= 0)
+        {
+            Shutdown(HotfixUxSelfTest.Run());
+            return true;
+        }
         int capturePerformanceIndex = FindSwitch(args, CapturePerformanceSelfTest.CommandLineSwitch);
         if (capturePerformanceIndex >= 0)
         {
@@ -1942,7 +2003,7 @@ public partial class App : Application
         // A capture tool that dies mid-annotation loses the user's work. Failing soft
         // keeps the tray alive so the queue and any remaining windows survive.
         _tray?.SetState(TrayIconState.Error);
-        MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Dialog.AppFailure"), e.Exception);
+        ThemedDialog.ShowUnhandled(e.Exception);
 
         e.Handled = true;
     }
@@ -1952,6 +2013,7 @@ public partial class App : Application
         _quickAccess?.Close();
         if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
         HotkeyRecorder.CanRegister = null;
+        ShortcutHelpWindow.CanShowHelp = () => true;
         AnnotationEditorPreferences.Read = null;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = null;
         AnnotationEditorPreferences.Write = null;

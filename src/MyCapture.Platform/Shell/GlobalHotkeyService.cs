@@ -57,6 +57,12 @@ public sealed class NativeHotkeyRegistrar : IHotkeyRegistrar
 
     public bool TryRegister(int id, Hotkey hotkey, out int errorCode, out string errorMessage)
     {
+        if (!hotkey.IsSafeGlobalShortcut)
+        {
+            errorCode = 87;
+            errorMessage = MyCapture.Core.Localization.UiText.Get("Hotkey.ModifierRequired");
+            return false;
+        }
         // MOD_NOREPEAT stops an auto-repeating keydown from firing the command in a tight
         // loop while the chord is held.
         uint modifiers = (uint)hotkey.Modifiers | NativeMethods.MOD_NOREPEAT;
@@ -130,6 +136,7 @@ public sealed class GlobalHotkeyService : IDisposable
 
     public bool CanRegister(Hotkey hotkey)
     {
+        if (!hotkey.IsSafeGlobalShortcut) return false;
         if (!hotkey.IsAssigned || _assignedByCommand.Values.Contains(hotkey)) return true;
         const int probeId = FirstHotkeyId + 127;
         if (!_registrar.TryRegister(probeId, hotkey, out _, out _)) return false;

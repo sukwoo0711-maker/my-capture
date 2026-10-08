@@ -234,6 +234,19 @@ internal sealed class AnnotationEditorControl : Grid
 
     internal BitmapSource DisplayedBitmap => _surface.Frame.Bitmap;
 
+    /// <summary>Copies the same canvas, transforms, assets and title used by editor commits.</summary>
+    internal Task<BitmapSource> RenderCurrentImageAsync()
+    {
+        Dispatcher.VerifyAccess();
+        if (_activeTextBox is not null) CommitActiveText();
+        AnnotationDocument snapshot = CaptureCommitService.CreatePersistenceSnapshot(_controller.Document);
+        var assets = _imageStore.DecodedFor(snapshot.Items.OfType<ImageAnnotation>().Select(item => item.AssetFileName));
+        BitmapSource bitmap = _surface.Frame.Bitmap;
+        string? title = _showSourceWindowTitle ? _sourceWindowTitle : null;
+        return Threading.StaThreadTask.RunAsync(() => CaptureCommitService.Flatten(bitmap, snapshot, assets, title),
+            "MyCapture Quick Access renderer");
+    }
+
     internal RectD DisplayedRegion => _surface.CropRegion;
 
     /// <summary>

@@ -107,6 +107,14 @@ public sealed class SettingsStore
         _log.LogDebug("Settings saved to {Path}", LogText.SingleLine(_paths.SettingsFile));
     }
 
+    /// <summary>Creates the settings file only after the welcome card is dismissed.</summary>
+    public void CompleteFirstRun(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        Save(settings);
+        settings.General.IsFirstRun = false;
+    }
+
     /// <summary>
     /// Writes the settings as a portable JSON file the user picks. Secrets are never
     /// exported: the GitHub PAT is DPAPI-encrypted per machine and per user, so a copied
