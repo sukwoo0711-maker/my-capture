@@ -65,6 +65,11 @@ internal sealed class AnnotationEditorControl : Grid
     private bool _mosaicDragging;
     private PointD _mosaicStart;
     private CropSelection? _crop;
+    private PointD? _edgeCropStart;
+    private Button _autoTrimButton = null!;
+    private bool _autoTrimInProgress;
+    private CancellationTokenSource? _autoTrimCts;
+    private long _documentRevision;
     private FrameworkElement _cropSection = null!;
     private TextBox _cropWidth = null!;
     private TextBox _cropHeight = null!;
@@ -209,6 +214,13 @@ internal sealed class AnnotationEditorControl : Grid
         _viewport.MouseMove += OnSurfaceMouseMove;
         _viewport.MouseLeftButtonUp += OnSurfaceMouseUp;
         _viewport.MouseRightButtonDown += OnSurfaceRightDown;
+        _viewport.MouseLeave += (_, _) => { if (!_viewport.IsMouseCaptured) Cursor = Cursors.Arrow; };
+        _viewport.LostMouseCapture += (_, e) =>
+        {
+            if (!ReferenceEquals(e.OriginalSource, _viewport) || _viewport.IsMouseCaptured) return;
+            _edgeCropStart = null;
+            if (_crop is { IsDragging: true }) { _crop.End(); RefreshCrop(); }
+        };
 
         SizeChanged += (_, _) => UpdateResponsiveLayout();
 
@@ -219,6 +231,7 @@ internal sealed class AnnotationEditorControl : Grid
         };
         Unloaded += (_, _) =>
         {
+            _autoTrimCts?.Cancel();
             _redactionCts?.Cancel();
             _redactionCts?.Dispose();
             _redactionCts = null;
@@ -430,6 +443,8 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void OnSurfaceMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (_completed || _commitInProgress) return;
+        _autoTrimCts?.Cancel();
         if (_activeTextBox is not null)
         {
             CommitActiveText();
@@ -439,6 +454,13 @@ internal sealed class AnnotationEditorControl : Grid
         Focus();
         Point dip = e.GetPosition(_surface);
         PointD image = _surface.ToImagePoint(dip);
+
+        if (TryBeginEdgeCrop(image))
+        {
+            CapturePointer();
+            e.Handled = true;
+            return;
+        }
 
         switch (_controller.Tool)
         {
@@ -580,6 +602,101 @@ internal sealed class AnnotationEditorControl : Grid
         SetStatus(UiText.Get("Text_3F8046019B34"));
     }
 
+    internal CropGrip? EdgeCropGripAt(PointD image) => _crop is null
+        ? CropSelection.HitTestEdge(new RectD(0, 0, _canvasWidth, _canvasHeight), image,
+            7 / Math.Max(double.Epsilon, _surface.DipPerPixel)) : null;
+
+    internal bool TryBeginEdgeCrop(PointD image)
+    {
+        if (_completed || _commitInProgress || _activeTextBox is not null || EdgeCropGripAt(image) is null)
+            return false;
+        _edgeCropStart = image;
+        return true;
+    }
+
+    internal bool ContinueEdgeCrop(PointD image, bool shift)
+    {
+        if (_edgeCropStart is not PointD start) return false;
+        double scale = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        if (Math.Abs(image.X - start.X) < SystemParameters.MinimumHorizontalDragDistance / scale
+            && Math.Abs(image.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance / scale) return true;
+        _edgeCropStart = null;
+        SelectTool(EditorTool.Crop);
+        _crop!.Begin(start, 7 / scale);
+        _crop.Drag(image, shift);
+        RefreshCrop();
+        return true;
+    }
+
+    private static Cursor CropCursor(CropGrip grip) => grip switch
+    {
+        CropGrip.Move => Cursors.SizeAll,
+        CropGrip.TopLeft or CropGrip.BottomRight => Cursors.SizeNWSE,
+        CropGrip.TopRight or CropGrip.BottomLeft => Cursors.SizeNESW,
+        CropGrip.Top or CropGrip.Bottom => Cursors.SizeNS,
+        CropGrip.Left or CropGrip.Right => Cursors.SizeWE,
+        _ => Cursors.Cross,
+    };
+
+    internal async Task PreviewAutomaticTrimAsync()
+    {
+        if (_autoTrimInProgress || _completed || _commitInProgress) return;
+        CommitActiveText();
+        var operation = new CancellationTokenSource();
+        CancellationToken token = operation.Token;
+        _autoTrimCts = operation;
+        _autoTrimInProgress = true;
+        _autoTrimButton.IsEnabled = false;
+        BitmapSource original = DisplayedBitmap;
+        long revision = _documentRevision;
+        CropSelection? pending = _crop;
+        RectD? pendingRegion = pending?.Region;
+        SetStatus(UiText.Get("Capture410.AutoTrimWorking"));
+        try
+        {
+            // Includes live annotations, title, and the current crop/rotation. Rendering
+            // and pixel scanning are outside the capture acquisition/pointer path.
+            BitmapSource rendered = await RenderCurrentImageAsync();
+            RectD region = await Task.Run(() =>
+            {
+                token.ThrowIfCancellationRequested();
+                BitmapSource source = rendered.Format == PixelFormats.Bgra32 ? rendered
+                    : new FormatConvertedBitmap(rendered, PixelFormats.Bgra32, null, 0);
+                int stride = checked(source.PixelWidth * 4);
+                byte[] pixels = new byte[checked(stride * source.PixelHeight)];
+                source.CopyPixels(pixels, stride, 0);
+                return AutomaticMarginTrim.Find(pixels, source.PixelWidth, source.PixelHeight, stride, token);
+            }, token);
+            if (token.IsCancellationRequested || _completed || _commitInProgress || revision != _documentRevision
+                || !ReferenceEquals(original, DisplayedBitmap) || !ReferenceEquals(pending, _crop)
+                || pendingRegion != _crop?.Region || _dirtyCropInputs.Count != 0 || _activeTextBox is not null) return;
+            if (region == new RectD(0, 0, _canvasWidth, _canvasHeight))
+            {
+                SetStatus(UiText.Get("Capture410.AutoTrimNoMargin"));
+                return;
+            }
+            SelectTool(EditorTool.Crop);
+            _crop!.SetRegion(region);
+            _cropRatio.SelectedIndex = 0;
+            RefreshCrop();
+            SetStatus(UiText.Get("Capture410.AutoTrimPreview"));
+            if (ReferenceEquals(Keyboard.FocusedElement, _autoTrimButton)) Focus();
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning("Automatic margin inspection failed: {0}", ex);
+            if (!_completed && !token.IsCancellationRequested) SetStatus(UiText.Get("Capture410.AutoTrimFailed"));
+        }
+        finally
+        {
+            if (ReferenceEquals(_autoTrimCts, operation)) _autoTrimCts = null;
+            operation.Dispose();
+            _autoTrimInProgress = false;
+            _autoTrimButton.IsEnabled = true;
+        }
+    }
+
     private void OnSurfaceMouseMove(object sender, MouseEventArgs e)
     {
         if (_activeTextBox is not null)
@@ -590,6 +707,12 @@ internal sealed class AnnotationEditorControl : Grid
         Point dip = e.GetPosition(_surface);
         PointD image = _surface.ToImagePoint(dip);
 
+        if (_edgeCropStart is not null)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed) ContinueEdgeCrop(image, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            else { _edgeCropStart = null; ReleasePointer(); }
+            return;
+        }
         if (_crop is not null)
         {
             if (e.LeftButton == MouseButtonState.Pressed && _crop.IsDragging)
@@ -597,20 +720,16 @@ internal sealed class AnnotationEditorControl : Grid
                 _crop.Drag(image, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
                 RefreshCrop();
             }
-            Cursor = _crop.HitTest(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel)) switch
-            {
-                CropGrip.Move => Cursors.SizeAll,
-                CropGrip.TopLeft or CropGrip.BottomRight => Cursors.SizeNWSE,
-                CropGrip.TopRight or CropGrip.BottomLeft => Cursors.SizeNESW,
-                CropGrip.Top or CropGrip.Bottom => Cursors.SizeNS,
-                CropGrip.Left or CropGrip.Right => Cursors.SizeWE,
-                _ => Cursors.Cross,
-            };
+            Cursor = CropCursor(_crop.HitTest(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel)));
             return;
         }
         if (e.LeftButton == MouseButtonState.Pressed)
         {
             _controller.PointerMove(image);
+        }
+        else if (EdgeCropGripAt(image) is CropGrip edge)
+        {
+            Cursor = CropCursor(edge);
         }
         else if (_controller.Tool == EditorTool.Select)
         {
@@ -627,6 +746,13 @@ internal sealed class AnnotationEditorControl : Grid
         if (_activeTextBox is not null)
         {
             return;
+        }
+
+        if (_edgeCropStart is not null)
+        {
+            ContinueEdgeCrop(_surface.ToImagePoint(e.GetPosition(_surface)), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            _edgeCropStart = null;
+            if (_crop is null) { ReleasePointer(); e.Handled = true; return; }
         }
 
         if (_mosaicDragging)
@@ -1002,6 +1128,16 @@ internal sealed class AnnotationEditorControl : Grid
         left.Children.Add(_rotateLeftButton);
         left.Children.Add(_rotateRightButton);
         left.Children.Add(Separator());
+
+        Button crop = TextButton(UiText.Get("Capture410.Crop"), UiText.Get("Capture410.CropHint"),
+            "Button.Secondary", () => { SelectTool(EditorTool.Crop); Focus(); });
+        AutomationProperties.SetAutomationId(crop, "Capture410Crop");
+        AutomationProperties.SetAcceleratorKey(crop, "X");
+        left.Children.Add(crop);
+        _autoTrimButton = TextButton(UiText.Get("Capture410.AutoTrim"), UiText.Get("Capture410.AutoTrimHint"),
+            "Button.GhostCompact", () => _ = PreviewAutomaticTrimAsync());
+        AutomationProperties.SetAutomationId(_autoTrimButton, "Capture410AutoTrim");
+        left.Children.Add(_autoTrimButton);
 
         _redactButton = TextButton(
             UiText.Get("Text_E395E2567985"),
@@ -1812,6 +1948,8 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void SelectTool(EditorTool tool)
     {
+        _autoTrimCts?.Cancel();
+        if (_edgeCropStart is not null) { _edgeCropStart = null; ReleasePointer(); }
         if (_activeTextBox is not null)
         {
             CommitActiveText();
@@ -1881,6 +2019,8 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void OnHistoryChanged()
     {
+        _documentRevision++;
+        _autoTrimCts?.Cancel();
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncBaseBitmapWithDocument();
         _dimensionsText.Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight);

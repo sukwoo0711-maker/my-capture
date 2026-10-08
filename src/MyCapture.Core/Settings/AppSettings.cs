@@ -319,6 +319,9 @@ public sealed class GeneralSettings
     /// <summary>Chrome palette id: glass, glass-light, workspace, midnight, daylight, or high-contrast.</summary>
     public string Theme { get; set; } = MyCapture.Core.Themes.AppThemeNames.Glass;
 
+    /// <summary>Independent capture-guide brand override. Empty follows the theme; otherwise #RRGGBB.</summary>
+    public string CaptureGuideColor { get; set; } = string.Empty;
+
     /// <summary>One preserves theme choices made after the workspace migration.</summary>
     public int ThemeRevision { get; set; }
 

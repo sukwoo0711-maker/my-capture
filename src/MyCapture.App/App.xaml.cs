@@ -173,7 +173,7 @@ public partial class App : Application
 
         _settings = _services.GetRequiredService<SettingsStore>().Load();
         UiText.Configure(_settings.General.Language);
-        ThemeService.ApplyFromSettings(_settings.General.Theme);
+        ThemeService.ApplyFromSettings(_settings.General);
 
         _tray = _services.GetRequiredService<TrayIconService>();
         _hotkeys = _services.GetRequiredService<GlobalHotkeyService>();

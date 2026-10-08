@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using MyCapture.Core.Themes;
+using MyCapture.Core.Settings;
 
 namespace MyCapture.App.Themes;
 
@@ -16,6 +17,8 @@ internal static class ThemeService
     /// <summary>Null until the first Apply; lets diagnostics restore the pre-fixture state.</summary>
     internal static AppTheme? IsAppliedForTest => _applied ? Current : null;
     private static bool _applied;
+    internal static string CaptureGuideColor { get; private set; } = string.Empty;
+    internal static event Action? CaptureGuideChanged;
 
     static ThemeService()
     {
@@ -30,7 +33,13 @@ internal static class ThemeService
     internal static DispatcherOperation ScheduleCropResourceRefresh(Dispatcher dispatcher,
         ResourceDictionary resources, Func<bool> readHighContrast) =>
         dispatcher.BeginInvoke(DispatcherPriority.ContextIdle,
-            new Action(() => ApplyCropResources(resources, readHighContrast())));
+            new Action(() =>
+            {
+                bool highContrast = readHighContrast();
+                ApplyCropResources(resources, highContrast);
+                CaptureGuidePalette.Apply(resources, Current, CaptureGuideColor, highContrast);
+                CaptureGuideChanged?.Invoke();
+            }));
 
     internal static void Apply(AppTheme theme)
     {
@@ -41,12 +50,13 @@ internal static class ThemeService
             return;
         }
 
-        ApplyResources(theme, resources);
+        ApplyResources(theme, resources, CaptureGuideColor);
         WorkspaceTheme.Refresh(theme);
         ModernWindowChrome.RefreshAll();
+        CaptureGuideChanged?.Invoke();
     }
 
-    internal static void ApplyResources(AppTheme theme, ResourceDictionary resources)
+    internal static void ApplyResources(AppTheme theme, ResourceDictionary resources, string? captureGuideColor = null)
     {
         foreach ((string key, ThemeColor color) in ThemeCatalog.ColorsFor(theme))
         {
@@ -71,6 +81,7 @@ internal static class ThemeService
         resources["Text.Disabled"] = new SolidColorBrush(theme is AppTheme.Daylight or AppTheme.GlassLight
             ? Color.FromRgb(0x74, 0x7C, 0x89) : Color.FromRgb(0x7A, 0x82, 0x90));
         ApplyCropResources(resources, SystemParameters.HighContrast);
+        CaptureGuidePalette.Apply(resources, theme, captureGuideColor, SystemParameters.HighContrast);
     }
 
     internal static void ApplyCropResources(ResourceDictionary resources, bool highContrast)
@@ -80,5 +91,12 @@ internal static class ThemeService
         resources["Crop.FrameShadow"] = highContrast ? SystemColors.WindowBrush : Brushes.Black;
     }
 
-    internal static void ApplyFromSettings(string? themeId) => Apply(AppThemeNames.Parse(themeId));
+    internal static void ApplyFromSettings(string? themeId, string? captureGuideColor = null)
+    {
+        CaptureGuideColor = CaptureGuideColorValue.TryNormalize(captureGuideColor, out string color) ? color : string.Empty;
+        Apply(AppThemeNames.Parse(themeId));
+    }
+
+    internal static void ApplyFromSettings(GeneralSettings settings) =>
+        ApplyFromSettings(settings.Theme, settings.CaptureGuideColor);
 }

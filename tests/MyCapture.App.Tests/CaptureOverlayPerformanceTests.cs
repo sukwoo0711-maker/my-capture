@@ -113,7 +113,7 @@ public sealed class CaptureOverlayPerformanceTests
     [InlineData(1.0)]
     [InlineData(1.5)]
     [InlineData(2.0)]
-    public void RetainedStripPixels_MatchOriginalGuidesAtEdgesAndFractionalCoordinates(double scale) => StaTestHost.Run(() =>
+    public void RetainedStripPixels_MatchTokenGuidesAtEdgesAndFractionalCoordinates(double scale) => StaTestHost.Run(() =>
     {
         foreach (PointD cursor in new[] { new PointD(0, 0), new PointD(639, 0), new PointD(0, 359), new PointD(639, 359), new PointD(123.25, 79.5) })
         {
@@ -126,11 +126,15 @@ public sealed class CaptureOverlayPerformanceTests
                 reference.InitializePointer();
                 Render(reference, 640, 360, scale);
                 var original = new DrawingVisual();
-                // The v3.1.4 full-viewport guide drawing, preserved as a pixel reference.
+                // Independent full-viewport drawing of the current token/dash recipe.
+                // Retained strips must match it exactly, including fractional coordinates.
                 using (DrawingContext dc = original.RenderOpen())
                 {
-                    var shadow = new Pen(new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)), 3);
-                    var line = new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xB3, 0x47)), 1.25);
+                    double pixel = 1 / scale;
+                    var shadow = new Pen(reference.GuidePalette["CaptureGuide.LineShadow"], 2 * pixel)
+                        { DashStyle = new DashStyle([1.5, 1.5], 0) };
+                    var line = new Pen(reference.GuidePalette["CaptureGuide.Line"], pixel)
+                        { DashStyle = new DashStyle([3, 3], 0) };
                     Point p = new(cursor.X * reference.ActualWidth / 640, cursor.Y * reference.ActualHeight / 360);
                     dc.PushClip(new RectangleGeometry(new Rect(reference.RenderSize)));
                     dc.DrawLine(shadow, new Point(0, p.Y), new Point(reference.ActualWidth, p.Y));
@@ -235,6 +239,9 @@ public sealed class CaptureOverlayPerformanceTests
 
     private static RenderTargetBitmap Render(CaptureOverlayView view, int width, int height, double scale = 1)
     {
+        if (Math.Abs(view.GuidePixelSizeX - 1 / scale) > 0.000001)
+            Invoke(view, "OnDpiChanged", new DpiScale(1 / view.GuidePixelSizeX, 1 / view.GuidePixelSizeY),
+                new DpiScale(scale, scale));
         view.InvalidateVisual();
         view.Measure(new Size(width / scale, height / scale));
         view.Arrange(new Rect(0, 0, width / scale, height / scale));

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -3237,4 +3237,18 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Crop.InvalidSizeLabel" xml:space="preserve"><value>정수 입력</value></data>
   <data name="Crop.InvalidSize" xml:space="preserve"><value>너비와 높이에 2 이상의 정수를 입력하십시오.</value></data>
   <data name="Capture.LibrarySaveFailedNoEditor" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 라이브러리를 확인하고 필요하면 다시 캡처하십시오. {0}</value></data>
+  <data name="Capture410.Crop" xml:space="preserve"><value>자르기 (X)</value></data>
+  <data name="Capture410.CropHint" xml:space="preserve"><value>이미지 가장자리를 끌어 자르기 범위를 조정합니다.</value></data>
+  <data name="Capture410.AutoTrim" xml:space="preserve"><value>여백 자동 제거</value></data>
+  <data name="Capture410.AutoTrimHint" xml:space="preserve"><value>가장자리의 여백을 찾아 자르기 틀로 표시합니다.</value></data>
+  <data name="Capture410.AutoTrimWorking" xml:space="preserve"><value>여백을 확인합니다.</value></data>
+  <data name="Capture410.AutoTrimPreview" xml:space="preserve"><value>여백 제거 범위</value></data>
+  <data name="Capture410.AutoTrimNoMargin" xml:space="preserve"><value>제거할 여백이 없습니다.</value></data>
+  <data name="Capture410.AutoTrimFailed" xml:space="preserve"><value>여백을 확인하지 못했습니다. 다시 시도하십시오.</value></data>
+  <data name="Capture410.GuideColor" xml:space="preserve"><value>캡처 가이드 색</value></data>
+  <data name="Capture410.GuideColorTheme" xml:space="preserve"><value>테마 기본</value></data>
+  <data name="Capture410.GuideColorCustom" xml:space="preserve"><value>사용자 지정 색</value></data>
+  <data name="Capture410.GuideColorHex" xml:space="preserve"><value>HEX</value></data>
+  <data name="Capture410.GuideColorSwatch" xml:space="preserve"><value>캡처 가이드 색 견본</value></data>
+  <data name="Capture410.GuideColorInvalid" xml:space="preserve"><value>HEX 색을 #RRGGBB 형식으로 입력하십시오.</value></data>
 </root>

@@ -266,6 +266,9 @@ internal static class CapturePerformanceSelfTest
         var renderGaps = new List<double>();
         long previousRender = 0, callbackAllocations = 0;
         int updates = 0, mouseOverCallbacks = 0;
+        int desktopBefore = view.StaticRenderCount, feedbackBefore = view.FeedbackRenderCount;
+        int guidePensBefore = view.GuidePenBuildCount, guideGeometryBefore = view.GuideGeometryBuildCount;
+        int magnifierBefore = view.MagnifierUpdateCount;
         bool mouseOverAtStart = view.IsMouseOver;
         long started = Stopwatch.GetTimestamp();
         var timer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(8) };
@@ -303,7 +306,14 @@ internal static class CapturePerformanceSelfTest
         return new { Updates = updates, WallMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds,
             MouseOverAtStart = mouseOverAtStart, MouseOverAtEnd = view.IsMouseOver,
             MouseOverCallbacks = mouseOverCallbacks, TotalCallbacks = callbacks.Count,
-            CallbackAllocatedBytes = callbackAllocations, Callback = Summarize(callbacks), RenderGaps = Summarize(renderGaps) };
+            CallbackAllocatedBytes = callbackAllocations, Callback = Summarize(callbacks), RenderGaps = Summarize(renderGaps),
+            GuideTheme = MyCapture.App.Themes.ThemeService.Current.ToString(),
+            GuideColor = view.GuidePalette["CaptureGuide.SelectionBorder"].ToString(),
+            DesktopRebuilds = view.StaticRenderCount - desktopBefore,
+            GuidePenBuilds = view.GuidePenBuildCount - guidePensBefore,
+            GuideGeometryBuilds = view.GuideGeometryBuildCount - guideGeometryBefore,
+            FeedbackFrames = view.FeedbackRenderCount - feedbackBefore,
+            MagnifierUpdates = view.MagnifierUpdateCount - magnifierBefore };
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

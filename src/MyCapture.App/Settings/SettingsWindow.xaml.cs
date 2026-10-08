@@ -151,7 +151,7 @@ internal sealed partial class SettingsWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         DetachDraftEvents();
-        ThemeService.ApplyFromSettings(_currentSettings().General.Theme);
+        ThemeService.ApplyFromSettings(_currentSettings().General);
         base.OnClosed(e);
     }
 
@@ -164,7 +164,7 @@ internal sealed partial class SettingsWindow : Window
         AttachDraftEvents();
         _settingsEdited = false;
         DataContext = _draft;
-        ThemeService.ApplyFromSettings(_draft.Theme);
+        ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
         SetStatusMessage(string.Empty);
         RefreshErrorSummary();
     }
@@ -187,8 +187,9 @@ internal sealed partial class SettingsWindow : Window
     {
         _settingsEdited = true;
         // ResetToDefaults raises a whole-draft notification instead of one for Theme.
-        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(SettingsDraft.Theme))
-            ThemeService.ApplyFromSettings(_draft.Theme);
+        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName is nameof(SettingsDraft.Theme)
+            or nameof(SettingsDraft.CaptureGuideColorMode) or nameof(SettingsDraft.CaptureGuideColorHex))
+            ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
     }
 
     /// <summary>Reports settings file operations independently of the selected category.</summary>
@@ -315,7 +316,7 @@ internal sealed partial class SettingsWindow : Window
             // so they can fix the underlying problem (read-only folder, full disk, path
             // conflict) and retry without re-entering everything. Its theme remains a
             // reversible preview; the shell is not notified of a saved apply.
-            ThemeService.ApplyFromSettings(_draft.Theme);
+            ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
             _showSaveFailureMessage(string.Join(Environment.NewLine, result.Messages));
             return;
         }

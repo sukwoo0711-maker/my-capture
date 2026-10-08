@@ -177,7 +177,7 @@ public sealed class SettingsApplyService
             }
         }
 
-        MyCapture.App.Themes.ThemeService.ApplyFromSettings(next.General.Theme);
+        MyCapture.App.Themes.ThemeService.ApplyFromSettings(next.General);
 
         bool languageChanged = !string.Equals(previous.General.Language, next.General.Language, StringComparison.OrdinalIgnoreCase);
         if (languageChanged)

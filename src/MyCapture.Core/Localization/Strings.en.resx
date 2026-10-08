@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -3237,4 +3237,18 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Crop.InvalidSizeLabel" xml:space="preserve"><value>Whole number</value></data>
   <data name="Crop.InvalidSize" xml:space="preserve"><value>Enter a whole number of at least 2 for width and height.</value></data>
   <data name="Capture.LibrarySaveFailedNoEditor" xml:space="preserve"><value>Could not save to the library. Check the library and capture again if needed. {0}</value></data>
+  <data name="Capture410.Crop" xml:space="preserve"><value>Crop (X)</value></data>
+  <data name="Capture410.CropHint" xml:space="preserve"><value>Drag an image edge to adjust the crop.</value></data>
+  <data name="Capture410.AutoTrim" xml:space="preserve"><value>Auto trim margins</value></data>
+  <data name="Capture410.AutoTrimHint" xml:space="preserve"><value>Find edge margins and preview a crop.</value></data>
+  <data name="Capture410.AutoTrimWorking" xml:space="preserve"><value>Finding margins.</value></data>
+  <data name="Capture410.AutoTrimPreview" xml:space="preserve"><value>Margin trim preview</value></data>
+  <data name="Capture410.AutoTrimNoMargin" xml:space="preserve"><value>No margins to remove.</value></data>
+  <data name="Capture410.AutoTrimFailed" xml:space="preserve"><value>Could not inspect the margins. Try again.</value></data>
+  <data name="Capture410.GuideColor" xml:space="preserve"><value>Capture guide color</value></data>
+  <data name="Capture410.GuideColorTheme" xml:space="preserve"><value>Theme default</value></data>
+  <data name="Capture410.GuideColorCustom" xml:space="preserve"><value>Custom color</value></data>
+  <data name="Capture410.GuideColorHex" xml:space="preserve"><value>HEX</value></data>
+  <data name="Capture410.GuideColorSwatch" xml:space="preserve"><value>Capture guide color swatch</value></data>
+  <data name="Capture410.GuideColorInvalid" xml:space="preserve"><value>Enter a HEX color in #RRGGBB format.</value></data>
 </root>

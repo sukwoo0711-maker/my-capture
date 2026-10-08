@@ -85,6 +85,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _gitHubIssueUrl = GitHubIssueImageUrl.DefaultIssueUrl;
     private string _gitHubToken = string.Empty;
     private string _theme = AppThemeNames.Midnight;
+    private string _captureGuideColorMode = "theme";
+    private string _captureGuideColorHex = CaptureGuideColorValue.DefaultCustomColor;
 
     // ----- Export -----
     private string _quickSaveDirectoryOverride = string.Empty;
@@ -336,6 +338,35 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set => Set(ref _theme, AppThemeNames.ToSetting(AppThemeNames.Parse(value)));
     }
 
+    public string CaptureGuideColorMode
+    {
+        get => _captureGuideColorMode;
+        set
+        {
+            if (!Set(ref _captureGuideColorMode, value == "custom" ? "custom" : "theme")) return;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsCustomCaptureGuideColor)));
+            ValidateCaptureGuideColor();
+        }
+    }
+
+    public bool IsCustomCaptureGuideColor => _captureGuideColorMode == "custom";
+
+    public string CaptureGuideColorHex
+    {
+        get => _captureGuideColorHex;
+        set
+        {
+            if (Set(ref _captureGuideColorHex, value ?? string.Empty)) ValidateCaptureGuideColor();
+        }
+    }
+
+    public string CaptureGuideColorSetting => IsCustomCaptureGuideColor
+        && CaptureGuideColorValue.TryNormalize(_captureGuideColorHex, out string color) ? color : string.Empty;
+
+    private void ValidateCaptureGuideColor() => SetErrorState(nameof(CaptureGuideColorHex),
+        !IsCustomCaptureGuideColor || CaptureGuideColorValue.TryNormalize(_captureGuideColorHex, out _),
+        UiText.Get("Capture410.GuideColorInvalid"));
+
     // ================= Export =================
 
     public string QuickSaveDirectoryOverride
@@ -491,6 +522,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             : GitHubIssueImageUrl.DefaultIssueUrl;
         _gitHubToken = s.GitHub.Token ?? string.Empty;
         _theme = AppThemeNames.ToSetting(AppThemeNames.Parse(s.General.Theme));
+        bool customGuide = CaptureGuideColorValue.TryNormalize(s.General.CaptureGuideColor, out string guideColor);
+        _captureGuideColorMode = customGuide ? "custom" : "theme";
+        _captureGuideColorHex = customGuide ? guideColor : CaptureGuideColorValue.DefaultCustomColor;
         _copyToClipboardOnQuickSave = s.Export.CopyToClipboardOnQuickSave;
         _showSourceWindowTitle = s.Export.ShowSourceWindowTitle;
         _fileNamePattern = s.Export.FileNamePattern;
@@ -560,6 +594,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 ShowShortcutHints = _showShortcutHints,
                 Language = _language,
                 Theme = AppThemeNames.ToSetting(AppThemeNames.Parse(_theme)),
+                CaptureGuideColor = CaptureGuideColorSetting,
                 ThemeRevision = 1,
                 IsFirstRun = _preservedIsFirstRun,
             },
@@ -705,6 +740,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     private void ValidateAll()
     {
+        ValidateCaptureGuideColor();
         ValidateInt(_delaySeconds, SettingsRanges.DelaySeconds, nameof(DelaySeconds));
         ValidateInt(_regionHistoryLimit, SettingsRanges.RegionHistoryLimit, nameof(RegionHistoryLimit));
         ValidateRecordingFrameRate(_recordingFrameRate);
