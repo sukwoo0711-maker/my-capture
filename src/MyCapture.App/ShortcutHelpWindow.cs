@@ -72,6 +72,7 @@ internal sealed class ShortcutHelpWindow : Window
             (string Tab, (string Action, string Keys)[] Entries)[] sections =
             [
                 ("Help.Capture", [("Text_096A13A757DB", Display(keys.Capture)), ("Text_75306DAE2E60", Display(keys.RecordRegion)),
+                    ("RecordingPauseHotkey_Command", Display(keys.PauseRecording)),
                     ("Text_66BA5DCDA810", Display(keys.OpenLibrary)), ("Text_36458FABBDBB", Display(keys.CaptureWindow)),
                     ("Text_254C836B9ED2", Display(keys.CaptureFullScreen)), ("Hotkey.Scroll", Display(keys.ScrollingCapture)), ("Hotkey.Delay", Display(keys.DelayedCapture)),
                     ("QuickAccess.Title", "Alt+Q"), ("TextCapture_Title", Display(keys.CaptureText)),

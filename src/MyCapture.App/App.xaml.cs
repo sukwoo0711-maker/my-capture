@@ -477,6 +477,34 @@ public partial class App : Application
                 _log?.LogInformation("Text capture hotkey requested");
                 HandleCaptureTextRequested();
                 break;
+            case GlobalHotkeyCommand.PauseRecording:
+                _log?.LogInformation("Pause-recording hotkey requested");
+                HandlePauseRecording();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Pauses or resumes the running recording exactly like the control window's pause
+    /// button. Without a recording the chord is inert: a log line, no notification.
+    /// </summary>
+    private void HandlePauseRecording()
+    {
+        if (_recorder is null)
+        {
+            _log?.LogInformation("Pause-recording hotkey ignored: recording is unavailable");
+            return;
+        }
+
+        try
+        {
+            // The coordinator logs why a press was ignored.
+            _ = _recorder.TogglePause();
+        }
+        catch (Exception ex)
+        {
+            // Fail soft: a pause failure must not end the tray process.
+            _log?.LogError(ex, "Could not change the recording pause state from the hotkey");
         }
     }
 

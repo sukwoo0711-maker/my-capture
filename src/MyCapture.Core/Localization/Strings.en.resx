@@ -3390,4 +3390,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color while selecting</value></data>
   <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>Click Select window</value></data>
   <data name="WindowDetect_Setting" xml:space="preserve"><value>Highlight the window under the pointer · Click to select it</value></data>
+  <data name="RecordingPauseHotkey_Command" xml:space="preserve"><value>Pause/resume recording</value></data>
+  <data name="RecordingPauseHotkey_HotkeyName" xml:space="preserve"><value>Pause/resume recording shortcut</value></data>
+  <data name="RecordingPauseHotkey_Description" xml:space="preserve"><value>While recording, pauses or resumes the recording like the Pause button. Does nothing when no recording is running.</value></data>
+  <data name="RecordingPauseHotkey_HelpWithShortcut" xml:space="preserve"><value>{0} Shortcut: {1}</value></data>
 </root>

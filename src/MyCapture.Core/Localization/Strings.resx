@@ -3390,4 +3390,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="ColorPick_HelpLabel" xml:space="preserve"><value>선택 중 색상 복사</value></data>
   <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>클릭 창 선택</value></data>
   <data name="WindowDetect_Setting" xml:space="preserve"><value>포인터 아래 창 강조 · 클릭으로 창 영역 선택</value></data>
+  <data name="RecordingPauseHotkey_Command" xml:space="preserve"><value>녹화 일시정지/재개</value></data>
+  <data name="RecordingPauseHotkey_HotkeyName" xml:space="preserve"><value>녹화 일시정지/재개 단축키</value></data>
+  <data name="RecordingPauseHotkey_Description" xml:space="preserve"><value>녹화 중에 누르면 일시정지 버튼과 같이 녹화를 일시정지하거나 재개합니다. 녹화 중이 아닐 때는 동작하지 않습니다.</value></data>
+  <data name="RecordingPauseHotkey_HelpWithShortcut" xml:space="preserve"><value>{0} 단축키: {1}</value></data>
 </root>

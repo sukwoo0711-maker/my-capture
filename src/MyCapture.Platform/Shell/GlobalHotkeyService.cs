@@ -23,6 +23,7 @@ public enum GlobalHotkeyCommand
     DelayedCapture,
     RestoreClosedPin,
     CaptureText,
+    PauseRecording,
 }
 
 /// <summary>
@@ -296,6 +297,7 @@ public sealed class GlobalHotkeyService : IDisposable
         yield return (GlobalHotkeyCommand.DelayedCapture, settings.DelayedCapture);
         yield return (GlobalHotkeyCommand.RestoreClosedPin, settings.RestoreClosedPin);
         yield return (GlobalHotkeyCommand.CaptureText, settings.CaptureText);
+        yield return (GlobalHotkeyCommand.PauseRecording, settings.PauseRecording);
     }
 
     private static int IdFor(GlobalHotkeyCommand command) => FirstHotkeyId + (int)command;

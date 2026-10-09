@@ -582,6 +582,12 @@
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingPauseHotkey_Command}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text RecordingPauseHotkey_Description}" />
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text RecordingPauseHotkey_HotkeyName}" AutomationProperties.HelpText="{loc:Text RecordingPauseHotkey_Description}" DefaultText="" Text="{Binding PauseRecordingHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.UploadGitHubHotkey}" />
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Settings.UploadGitHubHotkey}" DefaultText="F9" Text="{Binding UploadGitHubImageHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>

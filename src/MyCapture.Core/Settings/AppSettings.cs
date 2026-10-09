@@ -124,6 +124,15 @@ public sealed class HotkeySettings
     /// </summary>
     /// <remarks>Unassigned by default, like the other optional capture commands.</remarks>
     public Hotkey CaptureText { get; set; } = Hotkey.None;
+
+    /// <summary>
+    /// Pauses or resumes the active region recording without clicking its control window.
+    /// </summary>
+    /// <remarks>
+    /// Unassigned by default so a default chord never takes a shortcut from another app;
+    /// pressing it while nothing is recording does nothing.
+    /// </remarks>
+    public Hotkey PauseRecording { get; set; } = Hotkey.None;
 }
 
 public sealed class QueueSettings
