@@ -315,5 +315,6 @@ internal static class HotkeyCloneExtensions
         CaptureFullScreen = s.CaptureFullScreen,
         RecordRegion = s.RecordRegion,
         UploadGitHubImage = s.UploadGitHubImage,
+        CaptureText = s.CaptureText,
     };
 }

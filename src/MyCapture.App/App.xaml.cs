@@ -259,6 +259,7 @@ public partial class App : Application
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_50EE4EA7C243"), null,
             [
                 new(UiText.Get("Text_2C20ADDA2018"), HandleCaptureRequested, Gesture: _settings!.Hotkeys.Capture.ToString()),
+                new(UiText.Get("TextCapture_Title"), HandleCaptureTextRequested, Gesture: _settings!.Hotkeys.CaptureText.ToString()),
                 new(UiText.Get("Text_EA1FBABE64F3"), HandleCaptureWindow, Gesture: _settings!.Hotkeys.CaptureWindow.ToString()),
                 new(UiText.Get("Text_65BB6610ACA0"), HandleCaptureFullScreen, Gesture: _settings!.Hotkeys.CaptureFullScreen.ToString()),
                 new(_scrollCancellation is not null ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"), HandleScrollingCapture, Gesture: _settings!.Hotkeys.ScrollingCapture.ToString()),
@@ -287,6 +288,7 @@ public partial class App : Application
         _tray.GalleryRequested += (_, _) => HandleGalleryRequested();
         _tray.SettingsRequested += (_, _) => HandleSettingsRequested();
         _tray.ExitRequested += (_, _) => Shutdown(0);
+        InitializeTextCapture();
         ShortcutHelpWindow.ReadHotkeys = () => _settings!.Hotkeys;
         ShortcutHelpWindow.OpenSettings = HandleSettingsRequested;
         ShortcutHelpWindow.CanShowHelp = () => !_preparingAdvancedCapture && _overlay?.IsSelecting != true;
@@ -460,6 +462,10 @@ public partial class App : Application
             case GlobalHotkeyCommand.UploadGitHubImage:
                 _log?.LogInformation("GitHub image URL hotkey requested");
                 HandleGitHubImageUpload();
+                break;
+            case GlobalHotkeyCommand.CaptureText:
+                _log?.LogInformation("Text capture hotkey requested");
+                HandleCaptureTextRequested();
                 break;
         }
     }
