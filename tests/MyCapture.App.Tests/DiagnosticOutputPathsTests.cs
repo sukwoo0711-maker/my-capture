@@ -59,7 +59,7 @@ public sealed class DiagnosticOutputPathsTests
         string link = Path.Combine(owner, "linked");
         try
         {
-            UpdatePathsTests.CreateJunction(link, target);
+            TestJunction.Create(link, target);
             Assert.Throws<IOException>(() => DiagnosticOutputPaths.Create(Path.Combine(link, "must-not-exist", "reports")));
             Assert.Throws<IOException>(() => DiagnosticOutputPaths.Child(link, "report.json"));
             Assert.Empty(Directory.EnumerateFileSystemEntries(target));
@@ -82,7 +82,7 @@ public sealed class DiagnosticOutputPathsTests
         try
         {
             File.WriteAllText(keep, "unrelated");
-            UpdatePathsTests.CreateJunction(link, target);
+            TestJunction.Create(link, target);
             Assert.Throws<IOException>(() => DiagnosticOutputPaths.Child(owner, "recording-performance.json"));
             Assert.Equal("unrelated", File.ReadAllText(keep));
         }

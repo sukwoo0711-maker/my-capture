@@ -37,9 +37,6 @@ Thumbs.db
 desktop.ini
 .DS_Store
 
-## Installer output
-build/installer-output/
-
 ## Local scratch
 *.local.ps1
 scratch/

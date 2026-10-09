@@ -87,27 +87,6 @@ jobs:
           }
           finally { Stop-Transcript | Out-Null }
 
-      - name: Verify installer and update lifecycle
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Start-Transcript -Path artifacts/validation/hosted/installer-update-tests.log | Out-Null
-          function Invoke-CheckedTest([string]$Path, [string[]]$TestArguments = @()) {
-            # Negative-case harnesses intentionally run failing child commands. Give
-            # each harness its own host so its internal LASTEXITCODE cannot leak into
-            # the Actions wrapper after all assertions have passed.
-            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $Path @TestArguments
-            if ($LASTEXITCODE -ne 0) { throw "Validation failed ($LASTEXITCODE): $Path" }
-          }
-          try {
-            Invoke-CheckedTest .\build\tests\installer-resident-tests.ps1
-            Invoke-CheckedTest .\build\tests\installer-hostile-tests.ps1 @('-Version', $env:PACKAGE_VERSION, '-ArtifactRoot', "artifacts/release/$env:PACKAGE_VERSION")
-            Invoke-CheckedTest .\build\tests\update-helper-tests.ps1
-            Invoke-CheckedTest .\build\tests\update-preservation-tests.ps1
-            Invoke-CheckedTest .\build\tests\update-restart-preflight-tests.ps1
-            Invoke-CheckedTest .\build\tests\update-restart-acceptance.ps1 @('-ArtifactRoot', "artifacts/release/$env:PACKAGE_VERSION", '-ExpectedSourceCommit', $env:EXPECTED_SOURCE_SHA, '-DotNetPath', (Get-Command dotnet).Source, '-Execute')
-          }
-          finally { Stop-Transcript | Out-Null }
-
       - name: Verify release provenance and preserve seven reports
         run: |
           $ErrorActionPreference = 'Stop'
@@ -116,23 +95,24 @@ jobs:
           $status = git status --porcelain --untracked-files=all
           if ($LASTEXITCODE -ne 0 -or $status) { throw 'Source tree changed during validation.' }
           $releaseRoot = "artifacts/release/$env:PACKAGE_VERSION"
-          $manifest = Get-Content "$releaseRoot/release-manifest.json" -Raw | ConvertFrom-Json
-          if ($manifest.SourceCommit -cne $env:EXPECTED_SOURCE_SHA -or
+          $manifestFile = Get-Item -LiteralPath "$releaseRoot/release-manifest.json"
+          if ($manifestFile.PSIsContainer -or $manifestFile.Length -le 0) { throw 'Missing release manifest.' }
+          $manifest = Get-Content -LiteralPath $manifestFile.FullName -Raw | ConvertFrom-Json
+          if ($manifest.SchemaVersion -ne 4 -or
+              $manifest.SourceCommit -cne $env:EXPECTED_SOURCE_SHA -or
               $manifest.SourceTreeClean -isnot [bool] -or -not $manifest.SourceTreeClean -or
               $manifest.Version -cne $env:PACKAGE_VERSION) { throw 'Release provenance mismatch.' }
-          $assetNames = @(
-            "MyCapture-$env:PACKAGE_VERSION-win-x64-setup.exe",
-            "MyCapture-$env:PACKAGE_VERSION-win-x64-portable.zip",
-            'installer-manifest.json', 'release-manifest.json', 'SHA256SUMS.txt', 'README-OFFLINE.txt'
-          )
-          $assets = @($assetNames | ForEach-Object {
-            $file = Get-Item -LiteralPath (Join-Path $releaseRoot $_)
-            if ($file.PSIsContainer -or $file.Length -le 0) { throw "Missing release asset: $_" }
-            [pscustomobject]@{ Path = $_; Bytes = $file.Length; Sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
-          })
-          $sums = @(Get-Content "$releaseRoot/SHA256SUMS.txt")
-          $expectedSums = @($assets | Where-Object { $_.Path -in @($assetNames[0], $assetNames[1], 'release-manifest.json') } | ForEach-Object { "$($_.Sha256.ToUpperInvariant())  $($_.Path)" })
-          if ($sums.Count -ne 3 -or @(Compare-Object $expectedSums $sums -CaseSensitive).Count -ne 0) { throw 'Release checksum mismatch.' }
+          $releaseManifest = [pscustomobject]@{ Path = 'release-manifest.json'; Bytes = $manifestFile.Length; Sha256 = (Get-FileHash -LiteralPath $manifestFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+          $storeRoot = "artifacts/store/$env:PACKAGE_VERSION-localtest"
+          $msixFiles = @(Get-ChildItem -LiteralPath $storeRoot -Filter *.msix -File)
+          if ($msixFiles.Count -ne 1 -or $msixFiles[0].Length -le 0) { throw 'Expected exactly one non-empty local-test MSIX.' }
+          $msix = $msixFiles[0]
+          $msixHash = (Get-FileHash -LiteralPath $msix.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $storeSummary = Get-Content -LiteralPath "$storeRoot/store-package.json" -Raw | ConvertFrom-Json
+          if ($storeSummary.Sha256 -cne $msixHash) { throw 'Store package summary checksum mismatch.' }
+          $sums = @(Get-Content -LiteralPath "$storeRoot/SHA256SUMS.txt")
+          if ($sums.Count -ne 1 -or $sums[0] -cne "$msixHash  $($msix.Name)") { throw 'Store package checksum mismatch.' }
+          $storePackage = [pscustomobject]@{ Path = $msix.Name; Bytes = $msix.Length; Sha256 = $msixHash }
           $runs = @(Get-ChildItem artifacts/validation/hosted/packaged-self-tests -Directory)
           if ($runs.Count -ne 1) { throw 'Expected exactly one packaged validation run.' }
           $reportPaths = @(
@@ -149,21 +129,19 @@ jobs:
           })
           [ordered]@{
             SourceCommit = $head; SourceTreeClean = $true; Version = $env:PACKAGE_VERSION
-            Result = 'PASS'; PackagedSelfTests = $reports; ReleaseAssets = $assets
+            Result = 'PASS'; PackagedSelfTests = $reports; ReleaseManifest = $releaseManifest; StorePackage = $storePackage
           } | ConvertTo-Json -Depth 5 | Set-Content artifacts/validation/hosted/validation.json -Encoding utf8
           "Packaged validation: PASS (7/7), source $head, version $env:PACKAGE_VERSION" | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
-      - name: Upload six validated release assets
+      - name: Upload validated release manifest and Store local-test package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: MyCapture-${{ env.PACKAGE_VERSION }}-${{ github.sha }}-${{ github.run_attempt }}
           path: |
-            artifacts/release/${{ env.PACKAGE_VERSION }}/MyCapture-${{ env.PACKAGE_VERSION }}-win-x64-setup.exe
-            artifacts/release/${{ env.PACKAGE_VERSION }}/MyCapture-${{ env.PACKAGE_VERSION }}-win-x64-portable.zip
-            artifacts/release/${{ env.PACKAGE_VERSION }}/installer-manifest.json
             artifacts/release/${{ env.PACKAGE_VERSION }}/release-manifest.json
-            artifacts/release/${{ env.PACKAGE_VERSION }}/SHA256SUMS.txt
-            artifacts/release/${{ env.PACKAGE_VERSION }}/README-OFFLINE.txt
+            artifacts/store/${{ env.PACKAGE_VERSION }}-localtest/*.msix
+            artifacts/store/${{ env.PACKAGE_VERSION }}-localtest/store-package.json
+            artifacts/store/${{ env.PACKAGE_VERSION }}-localtest/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
@@ -178,12 +156,5 @@ jobs:
             artifacts/validation/hosted/*.json
             artifacts/validation/hosted/*.log
             artifacts/validation/hosted/packaged-self-tests/**/*report.txt
-            artifacts/validation/update-restart/*/acceptance-result.json
-            artifacts/validation/update-restart/*/verified-install-result.json
-            artifacts/validation/update-restart/*/restart-process.json
-            artifacts/validation/update-restart/*/seed-install.log
-            artifacts/validation/update-restart/*/restart.stdout.txt
-            artifacts/validation/update-restart/*/restart.stderr.txt
-            artifacts/validation/update-restart/*/temporary/**/ux-review-selftest-report.txt
           if-no-files-found: warn
           retention-days: 14

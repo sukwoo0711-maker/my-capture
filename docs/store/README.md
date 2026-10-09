@@ -4,18 +4,18 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 
 ## Store 빌드에서 달라지는 동작
 
+업데이트는 빌드와 관계없이 Microsoft Store가 제공합니다. 앱 안의 GitHub 업데이트 기능(릴리스 확인, 설치 파일 다운로드, PowerShell 설치 도우미)은 제거했습니다. 설정의 업데이트 탭은 모든 빌드에서 Store 안내와 **Microsoft Store에서 열기** 버튼을 표시하고, 버튼은 Store 앱의 제품 페이지(`ms-windows-store://pdp/?productid=9PB33MC095VR`)를 엽니다.
+
 앱은 실행할 때 패키지 ID가 있는지 확인하고, 다음 항목만 Store 방식으로 바꿉니다. 같은 바이너리를 그대로 쓰므로 별도 빌드 구성은 없습니다.
 
 | 항목 | 개발 빌드(비패키지)와 기존 GitHub 설치본 | Store 빌드 |
 |---|---|---|
-| 업데이트 | 설정의 업데이트 탭에서 GitHub 릴리스를 확인하고 설치 | Microsoft Store가 업데이트. 업데이트 탭에는 안내만 표시 |
 | 로그인 시 자동 시작 | HKCU `Run` 키, 기본 켜짐 | 매니페스트 시작 작업(`MyCaptureStartup`), 기본 꺼짐 |
 | 설정·라이브러리 | `%APPDATA%\MyCapture` | `%LOCALAPPDATA%\Packages\<패키지 패밀리 이름>\LocalState` |
 | OCR 모델 | `%LOCALAPPDATA%\MyCapture\ocr-models` | 같은 패키지 폴더의 `LocalCache\ocr-models` |
 | 드래그 내보내기 임시 파일 | `%TEMP%\MyCapture\DragExports` | 같은 패키지 폴더의 `TempState\MyCapture\DragExports` |
 | 빠른 저장 | `사진\Captures` | 같음 |
 
-- **업데이트**: Store 빌드에서 GitHub 설치 파일을 받으면 패키지 옆에 비패키지 사본이 하나 더 설치됩니다. 그래서 Store 빌드에서는 업데이트 동작을 막았습니다.
 - **자동 시작**: 패키지 앱이 `Run` 키에 쓴 값은 가상화되어 로그인할 때 실행되지 않습니다. Store 정책 10.2.8은 Windows 시작 동작을 바꾸기 전에 사용자 동의를 요구합니다. 그래서 시작 작업은 꺼진 상태로 배포됩니다. 사용자가 MyCapture 설정이나 Windows 설정 > 앱 > 시작 프로그램에서 직접 켭니다. 앱 설정의 체크 상태는 Windows의 실제 상태를 따릅니다.
 - **저장 위치**: 패키지 앱이 AppData에 새로 만든 파일은 패키지 전용 위치로 리디렉션됩니다. 이 위치는 탐색기, 사진 앱, 드롭 대상이 원래 경로로 찾을 수 없습니다. 가상화를 끄는 `unvirtualizedResources` 기능은 게임용이어서 Store 승인을 기대하기 어렵습니다. 그래서 Store 빌드는 실제 경로인 패키지 폴더를 사용합니다.
 - **제거하면 데이터도 삭제됨**: Store 앱을 제거하면 패키지 폴더의 설정과 라이브러리도 함께 삭제됩니다. 라이브러리를 유지하려면 설정에서 캡처 폴더를 다른 위치로 지정하십시오. `사진\Captures`의 빠른 저장 파일은 남습니다.
@@ -45,7 +45,7 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 
 ## 2. 패키지 만들기
 
-병합된 main의 깨끗한 작업 트리에서 실행합니다. `package-store.ps1`은 `package.ps1`이 만든 게시 폴더(`artifacts\release\<버전>\publish-win-x64`)를 그대로 사용합니다. 패키지 self-test 8종을 단독 실행하여 통과한 바이너리를 Store 패키지로 묶습니다.
+병합된 main의 깨끗한 작업 트리에서 실행합니다. `package.ps1`은 self-contained 게시 폴더(`artifacts\release\<버전>\publish-win-x64`)와 소스 커밋·파일 목록을 기록한 `release-manifest.json`만 만듭니다. 설치 파일(setup.exe)과 포터블 ZIP은 만들지 않습니다. `package-store.ps1`은 이 게시 폴더를 그대로 사용합니다. 패키지 self-test 8종을 단독 실행하여 통과한 바이너리를 Store 패키지로 묶습니다.
 
 ```powershell
 .\build\package.ps1 -Version 4.1.0
@@ -80,7 +80,7 @@ Add-AppxPackage -Path .\artifacts\store\4.1.0-localtest\MyCapture.LocalTest_4.1.
 다음 항목을 확인합니다.
 
 - 시작 메뉴와 작업 표시줄 아이콘
-- 설정 > 업데이트 탭의 Store 안내
+- 설정 > 업데이트 탭의 Store 안내와 **Microsoft Store에서 열기** 버튼(Store 앱의 MyCapture 페이지가 열리는지 여부)
 - 설정에서 로그인 시 자동 시작을 켜면 Windows 설정 > 앱 > 시작 프로그램에 MyCapture가 표시되는지 여부
 - 캡처 후 라이브러리에서 탐색기로 드래그하거나 다른 앱에서 열기
 

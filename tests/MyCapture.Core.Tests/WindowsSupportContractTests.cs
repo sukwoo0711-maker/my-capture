@@ -10,8 +10,9 @@ namespace MyCapture.Core.Tests;
 
 /// <summary>
 /// Keeps the shipped artefacts honest about the supported host. The runtime policy, the MSBuild
-/// platform floor, the installer preflight and the release manifest must all state the same
-/// Windows 11 baseline; a stray Windows 10 claim anywhere in src/ or build/ is a contract break.
+/// platform floor, the Store package manifest MinVersion and the release manifest must all state
+/// the same Windows 11 baseline; a stray Windows 10 claim anywhere in src/ or build/ is a
+/// contract break.
 /// </summary>
 public sealed class WindowsSupportContractTests
 {
@@ -66,20 +67,12 @@ public sealed class WindowsSupportContractTests
     {
         string package = ReadRepositoryFile("build/package.ps1");
 
-        // Both the installer manifest and the release manifest carry the floor.
+        // The release manifest is the single place that stamps the floor.
         int occurrences = Regex.Matches(package, $@"MinimumWindowsBuild\s*=\s*{WindowsSupportPolicy.MinimumBuild}\b").Count;
-        Assert.True(occurrences >= 2, $"Expected at least 2 MinimumWindowsBuild={WindowsSupportPolicy.MinimumBuild} stamps, found {occurrences}.");
+        Assert.True(occurrences == 1, $"Expected exactly 1 MinimumWindowsBuild={WindowsSupportPolicy.MinimumBuild} stamp, found {occurrences}.");
 
         Assert.Contains($"MinimumWindowsRelease = '{WindowsSupportPolicy.MinimumReleaseName}'", package, StringComparison.Ordinal);
         Assert.Contains("Windows 11", package, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void InstallerPreflight_RejectsHostsBelowTheWindows11Floor()
-    {
-        string install = ReadRepositoryFile("build/installer/install.ps1");
-        Assert.Contains("Windows 11", install, StringComparison.Ordinal);
-        Assert.Contains("MinimumWindowsBuild", install, StringComparison.Ordinal);
     }
 
     [Fact]

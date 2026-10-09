@@ -162,7 +162,7 @@ public sealed class GalleryBatchDragTests
             TestRecycleBin.DeleteFile(link);
             string keep = Path.Combine(targetRoot, "keep.txt");
             File.WriteAllText(keep, "unrelated");
-            UpdatePathsTests.CreateJunction(link, targetRoot);
+            TestJunction.Create(link, targetRoot);
             Assert.Throws<IOException>(() => GalleryExportFiles.ValidateSource(link));
             string staging = Path.Combine(root, "staging");
             var service = new GalleryDragExportService(queue, staging);
@@ -199,7 +199,7 @@ public sealed class GalleryBatchDragTests
                 {
                     if (count != 1) return;
                     Directory.Move(sourceParent, sourceParent + "-original");
-                    UpdatePathsTests.CreateJunction(sourceParent, targetRoot);
+                    TestJunction.Create(sourceParent, targetRoot);
                 },
             };
             Assert.Equal(staging, service.StagingRoot);
@@ -227,7 +227,7 @@ public sealed class GalleryBatchDragTests
             CaptureRecord record = Add(queue);
             string keep = Path.Combine(targetRoot, "MyCapture_unrelated.png");
             File.WriteAllText(keep, "keep"); File.SetLastWriteTimeUtc(keep, DateTime.UtcNow.AddDays(-4));
-            UpdatePathsTests.CreateJunction(link, targetRoot);
+            TestJunction.Create(link, targetRoot);
             var service = new GalleryDragExportService(queue, link);
             service.CleanupExpiredBestEffort(DateTimeOffset.UtcNow.AddDays(-2));
             await Assert.ThrowsAsync<IOException>(() => service.PrepareBatchAsync([record], CancellationToken.None));
@@ -257,7 +257,7 @@ public sealed class GalleryBatchDragTests
                 Directory.Move(link, link + "-original");
                 string keep = Path.Combine(targetRoot, Path.GetFileName(Assert.Single(batch.Paths)));
                 File.WriteAllText(keep, "unrelated matching name");
-                UpdatePathsTests.CreateJunction(link, targetRoot);
+                TestJunction.Create(link, targetRoot);
             }
             Assert.Equal("unrelated matching name", File.ReadAllText(Assert.Single(Directory.EnumerateFiles(targetRoot))));
         }
@@ -322,12 +322,12 @@ public sealed class GalleryBatchDragTests
 
                 // This native helper opens the existing empty directory with GENERIC_WRITE,
                 // then issues FSCTL_SET_REPARSE_POINT. No rename or directory swap is used.
-                Win32Exception denied = Assert.Throws<Win32Exception>(() => UpdatePathsTests.CreateJunction(staging, targetRoot));
+                Win32Exception denied = Assert.Throws<Win32Exception>(() => TestJunction.Create(staging, targetRoot));
                 Assert.Equal(32 /* ERROR_SHARING_VIOLATION */, denied.NativeErrorCode);
                 Assert.False(File.GetAttributes(staging).HasFlag(FileAttributes.ReparsePoint));
             }
             // Prove the same filesystem and native request permit the operation after release.
-            UpdatePathsTests.CreateJunction(staging, targetRoot);
+            TestJunction.Create(staging, targetRoot);
             Assert.True(File.GetAttributes(staging).HasFlag(FileAttributes.ReparsePoint));
             Assert.Equal("original bytes", File.ReadAllText(source));
             Assert.Empty(Directory.EnumerateFileSystemEntries(targetRoot));

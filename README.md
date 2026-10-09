@@ -65,7 +65,7 @@ MyCapture는 [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR)�
 
 배포 패키지는 .NET 런타임을 포함하는 **self-contained** 빌드이므로 사용자 PC에 .NET을 따로 설치할 필요가 없습니다. 캡처, 편집, 녹화와 OCR은 PC 안에서 처리하며, 앱이 자동으로 인터넷에 연결하는 경우는 PC에 없는 OCR 모델 파일을 내려받을 때뿐입니다. 네트워크 연결 전체 목록은 [개인정보처리방침](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md)에서 확인할 수 있습니다. Store 패키지를 만들고 제출하는 절차는 [Microsoft Store 배포](docs/store/README.md)를 참고하십시오.
 
-`build\package.ps1`이 만드는 설치 파일과 포터블 ZIP은 Store 패키지의 원본 게시 폴더와 내부 확인용이며 서명되지 않습니다. 외부에 배포하지 마십시오.
+`build\package.ps1`은 Store 패키지의 원본인 self-contained 게시 폴더와 소스 커밋을 기록한 `release-manifest.json`만 만듭니다. 설치 파일(setup.exe)과 포터블 ZIP은 더 이상 만들지 않습니다.
 
 기본 사용자 데이터 위치는 다음과 같습니다.
 
@@ -77,14 +77,11 @@ MyCapture는 [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR)�
 
 4.1.0의 변경 사항은 [릴리스 노트](docs/releases/4.1.0-release-notes.md)에서 확인할 수 있습니다. 이전 [4.0.2](docs/releases/4.0.2-release-notes.md), [4.0.1](docs/releases/4.0.1-release-notes.md), [4.0.0](docs/releases/4.0.0-release-notes.md), [3.4.0](docs/releases/3.4.0-release-notes.md), [3.2.1](docs/releases/3.2.1-release-notes.md), [3.2.0](docs/releases/3.2.0-release-notes.md), [3.1.7](docs/releases/3.1.7-release-notes.md), [3.1.5](docs/releases/3.1.5-release-notes.md), [3.1.4](docs/releases/3.1.4-release-notes.md), [3.1.3](docs/releases/3.1.3-release-notes.md), [3.1.2](docs/releases/3.1.2-release-notes.md), [3.1.1](docs/releases/3.1.1-release-notes.md), [3.1.0](docs/releases/3.1.0-release-notes.md), [3.0.0](docs/releases/3.0.0-release-notes.md), [2.4.1](docs/releases/2.4.1-release-notes.md), [2.4.0](docs/releases/2.4.0-release-notes.md), [2.3.10](docs/releases/2.3.10-release-notes.md), [2.3.9](docs/releases/2.3.9-release-notes.md), [2.3.8](docs/releases/2.3.8-release-notes.md), [2.3.7](docs/releases/2.3.7-release-notes.md), [2.3.6](docs/releases/2.3.6-release-notes.md), [2.3.5](docs/releases/2.3.5-release-notes.md), [2.3.4](docs/releases/2.3.4-release-notes.md), [2.3.3](docs/releases/2.3.3-release-notes.md), [2.3.2](docs/releases/2.3.2-release-notes.md), [2.3.1](docs/releases/2.3.1-release-notes.md), [2.3.0](docs/releases/2.3.0-release-notes.md), [2.2.2](docs/releases/2.2.2-release-notes.md), [2.2.1](docs/releases/2.2.1-release-notes.md), [2.1.1](docs/releases/2.1.1-release-notes.md), [2.1.0](docs/releases/2.1.0-release-notes.md), [2.0.0](docs/releases/2.0.0-release-notes.md), [1.9.2](docs/releases/1.9.2-release-notes.md), [1.9.0](docs/releases/1.9.0-release-notes.md) 기록도 보존합니다.
 
-### 1.8.3 실행 및 배포 형식 안내
+### 실행과 업데이트
 
 - 일반 실행과 바로가기 더블클릭은 라이브러리 창을 엽니다. 로그인 자동 실행은 `--background`로 트레이에만 상주합니다.
-- 설치형과 포터블 ZIP의 앱·런타임 파일은 동일합니다. 설치형은 `%LOCALAPPDATA%\Programs\MyCapture`에 설치하고 시작 메뉴, 제거 프로그램, `install-manifest.json` 소유권 기록을 추가합니다.
-- 포터블은 ZIP 전체를 별도 폴더에 풀고 `MyCapture.exe`를 실행하십시오. EXE만 옮기면 DLL과 Assets가 없어 실행할 수 없습니다. 두 형식의 기본 사용자 데이터는 `%APPDATA%\MyCapture`입니다.
-- 설치 전 다른 위치의 포터블/설치형을 트레이 메뉴에서 종료하십시오. 두 복사본은 한 Windows 세션에서 동시에 상주하지 않습니다.
-- 포터블의 앱 내 업데이트는 일반 설치형으로 전환합니다. 포터블 유지 시 새 ZIP을 별도 폴더에 풀어 실행하십시오. 기존 폴더와 사용자 파일은 자동 삭제하지 않습니다.
-- [1.8.3 수정 내역](docs/releases/1.8.3-release-notes.md)과 [검증 기록](docs/releases/1.8.3-validation.md)을 확인하십시오.
+- 업데이트는 Microsoft Store가 제공합니다. 설정 > 업데이트 탭은 모든 빌드에서 Store 안내와 **Microsoft Store에서 열기** 버튼을 표시하며, 앱이 업데이트 파일을 직접 내려받거나 설치하지 않습니다.
+- Store 설치본과 개발 빌드는 같은 단일 실행 잠금을 쓰므로 한 Windows 세션에서 동시에 상주하지 않습니다.
 
 ## 소스에서 빌드
 

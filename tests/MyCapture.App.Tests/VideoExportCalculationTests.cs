@@ -124,7 +124,7 @@ public sealed class VideoExportCalculationTests
             string folder = Directory.CreateDirectory(Path.Combine(root, "original")).FullName;
             string source = Path.Combine(folder, "source.mp4");
             File.WriteAllBytes(source, [7, 8, 9]);
-            UpdatePathsTests.CreateJunction(link, folder);
+            TestJunction.Create(link, folder);
             using var result = VideoExportCalculation.Calculate(0, 1000, 1_000_000,
                 (path, _, _, _) => File.WriteAllBytes(path, [1, 2, 3, 4]), CancellationToken.None);
 

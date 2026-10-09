@@ -40,10 +40,6 @@
     <value>F  프레임</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
-  <data name="Text_0226F79FE6FB" xml:space="preserve">
-    <value>업데이트를 취소했습니다.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_03151E566E1D" xml:space="preserve">
     <value>MyCapture 화면 고정</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
@@ -59,10 +55,6 @@
   <data name="Text_04B54A7BED01" xml:space="preserve">
     <value>스크롤 캡처가 취소되었습니다.</value>
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
-  </data>
-  <data name="Text_05184F5EA537" xml:space="preserve">
-    <value>업데이트하고 다시 시작</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_060B5907DA2C" xml:space="preserve">
     <value>텍스트 레이어 {0}개, 프레임 레이어 {1}개. {2}</value>
@@ -172,10 +164,6 @@
     <value>텍스트 표시 시간: {0:0.00}초부터 {1:0.00}초까지</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
-  <data name="Text_1125C68F3C22" xml:space="preserve">
-    <value>다운로드 취소</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_1145FCF19412" xml:space="preserve">
     <value>캡처 저장 폴더 찾아보기</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -240,10 +228,6 @@
     <value>자르기 모드입니다. 자홍색 시작/끝 삭제 핸들을 드래그하거나 방향키로 조정합니다. Tab은 조정할 핸들을 바꿉니다.</value>
     <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
   </data>
-  <data name="Text_1764E00FE2EE" xml:space="preserve">
-    <value>설치 버전으로 전환하고 다시 시작</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_182650FB6543" xml:space="preserve">
     <value>더 투명하게 (Ctrl+휠)</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
@@ -258,17 +242,9 @@
 </value>
     <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
   </data>
-  <data name="Text_18AB379A433A" xml:space="preserve">
-    <value>설치 파일 검증 중…</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_190A3BE20786" xml:space="preserve">
     <value>화살표 도구 · 시작점에서 끝점으로 드래그하십시오</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
-  </data>
-  <data name="Text_195F0315EBCE" xml:space="preserve">
-    <value>설치 버전으로 전환합니다. 설치 위치: {0}{1}다운로드 후 설치한 앱을 다시 시작합니다. 현재 포터블 폴더와 그 안의 파일은 그대로 둡니다.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_199EB510DA51" xml:space="preserve">
     <value>MyCapture — 캡처 편집</value>
@@ -293,10 +269,6 @@
   <data name="Text_1C856E8BF798" xml:space="preserve">
     <value>녹화 시작 카운트다운 시간(초)</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
-  </data>
-  <data name="Text_1C944F0E89C3" xml:space="preserve">
-    <value>공식 GitHub 저장소에서 최신 안정 버전을 확인합니다. 다운로드한 설치 파일의 SHA-256을 확인한 뒤 설치합니다.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_1D9A98A69018" xml:space="preserve">
     <value>카운트다운 시간(초)</value>
@@ -476,10 +448,6 @@
   <data name="Text_2B7B1B697484" xml:space="preserve">
     <value>이미지는 최대 8192px, 1600만 픽셀 이하여야 합니다.</value>
     <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
-  </data>
-  <data name="Text_2BEE8F5FACA0" xml:space="preserve">
-    <value>최신 버전을 사용하고 있습니다.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_2C20ADDA2018" xml:space="preserve">
     <value>영역 캡처</value>
@@ -740,14 +708,6 @@
   <data name="Text_42A667BC71B0" xml:space="preserve">
     <value>이미지 복사</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
-  </data>
-  <data name="Text_42B9E5111FE2" xml:space="preserve">
-    <value>검증 정보 다운로드 중…</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
-  <data name="Text_42DA25F8F77F" xml:space="preserve">
-    <value>업데이트 설치 또는 재시작을 확인하지 못했습니다. 이 창의 로그 경로를 확인하고 MyCapture를 다시 실행하십시오.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_45E6B157C051" xml:space="preserve">
     <value>안전 크기 한도에 도달해 검증된 부분까지만 열었습니다.</value>
@@ -1032,10 +992,6 @@
   <data name="Text_5B8BBBA7AA27" xml:space="preserve">
     <value>화면에 고정할 수 없습니다</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
-  </data>
-  <data name="Text_5C2CD3EFE79B" xml:space="preserve">
-    <value>앱을 종료하고 업데이트를 설치합니다…</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_5C6A8668C3C0" xml:space="preserve">
     <value>작은 글자 정확도를 높입니다. 1.0 ~ 4.0.</value>
@@ -1409,10 +1365,6 @@
     <value>MyCapture — 녹화 편집</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
-  <data name="Text_7926541DAB63" xml:space="preserve">
-    <value>업데이트 위치: {0}{1}다운로드 후 이 위치의 앱을 업데이트하고 다시 시작합니다.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_798E080A9262" xml:space="preserve">
     <value>드래그해 캡처할 영역을 선택하십시오  ·  Shift 정밀 이동  ·  놓으면 확정  ·  Esc 취소</value>
     <comment>src\MyCapture.App\Capture\CaptureOverlayView.cs</comment>
@@ -1536,10 +1488,6 @@
   <data name="Text_875917AFD6EF" xml:space="preserve">
     <value>재생할 수 없음</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
-  </data>
-  <data name="Text_875E3EA22A90" xml:space="preserve">
-    <value>GitHub 요청 한도에 도달했습니다. 잠시 후 다시 시도하십시오.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_8773C2A9C3EA" xml:space="preserve">
     <value>아직 표시할 항목이 없습니다</value>
@@ -1785,10 +1733,6 @@
     <value>영상 레이어 타임라인</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
-  <data name="Text_9DB22E7B0ADA" xml:space="preserve">
-    <value>최신 버전을 확인하는 중…</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_9DDB97F03D7D" xml:space="preserve">
     <value>동영상 재생 위치</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
@@ -1819,7 +1763,7 @@
   </data>
   <data name="Text_9EA9BD59E20C" xml:space="preserve">
     <value>업데이트</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.Updates.cs</comment>
   </data>
   <data name="Text_9F05CC6FEDE5" xml:space="preserve">
     <value>영상 저장을 취소했습니다</value>
@@ -1982,10 +1926,6 @@
   <data name="Text_B0B5252B194F" xml:space="preserve">
     <value>현재 프레임을 준비할 수 없습니다: </value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
-  </data>
-  <data name="Text_B0F8B4B6D520" xml:space="preserve">
-    <value>업데이트하지 못했습니다. 네트워크와 저장 공간을 확인한 뒤 다시 시도하십시오.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_B2B3E2E19B90" xml:space="preserve">
     <value>이전 단축키를 복원하는 중 오류가 발생했습니다. 일부 단축키가 동작하지 않을 수 있으니 프로그램을 다시 시작하십시오.</value>
@@ -2237,10 +2177,6 @@
     <value>다시 캡처에 사용할 이전 선택 영역 개수. 1 ~ 200.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
-  <data name="Text_C48278DA0670" xml:space="preserve">
-    <value>업데이트 파일의 안전성을 확인할 수 없습니다. 설치하지 않았습니다.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_C4DFF18A59CA" xml:space="preserve">
     <value>GIF 만드는 중… {0}% ({1}/{2})</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
@@ -2274,10 +2210,6 @@
   <data name="Text_C61A081610C9" xml:space="preserve">
     <value>실행 취소 (Ctrl+Z)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
-  </data>
-  <data name="Text_C68C66E8758A" xml:space="preserve">
-    <value>다운로드와 검증이 완료되었습니다. 작업을 저장한 뒤 설치하십시오.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_C7000F39A0DF" xml:space="preserve">
     <value>자르기 범위 적용 · 유지 {0}</value>
@@ -2320,10 +2252,6 @@
   <data name="Text_CDC04935B675" xml:space="preserve">
     <value>'{0}'은(는) 올바른 언어 태그가 아닙니다 (예: ko-KR, en-US).</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
-  </data>
-  <data name="Text_CE2F7B272674" xml:space="preserve">
-    <value>설치 파일 다운로드 중… {0:F0}%</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_CE57D5CA2394" xml:space="preserve">
     <value>화면 고정에 실패했습니다</value>
@@ -2396,10 +2324,6 @@
   <data name="Text_D1F6E7772569" xml:space="preserve">
     <value>{0} · 언어 {1} · {2}줄 · {3:0}ms</value>
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
-  </data>
-  <data name="Text_D2ABBB3968D3" xml:space="preserve">
-    <value>녹화, 캡처 또는 편집을 마치고 설정을 적용한 뒤 다시 시도하십시오.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_D2E201C9D452" xml:space="preserve">
     <value>프레임</value>
@@ -2623,7 +2547,7 @@
   </data>
   <data name="Text_E285D4BC2FA3" xml:space="preserve">
     <value>현재 버전 {0}</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.Updates.cs</comment>
   </data>
   <data name="Text_E2B271067CCF" xml:space="preserve">
     <value>고정 크기 영역이 이 모니터 밖에 있습니다.</value>
@@ -2876,10 +2800,6 @@
   <data name="Text_F87FEA248BDD" xml:space="preserve">
     <value>이미 캡처가 진행 중입니다.</value>
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
-  </data>
-  <data name="Text_F91180061AA3" xml:space="preserve">
-    <value>설치하고 다시 시작</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_FA22CDFB3221" xml:space="preserve">
     <value>끝</value>
@@ -3318,7 +3238,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Folder410.InvalidMove" xml:space="preserve"><value>이 위치로 이동할 수 없습니다.</value></data>
   <data name="Folder410.EmptyFolder" xml:space="preserve"><value>폴더에 캡처가 없습니다.</value></data>
   <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>캡처를 끌어 넣거나 새 캡처 저장 위치로 지정하십시오.</value></data>
-  <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store에서 설치한 MyCapture는 Microsoft Store가 업데이트합니다. 새 버전은 Microsoft Store 앱의 라이브러리에서 확인할 수 있습니다.</value></data>
+  <data name="Update.StoreManaged" xml:space="preserve"><value>MyCapture는 Microsoft Store로 배포하며, 업데이트도 Microsoft Store가 제공합니다. 새 버전은 Microsoft Store 앱의 라이브러리에서 확인할 수 있습니다.</value></data>
+  <data name="Update.OpenStore" xml:space="preserve"><value>Microsoft Store에서 열기</value></data>
+  <data name="Update.OpenStoreFailed" xml:space="preserve"><value>Microsoft Store를 열 수 없습니다. Microsoft Store 앱에서 MyCapture를 검색하십시오.</value></data>
   <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>Windows 설정에서 MyCapture 시작 앱이 꺼져 있습니다. 설정 &gt; 앱 &gt; 시작 프로그램에서 켜십시오.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>조직 정책이 시작 프로그램 설정을 관리합니다.</value></data>
   <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>폴더에서 뺀 캡처는 오늘부터 보관 기간이 다시 적용됩니다.</value></data>

@@ -1,5 +1,6 @@
 # Builds the Microsoft Store MSIX from the verified self-contained publish folder that
-# build\package.ps1 produced, so the Store and GitHub releases ship identical binaries.
+# build\package.ps1 produced, so the Store package ships the exact binaries that the
+# packaged self-tests ran against.
 #
 # Store package (identity values from Partner Center > Product identity):
 #   .\build\package-store.ps1 -IdentityName 'Publisher.MyCapture' -Publisher 'CN=...' -PublisherDisplayName '...'

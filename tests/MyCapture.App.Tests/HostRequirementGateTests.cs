@@ -4,8 +4,8 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The portable ZIP has no installer preflight, so the process must refuse unsupported hosts by
-/// itself. These tests pin that behaviour without starting a WPF message loop.
+/// An unpackaged build has no Store manifest preflight, so the process must refuse unsupported
+/// hosts by itself. These tests pin that behaviour without starting a WPF message loop.
 /// </summary>
 public sealed class HostRequirementGateTests
 {

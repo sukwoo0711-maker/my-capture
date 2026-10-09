@@ -1,10 +1,10 @@
-using System.Reflection;
+using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
-using MyCapture.App.Updates;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
@@ -16,13 +16,11 @@ namespace MyCapture.App.Tests;
 public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
-    public Task StoreBuildUpdateTab_ShowsStoreNotice_AndOffersNoGitHubInstall() =>
-        RunIsolated(nameof(StoreBuildUpdateTab_ShowsStoreNotice_AndOffersNoGitHubInstall), VerifyStoreUpdateTab);
+    public Task UpdateTab_ShowsStoreNoticeAndOpensStorePage_InEveryBuild() =>
+        RunIsolated(nameof(UpdateTab_ShowsStoreNoticeAndOpensStorePage_InEveryBuild), VerifyStoreUpdateTab);
 
     private static void VerifyStoreUpdateTab()
     {
-        // The isolated child process owns this override, so no other test sees a packaged app.
-        AppPackage.IsPackagedOverride = true;
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
             application.Resources.MergedDictionaries.Add(new ResourceDictionary
@@ -31,10 +29,15 @@ public sealed partial class SettingsThemePreviewTests
             });
         try
         {
-            foreach (string locale in new[] { "ko-KR", "en-US" })
+            // The isolated child process owns this override, so no other test sees a packaged app.
+            foreach (bool packaged in new[] { false, true })
             {
-                using var language = UiText.UseLanguage(locale);
-                VerifyStoreUpdateTabForLanguage();
+                AppPackage.IsPackagedOverride = packaged;
+                foreach (string locale in new[] { "ko-KR", "en-US" })
+                {
+                    using var language = UiText.UseLanguage(locale);
+                    VerifyStoreUpdateTabForLanguage();
+                }
             }
         }
         finally
@@ -63,6 +66,8 @@ public sealed partial class SettingsThemePreviewTests
             ShowActivated = false, ShowInTaskbar = false,
         };
         FluidMotion.SetWindowEntrance(window, false);
+        var opened = new List<string>();
+        window.OpenStorePage = opened.Add;
         try
         {
             window.Show();
@@ -70,13 +75,35 @@ public sealed partial class SettingsThemePreviewTests
             tabs.SelectedItem = window.FindName("UpdateTab");
             Drain(window);
 
-            Assert.Equal(UpdateStrings.StoreManaged, Assert.IsType<TextBlock>(window.FindName("UpdateDescription")).Text);
-            Assert.Equal(Visibility.Collapsed, Assert.IsType<Button>(window.FindName("UpdateAction")).Visibility);
-            Assert.Equal(Visibility.Collapsed, Assert.IsType<Button>(window.FindName("UpdateCancel")).Visibility);
-            Assert.Equal(Visibility.Collapsed, Assert.IsType<ProgressBar>(window.FindName("UpdateDownloadProgress")).Visibility);
-            // Without a resolved target the GitHub download and installer handoff stay unreachable.
-            FieldInfo target = typeof(SettingsWindow).GetField("_updateTarget", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            Assert.Null(target.GetValue(window));
+            Assert.Equal(UiText.Get("Update.StoreManaged"), Assert.IsType<TextBlock>(window.FindName("UpdateDescription")).Text);
+            // The GitHub check, download and installer handoff controls are gone in every build.
+            Assert.Null(window.FindName("UpdateAction"));
+            Assert.Null(window.FindName("UpdateCancel"));
+            Assert.Null(window.FindName("UpdateDownloadProgress"));
+
+            Button openStore = Assert.IsType<Button>(window.FindName("UpdateOpenStore"));
+            Assert.True(openStore.IsVisible);
+            Assert.True(openStore.IsEnabled);
+            Assert.Equal(UiText.Get("Update.OpenStore"), openStore.Content);
+            Assert.Equal(UiText.Get("Update.OpenStore"), AutomationProperties.GetName(openStore));
+            AssertFits(window, openStore);
+
+            TextBlock status = Assert.IsType<TextBlock>(window.FindName("UpdateStatus"));
+            openStore.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal("ms-windows-store://pdp/?productid=9PB33MC095VR", Assert.Single(opened));
+            Assert.Equal(string.Empty, status.Text);
+
+            window.OpenStorePage = _ => throw new Win32Exception(2);
+            openStore.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Drain(window);
+            Assert.Equal(UiText.Get("Update.OpenStoreFailed"), status.Text);
+            Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(status));
+            AssertFits(window, status);
+
+            window.OpenStorePage = opened.Add;
+            openStore.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(2, opened.Count);
+            Assert.Equal(string.Empty, status.Text);
         }
         finally
         {

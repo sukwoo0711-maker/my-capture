@@ -20,7 +20,7 @@ under their own licenses.
 | Qualcomm AI Hub Real-ESRGAN-x4plus ONNX export | ONNX float weights for the Real-ESRGAN model above (downloaded from the Qualcomm AI Hub public asset store; export tooling is its own project) | BSD-3-Clause (model), see the linked source for tooling terms | <https://aihub.qualcomm.com/models/real-esrgan-x4plus> |
 | Microsoft.ML.OnnxRuntime (Careful OCR SR) | Same ONNX runtime as above, also hosts the super-resolution session | MIT | <https://github.com/microsoft/onnxruntime> |
 
-The portable and installer packages include the authoritative .NET license as
+The Microsoft Store package and its publish folder include the authoritative .NET license as
 `DOTNET-LICENSE.txt` and the complete .NET third-party notice set as
 `DOTNET-THIRD-PARTY-NOTICES.txt`.
 

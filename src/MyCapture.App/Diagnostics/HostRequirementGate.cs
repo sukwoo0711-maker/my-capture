@@ -6,13 +6,14 @@ namespace MyCapture.App.Diagnostics;
 /// Startup gate that stops MyCapture on hosts below the supported Windows baseline.
 /// </summary>
 /// <remarks>
-/// The installer refuses unsupported hosts, but the portable ZIP has no installer, so the process
-/// itself must enforce the same floor. The gate is written as a pure function over the reported OS
-/// version plus two callbacks so it can be unit-tested without a message loop.
+/// The Store package manifest refuses unsupported hosts, but an unpackaged build has no such
+/// check, so the process itself must enforce the same floor. The gate is written as a pure
+/// function over the reported OS version plus two callbacks so it can be unit-tested without a
+/// message loop.
 /// </remarks>
 internal static class HostRequirementGate
 {
-    /// <summary>Matches the installer's unsupported-OS exit code.</summary>
+    /// <summary>Exit code for an unsupported host, kept from the former offline installer.</summary>
     internal const int UnsupportedHostExitCode = 10;
 
     /// <summary>

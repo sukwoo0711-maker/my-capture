@@ -40,10 +40,6 @@
     <value>F  Frame</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
-  <data name="Text_0226F79FE6FB" xml:space="preserve">
-    <value>Update cancelled.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_03151E566E1D" xml:space="preserve">
     <value>MyCapture screen pin</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
@@ -59,10 +55,6 @@
   <data name="Text_04B54A7BED01" xml:space="preserve">
     <value>Scrolling capture was cancelled.</value>
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
-  </data>
-  <data name="Text_05184F5EA537" xml:space="preserve">
-    <value>Update and restart</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_060B5907DA2C" xml:space="preserve">
     <value>{0} text layers, {1} frame layers. {2}</value>
@@ -172,10 +164,6 @@
     <value>Text display: {0:0.00} to {1:0.00} seconds</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
-  <data name="Text_1125C68F3C22" xml:space="preserve">
-    <value>Cancel download</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_1145FCF19412" xml:space="preserve">
     <value>Browse capture folder</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -240,10 +228,6 @@
     <value>Trim mode. Drag the magenta start/end removal handles or adjust them with the arrow keys. Tab switches the active handle.</value>
     <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
   </data>
-  <data name="Text_1764E00FE2EE" xml:space="preserve">
-    <value>Switch to installed app and restart</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_182650FB6543" xml:space="preserve">
     <value>More transparent (Ctrl+scroll)</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
@@ -258,17 +242,9 @@
 </value>
     <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
   </data>
-  <data name="Text_18AB379A433A" xml:space="preserve">
-    <value>Verifying installer…</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_190A3BE20786" xml:space="preserve">
     <value>Arrow tool · Drag from start to end</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
-  </data>
-  <data name="Text_195F0315EBCE" xml:space="preserve">
-    <value>Switch to the installed version. Destination: {0}{1}After downloading, the installed app will restart. Your current portable folder and its files will be retained.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_199EB510DA51" xml:space="preserve">
     <value>MyCapture — Edit capture</value>
@@ -293,10 +269,6 @@
   <data name="Text_1C856E8BF798" xml:space="preserve">
     <value>Recording countdown (seconds)</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
-  </data>
-  <data name="Text_1C944F0E89C3" xml:space="preserve">
-    <value>Check the official GitHub repository for the latest stable version. The installer's SHA-256 is verified before installation.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_1D9A98A69018" xml:space="preserve">
     <value>Countdown (seconds)</value>
@@ -476,10 +448,6 @@ This cannot be undone.</value>
   <data name="Text_2B7B1B697484" xml:space="preserve">
     <value>Images must be at most 8192 px and 16 million pixels.</value>
     <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
-  </data>
-  <data name="Text_2BEE8F5FACA0" xml:space="preserve">
-    <value>You are up to date.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_2C20ADDA2018" xml:space="preserve">
     <value>Region capture </value>
@@ -740,14 +708,6 @@ This cannot be undone.</value>
   <data name="Text_42A667BC71B0" xml:space="preserve">
     <value>Copy image</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
-  </data>
-  <data name="Text_42B9E5111FE2" xml:space="preserve">
-    <value>Downloading verification information…</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
-  <data name="Text_42DA25F8F77F" xml:space="preserve">
-    <value>Update installation or restart could not be confirmed. Check the log path shown here and start MyCapture again.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_45E6B157C051" xml:space="preserve">
     <value>The safe size limit was reached. Only the verified portion was opened.</value>
@@ -1032,10 +992,6 @@ This cannot be undone.</value>
   <data name="Text_5B8BBBA7AA27" xml:space="preserve">
     <value>Cannot pin to screen</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
-  </data>
-  <data name="Text_5C2CD3EFE79B" xml:space="preserve">
-    <value>Closing the app and installing the update…</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_5C6A8668C3C0" xml:space="preserve">
     <value>Improve recognition of small text. 1.0–4.0.</value>
@@ -1409,10 +1365,6 @@ This cannot be undone.</value>
     <value>MyCapture — Edit recording</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
-  <data name="Text_7926541DAB63" xml:space="preserve">
-    <value>Update location: {0}{1}After downloading, the app at this location will be updated and restarted.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_798E080A9262" xml:space="preserve">
     <value>Drag to select a region  ·  Hold Shift for precision  ·  Release to confirm  ·  Esc to cancel</value>
     <comment>src\MyCapture.App\Capture\CaptureOverlayView.cs</comment>
@@ -1536,10 +1488,6 @@ This cannot be undone.</value>
   <data name="Text_875917AFD6EF" xml:space="preserve">
     <value>Cannot play</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
-  </data>
-  <data name="Text_875E3EA22A90" xml:space="preserve">
-    <value>GitHub's request limit was reached. Try again shortly.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_8773C2A9C3EA" xml:space="preserve">
     <value>No items to display yet</value>
@@ -1785,10 +1733,6 @@ This cannot be undone.</value>
     <value>Video layer timeline</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
-  <data name="Text_9DB22E7B0ADA" xml:space="preserve">
-    <value>Checking the latest version…</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_9DDB97F03D7D" xml:space="preserve">
     <value>Video playback position</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
@@ -1819,7 +1763,7 @@ This cannot be undone.</value>
   </data>
   <data name="Text_9EA9BD59E20C" xml:space="preserve">
     <value>Update</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.Updates.cs</comment>
   </data>
   <data name="Text_9F05CC6FEDE5" xml:space="preserve">
     <value>Video save cancelled</value>
@@ -1982,10 +1926,6 @@ This cannot be undone.</value>
   <data name="Text_B0B5252B194F" xml:space="preserve">
     <value>Cannot prepare the current frame: </value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
-  </data>
-  <data name="Text_B0F8B4B6D520" xml:space="preserve">
-    <value>The update could not be completed. Check your network connection and available storage, then try again.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_B2B3E2E19B90" xml:space="preserve">
     <value>An error occurred while restoring previous shortcuts. Some shortcuts may not work; restart the application.</value>
@@ -2237,10 +2177,6 @@ This cannot be undone.</value>
     <value>Number of previous regions to keep for repeat capture. 1–200.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
-  <data name="Text_C48278DA0670" xml:space="preserve">
-    <value>The update file could not be verified. It was not installed.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
-  </data>
   <data name="Text_C4DFF18A59CA" xml:space="preserve">
     <value>Creating GIF… {0}% ({1}/{2})</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
@@ -2274,10 +2210,6 @@ This cannot be undone.</value>
   <data name="Text_C61A081610C9" xml:space="preserve">
     <value>Undo (Ctrl+Z)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
-  </data>
-  <data name="Text_C68C66E8758A" xml:space="preserve">
-    <value>Download and verification complete. Save your work before installation.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_C7000F39A0DF" xml:space="preserve">
     <value>Trim applied · Keeping {0}</value>
@@ -2320,10 +2252,6 @@ This cannot be undone.</value>
   <data name="Text_CDC04935B675" xml:space="preserve">
     <value>'{0}' is not a valid language tag (for example ko-KR, en-US).</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
-  </data>
-  <data name="Text_CE2F7B272674" xml:space="preserve">
-    <value>Downloading installer… {0:F0}%</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_CE57D5CA2394" xml:space="preserve">
     <value>Pin to screen failed</value>
@@ -2396,10 +2324,6 @@ This cannot be undone.</value>
   <data name="Text_D1F6E7772569" xml:space="preserve">
     <value>{0} · Language {1} · {2} lines · {3:0} ms</value>
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
-  </data>
-  <data name="Text_D2ABBB3968D3" xml:space="preserve">
-    <value>Finish recording, capturing, or editing and apply your settings, then try again.</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_D2E201C9D452" xml:space="preserve">
     <value>Frame</value>
@@ -2623,7 +2547,7 @@ This cannot be undone.</value>
   </data>
   <data name="Text_E285D4BC2FA3" xml:space="preserve">
     <value>Current version {0}</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
+    <comment>src\MyCapture.App\Settings\SettingsWindow.Updates.cs</comment>
   </data>
   <data name="Text_E2B271067CCF" xml:space="preserve">
     <value>The fixed-size region is outside this monitor.</value>
@@ -2876,10 +2800,6 @@ This cannot be undone.</value>
   <data name="Text_F87FEA248BDD" xml:space="preserve">
     <value>A capture is already in progress.</value>
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
-  </data>
-  <data name="Text_F91180061AA3" xml:space="preserve">
-    <value>Install and restart</value>
-    <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_FA22CDFB3221" xml:space="preserve">
     <value>End</value>
@@ -3318,7 +3238,9 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Folder410.InvalidMove" xml:space="preserve"><value>Cannot move to this location.</value></data>
   <data name="Folder410.EmptyFolder" xml:space="preserve"><value>This folder has no captures.</value></data>
   <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>Drag captures here or select this folder for new captures.</value></data>
-  <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store keeps this copy of MyCapture up to date. Check for new versions in the Library of the Microsoft Store app.</value></data>
+  <data name="Update.StoreManaged" xml:space="preserve"><value>MyCapture is distributed and updated through the Microsoft Store. Check for new versions in the Library of the Microsoft Store app.</value></data>
+  <data name="Update.OpenStore" xml:space="preserve"><value>Open in Microsoft Store</value></data>
+  <data name="Update.OpenStoreFailed" xml:space="preserve"><value>The Microsoft Store could not be opened. Search for MyCapture in the Microsoft Store app.</value></data>
   <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>MyCapture is turned off in the Windows startup apps. Turn it on in Settings &gt; Apps &gt; Startup.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>An organization policy manages this startup setting.</value></data>
   <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>Captures removed from a folder start a new retention period today.</value></data>

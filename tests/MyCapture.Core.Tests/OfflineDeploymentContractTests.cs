@@ -7,8 +7,9 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Prevents an installer or portable archive from claiming to be offline while shipping a
-/// framework-dependent apphost. The release must carry CoreCLR and WPF beside MyCapture.exe.
+/// Prevents the published payload from claiming to be self-contained while shipping a
+/// framework-dependent apphost. The publish folder that the Microsoft Store package is built from
+/// must carry CoreCLR and WPF beside MyCapture.exe.
 /// </summary>
 public sealed class OfflineDeploymentContractTests
 {

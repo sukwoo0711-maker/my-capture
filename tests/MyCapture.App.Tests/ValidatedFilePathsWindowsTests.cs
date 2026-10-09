@@ -41,7 +41,7 @@ public sealed class ValidatedFilePathsWindowsTests
         string sentinel = ValidatedFilePaths.FileWithinRoot(target, "keep.txt", ".txt");
         File.WriteAllText(sentinel, "preserve external target");
         string link = ValidatedFilePaths.DirectoryWithinRoot(owner, "linked");
-        UpdatePathsTests.CreateJunction(link, target);
+        TestJunction.Create(link, target);
 
         Assert.Throws<IOException>(() => Directory.CreateDirectory(
             ValidatedFilePaths.DirectoryWithinRoot(owner, Path.Combine(link, "must-not-be-created"))));
@@ -58,7 +58,7 @@ public sealed class ValidatedFilePathsWindowsTests
         string owner = ValidatedFilePaths.CreateTemporaryDirectory();
         string outside = ValidatedFilePaths.CreateTemporaryDirectory();
         string link = Path.Combine(owner, "linked");
-        UpdatePathsTests.CreateJunction(link, outside);
+        TestJunction.Create(link, outside);
         Assert.Throws<IOException>(() => ValidatedFilePaths.CreateDirectory(Path.Combine(link, "new-output")));
         Assert.Throws<IOException>(() => ValidatedFilePaths.FileWithinRoot(owner, Path.Combine(link, "report.txt"), ".txt"));
         Assert.Equal(1, HotfixUxSelfTest.Run(Path.Combine(link, "diagnostic")));
@@ -95,7 +95,7 @@ public sealed class ValidatedFilePathsWindowsTests
         string owner = ValidatedFilePaths.CreateTemporaryDirectory();
         string target = ValidatedFilePaths.CreateTemporaryDirectory();
         string link = Path.Combine(owner, "redirected-profile");
-        UpdatePathsTests.CreateJunction(link, target);
+        TestJunction.Create(link, target);
         string profile = ValidatedFilePaths.CreateDirectory(Path.Combine(target, "MyCapture"));
         string settings = ValidatedFilePaths.FileWithinRoot(profile, "settings.json", ".json");
         File.WriteAllText(settings, "{\"schemaVersion\":4,\"general\":{\"isFirstRun\":false},\"capture\":{\"delaySeconds\":17}}");
@@ -127,7 +127,7 @@ public sealed class ValidatedFilePathsWindowsTests
         string owner = ValidatedFilePaths.CreateTemporaryDirectory();
         string target = ValidatedFilePaths.CreateTemporaryDirectory();
         string link = Path.Combine(owner, "redirected-temp");
-        UpdatePathsTests.CreateJunction(link, target);
+        TestJunction.Create(link, target);
         string fixture = ValidatedFilePaths.CreateTemporaryDirectory(link);
         Assert.StartsWith(Path.Combine(target, "MyCapture", "Diagnostics") + Path.DirectorySeparatorChar, fixture);
         string report = ValidatedFilePaths.FileWithinRoot(fixture, "report.txt", ".txt");

@@ -6,8 +6,8 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Keeps the 4.1.0 stable version and its Windows binary version aligned across MSBuild, packaging
-/// and installer validation.
+/// Keeps the 4.1.0 stable version and its Windows binary version aligned across MSBuild and the
+/// packaging scripts that feed the Microsoft Store package.
 /// </summary>
 public sealed class ReleaseVersionContractTests
 {
@@ -50,35 +50,24 @@ public sealed class ReleaseVersionContractTests
     }
 
     [Fact]
-    public void PackageAndInstaller_DefaultToTheGaVersion_AndStillAcceptAPrerelease()
+    public void Package_DefaultsToTheGaVersion_AndStillAcceptsAPrerelease()
     {
         string package = Read("build/package.ps1");
-        string installer = Read("build/installer/install.ps1");
-        string hostile = Read("build/tests/installer-hostile-tests.ps1");
 
         // The shipping default is the GA version. A release candidate must never be the default
-        // again, otherwise an operator who forgets -Version publishes a prerelease by accident.
+        // again, otherwise an operator who forgets -Version packages a prerelease by accident.
         Assert.Contains("[string]$Version = '4.1.0'", package, StringComparison.Ordinal);
-        Assert.Contains("[string]$Version = '4.1.0',", hostile, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", package, StringComparison.Ordinal);
-        Assert.DoesNotContain("$Version = '1.7.0-rc.1'", hostile, StringComparison.Ordinal);
 
         // A prerelease must still parse, so a future RC needs no script edit. The Windows binary
         // version stays numeric because Win32 version resources cannot carry a prerelease label.
         Assert.Contains("$semVerPattern", package, StringComparison.Ordinal);
+        Assert.Contains("$versionMatch", package, StringComparison.Ordinal);
         Assert.Contains("$baseVersion", package, StringComparison.Ordinal);
         Assert.Contains("$binaryVersion = \"$baseVersion.0\"", package, StringComparison.Ordinal);
         Assert.Contains("does not match the release version declared in Directory.Build.props", package, StringComparison.Ordinal);
         Assert.Contains("SemVer core", package, StringComparison.Ordinal);
         Assert.DoesNotContain("numeric SemVer", package, StringComparison.Ordinal);
-
-        Assert.Contains("$semVerPattern", installer, StringComparison.Ordinal);
-        Assert.Contains("$versionMatch", hostile, StringComparison.Ordinal);
-        Assert.Contains("$baseVersion", hostile, StringComparison.Ordinal);
-        Assert.Contains("$binaryVersion", hostile, StringComparison.Ordinal);
-        Assert.Contains("Assert-Equal $baseVersion $sourceVersion", hostile, StringComparison.Ordinal);
-        Assert.Contains("Assert-Equal $binaryVersion $sourceFileVersion", hostile, StringComparison.Ordinal);
-        Assert.Contains("Assert-Equal $Version (($dllVersionInfo.ProductVersion -split '\\+')[0])", hostile, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -88,11 +77,11 @@ public sealed class ReleaseVersionContractTests
 
         Assert.Contains("rev-parse --verify 'HEAD^{commit}'", package, StringComparison.Ordinal);
         Assert.Contains("-p:SourceRevisionId=$sourceCommit", package, StringComparison.Ordinal);
-        Assert.Contains("SchemaVersion = 3", package, StringComparison.Ordinal);
+        Assert.Contains("SchemaVersion = 4", package, StringComparison.Ordinal);
         Assert.Contains("SourceCommit = $sourceCommit", package, StringComparison.Ordinal);
         Assert.Contains("SourceTreeClean = $sourceTreeClean", package, StringComparison.Ordinal);
         Assert.Contains("releaseRoundTrip.SourceCommit", package, StringComparison.Ordinal);
-        Assert.Contains("New-FileRecord $releaseManifestOutput", package, StringComparison.Ordinal);
+        Assert.Contains("PublishInventory = $inventory", package, StringComparison.Ordinal);
         Assert.Contains("Refusing to package a dirty Git worktree", package, StringComparison.Ordinal);
         Assert.Contains("Release source changed during packaging", package, StringComparison.Ordinal);
     }
@@ -153,9 +142,7 @@ public sealed class ReleaseVersionContractTests
         }
 
         string package = Read("build/package.ps1");
-        string installer = Read("build/installer/install.ps1");
         Assert.Contains("'tray-error.ico'", package, StringComparison.Ordinal);
-        Assert.Contains("'tray-error.ico'", installer, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -207,45 +194,49 @@ public sealed class ReleaseVersionContractTests
     }
 
     [Fact]
-    public void PublishedGitHubReleases_MustIncludeTheSixRequiredAssets()
+    public void Packaging_FeedsOnlyTheMicrosoftStorePackage()
     {
-        string required = Read("build/required-release-assets.ps1");
-        string verify = Read("build/verify-github-release.ps1");
-        string publish = Read("build/publish-github-release.ps1");
-        string workflow = Read(".github/workflows/release-assets.yml");
+        string package = Read("build/package.ps1");
+        string store = Read("build/package-store.ps1");
         string packaged = Read(".github/workflows/packaged-validation.yml");
 
-        foreach (string name in new[]
+        // MyCapture ships only through the Microsoft Store. package.ps1 produces the verified
+        // publish folder and its release manifest; the offline installer and archive are gone.
+        foreach (string retired in new[]
                  {
-                     "MyCapture-$Version-win-x64-setup.exe",
-                     "MyCapture-$Version-win-x64-portable.zip",
+                     "iexpress",
+                     "setup.exe",
+                     "portable.zip",
                      "installer-manifest.json",
-                     "release-manifest.json",
                      "SHA256SUMS.txt",
                      "README-OFFLINE.txt",
                  })
         {
-            Assert.Contains(name, required, StringComparison.Ordinal);
+            Assert.DoesNotContain(retired, package, StringComparison.OrdinalIgnoreCase);
         }
 
-        Assert.Contains("Get-RequiredReleaseAssetNames", verify, StringComparison.Ordinal);
-        Assert.Contains("releases/tags/", verify, StringComparison.Ordinal);
-        Assert.Contains("NO_COLOR", verify, StringComparison.Ordinal);
-        Assert.Contains(".draft", verify, StringComparison.Ordinal);
-        Assert.Contains("missing required assets", verify, StringComparison.Ordinal);
-        Assert.Contains("Refusing to publish", publish, StringComparison.Ordinal);
-        Assert.Contains("verify-github-release.ps1", publish, StringComparison.Ordinal);
+        Assert.Contains("release-manifest.json", package, StringComparison.Ordinal);
+        Assert.Contains("publish-win-x64", store, StringComparison.Ordinal);
 
-        Assert.Contains("release:", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.Contains("types: [published]", workflow, StringComparison.Ordinal);
-        Assert.Contains("verify-github-release.ps1", workflow, StringComparison.Ordinal);
-        Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.DoesNotContain(": write", workflow, StringComparison.Ordinal);
-        Assert.Contains("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", workflow, StringComparison.Ordinal);
-
-        Assert.Contains("MyCapture-${{ env.PACKAGE_VERSION }}-win-x64-setup.exe", packaged, StringComparison.Ordinal);
-        Assert.Contains("SHA256SUMS.txt", packaged, StringComparison.Ordinal);
+        Assert.Contains("package-store.ps1", packaged, StringComparison.Ordinal);
         Assert.Contains("release-manifest.json", packaged, StringComparison.Ordinal);
+        Assert.DoesNotContain("setup.exe", packaged, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExecutionPolicy", packaged, StringComparison.Ordinal);
+
+        string root = RepositoryRoot();
+        Assert.False(Directory.Exists(Path.Combine(root, "build", "installer")), "build/installer must stay retired.");
+        foreach (string retiredFile in new[]
+                 {
+                     "build/required-release-assets.ps1",
+                     "build/publish-github-release.ps1",
+                     "build/verify-github-release.ps1",
+                     ".github/workflows/release-assets.yml",
+                 })
+        {
+            Assert.False(
+                File.Exists(Path.Combine(root, retiredFile.Replace('/', Path.DirectorySeparatorChar))),
+                $"{retiredFile} must stay retired.");
+        }
     }
 
     [Fact]

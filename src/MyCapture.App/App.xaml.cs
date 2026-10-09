@@ -87,9 +87,9 @@ public partial class App : Application
         base.OnStartup(e);
         UiText.Configure(null);
 
-        // Windows 11 is the supported baseline. The installer refuses older hosts, but the
-        // portable ZIP does not run the installer, so the process enforces the floor itself
-        // before any capture or diagnostics code touches Windows 11-era APIs.
+        // Windows 11 is the supported baseline. The Store package manifest refuses older hosts,
+        // but an unpackaged development build has no such check, so the process enforces the
+        // floor itself before any capture or diagnostics code touches Windows 11-era APIs.
         if (HostRequirementGate.BlockUnsupportedHost(
             Environment.OSVersion.Version,
             message => MyCapture.App.Themes.ThemedDialog.Show(message, "MyCapture", MessageBoxButton.OK, MessageBoxImage.Error),
@@ -1685,13 +1685,6 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<SettingsWindow>>(),
             () => _services.GetRequiredService<SettingsStore>(),
             applyDraft: (next, edited) => _settingsApply!.Apply(next, edited));
-
-        window.CanExitForUpdate = () =>
-            _recorder?.IsActive != true && _overlay?.IsActive != true &&
-            _activeCountdown is null && _scrollCancellation is null &&
-            !_pasteToScreenInFlight && _currentEditSession is null &&
-            !Windows.OfType<Window>().Any(w => w is MyCapture.App.Recording.VideoEditorWindow or AnnotationEditorWindow);
-        window.ExitForUpdate = () => Shutdown(0);
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();

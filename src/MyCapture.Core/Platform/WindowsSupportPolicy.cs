@@ -10,7 +10,7 @@ namespace MyCapture.Core.Platform;
 /// gate is expressed as a build-number floor: build 22000 is the first Windows 11 release, and
 /// every earlier build is rejected regardless of its marketing name. The floor is duplicated in
 /// three places that cannot reference this assembly - the MSBuild
-/// <c>SupportedOSPlatformVersion</c>, the installer preflight and the release manifest - so the
+/// <c>SupportedOSPlatformVersion</c>, the Store package manifest and the release manifest - so the
 /// constants below are asserted against those artefacts by the contract tests.
 /// </remarks>
 public static class WindowsSupportPolicy
@@ -44,7 +44,7 @@ public static class WindowsSupportPolicy
     public static bool IsCurrentHostSupported() =>
         OperatingSystem.IsWindows() && IsSupportedHost(Environment.OSVersion.Version);
 
-    /// <summary>One-line statement of the requirement, used by installer and UI messages.</summary>
+    /// <summary>One-line statement of the requirement, used by UI messages.</summary>
     public static string DescribeRequirement() => string.Format(
         CultureInfo.InvariantCulture,
         "{0} (build {1}) or later, x64, is required.",

@@ -290,7 +290,7 @@ public sealed class GalleryFolderTests
         string sentinel = ValidatedFilePaths.FileWithinRoot(outside, "keep.txt", ".txt");
         File.WriteAllText(sentinel, "keep");
         string link = Path.Combine(f.Root, "destination-link");
-        UpdatePathsTests.CreateJunction(link, outside);
+        TestJunction.Create(link, outside);
         await Assert.ThrowsAsync<IOException>(() => GalleryFolderExportService.ExportDirectoryAsync(prepared, link));
         await Assert.ThrowsAsync<IOException>(() => GalleryFolderExportService.ExportZipAsync(prepared, Path.Combine(link, "capture.zip")));
         Assert.Equal("keep", File.ReadAllText(sentinel));
@@ -312,7 +312,7 @@ public sealed class GalleryFolderTests
         Directory.CreateDirectory(ValidatedFilePaths.DirectoryWithinRoot(outside, batchName));
         string keep = ValidatedFilePaths.FileWithinRoot(outside, Path.Combine(batchName, "keep.png"), ".png");
         File.WriteAllText(keep, "unrelated");
-        UpdatePathsTests.CreateJunction(f.Staging, outside);
+        TestJunction.Create(f.Staging, outside);
         prepared.Dispose();
         GalleryExportFiles.CleanupFolderBatches(f.Staging, DateTimeOffset.Now.AddDays(1));
         Assert.Equal("unrelated", File.ReadAllText(keep));
