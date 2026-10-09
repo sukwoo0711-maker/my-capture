@@ -49,7 +49,14 @@ public sealed record RecordingResult(
 
 /// <summary>Constant-space production timing totals, separate from the recorded duration.</summary>
 public sealed record RecordingPerformance(double InitializationMs, double CaptureTotalMs,
-    double CaptureMaxMs, double EncodeTotalMs, double EncodeMaxMs, double FinalizationMs);
+    double CaptureMaxMs, double EncodeTotalMs, double EncodeMaxMs, double FinalizationMs)
+{
+    /// <summary>
+    /// True when frames were paced by the high-resolution waitable timer; false when the
+    /// recorder fell back to whole-millisecond sleeps on the system timer tick.
+    /// </summary>
+    public bool HighResolutionTimer { get; init; }
+}
 
 /// <summary>
 /// Drives the grab → pace → encode loop for a region recording on a dedicated
@@ -61,7 +68,9 @@ public sealed record RecordingPerformance(double InitializationMs, double Captur
 /// never freeze the interface. A <see cref="RecordingClock"/> decides when each frame
 /// is due from elapsed wall-clock time; if the encoder falls behind, whole frame
 /// intervals are skipped (adaptive frame drop) and the surviving frames keep their
-/// true timestamps, so playback stays real-time instead of speeding up.
+/// true timestamps, so playback stays real-time instead of speeding up. The wait until the
+/// next frame uses a per-handle high-resolution timer (<see cref="RecordingFrameDelay"/>), so
+/// the cadence no longer depends on whether something else raised the process timer resolution.
 /// </para>
 /// <para>
 /// The encoder is created through a factory so tests inject a fake that only records
@@ -79,6 +88,10 @@ public sealed class RegionRecorder : IDisposable
     // Upper bound for one parked wait. Resume and Stop pulse the gate, so this only limits
     // how long a missed pulse could delay the loop.
     private const int PausedWaitMs = 250;
+
+    // Upper bound for one wait between frames, so a stop request is honoured promptly even
+    // at low fps.
+    private const double MaxFrameWaitMs = 50;
 
     private readonly RegionFrameGrabber _grabber;
     private readonly Func<VideoEncoderOptions, IVideoEncoder> _encoderFactory;
@@ -145,6 +158,12 @@ public sealed class RegionRecorder : IDisposable
     }
 
     public bool IsRecording => _thread is { IsAlive: true };
+
+    /// <summary>
+    /// Creates the inter-frame delay on the capture thread. Tests substitute the sleep
+    /// fallback to prove both paths keep the same contract.
+    /// </summary>
+    internal Func<RecordingFrameDelay> FrameDelayFactory { get; init; } = static () => RecordingFrameDelay.Create();
 
     /// <summary>
     /// Pauses capture: no frame is grabbed or encoded until <see cref="Resume"/>, and the
@@ -300,8 +319,15 @@ public sealed class RegionRecorder : IDisposable
     {
         long initializationStarted = Stopwatch.GetTimestamp();
         double captureTotal = 0, captureMax = 0, encodeTotal = 0, encodeMax = 0;
+        RecordingFrameDelay? delay = null;
         try
         {
+            delay = FrameDelayFactory();
+            if (!delay.IsHighResolution)
+            {
+                _log.LogWarning("High-resolution frame timer unavailable; recording paces frames with Thread.Sleep");
+            }
+
             // Create the encoder here, on this MTA capture thread, so the MF Sink Writer's
             // COM objects live in the same apartment that will write every frame.
             _encoder = _encoderFactory(options);
@@ -354,11 +380,10 @@ public sealed class RegionRecorder : IDisposable
                     break;
                 }
 
-                double sleep = clock.MillisecondsUntilNextFrame(ActiveElapsedMs());
-                if (sleep >= 1)
+                double wait = clock.MillisecondsUntilNextFrame(ActiveElapsedMs());
+                if (wait > 0)
                 {
-                    // Cap the sleep so a stop request is honoured promptly even at low fps.
-                    Thread.Sleep((int)Math.Min(sleep, 50));
+                    delay.Wait(Math.Min(wait, MaxFrameWaitMs));
                 }
             }
 
@@ -389,7 +414,10 @@ public sealed class RegionRecorder : IDisposable
                 _grabber.Width,
                 _grabber.Height)
             {
-                Performance = new RecordingPerformance(initializationMs, captureTotal, captureMax, encodeTotal, encodeMax, finalizationMs),
+                Performance = new RecordingPerformance(initializationMs, captureTotal, captureMax, encodeTotal, encodeMax, finalizationMs)
+                {
+                    HighResolutionTimer = delay.IsHighResolution,
+                },
                 PausedMs = pausedMs,
                 PauseCount = pauseCount,
             };
@@ -441,6 +469,7 @@ public sealed class RegionRecorder : IDisposable
                 }
 
                 _grabber.Dispose();
+                delay?.Dispose();
             }
         }
     }

@@ -523,4 +523,34 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll", SetLastError = true)]
     internal static partial uint SendInput(uint cInputs, [In] INPUT[] pInputs, int cbSize);
+
+    // ----- Recording frame pacing -----
+
+    /// <summary>CREATE_WAITABLE_TIMER_HIGH_RESOLUTION; available on every supported Windows 11 build.</summary>
+    internal const uint CREATE_WAITABLE_TIMER_HIGH_RESOLUTION = 0x00000002;
+
+    internal const uint TIMER_MODIFY_STATE = 0x0002;
+    internal const uint SYNCHRONIZE = 0x00100000;
+    internal const uint WAIT_FAILED = 0xFFFFFFFF;
+
+    /// <summary>
+    /// A per-handle high-resolution timer: unlike <c>timeBeginPeriod</c> it does not raise the
+    /// system-wide timer resolution or its power cost.
+    /// </summary>
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateWaitableTimerExW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial Microsoft.Win32.SafeHandles.SafeWaitHandle CreateWaitableTimerEx(
+        IntPtr timerAttributes, string? timerName, uint flags, uint desiredAccess);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool SetWaitableTimer(
+        Microsoft.Win32.SafeHandles.SafeWaitHandle timer,
+        in long dueTime,
+        int period,
+        IntPtr completionRoutine,
+        IntPtr completionArgument,
+        [MarshalAs(UnmanagedType.Bool)] bool resume);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    internal static partial uint WaitForSingleObject(Microsoft.Win32.SafeHandles.SafeWaitHandle handle, uint milliseconds);
 }
