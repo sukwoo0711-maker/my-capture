@@ -1,7 +1,11 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -18,29 +22,49 @@ namespace MyCapture.App.Recording;
 /// <summary>Explicit calculation and staged Save As; never commits edits to the library.</summary>
 internal sealed class VideoExportDialog : Window
 {
+    /// <summary>Settles keyboard arrowing through the option lists before a new sample starts.</summary>
+    internal static readonly TimeSpan SampleDebounce = TimeSpan.FromMilliseconds(300);
+
     private readonly RecordingResult _recording;
     private readonly VideoEditDocument _document;
     private readonly ILoggerFactory _logs;
     private readonly ComboBox _format = new() { MinHeight = 36 };
     private readonly Slider _target = new() { Minimum = 0, Maximum = 90, TickFrequency = 1, IsSnapToTickEnabled = true };
     private readonly TextBlock _targetLabel = new();
-    private readonly ComboBox _quality = new() { MinHeight = 36 };
-    private readonly ComboBox _speed = new() { MinHeight = 36 };
+    private readonly ComboBox _quality = OptionList();
+    private readonly ComboBox _speed = OptionList();
+    private readonly ComboBox _shareTarget = OptionList();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, MinHeight = 64 };
     private readonly Image _preview = new() { Height = 150, Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 12, 0, 0) };
+    private readonly GifPreviewPanel _samplePanel;
+    private readonly StackPanel _samplePositionRow = new() { Margin = new Thickness(0, 4, 0, 0) };
+    private readonly TextBlock _samplePositionLabel = new() { Margin = new Thickness(0, 8, 0, 4) };
+    private readonly Slider _samplePosition = new() { Minimum = 0, Maximum = 100, Value = GifPreviewSampling.CentrePosition * 100, SmallChange = 5, LargeChange = 10, TickFrequency = 5, IsSnapToTickEnabled = true };
+    private readonly TextBlock _estimate = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
+    private readonly Border _adviceCard = new() { Margin = new Thickness(0, 10, 0, 0), Visibility = Visibility.Collapsed };
+    private readonly TextBlock _advice = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly Button _applyAdvice;
+    private readonly TextBlock _applyAdviceText;
     private readonly StackPanel _mp4 = new();
     private readonly StackPanel _gif = new();
     private readonly StackPanel _settings = new();
     private readonly Button _calculate;
     private readonly Button _save;
     private readonly Button _cancel;
+    private readonly DispatcherTimer _sampleTimer;
+    private readonly Dictionary<GifExportQuality, GifPresetMeasurement> _measurements = [];
     private CancellationTokenSource? _cancellation;
+    private CancellationTokenSource? _sampleCancellation;
+    private Task _sampleTask = Task.CompletedTask;
+    private GifPreviewSample? _sample;
+    private GifRecommendation? _recommendation;
     private VideoExportCalculation? _result;
     private bool _working;
     private bool _closeRequested;
     private bool _closed;
-    private bool _autoCalculatedOnShow;
     private int _settingsRevision;
+    private int _sampleRequest;
+    private double _sampleMotion;
 
     internal VideoExportDialog(RecordingResult recording, VideoEditDocument document, ILoggerFactory logs, bool gif)
     {
@@ -50,11 +74,12 @@ internal sealed class VideoExportDialog : Window
         _logs = logs;
         StandardWindowTheme.Apply(this);
         Title = UiText.Get("MediaExport_Title");
-        Width = 580;
-        Height = 520;
+        Width = 640;
         MinWidth = 460;
         MinHeight = 400;
         MaxHeight = Math.Max(400, SystemParameters.WorkArea.Height - 24);
+        // The GIF form carries the animated sample; open tall enough to show it unscrolled.
+        Height = Math.Min(MaxHeight, gif ? 900 : 520);
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
@@ -80,17 +105,44 @@ internal sealed class VideoExportDialog : Window
         AddText(_mp4, UiText.Get("MediaExport_DimensionsKept"));
         _settings.Children.Add(_mp4);
         AddText(_gif, UiText.Get("MediaExport_GifLimits"));
-        foreach (GifExportQuality quality in new[] { GifExportQuality.Standard, GifExportQuality.Compact, GifExportQuality.Smallest })
-            _quality.Items.Add(new ComboBoxItem { Content = $"{quality.LongEdge}px · {quality.FramesPerSecond} fps", Tag = quality });
+        foreach (GifExportQuality quality in GifSharePolicy.Presets)
+            _quality.Items.Add(new OptionItem(QualityText(quality), quality));
         _quality.SelectedIndex = 0;
-        AutomationProperties.SetName(_quality, UiText.Get("MediaExport_GifPreset"));
-        _gif.Children.Add(_quality);
-        AddText(_gif, UiText.Get("MediaExport_Speed"));
-        foreach (double speed in new[] { 0.5, 1, 1.5, 2, 3, 4 })
-            _speed.Items.Add(new ComboBoxItem { Content = $"{speed:0.0}×", Tag = speed });
+        foreach (double speed in GifSharePolicy.Speeds)
+            _speed.Items.Add(new OptionItem(SpeedText(speed), speed));
         _speed.SelectedIndex = 1;
-        AutomationProperties.SetName(_speed, UiText.Get("MediaExport_Speed"));
-        _gif.Children.Add(_speed);
+        foreach (GifShareTarget shareTarget in GifSharePolicy.Targets)
+            _shareTarget.Items.Add(new OptionItem(UiText.Get(shareTarget.LabelKey), shareTarget));
+        _shareTarget.SelectedIndex = GifSharePolicy.DefaultTargetIndex;
+        var options = new Grid();
+        AddOption(options, 0, 5, "MediaExport_GifPreset", _quality);
+        AddOption(options, 1, 3, "MediaExport_Speed", _speed);
+        AddOption(options, 2, 5, "GifPreview_Target", _shareTarget);
+        _gif.Children.Add(options);
+        // Longer ranges show a 3 s window; the user can move it to the moment that matters.
+        _samplePositionRow.Children.Add(_samplePositionLabel);
+        _samplePositionRow.Children.Add(_samplePosition);
+        AutomationProperties.SetName(_samplePosition, UiText.Get("GifPreview_SamplePosition"));
+        _samplePositionRow.Visibility = SpanMs > GifPreviewSampling.MaximumSourceMs ? Visibility.Visible : Visibility.Collapsed;
+        _gif.Children.Add(_samplePositionRow);
+        _samplePanel = new GifPreviewPanel(RenderOriginalAsync);
+        _gif.Children.Add(_samplePanel);
+        _estimate.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        AutomationProperties.SetLiveSetting(_estimate, AutomationLiveSetting.Polite);
+        _gif.Children.Add(_estimate);
+        _adviceCard.SetResourceReference(StyleProperty, "Card.Accent");
+        _adviceCard.Padding = new Thickness(12, 10, 12, 10);
+        var adviceBody = new StackPanel();
+        _advice.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        AutomationProperties.SetLiveSetting(_advice, AutomationLiveSetting.Polite);
+        adviceBody.Children.Add(_advice);
+        _applyAdvice = MediaExportVisuals.Button(this, UiText.Get("GifPreview_ApplyAdvice"));
+        _applyAdviceText = ((StackPanel)_applyAdvice.Content).Children.OfType<TextBlock>().Single();
+        _applyAdvice.HorizontalAlignment = HorizontalAlignment.Left;
+        _applyAdvice.Margin = new Thickness(0, 8, 0, 0);
+        adviceBody.Children.Add(_applyAdvice);
+        _adviceCard.Child = adviceBody;
+        _gif.Children.Add(_adviceCard);
         _settings.Children.Add(_gif);
         _calculate = MediaExportVisuals.Button(this, UiText.Get("MediaExport_Calculate"), "MediaExport_Options");
         _calculate.HorizontalAlignment = HorizontalAlignment.Left;
@@ -107,10 +159,20 @@ internal sealed class VideoExportDialog : Window
         footer.Children.Add(_cancel); footer.Children.Add(_save);
         Grid.SetRow(footer, 1); root.Children.Add(footer);
         Content = root;
+        _sampleTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = SampleDebounce };
+        _sampleTimer.Tick += (_, _) => { _sampleTimer.Stop(); StartSample(); };
         _format.SelectionChanged += (_, _) => Changed();
         _target.ValueChanged += (_, _) => Changed();
         _quality.SelectionChanged += (_, _) => Changed();
         _speed.SelectionChanged += (_, _) => Changed();
+        _shareTarget.SelectionChanged += (_, _) => UpdateGuidance();
+        _samplePosition.ValueChanged += (_, _) =>
+        {
+            UpdateSamplePositionLabel();
+            if (IsLoaded && IsGif) RequestSample(immediately: false);
+        };
+        UpdateSamplePositionLabel();
+        _applyAdvice.Click += (_, _) => ApplyRecommendation();
         _calculate.Click += async (_, _) => await CalculateAsync();
         _save.Click += async (_, _) => await SaveAsync();
         _cancel.Click += (_, _) => { if (_working) _cancellation?.Cancel(); else Close(); };
@@ -121,23 +183,73 @@ internal sealed class VideoExportDialog : Window
             e.Handled = true;
         };
         Closing += (_, e) => { if (_working) { e.Cancel = true; _closeRequested = true; _cancellation?.Cancel(); } };
-        Closed += (_, _) => { _closed = true; _cancellation?.Cancel(); _result?.Dispose(); _result = null; };
-        // GIF is the common share target: calculate the moment the dialog is shown so the
-        // user sees a size and preview without pressing 계산. Loaded (not the ctor) so
-        // headless construction in tests never starts a calculation pump.
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            _sampleTimer.Stop();
+            _cancellation?.Cancel();
+            _sampleCancellation?.Cancel();
+            _samplePanel.Stop();
+            _sample?.Dispose(); _sample = null;
+            _result?.Dispose(); _result = null;
+        };
+        // GIF is the common share target: render the preview sample the moment the dialog is
+        // shown, so quality, speed and an estimated size appear without pressing 결과 계산.
+        // Loaded (not the ctor) so headless construction in tests never starts a render.
         Loaded += (_, _) =>
         {
-            if (_format.SelectedIndex == 1 && !_autoCalculatedOnShow)
-            {
-                _autoCalculatedOnShow = true;
-                _ = CalculateAsync();
-            }
+            if (_format.SelectedIndex == 1 && _sample is null) RequestSample(immediately: true);
         };
         Changed();
     }
 
     private static void AddText(Panel panel, string text) => panel.Children.Add(new TextBlock
     { Text = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 6) });
+
+    private static void AddOption(Grid grid, int column, double weight, string labelKey, ComboBox combo)
+    {
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(weight, GridUnitType.Star) });
+        var cell = new StackPanel { Margin = new Thickness(column == 0 ? 0 : 6, 0, column == 2 ? 0 : 6, 0) };
+        var label = new TextBlock { Text = UiText.Get(labelKey), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 6) };
+        cell.Children.Add(label);
+        cell.Children.Add(combo);
+        AutomationProperties.SetName(combo, label.Text);
+        Grid.SetColumn(cell, column);
+        grid.Children.Add(cell);
+    }
+
+    /// <summary>A combo box whose item captions can change (the 권장 mark) while selected.</summary>
+    private static ComboBox OptionList()
+    {
+        var text = new FrameworkElementFactory(typeof(TextBlock));
+        text.SetBinding(TextBlock.TextProperty, new Binding(nameof(OptionItem.Text)));
+        text.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
+        return new ComboBox { MinHeight = 36, ItemTemplate = new DataTemplate { VisualTree = text } };
+    }
+
+    private static string QualityText(GifExportQuality quality) => $"{quality.LongEdge}px · {quality.FramesPerSecond} fps";
+
+    private static string SpeedText(double speed) => string.Create(CultureInfo.InvariantCulture, $"{speed:0.0}×");
+
+    private GifExportQuality SelectedQuality => (GifExportQuality)((OptionItem)_quality.SelectedItem).Value;
+
+    private double SelectedSpeed => (double)((OptionItem)_speed.SelectedItem).Value;
+
+    private GifShareTarget SelectedShareTarget => (GifShareTarget)((OptionItem)_shareTarget.SelectedItem).Value;
+
+    private double SpanMs => KeptRange.OutMs - KeptRange.InMs;
+
+    /// <summary>The trim clamped to the recording, as the exporter normalizes it.</summary>
+    private (double InMs, double OutMs) KeptRange
+    {
+        get
+        {
+            double duration = Math.Max(1, _recording.DurationMs);
+            double trimIn = Math.Clamp(_document.TrimInMs, 0, duration);
+            double trimOut = Math.Clamp(_document.TrimOutMs, 0, duration);
+            return trimOut > trimIn ? (trimIn, trimOut) : (0, duration);
+        }
+    }
 
     private void Changed()
     {
@@ -149,15 +261,14 @@ internal sealed class VideoExportDialog : Window
         _mp4.Visibility = gif ? Visibility.Collapsed : Visibility.Visible;
         _gif.Visibility = gif ? Visibility.Visible : Visibility.Collapsed;
         _targetLabel.Text = UiText.Format("MediaExport_Target", (int)_target.Value);
-        double span = _document.TrimOutMs - _document.TrimInMs;
-        // No hard cap: a long GIF is allowed, but the cost grows linearly with frame count,
-        // so say so instead of silently chewing through hundreds of frames.
-        bool longGif = gif && span > LongGifHintThresholdMs;
-        _status.Text = UiText.Get(longGif ? "MediaExport_GifLongHint" : "MediaExport_CalculateHint");
+        // No hard cap and no fixed-length warning: the sample measures this clip, and the
+        // estimate and recommendation below compare it with the chosen share limit.
+        _status.Text = UiText.Get("MediaExport_CalculateHint");
+        UpdateSamplePositionLabel();
+        DiscardSample();
+        if (gif && IsLoaded) RequestSample(immediately: false);
+        UpdateGuidance();
     }
-
-    /// <summary>Above this span the GIF dialog warns about file size and calculation time.</summary>
-    internal const double LongGifHintThresholdMs = 20_000;
 
     internal int TargetReductionPercent
     {
@@ -167,6 +278,281 @@ internal sealed class VideoExportDialog : Window
 
     internal bool CanExport => _save.IsEnabled;
 
+    /// <summary>Completes when the latest requested preview sample has been published or abandoned.</summary>
+    internal Task SampleCompletion => _sampleTask;
+
+    internal GifPreviewPanel SamplePanel => _samplePanel;
+
+    internal string EstimateText => _estimate.Text;
+
+    internal string AdviceText => _adviceCard.Visibility == Visibility.Visible ? _advice.Text : string.Empty;
+
+    internal GifRecommendation? Recommendation => _recommendation;
+
+    internal int QualityIndex
+    {
+        get => _quality.SelectedIndex;
+        set => _quality.SelectedIndex = value;
+    }
+
+    internal int ShareTargetIndex
+    {
+        get => _shareTarget.SelectedIndex;
+        set => _shareTarget.SelectedIndex = value;
+    }
+
+    internal bool IsGif => _format.SelectedIndex == 1;
+
+    private void DiscardSample()
+    {
+        _sampleTimer.Stop();
+        _sampleCancellation?.Cancel();
+        _samplePanel.ShowPreparing();
+        _sample?.Dispose();
+        _sample = null;
+    }
+
+    private void RequestSample(bool immediately)
+    {
+        DiscardSample();
+        if (immediately) StartSample();
+        else _sampleTimer.Start();
+    }
+
+    private void UpdateSamplePositionLabel()
+    {
+        GifSampleWindow window = GifPreviewSampling.Plan(KeptRange.InMs, KeptRange.OutMs, SelectedSpeed, _samplePosition.Value / 100);
+        _samplePositionLabel.Text = UiText.Format("GifPreview_SamplePositionValue", window.StartMs / 1000);
+    }
+
+    private void StartSample()
+    {
+        if (_closed || !IsGif || _working) return;
+        var cancellation = new CancellationTokenSource();
+        _sampleCancellation = cancellation;
+        Task previous = _sampleTask;
+        _sampleTask = RenderSampleAsync(previous, cancellation, _settingsRevision, ++_sampleRequest,
+            SelectedQuality, SelectedSpeed, _samplePosition.Value / 100);
+    }
+
+    private bool IsCurrentSample(int revision, int request, CancellationTokenSource cancellation) =>
+        !_closed && revision == _settingsRevision && request == _sampleRequest && !cancellation.IsCancellationRequested;
+
+    private async Task RenderSampleAsync(Task previous, CancellationTokenSource cancellation, int revision, int request,
+        GifExportQuality quality, double speed, double position)
+    {
+        GifPreviewSample? sample = null;
+        try
+        {
+            // One render worker at a time: the cancelled one exits at its next frame.
+            await previous;
+            cancellation.Token.ThrowIfCancellationRequested();
+            (double trimIn, double trimOut) = KeptRange;
+            GifSampleWindow window = GifPreviewSampling.Plan(trimIn, trimOut, speed, position);
+            VideoEditDocument sampleDocument = GifPreviewSampling.CreateSampleDocument(_document, window);
+            CancellationToken token = cancellation.Token;
+            sample = await StaThreadTask.RunAsync(
+                () => GifPreviewSample.Render(_recording, sampleDocument, window, quality, speed, token),
+                "MyCapture GIF preview sample");
+            if (!IsCurrentSample(revision, request, cancellation)) return;
+            _sample = sample;
+            sample = null;
+            _sampleMotion = _sample.MotionFraction;
+            GifPresetMeasurement measurement = _sample.Measurement;
+            Remember(measurement);
+            // A sample of the whole kept range is the exact export: make it saveable at once.
+            VideoExportCalculation? whole = _working || _result is not null ? null : _sample.TakeWholeRangeResult();
+            if (whole is not null)
+            {
+                _result = whole;
+                _save.IsEnabled = true;
+                _status.Text = UiText.Format("MediaExport_GifResult", _result.ResultBytes) + Environment.NewLine + UiText.Get("MediaExport_Ready");
+            }
+
+            _samplePanel.ShowSample(_sample, autoplay: FluidMotion.AnimationsEnabled);
+            UpdateGuidance();
+
+            // Estimate-only start and end segments refine the size once the preview is visible.
+            foreach (GifSampleWindow segment in GifPreviewSampling.PlanRefinement(trimIn, trimOut, window))
+            {
+                VideoEditDocument segmentDocument = GifPreviewSampling.CreateSampleDocument(_document, segment);
+                long bytes = await StaThreadTask.RunAsync(
+                    () => GifPreviewSample.MeasureSegment(_recording, segmentDocument, quality, speed, token),
+                    "MyCapture GIF estimate segment");
+                if (!IsCurrentSample(revision, request, cancellation)
+                    || !_measurements.TryGetValue(quality, out GifPresetMeasurement? known)
+                    || !ReferenceEquals(known, measurement))
+                {
+                    return; // Superseded, or replaced by an exact full calculation.
+                }
+
+                measurement = measurement.Including(bytes, segment.DurationMs);
+                _measurements[quality] = measurement;
+                UpdateGuidance();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception error)
+        {
+            _logs.CreateLogger("VideoExport").LogWarning(error, "GIF preview sample failed");
+            if (IsCurrentSample(revision, request, cancellation) && _sample is null)
+                _samplePanel.ShowFailure(error.Message);
+        }
+        finally
+        {
+            sample?.Dispose();
+            if (ReferenceEquals(_sampleCancellation, cancellation)) _sampleCancellation = null;
+            cancellation.Dispose();
+        }
+    }
+
+    /// <summary>Keeps a whole-range measurement of a preset over a later partial sample.</summary>
+    private void Remember(GifPresetMeasurement measurement)
+    {
+        bool keepExact = _measurements.TryGetValue(measurement.Quality, out GifPresetMeasurement? known)
+            && known.SourceMs >= SpanMs - 0.5 && measurement.SourceMs < SpanMs - 0.5;
+        if (!keepExact) _measurements[measurement.Quality] = measurement;
+    }
+
+    private Task<BitmapSource> RenderOriginalAsync(GifPreviewSample sample, int frameIndex, CancellationToken cancellationToken)
+    {
+        double sourceTime = sample.SourceTimeOf(frameIndex);
+        string path = _recording.OutputPath;
+        int width = _recording.Width, height = _recording.Height;
+        List<TimedTextOverlay> overlays = _document.TextOverlays.Select(overlay => overlay.Clone()).ToList();
+        List<FrameEditLayer> layers = _document.FrameEditLayers.Select(layer => layer.Clone()).ToList();
+        return StaThreadTask.RunAsync(
+            () => VideoFrameRenderPipeline.RenderSingleFrame(path, sourceTime, width, height, overlays, layers, cancellationToken),
+            "MyCapture GIF preview original");
+    }
+
+    /// <summary>Text and image layer intervals inside the kept range, relative to its start.</summary>
+    private List<(double StartMs, double EndMs)> LayerIntervals
+    {
+        get
+        {
+            (double trimIn, double trimOut) = KeptRange;
+            return _document.TextOverlays.Select(overlay => (overlay.StartMs, overlay.EndMs))
+                .Concat(_document.FrameEditLayers.Select(layer => (layer.StartMs, layer.EndMs)))
+                .Where(interval => interval.EndMs > trimIn && interval.StartMs < trimOut)
+                .Select(interval => (Math.Max(interval.StartMs, trimIn) - trimIn, Math.Min(interval.EndMs, trimOut) - trimIn))
+                .ToList();
+        }
+    }
+
+    /// <summary>Refreshes the estimate line, the recommendation and the 권장 mark.</summary>
+    private void UpdateGuidance()
+    {
+        _recommendation = null;
+        if (!IsGif || _measurements.Count == 0)
+        {
+            _estimate.Text = string.Empty;
+            _adviceCard.Visibility = Visibility.Collapsed;
+            MarkRecommended(null);
+            return;
+        }
+
+        GifExportQuality quality = SelectedQuality;
+        double speed = SelectedSpeed;
+        double span = SpanMs;
+        List<(double StartMs, double EndMs)> layers = LayerIntervals;
+        double playbackSeconds = span / speed / 1000;
+        int frames = GifPreviewSampling.EstimateFrameCount(span, quality.FramesPerSecond, layers);
+        if (_measurements.TryGetValue(quality, out GifPresetMeasurement? measured))
+        {
+            GifSizeEstimate own = GifSizeEstimator.FromSample(measured.Bytes, measured.SourceMs, span);
+            _estimate.Text = own.IsExact
+                ? UiText.Format("GifPreview_Exact", FormatSize(own.ExpectedBytes), frames, playbackSeconds)
+                : UiText.Format("GifPreview_Estimate", FormatRange(own), frames, playbackSeconds,
+                    Math.Max(1, GifSizeEstimator.EstimateCalculationMs(measured, span) / 1000));
+        }
+        else
+        {
+            _estimate.Text = string.Empty;
+        }
+
+        GifShareTarget shareTarget = SelectedShareTarget;
+        GifRecommendation recommendation = GifSharePolicy.Recommend(
+            span, _recording.Width, _recording.Height, _measurements, quality, speed, shareTarget, _sampleMotion, layers);
+        _recommendation = recommendation;
+        string limit = shareTarget.Bytes is long bytes ? FormatSize(bytes) : string.Empty;
+        string size = FormatRange(recommendation.Estimate);
+        var lines = new List<string>();
+        switch (recommendation.Kind)
+        {
+            case GifRecommendationKind.UseMp4:
+                int smallestFrames = GifPreviewSampling.EstimateFrameCount(span, recommendation.Quality.FramesPerSecond, layers);
+                double maximumSeconds = recommendation.MaximumGifSourceMs / 1000;
+                lines.Add(recommendation.Reason switch
+                {
+                    GifLimitReason.DestinationFrames => UiText.Format("GifPreview_AdviceMp4Frames", shareTarget.MaximumFrames ?? 0, smallestFrames, maximumSeconds),
+                    GifLimitReason.SafetyFrames => UiText.Format("GifPreview_AdviceMp4Safety", smallestFrames, maximumSeconds),
+                    _ => UiText.Format("GifPreview_AdviceMp4", size, limit, maximumSeconds),
+                });
+                break;
+            case GifRecommendationKind.CurrentFits:
+                lines.Add(shareTarget.Bytes is null
+                    ? UiText.Format("GifPreview_AdviceCurrentNoLimit", size)
+                    : UiText.Format("GifPreview_AdviceCurrent", size, limit));
+                break;
+            default:
+                lines.Add(shareTarget.Bytes is null
+                    ? UiText.Format("GifPreview_AdviceSwitchNoLimit", QualityText(recommendation.Quality), size)
+                    : UiText.Format("GifPreview_AdviceSwitch", QualityText(recommendation.Quality), limit, size));
+                lines.Add(UiText.Get(GifSharePolicy.Classify(_sampleMotion) switch
+                {
+                    GifMotionClass.Static => "GifPreview_MotionStatic",
+                    GifMotionClass.Moderate => "GifPreview_MotionModerate",
+                    _ => "GifPreview_MotionHigh",
+                }));
+                GifSizeEstimate current = GifSharePolicy.EstimateFor(quality, span, _recording.Width, _recording.Height, _measurements);
+                if (shareTarget.Bytes is long target && current.HighBytes > target)
+                    lines.Add(UiText.Format("GifPreview_AdviceCurrentOver", FormatRange(current), limit));
+                break;
+        }
+
+        // Speed is only ever suggested: it shortens playback, not the file.
+        if (recommendation.Speed is double faster)
+            lines.Add(UiText.Format("GifPreview_AdviceSpeed", playbackSeconds, faster, span / faster / 1000));
+        _advice.Text = string.Join(Environment.NewLine, lines);
+        _adviceCard.Visibility = Visibility.Visible;
+        string action = UiText.Get(recommendation.Kind == GifRecommendationKind.UseMp4 ? "GifPreview_SwitchToMp4" : "GifPreview_ApplyAdvice");
+        _applyAdviceText.Text = action;
+        AutomationProperties.SetName(_applyAdvice, action);
+        _applyAdvice.ToolTip = action;
+        _applyAdvice.Visibility = recommendation.Kind == GifRecommendationKind.CurrentFits ? Visibility.Collapsed : Visibility.Visible;
+        MarkRecommended(recommendation.Kind == GifRecommendationKind.UseMp4 ? null : recommendation.Quality);
+    }
+
+    private void MarkRecommended(GifExportQuality? quality)
+    {
+        string suffix = " · " + UiText.Get("GifPreview_Recommended");
+        foreach (OptionItem item in _quality.Items)
+            item.Text = QualityText((GifExportQuality)item.Value) + (Equals(item.Value, quality) ? suffix : string.Empty);
+    }
+
+    private void ApplyRecommendation()
+    {
+        GifRecommendation? recommendation = _recommendation;
+        if (recommendation is null || _working) return;
+        if (recommendation.Kind == GifRecommendationKind.UseMp4)
+            _format.SelectedIndex = 0;
+        else
+            _quality.SelectedItem = _quality.Items.OfType<OptionItem>().First(item => Equals(item.Value, recommendation.Quality));
+    }
+
+    /// <summary>One size when measured, otherwise the estimated range.</summary>
+    internal static string FormatRange(GifSizeEstimate estimate) => estimate.IsExact || estimate.LowBytes == estimate.HighBytes
+        ? FormatSize(estimate.ExpectedBytes)
+        : UiText.Format("GifPreview_SizeRange", FormatSize(estimate.LowBytes), FormatSize(estimate.HighBytes));
+
+    /// <summary>Decimal units, matching how share sites state their upload limits.</summary>
+    internal static string FormatSize(long bytes) => bytes >= 1_000_000
+        ? UiText.Format("GifPreview_SizeMb", bytes / 1_000_000d)
+        : UiText.Format("GifPreview_SizeKb", Math.Max(1, bytes / 1_000d));
+
     internal async Task CalculateAsync()
     {
         if (_working || _closed) return;
@@ -174,8 +560,8 @@ internal sealed class VideoExportDialog : Window
         _preview.Source = null; _preview.Visibility = Visibility.Collapsed;
         bool gif = _format.SelectedIndex == 1;
         int target = (int)_target.Value;
-        var quality = (GifExportQuality)((ComboBoxItem)_quality.SelectedItem).Tag;
-        double speed = (double)((ComboBoxItem)_speed.SelectedItem).Tag;
+        GifExportQuality quality = SelectedQuality;
+        double speed = SelectedSpeed;
         int revision = _settingsRevision;
         using var cancellation = new CancellationTokenSource();
         _cancellation = cancellation;
@@ -192,6 +578,15 @@ internal sealed class VideoExportDialog : Window
         VideoExportCalculation? calculated = null;
         try
         {
+            if (gif)
+            {
+                // The full render needs the decoder to itself; a pending sample yields.
+                _sampleTimer.Stop();
+                _sampleCancellation?.Cancel();
+                await _sampleTask;
+            }
+
+            var stopwatch = Stopwatch.StartNew();
             calculated = await StaThreadTask.RunAsync(() => gif
                 ? VideoExportCalculation.CalculateGif(path => AnimatedGifExporter.Export(_recording, _document, path, gifProgress, cancellation.Token, speed, quality), cancellation.Token)
                 : VideoExportCalculation.Calculate(target, _document.TrimOutMs - _document.TrimInMs,
@@ -201,22 +596,15 @@ internal sealed class VideoExportDialog : Window
                         options => new MediaFoundationVideoEncoder(options, _logs.CreateLogger<MediaFoundationVideoEncoder>()),
                         _logs.CreateLogger("VideoExport"), _document.TextOverlays, _document.FrameEditLayers, baseline ? baselineProgress : reducedProgress, token, bitrate),
                     cancellation.Token), "MyCapture export calculation");
+            double elapsed = stopwatch.Elapsed.TotalMilliseconds;
             cancellation.Token.ThrowIfCancellationRequested();
-            BitmapSource preview = await StaThreadTask.RunAsync(() =>
+            BitmapSource? preview = gif ? null : await StaThreadTask.RunAsync(() =>
             {
                 cancellation.Token.ThrowIfCancellationRequested();
-                BitmapSource frame;
-                if (gif)
-                {
-                    frame = CreateGifPreview(calculated.ResultPath);
-                }
-                else
-                {
-                    double scale = Math.Min(1, 480d / Math.Max(_recording.Width, _recording.Height));
-                    frame = VideoFrameRenderPipeline.RenderSingleFrame(calculated.ResultPath,
-                        (_document.TrimOutMs - _document.TrimInMs) / 2,
-                        Math.Max(1, (int)(_recording.Width * scale)), Math.Max(1, (int)(_recording.Height * scale)));
-                }
+                double scale = Math.Min(1, 480d / Math.Max(_recording.Width, _recording.Height));
+                BitmapSource frame = VideoFrameRenderPipeline.RenderSingleFrame(calculated.ResultPath,
+                    (_document.TrimOutMs - _document.TrimInMs) / 2,
+                    Math.Max(1, (int)(_recording.Width * scale)), Math.Max(1, (int)(_recording.Height * scale)));
                 frame.Freeze();
                 cancellation.Token.ThrowIfCancellationRequested();
                 return frame;
@@ -225,15 +613,27 @@ internal sealed class VideoExportDialog : Window
             if (_closed || revision != _settingsRevision) return;
             _result = calculated;
             calculated = null; // Publish only the complete result for the current settings.
-            _preview.Source = preview;
-            _preview.Visibility = Visibility.Visible;
-            _status.Text = gif ? UiText.Format("MediaExport_GifResult", _result.ResultBytes)
+            if (gif)
+            {
+                // The animated sample above is the visual check; the measured file now
+                // replaces the sample-based estimate for this preset.
+                Remember(new GifPresetMeasurement(quality, _result.ResultBytes, SpanMs, elapsed / SpanMs));
+                UpdateGuidance();
+            }
+            else
+            {
+                _preview.Source = preview;
+                _preview.Visibility = Visibility.Visible;
+            }
+
+            _status.Text = gif ? UiText.Format("MediaExport_GifResult", _result.ResultBytes) + Environment.NewLine + UiText.Get("MediaExport_Ready")
                 : UiText.Format("MediaExport_Result", _result.BaselineBytes, _result.ResultBytes, _result.ActualReduction)
                     + Environment.NewLine + UiText.Get(_result.TargetReached ? "MediaExport_Ready" : "MediaExport_Unmet");
             VideoExportCalculation ready = _result;
+            FrameworkElement shown = gif ? _status : _preview;
             _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
             {
-                if (!_closed && !_working && ReferenceEquals(_result, ready)) _preview.BringIntoView();
+                if (!_closed && !_working && ReferenceEquals(_result, ready)) shown.BringIntoView();
             }));
         }
         catch (OperationCanceledException)
@@ -250,6 +650,7 @@ internal sealed class VideoExportDialog : Window
             _cancellation = null;
             SetWorking(false);
             if (_closeRequested) Close();
+            else if (gif && !_closed && revision == _settingsRevision && _sample is null) RequestSample(immediately: true);
         }
     }
 
@@ -329,5 +730,28 @@ internal sealed class VideoExportDialog : Window
             PixelFormats.Bgra32, null, pixels, stride);
         result.Freeze();
         return result;
+    }
+
+    /// <summary>Combo-box entry whose caption can gain or lose the 권장 mark in place.</summary>
+    private sealed class OptionItem(string text, object value) : INotifyPropertyChanged
+    {
+        private string _text = text;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public object Value { get; } = value;
+
+        public string Text
+        {
+            get => _text;
+            set
+            {
+                if (_text == value) return;
+                _text = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Text)));
+            }
+        }
+
+        public override string ToString() => _text;
     }
 }

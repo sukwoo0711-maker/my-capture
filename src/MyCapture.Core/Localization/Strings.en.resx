@@ -2993,7 +2993,6 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_TargetLabel" xml:space="preserve"><value>Target file size reduction</value></data>
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>Resolution and frame rate stay unchanged. The reduction is a target; calculate to see the actual size. Quality may decrease.</value></data>
   <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF files grow with the frame count. Choose the long edge and frame rate. Sound is not included.</value></data>
-  <data name="MediaExport_GifLongHint" xml:space="preserve"><value>GIFs longer than 20 seconds can grow very large and take a while to calculate.</value></data>
   <data name="Recording.FinishingBusy" xml:space="preserve"><value>Finishing the recording save. Please try again shortly.</value></data>
   <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF size and frame rate</value></data>
   <data name="MediaExport_Speed" xml:space="preserve"><value>Playback speed</value></data>
@@ -3394,4 +3393,50 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="RecordingPauseHotkey_HotkeyName" xml:space="preserve"><value>Pause/resume recording shortcut</value></data>
   <data name="RecordingPauseHotkey_Description" xml:space="preserve"><value>While recording, pauses or resumes the recording like the Pause button. Does nothing when no recording is running.</value></data>
   <data name="RecordingPauseHotkey_HelpWithShortcut" xml:space="preserve"><value>{0} Shortcut: {1}</value></data>
+  <data name="GifPreview_Heading" xml:space="preserve"><value>Preview sample</value></data>
+  <data name="GifPreview_Preparing" xml:space="preserve"><value>Creating sample…</value></data>
+  <data name="GifPreview_Failed" xml:space="preserve"><value>Could not create the sample: {0}</value></data>
+  <data name="GifPreview_Info" xml:space="preserve"><value>Source {0:N1}–{1:N1} s · {2} × {3} · {4} frames · {5:N1} s loop</value></data>
+  <data name="GifPreview_MotionReduced" xml:space="preserve"><value>Windows animation effects are off, so the sample starts paused.</value></data>
+  <data name="GifPreview_Play" xml:space="preserve"><value>Play</value></data>
+  <data name="GifPreview_Pause" xml:space="preserve"><value>Pause</value></data>
+  <data name="GifPreview_Position" xml:space="preserve"><value>Sample frame position</value></data>
+  <data name="GifPreview_Frame" xml:space="preserve"><value>Frame {0}/{1}</value></data>
+  <data name="GifPreview_Compare" xml:space="preserve"><value>Compare</value></data>
+  <data name="GifPreview_ActualSize" xml:space="preserve"><value>Actual size</value></data>
+  <data name="GifPreview_Original" xml:space="preserve"><value>Original</value></data>
+  <data name="GifPreview_OriginalLoading" xml:space="preserve"><value>Loading original…</value></data>
+  <data name="GifPreview_GifFrame" xml:space="preserve"><value>GIF sample frame</value></data>
+  <data name="GifPreview_OriginalFrame" xml:space="preserve"><value>Original frame at the same time</value></data>
+  <data name="GifPreview_Target" xml:space="preserve"><value>Share size limit</value></data>
+  <data name="GifPreview_Target5" xml:space="preserve"><value>5 MB · Notion free</value></data>
+  <data name="GifPreview_Target10" xml:space="preserve"><value>10 MB · GitHub attachments</value></data>
+  <data name="GifPreview_Target15" xml:space="preserve"><value>15 MB · X (up to 350 frames)</value></data>
+  <data name="GifPreview_Recommended" xml:space="preserve"><value>best fit</value></data>
+  <data name="GifPreview_Estimate" xml:space="preserve"><value>Estimated size {0} · {1:N0} frames · playback {2:N1} s · calculation about {3:N0} s</value></data>
+  <data name="GifPreview_Exact" xml:space="preserve"><value>Size {0} (measured) · {1:N0} frames · playback {2:N1} s</value></data>
+  <data name="GifPreview_AdviceCurrent" xml:space="preserve"><value>The current setting is recommended. Its estimated size of {0} stays within {1}.</value></data>
+  <data name="GifPreview_AdviceSwitch" xml:space="preserve"><value>Recommended: {0}, the best fit within {1}, at an estimated {2}.</value></data>
+  <data name="GifPreview_AdviceCurrentOver" xml:space="preserve"><value>The current setting may exceed {1} (estimated {0}).</value></data>
+  <data name="GifPreview_AdviceMp4" xml:space="preserve"><value>Even the smallest GIF setting is expected to exceed {1} ({0}). Export MP4, or trim the range to about {2:N0} s or less.</value></data>
+  <data name="GifPreview_AdviceSpeed" xml:space="preserve"><value>Playback takes {0:N1} s. At {1:0.#}× speed it takes {2:N1} s. Speed barely changes the file size.</value></data>
+  <data name="GifPreview_ApplyAdvice" xml:space="preserve"><value>Apply recommendation</value></data>
+  <data name="GifPreview_SwitchToMp4" xml:space="preserve"><value>Switch to MP4</value></data>
+  <data name="GifPreview_SizeMb" xml:space="preserve"><value>{0:0.#} MB</value></data>
+  <data name="GifPreview_SizeKb" xml:space="preserve"><value>{0:N0} KB</value></data>
+  <data name="GifPreview_Target20" xml:space="preserve"><value>20 MB · Discord free</value></data>
+  <data name="GifPreview_TargetNone" xml:space="preserve"><value>No limit</value></data>
+  <data name="GifPreview_PresetSharpLowRate" xml:space="preserve"><value>Sharp, low frame rate</value></data>
+  <data name="GifPreview_SamplePosition" xml:space="preserve"><value>Sample position</value></data>
+  <data name="GifPreview_SamplePositionValue" xml:space="preserve"><value>Sample position: from {0:N1} s</value></data>
+  <data name="GifPreview_AdviceCurrentNoLimit" xml:space="preserve"><value>The current setting is recommended. There is no size limit, and the estimated size is {0}.</value></data>
+  <data name="GifPreview_AdviceSwitchNoLimit" xml:space="preserve"><value>Recommended: {0}. With no size limit it is the sharpest setting, at an estimated {1}.</value></data>
+  <data name="GifPreview_AdviceMp4Frames" xml:space="preserve"><value>The selected destination recommends GIFs of up to {0:N0} frames, but even the smallest setting has about {1:N0}. Trim the range to about {2:N0} s or less, or export MP4.</value></data>
+  <data name="GifPreview_AdviceMp4Safety" xml:space="preserve"><value>Even the smallest setting has about {0:N0} frames, so the calculation takes long and the file gets very large. Export MP4, or trim the range to about {1:N0} s or less.</value></data>
+  <data name="GifPreview_MotionStatic" xml:space="preserve"><value>Little of the screen changes, so text sharpness comes first.</value></data>
+  <data name="GifPreview_MotionModerate" xml:space="preserve"><value>Parts of the screen move, so smooth playback is kept first.</value></data>
+  <data name="GifPreview_MotionHigh" xml:space="preserve"><value>Much of the screen moves, so smooth playback comes first.</value></data>
+  <data name="GifPreview_SizeRange" xml:space="preserve"><value>{0}–{1}</value></data>
+  <data name="GifPreview_CompareHelp" xml:space="preserve"><value>Shows the original frame of the same moment beside the GIF.</value></data>
+  <data name="GifPreview_ActualSizeHelp" xml:space="preserve"><value>Shows GIF pixels 1:1 with screen pixels.</value></data>
 </root>
