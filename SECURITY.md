@@ -4,18 +4,18 @@ MyCapture의 보안 문제를 책임 있게 알려 주셔서 감사합니다. �
 
 ## 지원 범위
 
-보안 수정은 최신 공개 릴리스와 기본 브랜치를 우선 대상으로 합니다. 오래된 릴리스에서만 재현되는 문제는 최신 버전에서도 발생하는지 먼저 확인하십시오. Windows 10과 Windows 11 build 22000 미만은 지원 범위에 포함되지 않습니다.
+보안 수정은 Microsoft Store의 최신 버전과 기본 브랜치를 우선 대상으로 합니다. 오래된 릴리스에서만 재현되는 문제는 최신 버전에서도 발생하는지 먼저 확인하십시오. Windows 10과 Windows 11 build 22000 미만은 지원 범위에 포함되지 않습니다.
 
 ## 비공개 신고
 
-1. 저장소의 **Security → Report a vulnerability**에서 [비공개 보안 권고 초안](https://github.com/sukwoo0711-maker/my-capture/security/advisories/new)을 만드십시오.
-2. 기능이 활성화되지 않았거나 접근할 수 없다면, 공개 이슈에는 취약점 세부 정보를 쓰지 말고 “비공개 신고 채널이 필요하다”는 최소한의 요청만 남기십시오. 유지관리자가 비공개 채널을 안내합니다.
+1. 공개 [지원 저장소](https://github.com/sukwoo0711-maker/mycapture-support)의 **Security → Report a vulnerability**에서 [비공개 보안 신고](https://github.com/sukwoo0711-maker/mycapture-support/security/advisories/new)를 만드십시오.
+2. 신고를 만들 수 없다면 지원 저장소의 공개 이슈에는 취약점 세부 정보를 쓰지 말고 “비공개 신고 채널이 필요하다”는 최소한의 요청만 남기십시오. 유지관리자가 비공개 채널을 안내합니다.
 3. 수정과 공개 시점이 합의되기 전에는 개념 증명 코드나 사용자 데이터가 포함된 로그를 공개하지 마십시오.
 
 신고에는 가능한 범위에서 다음 정보를 포함하십시오.
 
 - 영향을 받는 MyCapture 버전 또는 커밋 SHA
-- Windows 버전과 build, CPU 아키텍처, 설치/포터블 여부
+- Windows 버전과 build, CPU 아키텍처
 - 재현 단계, 기대 동작, 실제 동작과 보안 영향
 - 최소화한 개념 증명 또는 크래시 정보
 - 이미 시도한 완화 방법
@@ -28,4 +28,4 @@ MyCapture의 보안 문제를 책임 있게 알려 주셔서 감사합니다. �
 
 ## 배포 파일 무결성
 
-현재 배포 파일은 Authenticode 서명이 없습니다. 릴리스의 `SHA256SUMS.txt`를 신뢰할 수 있는 채널에서 받은 값과 비교하십시오. 체크섬은 파일 변경을 탐지하지만 게시자 신원을 독립적으로 증명하지 않습니다.
+MyCapture는 Microsoft Store로만 배포하며, Store가 인증을 통과한 패키지를 Microsoft 인증서로 서명합니다. Store 밖에서 받은 MyCapture 설치 파일은 공식 배포본이 아닙니다.
