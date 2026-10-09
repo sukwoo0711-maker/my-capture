@@ -48,7 +48,7 @@ GitHub 릴리스와 같은 self-contained 게시본을 MSIX로 묶어 Microsoft 
 릴리스 커밋의 깨끗한 작업 트리에서 실행합니다. `package-store.ps1`은 `package.ps1`이 검증한 게시 폴더(`artifacts\release\<버전>\publish-win-x64`)를 그대로 사용합니다. 따라서 GitHub 릴리스와 Store 패키지의 바이너리가 같습니다.
 
 ```powershell
-.\build\package.ps1 -Version 4.0.2
+.\build\package.ps1 -Version 4.0.3
 .\build\package-store.ps1 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
 ```
 
@@ -73,7 +73,7 @@ GitHub 릴리스와 같은 self-contained 게시본을 MSIX로 묶어 Microsoft 
 관리자 권한 PowerShell에서 설치합니다. Windows 11은 서명 없는 패키지를 `-AllowUnsigned`로 설치할 수 있지만, 실행 파일이 든 패키지는 관리자 권한이 필요합니다.
 
 ```powershell
-Add-AppxPackage -Path .\artifacts\store\4.0.2-localtest\MyCapture.LocalTest_4.0.2.0_x64.msix -AllowUnsigned
+Add-AppxPackage -Path .\artifacts\store\4.0.3-localtest\MyCapture.LocalTest_4.0.3.0_x64.msix -AllowUnsigned
 ```
 
 다음 항목을 확인합니다.
