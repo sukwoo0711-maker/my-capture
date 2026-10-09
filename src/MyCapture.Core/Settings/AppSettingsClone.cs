@@ -122,6 +122,7 @@ public static class AppSettingsClone
         MosaicBlockSize = s.MosaicBlockSize,
         HighlighterAlpha = s.HighlighterAlpha,
         RecentColors = [.. s.RecentColors],
+        BlurRadius = s.BlurRadius,
     };
 
     private static OcrSettings Clone(OcrSettings s) => new()

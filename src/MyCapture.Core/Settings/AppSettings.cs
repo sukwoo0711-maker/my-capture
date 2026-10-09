@@ -265,6 +265,9 @@ public sealed class AnnotationDefaults
     /// Recently used colours, most recent first. Surfaced in the toolbar swatches.
     /// </summary>
     public List<ColorRgba> RecentColors { get; set; } = [];
+
+    /// <summary>Strength used by the blur tool: a Gaussian radius in image pixels.</summary>
+    public int BlurRadius { get; set; } = MyCapture.Core.Annotations.BlurAnnotation.DefaultRadius;
 }
 
 public sealed class OcrSettings

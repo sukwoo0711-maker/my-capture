@@ -3333,4 +3333,13 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Folder410.ExportChanged" xml:space="preserve"><value>내보내는 동안 캡처가 변경되었습니다. 다시 시도하십시오.</value></data>
   <data name="Folder410.ExportLocked" xml:space="preserve"><value>파일이 다른 프로그램에서 사용 중입니다. 파일을 닫고 다시 시도하십시오.</value></data>
   <data name="Folder410.ExportDiskFull" xml:space="preserve"><value>저장 공간이 부족합니다. 공간을 확보하거나 다른 위치를 선택하십시오.</value></data>
+  <data name="EditorBlur_Name" xml:space="preserve"><value>블러</value></data>
+  <data name="EditorBlur_ToolTip" xml:space="preserve"><value>흐리게 가릴 영역을 드래그하십시오 (B)</value></data>
+  <data name="EditorBlur_ToolTitle" xml:space="preserve"><value>블러 도구</value></data>
+  <data name="EditorBlur_Instruction" xml:space="preserve"><value>드래그해서 흐리게 가릴 영역을 지정합니다.</value></data>
+  <data name="EditorBlur_ToolStatus" xml:space="preserve"><value>블러 도구 · 이미지 위를 드래그하십시오</value></data>
+  <data name="EditorBlur_Strength" xml:space="preserve"><value>블러 강도</value></data>
+  <data name="EditorBlur_StrengthHint" xml:space="preserve"><value>값이 클수록 더 강하게 흐려집니다.</value></data>
+  <data name="EditorBlur_StrengthChanged" xml:space="preserve"><value>블러 강도를 {0:0}px로 바꿨습니다</value></data>
+  <data name="EditorBlur_StrengthRange" xml:space="preserve"><value>2 ~ 64 (이미지 픽셀).</value></data>
 </root>
