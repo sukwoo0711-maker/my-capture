@@ -4,7 +4,6 @@ using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.Platform.Recording;
 
@@ -19,7 +18,7 @@ internal sealed record GifEngineOptions
     internal bool PreferHardwareDecode { get; init; } = true;
 
     /// <summary>
-    /// Read the decoder's own NV12 output and convert it on the encoder threads with
+    /// Read the decoder's own NV12 output and convert it on the pixel workers with
     /// <see cref="Nv12FrameConverter"/> (default), which reproduces the system software
     /// converter exactly at a fraction of its cost. When false, the reader's RGB converter is
     /// used instead: the CPU converter for software decode (the original path) or the GPU
@@ -34,12 +33,15 @@ internal sealed record GifEngineOptions
     /// </summary>
     internal bool GpuResize { get; init; }
 
-    /// <summary>Encoder worker threads; zero picks half the logical processors, from 1 to 4.</summary>
-    internal int EncoderThreads { get; init; }
+    /// <summary>
+    /// Pixel worker threads for colour conversion and scaling; zero picks half the logical
+    /// processors, from 1 to 4. They never touch WPF.
+    /// </summary>
+    internal int WorkerThreads { get; init; }
 
-    internal int ResolveEncoderThreads() =>
-        EncoderThreads > 0
-            ? Math.Min(EncoderThreads, 16)
+    internal int ResolveWorkerThreads() =>
+        WorkerThreads > 0
+            ? Math.Min(WorkerThreads, 16)
             : Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
 }
 
@@ -84,7 +86,7 @@ internal sealed record GifRenderStatistics(
     string FrameSource,
     int Frames,
     int DecodedFrames,
-    int EncoderThreads,
+    int WorkerThreads,
     double ElapsedMs);
 
 /// <summary>
@@ -92,19 +94,23 @@ internal sealed record GifRenderStatistics(
 /// </summary>
 /// <remarks>
 /// <para>
-/// The calling thread decodes (or reads cached frames) in schedule order and appends encoded
-/// frames to the writer strictly in output order. A small pool of dedicated STA threads does the
-/// CPU-heavy middle: NV12 conversion to the base size, area-average scaling to the preset, WPF
-/// composition only for frames with an active text or frame layer, and the WPF/WIC GIF encode. Each worker owns its composition buffers and creates
-/// every <see cref="BitmapSource"/> it encodes, so WPF thread affinity is respected; frozen layer
-/// bitmaps are shared read-only.
+/// Three kinds of thread share the work. One decode thread runs the Media Foundation reader
+/// (or reads cached frames) in schedule order. A few pixel workers do the CPU-heavy, WPF-free
+/// middle on plain managed arrays: NV12 conversion to the base size, area-average scaling to the
+/// preset and the opaque copy the encoder needs. The calling STA thread does every WPF
+/// operation — composition only for frames with an active text or frame layer, the GIF encode —
+/// and appends frames strictly in output order, exactly as the original single-threaded exporter
+/// did.
 /// </para>
 /// <para>
-/// Memory is bounded: at most <c>workers + 2</c> frames are in flight between decode and append,
-/// and finished frames wait for their turn only within that window. Workers shut their lazily
-/// created dispatchers down on exit, exactly like <c>StaThreadTask</c>.
+/// WPF imaging stays on one thread on purpose. Running composition and GifBitmapEncoder on
+/// several STA threads at once corrupted the native heap (0xC0000374) or changed a frame's GIF
+/// palette in roughly one export in 600 under load, with software or hardware decode and with or
+/// without frame layers; the test assembly disables parallel tests for the same reason. Encoding
+/// therefore overlaps decoding and conversion instead of running beside other encodes.
 /// </para>
 /// <para>
+/// Memory is bounded: at most <c>workers + 2</c> frames are in flight between decode and append.
 /// All presets decode to the same base size (the recording fitted within 960 px) and scale down
 /// from it with <see cref="BgraFrameScaler"/>, so a one-shot export and a cached session export of
 /// the same preset produce byte-identical files.
@@ -114,7 +120,7 @@ internal static class GifExportEngine
 {
     private static int s_liveWorkerThreads;
 
-    /// <summary>Encoder workers currently running in this process; zero between exports.</summary>
+    /// <summary>Decode and pixel threads currently running in this process; zero between exports.</summary>
     internal static int LiveWorkerThreads => Volatile.Read(ref s_liveWorkerThreads);
 
     internal static GifRenderStatistics Render(
@@ -131,6 +137,11 @@ internal static class GifExportEngine
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(log);
+        if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
+        {
+            throw new InvalidOperationException("GIF composition and encoding require an STA thread.");
+        }
+
         VideoFrameRenderPipeline.ValidateSchedule(plan.Request, plan.SourceTimesMs);
         if (plan.FrameDelaysCentiseconds.Count != plan.SourceTimesMs.Count)
         {
@@ -171,93 +182,35 @@ internal static class GifExportEngine
 
         IReadOnlyDictionary<Guid, BitmapSource> layerBitmaps =
             FrameEditLayerRenderer.Decode(plan.Request.FrameEditLayers);
-        int threads = options.ResolveEncoderThreads();
-        using var run = new PipelineRun(plan, layerBitmaps, threads, cancellationToken);
+        int threads = options.ResolveWorkerThreads();
         var encodedForCache = cache is not null ? new byte[total][] : null;
         var decodedForCache = buildDecodedCache ? new GifSourceFrame[decodeTimes.Count] : null;
-        MediaFoundationVideoFrameReader? reader = null;
-        string frameSource = "cache-decoded";
-        int decodedFrames = 0;
-        try
+        VideoFrameCompositor? compositor = null;
+        int written = 0;
+        string frameSource;
+        int decodedFrames;
+        using (var run = new PixelPipeline(
+                   plan,
+                   decodeTimes,
+                   decodedHit,
+                   buildDecodedCache,
+                   options,
+                   log,
+                   threads,
+                   cancellationToken))
         {
-            if (decodedHit is null)
-            {
-                reader = OpenReader(plan, options, log);
-                frameSource = reader.IsHardwareAccelerated ? "hardware" : "software";
-            }
-
-            int maxInFlight = threads + 2;
-            int drained = 0;
-            int written = 0;
-            int nextOutput = 0;
             for (int slot = 0; slot < decodeTimes.Count; slot++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                while (slot - drained >= maxInFlight)
+                PixelResult result = run.Take(slot);
+                if (result.Output >= 0)
                 {
-                    Drain(run.WaitFor(drained));
-                }
-
-                double sourceTime = decodeTimes[slot];
-                GifSourceFrame frame;
-                if (decodedHit is not null)
-                {
-                    frame = decodedHit[slot];
-                }
-                else
-                {
-                    DecodedVideoFrame decoded;
-                    try
-                    {
-                        decoded = reader!.ReadFrameAt(sourceTime, cancellationToken);
-                    }
-                    catch (Exception ex) when (reader!.IsHardwareAccelerated
-                                               && ex is InvalidOperationException
-                                                   or System.IO.InvalidDataException
-                                                   or System.Runtime.InteropServices.COMException)
-                    {
-                        // Device loss or a driver-specific surface problem after a successful
-                        // hardware open; the exporter retries the whole file in software.
-                        throw new GifHardwareDecodeException(ex);
-                    }
-
-                    frame = new GifSourceFrame(
-                        decoded.Pixels,
-                        decoded.Width,
-                        decoded.Height,
-                        decoded.Stride,
-                        decoded.Format,
-                        reader.YuvEncoding);
-                    decodedFrames++;
-                }
-
-                int output = -1;
-                if (nextOutput < total && times[nextOutput] == sourceTime)
-                {
-                    output = nextOutput++;
-                }
-
-                run.Submit(new FrameJob(slot, output, sourceTime, frame, buildDecodedCache));
-                while (drained <= slot && run.TryTake(drained, out FrameResult? ready))
-                {
-                    Drain(ready!);
-                }
-            }
-
-            while (drained < decodeTimes.Count)
-            {
-                Drain(run.WaitFor(drained));
-            }
-
-            if (written != total)
-            {
-                throw new InvalidOperationException("The GIF schedule was not fully rendered.");
-            }
-
-            void Drain(FrameResult result)
-            {
-                if (result.Encoded is { } encoded)
-                {
+                    byte[] encoded = EncodeOutputFrame(
+                        result.Target,
+                        plan.Request,
+                        layerBitmaps,
+                        result.SourceTimeMs,
+                        ref compositor);
                     writer.AddEncodedFrame(encoded, plan.FrameDelaysCentiseconds[result.Output]);
                     if (encodedForCache is not null)
                     {
@@ -270,15 +223,18 @@ internal static class GifExportEngine
 
                 if (decodedForCache is not null && result.Base is { } baseFrame)
                 {
-                    decodedForCache[result.Slot] = baseFrame;
+                    decodedForCache[slot] = baseFrame;
                 }
-
-                drained++;
             }
+
+            run.Complete();
+            frameSource = run.FrameSource;
+            decodedFrames = run.DecodedFrames;
         }
-        finally
+
+        if (written != total)
         {
-            reader?.Dispose();
+            throw new InvalidOperationException("The GIF schedule was not fully rendered.");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -294,22 +250,22 @@ internal static class GifExportEngine
 
         return Finish(frameSource, decodedFrames, threads);
 
-        GifRenderStatistics Finish(string source, int decoded, int encoderThreads)
+        GifRenderStatistics Finish(string source, int decoded, int workerThreads)
         {
             var statistics = new GifRenderStatistics(
                 source,
                 total,
                 decoded,
-                encoderThreads,
+                workerThreads,
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds);
             log.LogInformation(
-                "GIF rendered {Frames} frame(s) at {Width}x{Height} from {Source}: {Decoded} decoded, {Threads} encoder thread(s), {Elapsed:0} ms",
+                "GIF rendered {Frames} frame(s) at {Width}x{Height} from {Source}: {Decoded} decoded, {Threads} pixel thread(s), {Elapsed:0} ms",
                 statistics.Frames,
                 plan.Request.Width,
                 plan.Request.Height,
                 statistics.FrameSource,
                 statistics.DecodedFrames,
-                statistics.EncoderThreads,
+                statistics.WorkerThreads,
                 statistics.ElapsedMs);
             return statistics;
         }
@@ -411,9 +367,26 @@ internal static class GifExportEngine
     }
 
     /// <summary>
-    /// Scales, composes when needed, and encodes one output frame on a worker thread. A frame
+    /// The WPF-free part of one output frame, run on a pixel worker: the preset-size frame as
+    /// opaque BGRA when it can be scaled down, otherwise the base frame for the compositor to
+    /// stretch.
+    /// </summary>
+    internal static GifSourceFrame PrepareOutputFrame(GifSourceFrame baseFrame, int width, int height)
+    {
+        if (FitFrame(baseFrame, width, height) is not { } target)
+        {
+            return baseFrame;
+        }
+
+        return target.Opaque
+            ? target
+            : new GifSourceFrame(OpaqueCopy(target), target.Width, target.Height, target.Width * 4, Opaque: true);
+    }
+
+    /// <summary>
+    /// Composes when needed and encodes one output frame on the calling STA thread. A frame
     /// with nothing drawn over it skips <see cref="RenderTargetBitmap"/> and goes straight to the
-    /// encoder as an opaque BGR32 bitmap.
+    /// encoder as an opaque BGRA32 bitmap.
     /// </summary>
     internal static byte[] EncodeOutputFrame(
         GifSourceFrame frame,
@@ -479,31 +452,50 @@ internal static class GifExportEngine
         return copy;
     }
 
-    private sealed record FrameJob(int Slot, int Output, double SourceTimeMs, GifSourceFrame Frame, bool KeepBase);
+    private sealed record PixelJob(int Slot, int Output, double SourceTimeMs, GifSourceFrame Frame);
 
-    private sealed record FrameResult(int Slot, int Output, double SourceTimeMs, byte[]? Encoded, GifSourceFrame? Base);
+    private sealed record PixelResult(int Slot, int Output, double SourceTimeMs, GifSourceFrame Target, GifSourceFrame? Base);
 
-    /// <summary>Worker threads, the job queue and the slot-ordered result window of one export.</summary>
-    private sealed class PipelineRun : IDisposable
+    /// <summary>
+    /// The decode thread, the pixel workers and the slot-ordered result window of one export.
+    /// None of these threads touches WPF.
+    /// </summary>
+    private sealed class PixelPipeline : IDisposable
     {
         private readonly GifRenderPlan _plan;
-        private readonly IReadOnlyDictionary<Guid, BitmapSource> _layerBitmaps;
-        private readonly BlockingCollection<FrameJob> _jobs = new(new ConcurrentQueue<FrameJob>());
-        private readonly Dictionary<int, FrameResult> _results = [];
+        private readonly IReadOnlyList<double> _decodeTimes;
+        private readonly GifSourceFrame[]? _cachedFrames;
+        private readonly bool _keepBase;
+        private readonly GifEngineOptions _options;
+        private readonly ILogger _log;
+        private readonly int _maxInFlight;
+        private readonly BlockingCollection<PixelJob> _jobs = new(new ConcurrentQueue<PixelJob>());
+        private readonly Dictionary<int, PixelResult> _results = [];
         private readonly object _gate = new();
         private readonly CancellationTokenSource _stop;
         private readonly CancellationTokenRegistration _wakeOnStop;
         private readonly List<Thread> _threads = [];
         private ExceptionDispatchInfo? _failure;
+        private int _taken;
 
-        internal PipelineRun(
+        internal PixelPipeline(
             GifRenderPlan plan,
-            IReadOnlyDictionary<Guid, BitmapSource> layerBitmaps,
-            int threadCount,
+            IReadOnlyList<double> decodeTimes,
+            GifSourceFrame[]? cachedFrames,
+            bool keepBase,
+            GifEngineOptions options,
+            ILogger log,
+            int workerCount,
             CancellationToken cancellationToken)
         {
             _plan = plan;
-            _layerBitmaps = layerBitmaps;
+            _decodeTimes = decodeTimes;
+            _cachedFrames = cachedFrames;
+            _keepBase = keepBase;
+            _options = options;
+            _log = log;
+            _maxInFlight = workerCount + 2;
+            FrameSource = cachedFrames is null ? "software" : "cache-decoded";
             _stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _wakeOnStop = _stop.Token.Register(() =>
             {
@@ -512,56 +504,31 @@ internal static class GifExportEngine
                     Monitor.PulseAll(_gate);
                 }
             });
-            for (int index = 0; index < threadCount; index++)
+            Start(DecodeMain, "MyCapture GIF decode");
+            for (int index = 0; index < workerCount; index++)
             {
-                var thread = new Thread(WorkerMain)
-                {
-                    IsBackground = true,
-                    Name = $"MyCapture GIF encoder {index + 1}",
-                };
-                thread.SetApartmentState(ApartmentState.STA);
-                _threads.Add(thread);
-                thread.Start();
+                Start(WorkerMain, $"MyCapture GIF pixels {index + 1}");
             }
         }
 
-        internal void Submit(FrameJob job)
-        {
-            ThrowIfFailed();
-            try
-            {
-                _jobs.Add(job, _stop.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                // A worker failure also stops the run; report that failure, not a cancellation.
-                lock (_gate)
-                {
-                    ThrowIfFailed();
-                }
+        /// <summary>Set by the decode thread; read after <see cref="Complete"/>.</summary>
+        internal string FrameSource { get; private set; }
 
-                throw;
-            }
-        }
+        internal int DecodedFrames { get; private set; }
 
-        internal bool TryTake(int slot, out FrameResult? result)
-        {
-            lock (_gate)
-            {
-                ThrowIfFailed();
-                return _results.Remove(slot, out result);
-            }
-        }
-
-        internal FrameResult WaitFor(int slot)
+        /// <summary>Waits for the result of <paramref name="slot"/> (taken strictly in order).</summary>
+        internal PixelResult Take(int slot)
         {
             lock (_gate)
             {
                 while (true)
                 {
-                    ThrowIfFailed();
-                    if (_results.Remove(slot, out FrameResult? result))
+                    _failure?.Throw();
+                    if (_results.Remove(slot, out PixelResult? result))
                     {
+                        // Frees one window slot for the decode thread.
+                        _taken = slot + 1;
+                        Monitor.PulseAll(_gate);
                         return result;
                     }
 
@@ -571,10 +538,20 @@ internal static class GifExportEngine
             }
         }
 
+        /// <summary>Waits for the decode thread so its statistics are final.</summary>
+        internal void Complete()
+        {
+            _threads[0].Join();
+            lock (_gate)
+            {
+                _failure?.Throw();
+            }
+        }
+
         public void Dispose()
         {
-            _jobs.CompleteAdding();
             _stop.Cancel();
+            _jobs.CompleteAdding();
             foreach (Thread thread in _threads)
             {
                 thread.Join();
@@ -589,28 +566,124 @@ internal static class GifExportEngine
             }
         }
 
-        private void ThrowIfFailed() => _failure?.Throw();
+        private void Start(ThreadStart body, string name)
+        {
+            var thread = new Thread(() =>
+            {
+                _ = Interlocked.Increment(ref s_liveWorkerThreads);
+                try
+                {
+                    body();
+                }
+                finally
+                {
+                    _ = Interlocked.Decrement(ref s_liveWorkerThreads);
+                }
+            })
+            {
+                IsBackground = true,
+                Name = name,
+            };
+            _threads.Add(thread);
+            thread.Start();
+        }
+
+        private void DecodeMain()
+        {
+            MediaFoundationVideoFrameReader? reader = null;
+            try
+            {
+                if (_cachedFrames is null)
+                {
+                    reader = OpenReader(_plan, _options, _log);
+                    FrameSource = reader.IsHardwareAccelerated ? "hardware" : "software";
+                }
+
+                IReadOnlyList<double> outputTimes = _plan.SourceTimesMs;
+                int nextOutput = 0;
+                for (int slot = 0; slot < _decodeTimes.Count; slot++)
+                {
+                    lock (_gate)
+                    {
+                        while (slot - _taken >= _maxInFlight)
+                        {
+                            _stop.Token.ThrowIfCancellationRequested();
+                            _ = Monitor.Wait(_gate);
+                        }
+                    }
+
+                    _stop.Token.ThrowIfCancellationRequested();
+                    double sourceTime = _decodeTimes[slot];
+                    GifSourceFrame frame = _cachedFrames is not null ? _cachedFrames[slot] : Decode(reader!, sourceTime);
+                    int output = -1;
+                    if (nextOutput < outputTimes.Count && outputTimes[nextOutput] == sourceTime)
+                    {
+                        output = nextOutput++;
+                    }
+
+                    _jobs.Add(new PixelJob(slot, output, sourceTime, frame), _stop.Token);
+                }
+
+                _jobs.CompleteAdding();
+            }
+            catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                Fail(ex);
+            }
+            finally
+            {
+                reader?.Dispose();
+            }
+        }
+
+        private GifSourceFrame Decode(MediaFoundationVideoFrameReader reader, double sourceTime)
+        {
+            DecodedVideoFrame decoded;
+            try
+            {
+                decoded = reader.ReadFrameAt(sourceTime, _stop.Token);
+            }
+            catch (Exception ex) when (reader.IsHardwareAccelerated
+                                       && ex is InvalidOperationException
+                                           or System.IO.InvalidDataException
+                                           or System.Runtime.InteropServices.COMException)
+            {
+                // Device loss or a driver-specific surface problem after a successful
+                // hardware open; the exporter retries the whole file in software.
+                throw new GifHardwareDecodeException(ex);
+            }
+
+            DecodedFrames++;
+            return new GifSourceFrame(
+                decoded.Pixels,
+                decoded.Width,
+                decoded.Height,
+                decoded.Stride,
+                decoded.Format,
+                reader.YuvEncoding);
+        }
 
         private void WorkerMain()
         {
-            _ = Interlocked.Increment(ref s_liveWorkerThreads);
-            VideoFrameCompositor? compositor = null;
             try
             {
-                foreach (FrameJob job in _jobs.GetConsumingEnumerable(_stop.Token))
+                foreach (PixelJob job in _jobs.GetConsumingEnumerable(_stop.Token))
                 {
                     // Every preset scales from the same base frame, so cached and freshly
                     // decoded exports of one preset are byte-identical.
                     GifSourceFrame baseFrame = NormalizeFrame(job.Frame, _plan.BaseWidth, _plan.BaseHeight);
-                    byte[]? encoded = job.Output >= 0
-                        ? EncodeOutputFrame(baseFrame, _plan.Request, _layerBitmaps, job.SourceTimeMs, ref compositor)
-                        : null;
-                    var result = new FrameResult(
+                    GifSourceFrame target = job.Output >= 0
+                        ? PrepareOutputFrame(baseFrame, _plan.Request.Width, _plan.Request.Height)
+                        : baseFrame;
+                    var result = new PixelResult(
                         job.Slot,
                         job.Output,
                         job.SourceTimeMs,
-                        encoded,
-                        job.KeepBase ? baseFrame : null);
+                        target,
+                        _keepBase ? baseFrame : null);
                     lock (_gate)
                     {
                         _results[job.Slot] = result;
@@ -623,26 +696,19 @@ internal static class GifExportEngine
             }
             catch (Exception ex)
             {
-                lock (_gate)
-                {
-                    _failure ??= ExceptionDispatchInfo.Capture(ex);
-                    Monitor.PulseAll(_gate);
-                }
-
-                _stop.Cancel();
+                Fail(ex);
             }
-            finally
+        }
+
+        private void Fail(Exception ex)
+        {
+            lock (_gate)
             {
-                // Imaging lazily creates a Dispatcher on this thread; thread exit alone does not
-                // run its shutdown callbacks (see StaThreadTask).
-                Dispatcher? dispatcher = Dispatcher.FromThread(Thread.CurrentThread);
-                if (dispatcher is { HasShutdownFinished: false })
-                {
-                    dispatcher.InvokeShutdown();
-                }
-
-                _ = Interlocked.Decrement(ref s_liveWorkerThreads);
+                _failure ??= ExceptionDispatchInfo.Capture(ex);
+                Monitor.PulseAll(_gate);
             }
+
+            _stop.Cancel();
         }
     }
 }

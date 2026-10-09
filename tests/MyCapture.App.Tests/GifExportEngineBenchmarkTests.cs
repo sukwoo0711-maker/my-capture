@@ -145,7 +145,7 @@ public sealed class GifExportEngineBenchmarkTests
                          ("960px-10fps-legacy-converter", new GifEngineOptions { PreferHardwareDecode = false, DecodeNv12 = false }),
                          ("960px-10fps-gpu-video-processor", new GifEngineOptions { DecodeNv12 = false }),
                          ("960px-10fps-gpu-resize", new GifEngineOptions { GpuResize = true }),
-                         ("960px-10fps-1-encoder-thread", new GifEngineOptions { EncoderThreads = 1 }),
+                         ("960px-10fps-1-pixel-thread", new GifEngineOptions { WorkerThreads = 1 }),
                      })
             {
                 string gif = Path.Combine(output, $"{name}.gif");
@@ -166,7 +166,7 @@ public sealed class GifExportEngineBenchmarkTests
             details["parallel-equals-single-thread"] =
                 File.ReadAllBytes(Path.Combine(output, "960px-10fps.gif"))
                     .AsSpan()
-                    .SequenceEqual(File.ReadAllBytes(Path.Combine(output, "960px-10fps-1-encoder-thread.gif")));
+                    .SequenceEqual(File.ReadAllBytes(Path.Combine(output, "960px-10fps-1-pixel-thread.gif")));
         }
 
         var summary = samples.ToDictionary(

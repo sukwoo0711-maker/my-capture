@@ -19,8 +19,10 @@ namespace MyCapture.App.Recording;
 /// The temporary encoded payload is released before <see cref="AddFrame(BitmapSource)"/> returns,
 /// so memory use is bounded by one encoded frame. Instances are not thread-safe; callers must
 /// also obey the usual dispatcher-affinity rules of the supplied <see cref="BitmapSource"/>.
-/// <see cref="EncodeFrame"/> is stateless, so frames may be encoded on worker threads and then
-/// appended in order through <see cref="AddEncodedFrame"/>.
+/// <see cref="EncodeFrame"/> touches no writer state, so a payload can be produced ahead of
+/// time (or reused from a cache) and appended later through <see cref="AddEncodedFrame"/>.
+/// Keep WPF encoding on one thread: concurrent WPF imaging work on several threads was
+/// measured to corrupt the native heap (see <see cref="GifExportEngine"/>).
 /// </para>
 /// </remarks>
 internal sealed class AnimatedGifWriter : IDisposable
@@ -112,8 +114,8 @@ internal sealed class AnimatedGifWriter : IDisposable
 
     /// <summary>
     /// Encodes one frame as a complete single-frame GIF with the platform encoder. This touches
-    /// no writer state, so callers may encode on several threads (each using bitmaps it owns or
-    /// frozen ones) and append the payloads in order with <see cref="AddEncodedFrame"/>.
+    /// no writer state, so the payload can be appended later, or several times with different
+    /// delays, through <see cref="AddEncodedFrame"/>.
     /// </summary>
     internal static ReadOnlyMemory<byte> EncodeFrame(BitmapSource frame)
     {
