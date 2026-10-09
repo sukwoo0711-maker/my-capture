@@ -36,6 +36,17 @@ public sealed class CaptureRecord
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
 
+    /// <summary>Restarted when a capture leaves a folder; absent in legacy indexes.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? RetentionStartedAt { get; set; }
+
+    [JsonIgnore]
+    public DateTimeOffset RetentionReference => RetentionStartedAt ?? CreatedAt;
+
+    [JsonIgnore]
+    public DateTimeOffset EvictionReference => RetentionStartedAt is { } restarted && restarted > UpdatedAt
+        ? restarted : UpdatedAt;
+
     /// <summary>
     /// Media stored by this record. The zero value deliberately remains <see cref="CaptureMediaKind.Image"/>
     /// so indexes written before video-gallery support deserialize without migration.
@@ -118,6 +129,21 @@ public sealed class CaptureRecord
 
     /// <summary>User-managed, comma-separated local search tags; empty for legacy indexes.</summary>
     public string Tags { get; set; } = string.Empty;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? FolderId { get; set; }
+
+    public long FolderSequence { get; set; }
+
+    /// <summary>Restores the user's pin after leaving a folder; IsPinned protects older apps.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? FolderPinBeforeAssignment { get; set; }
+
+    [JsonIgnore]
+    public bool IsManuallyPinned => FolderId is not null ? FolderPinBeforeAssignment ?? IsPinned : IsPinned;
+
+    [JsonIgnore]
+    internal bool FolderDestinationResolved { get; set; }
 
     /// <summary>
     /// Title of the foreground window at capture time.

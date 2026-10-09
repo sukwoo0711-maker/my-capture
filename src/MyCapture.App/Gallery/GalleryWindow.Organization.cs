@@ -45,15 +45,15 @@ internal sealed partial class GalleryWindow
         LibraryActionStatus.Text = UiText.Get("Library.Archive.Preparing");
         try
         {
-            using GalleryDragExportService.PreparedDrag prepared =
-                await _dragExport.PrepareBatchAsync(records, cancellation.Token);
+            var exporter = new GalleryFolderExportService(_queue);
+            using var prepared = await exporter.PrepareAsync(exporter.BuildCapturePlan(records, tree: true), cancellation.Token);
             var progress = new Progress<int>(done =>
             {
                 // Ignore dispatcher callbacks queued by a completed or cancelled export.
                 if (ReferenceEquals(_archiveCancellation, cancellation))
                     LibraryActionStatus.Text = UiText.Format("Library.Archive.Progress", done, records.Length);
             });
-            await GalleryArchiveExporter.ExportNewAsync(prepared.Paths, dialog.FileName, progress, cancellation.Token);
+            await GalleryFolderExportService.ExportZipAsync(prepared, dialog.FileName, progress, cancellation.Token);
             LibraryActionStatus.Text = UiText.Format("Library.Archive.Done", records.Length);
         }
         catch (OperationCanceledException)

@@ -8,6 +8,7 @@ using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 using MyCapture.App.Recording;
+using MyCapture.App.Themes;
 
 namespace MyCapture.App.Capture;
 
@@ -38,11 +39,17 @@ internal sealed class CaptureOverlayView : FrameworkElement
     /// repeated captures keep identical dimensions.
     /// </summary>
     internal System.Drawing.Size? PresetSize { get; set; }
-    private readonly Brush _dimmerBrush;
-    private readonly Brush _selectionBrush;
-    private readonly Brush _chromeBrush;
-    private readonly Brush _primaryTextBrush;
-    private readonly Brush _mutedTextBrush;
+    private Brush _dimmerBrush = null!;
+    private Brush _chromeBrush = null!;
+    private Brush _primaryTextBrush = null!;
+    private Brush _mutedTextBrush = null!;
+    private IReadOnlyDictionary<string, Brush> _guidePalette;
+    internal IReadOnlyDictionary<string, Brush> GuidePalette => _guidePalette;
+    internal int GuidePenBuildCount { get; private set; }
+    internal int GuideGeometryBuildCount { get; private set; }
+    private DpiScale _guideDpi;
+    internal double GuidePixelSizeX => 1 / _guideDpi.DpiScaleX;
+    internal double GuidePixelSizeY => 1 / _guideDpi.DpiScaleY;
     private readonly Typeface _uiTypeface;
     private readonly Typeface _monoTypeface;
 
@@ -86,11 +93,16 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private FormattedText? _instructionText;
     private FormattedText? _anchorText;
     private FormattedText? _precisionText;
-    private readonly Pen _pointerOuterPen = new(Brushes.Black, 4);
-    private readonly Pen _pointerInnerPen = new(Brushes.White, 1.5);
-    private readonly Pen _anchorPen;
-    private readonly Pen _guideShadowPen = new(new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)), 3);
-    private readonly Pen _guideLinePen = new(new SolidColorBrush(Color.FromRgb(0xFF, 0xB3, 0x47)), 1.25);
+    private Pen _pointerOuterPen = null!;
+    private Pen _pointerInnerPen = null!;
+    private Pen _anchorPen = null!;
+    private Pen _guideShadowPen = null!;
+    private Pen _guideLinePen = null!;
+    private Pen _selectionBorderPen = null!;
+    private Pen _innerGlowPen = null!;
+    private Pen _chipBorderPen = null!;
+    private Pen _magnifierBorderPen = null!;
+    private Pen _magnifierGridPen = null!;
     internal int StaticRenderCount { get; private set; }
     internal int FeedbackRenderCount { get; private set; }
     internal int MagnifierUpdateCount { get; private set; }
@@ -110,6 +122,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         if (_released) return;
         _released = true;
+        ThemeService.CaptureGuideChanged -= OnGuidePaletteChanged;
         _ended = true;
         EndPointerInteraction();
         _feedbackScheduler.Dispose();
@@ -194,7 +207,18 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _horizontalGuideVisual.Clip = _horizontalGuideClip;
         _verticalGuideVisual.Clip = _verticalGuideClip;
         _horizontalGuideVisual.Opacity = _verticalGuideVisual.Opacity = 0;
-        Unloaded += (_, _) => _feedbackScheduler.CancelPending();
+        Loaded += (_, _) =>
+        {
+            if (_released) return;
+            ThemeService.CaptureGuideChanged -= OnGuidePaletteChanged;
+            ThemeService.CaptureGuideChanged += OnGuidePaletteChanged;
+            OnGuidePaletteChanged();
+        };
+        Unloaded += (_, _) =>
+        {
+            ThemeService.CaptureGuideChanged -= OnGuidePaletteChanged;
+            _feedbackScheduler.CancelPending();
+        };
 
         Focusable = true;
         Cursor = Cursors.Cross;
@@ -202,17 +226,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
         UseLayoutRounding = true;
         RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.NearestNeighbor);
 
-        _dimmerBrush = ResourceBrush("Overlay.Dimmer", new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)));
-        _selectionBrush = ResourceBrush("Overlay.SelectionBorder", new SolidColorBrush(Color.FromRgb(0x97, 0x89, 0xFF)));
-        _anchorPen = new Pen(_selectionBrush, 1.5);
-        _pointerOuterPen.Freeze();
-        _pointerInnerPen.Freeze();
-        _guideShadowPen.Freeze();
-        _guideLinePen.Freeze();
-        if (_anchorPen.CanFreeze) _anchorPen.Freeze();
-        _chromeBrush = ResourceBrush("Surface.Floating", new SolidColorBrush(Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)));
-        _primaryTextBrush = ResourceBrush("Text.Primary", Brushes.White);
-        _mutedTextBrush = ResourceBrush("Text.Secondary", Brushes.LightGray);
+        _guideDpi = VisualTreeHelper.GetDpi(this);
+        _guidePalette = CaptureGuidePalette.Resolve();
+        ApplyGuideBrushes();
 
         FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");
@@ -262,6 +278,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
         base.OnDpiChanged(oldDpi, newDpi);
+        _guideDpi = newDpi;
         _staticDirty = true;
         QueueFeedback();
     }
@@ -275,6 +292,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             _staticDirty = false;
             StaticRenderCount++;
+            BuildGuidePens();
             _instructionText = _anchorText = _precisionText = null;
             using (DrawingContext dc = _desktopVisual.RenderOpen())
                 if (_frame?.Bitmap is { } bitmap) dc.DrawImage(bitmap, new Rect(RenderSize));
@@ -346,7 +364,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 FormattedText text = _anchorText ??= CreateText(UiText.Get("CaptureSelectionStart"), _uiTypeface, 11, _primaryTextBrush);
                 double x = Math.Clamp(p.X + 15, 4, Math.Max(4, ActualWidth - text.Width - 12));
                 double y = Math.Clamp(p.Y + 12, 4, Math.Max(4, ActualHeight - text.Height - 8));
-                dc.DrawRoundedRectangle(_chromeBrush, null, new Rect(x - 4, y - 2, text.Width + 8, text.Height + 4), 4, 4);
+                dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, new Rect(x - 4, y - 2, text.Width + 8, text.Height + 4), 4, 4);
                 dc.DrawText(text, new Point(x, y));
             }
         }
@@ -355,13 +373,20 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     private void DrawSelection(DrawingContext dc, RectD pixelRect)
     {
-        Rect rect = ToDipRect(pixelRect);
-        var glowPen = new Pen(new SolidColorBrush(Color.FromArgb(90, 88, 199, 243)), Math.Max(3, 3 * DipPerPixelX));
-        glowPen.Freeze();
-        var borderPen = new Pen(_selectionBrush, Math.Max(1.25, 1.25 * DipPerPixelX));
-        borderPen.Freeze();
-        dc.DrawRectangle(null, glowPen, rect);
-        dc.DrawRectangle(null, borderPen, rect);
+        Rect mapped = ToDipRect(pixelRect.ToPixelBounds());
+        double px = GuidePixelSizeX, py = GuidePixelSizeY;
+        double left = Math.Round(mapped.Left / px) * px, top = Math.Round(mapped.Top / py) * py;
+        double right = Math.Round(mapped.Right / px) * px, bottom = Math.Round(mapped.Bottom / py) * py;
+        var rect = new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+        if (rect.Width <= 0 || rect.Height <= 0) return;
+        // Clip the low-opacity accent to the inside; the crisp border occupies one
+        // physical pixel inside the selected pixel bounds at every display scale.
+        dc.PushClip(new RectangleGeometry(rect));
+        dc.DrawRectangle(null, _innerGlowPen, rect);
+        dc.Pop();
+        var border = new Rect(rect.X + px / 2, rect.Y + py / 2,
+            Math.Max(0, rect.Width - px), Math.Max(0, rect.Height - py));
+        dc.DrawRectangle(null, _selectionBorderPen, border);
         DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect);
     }
 
@@ -379,6 +404,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
         if (rebuild || !_guideGeometryReady)
         {
+            GuideGeometryBuildCount++;
             // Retain two narrow strips rather than redrawing one viewport-sized visual.
             // Their order preserves the original horizontal-then-vertical intersection.
             using (DrawingContext dc = _horizontalGuideVisual.RenderOpen())
@@ -431,7 +457,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
 
         var background = new Rect(x, y, width, height);
-        dc.DrawRoundedRectangle(_chromeBrush, null, background, 7, 7);
+        dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, background, 7, 7);
         dc.DrawText(formatted, new Point(x + paddingX, y + paddingY));
     }
 
@@ -443,12 +469,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
         double width = text.Width + (paddingX * 2);
         double left = Math.Max(16, (ActualWidth - width) / 2);
         var background = new Rect(left, 18, width, text.Height + (paddingY * 2));
-        dc.DrawRoundedRectangle(_chromeBrush, new Pen(_selectionBrush, 1), background, 10, 10);
+        dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, background, 10, 10);
         dc.DrawText(text, new Point(background.Left + paddingX, background.Top + paddingY));
         if (_precisionPointer.IsPrecision)
         {
             FormattedText precision = _precisionText ??= CreateText(UiText.Get("CapturePrecisionActive"), _uiTypeface, 12, _primaryTextBrush);
-            dc.DrawRoundedRectangle(_chromeBrush, new Pen(_selectionBrush, 1),
+            dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen,
                 new Rect(16, 64, precision.Width + 20, precision.Height + 12), 6, 6);
             dc.DrawText(precision, new Point(26, 70));
         }
@@ -484,13 +510,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
         y = Math.Clamp(y, 8, Math.Max(8, ActualHeight - imageHeight - footerHeight - 8));
 
         var panel = new Rect(x - 3, y - 3, width + 6, imageHeight + footerHeight + 6);
-        dc.DrawRoundedRectangle(_chromeBrush, new Pen(_selectionBrush, Math.Max(1, DipPerPixelX)), panel, 9, 9);
+        dc.DrawRoundedRectangle(_chromeBrush, _magnifierBorderPen, panel, 9, 9);
         dc.DrawImage(_magnifierCrop, new Rect(x, y, width, imageHeight));
 
         double cellWidth = width / _magnifierCrop.PixelWidth;
         double cellHeight = imageHeight / _magnifierCrop.PixelHeight;
-        var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(45, 255, 255, 255)), Math.Max(0.5, DipPerPixelX));
-        gridPen.Freeze();
+        Pen gridPen = _magnifierGridPen;
         for (int index = 1; index < _magnifierCrop.PixelWidth; index++)
         {
             dc.DrawLine(gridPen, new Point(x + (index * cellWidth), y), new Point(x + (index * cellWidth), y + imageHeight));
@@ -503,9 +528,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         int cursorX = Math.Clamp((int)Math.Floor(_cursorPixel.X) - _magnifierCropX, 0, _magnifierCrop.PixelWidth - 1);
         int cursorY = Math.Clamp((int)Math.Floor(_cursorPixel.Y) - _magnifierCropY, 0, _magnifierCrop.PixelHeight - 1);
         var cell = new Rect(x + (cursorX * cellWidth), y + (cursorY * cellHeight), cellWidth, cellHeight);
-        var crosshairPen = new Pen(_selectionBrush, Math.Max(1.5, 1.5 * DipPerPixelX));
-        crosshairPen.Freeze();
-        dc.DrawRectangle(null, crosshairPen, cell);
+        dc.DrawRectangle(null, _magnifierBorderPen, cell);
 
         string coordinate = $"{(int)_cursorPixel.X}, {(int)_cursorPixel.Y}";
         FormattedText color = CreateText(_sampleLabel, _monoTypeface, 12, _primaryTextBrush);
@@ -787,8 +810,45 @@ internal sealed class CaptureOverlayView : FrameworkElement
         MagnifierUpdateCount++;
     }
 
-    private Brush ResourceBrush(string key, Brush fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? fallback;
+    private void ApplyGuideBrushes()
+    {
+        _dimmerBrush = _guidePalette["CaptureGuide.Dimmer"];
+        _chromeBrush = _guidePalette["CaptureGuide.ChipSurface"];
+        _primaryTextBrush = _guidePalette["CaptureGuide.Text"];
+        _mutedTextBrush = _guidePalette["CaptureGuide.MutedText"];
+    }
+
+    private void OnGuidePaletteChanged()
+    {
+        if (_released) return;
+        _guidePalette = CaptureGuidePalette.Resolve();
+        ApplyGuideBrushes();
+        _staticDirty = true;
+        QueueFeedback();
+    }
+
+    private void BuildGuidePens()
+    {
+        GuidePenBuildCount++;
+        double pixel = GuidePixelSizeX;
+        Pen Create(string key, double width, DashStyle? dash = null)
+        {
+            var pen = new Pen(_guidePalette[key], width * pixel);
+            if (dash is not null) pen.DashStyle = dash;
+            pen.Freeze();
+            return pen;
+        }
+        _pointerOuterPen = Create("CaptureGuide.CrosshairShadow", 3);
+        _pointerInnerPen = Create("CaptureGuide.Crosshair", 1);
+        _anchorPen = Create("CaptureGuide.StartPoint", 1);
+        _guideShadowPen = Create("CaptureGuide.LineShadow", 2, new DashStyle([1.5, 1.5], 0));
+        _guideLinePen = Create("CaptureGuide.Line", 1, new DashStyle([3, 3], 0));
+        _selectionBorderPen = Create("CaptureGuide.SelectionBorder", 1);
+        _innerGlowPen = Create("CaptureGuide.InnerGlow", 3);
+        _chipBorderPen = Create("CaptureGuide.ChipBorder", 1);
+        _magnifierBorderPen = Create("CaptureGuide.MagnifierBorder", 1);
+        _magnifierGridPen = Create("CaptureGuide.MagnifierGrid", 0.5);
+    }
 
     private FormattedText CreateText(string text, Typeface typeface, double size, Brush brush) =>
         new(

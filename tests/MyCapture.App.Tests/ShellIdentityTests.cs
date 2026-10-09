@@ -74,7 +74,7 @@ public sealed class ShellIdentityTests
         string title = UiText.Get("Text_60CBF2E08D0D");
         Assert.Equal("MyCapture — " + context, title);
         string formatted = AppIdentity.FormatWindowTitle(title);
-        Assert.Equal(AppIdentity.Label + " — " + context, formatted);
+        Assert.Equal(AppIdentity.WindowLabel + " — " + context, formatted);
         Assert.Equal(formatted, AppIdentity.FormatWindowTitle(formatted));
     }
 
@@ -83,16 +83,16 @@ public sealed class ShellIdentityTests
     [InlineData("folder/MyCapture — notes.png")]
     [InlineData("Gallery — MyCapture screenshot.png")]
     public void UserFileNamesContainingProductName_ArePreserved(string context) =>
-        Assert.Equal(AppIdentity.Label + " — " + context, AppIdentity.FormatWindowTitle(context));
+        Assert.Equal(AppIdentity.WindowLabel + " — " + context, AppIdentity.FormatWindowTitle(context));
 
     [Fact]
     public void Identity_UsesCompiledVersion_AndPreservesContextWithoutRepeatedPrefix()
     {
         Assert.Equal(AppIdentity.GetVersion(typeof(App).Assembly.GetName().Version), AppIdentity.Version);
         Assert.Equal("0.10.0", AppIdentity.GetVersion(new Version(0, 10, 0, 42)));
-        Assert.Equal(AppIdentity.Label, AppIdentity.FormatWindowTitle("MyCapture"));
+        Assert.Equal(AppIdentity.WindowLabel, AppIdentity.FormatWindowTitle("MyCapture"));
         string title = AppIdentity.FormatWindowTitle("Gallery — user capture.png");
-        Assert.Equal(AppIdentity.Label + " — Gallery — user capture.png", title);
+        Assert.Equal(AppIdentity.WindowLabel + " — Gallery — user capture.png", title);
         Assert.Equal(title, AppIdentity.FormatWindowTitle(title));
     }
 }

@@ -6,6 +6,69 @@ namespace MyCapture.Core.Tests;
 public sealed class ValidatedFilePathsTests
 {
     [Fact]
+    public void DirectoryChildNormalizesContainedTraversalBeforeCreation()
+    {
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
+        string child = ValidatedFilePaths.DirectoryWithinRoot(root, @"nested\..\approved\");
+        Assert.Equal(Path.Combine(root, "approved"), child);
+        Directory.CreateDirectory(child);
+        Assert.Equal(child, ValidatedFilePaths.DirectoryWithinRoot(root + Path.DirectorySeparatorChar, child));
+        Assert.True(Directory.Exists(child));
+    }
+
+    [Theory]
+    [InlineData(@"..\outside")]
+    [InlineData(@"nested\..\..\outside")]
+    [InlineData("C:relative")]
+    [InlineData(@"\volume-relative")]
+    [InlineData("blocked:stream")]
+    [InlineData("blocked.")]
+    [InlineData("blocked ")]
+    [InlineData("NUL")]
+    [InlineData(".")]
+    [InlineData(@".\")]
+    public void DirectoryChildRejectsEscapesAmbiguityAndRootItselfBeforeCreation(string candidate)
+    {
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
+
+        Assert.Throws<IOException>(() => Directory.CreateDirectory(ValidatedFilePaths.DirectoryWithinRoot(root, candidate)));
+
+        Assert.Empty(Directory.EnumerateFileSystemEntries(root));
+    }
+
+    [Fact]
+    public void DirectoryChildRejectsAbsoluteAndTraversalSiblingPrefixesAndPreservesSentinel()
+    {
+        string owner = ValidatedFilePaths.CreateTemporaryDirectory();
+        string root = ValidatedFilePaths.CreateDirectory(Path.Combine(owner, "approved"));
+        string sibling = ValidatedFilePaths.CreateDirectory(Path.Combine(owner, "approved-sibling"));
+        string sentinel = ValidatedFilePaths.FileWithinRoot(sibling, "keep.txt", ".txt");
+        File.WriteAllText(sentinel, "outside remains untouched");
+
+        Assert.Throws<IOException>(() => Directory.CreateDirectory(
+            ValidatedFilePaths.DirectoryWithinRoot(root, Path.Combine(sibling, "must-not-be-created"))));
+        Assert.Throws<IOException>(() => Directory.CreateDirectory(
+            ValidatedFilePaths.DirectoryWithinRoot(root, Path.Combine("..", "approved-sibling", "must-not-be-created"))));
+        Assert.Throws<IOException>(() => ValidatedFilePaths.DirectoryWithinRoot(root, sibling));
+
+        Assert.Equal("outside remains untouched", File.ReadAllText(sentinel));
+        Assert.Single(Directory.EnumerateFileSystemEntries(sibling));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(root));
+    }
+
+    [Fact]
+    public void DirectoryChildRejectsExistingFileLeaf()
+    {
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
+        string file = ValidatedFilePaths.FileWithinRoot(root, "keep.txt", ".txt");
+        File.WriteAllText(file, "keep");
+
+        Assert.Throws<IOException>(() => ValidatedFilePaths.DirectoryWithinRoot(root, file));
+
+        Assert.Equal("keep", File.ReadAllText(file));
+    }
+
+    [Fact]
     public void TemporaryRootsAreDistinctGuidDirectoriesUnderDedicatedOsTempRoot()
     {
         string first = ValidatedFilePaths.CreateTemporaryDirectory();

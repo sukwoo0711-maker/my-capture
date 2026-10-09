@@ -86,7 +86,7 @@ public sealed class HotfixUxRegressionTests
             Assert.False(card.IsActive);
             Assert.Same(before, Keyboard.FocusedElement);
             Assert.NotEqual(0, GetWindowLongPtrW(new WindowInteropHelper(card).Handle, -20).ToInt64() & 0x08000000L);
-            var actions = ((StackPanel)card.Content).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
+            var actions = ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
             Assert.Equal(4, actions.Columns);
             Assert.All(actions.Children.OfType<Button>(), button => Assert.False(button.Focusable));
             card.Advance(TimeSpan.FromSeconds(9), false);
@@ -192,7 +192,7 @@ public sealed class HotfixUxRegressionTests
         if (userFacing) error = UserFacingError.Mark(new InvalidOperationException(UiText.Get("Text_D0FD12A01E4A")));
         var run = typeof(QuickAccessWindow).GetMethod("RunAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
         ((Task)run.Invoke(card, new object[] { (Func<Task<bool>>)(() => Task.FromException<bool>(error)), "QuickAccess.Copied" })!).GetAwaiter().GetResult();
-        TextBlock status = ((StackPanel)card.Content).Children.OfType<TextBlock>().Single();
+        TextBlock status = ((StackPanel)((Border)card.Content).Child).Children.OfType<TextBlock>().Single();
         Assert.Equal(UiText.Get(userFacing ? "Text_D0FD12A01E4A" : "QuickAccess.Failed"), status.Text);
         card.Close();
     });
@@ -202,7 +202,7 @@ public sealed class HotfixUxRegressionTests
     {
         var card = Card();
         card.UpdatePreview(new CroppedBitmap(Image(), new Int32Rect(0, 0, 16, 12)));
-        Assert.Equal("16 × 12", ((StackPanel)card.Content).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single().Text);
+        Assert.Equal("16 × 12", ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single().Text);
         card.Close();
     });
 

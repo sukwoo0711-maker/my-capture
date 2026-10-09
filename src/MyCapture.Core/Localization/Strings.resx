@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -3201,7 +3201,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Help.Frame" xml:space="preserve"><value>이전·다음 프레임</value></data>
   <data name="Help.Next" xml:space="preserve"><value>다음</value></data>
   <data name="Help.Play" xml:space="preserve"><value>재생·일시정지</value></data>
-  <data name="Help.Search" xml:space="preserve"><value>단축키 검색</value></data>
+  <data name="Help.Search" xml:space="preserve"><value>기능 또는 단축키 검색</value></data>
   <data name="Help.Settings" xml:space="preserve"><value>단축키 변경</value></data>
   <data name="Help.Start" xml:space="preserve"><value>시작</value></data>
   <data name="Help.Title" xml:space="preserve"><value>단축키 모음</value></data>
@@ -3237,7 +3237,100 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Crop.InvalidSizeLabel" xml:space="preserve"><value>정수 입력</value></data>
   <data name="Crop.InvalidSize" xml:space="preserve"><value>너비와 높이에 2 이상의 정수를 입력하십시오.</value></data>
   <data name="Capture.LibrarySaveFailedNoEditor" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 라이브러리를 확인하고 필요하면 다시 캡처하십시오. {0}</value></data>
+  <data name="Capture410.Crop" xml:space="preserve"><value>자르기 (X)</value></data>
+  <data name="Capture410.CropHint" xml:space="preserve"><value>이미지 가장자리를 끌어 자르기 범위를 조정합니다.</value></data>
+  <data name="Capture410.AutoTrim" xml:space="preserve"><value>여백 자동 제거</value></data>
+  <data name="Capture410.AutoTrimHint" xml:space="preserve"><value>가장자리의 여백을 찾아 자르기 틀로 표시합니다.</value></data>
+  <data name="Capture410.AutoTrimWorking" xml:space="preserve"><value>여백을 확인합니다.</value></data>
+  <data name="Capture410.AutoTrimPreview" xml:space="preserve"><value>여백 제거 범위</value></data>
+  <data name="Capture410.AutoTrimNoMargin" xml:space="preserve"><value>제거할 여백이 없습니다.</value></data>
+  <data name="Capture410.AutoTrimFailed" xml:space="preserve"><value>여백을 확인하지 못했습니다. 다시 시도하십시오.</value></data>
+  <data name="Capture410.GuideColor" xml:space="preserve"><value>캡처 가이드 색</value></data>
+  <data name="Capture410.GuideColorTheme" xml:space="preserve"><value>테마 기본</value></data>
+  <data name="Capture410.GuideColorCustom" xml:space="preserve"><value>사용자 지정 색</value></data>
+  <data name="Capture410.GuideColorHex" xml:space="preserve"><value>HEX</value></data>
+  <data name="Capture410.GuideColorSwatch" xml:space="preserve"><value>캡처 가이드 색 견본</value></data>
+  <data name="Capture410.GuideColorInvalid" xml:space="preserve"><value>HEX 색을 #RRGGBB 형식으로 입력하십시오.</value></data>
+  <data name="OCR410_ExtractionMode" xml:space="preserve"><value>추출 형식</value></data>
+  <data name="OCR410_Table" xml:space="preserve"><value>표</value></data>
+  <data name="OCR410_Code" xml:space="preserve"><value>코드</value></data>
+  <data name="OCR410_Text" xml:space="preserve"><value>텍스트</value></data>
+  <data name="OCR410_OriginalImage" xml:space="preserve"><value>원본 이미지</value></data>
+  <data name="OCR410_SelectionHelp" xml:space="preserve"><value>영역을 끌어서 선택합니다. 화살표 키로 영역을 이동하고 Enter 키로 선택합니다.</value></data>
+  <data name="OCR410_JoinLines" xml:space="preserve"><value>줄 합치기</value></data>
+  <data name="OCR410_FirstRowHeader" xml:space="preserve"><value>첫 행 머리글</value></data>
+  <data name="OCR410_ClearSelection" xml:space="preserve"><value>선택 해제</value></data>
+  <data name="OCR410_ImageUnavailable" xml:space="preserve"><value>원본 이미지 없음</value></data>
+  <data name="OCR410_ResizePanes" xml:space="preserve"><value>원본·결과 너비 조절</value></data>
+  <data name="OCR410_OpenExcel" xml:space="preserve"><value>Excel로 열기</value></data>
+  <data name="OCR410_CopyCsv" xml:space="preserve"><value>CSV 복사</value></data>
+  <data name="OCR410_CopyMarkdown" xml:space="preserve"><value>Markdown 표 복사</value></data>
+  <data name="OCR410_CopyTsv" xml:space="preserve"><value>탭 구분 복사</value></data>
+  <data name="OCR410_UnknownLanguage" xml:space="preserve"><value>언어 미지정</value></data>
+  <data name="OCR410_EstimatedLanguage" xml:space="preserve"><value>{0} 추정</value></data>
+  <data name="OCR410_Monospace" xml:space="preserve"><value>고정폭 추정</value></data>
+  <data name="OCR410_Proportional" xml:space="preserve"><value>가변폭 추정</value></data>
+  <data name="OCR410_UnknownFont" xml:space="preserve"><value>글자 폭 미지정</value></data>
+  <data name="OCR410_ExcelFailed" xml:space="preserve"><value>Excel 파일을 열지 못했습니다.</value></data>
+  <data name="OCR410_Copied" xml:space="preserve"><value>복사됨</value></data>
+  <data name="OCR410_ResultStatus" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="Folder410.Title" xml:space="preserve"><value>폴더</value></data>
+  <data name="Folder410.NewFolder" xml:space="preserve"><value>새 폴더</value></data>
+  <data name="Folder410.Name" xml:space="preserve"><value>폴더 이름</value></data>
+  <data name="Folder410.Create" xml:space="preserve"><value>만들기</value></data>
+  <data name="Folder410.Rename" xml:space="preserve"><value>이름 변경</value></data>
+  <data name="Folder410.MoveCaptures" xml:space="preserve"><value>폴더로 이동</value></data>
+  <data name="Folder410.MoveFolder" xml:space="preserve"><value>폴더 이동</value></data>
+  <data name="Folder410.Destination" xml:space="preserve"><value>이동 위치</value></data>
+  <data name="Folder410.Unassigned" xml:space="preserve"><value>폴더 미지정 (캡처 날짜)</value></data>
+  <data name="Folder410.RootLocation" xml:space="preserve"><value>최상위 (폴더 생성일)</value></data>
+  <data name="Folder410.CurrentFolderOption" xml:space="preserve"><value>새 캡처를 현재 폴더에 저장</value></data>
+  <data name="Folder410.DestinationHeader" xml:space="preserve"><value>새 캡처 저장 위치: {0}</value></data>
+  <data name="Folder410.DefaultDestination" xml:space="preserve"><value>날짜별 라이브러리</value></data>
+  <data name="Folder410.Delete" xml:space="preserve"><value>폴더와 캡처 삭제</value></data>
+  <data name="Folder410.DeleteDate" xml:space="preserve"><value>이 날짜의 캡처 모두 삭제</value></data>
+  <data name="Folder410.DeleteTitle" xml:space="preserve"><value>폴더 삭제</value></data>
+  <data name="Folder410.DeleteConfirm" xml:space="preserve"><value>{0}
+하위 폴더 {1}개 · 이미지 {2}개 · 동영상 {3}개를 삭제합니다.</value></data>
+  <data name="Folder410.DeleteResult" xml:space="preserve"><value>폴더 {0}개 · 캡처 {1}개 삭제 · 남은 캡처 {2}개</value></data>
+  <data name="Folder410.FolderExport" xml:space="preserve"><value>폴더로 내보내기…</value></data>
+  <data name="Folder410.ZipExport" xml:space="preserve"><value>ZIP으로 내보내기…</value></data>
+  <data name="Folder410.ExportDestination" xml:space="preserve"><value>내보내기 위치</value></data>
+  <data name="Folder410.ExportPreparing" xml:space="preserve"><value>내보내기 준비 중</value></data>
+  <data name="Folder410.ExportProgress" xml:space="preserve"><value>{0}/{1}개 내보내는 중</value></data>
+  <data name="Folder410.ExportDone" xml:space="preserve"><value>캡처 {0}개 내보내기 완료</value></data>
+  <data name="Folder410.ExportFailed" xml:space="preserve"><value>내보내지 못했습니다. 캡처 상태와 저장 위치를 확인하십시오.</value></data>
+  <data name="Folder410.NameInvalid" xml:space="preserve"><value>폴더 이름을 확인하십시오. 중복되는 이름이나 파일 경로 문자를 사용할 수 없습니다.</value></data>
+  <data name="Folder410.OperationFailed" xml:space="preserve"><value>변경 사항을 저장하지 못했습니다. 다시 시도하십시오.</value></data>
+  <data name="Folder410.MoveDone" xml:space="preserve"><value>캡처 {0}개 이동</value></data>
+  <data name="Folder410.SearchInFolder" xml:space="preserve"><value>{0} 안에서 검색</value></data>
+  <data name="Folder410.TreeAll" xml:space="preserve"><value>모든 날짜</value></data>
+  <data name="Folder410.Count" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="Folder410.RetentionHint" xml:space="preserve"><value>폴더에 넣은 캡처는 자동으로 정리하지 않습니다.</value></data>
+  <data name="Folder410.RetentionKept" xml:space="preserve"><value>폴더에 보관</value></data>
+  <data name="Folder410.PrefixLabel" xml:space="preserve"><value>폴더 안 캡처 이름 접두어</value></data>
+  <data name="Folder410.PrefixHint" xml:space="preserve"><value>제목이 없는 캡처에 접두어와 순번을 붙입니다.</value></data>
+  <data name="Folder410.PrefixInvalid" xml:space="preserve"><value>접두어는 경로 문자가 없는 1~40자로 입력하십시오.</value></data>
+  <data name="Folder410.Sort" xml:space="preserve"><value>정렬</value></data>
+  <data name="Folder410.Newest" xml:space="preserve"><value>최신순</value></data>
+  <data name="Folder410.Oldest" xml:space="preserve"><value>오래된순</value></data>
+  <data name="Folder410.ByName" xml:space="preserve"><value>이름순</value></data>
+  <data name="Folder410.InvalidMove" xml:space="preserve"><value>이 위치로 이동할 수 없습니다.</value></data>
+  <data name="Folder410.EmptyFolder" xml:space="preserve"><value>폴더에 캡처가 없습니다.</value></data>
+  <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>캡처를 끌어 넣거나 새 캡처 저장 위치로 지정하십시오.</value></data>
   <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store에서 설치한 MyCapture는 Microsoft Store가 업데이트합니다. 새 버전은 Microsoft Store 앱의 라이브러리에서 확인할 수 있습니다.</value></data>
   <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>Windows 설정에서 MyCapture 시작 앱이 꺼져 있습니다. 설정 &gt; 앱 &gt; 시작 프로그램에서 켜십시오.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>조직 정책이 시작 프로그램 설정을 관리합니다.</value></data>
+  <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>폴더에서 뺀 캡처는 오늘부터 보관 기간이 다시 적용됩니다.</value></data>
+  <data name="Folder410.DeleteChanged" xml:space="preserve"><value>확인한 뒤 폴더 항목이 변경되어 삭제를 중단했습니다. 내용을 확인한 후 다시 시도하십시오.</value></data>
+  <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>이 날짜의 폴더와 폴더에 넣지 않은 캡처, 핀으로 보관한 캡처가 모두 포함됩니다.</value></data>
+  <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>삭제한 폴더와 캡처는 되돌릴 수 없습니다.</value></data>
+  <data name="Folder410.Storage" xml:space="preserve"><value>폴더 {0}개 · {1}</value></data>
+  <data name="Folder410.StorageInfo" xml:space="preserve"><value>폴더 보관 용량이 일반 캡처의 용량 한도를 넘었습니다. 폴더 항목은 자동 삭제되지 않습니다.</value></data>
+  <data name="Folder410.ExportPathTooLong" xml:space="preserve"><value>선택한 저장 위치가 너무 깊습니다. 더 짧은 경로를 선택하십시오.</value></data>
+  <data name="Folder410.ExportNameExists" xml:space="preserve"><value>같은 이름의 파일이 있습니다. 다른 이름을 선택하십시오.</value></data>
+  <data name="Folder410.ExportMissing" xml:space="preserve"><value>원본 파일 또는 저장 폴더를 찾을 수 없습니다. 경로를 확인하십시오.</value></data>
+  <data name="Folder410.ExportChanged" xml:space="preserve"><value>내보내는 동안 캡처가 변경되었습니다. 다시 시도하십시오.</value></data>
+  <data name="Folder410.ExportLocked" xml:space="preserve"><value>파일이 다른 프로그램에서 사용 중입니다. 파일을 닫고 다시 시도하십시오.</value></data>
+  <data name="Folder410.ExportDiskFull" xml:space="preserve"><value>저장 공간이 부족합니다. 공간을 확보하거나 다른 위치를 선택하십시오.</value></data>
 </root>

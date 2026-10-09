@@ -94,6 +94,7 @@ internal sealed class CapturePersistenceService
         ArgumentNullException.ThrowIfNull(original);
 
         CaptureRecord record = CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor);
+        _queue.PrepareNewCaptureFolder(record);
         long bytes = WriteOriginalFiles(record, original);
         CompleteOriginal(record, bytes);
         return record;
@@ -119,6 +120,7 @@ internal sealed class CapturePersistenceService
     internal async Task<CaptureRecord> PersistPendingOriginalAsync(CaptureRecord record, BitmapSource original,
         BitmapSource? initialRendered = null)
     {
+        _queue.PrepareNewCaptureFolder(record);
         using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
         if (!_busyRecords.TryAdd(record.Id, 0)) throw new InvalidOperationException("The capture is already being written.");
         try

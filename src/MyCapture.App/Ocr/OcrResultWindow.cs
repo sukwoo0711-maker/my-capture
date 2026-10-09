@@ -1,10 +1,11 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using MyCapture.App.Themes;
 using MyCapture.Ocr;
 
@@ -12,7 +13,7 @@ namespace MyCapture.App.Ocr;
 
 /// <summary>
 /// A reusable, accessible dialog that shows an OCR result: selectable text, a copy button,
-/// a rerun option, and a status line carrying the language and timing (or empty/error guidance).
+/// table/code/text extraction, a rerun option, and a language or empty/error status.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -27,7 +28,7 @@ namespace MyCapture.App.Ocr;
 /// window carries automation names on every control and closes on Escape.
 /// </para>
 /// </remarks>
-internal sealed class OcrResultWindow : Window
+internal sealed partial class OcrResultWindow : Window
 {
     private readonly TextBox _textBox;
     private readonly LiveTextBlock _status;
@@ -43,10 +44,10 @@ internal sealed class OcrResultWindow : Window
         StandardWindowTheme.Apply(this);
 
         Title = UiText.Get("Text_7CD1B787C3E6");
-        Width = 680;
-        Height = 560;
-        MinWidth = 440;
-        MinHeight = 340;
+        Width = Math.Min(1040, Math.Max(760, SystemParameters.WorkArea.Width - 48));
+        Height = Math.Min(720, Math.Max(520, SystemParameters.WorkArea.Height - 48));
+        MinWidth = 760;
+        MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ShowInTaskbar = true;
         AutomationProperties.SetName(this, UiText.Get("Text_E5F541120733"));
@@ -130,14 +131,14 @@ internal sealed class OcrResultWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             ClipToBounds = true,
-            Child = _textBox,
+            Child = BuildAdvancedWorkspace(),
         };
         textFrame.SetResourceReference(Border.BackgroundProperty, "Surface.Sunken");
         textFrame.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         Grid.SetRow(textFrame, 1);
         root.Children.Add(textFrame);
 
-        var buttons = new StackPanel
+        var buttons = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
@@ -149,8 +150,9 @@ internal sealed class OcrResultWindow : Window
         _rerunButton.Margin = new Thickness(0, 0, 8, 0);
         _rerunButton.Click += (_, _) => RerunRequested?.Invoke(this, EventArgs.Empty);
         buttons.Children.Add(_rerunButton);
+        AddAdvancedActions(buttons);
 
-        // Copy is the sole primary action — the one thing this window exists to make easy.
+        // The active extraction mode determines the copy and export actions.
         _copyButton = MakeButton(UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_20CF6A996B4D"));
         _copyButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         _copyButton.Click += (_, _) => CopyText();
@@ -182,6 +184,7 @@ internal sealed class OcrResultWindow : Window
         ShortcutPresentation.Attach(_copyButton, ShortcutScope.Ocr, "Copy");
         ShortcutPresentation.Attach(exportButton, ShortcutScope.Ocr, "Export");
         PreviewKeyDown += OnPreviewKeyDown;
+        CompleteAdvancedSetup(exportButton);
     }
 
     /// <summary>Raised when the user asks to run recognition again.</summary>
@@ -191,10 +194,16 @@ internal sealed class OcrResultWindow : Window
     internal event EventHandler? Dismissed;
 
     /// <summary>Populates the window from a result and shows/activates it.</summary>
-    internal void ShowResult(OcrResult result, string contextLabel)
+    internal void ShowResult(OcrResult result, string contextLabel,
+        BitmapSource? sourceImage = null, bool preserveSelection = false)
     {
         ArgumentNullException.ThrowIfNull(result);
-
+        if (!preserveSelection)
+        {
+            _deferredSelection = null;
+            _geometryRequested = false;
+        }
+        SetSourceImage(sourceImage);
         ApplyResult(result, contextLabel);
 
         if (!IsVisible)
@@ -208,13 +217,14 @@ internal sealed class OcrResultWindow : Window
         }
 
         _ = Activate();
-        _ = _textBox.Focus();
-        _textBox.SelectAll();
+        FocusAdvancedResult();
+        RequestGeometryIfNeeded();
     }
 
     /// <summary>Shows a busy state while a (re)run is in flight, keeping the window responsive.</summary>
-    internal void ShowBusy(string contextLabel)
+    internal void ShowBusy(string contextLabel, bool preserveSelection = false)
     {
+        PrepareAdvancedBusy(preserveSelection);
         _status.Text = UiText.Format("Text_4A376FDFB111", contextLabel);
         _rerunButton.IsEnabled = false;
         _copyButton.IsEnabled = false;
@@ -244,7 +254,7 @@ internal sealed class OcrResultWindow : Window
                 _textBox.Text = result.Text;
                 _copyButton.IsEnabled = true;
                 _status.Text =
-                    UiText.Format("Text_D1F6E7772569", contextLabel, result.LanguageTag, result.Lines.Count, result.Elapsed.TotalMilliseconds);
+                    UiText.Format("OCR410_ResultStatus", contextLabel, result.LanguageTag);
                 break;
 
             case OcrStatus.NoText:
@@ -274,26 +284,10 @@ internal sealed class OcrResultWindow : Window
                 _status.Text = result.Message ?? UiText.Get("Text_AA254F35F02E");
                 break;
         }
+        ApplyAdvancedResult(result);
     }
 
-    private void CopyText()
-    {
-        if (string.IsNullOrEmpty(_textBox.Text))
-        {
-            return;
-        }
-
-        try
-        {
-            Clipboard.SetText(_textBox.Text);
-            _status.Text = UiText.Get("Text_6EAF5A406E0E") + _status.Text;
-        }
-        catch (System.Runtime.InteropServices.COMException)
-        {
-            // Clipboard momentarily locked by another app; a copy failure must not throw.
-            _status.Text = UiText.Get("Text_75425A6D9BE8");
-        }
-    }
+    private void CopyText() => CopyValue(_textBox.Text);
 
     /// <summary>Saves the recognised text to a UTF-8 .txt file the user picks.</summary>
     private void ExportText()
@@ -331,7 +325,14 @@ internal sealed class OcrResultWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && _imageOverlay.Selection is not null)
+        {
+            _imageOverlay.SetSelection(null);
+            e.Handled = true;
+            return;
+        }
         string? command = ShortcutCatalog.Match(ShortcutScope.Ocr, e.Key, Keyboard.Modifiers);
+        if (command == "Copy" && _tableGrid.IsKeyboardFocusWithin && _tableGrid.SelectedCells.Count > 0) return;
         // Preserve native selected-text copy; the button / unselected Ctrl+C copies all.
         if (command == "Copy" && _textBox.IsKeyboardFocusWithin && _textBox.SelectionLength > 0) return;
         e.Handled = ShortcutCatalog.Execute(ShortcutScope.Ocr, e.Key, Keyboard.Modifiers, _shortcutActions);

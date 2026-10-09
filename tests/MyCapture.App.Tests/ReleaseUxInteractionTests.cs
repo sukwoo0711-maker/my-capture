@@ -26,7 +26,7 @@ namespace MyCapture.App.Tests;
 public sealed class ReleaseUxInteractionTests
 {
     [Fact]
-    public void HelpUsesConfiguredKeysAndSearchFiltersAcrossFourTabs()
+    public void HelpUsesConfiguredKeysAndSearchFiltersAcrossFiveTabsIncludingLibrary()
     {
         Sta(() =>
         {
@@ -37,10 +37,13 @@ public sealed class ReleaseUxInteractionTests
                 var help = new ShortcutHelpWindow();
                 var root = Assert.IsType<DockPanel>(help.Content);
                 var tabs = root.Children.OfType<TabControl>().Single();
-                Assert.Equal(4, tabs.Items.Count);
+                Assert.Equal(5, tabs.Items.Count);
+                var library = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(((TabItem)tabs.Items[2]).Content).Content);
+                Assert.Equal(new[] { "Ctrl+Shift+N", "F2", "M", "Del" }, library.Children.OfType<UniformGrid>()
+                    .SelectMany(row => row.Children.OfType<WrapPanel>()).Select(System.Windows.Automation.AutomationProperties.GetName));
                 var capture = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(((TabItem)tabs.Items[0]).Content).Content);
-                Assert.Contains(capture.Children.OfType<UniformGrid>(), row => row.Children.OfType<TextBlock>().Any(t => t.Text == "Ctrl+F8"));
-                root.Children.OfType<TextBox>().Single().Text = "Ctrl+F8";
+                Assert.Contains(capture.Children.OfType<UniformGrid>(), row => row.Children.OfType<WrapPanel>().Any(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Ctrl+F8"));
+                root.Children.OfType<Grid>().Single().Children.OfType<TextBox>().Single().Text = "Ctrl+F8";
                 Assert.Single(capture.Children.OfType<UniformGrid>(), row => row.Visibility == Visibility.Visible);
                 help.Close();
                 var onboarding = new ShortcutHelpWindow(onboarding: true);
@@ -156,7 +159,7 @@ public sealed class ReleaseUxInteractionTests
             int copied = 0, pinned = 0, saved = 0;
             var card = new QuickAccessWindow(Image(), () => { copied++; return Task.FromResult(true); }, () => { },
                 () => { pinned++; return Task.CompletedTask; }, () => { saved++; return Task.FromResult(true); }, () => { }, () => Task.FromResult("unused.png"));
-            var panel = Assert.IsType<StackPanel>(card.Content);
+            var panel = Assert.IsType<StackPanel>(Assert.IsType<Border>(card.Content).Child);
             var actions = panel.Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
             foreach (int index in new[] { 0, 2, 3 })
                 ((Button)actions.Children[index]).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

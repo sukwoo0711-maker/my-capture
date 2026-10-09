@@ -46,6 +46,13 @@ namespace MyCapture.App.Settings;
 /// </remarks>
 public sealed class SettingsApplyService
 {
+    internal static void ReconcileFolderDestination(QueueSettings next, CaptureQueue? queue, bool edited)
+    {
+        if (queue is null) return;
+        if (!edited) next.UseCurrentFolderForNewCaptures = queue.UseCurrentFolderForNewCaptures;
+        next.DefaultCaptureFolderId = next.UseCurrentFolderForNewCaptures ? queue.DefaultCaptureFolderId : null;
+    }
+
     private readonly SettingsStore _store;
     private readonly Action<AppSettings> _publish;
     private readonly Func<AppSettings> _current;
@@ -86,11 +93,12 @@ public sealed class SettingsApplyService
     /// <see cref="SettingsApplyResult.Saved"/> is <see langword="false"/> so the window
     /// stays open with the user's draft intact.
     /// </remarks>
-    public SettingsApplyResult Apply(AppSettings next)
+    public SettingsApplyResult Apply(AppSettings next, bool applyFolderDestination = true)
     {
         ArgumentNullException.ThrowIfNull(next);
 
         AppSettings previous = _current();
+        ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);
         var messages = new List<string>();
 
         // 1) Snapshot everything a rollback would need to restore, captured before any
@@ -177,7 +185,7 @@ public sealed class SettingsApplyService
             }
         }
 
-        MyCapture.App.Themes.ThemeService.ApplyFromSettings(next.General.Theme);
+        MyCapture.App.Themes.ThemeService.ApplyFromSettings(next.General);
 
         bool languageChanged = !string.Equals(previous.General.Language, next.General.Language, StringComparison.OrdinalIgnoreCase);
         if (languageChanged)

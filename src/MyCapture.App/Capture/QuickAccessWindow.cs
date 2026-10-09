@@ -54,7 +54,7 @@ internal sealed class QuickAccessWindow : Window
         RectD? capturedRegion = null, MonitorInfo? targetMonitor = null)
     {
         Title = UiText.Get("QuickAccess.Title");
-        Width = 280;
+        Width = 296;
         _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
@@ -62,10 +62,17 @@ internal sealed class QuickAccessWindow : Window
         ShowActivated = false;
         Topmost = true;
         WindowStartupLocation = WindowStartupLocation.Manual;
-        StandardWindowTheme.Apply(this);
-        SetResourceReference(BackgroundProperty, "Surface.Raised");
+        WindowStyle = WindowStyle.None;
+        AllowsTransparency = true;
+        Background = Brushes.Transparent;
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var panel = new StackPanel { Margin = new Thickness(8) };
+        var close = Button("Dialog.Close", Close);
+        close.Content = Glyph("Icon.Close");
+        close.Width = 26; close.Height = 26; close.MinHeight = 0; close.MinWidth = 0;
+        close.Padding = new Thickness(4); close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.SetResourceReference(StyleProperty, "Button.Ghost");
+        panel.Children.Add(close);
         var row = new DockPanel { LastChildFill = true };
         _keep = new ToggleButton { Content = Glyph("Icon.Unlock"), Width = 24, Height = 30, MinWidth = 0, MinHeight = 0,
             Padding = new Thickness(2), Focusable = false, ToolTip = UiText.Get("QuickAccess.Keep") };
@@ -119,9 +126,15 @@ internal sealed class QuickAccessWindow : Window
         _dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight}";
         _dimensions.FontSize = 10; _dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         footer.Children.Add(_dimensions); panel.Children.Add(footer);
+        _keyboardTargets.Remove(close);
+        _keyboardTargets.Add(close);
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         panel.Children.Add(_status); panel.Children.Add(_remaining);
-        Content = panel;
+        var surface = new Border { Child = panel, Margin = new Thickness(8), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1) };
+        surface.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
+        surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        surface.SetResourceReference(EffectProperty, "Shadow.Card");
+        Content = surface;
         ToolTip = UiText.Get("QuickAccess.KeyboardHint");
         SourceInitialized += (_, _) =>
         {
@@ -144,7 +157,7 @@ internal sealed class QuickAccessWindow : Window
             long now = Stopwatch.GetTimestamp();
             TimeSpan elapsed = Stopwatch.GetElapsedTime(_lastTick, now);
             _lastTick = now;
-            Advance(elapsed, IsPointerOver || (_keyboardInteracting && IsKeyboardFocusWithin) || _busy);
+            Advance(elapsed, IsPointerOver || IsMouseCaptured || (_keyboardInteracting && IsKeyboardFocusWithin) || _busy);
         };
         SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
         Closed += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); _activationKey = null; };
@@ -156,11 +169,38 @@ internal sealed class QuickAccessWindow : Window
             if (IsVisible) { _lastTick = Stopwatch.GetTimestamp(); _timer.Start(); }
             UpdateActivationHotkey();
         };
-        PreviewMouseDown += (_, e) =>
+        Point? cardDrag = null;
+        Point cardOrigin = default;
+        bool cardMoved = false;
+        PreviewMouseLeftButtonDown += (_, e) =>
         {
-            if (!_keyboardAccess && e.ChangedButton == MouseButton.Left && IsKeyboardEntryBackground(e.OriginalSource as DependencyObject))
-                ActivateForKeyboard();
+            if (!IsKeyboardEntryBackground(e.OriginalSource as DependencyObject)) return;
+            cardDrag = PointToScreen(e.GetPosition(this));
+            cardOrigin = new Point(Left, Top);
+            cardMoved = false;
+            CaptureMouse();
+            e.Handled = true;
         };
+        PreviewMouseMove += (_, e) =>
+        {
+            if (cardDrag is not Point start || e.LeftButton != MouseButtonState.Pressed) return;
+            Point screen = PointToScreen(e.GetPosition(this));
+            var dpi = VisualTreeHelper.GetDpi(this);
+            Vector delta = screen - start;
+            if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance * dpi.DpiScaleX
+                && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance * dpi.DpiScaleY) return;
+            Left = cardOrigin.X + delta.X / dpi.DpiScaleX;
+            Top = cardOrigin.Y + delta.Y / dpi.DpiScaleY;
+            cardMoved = true;
+            e.Handled = true;
+        };
+        PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            if (cardDrag is null) return;
+            cardDrag = null; ReleaseMouseCapture(); e.Handled = true;
+            if (!cardMoved && !_keyboardAccess) ActivateForKeyboard();
+        };
+        LostMouseCapture += (_, _) => cardDrag = null;
         PreviewKeyDown += (_, e) =>
         {
             if (!_keyboardAccess || !IsKeyboardFocusWithin) return;

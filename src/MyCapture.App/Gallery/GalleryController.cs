@@ -37,6 +37,8 @@ public sealed class GalleryController
     /// <summary>Retained captures, newest first. Mirrors the live queue collection.</summary>
     public IReadOnlyList<CaptureRecord> Records => _queue.Records;
 
+    internal CaptureQueue Queue => _queue;
+
     public int Count => _queue.Count;
 
     public long TotalBytes => _queue.TotalBytes;
@@ -54,24 +56,33 @@ public sealed class GalleryController
     /// filtered results: doing them together keeps a single ordering (newest-first within a
     /// day, newest day first) and avoids the caller re-sorting.
     /// </remarks>
-    public IReadOnlyList<GalleryGroupedRecords> BuildGroups(string? query, DateTimeOffset now)
+    public IReadOnlyList<GalleryGroupedRecords> BuildGroups(string? query, DateTimeOffset now,
+        CaptureFolderScope scope = default, GallerySortOrder sort = GallerySortOrder.Newest)
     {
-        IEnumerable<CaptureRecord> matches = _queue.Records;
-
+        IEnumerable<CaptureRecord> matches = _queue.RecordsInScope(scope);
         string? trimmed = query?.Trim();
         if (!string.IsNullOrEmpty(trimmed))
+            matches = matches.Where(record => Matches(record, trimmed)
+                || _queue.GetExportFileName(record).Contains(trimmed, StringComparison.CurrentCultureIgnoreCase));
+        CaptureRecord[] ordered = (sort switch
         {
-            matches = matches.Where(r => Matches(r, trimmed));
+            GallerySortOrder.Oldest => matches.OrderBy(record => record.CreatedAt).ThenBy(record => record.Id),
+            GallerySortOrder.Name => matches.OrderBy(record => _queue.GetExportFileName(record),
+                StringComparer.CurrentCultureIgnoreCase).ThenBy(record => record.CreatedAt).ThenBy(record => record.Id),
+            _ => matches.OrderByDescending(record => record.CreatedAt).ThenBy(record => record.Id),
+        }).ToArray();
+        if (!scope.IsAll || sort != GallerySortOrder.Newest)
+        {
+            if (ordered.Length == 0) return [];
+            string heading = scope.FolderId is { } folderId ? _queue.GetFolderDisplayPath(folderId)
+                : scope.Date?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                    ?? UiText.Get("Folder410.TreeAll");
+            return [new GalleryGroupedRecords(new GalleryDateGroup(
+                scope.Date ?? DateOnly.FromDateTime(now.DateTime), heading), ordered)];
         }
-
-        return matches
-            .OrderByDescending(r => r.CreatedAt)
-            .GroupBy(r => GalleryDateGrouping.Resolve(r.CreatedAt, now))
-            .OrderByDescending(g => g.Key.SortKey)
-            .Select(g => new GalleryGroupedRecords(
-                g.Key,
-                g.OrderByDescending(r => r.CreatedAt).ToList()))
-            .ToList();
+        return ordered.GroupBy(record => GalleryDateGrouping.Resolve(record.CreatedAt, now))
+            .OrderByDescending(group => group.Key.SortKey)
+            .Select(group => new GalleryGroupedRecords(group.Key, group.ToArray())).ToArray();
     }
 
     /// <summary>

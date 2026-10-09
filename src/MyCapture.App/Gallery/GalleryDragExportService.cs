@@ -61,6 +61,8 @@ internal sealed class GalleryDragExportService
     internal string PrepareExport(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
+        if (record.FolderId is not null || !string.IsNullOrWhiteSpace(record.Title))
+            return new GalleryFolderExportService(Queue, _stagingRoot, _clock).PrepareSingle(record);
         return StageSource(ResolveSource(record), record.IsVideo, _clock(), CancellationToken.None);
     }
 
@@ -158,6 +160,14 @@ internal sealed class GalleryDragExportService
     /// <summary>Resolve immutable paths and acquire leases on the owner before disk-only staging.</summary>
     internal async Task<PreparedDrag> PrepareBatchAsync(IReadOnlyList<CaptureRecord> records, CancellationToken cancellationToken)
     {
+        if (records.Any(record => record.FolderId is not null || !string.IsNullOrWhiteSpace(record.Title)))
+        {
+            var exporter = new GalleryFolderExportService(Queue, _stagingRoot, _clock)
+                { StagedFileForTest = StagedFileForTest };
+            var prepared = await exporter.PrepareAsync(exporter.BuildCapturePlan(records), cancellationToken);
+            return new PreparedDrag(prepared.Paths.ToArray(), [], null, prepared.Dispose);
+        }
+
         var leases = new List<IDisposable>();
         var paths = new List<string>();
         try
@@ -194,14 +204,16 @@ internal sealed class GalleryDragExportService
 
     internal Action<int>? StagedFileForTest { get; set; }
 
-    internal sealed class PreparedDrag(string[] paths, List<IDisposable> leases) : IDisposable
+    internal sealed class PreparedDrag(string[] paths, List<IDisposable> leases,
+        Action? onPublish = null, Action? onDispose = null) : IDisposable
     {
         private bool _published;
         internal IReadOnlyList<string> Paths { get; } = paths;
-        internal void MarkPublished() => _published = true;
+        internal void MarkPublished() { _published = true; onPublish?.Invoke(); }
         public void Dispose()
         {
-            if (!_published) foreach (string path in paths) GalleryExportFiles.DeleteBestEffort(path);
+            if (onDispose is not null) onDispose();
+            else if (!_published) foreach (string path in paths) GalleryExportFiles.DeleteBestEffort(path);
             foreach (IDisposable lease in leases) lease.Dispose();
             leases.Clear();
         }

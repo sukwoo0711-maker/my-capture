@@ -142,7 +142,7 @@ internal static class HotfixUxSelfTest
                         if (available) probe.Unregister(0x7103);
                         Check($"Alt+Q available to a separate registration iff kept={kept}", available == kept);
                     }
-                    var mouseRow = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().First();
+                    var mouseRow = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().First();
                     var mouseActions = mouseRow.Children.OfType<UniformGrid>().Single().Children.OfType<Button>().ToArray();
                     Click(inputHandle, mouseActions[0]);
                     Check("copy click preserves external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && copies == 1);
@@ -173,7 +173,19 @@ internal static class HotfixUxSelfTest
                         Check($"{(library ? "library" : "edit")} click invokes action without activating card", invoked == 1 && GetForegroundWindow() == inputHandle && !actionCard.IsVisible);
                     }
                     // Kept cards enter only by a non-action background click.
-                    var dimensions = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single();
+                    var dimensions = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single();
+                    double originalLeft = keyboardCard.Left;
+                    Point dragStart = dimensions.PointToScreen(new Point(dimensions.ActualWidth / 2, dimensions.ActualHeight / 2));
+                    MoveCursor(inputHandle, (int)dragStart.X, (int)dragStart.Y);
+                    MouseButton(inputHandle, 0x0002); Pump(50);
+                    for (int delta = 10; delta <= 80; delta += 10)
+                    {
+                        MoveCursor(inputHandle, (int)dragStart.X - delta, (int)dragStart.Y); Pump(25);
+                    }
+                    MouseButton(inputHandle, 0x0004); Pump(80);
+                    Check("background drag moves the card without activating or invoking an action",
+                        Math.Abs(keyboardCard.Left - originalLeft) > 40 && GetForegroundWindow() == inputHandle
+                        && !keyboardCard.IsActive && copies == 1 && saves == 1);
                     Click(inputHandle, dimensions);
                     Check("background click activates the kept card", keyboardCard.IsActive && keyboardCard.IsKeyboardFocusWithin);
                     SendKey(cardHandle, 0x43); Pump(80);
@@ -189,7 +201,7 @@ internal static class HotfixUxSelfTest
                     SendKey(cardHandle, 0x53); Pump(80);
                     Check("focused card S invokes save", saves == 2);
                     // Observe real pointer-triggered tooltips on this owned foreground HWND.
-                    var cardRow = ((StackPanel)keyboardCard.Content).Children.OfType<DockPanel>().First();
+                    var cardRow = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().First();
                     var tooltipTargets = cardRow.Children.OfType<UniformGrid>().Single().Children.OfType<ButtonBase>()
                         .Concat(cardRow.Children.OfType<ToggleButton>()).ToArray();
                     foreach (ButtonBase target in tooltipTargets)
@@ -243,7 +255,7 @@ internal static class HotfixUxSelfTest
                 ThemeService.Apply(theme);
                 var receipt = Card(sample); owned.Add(receipt); receipt.IsKept = true;
                 receipt.Show(); Pump(70); receipt.UpdateLayout();
-                var keep = ((StackPanel)receipt.Content).Children.OfType<DockPanel>().First().Children.OfType<ToggleButton>().Single();
+                var keep = ((StackPanel)((Border)receipt.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<ToggleButton>().Single();
                 string locked = ((System.Windows.Shapes.Path)keep.Content).Data.ToString();
                 receipt.IsKept = false;
                 string unlocked = ((System.Windows.Shapes.Path)keep.Content).Data.ToString();
@@ -251,7 +263,7 @@ internal static class HotfixUxSelfTest
                     locked != unlocked && locked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString()
                     && unlocked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString());
                 receipt.IsKept = true;
-                var grid = ((StackPanel)receipt.Content).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
+                var grid = ((StackPanel)((Border)receipt.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
                 foreach (Button button in grid.Children.OfType<Button>())
                 {
                     var content = (Grid)button.Content;
@@ -327,7 +339,7 @@ internal static class HotfixUxSelfTest
             Render(updatedCard, Path.Combine(output, "preview-before-update.png"), 96);
             updatedCard.UpdatePreview(expected); updatedCard.UpdateLayout();
             Render(updatedCard, Path.Combine(output, "preview-after-update.png"), 96);
-            Check("preview dimensions reflect edited crop", ((StackPanel)updatedCard.Content).Children.OfType<DockPanel>().Last()
+            Check("preview dimensions reflect edited crop", ((StackPanel)((Border)updatedCard.Content).Child).Children.OfType<DockPanel>().Last()
                 .Children.OfType<TextBlock>().Single().Text == "230 × 130");
             updatedCard.Close();
             string? saved = null; BitmapSource? pinned = null; byte[]? clipboardPng = null;
@@ -546,7 +558,8 @@ internal static class HotfixUxSelfTest
         var window = new AnnotationEditorWindow(new FrozenFrame(sample, rect, null, 0), rect, sample);
         owned.Add(window); window.Show(); Pump(150); window.Activate(); window.Editor.Focus();
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
-        ButtonBase Button(string key) => Ux402VisualMetrics.Descendants(window).OfType<ButtonBase>().Single(b => AutomationProperties.GetAcceleratorKey(b) == key);
+        ButtonBase Button(string key) => Ux402VisualMetrics.Descendants(window).OfType<ButtonBase>()
+            .Single(b => AutomationProperties.GetAcceleratorKey(b) == key && (key != "X" || b is ToggleButton));
         Click(hwnd, Button("A"));
         check("mouse rail click returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
         foreach (var (key, hint) in new[] { ((byte)0x52, "R"), ((byte)0x45, "E"), ((byte)0x58, "X") })
@@ -585,9 +598,11 @@ internal static class HotfixUxSelfTest
         check("native Done blocks invalid input and preserves text/error", window.IsVisible && window.Editor.PendingCrop is not null
             && widthInput.Text == "abc" && !string.IsNullOrEmpty(AutomationProperties.GetHelpText(widthInput)));
         SendKey(hwnd, 0x1B); Pump(50);
-        Click(hwnd, Button("X")); window.Editor.PendingCrop!.SetWidth(200);
+        var topCrop = Ux402VisualMetrics.Descendants(window).OfType<Button>()
+            .Single(b => AutomationProperties.GetAcceleratorKey(b) == "X");
+        Click(hwnd, topCrop); window.Editor.PendingCrop!.SetWidth(200);
         SendKey(hwnd, 0x0D); Pump(80);
-        check("native crop button click then Enter applies crop", window.Editor.PendingCrop is null && window.Editor.CreateCurrentImageSnapshot().CanvasWidth == 200);
+        check("native top crop button click then Enter applies crop", window.Editor.PendingCrop is null && window.Editor.CreateCurrentImageSnapshot().CanvasWidth == 200);
         Click(hwnd, Button("X")); SendKey(hwnd, 0x1B); Pump(50);
         check("native crop button click then Esc cancels", window.Editor.PendingCrop is null && window.IsVisible);
         window.Editor.Focus(); SendKey(hwnd, 0x09); Pump(50);

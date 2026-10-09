@@ -26,7 +26,7 @@ public sealed class Ux402VisualRevisionTests
             () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"));
         try
         {
-            var row = ((StackPanel)card.Content).Children.OfType<DockPanel>().First();
+            var row = ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().First();
             var actions = row.Children.OfType<UniformGrid>().Single().Children.OfType<Button>().ToArray();
             foreach (var (button, expected) in actions.Zip(new[] { copy, edit, pin, save }))
             {

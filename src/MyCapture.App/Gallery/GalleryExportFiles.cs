@@ -6,7 +6,7 @@ using Microsoft.Win32.SafeHandles;
 namespace MyCapture.App.Gallery;
 
 /// <summary>Opens drag-export files without following links or allowing parent replacement.</summary>
-internal static class GalleryExportFiles
+internal static partial class GalleryExportFiles
 {
     private const uint ListDirectory = 0x1, ReadAttributes = 0x80, DeleteAccess = 0x10000;
     private const uint OpenExisting = 3, CreateNew = 1;
@@ -111,6 +111,7 @@ internal static class GalleryExportFiles
 
     internal static void Cleanup(string root, DateTimeOffset cutoff)
     {
+        CleanupFolderBatches(root, cutoff);
         try
         {
             using DirectoryLease parents = DirectoryLease.Open(root, create: false);

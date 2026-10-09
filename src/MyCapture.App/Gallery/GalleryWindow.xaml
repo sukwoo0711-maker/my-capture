@@ -27,6 +27,22 @@
             <Setter Property="Margin" Value="4,0,0,0" />
         </Style>
 
+        <ContextMenu x:Key="Gallery.FolderContextMenu" x:Shared="False" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="{loc:Text Folder410.NewFolder}" CommandParameter="{Binding}"
+                      InputGestureText="Ctrl+Shift+N" Click="OnNewFolderClick" />
+            <MenuItem Header="{loc:Text Folder410.Rename}" CommandParameter="{Binding}"
+                      IsEnabled="{Binding IsFolder}" InputGestureText="F2" Click="OnRenameFolderClick" />
+            <MenuItem Header="{loc:Text Folder410.MoveFolder}" CommandParameter="{Binding}"
+                      IsEnabled="{Binding IsFolder}" InputGestureText="M" Click="OnMoveFolderClick" />
+            <Separator />
+            <MenuItem Header="{loc:Text Folder410.FolderExport}" CommandParameter="{Binding}" Click="OnExportFolderClick" />
+            <MenuItem Header="{loc:Text Folder410.ZipExport}" CommandParameter="{Binding}" Click="OnExportFolderZipClick" />
+            <Separator />
+            <MenuItem Header="{Binding DeleteLabel, FallbackValue={loc:Text Folder410.Delete}}" CommandParameter="{Binding}"
+                      InputGestureText="Delete" Foreground="{DynamicResource State.DangerHover}"
+                      Click="OnDeleteFolderClick" />
+        </ContextMenu>
+
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
             <!-- A 244px tile plus 6px margins occupies a 256px track, matching
                  GalleryRowBuilder.TileTrackWidth. Four cards now fill the default window
@@ -263,6 +279,8 @@
                                               InputGestureText="G"
                                               Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
                                               Click="OnGifMenuClick" />
+                                    <MenuItem Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
+                                              InputGestureText="M" Click="OnMoveCapturesClick" />
                                     <Separator />
                                     <MenuItem Header="{loc:Text ExportReduction_Title}"
                                               CommandParameter="{Binding}"
@@ -435,6 +453,15 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <HierarchicalDataTemplate x:Key="Gallery.FolderNodeTemplate" DataType="{x:Type gallery:GalleryFolderNode}"
+                                  ItemsSource="{Binding Children}">
+            <StackPanel Orientation="Horizontal" Margin="1,4">
+                <Path Data="M2,5 L8,5 L10,7 L20,7 L20,19 L2,19 Z" Width="16" Height="16" Stretch="Uniform"
+                      Stroke="{DynamicResource Text.Secondary}" StrokeThickness="1.5" Fill="Transparent" Margin="0,0,6,0"
+                      Visibility="{Binding IsFolder, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="{Binding Caption}" VerticalAlignment="Center" ToolTip="{Binding Caption}" />
+            </StackPanel>
+        </HierarchicalDataTemplate>
       </ResourceDictionary>
     </Window.Resources>
 
@@ -518,7 +545,7 @@
                          AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
                          TextChanged="OnSearchTextChanged" />
                 <TextBlock Grid.Column="1" IsHitTestVisible="False"
-                           Text="{loc:Text Text_59208AC2B48E}"
+                           Text="{Binding SearchPlaceholder}"
                            Foreground="{DynamicResource Text.Muted}"
                            Margin="12,10"
                            VerticalAlignment="Center">
@@ -571,9 +598,25 @@
         </Border>
 
         <StackPanel Grid.Row="3" Margin="0,0,0,10">
+            <DockPanel Margin="4,0,4,10">
+                <ComboBox DockPanel.Dock="Right" Width="132" Margin="12,0,0,0"
+                          AutomationProperties.Name="{loc:Text Folder410.Sort}"
+                          SelectedIndex="{Binding SortIndex, Mode=TwoWay}">
+                    <ComboBoxItem Content="{loc:Text Folder410.Newest}" />
+                    <ComboBoxItem Content="{loc:Text Folder410.Oldest}" />
+                    <ComboBoxItem Content="{loc:Text Folder410.ByName}" />
+                </ComboBox>
+                <CheckBox x:Name="CurrentFolderCaptureCheck" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                          Content="{loc:Text Folder410.CurrentFolderOption}" IsEnabled="{Binding CanChangeNewCaptureFolder}"
+                          IsChecked="{Binding UseCurrentFolderForNewCaptures, Mode=OneWay}" Click="OnFolderCaptureTargetClick" />
+                <TextBlock Text="{Binding NewCaptureDestinationText}" ToolTip="{Binding NewCaptureDestinationText}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Text.Secondary}" />
+            </DockPanel>
+
             <WrapPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock Text="{Binding SelectionText}" VerticalAlignment="Center" Margin="8,0,14,0" />
                 <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource Button.Primary}" Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" Margin="0,0,8,4" />
+                <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource Button.Secondary}" Click="OnMoveCapturesClick" ToolTip="M" Margin="0,0,8,4" />
                 <Button Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource Button.Secondary}" Click="OnDeleteSelectedClick" Margin="0,0,8,4" />
                 <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,4" DataContext="{Binding SingleSelectedTile}" Click="OnReducedExportClick" Visibility="{Binding DataContext.CanReduceSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
                 <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,4" DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick" Visibility="{Binding DataContext.CanGifSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
@@ -592,15 +635,72 @@
                 <TextBlock x:Name="LibraryActionStatus" TextWrapping="Wrap" Foreground="{DynamicResource Text.Secondary}" AutomationProperties.LiveSetting="Polite" />
             </DockPanel>
         </StackPanel>
-        <Grid Grid.Row="4" x:Name="GalleryWorkspace"><Grid.ColumnDefinitions><ColumnDefinition Width="136" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
-<Border x:Name="GalleryFilterRail" Background="{DynamicResource Surface.Raised}" CornerRadius="10" Padding="10" Margin="0,0,10,0"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><DockPanel>
-<TextBlock DockPanel.Dock="Bottom" themes:KoreanWordWrap.Text="{loc:Text Workspace.RetentionHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,16,0,0" />
-<StackPanel><TextBlock Text="{loc:Text Workspace.Library}" FontWeight="SemiBold" Margin="4,6,0,8" /><TextBlock themes:KoreanWordWrap.Text="{Binding ResultCountText}" Foreground="{DynamicResource Text.Muted}" TextWrapping="Wrap" Margin="4,0,0,16" AutomationProperties.LiveSetting="Polite" />
-<RadioButton x:Name="AllLibraryFilter" Content="{loc:Text Workspace.All}" Tag="All" GroupName="LibraryFilter" IsChecked="True" Checked="OnLibraryFilterChanged" Margin="0,0,0,14" />
-<RadioButton Content="{loc:Text Text_302BAE127938}" Tag="Images" GroupName="LibraryFilter"  Checked="OnLibraryFilterChanged" Margin="0,0,0,14" />
-<RadioButton Content="{loc:Text Text_C11734267E6B}" Tag="Videos" GroupName="LibraryFilter"  Checked="OnLibraryFilterChanged" Margin="0,0,0,14" />
-<RadioButton Content="{loc:Text Workspace.Pinned}" Tag="Pinned" GroupName="LibraryFilter"  Checked="OnLibraryFilterChanged" Margin="0,0,0,14" />
-</StackPanel></DockPanel></ScrollViewer></Border>
+        <Grid Grid.Row="4" x:Name="GalleryWorkspace"><Grid.ColumnDefinitions><ColumnDefinition Width="224" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
+            <Border x:Name="GalleryFilterRail" Background="{DynamicResource Surface.Raised}"
+                    CornerRadius="10" Padding="10" Margin="0,0,10,0">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="{loc:Text Workspace.Library}" FontWeight="SemiBold" Margin="4,6,0,8" />
+                        <TextBlock themes:KoreanWordWrap.Text="{Binding ResultCountText}" Foreground="{DynamicResource Text.Muted}"
+                                   TextWrapping="Wrap" Margin="4,0,0,12" AutomationProperties.LiveSetting="Polite" />
+                        <UniformGrid Columns="2" Margin="0,0,0,4">
+                        <RadioButton x:Name="AllLibraryFilter" Content="{loc:Text Workspace.All}" Tag="All"
+                                     GroupName="LibraryFilter" IsChecked="True" Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
+                        <RadioButton Content="{loc:Text Text_302BAE127938}" Tag="Images" GroupName="LibraryFilter"
+                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
+                        <RadioButton Content="{loc:Text Text_C11734267E6B}" Tag="Videos" GroupName="LibraryFilter"
+                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
+                        <RadioButton Content="{loc:Text Workspace.Pinned}" Tag="Pinned" GroupName="LibraryFilter"
+                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
+                        </UniformGrid>
+                        <Button x:Name="NewFolderButton" Content="{loc:Text Folder410.NewFolder}" Style="{StaticResource Button.Secondary}"
+                                Click="OnNewFolderClick" ToolTip="Ctrl+Shift+N" Margin="0,0,0,8" />
+                        <Button Content="{loc:Text Folder410.TreeAll}" Style="{StaticResource Button.GhostCompact}"
+                                Click="OnAllFolderDatesClick" AllowDrop="True"
+                                DragOver="OnFolderDragOver" Drop="OnFolderDrop" Margin="0,0,0,6" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                        <TextBlock Text="{Binding FolderStorageText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource Text.Secondary}" FontSize="12" />
+                        <TextBlock themes:KoreanWordWrap.Text="{loc:Text Folder410.StorageInfo}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource Text.Secondary}" FontSize="12">
+                            <TextBlock.Style><Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers><DataTrigger Binding="{Binding ShowFolderStorageInfo}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger></Style.Triggers>
+                            </Style></TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock themes:KoreanWordWrap.Text="{loc:Text Folder410.RetentionHint}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Text.Muted}" FontSize="12" ToolTip="{loc:Text Workspace.RetentionHint}" />
+                    </StackPanel>
+                    <TreeView x:Name="FolderTree" ItemsSource="{Binding FolderNodes}" Background="Transparent" BorderThickness="0"
+                              Foreground="{DynamicResource Text.Primary}"
+                              AutomationProperties.Name="{loc:Text Folder410.Title}" ItemTemplate="{StaticResource Gallery.FolderNodeTemplate}"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling"
+                              SelectedItemChanged="OnFolderSelected" PreviewKeyDown="OnFolderTreeKeyDown"
+                              PreviewMouseLeftButtonDown="OnFolderPointerDown"
+                              AllowDrop="True" DragOver="OnFolderDragOver" Drop="OnFolderDrop">
+                        <TreeView.Resources>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="{Binding Color, Source={StaticResource Accent.Default}}" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="{Binding Color, Source={StaticResource Text.OnAccent}}" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="{Binding Color, Source={StaticResource Accent.Subtle}}" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="{Binding Color, Source={StaticResource Text.Primary}}" />
+                        </TreeView.Resources>
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                <Setter Property="AutomationProperties.Name" Value="{Binding Caption}" />
+                                <Setter Property="MinHeight" Value="30" />
+                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                                <Setter Property="ContextMenu" Value="{StaticResource Gallery.FolderContextMenu}" />
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                    </TreeView>
+                </DockPanel>
+            </Border>
 <Border x:Name="GalleryDetailsPanel" Grid.Column="2" Background="{DynamicResource Surface.Raised}" CornerRadius="10" Padding="14" Margin="8,0,0,0"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
 <TextBlock Text="{loc:Text Workspace.Details}" Style="{DynamicResource Text.Section}" Margin="0,0,0,14" />
 <TextBlock Text="{loc:Text Workspace.SelectHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding SingleSelectedTile}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>

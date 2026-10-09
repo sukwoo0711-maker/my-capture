@@ -254,7 +254,8 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         }
         foreach (Point center in HandleCenters(bounds))
             dc.DrawRectangle(frame, new Pen(shadow, 1), new Rect(center.X - 4, center.Y - 4, 8, 8));
-        var label = new FormattedText($"{Math.Round(pending.Region.Width)} × {Math.Round(pending.Region.Height)} px",
+        RectD pixels = pending.Region.ToPixelBounds();
+        var label = new FormattedText($"{pixels.Width} × {pixels.Height} px",
             UiText.Culture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 12, frame, VisualTreeHelper.GetDpi(this).PixelsPerDip);
         double left = Math.Clamp(bounds.Left + (bounds.Width - label.Width) / 2, 4, Math.Max(4, ActualWidth - label.Width - 12));
         double top = bounds.Bottom + 10 + label.Height < ActualHeight ? bounds.Bottom + 10 : Math.Max(4, bounds.Bottom - label.Height - 14);

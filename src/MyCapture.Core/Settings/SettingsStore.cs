@@ -164,7 +164,10 @@ public sealed class SettingsStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
 
-        string text = File.ReadAllText(sourcePath);
+        // The chooser authorizes an existing JSON file, including linked or cloud-backed
+        // files. Keep that policy distinct from strict app-owned temporary directories.
+        string selectedFile = ValidatedFilePaths.SelectedFile(sourcePath, ".json");
+        string text = File.ReadAllText(selectedFile);
         if (!TryDeserialize(text, out AppSettings? parsed) || parsed is null)
         {
             throw new InvalidDataException(UiText.Get("Settings_ImportFailed"));
@@ -172,7 +175,7 @@ public sealed class SettingsStore
 
         var warnings = new List<string>();
         Sanitize(parsed, warnings);
-        _log.LogInformation("Settings imported from {Path}", LogText.SingleLine(sourcePath));
+        _log.LogInformation("Settings imported from {Path}", LogText.SingleLine(selectedFile));
         return parsed;
     }
 
@@ -233,6 +236,10 @@ public sealed class SettingsStore
         }
 
         // --- Queue ---
+        try { s.Queue.FolderFilePrefix = MyCapture.Core.Queue.CaptureFolderNaming.NormalizePrefix(s.Queue.FolderFilePrefix); }
+        catch (ArgumentException) { s.Queue.FolderFilePrefix = MyCapture.Core.Queue.CaptureFolderNaming.DefaultPrefix; }
+        if (s.Queue.DefaultCaptureFolderId == Guid.Empty) s.Queue.DefaultCaptureFolderId = null;
+
         // The floor of 10 is not arbitrary: below that, capturing a handful of
         // screenshots in a row would start evicting work the user is still using.
         s.Queue.MaxItems = ClampWithWarning(

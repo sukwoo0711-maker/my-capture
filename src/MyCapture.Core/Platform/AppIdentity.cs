@@ -5,6 +5,7 @@ public static class AppIdentity
 {
     public static string Version { get; } = GetVersion(typeof(AppIdentity).Assembly.GetName().Version);
     public static string Label => "MyCapture-" + Version;
+    public const string WindowLabel = "MyCapture";
 
     public static string GetVersion(Version? version) => version is null
         ? "0.0.0"
@@ -12,10 +13,10 @@ public static class AppIdentity
 
     public static string FormatWindowTitle(string? context)
     {
-        if (string.IsNullOrWhiteSpace(context) || context == "MyCapture") return Label;
-        if (context == Label || context.StartsWith(Label + " — ", StringComparison.Ordinal)) return context;
-        const string legacyPrefix = "MyCapture — ";
-        if (context.StartsWith(legacyPrefix, StringComparison.Ordinal)) context = context[legacyPrefix.Length..];
-        return Label + " — " + context;
+        if (string.IsNullOrWhiteSpace(context) || context == WindowLabel || context == Label) return WindowLabel;
+        const string prefix = WindowLabel + " — ";
+        if (context.StartsWith(prefix, StringComparison.Ordinal)) return context;
+        if (context.StartsWith(Label + " — ", StringComparison.Ordinal)) context = context[(Label.Length + 3)..];
+        return prefix + context;
     }
 }

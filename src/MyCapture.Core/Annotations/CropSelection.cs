@@ -22,19 +22,42 @@ public sealed class CropSelection
     public bool IsDragging { get; private set; }
     public CropGrip Grip { get; private set; }
 
-    public CropGrip HitTest(PointD point, double tolerance)
+    public CropGrip HitTest(PointD point, double tolerance) =>
+        HitTestEdge(Region, point, tolerance) ?? (Contains(point) ? CropGrip.Move : CropGrip.New);
+
+    /// <summary>Entire edges are draggable; corners take precedence. No hover allocations.</summary>
+    public static CropGrip? HitTestEdge(RectD region, PointD point, double tolerance)
     {
-        RectD r = Region;
-        (CropGrip Grip, double X, double Y)[] handles =
-        [
-            (CropGrip.TopLeft, r.Left, r.Top), (CropGrip.TopRight, r.Right, r.Top),
-            (CropGrip.BottomRight, r.Right, r.Bottom), (CropGrip.BottomLeft, r.Left, r.Bottom),
-            (CropGrip.Top, r.Center.X, r.Top), (CropGrip.Right, r.Right, r.Center.Y),
-            (CropGrip.Bottom, r.Center.X, r.Bottom), (CropGrip.Left, r.Left, r.Center.Y),
-        ];
-        foreach (var handle in handles)
-            if (Math.Abs(point.X - handle.X) <= tolerance && Math.Abs(point.Y - handle.Y) <= tolerance) return handle.Grip;
-        return Contains(point) ? CropGrip.Move : CropGrip.New;
+        if (!double.IsFinite(point.X) || !double.IsFinite(point.Y)
+            || !double.IsFinite(tolerance) || tolerance < 0 || region.IsEmpty) return null;
+        double tx = Math.Min(tolerance, region.Width / 3);
+        double ty = Math.Min(tolerance, region.Height / 3);
+        if (point.X < region.Left - tx || point.X > region.Right + tx
+            || point.Y < region.Top - ty || point.Y > region.Bottom + ty) return null;
+        bool left = Math.Abs(point.X - region.Left) <= tx;
+        bool right = Math.Abs(point.X - region.Right) <= tx;
+        bool top = Math.Abs(point.Y - region.Top) <= ty;
+        bool bottom = Math.Abs(point.Y - region.Bottom) <= ty;
+        if (top && left) return CropGrip.TopLeft;
+        if (top && right) return CropGrip.TopRight;
+        if (bottom && left) return CropGrip.BottomLeft;
+        if (bottom && right) return CropGrip.BottomRight;
+        if (top) return CropGrip.Top;
+        if (bottom) return CropGrip.Bottom;
+        if (left) return CropGrip.Left;
+        if (right) return CropGrip.Right;
+        return null;
+    }
+
+    public void SetRegion(RectD region)
+    {
+        if (!double.IsFinite(region.X) || !double.IsFinite(region.Y)
+            || !double.IsFinite(region.Width) || !double.IsFinite(region.Height)) return;
+        RectD bounded = region.Normalized().ClampTo(Bounds).ToPixelBounds();
+        if (bounded.Width < 1 || bounded.Height < 1) return;
+        End();
+        Ratio = null;
+        Region = bounded;
     }
 
     public bool Contains(PointD p) => p.X >= Region.Left && p.X <= Region.Right && p.Y >= Region.Top && p.Y <= Region.Bottom;

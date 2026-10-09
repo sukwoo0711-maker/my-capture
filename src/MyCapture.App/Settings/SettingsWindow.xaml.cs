@@ -38,6 +38,7 @@ internal sealed partial class SettingsWindow : Window
 {
     private readonly Func<AppSettings> _currentSettings;
     private readonly Func<AppSettings, SettingsApplyResult> _apply;
+    private readonly Func<AppSettings, bool, SettingsApplyResult>? _applyDraft;
     private readonly Func<SettingsStore>? _settingsStore;
     private readonly ILogger _log;
     private readonly Action<string> _showSaveFailureMessage;
@@ -50,10 +51,12 @@ internal sealed partial class SettingsWindow : Window
         Func<AppSettings, SettingsApplyResult> apply,
         ILogger log,
         Func<SettingsStore>? settingsStore = null,
-        Action<string>? showSaveFailureMessage = null)
+        Action<string>? showSaveFailureMessage = null,
+        Func<AppSettings, bool, SettingsApplyResult>? applyDraft = null)
     {
         _currentSettings = currentSettings ?? throw new ArgumentNullException(nameof(currentSettings));
         _apply = apply ?? throw new ArgumentNullException(nameof(apply));
+        _applyDraft = applyDraft;
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _settingsStore = settingsStore;
         _showSaveFailureMessage = showSaveFailureMessage ?? (message => MyCapture.App.Themes.ThemedDialog.Show(
@@ -151,7 +154,7 @@ internal sealed partial class SettingsWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         DetachDraftEvents();
-        ThemeService.ApplyFromSettings(_currentSettings().General.Theme);
+        ThemeService.ApplyFromSettings(_currentSettings().General);
         base.OnClosed(e);
     }
 
@@ -164,7 +167,7 @@ internal sealed partial class SettingsWindow : Window
         AttachDraftEvents();
         _settingsEdited = false;
         DataContext = _draft;
-        ThemeService.ApplyFromSettings(_draft.Theme);
+        ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
         SetStatusMessage(string.Empty);
         RefreshErrorSummary();
     }
@@ -187,8 +190,9 @@ internal sealed partial class SettingsWindow : Window
     {
         _settingsEdited = true;
         // ResetToDefaults raises a whole-draft notification instead of one for Theme.
-        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(SettingsDraft.Theme))
-            ThemeService.ApplyFromSettings(_draft.Theme);
+        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName is nameof(SettingsDraft.Theme)
+            or nameof(SettingsDraft.CaptureGuideColorMode) or nameof(SettingsDraft.CaptureGuideColorHex))
+            ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
     }
 
     /// <summary>Reports settings file operations independently of the selected category.</summary>
@@ -306,7 +310,7 @@ internal sealed partial class SettingsWindow : Window
         }
 
         AppSettings next = _draft.ToAppSettings();
-        SettingsApplyResult result = _apply(next);
+        SettingsApplyResult result = _applyDraft?.Invoke(next, _draft.FolderDestinationEdited) ?? _apply(next);
 
         if (!result.Saved)
         {
@@ -315,7 +319,7 @@ internal sealed partial class SettingsWindow : Window
             // so they can fix the underlying problem (read-only folder, full disk, path
             // conflict) and retry without re-entering everything. Its theme remains a
             // reversible preview; the shell is not notified of a saved apply.
-            ThemeService.ApplyFromSettings(_draft.Theme);
+            ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
             _showSaveFailureMessage(string.Join(Environment.NewLine, result.Messages));
             return;
         }

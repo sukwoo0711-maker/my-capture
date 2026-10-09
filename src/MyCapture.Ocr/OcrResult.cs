@@ -128,6 +128,26 @@ public readonly record struct OcrRect(double X, double Y, double Width, double H
     }
 }
 
+/// <summary>Maps upright reading axes to the original image without changing recognized text.</summary>
+internal readonly record struct OcrReadingOrientation(int ClockwiseDegrees, int OriginalWidth, int OriginalHeight)
+{
+    private int Rotation => ((ClockwiseDegrees % 360) + 360) % 360;
+    internal bool IsRotated => OriginalWidth > 0 && OriginalHeight > 0 && Rotation != 0;
+
+    internal OcrRect ToReading(OcrRect bounds)
+    {
+        if (!IsRotated || bounds.Width <= 0 || bounds.Height <= 0) return bounds;
+        bool quarterTurn = Rotation is 90 or 270;
+        return bounds.MapFromClockwiseRotation(360 - Rotation,
+            quarterTurn ? OriginalHeight : OriginalWidth,
+            quarterTurn ? OriginalWidth : OriginalHeight);
+    }
+
+    internal OcrRect ToOriginal(OcrRect bounds) =>
+        OriginalWidth <= 0 || OriginalHeight <= 0 || bounds.Width <= 0 || bounds.Height <= 0
+            ? bounds : bounds.MapFromClockwiseRotation(Rotation, OriginalWidth, OriginalHeight);
+}
+
 /// <summary>
 /// The full result of an OCR request.
 /// </summary>
@@ -139,7 +159,8 @@ public sealed class OcrResult
         string? languageTag,
         IReadOnlyList<OcrLine> lines,
         TimeSpan elapsed,
-        string? message)
+        string? message,
+        OcrReadingOrientation readingOrientation = default)
     {
         Status = status;
         Text = text;
@@ -147,6 +168,7 @@ public sealed class OcrResult
         Lines = lines;
         Elapsed = elapsed;
         Message = message;
+        ReadingOrientation = readingOrientation;
     }
 
     public OcrStatus Status { get; }
@@ -159,6 +181,9 @@ public sealed class OcrResult
 
     /// <summary>Recognised lines with word boxes, in original image coordinates.</summary>
     public IReadOnlyList<OcrLine> Lines { get; }
+
+    /// <summary>The winning recognition axes; public word/line boxes stay in source pixels.</summary>
+    internal OcrReadingOrientation ReadingOrientation { get; }
 
     /// <summary>Wall-clock time spent, for the status line.</summary>
     public TimeSpan Elapsed { get; }
@@ -174,6 +199,14 @@ public sealed class OcrResult
         IReadOnlyList<OcrLine> lines,
         TimeSpan elapsed) =>
         new(OcrStatus.Success, text, languageTag, lines, elapsed, message: null);
+
+    internal static OcrResult Success(
+        string text,
+        string languageTag,
+        IReadOnlyList<OcrLine> lines,
+        TimeSpan elapsed,
+        OcrReadingOrientation readingOrientation) =>
+        new(OcrStatus.Success, text, languageTag, lines, elapsed, message: null, readingOrientation);
 
     public static OcrResult NoText(string languageTag, TimeSpan elapsed) =>
         new(OcrStatus.NoText, string.Empty, languageTag, [], elapsed, message: null);

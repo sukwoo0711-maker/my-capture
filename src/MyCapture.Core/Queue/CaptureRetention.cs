@@ -31,8 +31,11 @@ public static class CaptureRetention
         TimeSpan ttl,
         DateTimeOffset now,
         bool isImage,
-        bool isPinned)
+        bool isPinned,
+        bool isInFolder = false)
     {
+        if (isInFolder) return UiText.Get("Folder410.RetentionKept");
+
         if (!isImage)
         {
             return UiText.Get("Gallery.RetentionVideo");

@@ -96,7 +96,8 @@ public sealed class UpdatePathsTests
     // A mount-point reparse fixture exercises the guard without symlink privileges or a shell.
     internal static void CreateJunction(string link, string target)
     {
-        Directory.CreateDirectory(link);
+        target = MyCapture.Core.Storage.ValidatedFilePaths.DirectoryRoot(target);
+        link = MyCapture.Core.Storage.ValidatedFilePaths.CreateDirectory(link);
         byte[] substitute = Encoding.Unicode.GetBytes(@"\??\" + Path.GetFullPath(target));
         byte[] print = Encoding.Unicode.GetBytes(Path.GetFullPath(target));
         using var buffer = new MemoryStream();

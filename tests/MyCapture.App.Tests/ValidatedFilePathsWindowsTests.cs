@@ -34,6 +34,25 @@ public sealed class ValidatedFilePathsWindowsTests
     }
 
     [Fact]
+    public void DirectoryChildRejectsJunctionRootsAndAncestorsBeforeAnyOutsideCreation()
+    {
+        string owner = ValidatedFilePaths.CreateTemporaryDirectory();
+        string target = ValidatedFilePaths.CreateTemporaryDirectory();
+        string sentinel = ValidatedFilePaths.FileWithinRoot(target, "keep.txt", ".txt");
+        File.WriteAllText(sentinel, "preserve external target");
+        string link = ValidatedFilePaths.DirectoryWithinRoot(owner, "linked");
+        UpdatePathsTests.CreateJunction(link, target);
+
+        Assert.Throws<IOException>(() => Directory.CreateDirectory(
+            ValidatedFilePaths.DirectoryWithinRoot(owner, Path.Combine(link, "must-not-be-created"))));
+        Assert.Throws<IOException>(() => Directory.CreateDirectory(
+            ValidatedFilePaths.DirectoryWithinRoot(link, "must-not-be-created")));
+
+        Assert.Equal("preserve external target", File.ReadAllText(sentinel));
+        Assert.Single(Directory.EnumerateFileSystemEntries(target));
+    }
+
+    [Fact]
     public void JunctionAncestorsAndOutputRootsAreRejectedBeforeAnyOutsideWrites()
     {
         string owner = ValidatedFilePaths.CreateTemporaryDirectory();
@@ -65,6 +84,7 @@ public sealed class ValidatedFilePathsWindowsTests
         File.WriteAllText(settings, json);
         File.CreateSymbolicLink(paths.SettingsFile, settings);
         Assert.Equal(17, new SettingsStore(paths, NullLogger<SettingsStore>.Instance).Load().Capture.DelaySeconds);
+        Assert.Equal(17, new SettingsStore(paths, NullLogger<SettingsStore>.Instance).ImportFrom(paths.SettingsFile).Capture.DelaySeconds);
         Assert.Equal(json, File.ReadAllText(settings));
         Assert.Equal(original, File.ReadAllBytes(target));
     }
@@ -81,6 +101,7 @@ public sealed class ValidatedFilePathsWindowsTests
         File.WriteAllText(settings, "{\"schemaVersion\":4,\"general\":{\"isFirstRun\":false},\"capture\":{\"delaySeconds\":17}}");
         var store = new SettingsStore(AppPaths.CreateForRoot(Path.Combine(link, "MyCapture")), NullLogger<SettingsStore>.Instance);
         Assert.Equal(17, store.Load().Capture.DelaySeconds);
+        Assert.Equal(17, store.ImportFrom(Path.Combine(link, "MyCapture", "settings.json")).Capture.DelaySeconds);
         Assert.Empty(store.LastLoadWarnings);
         await WriteAndReadImage(ValidatedFilePaths.FileWithinRoot(target, "image.png", ".png"));
         await AssertImageDecodes(Path.Combine(link, "image.png"));

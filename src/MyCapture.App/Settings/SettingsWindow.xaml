@@ -1,4 +1,4 @@
-﻿<Window x:Class="MyCapture.App.Settings.SettingsWindow"
+<Window x:Class="MyCapture.App.Settings.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:settings="clr-namespace:MyCapture.App.Settings"
         xmlns:coreSettings="clr-namespace:MyCapture.Core.Settings;assembly=MyCapture.Core"
@@ -269,6 +269,33 @@
                             <ComboBoxItem Tag="high-contrast" Content="{loc:Text Settings.ThemeHighContrast}" />
                         </ComboBox>
                         <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.ThemeHint}" />
+                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture410.GuideColor}" Margin="0,12,0,0" />
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+                            <ComboBox x:Name="CaptureGuideColorModeSelector" SelectedValue="{Binding CaptureGuideColorMode}" SelectedValuePath="Tag"
+                                      AutomationProperties.Name="{loc:Text Capture410.GuideColor}" MinWidth="220" HorizontalAlignment="Left">
+                                <ComboBoxItem Tag="theme" Content="{loc:Text Capture410.GuideColorTheme}" />
+                                <ComboBoxItem Tag="custom" Content="{loc:Text Capture410.GuideColorCustom}" />
+                            </ComboBox>
+                            <Border x:Name="CaptureGuideColorSwatch" Width="32" Height="32" Margin="10,0,0,0" CornerRadius="4"
+                                    Background="{DynamicResource CaptureGuide.SelectionBorder}" BorderBrush="{DynamicResource Border.Strong}" BorderThickness="1"
+                                    AutomationProperties.Name="{loc:Text Capture410.GuideColorSwatch}" />
+                        </StackPanel>
+                        <StackPanel Margin="0,4,0,8">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCustomCaptureGuideColor}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture410.GuideColorHex}" />
+                            <TextBox x:Name="CaptureGuideColorHexBox" Style="{StaticResource Settings.TextBox}" Width="150" MaxLength="32"
+                                     HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Capture410.GuideColorHex}"
+                                     Text="{Binding CaptureGuideColorHex, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
                         <CheckBox x:Name="LaunchAtLoginCheck"
                                   Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text Text_98F1681CB686}"
@@ -566,6 +593,16 @@
                             <TextBox Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
                                      AutomationProperties.Name="{loc:Text Settings.RetentionHours}"
                                      Text="{Binding ImageRetentionHours, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Folder410.PrefixLabel}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Folder410.PrefixHint}" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" MaxLength="40"
+                                     AutomationProperties.Name="{loc:Text Folder410.PrefixLabel}"
+                                     Text="{Binding FolderFilePrefix, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            <CheckBox Content="{loc:Text Folder410.CurrentFolderOption}" Margin="0,12,0,0"
+                                      IsChecked="{Binding UseCurrentFolderForNewCaptures}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">

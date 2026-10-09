@@ -22,7 +22,7 @@ namespace MyCapture.App.Gallery;
 /// count budget, and are released when the gallery is hidden.
 /// </para>
 /// </remarks>
-public sealed class GalleryViewModel : INotifyPropertyChanged
+public sealed partial class GalleryViewModel : INotifyPropertyChanged
 {
     private readonly GalleryController _controller;
     private readonly Func<CaptureRecord, string> _thumbnailPathResolver;
@@ -174,11 +174,14 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
 
     public int VisibleCount => _groups.Sum(group => group.Items.Count);
     public string ResultCountText => UiText.Format("Library.Search.Count", VisibleCount, _controller.Count);
-    public string EmptyStateTitle => UiText.Get(QueueIsEmpty ? "Library.Empty.Start" : "Library.Empty.NoResults");
+    public string EmptyStateTitle => UiText.Get(HasFolderScope && string.IsNullOrWhiteSpace(SearchQuery) && Filter == GalleryFilter.All
+        ? "Folder410.EmptyFolder" : QueueIsEmpty ? "Library.Empty.Start" : "Library.Empty.NoResults");
 
     /// <summary>Empty-state message, tailored to whether a search is active.</summary>
     public string EmptyStateText =>
-        QueueIsEmpty
+        HasFolderScope && string.IsNullOrWhiteSpace(SearchQuery) && Filter == GalleryFilter.All
+            ? UiText.Get("Folder410.EmptyFolderHint")
+            : QueueIsEmpty
             ? UiText.Get("Text_1FC9ECE11C93")
             : UiText.Get("Text_58726BF27E70");
 
@@ -196,10 +199,18 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
         }
     }
 
+    internal bool IsRefreshingFolderTree { get; private set; }
+
     /// <summary>Rebuilds the grouped, filtered view from the current queue state.</summary>
     public void Refresh()
     {
-        IReadOnlyList<GalleryGroupedRecords> grouped = _controller.BuildGroups(_searchQuery, _clock());
+        if (IsRefreshingFolderTree) return;
+        // Moving a selected node can raise WPF selection events while it is
+        // temporarily attached to both its old and new parent collections.
+        IsRefreshingFolderTree = true;
+        try { RefreshFolderTree(); }
+        finally { IsRefreshingFolderTree = false; }
+        IReadOnlyList<GalleryGroupedRecords> grouped = _controller.BuildGroups(_searchQuery, _clock(), _scope, _sortOrder);
 
         var seenTiles = new HashSet<Guid>();
 
@@ -211,7 +222,7 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
             {
                 if (_filter == GalleryFilter.Images && !record.IsImage
                     || _filter == GalleryFilter.Videos && !record.IsVideo
-                    || _filter == GalleryFilter.Pinned && !record.IsPinned) continue;
+                    || _filter == GalleryFilter.Pinned && !record.IsManuallyPinned) continue;
                 tiles.Add(GetOrCreateTile(record));
                 seenTiles.Add(record.Id);
             }
@@ -296,6 +307,7 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
     {
         if (_tileCache.TryGetValue(record.Id, out GalleryItemViewModel? existing))
         {
+            existing.RaiseMetaChanged();
             return existing;
         }
 
@@ -303,6 +315,7 @@ public sealed class GalleryViewModel : INotifyPropertyChanged
         {
             Clock = _clock,
             RetentionHours = _retentionHours,
+            FolderFileName = _controller.Queue.GetExportFileName,
         };
         if (_thumbnailLoader is not null && _thumbnailDispatcher is not null)
             tile.ConfigureAsyncLoading(_thumbnailLoader, _thumbnailDispatcher);

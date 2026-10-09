@@ -152,6 +152,22 @@
     <!-- ============================================================= -->
     <SolidColorBrush x:Key="Overlay.Dimmer" Color="#FF080C12" Opacity="0.52" />
     <SolidColorBrush x:Key="Overlay.SelectionBorder" Color="{StaticResource Primitive.Yellow300}" />
+    <!-- Capture410 guide roles; ThemeService resolves all six palettes and system high contrast. -->
+    <SolidColorBrush x:Key="CaptureGuide.SelectionBorder" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.InnerGlow" Color="#209789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.Line" Color="#789789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.LineShadow" Color="#40000000" />
+    <SolidColorBrush x:Key="CaptureGuide.Crosshair" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.CrosshairShadow" Color="#FF000000" />
+    <SolidColorBrush x:Key="CaptureGuide.StartPoint" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.ChipSurface" Color="#F2151E2B" />
+    <SolidColorBrush x:Key="CaptureGuide.ChipBorder" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.Text" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="CaptureGuide.MutedText" Color="#FFECF1F9" />
+    <SolidColorBrush x:Key="CaptureGuide.MagnifierBorder" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.MagnifierGrid" Color="#32000000" />
+    <SolidColorBrush x:Key="CaptureGuide.Dimmer" Color="#8C080C12" />
+
     <SolidColorBrush x:Key="Overlay.HandleFill" Color="{StaticResource Primitive.Warm100}" />
     <SolidColorBrush x:Key="Overlay.HandleStroke" Color="{StaticResource Primitive.Yellow600}" />
 

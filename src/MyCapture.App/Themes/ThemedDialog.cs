@@ -11,7 +11,7 @@ internal sealed class ThemedDialog : Window
     internal ThemedDialog(string text, string title, MessageBoxButton buttons, MessageBoxResult defaultResult,
         string? details = null, Action? recovery = null, string? recoveryLabel = null)
     {
-        Title = title;
+        Title = MyCapture.Core.Platform.AppIdentity.WindowLabel;
         Width = 500;
         SizeToContent = SizeToContent.Height;
         MaxHeight = SystemParameters.WorkArea.Height - 40;
@@ -22,7 +22,9 @@ internal sealed class ThemedDialog : Window
         SetResourceReference(BackgroundProperty, "Surface.Raised");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var panel = new StackPanel { Margin = new Thickness(24) };
-        panel.Children.Add(new TextBlock { Text = title, FontSize = 20, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        const string productPrefix = "MyCapture — ";
+        string heading = title.StartsWith(productPrefix, StringComparison.Ordinal) ? title[productPrefix.Length..] : title;
+        panel.Children.Add(new TextBlock { Text = heading, FontSize = 20, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 20) });
         if (!string.IsNullOrWhiteSpace(details))
         {

@@ -41,11 +41,12 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
             ImageRetentionHours = retentionHours?.Invoke() ?? CaptureRetention.DefaultImageRetentionHours,
         });
         string countdown = CaptureRetention.FormatCountdown(
-            record.CreatedAt,
+            record.RetentionReference,
             ttl,
             DateTimeOffset.Now,
             record.IsImage,
-            record.IsPinned);
+            record.IsPinned,
+            record.FolderId is not null);
 
         var bannerText = new TextBlock
         {

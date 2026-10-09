@@ -112,6 +112,10 @@ public sealed class HotkeySettings
 
 public sealed class QueueSettings
 {
+    public string FolderFilePrefix { get; set; } = MyCapture.Core.Queue.CaptureFolderNaming.DefaultPrefix;
+    public bool UseCurrentFolderForNewCaptures { get; set; }
+    public Guid? DefaultCaptureFolderId { get; set; }
+
     /// <summary>
     /// Maximum number of retained captures. Oldest unpinned entries are evicted.
     /// </summary>
@@ -318,6 +322,9 @@ public sealed class GeneralSettings
 
     /// <summary>Chrome palette id: glass, glass-light, workspace, midnight, daylight, or high-contrast.</summary>
     public string Theme { get; set; } = MyCapture.Core.Themes.AppThemeNames.Glass;
+
+    /// <summary>Independent capture-guide brand override. Empty follows the theme; otherwise #RRGGBB.</summary>
+    public string CaptureGuideColor { get; set; } = string.Empty;
 
     /// <summary>One preserves theme choices made after the workspace migration.</summary>
     public int ThemeRevision { get; set; }

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -82,9 +82,14 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _thumbnailLongEdge = string.Empty;
     private string _capturesDirectoryOverride = string.Empty;
     private string _imageRetentionHours = string.Empty;
+    private string _folderFilePrefix = MyCapture.Core.Queue.CaptureFolderNaming.DefaultPrefix;
+    private bool _useCurrentFolderForNewCaptures;
+    private Guid? _defaultCaptureFolderId;
     private string _gitHubIssueUrl = GitHubIssueImageUrl.DefaultIssueUrl;
     private string _gitHubToken = string.Empty;
     private string _theme = AppThemeNames.Midnight;
+    private string _captureGuideColorMode = "theme";
+    private string _captureGuideColorHex = CaptureGuideColorValue.DefaultCustomColor;
 
     // ----- Export -----
     private string _quickSaveDirectoryOverride = string.Empty;
@@ -308,6 +313,20 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _capturesDirectoryOverride, value)) ValidateOptionalDirectory(value, nameof(CapturesDirectoryOverride)); }
     }
 
+    public string FolderFilePrefix
+    {
+        get => _folderFilePrefix;
+        set { if (Set(ref _folderFilePrefix, value)) ValidateFolderFilePrefix(value); }
+    }
+
+    public bool UseCurrentFolderForNewCaptures
+    {
+        get => _useCurrentFolderForNewCaptures;
+        set { if (Set(ref _useCurrentFolderForNewCaptures, value)) FolderDestinationEdited = true; }
+    }
+
+    public bool FolderDestinationEdited { get; private set; }
+
     public string ImageRetentionHours
     {
         get => _imageRetentionHours;
@@ -335,6 +354,35 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         get => _theme;
         set => Set(ref _theme, AppThemeNames.ToSetting(AppThemeNames.Parse(value)));
     }
+
+    public string CaptureGuideColorMode
+    {
+        get => _captureGuideColorMode;
+        set
+        {
+            if (!Set(ref _captureGuideColorMode, value == "custom" ? "custom" : "theme")) return;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsCustomCaptureGuideColor)));
+            ValidateCaptureGuideColor();
+        }
+    }
+
+    public bool IsCustomCaptureGuideColor => _captureGuideColorMode == "custom";
+
+    public string CaptureGuideColorHex
+    {
+        get => _captureGuideColorHex;
+        set
+        {
+            if (Set(ref _captureGuideColorHex, value ?? string.Empty)) ValidateCaptureGuideColor();
+        }
+    }
+
+    public string CaptureGuideColorSetting => IsCustomCaptureGuideColor
+        && CaptureGuideColorValue.TryNormalize(_captureGuideColorHex, out string color) ? color : string.Empty;
+
+    private void ValidateCaptureGuideColor() => SetErrorState(nameof(CaptureGuideColorHex),
+        !IsCustomCaptureGuideColor || CaptureGuideColorValue.TryNormalize(_captureGuideColorHex, out _),
+        UiText.Get("Capture410.GuideColorInvalid"));
 
     // ================= Export =================
 
@@ -482,6 +530,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             s.Queue.CapturesDirectoryOverride,
             AppPaths.CreateDefault().CapturesRoot);
         _imageRetentionHours = Int(s.Queue.ImageRetentionHours);
+        _folderFilePrefix = s.Queue.FolderFilePrefix;
+        FolderDestinationEdited = false;
+        _useCurrentFolderForNewCaptures = s.Queue.UseCurrentFolderForNewCaptures;
+        _defaultCaptureFolderId = s.Queue.DefaultCaptureFolderId;
 
         _quickSaveDirectoryOverride = DisplayDirectory(
             s.Export.QuickSaveDirectoryOverride,
@@ -491,6 +543,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             : GitHubIssueImageUrl.DefaultIssueUrl;
         _gitHubToken = s.GitHub.Token ?? string.Empty;
         _theme = AppThemeNames.ToSetting(AppThemeNames.Parse(s.General.Theme));
+        bool customGuide = CaptureGuideColorValue.TryNormalize(s.General.CaptureGuideColor, out string guideColor);
+        _captureGuideColorMode = customGuide ? "custom" : "theme";
+        _captureGuideColorHex = customGuide ? guideColor : CaptureGuideColorValue.DefaultCustomColor;
         _copyToClipboardOnQuickSave = s.Export.CopyToClipboardOnQuickSave;
         _showSourceWindowTitle = s.Export.ShowSourceWindowTitle;
         _fileNamePattern = s.Export.FileNamePattern;
@@ -560,6 +615,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 ShowShortcutHints = _showShortcutHints,
                 Language = _language,
                 Theme = AppThemeNames.ToSetting(AppThemeNames.Parse(_theme)),
+                CaptureGuideColor = CaptureGuideColorSetting,
                 ThemeRevision = 1,
                 IsFirstRun = _preservedIsFirstRun,
             },
@@ -610,6 +666,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                     _capturesDirectoryOverride,
                     AppPaths.CreateDefault().CapturesRoot),
                 ImageRetentionHours = ParseInt(_imageRetentionHours),
+                FolderFilePrefix = MyCapture.Core.Queue.CaptureFolderNaming.NormalizePrefix(_folderFilePrefix),
+                UseCurrentFolderForNewCaptures = _useCurrentFolderForNewCaptures,
+                DefaultCaptureFolderId = _useCurrentFolderForNewCaptures ? _defaultCaptureFolderId : null,
             },
             GitHub =
             {
@@ -705,6 +764,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     private void ValidateAll()
     {
+        ValidateCaptureGuideColor();
         ValidateInt(_delaySeconds, SettingsRanges.DelaySeconds, nameof(DelaySeconds));
         ValidateInt(_regionHistoryLimit, SettingsRanges.RegionHistoryLimit, nameof(RegionHistoryLimit));
         ValidateRecordingFrameRate(_recordingFrameRate);
@@ -716,6 +776,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ValidateMaxGiB(_maxGiB);
         ValidateInt(_thumbnailLongEdge, SettingsRanges.ThumbnailLongEdge, nameof(ThumbnailLongEdge));
         ValidateInt(_imageRetentionHours, SettingsRanges.ImageRetentionHours, nameof(ImageRetentionHours));
+        ValidateFolderFilePrefix(_folderFilePrefix);
         ValidateOptionalDirectory(_capturesDirectoryOverride, nameof(CapturesDirectoryOverride));
         ValidateOptionalDirectory(_quickSaveDirectoryOverride, nameof(QuickSaveDirectoryOverride));
         ValidateGitHubIssueUrl(_gitHubIssueUrl);
@@ -787,6 +848,14 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             nameof(MaxGiB),
             ok,
             string.Format(CultureInfo.InvariantCulture, UiText.Get("Text_3862727D2DCB"), minGiB, maxGiB));
+    }
+
+    private void ValidateFolderFilePrefix(string value)
+    {
+        bool valid;
+        try { _ = MyCapture.Core.Queue.CaptureFolderNaming.NormalizePrefix(value); valid = true; }
+        catch (ArgumentException) { valid = false; }
+        SetErrorState(nameof(FolderFilePrefix), valid, UiText.Get("Folder410.PrefixInvalid"));
     }
 
     private void ValidateFileNamePattern(string value)

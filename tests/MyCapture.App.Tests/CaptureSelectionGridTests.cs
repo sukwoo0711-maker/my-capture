@@ -60,17 +60,17 @@ public sealed class CaptureSelectionGridTests
                     int offset = (y * 900 + x) * 4;
                     if (enabled.AsSpan(offset, 4).SequenceEqual(disabled.AsSpan(offset, 4))) continue;
                     changed++;
-                    // The 3-DIP dark under-stroke can partially cover adjacent pixels.
+                    // The theme guide has a two-physical-pixel shadow around its one-pixel line.
                     double reach = 1.5 * scale + 0.5;
                     Assert.True(Math.Abs(x + 0.5 - cursor.X) <= reach || Math.Abs(y + 0.5 - cursor.Y) <= reach,
                         $"Unexpected changed pixel ({x}, {y}) for cursor {cursor} at scale {scale}.");
                 }
                 Assert.InRange(changed, 1000, 15000);
                 // Both guides reach the viewport edges, rather than a selected rectangle.
-                AssertAmber(enabled, 0, (int)cursor.Y);
-                AssertAmber(enabled, 899, (int)cursor.Y);
-                AssertAmber(enabled, (int)cursor.X, 0);
-                AssertAmber(enabled, (int)cursor.X, 599);
+                AssertGuideAtEdge(enabled, disabled, 0, (int)cursor.Y, 1, 0);
+                AssertGuideAtEdge(enabled, disabled, 899, (int)cursor.Y, -1, 0);
+                AssertGuideAtEdge(enabled, disabled, (int)cursor.X, 0, 0, 1);
+                AssertGuideAtEdge(enabled, disabled, (int)cursor.X, 599, 0, -1);
             }
             Assert.Equal(original, Pixels(frame.Bitmap));
         }
@@ -107,19 +107,11 @@ public sealed class CaptureSelectionGridTests
             byte[] dragging = Pixels(Render(on, scale));
             Assert.Equal(dragging, Pixels(Render(off, scale)));
             Assert.Equal(new RectD(180, 120, 540, 330), on.Selection);
-            // The iris anchor ring is the only strongly blue pixel cluster near the start
-            // point; the live pointer is neutral white/grey.
-            bool irising = false;
-            for (int dx = -14; dx <= 14 && !irising; dx++)
-            for (int dy = -14; dy <= 14 && !irising; dy++)
-            {
-                int px = (((int)start.Y + dy) * 900 + (int)start.X + dx) * 4;
-                int b = dragging[px], g = dragging[px + 1], r = dragging[px + 2];
-                irising = b > g + 25 && b > r + 25;
-            }
-            Assert.True(irising, "expected an iris anchor ring near the drag start");
-            int pointerPixel = ((int)end.Y * 900 + (int)(end.X + 8 * scale)) * 4;
-            Assert.True(dragging[pointerPixel] > 180 && dragging[pointerPixel + 1] > 180 && dragging[pointerPixel + 2] > 180);
+            AssertPalettePixelNear(dragging, (int)start.X, (int)start.Y, 14,
+                ((SolidColorBrush)on.GuidePalette["CaptureGuide.StartPoint"]).Color);
+            AssertPalettePixelNear(dragging, (int)(end.X + 8 * scale), (int)end.Y, 2,
+                ((SolidColorBrush)on.GuidePalette["CaptureGuide.Crosshair"]).Color,
+                ((SolidColorBrush)on.GuidePalette["CaptureGuide.CrosshairShadow"]).Color);
 
             // A completed or keyboard-set selection also has no long/interior grid lines.
             foreach (CaptureOverlayView view in new[] { on, off })
@@ -214,11 +206,36 @@ public sealed class CaptureSelectionGridTests
     private static void InvokeInput(CaptureOverlayView view, string method, InputEventArgs args) =>
         typeof(CaptureOverlayView).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(view, [args]);
 
-    private static void AssertAmber(byte[] pixels, int x, int y)
+    private static void AssertGuideAtEdge(byte[] enabled, byte[] disabled, int x, int y, int dx, int dy)
     {
-        int offset = (y * 900 + x) * 4;
-        Assert.True(pixels[offset + 2] > pixels[offset + 1] + 20 && pixels[offset + 1] > pixels[offset] + 20,
-            $"Expected amber guide at ({x}, {y}), got RGB {pixels[offset + 2]}, {pixels[offset + 1]}, {pixels[offset]}.");
+        // Sample a full dash period at each edge; the gap itself must not become a solid line.
+        Assert.Contains(Enumerable.Range(0, 12), step =>
+        {
+            int offset = ((y + dy * step) * 900 + x + dx * step) * 4;
+            return !enabled.AsSpan(offset, 4).SequenceEqual(disabled.AsSpan(offset, 4));
+        });
+    }
+
+    private static void AssertPalettePixelNear(byte[] pixels, int x, int y, int radius, Color color,
+        Color? shadow = null)
+    {
+        for (int dy = -radius; dy <= radius; dy++)
+        for (int dx = -radius; dx <= radius; dx++)
+        {
+            int offset = ((y + dy) * 900 + x + dx) * 4;
+            if (Math.Abs(pixels[offset] - color.B) <= 28 && Math.Abs(pixels[offset + 1] - color.G) <= 28
+                && Math.Abs(pixels[offset + 2] - color.R) <= 28) return;
+            if (shadow is { } background)
+            {
+                // A one-pixel line on an integer physical coordinate covers two pixels at
+                // half opacity. Check its actual themed blend over the opaque keyline.
+                for (double alpha = .4; alpha <= 1; alpha += .05)
+                    if (Math.Abs(pixels[offset] - (color.B * alpha + background.B * (1 - alpha))) <= 8
+                        && Math.Abs(pixels[offset + 1] - (color.G * alpha + background.G * (1 - alpha))) <= 8
+                        && Math.Abs(pixels[offset + 2] - (color.R * alpha + background.R * (1 - alpha))) <= 8) return;
+            }
+        }
+        Assert.Fail($"Expected themed {color} pixel near ({x}, {y}).");
     }
 
     private static RenderTargetBitmap Render(CaptureOverlayView view, double scale = 1)
