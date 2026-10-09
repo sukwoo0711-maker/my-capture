@@ -97,13 +97,17 @@ internal static class RecordingSelfTest
             }
         }
 
+        // MediaPlayer reports these clips' duration in whole seconds (1538ms decodes as 1000ms),
+        // so each recorded span stays long enough that the truncation cannot fail the
+        // "too short" bound on its own.
+
         // ---- Session 3: record, pause, resume, record, stop — the pause must vanish from the clip ----
         string clip3 = Path.Combine(outputDirectory, "session3-pause-resume.mp4");
-        RecordWithPause(engine, region, clip3, settings, 1000, 1500, 1000, stopWhilePaused: false, report, failures, "Session 3");
+        RecordWithPause(engine, region, clip3, settings, 2000, 1500, 2000, stopWhilePaused: false, report, failures, "Session 3");
 
         // ---- Session 4: record, pause, stop while still paused ----
         string clip4 = Path.Combine(outputDirectory, "session4-stop-paused.mp4");
-        RecordWithPause(engine, region, clip4, settings, 800, 600, 0, stopWhilePaused: true, report, failures, "Session 4");
+        RecordWithPause(engine, region, clip4, settings, 2500, 600, 0, stopWhilePaused: true, report, failures, "Session 4");
 
         Line(string.Empty);
         Line(failures.Count == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures.Count} problem(s))");
