@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Display;
 using MyCapture.Platform.Recording;
 
@@ -157,6 +158,12 @@ internal sealed class RecordingControlWindow : Window
     internal bool IsPauseTransitionPending => _pauseTransition;
 
     /// <summary>
+    /// The optional global pause chord shown in the pause button's guidance. Reads the live
+    /// application settings by default; tests substitute a fixed chord.
+    /// </summary>
+    internal Func<Hotkey> ReadPauseHotkey { get; set; } = static () => ShortcutHelpWindow.ReadHotkeys().PauseRecording;
+
+    /// <summary>
     /// Set when the window closed (application exit, session end or a forced close) while
     /// recording and the recorder still finalised a playable private MP4 without the normal
     /// completion handshake. The owner keeps that clip for startup recovery.
@@ -275,7 +282,7 @@ internal sealed class RecordingControlWindow : Window
             Style = TryStyle("Button.Secondary"),
             Visibility = Visibility.Collapsed,
         };
-        pause.Click += (_, _) => TogglePause();
+        pause.Click += (_, _) => _ = TogglePause();
         Grid.SetColumn(pause, 1);
         panel.Children.Add(pause);
 
@@ -625,20 +632,34 @@ internal sealed class RecordingControlWindow : Window
         _timerText.Text = elapsed.ToString(elapsed.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Pauses or resumes the running recording (pause button).</summary>
-    private async void TogglePause()
+    /// <summary>
+    /// Pauses or resumes the running recording. The pause button and the optional pause
+    /// hotkey both enter here, so they share the badge-safe ordering, status text and
+    /// accessibility state.
+    /// </summary>
+    /// <returns>
+    /// False when nothing changed: no recording is running, it is stopping, or the previous
+    /// pause or resume is still being applied.
+    /// </returns>
+    internal bool TogglePause()
     {
         if (_pauseTransition || _stopping || _completionPending || _finished
             || _recorder is not { IsRecording: true } recorder)
         {
-            return;
+            return false;
         }
 
         _pauseTransition = true;
         _pauseButton.IsEnabled = false;
+        ApplyPauseToggle(recorder, pause: !_paused);
+        return true;
+    }
+
+    private async void ApplyPauseToggle(RegionRecorder recorder, bool pause)
+    {
         try
         {
-            if (!_paused)
+            if (pause)
             {
                 await PauseAsync(recorder);
             }
@@ -742,11 +763,21 @@ internal sealed class RecordingControlWindow : Window
     {
         _pauseButton.Content = UiText.Get(_paused ? "RecordingPause_Resume" : "RecordingPause_Pause");
         string help = UiText.Get(_paused ? "RecordingPause_ResumeHelp" : "RecordingPause_PauseHelp");
+        // Read on every refresh so a chord changed in settings shows on the next state change;
+        // an unassigned chord adds nothing.
+        Hotkey shortcut = ReadPauseHotkey();
+        string shortcutText = shortcut.IsAssigned ? shortcut.ToString() : string.Empty;
+        if (shortcutText.Length > 0)
+        {
+            help = UiText.Format("RecordingPauseHotkey_HelpWithShortcut", help, shortcutText);
+        }
+
         _pauseButton.ToolTip = help;
         AutomationProperties.SetName(
             _pauseButton,
             UiText.Get(_paused ? "RecordingPause_ResumeName" : "RecordingPause_PauseName"));
         AutomationProperties.SetHelpText(_pauseButton, help);
+        AutomationProperties.SetAcceleratorKey(_pauseButton, shortcutText);
     }
 
     private void UpdateRegionFrameBrush(Border frame)

@@ -145,6 +145,31 @@ internal sealed class RegionRecordingCoordinator
         StartRegionSelection();
     }
 
+    /// <summary>
+    /// Entry point for the optional pause hotkey. A running recording is paused or resumed
+    /// through the control window's own pause path; otherwise the chord does nothing and
+    /// only leaves a log line, because there is nothing to pause.
+    /// </summary>
+    /// <returns>True when a pause or resume was started.</returns>
+    internal bool TogglePause()
+    {
+        _dispatcher.VerifyAccess();
+
+        if (_finishing || _controls is not { IsRecording: true } running)
+        {
+            _log.LogInformation("Pause hotkey ignored: no recording is running");
+            return false;
+        }
+
+        if (!running.TogglePause())
+        {
+            _log.LogInformation("Pause hotkey ignored: the recording is stopping or a pause change is still applying");
+            return false;
+        }
+
+        return true;
+    }
+
     private void ActivateExisting()
     {
         Window? active = _editor ?? (Window?)_controls ?? _selectionOverlay;
