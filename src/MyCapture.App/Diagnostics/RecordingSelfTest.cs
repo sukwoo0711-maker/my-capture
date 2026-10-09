@@ -18,7 +18,8 @@ namespace MyCapture.App.Diagnostics;
 /// Drives the real recording pipeline end-to-end without the UI: record a region, stop,
 /// then record a SECOND clip and stop again — verifying that stop truly stops and that a
 /// fresh recording is independent (both clips valid, each starting at time 0, neither
-/// continuing the other).
+/// continuing the other). Two further sessions pause the real encoder: one resumes and
+/// stops, one stops while still paused; both clips must exclude the paused time.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -95,6 +96,14 @@ internal static class RecordingSelfTest
                 Line($"NOTE: session2 ({d2:0}ms) not shorter than session1 ({d1:0}ms) — timing variance, not necessarily a fault");
             }
         }
+
+        // ---- Session 3: record, pause, resume, record, stop — the pause must vanish from the clip ----
+        string clip3 = Path.Combine(outputDirectory, "session3-pause-resume.mp4");
+        RecordWithPause(engine, region, clip3, settings, 1000, 1500, 1000, stopWhilePaused: false, report, failures, "Session 3");
+
+        // ---- Session 4: record, pause, stop while still paused ----
+        string clip4 = Path.Combine(outputDirectory, "session4-stop-paused.mp4");
+        RecordWithPause(engine, region, clip4, settings, 800, 600, 0, stopWhilePaused: true, report, failures, "Session 4");
 
         Line(string.Empty);
         Line(failures.Count == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures.Count} problem(s))");
@@ -192,6 +201,211 @@ internal static class RecordingSelfTest
         finally
         {
             recorder.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Real pipeline with a pause: no frame may be encoded while paused, timestamps must stay
+    /// continuous across the resume, and the decoded clip must be as long as the recorded
+    /// spans only (not the wall-clock time including the pause).
+    /// </summary>
+    private static void RecordWithPause(
+        ScreenCaptureEngine engine,
+        RectD region,
+        string outputPath,
+        RecordingSettings settings,
+        int beforePauseMs,
+        int pausedMs,
+        int afterResumeMs,
+        bool stopWhilePaused,
+        StringBuilder report,
+        List<string> failures,
+        string label)
+    {
+        var frames = new TimestampObserver();
+        var recorder = new RegionRecorder(
+            new RegionFrameGrabber(engine, settings.IncludeCursor),
+            options => frames.Wrap(new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance)),
+            NullLogger.Instance);
+        try
+        {
+            recorder.Start(region, outputPath, settings);
+            var startup = Stopwatch.StartNew();
+            while (frames.Count == 0 && recorder.IsRecording && startup.Elapsed < TimeSpan.FromSeconds(15))
+            {
+                Thread.Sleep(50);
+            }
+
+            if (frames.Count == 0)
+            {
+                failures.Add($"{label}: no successfully encoded frame within startup deadline");
+                _ = recorder.Stop();
+                return;
+            }
+
+            // Recorded time already includes the first frame's encoder warm-up.
+            double recordedBeforeSample = recorder.RecordedElapsed.TotalMilliseconds;
+            var wall = Stopwatch.StartNew();
+            Thread.Sleep(beforePauseMs);
+            if (!recorder.Pause())
+            {
+                failures.Add($"{label}: Pause() was rejected while recording");
+            }
+
+            if (!recorder.WaitUntilCaptureParked(TimeSpan.FromSeconds(5)))
+            {
+                failures.Add($"{label}: capture loop did not park after Pause()");
+            }
+
+            int framesAtPause = frames.Count;
+            TimeSpan recordedAtPause = recorder.RecordedElapsed;
+            Thread.Sleep(pausedMs);
+            if (frames.Count != framesAtPause)
+            {
+                failures.Add($"{label}: {frames.Count - framesAtPause} frame(s) encoded while paused");
+            }
+
+            if (Math.Abs((recorder.RecordedElapsed - recordedAtPause).TotalMilliseconds) > 1)
+            {
+                failures.Add($"{label}: recorded time advanced while paused");
+            }
+
+            if (!stopWhilePaused)
+            {
+                if (!recorder.Resume())
+                {
+                    failures.Add($"{label}: Resume() was rejected while paused");
+                }
+
+                Thread.Sleep(afterResumeMs);
+            }
+
+            RecordingResult result = recorder.Stop();
+            double wallMs = recordedBeforeSample + wall.Elapsed.TotalMilliseconds;
+            double expectedMs = recordedBeforeSample + beforePauseMs + (stopWhilePaused ? 0 : afterResumeMs);
+            IReadOnlyList<double> timestamps = frames.Timestamps;
+            double maxGap = 0;
+            for (int i = 1; i < timestamps.Count; i++)
+            {
+                if (timestamps[i] <= timestamps[i - 1])
+                {
+                    failures.Add($"{label}: timestamps not strictly increasing at frame {i}");
+                    break;
+                }
+
+                maxGap = Math.Max(maxGap, timestamps[i] - timestamps[i - 1]);
+            }
+
+            (bool opened, int w, int h, double decodedMs) = Probe(outputPath);
+            report.AppendLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}: {result.EmittedFrames} frame(s), recorded {result.DurationMs:0}ms (expected ~{expectedMs:0}), " +
+                $"paused {result.PausedMs:0}ms x{result.PauseCount}, wall {wallMs:0}ms, max gap {maxGap:0}ms, " +
+                $"dropped {result.DroppedFrames}, effective {result.EffectiveFps:0.0}fps; " +
+                $"decode opened={opened} {w}x{h} {decodedMs:0}ms -> {Path.GetFileName(outputPath)}"));
+
+            if (result.PauseCount != 1)
+            {
+                failures.Add($"{label}: expected one pause, result reports {result.PauseCount}");
+            }
+
+            if (result.PausedMs < pausedMs * 0.9)
+            {
+                failures.Add($"{label}: paused time {result.PausedMs:0}ms is shorter than the {pausedMs}ms pause");
+            }
+
+            if (Math.Abs(result.DurationMs - expectedMs) > 400)
+            {
+                failures.Add($"{label}: recorded duration {result.DurationMs:0}ms is not ~{expectedMs:0}ms");
+            }
+
+            // The pause must not leave a hole in the timeline.
+            if (maxGap > 500)
+            {
+                failures.Add($"{label}: {maxGap:0}ms timestamp gap — the paused span leaked into the timeline");
+            }
+
+            if (!opened)
+            {
+                failures.Add($"{label}: produced MP4 could not be re-opened");
+            }
+            else
+            {
+                if (w != (int)region.Width || h != (int)region.Height)
+                {
+                    failures.Add($"{label}: unexpected size {w}x{h}");
+                }
+
+                // The playable clip must exclude the pause: never longer than the recorded
+                // duration plus one frame of tolerance, and clearly shorter than wall time.
+                if (decodedMs > result.DurationMs + 250 || decodedMs > wallMs - (pausedMs * 0.5))
+                {
+                    failures.Add($"{label}: decoded {decodedMs:0}ms includes the paused span (recorded {result.DurationMs:0}ms, wall {wallMs:0}ms)");
+                }
+
+                if (decodedMs < expectedMs * 0.6)
+                {
+                    failures.Add($"{label}: decoded {decodedMs:0}ms is too short for ~{expectedMs:0}ms of recording");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            failures.Add($"{label}: {ex.Message}" + (ex.InnerException is not null ? $" | inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : string.Empty));
+        }
+        finally
+        {
+            recorder.Dispose();
+        }
+    }
+
+    private sealed class TimestampObserver
+    {
+        private readonly List<double> _timestamps = [];
+
+        internal int Count
+        {
+            get
+            {
+                lock (_timestamps)
+                {
+                    return _timestamps.Count;
+                }
+            }
+        }
+
+        internal IReadOnlyList<double> Timestamps
+        {
+            get
+            {
+                lock (_timestamps)
+                {
+                    return _timestamps.ToArray();
+                }
+            }
+        }
+
+        internal IVideoEncoder Wrap(IVideoEncoder inner) => new Observed(inner, this);
+
+        private void Add(double timestampMs)
+        {
+            lock (_timestamps)
+            {
+                _timestamps.Add(timestampMs);
+            }
+        }
+
+        private sealed class Observed(IVideoEncoder inner, TimestampObserver owner) : IVideoEncoder
+        {
+            public int Width => inner.Width;
+            public int Height => inner.Height;
+            public void WriteFrame(in EncoderFrame frame)
+            {
+                inner.WriteFrame(frame);
+                owner.Add(frame.TimestampMs);
+            }
+            public void Complete() => inner.Complete();
+            public void Dispose() => inner.Dispose();
         }
     }
 

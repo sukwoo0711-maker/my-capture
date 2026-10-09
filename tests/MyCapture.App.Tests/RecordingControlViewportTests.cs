@@ -61,7 +61,7 @@ public sealed class RecordingControlViewportTests
                 foreach (Button cancel in Buttons(strip).OfType<Button>().Where(button => !ReferenceEquals(button, primary)))
                     cancel.Style = (Style)window.FindResource("Button.Ghost");
                 window.UpdateLayout();
-                AssertControlsInsideWorkArea(strip, monitor.WorkArea);
+                AssertControlsInsideWorkArea(strip, monitor.WorkArea, expectedButtons: 3);
                 SaveEvidence(window, strip, monitor, fullScreen, "ready");
 
                 // Exercise the real start command and capture worker. The injected encoder
@@ -72,7 +72,8 @@ public sealed class RecordingControlViewportTests
                 Assert.True(window.IsRecording);
                 primary.Style = (Style)window.FindResource("Button.Danger");
                 window.UpdateLayout();
-                AssertControlsInsideWorkArea(strip, monitor.WorkArea);
+                // The pause button joins the palette once recording starts.
+                AssertControlsInsideWorkArea(strip, monitor.WorkArea, expectedButtons: 4);
                 Assert.True(primary.IsEnabled);
                 SaveEvidence(window, strip, monitor, fullScreen, "recording");
 
@@ -83,7 +84,7 @@ public sealed class RecordingControlViewportTests
                 Assert.Null(failure);
                 Assert.True(finished);
                 window.UpdateLayout();
-                AssertControlsInsideWorkArea(strip, monitor.WorkArea, requireEnabled: false);
+                AssertControlsInsideWorkArea(strip, monitor.WorkArea, expectedButtons: 4, requireEnabled: false);
                 SaveEvidence(window, strip, monitor, fullScreen, "completed");
             }
             finally
@@ -98,11 +99,12 @@ public sealed class RecordingControlViewportTests
         }
     });
 
-    private static void AssertControlsInsideWorkArea(Border strip, RectD work, bool requireEnabled = true)
+    private static void AssertControlsInsideWorkArea(Border strip, RectD work, int expectedButtons, bool requireEnabled = true)
     {
         Assert.True(strip.IsVisible);
-        ButtonBase[] buttons = Buttons(strip).ToArray();
-        Assert.Equal(3, buttons.Length); // start/stop, clock toggle, cancel
+        // The pause button stays collapsed until recording starts; every other button is shown.
+        ButtonBase[] buttons = Buttons(strip).Where(button => button.Visibility != Visibility.Collapsed).ToArray();
+        Assert.Equal(expectedButtons, buttons.Length); // start/stop, [pause/resume], clock toggle, cancel
         foreach (ButtonBase button in buttons)
         {
             Assert.True(button.IsVisible && button.IsTabStop && button.Focusable);

@@ -355,6 +355,7 @@ internal sealed class RegionRecordingCoordinator
 
     private void OnControlsClosed(object? sender, EventArgs e)
     {
+        bool finalizedOnClose = false;
         if (sender is RecordingControlWindow controls)
         {
             controls.RecordingFinished -= OnRecordingFinished;
@@ -362,6 +363,7 @@ internal sealed class RegionRecordingCoordinator
             controls.Failed -= OnControlsFailed;
             controls.Stopping -= OnControlsStopping;
             controls.Closed -= OnControlsClosed;
+            finalizedOnClose = controls.FinalizedOnClose;
             if (ReferenceEquals(_controls, controls))
             {
                 _controls = null;
@@ -370,7 +372,21 @@ internal sealed class RegionRecordingCoordinator
 
         if (_writeSession is not null && !_completionInProgress)
         {
-            _writeSession.Dispose();
+            if (finalizedOnClose)
+            {
+                // The controls closed (application exit, session end or a forced close) while
+                // recording or paused, and the recorder still finalised the private MP4.
+                // Disposing the session would abort and delete that clip. Leave the pending
+                // sidecar and the finalised file in place: startup recovery validates and
+                // publishes them to the gallery. The session owns no native resources.
+                _log.LogWarning(
+                    "Recording controls closed before completion; keeping the finalized clip for startup recovery");
+            }
+            else
+            {
+                _writeSession.Dispose();
+            }
+
             _writeSession = null;
         }
 
