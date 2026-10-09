@@ -21,8 +21,11 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     private ContextMenu? _menu;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(5) };
 
-    /// <summary>A command or a submenu branch in the tray tree. A null Action marks a branch.</summary>
-    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "");
+    /// <summary>
+    /// A command or a submenu branch in the tray tree. A null Action marks a branch. A command
+    /// with <c>IsEnabled</c> false stays visible but cannot be invoked.
+    /// </summary>
+    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "", bool IsEnabled = true);
 
     internal void ShowNotification(string title, string message, TrayBalloonKind kind)
     {
@@ -119,7 +122,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
                 continue;
             }
 
-            var item = new MenuItem { Header = entry.Label, MinHeight = 36, InputGestureText = entry.Gesture };
+            var item = new MenuItem { Header = entry.Label, MinHeight = 36, InputGestureText = entry.Gesture, IsEnabled = entry.IsEnabled };
             Action action = entry.Action ?? (() => { });
             item.Click += (_, _) =>
             {

@@ -23,7 +23,7 @@ internal enum PasteResult
 /// <summary>
 /// Owns every live <see cref="PinWindow"/> and exposes the operations the global hotkeys
 /// and tray drive: paste-to-screen, hide/show all, toggle click-through under the cursor,
-/// and close all.
+/// close all, and reopening recently closed pins.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -38,10 +38,20 @@ internal enum PasteResult
 /// <see cref="PinGeometry"/>, and centred near the cursor but clamped fully inside the work
 /// area. This keeps a pin from opening off-screen or larger than the display.
 /// </para>
+/// <para>
+/// Every pin that closes (Esc, Delete, double-click, its menu, or close all) is remembered
+/// in a <see cref="ClosedPinHistory{T}"/> bounded by
+/// <see cref="PinSettings.ClosedWindowRestoreLimit"/> and a byte budget, and
+/// <see cref="RestoreLastClosed"/> reopens the newest one with its original content and last
+/// placement. Hiding with Shift+F3 is not a close and is never recorded. The history is
+/// memory-only and is discarded when the app exits, so closed screens never reach disk.
+/// </para>
 /// </remarks>
 internal sealed class PinManager
 {
     private readonly List<PinWindow> _pins = [];
+    private readonly ClosedPinHistory<ClosedPin> _closed;
+    private bool _recordClosedPins = true;
     private readonly Func<PinSettings> _settings;
     private readonly PinImageSaveService? _saveService;
     private readonly Func<BitmapSource, string?, Task<bool>> _copyImageAsync;
@@ -97,7 +107,36 @@ internal sealed class PinManager
         _copyImageAsync = copyImageAsync ?? throw new ArgumentNullException(nameof(copyImageAsync));
         _copyTextAsync = copyTextAsync ?? throw new ArgumentNullException(nameof(copyTextAsync));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _closed = new ClosedPinHistory<ClosedPin>(() => _settings().ClosedWindowRestoreLimit);
     }
+
+    /// <summary>
+    /// A closed pin as the restore history keeps it: the unchanged content plus the
+    /// presentation it had when it closed. No window reference is kept, so the closed
+    /// window itself can be collected.
+    /// </summary>
+    internal sealed record ClosedPin(
+        PinContent Content,
+        double ImageWidthDip,
+        double ImageHeightDip,
+        double Zoom,
+        double Opacity,
+        PinClosedPlacement? Placement);
+
+    /// <summary>Number of closed pins that can currently be reopened.</summary>
+    internal int ClosedCount => _closed.Count;
+
+    /// <summary>Whether <see cref="RestoreLastClosed"/> has anything to reopen.</summary>
+    internal bool CanRestoreClosed => _closed.Count > 0;
+
+    /// <summary>Estimated bytes held by the closed-pin history, for tests and diagnostics.</summary>
+    internal long ClosedRetainedBytes => _closed.RetainedBytes;
+
+    /// <summary>
+    /// Re-applies <see cref="PinSettings.ClosedWindowRestoreLimit"/> after settings change, so
+    /// a lowered limit or 0 (off) releases retained screen pixels right away.
+    /// </summary>
+    internal void TrimClosedHistory() => _closed.Trim();
 
     /// <summary>Raised when a pin requests OCR of its image (Ctrl+double-click or menu).</summary>
     internal event EventHandler<BitmapSource>? OcrRequested;
@@ -206,16 +245,7 @@ internal sealed class PinManager
             settings.ZoomStep);
 
         var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings);
-        pin.CloseAllRequested += (_, _) => CloseAll();
-        pin.CopyRequested += OnPinCopyRequested;
-        pin.OriginalTextCopyRequested += OnPinOriginalTextCopyRequested;
-        pin.OcrRequested += (_, source) => OcrRequested?.Invoke(pin, source);
-        pin.SaveRequested += OnPinSaveRequested;
-        pin.Closed += (_, _) => _pins.Remove(pin);
-
-        _pins.Add(pin);
-        pin.Show();
-        pin.Activate();
+        AttachAndShow(pin);
 
         _log.LogInformation(
             "Pinned {Width}x{Height} {Kind} at zoom {Zoom:0.##} ({Count} pin(s) open)",
@@ -226,6 +256,160 @@ internal sealed class PinManager
             _pins.Count);
 
         return pin;
+    }
+
+    /// <summary>
+    /// Reopens the most recently closed pin with its original content, zoom and opacity, at
+    /// its last position, moved into a visible work area only when the display layout no
+    /// longer shows that position.
+    /// </summary>
+    /// <returns>The reopened pin, or <see langword="null"/> when nothing can be restored.</returns>
+    internal PinWindow? RestoreLastClosed()
+    {
+        if (!_closed.TryPop(out ClosedPin? closed))
+        {
+            _log.LogInformation("Restore closed pin: nothing to restore");
+            return null;
+        }
+
+        // Click-through is deliberately not carried over: the new state starts interactive.
+        // A click-through pin carries WS_EX_TRANSPARENT, so the mouse cannot reach it to move,
+        // zoom or open its menu, and the user is reopening this pin precisely to work with it.
+        // Hidden (Shift+F3) state is not carried over either; a restored pin is shown.
+        var state = new PinViewState(
+            closed.ImageWidthDip,
+            closed.ImageHeightDip,
+            closed.Zoom,
+            closed.Opacity,
+            _settings().ZoomStep);
+
+        (double leftDip, double topDip, RectD? physical) = ResolveRestorePosition(closed, state);
+        var pin = new PinWindow(closed.Content, state, leftDip, topDip, _settings);
+        if (physical is { } bounds)
+        {
+            pin.PlaceAtPhysicalOnShow(bounds);
+        }
+
+        AttachAndShow(pin);
+        if (!pin.ApplyRestorePlacement())
+        {
+            _log.LogWarning("Restored pin could not reach its recorded position; left where Windows placed it");
+        }
+
+        pin.CompleteRestorePlacement();
+        _log.LogInformation(
+            "Restored a closed {Kind} pin at zoom {Zoom:0.##} ({Remaining} more restorable)",
+            closed.Content.Kind,
+            state.Zoom,
+            _closed.Count);
+        return pin;
+    }
+
+    /// <summary>
+    /// Closes every pin at app exit without recording them and discards the restore history,
+    /// so no closed screen outlives the process in memory or on disk.
+    /// </summary>
+    internal void CloseAllForExit()
+    {
+        _recordClosedPins = false;
+        try
+        {
+            CloseAll();
+        }
+        finally
+        {
+            _recordClosedPins = true;
+            _closed.Clear();
+        }
+    }
+
+    private (double LeftDip, double TopDip, RectD? Physical) ResolveRestorePosition(
+        ClosedPin closed,
+        PinViewState state)
+    {
+        if (closed.Placement is { } placement)
+        {
+            PinDisplayArea[] displays = MonitorEnumerator.GetAll()
+                .Select(m => new PinDisplayArea(m.DeviceName, m.Bounds, m.WorkArea, m.ScaleFactor))
+                .ToArray();
+            PinRestorePlacement.Result result = PinRestorePlacement.Resolve(
+                placement,
+                state.WidthDip,
+                state.HeightDip,
+                displays);
+            if (result.Adjusted)
+            {
+                _log.LogInformation("Restored pin moved into the visible work area after a display change");
+            }
+
+            double displayScale = result.DisplayIndex >= 0 ? displays[result.DisplayIndex].ScaleFactor : 1.0;
+            displayScale = displayScale <= 0 ? 1.0 : displayScale;
+
+            // Same DIP convention as a new pin (physical / target display scale) for the
+            // initial WPF position; the physical move then makes it exact.
+            return (
+                result.Left / displayScale,
+                result.Top / displayScale,
+                new RectD(result.Left, result.Top, result.Width, result.Height));
+        }
+
+        // The pin closed before it had a native window: reopen it centred on the cursor.
+        MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
+        double scale = monitor.ScaleFactor <= 0 ? 1.0 : monitor.ScaleFactor;
+        (int cursorX, int cursorY) = WindowStyleFacade.GetCursorPosition();
+        RectD work = monitor.WorkArea;
+        (double left, double top) = PinGeometry.ClampTopLeftIntoWork(
+            (cursorX / scale) - (state.WidthDip / 2.0),
+            (cursorY / scale) - (state.HeightDip / 2.0),
+            state.WidthDip,
+            state.HeightDip,
+            work.Left / scale,
+            work.Top / scale,
+            work.Width / scale,
+            work.Height / scale);
+        return (left, top, null);
+    }
+
+    private void AttachAndShow(PinWindow pin)
+    {
+        pin.CloseAllRequested += (_, _) => CloseAll();
+        pin.CopyRequested += OnPinCopyRequested;
+        pin.OriginalTextCopyRequested += OnPinOriginalTextCopyRequested;
+        pin.OcrRequested += (_, source) => OcrRequested?.Invoke(pin, source);
+        pin.SaveRequested += OnPinSaveRequested;
+        pin.RestoreClosedRequested += (_, _) => RestoreLastClosed();
+        pin.CanRestoreClosedPin = () => CanRestoreClosed;
+        pin.Closed += (_, _) => OnPinClosed(pin);
+
+        _pins.Add(pin);
+        pin.Show();
+        pin.Activate();
+    }
+
+    private void OnPinClosed(PinWindow pin)
+    {
+        _pins.Remove(pin);
+        if (!_recordClosedPins)
+        {
+            return;
+        }
+
+        PinViewState state = pin.State;
+        var entry = new ClosedPin(
+            pin.PinnedContent,
+            state.ImageWidthDip,
+            state.ImageHeightDip,
+            state.Zoom,
+            state.Opacity,
+            pin.ClosedPlacement);
+        if (_closed.Push(entry, pin.PinnedContent.EstimatedRetainedBytes))
+        {
+            _log.LogInformation("Remembered a closed {Kind} pin ({Count} restorable)", pin.PinnedContent.Kind, _closed.Count);
+        }
+        else
+        {
+            _log.LogInformation("Closed {Kind} pin not kept for restore (disabled or over the memory budget)", pin.PinnedContent.Kind);
+        }
     }
 
     /// <summary>Hides every pin if any are visible, otherwise reveals them all.</summary>
