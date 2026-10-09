@@ -47,6 +47,9 @@ public sealed class SettingsStore
     /// <summary>True only on the launch that repairs and persists unsafe legacy hotkeys.</summary>
     public bool LastLoadMigratedUnsafeHotkeys { get; private set; }
 
+    /// <summary>Clock for the Store rating first-seen stamp; replaced by tests.</summary>
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
+
     public AppSettings Load()
     {
         string settingsFile;
@@ -72,6 +75,7 @@ public sealed class SettingsStore
         }
 
         AppSettings settings;
+        bool parsedExistingFile = false;
 
         if (text is null)
         {
@@ -87,6 +91,7 @@ public sealed class SettingsStore
         else if (TryDeserialize(text, out AppSettings? parsed) && parsed is not null)
         {
             settings = parsed;
+            parsedExistingFile = true;
         }
         else
         {
@@ -100,9 +105,15 @@ public sealed class SettingsStore
         LastLoadMigratedUnsafeHotkeys = Sanitize(settings, warnings);
         LastLoadWarnings = warnings;
 
+        // The Store rating wait starts at the first load that knows about it. An existing
+        // file is stamped and written once; a new install is written with the welcome card,
+        // and a corrupt file is never overwritten just to record the stamp.
+        bool stampedFirstSeen = StoreRatingPolicy.EnsureFirstSeen(settings.StoreRating, Clock.GetUtcNow())
+            && parsedExistingFile;
+
         // A token written by 2.4.0 sits in plaintext on disk. Re-save it once so the
         // DPAPI converter rewrites it encrypted; a marker in the text means it already is.
-        if (LastLoadMigratedUnsafeHotkeys || (settings.GitHub.Token.Length > 0
+        if (LastLoadMigratedUnsafeHotkeys || stampedFirstSeen || (settings.GitHub.Token.Length > 0
             && text is not null
             && !text.Contains(DpapiSecretConverter.EncryptedPrefix, StringComparison.Ordinal)))
         {

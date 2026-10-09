@@ -36,6 +36,7 @@ public static class AppSettingsClone
             Ocr = Clone(source.Ocr),
             GitHub = Clone(source.GitHub),
             General = Clone(source.General),
+            StoreRating = Clone(source.StoreRating),
         };
     }
 
@@ -150,5 +151,13 @@ public static class AppSettingsClone
     private static GitHubSettings Clone(GitHubSettings s) => new()
     {
         IssueUrl = s.IssueUrl,
+    };
+
+    private static StoreRatingState Clone(StoreRatingState s) => new()
+    {
+        FirstSeenUtc = s.FirstSeenUtc,
+        SuccessfulCaptureCount = s.SuccessfulCaptureCount,
+        LastCaptureFailed = s.LastCaptureFailed,
+        RequestAttemptedUtc = s.RequestAttemptedUtc,
     };
 }

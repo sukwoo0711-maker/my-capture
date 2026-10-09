@@ -48,6 +48,9 @@ public sealed class AppSettings
     public GitHubSettings GitHub { get; set; } = new();
 
     public GeneralSettings General { get; set; } = new();
+
+    /// <summary>Local state for the one-time Microsoft Store rating request. An explicit null reads as new.</summary>
+    public StoreRatingState StoreRating { get; set => field = value ?? new(); } = new();
 }
 
 public sealed class HotkeySettings
