@@ -36,7 +36,7 @@ public sealed partial class SettingsThemePreviewTests
                 foreach (string locale in new[] { "ko-KR", "en-US" })
                 {
                     using var language = UiText.UseLanguage(locale);
-                    VerifyStoreUpdateTabForLanguage();
+                    VerifyStoreUpdateTabForLanguage(locale, packaged);
                 }
             }
         }
@@ -47,7 +47,7 @@ public sealed partial class SettingsThemePreviewTests
         }
     }
 
-    private static void VerifyStoreUpdateTabForLanguage()
+    private static void VerifyStoreUpdateTabForLanguage(string locale, bool packaged)
     {
         string root = TestRecycleBin.CreateTempSubdirectory("mc-store-update-").FullName;
         var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
@@ -87,6 +87,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(UiText.Get("Update.OpenStore"), openStore.Content);
             Assert.Equal(UiText.Get("Update.OpenStore"), AutomationProperties.GetName(openStore));
             AssertFits(window, openStore);
+            SaveEvidence(window, $"settings-update-{locale}-{(packaged ? "packaged" : "unpackaged")}.png");
 
             TextBlock status = Assert.IsType<TextBlock>(window.FindName("UpdateStatus"));
             openStore.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -99,6 +100,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(UiText.Get("Update.OpenStoreFailed"), status.Text);
             Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(status));
             AssertFits(window, status);
+            SaveEvidence(window, $"settings-update-open-failed-{locale}-{(packaged ? "packaged" : "unpackaged")}.png");
 
             window.OpenStorePage = opened.Add;
             openStore.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
