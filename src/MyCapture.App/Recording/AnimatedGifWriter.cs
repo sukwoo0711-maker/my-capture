@@ -16,9 +16,11 @@ namespace MyCapture.App.Recording;
 /// an explicit Graphic Control Extension.
 /// </para>
 /// <para>
-/// The temporary encoded payload is released before <see cref="AddFrame"/> returns, so memory
-/// use is bounded by one encoded frame. Instances are not thread-safe; callers must also obey
-/// the usual dispatcher-affinity rules of the supplied <see cref="BitmapSource"/>.
+/// The temporary encoded payload is released before <see cref="AddFrame(BitmapSource)"/> returns,
+/// so memory use is bounded by one encoded frame. Instances are not thread-safe; callers must
+/// also obey the usual dispatcher-affinity rules of the supplied <see cref="BitmapSource"/>.
+/// <see cref="EncodeFrame"/> is stateless, so frames may be encoded on worker threads and then
+/// appended in order through <see cref="AddEncodedFrame"/>.
 /// </para>
 /// </remarks>
 internal sealed class AnimatedGifWriter : IDisposable
@@ -105,6 +107,17 @@ internal sealed class AnimatedGifWriter : IDisposable
 
         // The platform encoder owns quantisation and LZW compression. Only this one-frame
         // payload is buffered; all earlier frames have already been written to _output.
+        AddEncodedFrameCore(EncodeFrame(frame).Span, delay);
+    }
+
+    /// <summary>
+    /// Encodes one frame as a complete single-frame GIF with the platform encoder. This touches
+    /// no writer state, so callers may encode on several threads (each using bitmaps it owns or
+    /// frozen ones) and append the payloads in order with <see cref="AddEncodedFrame"/>.
+    /// </summary>
+    internal static ReadOnlyMemory<byte> EncodeFrame(BitmapSource frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
         using var encodedStream = new MemoryStream();
         var encoder = new GifBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(frame));
@@ -115,7 +128,22 @@ internal sealed class AnimatedGifWriter : IDisposable
             throw new InvalidDataException("The platform GIF encoder did not expose its output buffer.");
         }
 
-        ReadOnlySpan<byte> encoded = segment.Array.AsSpan(segment.Offset, checked((int)encodedStream.Length));
+        return segment.Array.AsMemory(segment.Offset, checked((int)encodedStream.Length));
+    }
+
+    /// <summary>Appends a payload produced by <see cref="EncodeFrame"/> with an explicit delay.</summary>
+    internal void AddEncodedFrame(ReadOnlySpan<byte> encoded, int frameDelayCentiseconds)
+    {
+        ThrowIfCannotWrite();
+        ushort delay = ToGifUnsignedShort(
+            frameDelayCentiseconds,
+            nameof(frameDelayCentiseconds),
+            minimum: 0);
+        AddEncodedFrameCore(encoded, delay);
+    }
+
+    private void AddEncodedFrameCore(ReadOnlySpan<byte> encoded, ushort delay)
+    {
         EncodedGifFrame parsed = ParseSingleFrame(encoded, _width, _height);
 
         // Parsing must finish before the first destination byte for this frame is written. An

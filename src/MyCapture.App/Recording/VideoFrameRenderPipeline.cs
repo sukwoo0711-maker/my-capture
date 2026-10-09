@@ -92,34 +92,13 @@ internal static class VideoFrameRenderPipeline
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(sourceTimes);
         ArgumentNullException.ThrowIfNull(acceptFrame);
-        Validate(request);
 
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
         {
             throw new InvalidOperationException("Video frame composition requires an STA thread.");
         }
 
-        if (sourceTimes.Count == 0)
-        {
-            throw new ArgumentException("At least one source frame time is required.", nameof(sourceTimes));
-        }
-
-        double previous = double.NegativeInfinity;
-        for (int index = 0; index < sourceTimes.Count; index++)
-        {
-            double sourceTime = sourceTimes[index];
-            if (!double.IsFinite(sourceTime)
-                || sourceTime < request.StartMs
-                || sourceTime >= request.EndMs
-                || sourceTime + 1e-9 < previous)
-            {
-                throw new ArgumentException(
-                    "Source frame times must be finite, monotonic, and inside the render interval.",
-                    nameof(sourceTimes));
-            }
-
-            previous = sourceTime;
-        }
+        ValidateSchedule(request, sourceTimes);
 
         using var reader = new MediaFoundationVideoFrameReader(request.SourcePath);
         if (reader.Width <= 0 || reader.Height <= 0)
@@ -154,42 +133,25 @@ internal static class VideoFrameRenderPipeline
             return sourceTimes.Count;
         }
 
-        var source = new WriteableBitmap(reader.Width, reader.Height, 96, 96, PixelFormats.Bgr32, null);
-        var visual = new DrawingVisual();
-        var target = new RenderTargetBitmap(request.Width, request.Height, 96, 96, PixelFormats.Pbgra32);
+        var compositor = new VideoFrameCompositor(request.Width, request.Height);
         for (int index = 0; index < sourceTimes.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             double sourceTime = sourceTimes[index];
 
             DecodedVideoFrame decoded = reader.ReadFrameAt(sourceTime, cancellationToken);
-            if (decoded.Width != source.PixelWidth || decoded.Height != source.PixelHeight)
+            if (acceptRawFrame is not null
+                && CanBypassComposition(request, frameLayerBitmaps, decoded.Width, decoded.Height, sourceTime))
             {
-                // A mid-stream media-type change resized the decoder output; rebuild the
-                // reusable source bitmap for the new dimensions.
-                source = new WriteableBitmap(decoded.Width, decoded.Height, 96, 96, PixelFormats.Bgr32, null);
+                // Nothing is drawn over this frame and it already has the output size, so
+                // composition would be an exact copy (see the per-frame overload).
+                acceptRawFrame(decoded, index);
+            }
+            else
+            {
+                acceptFrame(compositor.Compose(request, frameLayerBitmaps, decoded, sourceTime), index);
             }
 
-            source.WritePixels(new Int32Rect(0, 0, decoded.Width, decoded.Height), decoded.Pixels, decoded.Stride, 0);
-            using (DrawingContext dc = visual.RenderOpen())
-            {
-                DrawComposedFrame(
-                    dc,
-                    source,
-                    request.Width,
-                    request.Height,
-                    request.CanvasWidth,
-                    request.CanvasHeight,
-                    request.TextOverlays,
-                    request.FrameEditLayers,
-                    frameLayerBitmaps,
-                    sourceTime);
-            }
-
-            target.Clear();
-            target.Render(visual);
-            BitmapSource frame = new FormatConvertedBitmap(target, PixelFormats.Bgra32, null, 0);
-            acceptFrame(frame, index);
             progress?.Report(new VideoFrameRenderProgress(index + 1, sourceTimes.Count, sourceTime));
         }
 
@@ -206,6 +168,79 @@ internal static class VideoFrameRenderPipeline
         && request.FrameEditLayers.Count == 0
         && request.Width == sourceWidth
         && request.Height == sourceHeight;
+
+    /// <summary>
+    /// Per-frame form: true when the frame at <paramref name="sourceTimeMs"/> already has the
+    /// output size and nothing would be drawn over it — no active overlay with visible text and
+    /// no active frame layer whose bitmap decoded. Composing such a frame only copies it (black
+    /// fill, 1:1 image), so skipping composition cannot change its pixels. Text-free segments of
+    /// an edited clip therefore avoid <see cref="RenderTargetBitmap"/> entirely.
+    /// </summary>
+    internal static bool CanBypassComposition(
+        VideoFrameRenderRequest request,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        int frameWidth,
+        int frameHeight,
+        double sourceTimeMs)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(frameLayerBitmaps);
+        if (request.Width != frameWidth || request.Height != frameHeight)
+        {
+            return false;
+        }
+
+        foreach (TimedTextOverlay overlay in request.TextOverlays)
+        {
+            if (overlay is not null
+                && overlay.IsActiveAt(sourceTimeMs)
+                && !string.IsNullOrWhiteSpace(overlay.Text))
+            {
+                return false;
+            }
+        }
+
+        foreach (FrameEditLayer layer in request.FrameEditLayers)
+        {
+            if (layer is not null
+                && layer.IsActiveAt(sourceTimeMs)
+                && frameLayerBitmaps.ContainsKey(layer.Id))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Validates a request plus a caller-defined monotonic schedule inside its interval.</summary>
+    internal static void ValidateSchedule(VideoFrameRenderRequest request, IReadOnlyList<double> sourceTimes)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(sourceTimes);
+        Validate(request);
+        if (sourceTimes.Count == 0)
+        {
+            throw new ArgumentException("At least one source frame time is required.", nameof(sourceTimes));
+        }
+
+        double previous = double.NegativeInfinity;
+        for (int index = 0; index < sourceTimes.Count; index++)
+        {
+            double sourceTime = sourceTimes[index];
+            if (!double.IsFinite(sourceTime)
+                || sourceTime < request.StartMs
+                || sourceTime >= request.EndMs
+                || sourceTime + 1e-9 < previous)
+            {
+                throw new ArgumentException(
+                    "Source frame times must be finite, monotonic, and inside the render interval.",
+                    nameof(sourceTimes));
+            }
+
+            previous = sourceTime;
+        }
+    }
 
     internal static BitmapSource RenderSingleFrame(
         string sourcePath,
@@ -374,7 +409,7 @@ internal static class VideoFrameRenderPipeline
         return target;
     }
 
-    private static void DrawComposedFrame(
+    internal static void DrawComposedFrame(
         DrawingContext dc,
         ImageSource source,
         int width,
@@ -484,6 +519,74 @@ internal static class VideoFrameRenderPipeline
         }
     }
 
+}
+
+/// <summary>
+/// Reusable composition buffers for one thread: the decoded-frame bitmap, the drawing visual and
+/// the render target shared by MP4 rendering and the GIF encoder workers. The returned bitmap
+/// aliases the render target, so it must be consumed (encoded or copied) before the next
+/// <see cref="Compose(VideoFrameRenderRequest, IReadOnlyDictionary{Guid, BitmapSource}, byte[], int, int, int, double)"/>
+/// call on the same instance. Instances are bound to the thread that created them.
+/// </summary>
+internal sealed class VideoFrameCompositor
+{
+    private readonly DrawingVisual _visual = new();
+    private readonly RenderTargetBitmap _target;
+    private WriteableBitmap? _source;
+
+    internal VideoFrameCompositor(int width, int height)
+    {
+        _target = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+    }
+
+    internal BitmapSource Compose(
+        VideoFrameRenderRequest request,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        DecodedVideoFrame decoded,
+        double sourceTimeMs) =>
+        Compose(request, frameLayerBitmaps, decoded.Pixels, decoded.Width, decoded.Height, decoded.Stride, sourceTimeMs);
+
+    /// <summary>
+    /// Draws a BGR32 frame (stretched to the request size) plus the active frame layers and
+    /// timed text, and returns the opaque BGRA32 result.
+    /// </summary>
+    internal BitmapSource Compose(
+        VideoFrameRenderRequest request,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        byte[] pixels,
+        int width,
+        int height,
+        int stride,
+        double sourceTimeMs)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (_source is null || _source.PixelWidth != width || _source.PixelHeight != height)
+        {
+            // A mid-stream media-type change resized the decoder output; rebuild the
+            // reusable source bitmap for the new dimensions.
+            _source = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, null);
+        }
+
+        _source.WritePixels(new Int32Rect(0, 0, width, height), pixels, stride, 0);
+        using (DrawingContext dc = _visual.RenderOpen())
+        {
+            VideoFrameRenderPipeline.DrawComposedFrame(
+                dc,
+                _source,
+                request.Width,
+                request.Height,
+                request.CanvasWidth,
+                request.CanvasHeight,
+                request.TextOverlays,
+                request.FrameEditLayers,
+                frameLayerBitmaps,
+                sourceTimeMs);
+        }
+
+        _target.Clear();
+        _target.Render(_visual);
+        return new FormatConvertedBitmap(_target, PixelFormats.Bgra32, null, 0);
+    }
 }
 
 /// <summary>Shared transparent frame-layer compositor used by preview, MP4 and GIF export.</summary>
