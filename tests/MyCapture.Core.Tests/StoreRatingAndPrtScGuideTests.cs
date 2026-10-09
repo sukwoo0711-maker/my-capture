@@ -158,17 +158,23 @@ public sealed class StoreRatingSettingsTests
         File.ReadAllText(ValidatedFilePaths.FileWithinRoot(workspace.Paths.DataRoot, "settings.json", ".json"));
 
     [Fact]
-    public void ExistingUserFile_IsStampedOnFirstLoadAndWrittenOnce()
+    public void ExistingUserFile_IsStampedInMemoryAndWrittenWithTheNextSave()
     {
         using var workspace = new TempWorkspace();
         workspace.Paths.EnsureCreated();
-        File.WriteAllText(workspace.Paths.SettingsFile, """{"schemaVersion":4,"general":{"launchAtLogin":false}}""");
+        const string original = """{"schemaVersion":4,"general":{"launchAtLogin":false}}""";
+        File.WriteAllText(workspace.Paths.SettingsFile, original);
 
-        AppSettings first = Store(workspace, Start).Load();
+        SettingsStore store = Store(workspace, Start);
+        AppSettings first = store.Load();
         Assert.Equal(Start, first.StoreRating.FirstSeenUtc);
         Assert.Equal(0, first.StoreRating.SuccessfulCaptureCount);
         Assert.Null(first.StoreRating.RequestAttemptedUtc);
         Assert.False(first.General.LaunchAtLogin);
+        // Loading alone never rewrites the file, so a linked settings file keeps its target.
+        Assert.Equal(original, SettingsText(workspace));
+
+        store.Save(first);
         string persisted = SettingsText(workspace);
         Assert.Contains("\"storeRating\"", persisted, StringComparison.Ordinal);
 

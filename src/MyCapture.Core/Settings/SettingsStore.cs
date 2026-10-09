@@ -75,7 +75,6 @@ public sealed class SettingsStore
         }
 
         AppSettings settings;
-        bool parsedExistingFile = false;
 
         if (text is null)
         {
@@ -91,7 +90,6 @@ public sealed class SettingsStore
         else if (TryDeserialize(text, out AppSettings? parsed) && parsed is not null)
         {
             settings = parsed;
-            parsedExistingFile = true;
         }
         else
         {
@@ -105,15 +103,15 @@ public sealed class SettingsStore
         LastLoadMigratedUnsafeHotkeys = Sanitize(settings, warnings);
         LastLoadWarnings = warnings;
 
-        // The Store rating wait starts at the first load that knows about it. An existing
-        // file is stamped and written once; a new install is written with the welcome card,
-        // and a corrupt file is never overwritten just to record the stamp.
-        bool stampedFirstSeen = StoreRatingPolicy.EnsureFirstSeen(settings.StoreRating, Clock.GetUtcNow())
-            && parsedExistingFile;
+        // The Store rating wait starts at the first load that knows about it. The stamp stays
+        // in memory and reaches disk with the next ordinary save (a counted capture, applied
+        // settings or the welcome card). Loading never writes just to record it, so a linked
+        // or corrupt settings file is left exactly as it was.
+        StoreRatingPolicy.EnsureFirstSeen(settings.StoreRating, Clock.GetUtcNow());
 
         // A token written by 2.4.0 sits in plaintext on disk. Re-save it once so the
         // DPAPI converter rewrites it encrypted; a marker in the text means it already is.
-        if (LastLoadMigratedUnsafeHotkeys || stampedFirstSeen || (settings.GitHub.Token.Length > 0
+        if (LastLoadMigratedUnsafeHotkeys || (settings.GitHub.Token.Length > 0
             && text is not null
             && !text.Contains(DpapiSecretConverter.EncryptedPrefix, StringComparison.Ordinal)))
         {
