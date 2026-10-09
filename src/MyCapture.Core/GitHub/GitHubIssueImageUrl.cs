@@ -8,7 +8,14 @@ namespace MyCapture.Core.GitHub;
 /// </summary>
 public static class GitHubIssueImageUrl
 {
-    public const string DefaultIssueUrl = "https://github.com/sukwoo0711-maker/my-capture/issues/new";
+    /// <summary>New issue in the public MyCapture support repository.</summary>
+    public const string DefaultIssueUrl = "https://github.com/sukwoo0711-maker/mycapture-support/issues/new";
+
+    /// <summary>
+    /// The default before the development repository became private. Saved settings that still hold it
+    /// move to <see cref="DefaultIssueUrl"/>, since the old page is no longer reachable for users.
+    /// </summary>
+    public const string LegacyDefaultIssueUrl = "https://github.com/sukwoo0711-maker/my-capture/issues/new";
 
     // Attachment URLs GitHub writes after a clipboard paste. The host is not pinned to
     // github.com so GitHub Enterprise Server issues work too; the path shape is what
