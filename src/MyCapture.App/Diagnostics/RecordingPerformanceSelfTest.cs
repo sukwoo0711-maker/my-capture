@@ -23,38 +23,33 @@ internal static class RecordingPerformanceSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-recording-performance";
 
+    /// <summary>Opaque fixture colour every pixel check compares against.</summary>
+    internal static readonly Color FixtureColor = Color.FromRgb(18, 90, 166);
+
+    private const int FixtureChannelTolerance = 12;
+    private const int FixtureWidth = 1400;
+    private const int FixtureHeight = 850;
+    private static readonly (int Width, int Height)[] SustainedSizes = [(320, 240), (1280, 720)];
+
     internal static int Run(string outputDirectory)
     {
         outputDirectory = DiagnosticOutputPaths.Create(outputDirectory);
         var measurements = new List<object>();
         var failures = new List<string>();
         var engine = new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance);
-        MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
-        var fixture = new Window { WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize,
-            ShowInTaskbar = false, ShowActivated = false, Topmost = true,
-            Background = new SolidColorBrush(Color.FromRgb(18, 90, 166)), Width = 1400, Height = 850 };
+        MonitorInfo monitor = SelectFixtureMonitor(MonitorEnumerator.GetFromCursor(), MonitorEnumerator.GetAll());
+        Window fixture = CreateFixture();
         try
         {
             fixture.Show();
-            var fixtureBounds = new RectD(monitor.Bounds.Left + 20, monitor.Bounds.Top + 20,
-                Math.Min(1400, monitor.Bounds.Width - 40), Math.Min(850, monitor.Bounds.Height - 40));
+            RectD fixtureBounds = FixtureBoundsOn(monitor);
             PhysicalWindowPositioner.PlaceTopmost(new System.Windows.Interop.WindowInteropHelper(fixture).Handle, fixtureBounds);
             fixture.UpdateLayout();
             Pump(250);
-            foreach ((int width, int height) in new[] { (320, 240), (1280, 720) })
-            {
-                if (fixtureBounds.Width < width + 20 || fixtureBounds.Height < height + 20)
-                {
-                    failures.Add($"Synthetic fixture cannot safely cover {width}x{height} on this display.");
-                    continue;
-                }
-                var region = new RectD(fixtureBounds.Left + 10, fixtureBounds.Top + 10, width, height);
-                measurements.Add(CompareCapturePaths(engine, region));
-                measurements.Add(Record(engine, region, DiagnosticOutputPaths.Child(outputDirectory, $"sustained-{width}.mp4"), null, failures));
-            }
-            var concurrentRegion = new RectD(fixtureBounds.Left + 10, fixtureBounds.Top + 10, 320, 240);
-            measurements.Add(Record(engine, concurrentRegion, DiagnosticOutputPaths.Child(outputDirectory, "concurrent.mp4"),
-                recorder => ConcurrentWindows(engine, concurrentRegion, recorder, failures), failures));
+            // Overlay checks are only meaningful, and recordings only synthetic, while the
+            // owned fixture is what the capture path actually sees.
+            if (VerifyFixtureCoverage(engine, fixtureBounds, measurements, failures))
+                Measure(engine, fixtureBounds, outputDirectory, measurements, failures);
         }
         catch (Exception ex)
         {
@@ -79,6 +74,71 @@ internal static class RecordingPerformanceSelfTest
         File.WriteAllText(DiagnosticOutputPaths.Child(outputDirectory, "recording-performance-report.txt"),
             (failures.Count == 0 ? "RESULT: PASS" : "RESULT: FAIL") + Environment.NewLine + string.Join(Environment.NewLine, failures));
         return failures.Count == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Plain opaque fixture. The app-wide implicit Window style enables ModernWindowChrome,
+    /// which replaces Background with Surface.Base (Transparent plus Mica on glass themes) once
+    /// the HWND exists. The fixture opts out so the capture path sees <see cref="FixtureColor"/>
+    /// and not the theme surface the overlay checks cannot tell apart from overlay pixels.
+    /// </summary>
+    internal static Window CreateFixture() => new()
+    {
+        Style = null, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize,
+        ShowInTaskbar = false, ShowActivated = false, Topmost = true,
+        Background = new SolidColorBrush(FixtureColor), Width = FixtureWidth, Height = FixtureHeight,
+    };
+
+    internal static RectD FixtureBoundsOn(MonitorInfo monitor) => new(monitor.Bounds.Left + 20, monitor.Bounds.Top + 20,
+        Math.Min(FixtureWidth, monitor.Bounds.Width - 40), Math.Min(FixtureHeight, monitor.Bounds.Height - 40));
+
+    internal static bool CanCover(RectD fixtureBounds, int width, int height) =>
+        fixtureBounds.Width >= width + 20 && fixtureBounds.Height >= height + 20;
+
+    /// <summary>
+    /// The cursor display when it can hold every sustained size, otherwise the primary or the
+    /// first other display that can, so a narrow or portrait cursor display does not make the
+    /// result depend on where the pointer happens to rest.
+    /// </summary>
+    internal static MonitorInfo SelectFixtureMonitor(MonitorInfo cursor, IReadOnlyList<MonitorInfo> all)
+    {
+        static bool Fits(MonitorInfo monitor) =>
+            SustainedSizes.All(size => CanCover(FixtureBoundsOn(monitor), size.Width, size.Height));
+        return Fits(cursor) ? cursor : all.Where(Fits).OrderByDescending(monitor => monitor.IsPrimary).FirstOrDefault() ?? cursor;
+    }
+
+    private static bool VerifyFixtureCoverage(ScreenCaptureEngine engine, RectD fixtureBounds,
+        List<object> measurements, List<string> failures)
+    {
+        var inset = new RectD(fixtureBounds.Left + 10, fixtureBounds.Top + 10, fixtureBounds.Width - 20, fixtureBounds.Height - 20);
+        int width = (int)inset.Width, height = (int)inset.Height, stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        engine.CaptureRegionInto(inset, false, pixels, stride);
+        int mismatched = CountFixtureMismatches(pixels, stride, 0, 0, width, height);
+        measurements.Add(new { Kind = "fixture-coverage", Width = width, Height = height, MismatchedPixels = mismatched });
+        if (mismatched == 0) return true;
+        failures.Add($"Synthetic fixture is not visible as RGB({FixtureColor.R},{FixtureColor.G},{FixtureColor.B}) " +
+            $"({mismatched} of {width * height} pixels differ); overlay checks and recordings were skipped.");
+        return false;
+    }
+
+    private static void Measure(ScreenCaptureEngine engine, RectD fixtureBounds, string outputDirectory,
+        List<object> measurements, List<string> failures)
+    {
+        foreach ((int width, int height) in SustainedSizes)
+        {
+            if (!CanCover(fixtureBounds, width, height))
+            {
+                failures.Add($"Synthetic fixture cannot safely cover {width}x{height} on this display.");
+                continue;
+            }
+            var region = new RectD(fixtureBounds.Left + 10, fixtureBounds.Top + 10, width, height);
+            measurements.Add(CompareCapturePaths(engine, region));
+            measurements.Add(Record(engine, region, DiagnosticOutputPaths.Child(outputDirectory, $"sustained-{width}.mp4"), null, failures));
+        }
+        var concurrentRegion = new RectD(fixtureBounds.Left + 10, fixtureBounds.Top + 10, 320, 240);
+        measurements.Add(Record(engine, concurrentRegion, DiagnosticOutputPaths.Child(outputDirectory, "concurrent.mp4"),
+            recorder => ConcurrentWindows(engine, concurrentRegion, recorder, failures), failures));
     }
 
     private static object CompareCapturePaths(ScreenCaptureEngine engine, RectD region)
@@ -231,14 +291,19 @@ internal static class RecordingPerformanceSelfTest
         return phases;
     }
 
-    internal static int CountChangedPixels(byte[] pixels, int stride)
+    internal static int CountChangedPixels(byte[] pixels, int stride) => CountFixtureMismatches(pixels, stride, 4, 4, 310, 70);
+
+    /// <summary>Counts BGRA pixels in [left,right)x[top,bottom) outside the fixture colour tolerance.</summary>
+    internal static int CountFixtureMismatches(byte[] pixels, int stride, int left, int top, int right, int bottom)
     {
         int changed = 0;
-        for (int y = 4; y < 70; y++)
-            for (int x = 4; x < 310; x++)
+        for (int y = top; y < bottom; y++)
+            for (int x = left; x < right; x++)
             {
                 int offset = y * stride + x * 4;
-                if (Math.Abs(pixels[offset] - 166) > 12 || Math.Abs(pixels[offset + 1] - 90) > 12 || Math.Abs(pixels[offset + 2] - 18) > 12) changed++;
+                if (Math.Abs(pixels[offset] - FixtureColor.B) > FixtureChannelTolerance
+                    || Math.Abs(pixels[offset + 1] - FixtureColor.G) > FixtureChannelTolerance
+                    || Math.Abs(pixels[offset + 2] - FixtureColor.R) > FixtureChannelTolerance) changed++;
             }
         return changed;
     }
