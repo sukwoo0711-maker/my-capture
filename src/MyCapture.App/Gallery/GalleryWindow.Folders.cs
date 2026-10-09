@@ -290,11 +290,13 @@ internal sealed partial class GalleryWindow
     {
         string parent = Path.GetDirectoryName(Path.GetFullPath(requested))!;
         string stem = Path.GetFileNameWithoutExtension(requested);
-        string candidate = requested;
+        if (!string.Equals(Path.GetExtension(requested), ".zip", StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Choose a ZIP filename.");
+        string candidate = GalleryExportFiles.Child(parent, Path.GetFileName(requested));
         for (int suffix = 2; File.Exists(candidate) || Directory.Exists(candidate); suffix++)
         {
             if (suffix > 10_000) throw new IOException("No available archive name.");
-            candidate = Path.Combine(parent, stem + "~" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".zip");
+            candidate = GalleryExportFiles.Child(parent, stem + "~" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".zip");
         }
         return candidate;
     }
