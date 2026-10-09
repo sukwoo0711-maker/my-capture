@@ -527,41 +527,61 @@
             </StackPanel>
         </Grid>
 
-        <!-- Search -->
-        <Border Grid.Row="1" Style="{StaticResource Card.Sunken}"
-                Padding="4" Margin="0,0,0,10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Path Grid.Column="0" Data="{StaticResource Icon.Search}"
-                      Style="{StaticResource Icon.Glyph.Muted}" Width="18" Height="18"
-                      Margin="10,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
-                <TextBox x:Name="SearchBox" Grid.Column="1"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         Padding="10,5" MinHeight="32"
-                         AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
-                         TextChanged="OnSearchTextChanged" />
-                <TextBlock Grid.Column="1" IsHitTestVisible="False"
-                           Text="{Binding SearchPlaceholder}"
-                           Foreground="{DynamicResource Text.Muted}"
-                           Margin="12,10"
-                           VerticalAlignment="Center">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </Grid>
-        </Border>
+        <!-- Search, with the folder capture target and sort order beside it. They share the
+             search row so the folder toolbar adds no height at the 560-DIP minimum, where one
+             full 304-DIP card must still fit in the library viewport. -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border Style="{StaticResource Card.Sunken}" Padding="4">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Path Grid.Column="0" Data="{StaticResource Icon.Search}"
+                          Style="{StaticResource Icon.Glyph.Muted}" Width="18" Height="18"
+                          Margin="10,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                    <TextBox x:Name="SearchBox" Grid.Column="1"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Padding="10,5" MinHeight="32"
+                             AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
+                             TextChanged="OnSearchTextChanged" />
+                    <TextBlock Grid.Column="1" IsHitTestVisible="False"
+                               Text="{Binding SearchPlaceholder}"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Margin="12,10"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+            </Border>
+            <!-- Declared after the search box so Tab follows the visual order. -->
+            <CheckBox x:Name="CurrentFolderCaptureCheck" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
+                      Content="{loc:Text Folder410.CurrentFolderOption}" IsEnabled="{Binding CanChangeNewCaptureFolder}"
+                      IsChecked="{Binding UseCurrentFolderForNewCaptures, Mode=OneWay}" Click="OnFolderCaptureTargetClick" />
+            <ComboBox Grid.Column="2" Width="132" Margin="12,0,0,0" VerticalAlignment="Center"
+                      AutomationProperties.Name="{loc:Text Folder410.Sort}"
+                      SelectedIndex="{Binding SortIndex, Mode=TwoWay}">
+                <ComboBoxItem Content="{loc:Text Folder410.Newest}" />
+                <ComboBoxItem Content="{loc:Text Folder410.Oldest}" />
+                <ComboBoxItem Content="{loc:Text Folder410.ByName}" />
+            </ComboBox>
+        </Grid>
 
         <!-- OCR full-text search coverage banner (Row 2). Shown only when part of the
              library is not yet searchable by the text inside the images, or when no OCR
@@ -598,29 +618,26 @@
         </Border>
 
         <StackPanel Grid.Row="3" Margin="0,0,0,10">
-            <DockPanel Margin="4,0,4,10">
-                <ComboBox DockPanel.Dock="Right" Width="132" Margin="12,0,0,0"
-                          AutomationProperties.Name="{loc:Text Folder410.Sort}"
-                          SelectedIndex="{Binding SortIndex, Mode=TwoWay}">
-                    <ComboBoxItem Content="{loc:Text Folder410.Newest}" />
-                    <ComboBoxItem Content="{loc:Text Folder410.Oldest}" />
-                    <ComboBoxItem Content="{loc:Text Folder410.ByName}" />
-                </ComboBox>
-                <CheckBox x:Name="CurrentFolderCaptureCheck" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
-                          Content="{loc:Text Folder410.CurrentFolderOption}" IsEnabled="{Binding CanChangeNewCaptureFolder}"
-                          IsChecked="{Binding UseCurrentFolderForNewCaptures, Mode=OneWay}" Click="OnFolderCaptureTargetClick" />
-                <TextBlock Text="{Binding NewCaptureDestinationText}" ToolTip="{Binding NewCaptureDestinationText}"
+            <!-- Selection actions and the new-capture destination share one line. The
+                 destination sits under its checkbox and is capped so the actions keep room
+                 in English at the 980-DIP minimum; the full path stays in its tooltip. -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <WrapPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="{Binding SelectionText}" VerticalAlignment="Center" Margin="8,0,14,0" />
+                    <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource Button.Primary}" Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" Margin="0,0,8,4" />
+                    <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource Button.Secondary}" Click="OnMoveCapturesClick" ToolTip="M" Margin="0,0,8,4" />
+                    <Button Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource Button.Secondary}" Click="OnDeleteSelectedClick" Margin="0,0,8,4" />
+                    <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,4" DataContext="{Binding SingleSelectedTile}" Click="OnReducedExportClick" Visibility="{Binding DataContext.CanReduceSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,4" DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick" Visibility="{Binding DataContext.CanGifSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+                </WrapPanel>
+                <TextBlock x:Name="NewCaptureDestinationLabel" Grid.Column="1" MaxWidth="360" Margin="12,0,0,4"
+                           Text="{Binding NewCaptureDestinationText}" ToolTip="{Binding NewCaptureDestinationText}"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Text.Secondary}" />
-            </DockPanel>
-
-            <WrapPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{Binding SelectionText}" VerticalAlignment="Center" Margin="8,0,14,0" />
-                <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource Button.Primary}" Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" Margin="0,0,8,4" />
-                <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource Button.Secondary}" Click="OnMoveCapturesClick" ToolTip="M" Margin="0,0,8,4" />
-                <Button Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource Button.Secondary}" Click="OnDeleteSelectedClick" Margin="0,0,8,4" />
-                <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,4" DataContext="{Binding SingleSelectedTile}" Click="OnReducedExportClick" Visibility="{Binding DataContext.CanReduceSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
-                <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,4" DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick" Visibility="{Binding DataContext.CanGifSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
-            </WrapPanel>
+            </Grid>
             <DockPanel>
                 <DockPanel.Style>
                     <Style TargetType="DockPanel">
