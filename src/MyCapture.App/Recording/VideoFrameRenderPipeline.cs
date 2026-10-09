@@ -285,7 +285,9 @@ internal static class VideoFrameRenderPipeline
         }
 
         // Decode both ends, not only container metadata. This rejects truncated MP4 files whose
-        // header still advertises plausible dimensions and duration.
+        // header still advertises plausible dimensions and duration. The final request seeks to
+        // the key frame before the end, so validation decodes about one key-frame interval
+        // instead of the whole clip; a missing tail still surfaces as an early final sample.
         _ = reader.ReadFrameAt(0, cancellationToken);
         DecodedVideoFrame finalFrame = reader.ReadFrameAt(Math.Max(0, duration - 1), cancellationToken);
         ValidateDecodedTail(duration, finalFrame);
