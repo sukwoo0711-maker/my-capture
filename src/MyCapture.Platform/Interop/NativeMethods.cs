@@ -477,6 +477,15 @@ internal static partial class NativeMethods
         System.Text.StringBuilder text,
         int maxCount);
 
+    /// <summary>Registered window class names are at most 256 characters (WNDCLASS.lpszClassName).</summary>
+    internal const int MaxClassNameLength = 256;
+
+    [DllImport("user32.dll", EntryPoint = "GetClassNameW", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern int GetClassName(
+        IntPtr hWnd,
+        System.Text.StringBuilder className,
+        int maxCount);
+
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetClientRect(IntPtr hWnd, out RECT rect);
