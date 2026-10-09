@@ -18,16 +18,32 @@ namespace MyCapture.App.Editing;
 /// at 100% and 150%, and would render identically when flattening the layer later.
 /// </para>
 /// <para>
-/// Stateless except for the image store it reads inserted bitmaps from.
+/// Stateless except for the image store it reads inserted bitmaps from and, on the live
+/// editor surface, the cache of blurred frames.
+/// </para>
+/// <para>
+/// Blur layers sample the base capture passed as <c>blurSource</c>. Exports blur exactly the
+/// covered pixels synchronously; the live surface clips a background-computed blurred frame
+/// instead. Both come from the same integer kernel, so the preview shows the bytes the
+/// export writes.
 /// </para>
 /// </remarks>
 internal sealed class AnnotationRenderer
 {
-    private readonly AnnotationImageStore _images;
+    private static readonly Brush BlurCover = CreateBlurCover();
 
-    internal AnnotationRenderer(AnnotationImageStore images)
+    private readonly AnnotationImageStore _images;
+    private readonly AnnotationBlurCache? _liveBlur;
+
+    /// <param name="images">Resolves inserted image assets.</param>
+    /// <param name="liveBlur">
+    /// Background blur frames for the interactive surface; <see langword="null"/> for exports,
+    /// which blur synchronously.
+    /// </param>
+    internal AnnotationRenderer(AnnotationImageStore images, AnnotationBlurCache? liveBlur = null)
     {
         _images = images ?? throw new ArgumentNullException(nameof(images));
+        _liveBlur = liveBlur;
     }
 
     /// <summary>
@@ -39,15 +55,46 @@ internal sealed class AnnotationRenderer
     /// <param name="suppress">
     /// An item currently being edited by a live TextBox, so it is not double-drawn.
     /// </param>
+    /// <param name="blurSource">
+    /// The unannotated base capture in the document's pixel space, sampled by blur layers.
+    /// Without it a blur layer draws an opaque cover rather than reveal anything.
+    /// </param>
     internal void Render(
         DrawingContext dc,
         AnnotationDocument document,
         double pixelsPerDip,
-        AnnotationItem? suppress = null)
+        AnnotationItem? suppress = null,
+        BitmapSource? blurSource = null)
     {
         ArgumentNullException.ThrowIfNull(dc);
         ArgumentNullException.ThrowIfNull(document);
 
+        bool livePass = _liveBlur is not null && blurSource is not null;
+        if (livePass)
+        {
+            _liveBlur!.BeginPass(blurSource!);
+        }
+
+        try
+        {
+            RenderItems(dc, document, pixelsPerDip, suppress, blurSource);
+        }
+        finally
+        {
+            if (livePass)
+            {
+                _liveBlur!.EndPass();
+            }
+        }
+    }
+
+    private void RenderItems(
+        DrawingContext dc,
+        AnnotationDocument document,
+        double pixelsPerDip,
+        AnnotationItem? suppress,
+        BitmapSource? blurSource)
+    {
         foreach (AnnotationItem item in document.Items)
         {
             if (ReferenceEquals(item, suppress))
@@ -81,6 +128,9 @@ internal sealed class AnnotationRenderer
                     break;
                 case ImageAnnotation image:
                     DrawImage(dc, image);
+                    break;
+                case BlurAnnotation blur:
+                    DrawBlur(dc, blur, blurSource);
                     break;
             }
 
@@ -319,6 +369,50 @@ internal sealed class AnnotationRenderer
         {
             dc.Pop();
         }
+    }
+
+    private void DrawBlur(DrawingContext dc, BlurAnnotation blur, BitmapSource? source)
+    {
+        if (source is null)
+        {
+            dc.DrawRectangle(BlurCover, null, ToRect(blur.Rect));
+            return;
+        }
+
+        RectD region = blur.PixelRegionWithin(source.PixelWidth, source.PixelHeight);
+        if (region.IsEmpty)
+        {
+            return;
+        }
+
+        var pixels = new Rect(region.X, region.Y, region.Width, region.Height);
+        if (_liveBlur is null)
+        {
+            dc.DrawImage(AnnotationBlurPixels.BlurRegion(source, region, blur.Radius), pixels);
+            return;
+        }
+
+        BitmapSource? frame = _liveBlur.Frame(blur.Radius);
+        if (frame is null)
+        {
+            dc.DrawRectangle(BlurCover, null, pixels);
+            return;
+        }
+
+        dc.PushClip(new RectangleGeometry(pixels));
+        dc.DrawImage(frame, new Rect(0, 0, source.PixelWidth, source.PixelHeight));
+        dc.Pop();
+    }
+
+    /// <summary>
+    /// Neutral, opaque fill shown while a blur is unavailable, so sensitive pixels are never
+    /// exposed even for one frame.
+    /// </summary>
+    private static Brush CreateBlurCover()
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80));
+        brush.Freeze();
+        return brush;
     }
 
     private static Point ToPoint(PointD p) => new(p.X, p.Y);

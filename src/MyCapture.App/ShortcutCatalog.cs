@@ -15,7 +15,7 @@ internal static class ShortcutCatalog
         void Add(ShortcutScope scope, string command, Key key, string hint, ModifierKeys modifiers = ModifierKeys.None) =>
             definitions.Add(new(scope, command, key, modifiers, hint));
         foreach (var (command, key) in new[] { ("Select", Key.V), ("Crop", Key.X), ("Rectangle", Key.R), ("Ellipse", Key.E),
-            ("Arrow", Key.A), ("Pen", Key.P), ("Highlighter", Key.H), ("Text", Key.T), ("StepNumber", Key.N), ("Image", Key.I), ("Mosaic", Key.M) })
+            ("Arrow", Key.A), ("Pen", Key.P), ("Highlighter", Key.H), ("Text", Key.T), ("StepNumber", Key.N), ("Image", Key.I), ("Mosaic", Key.M), ("Blur", Key.B) })
             Add(ShortcutScope.Annotation, command, key, key.ToString());
         Add(ShortcutScope.Annotation, "Done", Key.Enter, "Ctrl+Enter", ModifierKeys.Control);
         Add(ShortcutScope.Annotation, "Copy", Key.C, "Ctrl+C", ModifierKeys.Control);

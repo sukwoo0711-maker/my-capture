@@ -807,6 +807,14 @@
                                      AutomationProperties.Name="{loc:Text Text_22A29FBD57AD}"
                                      Text="{Binding HighlighterAlpha, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text EditorBlur_Strength}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text EditorBlur_StrengthRange}" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="{loc:Text EditorBlur_Strength}"
+                                     Text="{Binding BlurRadius, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

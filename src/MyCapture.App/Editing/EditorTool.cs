@@ -38,4 +38,7 @@ internal enum EditorTool
     Ellipse,
     Highlighter,
     StepNumber,
+
+    /// <summary>Drag a rectangle to blur the capture content underneath it as a live layer.</summary>
+    Blur,
 }
