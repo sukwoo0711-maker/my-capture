@@ -21,7 +21,8 @@ namespace MyCapture.App.Capture;
 /// A valid drag is committed as soon as the mouse button is released. Keyboard users retain
 /// Ctrl+A + Enter as a full-monitor alternative and Esc always cancels. When the owner enables
 /// <see cref="DetectWindows"/>, hovering highlights the frontmost top-level window and a click
-/// (no drag) selects it; there is still no snapping or Tab target selection. The owner can also
+/// (no drag) selects it; over empty desktop that is the whole monitor under the pointer. There
+/// is still no snapping or Tab target selection. The owner can also
 /// enable C to copy the frozen pixel's colour and T to switch to text capture.
 /// </remarks>
 internal sealed class CaptureOverlayView : FrameworkElement
@@ -88,7 +89,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private IReadOnlyList<WindowCandidate> _windowCandidates = [];
     private WindowCandidate? _hoverWindow;
     private RectD? _hoverRegion;
+    private bool _hoverWholeMonitor;
     private RectD? _drawnHover;
+    private bool _drawnHoverWholeMonitor;
+    private IReadOnlyList<MonitorInfo>? _monitors;
     private WindowCandidate? _selectedWindow;
     private bool _dragBeyondClick;
     private bool _textCaptureMode;
@@ -131,6 +135,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     internal string SampleLabelForTest => _sampleLabel;
     internal void FlushFeedbackForTest() => _feedbackScheduler.FlushForTest();
     internal RectD? HoverRegionForTest => _hoverRegion;
+    internal bool HoverWholeMonitorForTest => _hoverWholeMonitor;
     internal string? ToastMessageForTest => _toastMessage;
 
     /// <summary>How long the in-overlay copy confirmation stays visible.</summary>
@@ -156,6 +161,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     /// <summary>The overlay's own HWND, never offered as a detected window.</summary>
     internal IntPtr OwnWindowHandle { get; set; }
+
+    /// <summary>
+    /// Display layout in virtual-desktop physical pixels. Read once, the first time the pointer is
+    /// over the desktop shell window, whose hover and click select that monitor's full bounds.
+    /// </summary>
+    internal Func<IReadOnlyList<MonitorInfo>> ReadMonitors { get; set; } = MonitorEnumerator.GetAll;
 
     /// <summary>Copies the sampled colour (C key). Null disables colour copy.</summary>
     internal Func<string, Task<bool>>? CopyColorText { get; set; }
@@ -198,6 +209,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _windowCandidates = [];
         _hoverWindow = _selectedWindow = null;
         _hoverRegion = null;
+        _hoverWholeMonitor = false;
+        _monitors = null;
         CopyColorText = null;
         _frame = null;
         _magnifierCrop = null;
@@ -264,10 +277,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         WindowCandidate? window = null;
         RectD? region = null;
+        bool wholeMonitor = false;
         if (DetectWindows && !_ended && _interaction == InteractionMode.None && !_selection.HasValue)
         {
             window = WindowDetectHitTest.FindTopmost(_windowCandidates, screenPoint, OwnWindowHandle);
-            region = window is null ? null : WindowDetectHitTest.ToBitmapRegion(window, _screenBounds);
+            region = window is null ? null : WindowDetectHitTest.ResolveRegion(window, _windowCandidates, screenPoint,
+                _screenBounds, () => _monitors ??= ReadMonitors(), out wholeMonitor);
             if (region is null) window = null;
         }
         else if (_interaction == InteractionMode.Create && !_dragBeyondClick)
@@ -275,9 +290,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
             return false;
         }
 
-        bool changed = _hoverRegion != region || !ReferenceEquals(_hoverWindow, window);
+        bool changed = _hoverRegion != region || !ReferenceEquals(_hoverWindow, window)
+            || _hoverWholeMonitor != wholeMonitor;
         _hoverWindow = window;
         _hoverRegion = region;
+        _hoverWholeMonitor = wholeMonitor;
         return changed;
     }
 
@@ -286,6 +303,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (_hoverRegion is null && _hoverWindow is null) return;
         _hoverWindow = null;
         _hoverRegion = null;
+        _hoverWholeMonitor = false;
         QueueFeedback();
     }
 
@@ -417,16 +435,19 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 if (_frame?.Bitmap is { } revealBitmap) dc.DrawImage(revealBitmap, new Rect(RenderSize));
         }
         RectD? hover = _selection.HasValue ? null : _hoverRegion;
-        if (rebuild || _drawnSelection != _selection || _drawnHover != hover)
+        bool hoverWholeMonitor = hover.HasValue && _hoverWholeMonitor;
+        if (rebuild || _drawnSelection != _selection || _drawnHover != hover
+            || _drawnHoverWholeMonitor != hoverWholeMonitor)
         {
             _drawnSelection = _selection;
             _drawnHover = hover;
+            _drawnHoverWholeMonitor = hoverWholeMonitor;
             RectD? revealed = _selection ?? hover;
             _revealVisual.Clip = new RectangleGeometry(revealed is { } selected
                 ? ToDipRect(selected.ClampTo(FrameBounds)) : new Rect(0, 0, 0, 0));
             using DrawingContext dc = _selectionVisual.RenderOpen();
             if (_selection is { } selection) DrawSelection(dc, selection);
-            else if (hover is { } window) DrawDetectedWindow(dc, window);
+            else if (hover is { } window) DrawDetectedWindow(dc, window, hoverWholeMonitor);
         }
         if (rebuild || _drawnPrecision != _precisionPointer.IsPrecision || _drawnTextMode != _textCaptureMode)
         {
@@ -517,10 +538,14 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     private void DrawSelection(DrawingContext dc, RectD pixelRect) => DrawRegion(dc, pixelRect, borderPen: null);
 
-    /// <summary>The auto-detected window uses the same token colour with a 2px border.</summary>
-    private void DrawDetectedWindow(DrawingContext dc, RectD pixelRect) => DrawRegion(dc, pixelRect, _windowBorderPen);
+    /// <summary>
+    /// The auto-detected window uses the same token colour with a 2px border. A whole monitor
+    /// (the desktop under the pointer) keeps its size label inside that monitor.
+    /// </summary>
+    private void DrawDetectedWindow(DrawingContext dc, RectD pixelRect, bool wholeMonitor) =>
+        DrawRegion(dc, pixelRect, _windowBorderPen, labelInside: wholeMonitor);
 
-    private void DrawRegion(DrawingContext dc, RectD pixelRect, Pen? borderPen)
+    private void DrawRegion(DrawingContext dc, RectD pixelRect, Pen? borderPen, bool labelInside = false)
     {
         Rect mapped = ToDipRect(pixelRect.ToPixelBounds());
         double px = GuidePixelSizeX, py = GuidePixelSizeY;
@@ -543,7 +568,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 Math.Max(0, rect.Width - borderPen.Thickness), Math.Max(0, rect.Height - borderPen.Thickness));
         }
         dc.DrawRectangle(null, borderPen ?? _selectionBorderPen, border);
-        DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect);
+        DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect, labelInside);
     }
 
     private void UpdateStartingGuides(bool rebuild)
@@ -596,7 +621,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
     }
 
-    private void DrawDimensionLabel(DrawingContext dc, RectD pixels, Rect selectionDip)
+    private void DrawDimensionLabel(DrawingContext dc, RectD pixels, Rect selectionDip, bool inside = false)
     {
         string text = $"{(int)pixels.Width} × {(int)pixels.Height}";
         FormattedText formatted = CreateText(text, _monoTypeface, 12, _primaryTextBrush);
@@ -605,11 +630,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
         double width = formatted.Width + (paddingX * 2);
         double height = formatted.Height + (paddingY * 2);
 
-        double x = Math.Clamp(selectionDip.Left, 8, Math.Max(8, ActualWidth - width - 8));
-        double y = selectionDip.Top - height - 8;
-        if (y < 8)
+        double x;
+        double y;
+        if (inside)
         {
-            y = Math.Min(ActualHeight - height - 8, selectionDip.Bottom + 8);
+            // Outside a whole monitor is another display or, below a shorter display, space no
+            // monitor shows. Use its bottom-left corner, where Ctrl+A's full-frame label sits.
+            x = Math.Clamp(selectionDip.Left + 8, 8, Math.Max(8, ActualWidth - width - 8));
+            y = Math.Clamp(selectionDip.Bottom - height - 8, 8, Math.Max(8, ActualHeight - height - 8));
+        }
+        else
+        {
+            x = Math.Clamp(selectionDip.Left, 8, Math.Max(8, ActualWidth - width - 8));
+            y = selectionDip.Top - height - 8;
+            if (y < 8)
+            {
+                y = Math.Min(ActualHeight - height - 8, selectionDip.Bottom + 8);
+            }
         }
 
         var background = new Rect(x, y, width, height);
@@ -809,6 +846,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _selectedWindow = _hoverWindow;
             _hoverWindow = null;
             _hoverRegion = null;
+            _hoverWholeMonitor = false;
         }
         else
         {

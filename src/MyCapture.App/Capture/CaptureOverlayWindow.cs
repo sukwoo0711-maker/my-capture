@@ -267,7 +267,14 @@ internal sealed class CaptureOverlayWindow : Window
             // Prefer the latest candidate snapshot, which may carry a page URL read after the freeze.
             WindowCandidate window = SourceWindows.FirstOrDefault(candidate => candidate.Handle == detectedWindow.Handle)
                 ?? detectedWindow;
-            if (!string.IsNullOrWhiteSpace(window.Title))
+            if (WindowCandidateService.IsDesktopShell(window, SourceWindows))
+            {
+                // A desktop click captures one whole monitor. Neither the shell's caption nor a
+                // window that happens to cover the monitor centre is that capture's source.
+                sourceTitle = string.Empty;
+                sourcePageUrl = string.Empty;
+            }
+            else if (!string.IsNullOrWhiteSpace(window.Title))
             {
                 sourceTitle = window.Title;
                 sourcePageUrl = MyCapture.Core.Capture.SourcePageUrl.Normalize(window.SourcePageUrl);
