@@ -3436,6 +3436,9 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="GifPreview_MotionStatic" xml:space="preserve"><value>Little of the screen changes, so text sharpness comes first.</value></data>
   <data name="GifPreview_MotionModerate" xml:space="preserve"><value>Parts of the screen move, so smooth playback is kept first.</value></data>
   <data name="GifPreview_MotionHigh" xml:space="preserve"><value>Much of the screen moves, so smooth playback comes first.</value></data>
+  <data name="GifPreview_ReasonKeptSharpness" xml:space="preserve"><value>The size is kept for sharp text, and the frame rate is lowered.</value></data>
+  <data name="GifPreview_ReasonKeptSmoothness" xml:space="preserve"><value>The frame rate is kept for smooth playback, and the size is reduced.</value></data>
+  <data name="GifPreview_ReasonBothReduced" xml:space="preserve"><value>Both the size and the frame rate are lowered to fit the target size.</value></data>
   <data name="GifPreview_SizeRange" xml:space="preserve"><value>{0}–{1}</value></data>
   <data name="GifPreview_CompareHelp" xml:space="preserve"><value>Shows the original frame of the same moment beside the GIF.</value></data>
   <data name="GifPreview_ActualSizeHelp" xml:space="preserve"><value>Shows GIF pixels 1:1 with screen pixels.</value></data>

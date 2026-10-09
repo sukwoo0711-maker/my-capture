@@ -3436,6 +3436,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="GifPreview_MotionStatic" xml:space="preserve"><value>화면 변화가 적어 글자 선명도를 우선했습니다.</value></data>
   <data name="GifPreview_MotionModerate" xml:space="preserve"><value>화면 일부가 움직여 부드러운 재생을 먼저 유지했습니다.</value></data>
   <data name="GifPreview_MotionHigh" xml:space="preserve"><value>움직임이 많아 부드러운 재생을 우선했습니다.</value></data>
+  <data name="GifPreview_ReasonKeptSharpness" xml:space="preserve"><value>글자 선명도를 지키려고 크기는 유지하고 프레임 속도를 낮췄습니다.</value></data>
+  <data name="GifPreview_ReasonKeptSmoothness" xml:space="preserve"><value>부드러운 재생을 지키려고 프레임 속도는 유지하고 크기를 줄였습니다.</value></data>
+  <data name="GifPreview_ReasonBothReduced" xml:space="preserve"><value>목표 크기에 맞추려고 크기와 프레임 속도를 함께 낮췄습니다.</value></data>
   <data name="GifPreview_SizeRange" xml:space="preserve"><value>{0}~{1}</value></data>
   <data name="GifPreview_CompareHelp" xml:space="preserve"><value>같은 시점의 원본 프레임을 GIF 옆에 표시합니다.</value></data>
   <data name="GifPreview_ActualSizeHelp" xml:space="preserve"><value>GIF 픽셀을 화면 픽셀과 1:1로 표시합니다.</value></data>

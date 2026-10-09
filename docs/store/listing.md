@@ -36,7 +36,7 @@ MyCapture는 화면 캡처, 주석 편집, 화면 고정, OCR, 라이브러리, 
 - OCR로 찾은 민감정보를 한 번에 가리는 빠른 가리기
 - 이미지와 MP4를 함께 찾고 재생하는 통합 라이브러리
 - 일시정지를 지원하는 영역 MP4 녹화와 비파괴 영상 편집
-- 최대 20초 구간의 GIF 내보내기
+- 미리보기 샘플과 예상 크기, 공유 대상 크기에 맞춘 권장 설정을 보여 주는 GIF 내보내기
 - 한국어·영어 인터페이스와 고대비를 포함한 6가지 테마
 - 키보드 조작과 스크린 리더 접근성
 - 계정, 광고, 캡처 횟수 제한 없음
@@ -74,7 +74,7 @@ Recordings have no audio. Launch at sign-in starts turned off and can be turned 
 - Quick Redact for sensitive details found by OCR
 - One library for images and MP4 videos with in-app playback
 - Region MP4 recording with pause and non-destructive video editing
-- GIF export for clips up to 20 seconds
+- GIF export with a preview sample, estimated size and settings recommended for the share target's size limit
 - Korean and English interface with six themes, including high contrast
 - Keyboard and screen reader accessibility
 - No account, ads or capture limits

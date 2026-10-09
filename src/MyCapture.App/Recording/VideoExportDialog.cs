@@ -233,6 +233,29 @@ internal sealed class VideoExportDialog : Window
 
     private static string QualityText(GifExportQuality quality) => $"{quality.LongEdge}px · {quality.FramesPerSecond} fps";
 
+    /// <summary>
+    /// Explains the trade the recommended preset actually makes. The motion class only orders
+    /// the candidates; once the size target forces a smaller or slower preset, the sentence has
+    /// to describe that preset rather than the preference it started from.
+    /// </summary>
+    private string RecommendationReasonKey(GifExportQuality recommended)
+    {
+        bool fullSize = recommended.LongEdge >= AnimatedGifExporter.MaximumLongEdge;
+        bool fullRate = recommended.FramesPerSecond >= AnimatedGifExporter.FramesPerSecond;
+        return (fullSize, fullRate) switch
+        {
+            (true, true) => GifSharePolicy.Classify(_sampleMotion) switch
+            {
+                GifMotionClass.Static => "GifPreview_MotionStatic",
+                GifMotionClass.Moderate => "GifPreview_MotionModerate",
+                _ => "GifPreview_MotionHigh",
+            },
+            (true, false) => "GifPreview_ReasonKeptSharpness",
+            (false, true) => "GifPreview_ReasonKeptSmoothness",
+            _ => "GifPreview_ReasonBothReduced",
+        };
+    }
+
     private static string SpeedText(double speed) => string.Create(CultureInfo.InvariantCulture, $"{speed:0.0}×");
 
     private GifExportQuality SelectedQuality => (GifExportQuality)((OptionItem)_quality.SelectedItem).Value;
@@ -505,12 +528,7 @@ internal sealed class VideoExportDialog : Window
                 lines.Add(shareTarget.Bytes is null
                     ? UiText.Format("GifPreview_AdviceSwitchNoLimit", QualityText(recommendation.Quality), size)
                     : UiText.Format("GifPreview_AdviceSwitch", QualityText(recommendation.Quality), limit, size));
-                lines.Add(UiText.Get(GifSharePolicy.Classify(_sampleMotion) switch
-                {
-                    GifMotionClass.Static => "GifPreview_MotionStatic",
-                    GifMotionClass.Moderate => "GifPreview_MotionModerate",
-                    _ => "GifPreview_MotionHigh",
-                }));
+                lines.Add(UiText.Get(RecommendationReasonKey(recommendation.Quality)));
                 GifSizeEstimate current = GifSharePolicy.EstimateFor(quality, span, _recording.Width, _recording.Height, _measurements);
                 if (shareTarget.Bytes is long target && current.HighBytes > target)
                     lines.Add(UiText.Format("GifPreview_AdviceCurrentOver", FormatRange(current), limit));
