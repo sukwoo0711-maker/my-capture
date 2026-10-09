@@ -3367,4 +3367,27 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="EditorBlur_StrengthHint" xml:space="preserve"><value>Higher values blur more strongly.</value></data>
   <data name="EditorBlur_StrengthChanged" xml:space="preserve"><value>Blur strength changed to {0:0} px</value></data>
   <data name="EditorBlur_StrengthRange" xml:space="preserve"><value>2–64 image pixels.</value></data>
+  <data name="TextCapture_Title" xml:space="preserve"><value>Text capture</value></data>
+  <data name="TextCapture_Copied" xml:space="preserve"><value>Text copied</value></data>
+  <data name="TextCapture_CopiedDetail" xml:space="preserve"><value>Characters copied to the clipboard: {0}</value></data>
+  <data name="TextCapture_NoText" xml:space="preserve"><value>No text was found.</value></data>
+  <data name="TextCapture_ClipboardFailed" xml:space="preserve"><value>The text was recognized but could not be copied to the clipboard. Copy it from advanced extraction.</value></data>
+  <data name="TextCapture_Failed" xml:space="preserve"><value>Text recognition failed. Try again.</value></data>
+  <data name="TextCapture_Unavailable" xml:space="preserve"><value>Text recognition is not available on this PC.</value></data>
+  <data name="TextCapture_OpenAdvanced" xml:space="preserve"><value>Open advanced extraction</value></data>
+  <data name="TextCapture_OverlayHint" xml:space="preserve"><value>T Text capture</value></data>
+  <data name="TextCapture_OverlayHintImage" xml:space="preserve"><value>T Image capture</value></data>
+  <data name="TextCapture_ModeActive" xml:space="preserve"><value>Text capture mode · Copies only the text in the selection</value></data>
+  <data name="TextCapture_HelpToggle" xml:space="preserve"><value>Switch to text capture while selecting</value></data>
+  <data name="TextCapture_HotkeyHint" xml:space="preserve"><value>Select a region to recognize and copy only its text. The image is not saved to the library.</value></data>
+  <data name="ColorPick_OverlayHint" xml:space="preserve"><value>C Copy color</value></data>
+  <data name="ColorPick_CopyFailed" xml:space="preserve"><value>Could not copy the color.</value></data>
+  <data name="ColorPick_FormatLabel" xml:space="preserve"><value>Color copy format</value></data>
+  <data name="ColorPick_FormatHint" xml:space="preserve"><value>Press C while selecting a capture region to copy the color under the pointer in this format.</value></data>
+  <data name="ColorPick_FormatHex" xml:space="preserve"><value>HEX (#RRGGBB)</value></data>
+  <data name="ColorPick_FormatRgb" xml:space="preserve"><value>RGB (rgb(r, g, b))</value></data>
+  <data name="ColorPick_FormatHsl" xml:space="preserve"><value>HSL (hsl(h, s%, l%))</value></data>
+  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color while selecting</value></data>
+  <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>Click Select window</value></data>
+  <data name="WindowDetect_Setting" xml:space="preserve"><value>Highlight the window under the pointer · Click to select it</value></data>
 </root>

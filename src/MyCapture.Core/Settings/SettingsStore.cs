@@ -377,6 +377,7 @@ public sealed class SettingsStore
         s.Hotkeys.ScrollingCapture = Safe(s.Hotkeys.ScrollingCapture);
         s.Hotkeys.DelayedCapture = Safe(s.Hotkeys.DelayedCapture);
         s.Hotkeys.RestoreClosedPin = Safe(s.Hotkeys.RestoreClosedPin);
+        s.Hotkeys.CaptureText = Safe(s.Hotkeys.CaptureText);
         // --- Hotkeys ---
         // A capture hotkey that cannot be pressed makes the app inert, so an
         // unassigned value is restored rather than respected.
@@ -402,6 +403,7 @@ public sealed class SettingsStore
             s.Hotkeys.ScrollingCapture = WithoutCaptureConflict(s.Hotkeys.ScrollingCapture);
             s.Hotkeys.DelayedCapture = WithoutCaptureConflict(s.Hotkeys.DelayedCapture);
             s.Hotkeys.RestoreClosedPin = WithoutCaptureConflict(s.Hotkeys.RestoreClosedPin);
+            s.Hotkeys.CaptureText = WithoutCaptureConflict(s.Hotkeys.CaptureText);
         }
         if (migratedUnsafeHotkeys) warnings.Add(UiText.Get("Hotkey.Migrated"));
 
@@ -418,6 +420,7 @@ public sealed class SettingsStore
         }
 
         if (!Enum.IsDefined(s.General.AfterCapture)) s.General.AfterCapture = AfterCaptureAction.Editor;
+        if (!Enum.IsDefined(s.Capture.ColorFormat)) s.Capture.ColorFormat = ColorFormat.Hex;
         if (s.General.ThemeRevision < 1)
         {
             if (MyCapture.Core.Themes.AppThemeNames.Parse(s.General.Theme) == MyCapture.Core.Themes.AppTheme.Midnight)

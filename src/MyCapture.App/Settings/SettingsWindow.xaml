@@ -383,6 +383,23 @@
                                   AutomationProperties.Name="{loc:Text Settings.ShowSelectionGrid}"
                                   IsChecked="{Binding ShowSelectionGrid}" />
 
+                        <CheckBox x:Name="AutoDetectWindowsCheck" Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text WindowDetect_Setting}"
+                                  AutomationProperties.Name="{loc:Text WindowDetect_Setting}"
+                                  IsChecked="{Binding AutoDetectWindows}" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text ColorPick_FormatLabel}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text ColorPick_FormatHint}" />
+                            <ComboBox x:Name="ColorFormatSelector" SelectedValue="{Binding ColorFormat}" SelectedValuePath="Tag"
+                                      MinWidth="220" HorizontalAlignment="Left"
+                                      AutomationProperties.Name="{loc:Text ColorPick_FormatLabel}">
+                                <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Hex}" Content="{loc:Text ColorPick_FormatHex}" />
+                                <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Rgb}" Content="{loc:Text ColorPick_FormatRgb}" />
+                                <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Hsl}" Content="{loc:Text ColorPick_FormatHsl}" />
+                            </ComboBox>
+                        </StackPanel>
+
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text Text_BD975387F343}"
                                   AutomationProperties.Name="{loc:Text Text_B36A1FC25CCE}"
@@ -516,6 +533,12 @@
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_096A13A757DB}" />
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_AF588C59EB7B}" DefaultText="Ctrl+Shift+C" Text="{Binding CaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text TextCapture_Title}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text TextCapture_HotkeyHint}" />
+                            <settings:HotkeyRecorder x:Name="CaptureTextHotkeyRecorder" HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text TextCapture_Title}" DefaultText="" Text="{Binding CaptureTextHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">

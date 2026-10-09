@@ -3367,4 +3367,27 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorBlur_StrengthHint" xml:space="preserve"><value>값이 클수록 더 강하게 흐려집니다.</value></data>
   <data name="EditorBlur_StrengthChanged" xml:space="preserve"><value>블러 강도를 {0:0}px로 바꿨습니다</value></data>
   <data name="EditorBlur_StrengthRange" xml:space="preserve"><value>2 ~ 64 (이미지 픽셀).</value></data>
+  <data name="TextCapture_Title" xml:space="preserve"><value>텍스트 캡처</value></data>
+  <data name="TextCapture_Copied" xml:space="preserve"><value>텍스트 복사됨</value></data>
+  <data name="TextCapture_CopiedDetail" xml:space="preserve"><value>{0}자를 클립보드에 복사했습니다.</value></data>
+  <data name="TextCapture_NoText" xml:space="preserve"><value>텍스트를 찾지 못했습니다.</value></data>
+  <data name="TextCapture_ClipboardFailed" xml:space="preserve"><value>텍스트를 인식했지만 클립보드에 복사하지 못했습니다. 고급 추출에서 복사하십시오.</value></data>
+  <data name="TextCapture_Failed" xml:space="preserve"><value>텍스트를 인식하지 못했습니다. 다시 시도하십시오.</value></data>
+  <data name="TextCapture_Unavailable" xml:space="preserve"><value>이 PC에서는 텍스트 인식을 사용할 수 없습니다.</value></data>
+  <data name="TextCapture_OpenAdvanced" xml:space="preserve"><value>고급 추출 열기</value></data>
+  <data name="TextCapture_OverlayHint" xml:space="preserve"><value>T 텍스트 캡처</value></data>
+  <data name="TextCapture_OverlayHintImage" xml:space="preserve"><value>T 이미지 캡처</value></data>
+  <data name="TextCapture_ModeActive" xml:space="preserve"><value>텍스트 캡처 모드 · 선택 영역의 텍스트만 복사</value></data>
+  <data name="TextCapture_HelpToggle" xml:space="preserve"><value>선택 중 텍스트 캡처 전환</value></data>
+  <data name="TextCapture_HotkeyHint" xml:space="preserve"><value>영역을 선택하면 텍스트만 인식해 복사합니다. 이미지는 라이브러리에 저장하지 않습니다.</value></data>
+  <data name="ColorPick_OverlayHint" xml:space="preserve"><value>C 색상 복사</value></data>
+  <data name="ColorPick_CopyFailed" xml:space="preserve"><value>색상을 복사하지 못했습니다.</value></data>
+  <data name="ColorPick_FormatLabel" xml:space="preserve"><value>색상 복사 형식</value></data>
+  <data name="ColorPick_FormatHint" xml:space="preserve"><value>캡처 영역을 선택하는 중 C 키를 누르면 포인터 아래 색상을 이 형식으로 복사합니다.</value></data>
+  <data name="ColorPick_FormatHex" xml:space="preserve"><value>HEX (#RRGGBB)</value></data>
+  <data name="ColorPick_FormatRgb" xml:space="preserve"><value>RGB (rgb(r, g, b))</value></data>
+  <data name="ColorPick_FormatHsl" xml:space="preserve"><value>HSL (hsl(h, s%, l%))</value></data>
+  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>선택 중 색상 복사</value></data>
+  <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>클릭 창 선택</value></data>
+  <data name="WindowDetect_Setting" xml:space="preserve"><value>포인터 아래 창 강조 · 클릭으로 창 영역 선택</value></data>
 </root>

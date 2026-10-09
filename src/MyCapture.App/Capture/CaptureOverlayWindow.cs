@@ -19,6 +19,7 @@ internal sealed class CaptureOverlayWindow : Window
     private bool _completed;
     private bool _placingPhysicalBounds;
     private RectD? _pendingSelection;
+    private RegionSelectionEventArgs? _pendingSelectionDetails;
 
     internal CaptureOverlayWindow(
         FrozenFrame frame,
@@ -101,8 +102,10 @@ internal sealed class CaptureOverlayWindow : Window
 
         if (_pendingSelection is RectD pending)
         {
+            RegionSelectionEventArgs? details = _pendingSelectionDetails;
             _pendingSelection = null;
-            CompleteSelection(pending);
+            _pendingSelectionDetails = null;
+            CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true);
         }
     }
 
@@ -125,13 +128,51 @@ internal sealed class CaptureOverlayWindow : Window
     /// <summary>Recording needs geometry only; it must not allocate a cropped screenshot.</summary>
     internal Action<RectD>? GeometrySelectionCompleted { get; set; }
 
-    internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
+    internal IReadOnlyList<WindowCandidate> SourceWindows
+    {
+        get => _view.WindowCandidates;
+        set => _view.WindowCandidates = value ?? [];
+    }
+
+    /// <summary>Highlights and click-selects the top-level window under the pointer.</summary>
+    internal bool DetectWindows
+    {
+        get => _view.DetectWindows;
+        set => _view.DetectWindows = value;
+    }
+
+    /// <summary>Copies the frozen pixel colour on C; null disables the key.</summary>
+    internal Func<string, Task<bool>>? CopyColorText
+    {
+        get => _view.CopyColorText;
+        set => _view.CopyColorText = value;
+    }
+
+    internal Func<MyCapture.Core.Settings.ColorFormat> ReadColorFormat
+    {
+        get => _view.ReadColorFormat;
+        set => _view.ReadColorFormat = value ?? (() => MyCapture.Core.Settings.ColorFormat.Hex);
+    }
+
+    /// <summary>Lets T switch this selection between image and text capture.</summary>
+    internal bool TextCaptureAvailable
+    {
+        get => _view.TextCaptureAvailable;
+        set => _view.TextCaptureAvailable = value;
+    }
+
+    internal bool TextCaptureMode
+    {
+        get => _view.TextCaptureMode;
+        set => _view.TextCaptureMode = value;
+    }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         // EnsureHandle may create this HWND solely to apply recording exclusion.
         // PlaceTopmost uses SWP_SHOWWINDOW, so never call it while still hidden.
         // ContentRendered reasserts physical placement after the authorized Show.
+        _view.OwnWindowHandle = new WindowInteropHelper(this).Handle;
         if (IsVisible) PlacePhysicalBounds();
     }
 
@@ -187,13 +228,16 @@ internal sealed class CaptureOverlayWindow : Window
         if (_frame is null && GeometrySelectionCompleted is null)
         {
             _pendingSelection = e.BitmapRegion;
+            _pendingSelectionDetails = e;
             return;
         }
 
-        CompleteSelection(e.BitmapRegion);
+        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture);
     }
 
-    internal void CompleteSelection(RectD bitmapRegion)
+    internal void CompleteSelection(RectD bitmapRegion) => CompleteSelection(bitmapRegion, null, false);
+
+    internal void CompleteSelection(RectD bitmapRegion, WindowCandidate? detectedWindow, bool textCapture)
     {
         if (_completed)
         {
@@ -213,9 +257,22 @@ internal sealed class CaptureOverlayWindow : Window
         }
         FrozenFrame frame = _frame ?? throw new InvalidOperationException("A frozen capture frame is required.");
         System.Windows.Media.Imaging.BitmapSource crop = ScreenCaptureEngine.Crop(frame, bitmapRegion);
-        string sourceTitle = WindowCandidateService.ResolveSourceTitle(SourceWindows,
-            new RectD(_screenBounds.Left + bitmapRegion.Left, _screenBounds.Top + bitmapRegion.Top,
-                bitmapRegion.Width, bitmapRegion.Height));
+        var selectedScreenRegion = new RectD(_screenBounds.Left + bitmapRegion.Left, _screenBounds.Top + bitmapRegion.Top,
+            bitmapRegion.Width, bitmapRegion.Height);
+        string sourceTitle = WindowCandidateService.ResolveSourceTitle(SourceWindows, selectedScreenRegion);
+        string sourcePageUrl = WindowCandidateService.ResolveSourcePageUrl(SourceWindows, selectedScreenRegion);
+        if (detectedWindow is not null)
+        {
+            // A clicked window is the source even when another window overlaps its centre.
+            // Prefer the latest candidate snapshot, which may carry a page URL read after the freeze.
+            WindowCandidate window = SourceWindows.FirstOrDefault(candidate => candidate.Handle == detectedWindow.Handle)
+                ?? detectedWindow;
+            if (!string.IsNullOrWhiteSpace(window.Title))
+            {
+                sourceTitle = window.Title;
+                sourcePageUrl = MyCapture.Core.Capture.SourcePageUrl.Normalize(window.SourcePageUrl);
+            }
+        }
 
         // Remove the dimmed overlay before the normal editor window is created. The original
         // frozen frame and cropped physical pixels are retained; the desktop is never recaptured.
@@ -225,9 +282,10 @@ internal sealed class CaptureOverlayWindow : Window
             SelectionCompleted?.Invoke(
                 this,
                 new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop, sourceTitle,
-                    sourcePageUrl: WindowCandidateService.ResolveSourcePageUrl(SourceWindows,
-                        new RectD(_screenBounds.Left + bitmapRegion.Left, _screenBounds.Top + bitmapRegion.Top,
-                            bitmapRegion.Width, bitmapRegion.Height))));
+                    sourcePageUrl: sourcePageUrl)
+                {
+                    TextCapture = textCapture,
+                });
         }
         finally
         {
@@ -264,6 +322,7 @@ internal sealed class CaptureOverlayWindow : Window
         _view.ReleaseResources();
         _frame = null;
         _pendingSelection = null;
+        _pendingSelectionDetails = null;
         Content = null;
         GeometrySelectionCompleted = null;
         SourceWindows = [];
@@ -308,4 +367,10 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
     internal string SourceTitle { get; }
 
     internal string SourcePageUrl { get; }
+
+    /// <summary>
+    /// The selection was made in text capture mode: recognise and copy its text instead of
+    /// persisting the image and opening the editor.
+    /// </summary>
+    internal bool TextCapture { get; init; }
 }

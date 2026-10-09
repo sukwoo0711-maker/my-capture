@@ -56,6 +56,21 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
     internal Func<bool> OpenEditorAfterCapture { get; set; } = () => true;
 
+    /// <summary>Reads Capture.AutoDetectWindows when each selector opens. Off unless the app wires it.</summary>
+    internal Func<bool> AutoDetectWindows { get; set; } = () => false;
+
+    /// <summary>Copies the overlay's sampled colour (C key). Null leaves the key unbound.</summary>
+    internal Func<string, Task<bool>>? CopyColorText { get; set; }
+
+    internal Func<MyCapture.Core.Settings.ColorFormat> ReadColorFormat { get; set; } =
+        () => MyCapture.Core.Settings.ColorFormat.Hex;
+
+    /// <summary>
+    /// Receives a selection confirmed in text capture mode. The image is never persisted and no
+    /// editor opens; the session ends as soon as the selector closes. Null disables text capture.
+    /// </summary>
+    internal Action<CaptureSelectionCompletedEventArgs>? TextCaptureRequested { get; set; }
+
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
     internal Func<bool>? RequiresCaptureExclusion { get; set; }
     internal Func<Window, bool> ApplyCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApply;
@@ -102,7 +117,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Used only by the explicit advanced “capture window” command.</summary>
     internal WindowCandidateService WindowCandidates => _windowCandidates;
 
-    internal void Start(bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid = true)
+    internal void Start(bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid = true,
+        bool textCapture = false)
     {
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -113,6 +129,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             return;
         }
 
+        // The text capture command over an open selector switches it to text mode.
+        if (textCapture && _activeOverlay is { TextCaptureAvailable: true } open) open.TextCaptureMode = true;
+
         if (ActivateCurrent())
         {
             return;
@@ -121,7 +140,11 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         // Reserve the session synchronously, including when WM_HOTKEY has no WPF context.
         // Create its HWND for capture exclusion, but keep the opaque selector hidden until
         // its frozen background is ready. Showing a frameless window blacks out the desktop.
-        var preparation = new CapturePreparation { ShowSelectionGrid = showSelectionGrid };
+        var preparation = new CapturePreparation
+        {
+            ShowSelectionGrid = showSelectionGrid,
+            TextCapture = textCapture && TextCaptureRequested is not null,
+        };
         _preparation = preparation;
         _log.LogInformation("Capture frame acquisition requested");
         try
@@ -260,6 +283,11 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             : new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier, showSelectionGrid);
         _activeOverlay = overlay;
         overlay.SourceWindows = _preparation?.SourceWindows ?? [];
+        overlay.DetectWindows = AutoDetectWindows();
+        overlay.CopyColorText = CopyColorText;
+        overlay.ReadColorFormat = ReadColorFormat;
+        overlay.TextCaptureAvailable = TextCaptureRequested is not null;
+        overlay.TextCaptureMode = _preparation?.TextCapture == true;
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
         overlay.Closed += OnOverlayClosed;
         overlay.ContentRendered += OnFirstRendered;
@@ -378,6 +406,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         internal RectD DesktopBounds { get; set; }
         internal bool ShowSelectionGrid { get; init; } = true;
+        internal bool TextCapture { get; init; }
         internal volatile bool Cancelled;
         internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
         internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();
@@ -402,6 +431,24 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     private async void OnOverlaySelectionCompleted(object? sender, CaptureSelectionCompletedEventArgs e)
     {
+        if (e.TextCapture && TextCaptureRequested is { } textCapture)
+        {
+            // Text capture keeps only the recognised text: no library record, no editor. The
+            // selector closes right after this returns, ending the session before OCR runs.
+            _log.LogInformation("Selected region {Region} for text capture", e.BitmapRegion);
+            try
+            {
+                textCapture(e);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Could not start text capture");
+                TransitionFailed?.Invoke(ex);
+            }
+
+            return;
+        }
+
         LastTransitionForTest = AnnounceSelectionAndOpenEditorAsync(e);
         await LastTransitionForTest;
     }

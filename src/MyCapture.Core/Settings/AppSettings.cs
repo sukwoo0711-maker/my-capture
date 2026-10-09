@@ -118,6 +118,12 @@ public sealed class HotkeySettings
     /// older settings file keeps this value, so upgrading never claims a chord silently.
     /// </remarks>
     public Hotkey RestoreClosedPin { get; set; } = Hotkey.None;
+
+    /// <summary>
+    /// Selects a region, recognises its text locally and copies only the text.
+    /// </summary>
+    /// <remarks>Unassigned by default, like the other optional capture commands.</remarks>
+    public Hotkey CaptureText { get; set; } = Hotkey.None;
 }
 
 public sealed class QueueSettings

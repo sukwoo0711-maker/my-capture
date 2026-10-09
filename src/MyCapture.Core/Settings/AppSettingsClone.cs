@@ -57,6 +57,7 @@ public static class AppSettingsClone
         RecordRegion = s.RecordRegion,
         UploadGitHubImage = s.UploadGitHubImage,
         RestoreClosedPin = s.RestoreClosedPin,
+        CaptureText = s.CaptureText,
     };
 
     private static QueueSettings Clone(QueueSettings s) => new()

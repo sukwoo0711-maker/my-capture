@@ -42,6 +42,8 @@ public sealed class TrayIconService : IDisposable
     private const uint MenuDelayedCapture = 107;
     private const uint MenuScrollingCapture = 108;
     private const uint MenuRecordRegion = 109;
+    // Deliberately apart from the 10x run so concurrently added commands cannot share an id.
+    private const uint MenuCaptureText = 120;
     // Submenu branch for the capture group. TrackPopupMenuEx returns the selected item id;
     // popup handles never reach DispatchMenuCommand, so a fixed id above the leaves is safe.
     private const uint MenuCaptureBranch = 200;
@@ -80,6 +82,7 @@ public sealed class TrayIconService : IDisposable
     public event EventHandler? DelayedCaptureRequested;
     public event EventHandler? ScrollingCaptureRequested;
     public event EventHandler? RecordRegionRequested;
+    public event EventHandler? CaptureTextRequested;
 
     public TrayIconState State => _state;
 
@@ -318,6 +321,7 @@ public sealed class TrayIconService : IDisposable
             try
             {
                 AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuCapture, UiText.Get("Text_2C20ADDA2018"));
+                AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuCaptureText, UiText.Get("TextCapture_Title"));
                 AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuCaptureWindow, UiText.Get("Text_EA1FBABE64F3"));
                 AppendMenu(captureMenu, NativeMethods.MF_STRING, MenuCaptureFullScreen, UiText.Get("Text_65BB6610ACA0"));
                 AppendMenu(
@@ -401,6 +405,9 @@ public sealed class TrayIconService : IDisposable
                 break;
             case MenuRecordRegion:
                 RecordRegionRequested?.Invoke(this, EventArgs.Empty);
+                break;
+            case MenuCaptureText:
+                CaptureTextRequested?.Invoke(this, EventArgs.Empty);
                 break;
             case MenuGallery:
                 GalleryRequested?.Invoke(this, EventArgs.Empty);
