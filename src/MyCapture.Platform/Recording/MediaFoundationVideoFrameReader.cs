@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging;
 
 namespace MyCapture.Platform.Recording;
 
@@ -14,6 +15,9 @@ public sealed record DecodedVideoFrame(
 {
     /// <summary>The source-timeline position covered by the end of this decoded sample.</summary>
     public double EndTimestampMs => TimestampMs + SampleDurationMs;
+
+    /// <summary>Layout of <see cref="Pixels"/>; BGR32 unless NV12 output was requested.</summary>
+    public DecodedVideoPixelFormat Format { get; init; }
 }
 
 /// <summary>
@@ -79,7 +83,7 @@ internal sealed class DecodedVideoFrameSelector
 /// Requests may move forward without seeking; a backwards request performs one key-frame seek and
 /// then advances decoded samples to the requested presentation position.
 /// </summary>
-public sealed class MediaFoundationVideoFrameReader : IDisposable
+public sealed partial class MediaFoundationVideoFrameReader : IDisposable
 {
     private const uint MfVersion = 0x0002_0070;
     private const uint MfStartupFull = 0;
@@ -123,6 +127,15 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
     private double _lastResolvedSampleDurationMs;
 
     public MediaFoundationVideoFrameReader(string sourcePath)
+        : this(sourcePath, options: null)
+    {
+    }
+
+    /// <summary>
+    /// Opens <paramref name="sourcePath"/>, optionally preferring D3D11 hardware decode and a
+    /// GPU resize. Without options this is exactly the original software reader.
+    /// </summary>
+    public MediaFoundationVideoFrameReader(string sourcePath, MediaFoundationVideoFrameReaderOptions? options)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         string fullPath = Path.GetFullPath(sourcePath);
@@ -138,7 +151,7 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
         _startedMediaFoundation = true;
         try
         {
-            Initialize(fullPath);
+            Initialize(fullPath, options ?? MediaFoundationVideoFrameReaderOptions.Default);
         }
         catch
         {
@@ -178,8 +191,22 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
             cancellationToken);
     }
 
-    private void Initialize(string fullPath)
+    private void Initialize(string fullPath, MediaFoundationVideoFrameReaderOptions options)
     {
+        if (options.PreferHardwareDecode)
+        {
+            string? failure = TryInitializeHardware(fullPath, options);
+            if (failure is null)
+            {
+                return;
+            }
+
+            HardwareFallbackReason = failure;
+            options.Log?.LogWarning(
+                "Hardware video decode is unavailable; using the software decoder. {Reason}",
+                failure);
+        }
+
         Check(MFCreateAttributes(out IMFAttributes attributes, 2), nameof(MFCreateAttributes));
         try
         {
@@ -198,6 +225,16 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
 
         Check(_reader!.SetStreamSelection(AllStreams, false), "IMFSourceReader.SetStreamSelection(all)");
         Check(_reader.SetStreamSelection(FirstVideoStream, true), "IMFSourceReader.SetStreamSelection(video)");
+
+        // NV12 is the H.264/HEVC decoders' own output, so no software colour converter runs.
+        if (options.OutputFormat == DecodedVideoPixelFormat.Nv12
+            && TrySetOutputSubtype(_reader, VideoFormatNv12) >= 0)
+        {
+            _format = DecodedVideoPixelFormat.Nv12;
+            RefreshOutputFormat();
+            DurationMs = ReadDurationMs();
+            return;
+        }
 
         Check(MFCreateMediaType(out IMFMediaType requestedType), nameof(MFCreateMediaType));
         try
@@ -237,7 +274,19 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
                 throw new InvalidDataException("The source video reported invalid dimensions.");
             }
 
-            (_cropX, _cropY, Width, Height) = ReadDisplayArea(currentType, _codedWidth, _codedHeight);
+            (_cropX, _cropY, Width, Height) = _hardwareResize
+                ? ReadResizedDisplayArea(currentType, _codedWidth, _codedHeight)
+                : ReadDisplayArea(currentType, _codedWidth, _codedHeight);
+
+            int bytesPerPixel = 4;
+            if (_format == DecodedVideoPixelFormat.Nv12)
+            {
+                // Chroma pairs cover two luma columns and rows; keep the crop on that grid.
+                bytesPerPixel = 1;
+                _cropX &= ~1;
+                _cropY &= ~1;
+                YuvEncoding = ReadYuvEncoding(currentType, _codedHeight);
+            }
 
             Guid strideKey = MediaTypeDefaultStride;
             int strideResult = currentType.GetUINT32(ref strideKey, out uint rawStride);
@@ -246,13 +295,13 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
                 Check(strideResult, "IMFMediaType.GetUINT32(default stride)");
             }
 
-            _sourceStride = strideResult >= 0 ? unchecked((int)rawStride) : checked(_codedWidth * 4);
+            _sourceStride = strideResult >= 0 ? unchecked((int)rawStride) : checked(_codedWidth * bytesPerPixel);
             if (_sourceStride == 0)
             {
-                _sourceStride = checked(_codedWidth * 4);
+                _sourceStride = checked(_codedWidth * bytesPerPixel);
             }
 
-            if (Math.Abs((long)_sourceStride) < checked((long)_codedWidth * 4))
+            if (Math.Abs((long)_sourceStride) < checked((long)_codedWidth * bytesPerPixel))
             {
                 throw new InvalidDataException("The decoded video stride is smaller than one pixel row.");
             }
@@ -515,6 +564,21 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
         Check(sample.ConvertToContiguousBuffer(out IMFMediaBuffer buffer), "IMFSample.ConvertToContiguousBuffer");
         try
         {
+            if (_d3d is not null && TryCopyGpuSurface(buffer, timestampMs, sampleDurationMs) is { } gpuFrame)
+            {
+                return gpuFrame;
+            }
+
+            if (_format == DecodedVideoPixelFormat.Nv12)
+            {
+                return CopyNv12(buffer, timestampMs, sampleDurationMs);
+            }
+
+            if (_d3d is not null && buffer is IMF2DBuffer2 surface)
+            {
+                return CopySurface(surface, timestampMs, sampleDurationMs);
+            }
+
             Check(buffer.Lock(out IntPtr data, out _, out uint currentLength), "IMFMediaBuffer.Lock");
             try
             {
@@ -528,7 +592,8 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
                 }
 
                 int outputStride = rowBytes;
-                byte[] pixels = new byte[checked(outputStride * Height)];
+                // Every byte is overwritten by the row copies below.
+                byte[] pixels = GC.AllocateUninitializedArray<byte>(checked(outputStride * Height));
                 IntPtr topRow = _sourceStride < 0
                     ? data + checked(absoluteStride * (_codedHeight - 1))
                     : data;
@@ -575,6 +640,10 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
             Marshal.ReleaseComObject(_reader);
             _reader = null;
         }
+
+        // The device manager must outlive the reader and its decoder/processor transforms.
+        _d3d?.Dispose();
+        _d3d = null;
 
         if (_startedMediaFoundation)
         {
