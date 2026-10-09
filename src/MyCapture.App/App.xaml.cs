@@ -314,6 +314,7 @@ public partial class App : Application
             _currentEditSession = null;
             _pendingRecord = null;
             RestoreTrayAfterCapture();
+            _storeRating?.NotifyFlowEnded();
         };
         _overlay.CommitRequested = HandleCommitAsync;
         _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
@@ -373,6 +374,7 @@ public partial class App : Application
             _hotkeys,
             _startupService,
             _services.GetRequiredService<ILogger<SettingsApplyService>>());
+        InitializeStoreRating();
 
         if (_hotkeys.Failures.Count > 0)
         {
@@ -957,6 +959,7 @@ public partial class App : Application
                 break;
 
             case CaptureOutcomeKind.Failed:
+                _storeRating?.RecordCapture(succeeded: false);
                 _tray?.SetState(TrayIconState.Error);
                 _tray?.ShowBalloon(
                     UiText.Format("Text_60E0184FCBE5", mode),
@@ -1129,6 +1132,9 @@ public partial class App : Application
             // create a persistent floating window. F3 remains the explicit paste-to-screen
             // action when the user actually wants a pin.
         }
+        // Region, window, full-screen and scrolling captures all complete here. Only a durable,
+        // copied result counts toward the Store rating request; a save or copy failure resets it.
+        _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);
         if (_settings?.General.PlayCaptureSound == true)
             System.Media.SystemSounds.Asterisk.Play();
         if (_services is not null && _currentRecord is { } receipt)
@@ -1196,7 +1202,7 @@ public partial class App : Application
                 actions.SaveAsync,
                 () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
                 actions.ExportAsync, capturedRegion: region, targetMonitor: monitor);
-            card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; };
+            card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
             _quickAccess = card;
             card.Show();
         }
@@ -1248,6 +1254,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             _log?.LogError(ex, "Could not finalise the annotated capture");
+            _storeRating?.RecordCapture(succeeded: false);
             _tray?.ShowBalloon(
                 UiText.Get("Text_C1A40373A077"),
                 MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
@@ -1692,6 +1699,7 @@ public partial class App : Application
             !_pasteToScreenInFlight && _currentEditSession is null &&
             !Windows.OfType<Window>().Any(w => w is MyCapture.App.Recording.VideoEditorWindow or AnnotationEditorWindow);
         window.ExitForUpdate = () => Shutdown(0);
+        window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();

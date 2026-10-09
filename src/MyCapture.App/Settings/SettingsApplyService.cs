@@ -98,6 +98,8 @@ public sealed class SettingsApplyService
         ArgumentNullException.ThrowIfNull(next);
 
         AppSettings previous = _current();
+        // The window never edits the Store rating state; keep what captures recorded meanwhile.
+        next.StoreRating = previous.StoreRating;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);
         var messages = new List<string>();
 

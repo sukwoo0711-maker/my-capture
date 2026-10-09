@@ -3333,4 +3333,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Folder410.ExportChanged" xml:space="preserve"><value>내보내는 동안 캡처가 변경되었습니다. 다시 시도하십시오.</value></data>
   <data name="Folder410.ExportLocked" xml:space="preserve"><value>파일이 다른 프로그램에서 사용 중입니다. 파일을 닫고 다시 시도하십시오.</value></data>
   <data name="Folder410.ExportDiskFull" xml:space="preserve"><value>저장 공간이 부족합니다. 공간을 확보하거나 다른 위치를 선택하십시오.</value></data>
+  <data name="StoreRating_Button" xml:space="preserve"><value>Microsoft Store에서 평가</value></data>
+  <data name="StoreRating_ButtonHelp" xml:space="preserve"><value>Microsoft Store 앱에서 MyCapture 평가 페이지를 엽니다.</value></data>
+  <data name="StoreRating_OpenFailed" xml:space="preserve"><value>Microsoft Store를 열 수 없습니다. Microsoft Store 앱이 설치되어 있는지 확인하십시오.</value></data>
 </root>

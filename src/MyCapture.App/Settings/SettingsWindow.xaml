@@ -814,6 +814,12 @@
                 <StackPanel Margin="20">
                     <TextBlock x:Name="UpdateVersionLabel" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Text.Primary}" />
                     <TextBlock x:Name="UpdateDescription" TextWrapping="Wrap" Margin="0,12,0,20" Foreground="{DynamicResource Text.Primary}" />
+                    <Button x:Name="StoreRatingButton" Style="{StaticResource Button.Secondary}" Visibility="Collapsed"
+                            HorizontalAlignment="Left" MinWidth="140" Margin="0,0,0,20"
+                            Content="{loc:Text StoreRating_Button}"
+                            AutomationProperties.Name="{loc:Text StoreRating_Button}"
+                            AutomationProperties.HelpText="{loc:Text StoreRating_ButtonHelp}"
+                            Click="OnStoreRatingClick" />
                     <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap" Margin="0,0,0,12" Foreground="{DynamicResource Text.Primary}" AutomationProperties.LiveSetting="Polite" />
                     <ProgressBar x:Name="UpdateDownloadProgress" Height="8" Minimum="0" Maximum="100" Margin="0,0,0,20" />
                     <WrapPanel>
