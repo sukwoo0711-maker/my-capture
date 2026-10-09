@@ -532,6 +532,10 @@ public sealed partial class CaptureQueue
         // Synchronous owner saves bypass the async pool: slots can belong to awaiters whose
         // continuations still need that owner thread. Waiting for those slots here deadlocks.
         reservation?.Accept(_publicationSlots);
+        // Each job runs on its own thread (LongRunning), not a thread-pool worker. Owner-thread
+        // Save() blocks until the job finishes, and the pool starts with one worker per CPU: on a
+        // 2-core PC, two blocked or long pool items made the job wait seconds for thread
+        // injection. Jobs still run one at a time because each continues the previous tail.
         _publicationTail = _publicationTail.ContinueWith(_ =>
         {
             try
@@ -544,7 +548,7 @@ public sealed partial class CaptureQueue
                 afterDurableWrite?.Invoke();
             }
             finally { reservation?.Complete(); }
-        }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        }, CancellationToken.None, TaskContinuationOptions.LongRunning, TaskScheduler.Default);
         return _publicationTail;
     }
 
