@@ -4,7 +4,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 using MyCapture.App.Recording;
@@ -16,9 +18,11 @@ namespace MyCapture.App.Capture;
 /// Full-monitor frozen-frame selector for one free-form rectangular drag.
 /// </summary>
 /// <remarks>
-/// The region hotkey is deliberately region-only: there is no window hover, snapping or Tab
-/// target selection. A valid drag is committed as soon as the mouse button is released. Keyboard
-/// users retain Ctrl+A + Enter as a full-monitor alternative and Esc always cancels.
+/// A valid drag is committed as soon as the mouse button is released. Keyboard users retain
+/// Ctrl+A + Enter as a full-monitor alternative and Esc always cancels. When the owner enables
+/// <see cref="DetectWindows"/>, hovering highlights the frontmost top-level window and a click
+/// (no drag) selects it; there is still no snapping or Tab target selection. The owner can also
+/// enable C to copy the frozen pixel's colour and T to switch to text capture.
 /// </remarks>
 internal sealed class CaptureOverlayView : FrameworkElement
 {
@@ -79,7 +83,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private readonly DrawingVisual _anchorVisual = new();
     private readonly DrawingVisual _pointerVisual = new();
     private readonly DrawingVisual _magnifierVisual = new();
+    private readonly DrawingVisual _toastVisual = new();
     private readonly CompositionFrameScheduler _feedbackScheduler;
+    private IReadOnlyList<WindowCandidate> _windowCandidates = [];
+    private WindowCandidate? _hoverWindow;
+    private RectD? _hoverRegion;
+    private RectD? _drawnHover;
+    private WindowCandidate? _selectedWindow;
+    private bool _dragBeyondClick;
+    private bool _textCaptureMode;
+    private bool _drawnTextMode;
+    private FormattedText? _hintText;
+    private FormattedText? _textModeText;
+    private string? _toastMessage;
+    private string? _drawnToast;
+    private PointD? _drawnToastPointer;
+    private DispatcherTimer? _toastTimer;
+    private Pen _windowBorderPen = null!;
     private bool _staticDirty = true;
     private bool _released;
     private RectD? _drawnSelection;
@@ -110,6 +130,52 @@ internal sealed class CaptureOverlayView : FrameworkElement
     internal BitmapSource? MagnifierBitmapForTest => _magnifierCrop;
     internal string SampleLabelForTest => _sampleLabel;
     internal void FlushFeedbackForTest() => _feedbackScheduler.FlushForTest();
+    internal RectD? HoverRegionForTest => _hoverRegion;
+    internal string? ToastMessageForTest => _toastMessage;
+
+    /// <summary>How long the in-overlay copy confirmation stays visible.</summary>
+    internal static readonly TimeSpan ToastDuration = TimeSpan.FromMilliseconds(1600);
+
+    /// <summary>
+    /// Highlights the frontmost top-level window under the pointer and lets a click select it.
+    /// Off by default so recording selection and diagnostics keep the plain region selector.
+    /// </summary>
+    internal bool DetectWindows { get; set; }
+
+    /// <summary>Top-level windows in z-order (frontmost first), in virtual-desktop pixels.</summary>
+    internal IReadOnlyList<WindowCandidate> WindowCandidates
+    {
+        get => _windowCandidates;
+        set
+        {
+            _windowCandidates = value ?? [];
+            if (_pointerInitialized && RefreshHover(_cursorPixel.Offset(_screenBounds.Left, _screenBounds.Top)))
+                QueueFeedback();
+        }
+    }
+
+    /// <summary>The overlay's own HWND, never offered as a detected window.</summary>
+    internal IntPtr OwnWindowHandle { get; set; }
+
+    /// <summary>Copies the sampled colour (C key). Null disables colour copy.</summary>
+    internal Func<string, Task<bool>>? CopyColorText { get; set; }
+
+    internal Func<ColorFormat> ReadColorFormat { get; set; } = () => ColorFormat.Hex;
+
+    /// <summary>Lets T switch between image capture and text capture.</summary>
+    internal bool TextCaptureAvailable { get; set; }
+
+    /// <summary>When true, the confirmed region is recognised as text instead of opening the editor.</summary>
+    internal bool TextCaptureMode
+    {
+        get => _textCaptureMode;
+        set
+        {
+            if (_textCaptureMode == value) return;
+            _textCaptureMode = value;
+            QueueFeedback();
+        }
+    }
     protected override int VisualChildrenCount => _visuals.Count;
     protected override Visual GetVisualChild(int index) => _visuals[index];
 
@@ -126,6 +192,13 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _ended = true;
         EndPointerInteraction();
         _feedbackScheduler.Dispose();
+        _toastTimer?.Stop();
+        _toastTimer = null;
+        _toastMessage = null;
+        _windowCandidates = [];
+        _hoverWindow = _selectedWindow = null;
+        _hoverRegion = null;
+        CopyColorText = null;
         _frame = null;
         _magnifierCrop = null;
         _lastSample = null;
@@ -177,9 +250,48 @@ internal sealed class CaptureOverlayView : FrameworkElement
             || _drawnMagnifierMouseOver != IsMouseOver;
         _cursorPixel = cursor;
         _pointerInitialized = true;
+        if (RefreshHover(target)) changed = true;
         if (changed) QueueFeedback();
         return ClampEdgePoint(local);
     }
+
+    /// <summary>
+    /// Re-evaluates the highlighted window before a drag starts. A press keeps the window it
+    /// started on until the pointer leaves the click threshold, so the hover is frozen while
+    /// a selection or drag exists. Returns whether the highlight changed.
+    /// </summary>
+    private bool RefreshHover(PointD screenPoint)
+    {
+        WindowCandidate? window = null;
+        RectD? region = null;
+        if (DetectWindows && !_ended && _interaction == InteractionMode.None && !_selection.HasValue)
+        {
+            window = WindowDetectHitTest.FindTopmost(_windowCandidates, screenPoint, OwnWindowHandle);
+            region = window is null ? null : WindowDetectHitTest.ToBitmapRegion(window, _screenBounds);
+            if (region is null) window = null;
+        }
+        else if (_interaction == InteractionMode.Create && !_dragBeyondClick)
+        {
+            return false;
+        }
+
+        bool changed = _hoverRegion != region || !ReferenceEquals(_hoverWindow, window);
+        _hoverWindow = window;
+        _hoverRegion = region;
+        return changed;
+    }
+
+    private void ClearHover()
+    {
+        if (_hoverRegion is null && _hoverWindow is null) return;
+        _hoverWindow = null;
+        _hoverRegion = null;
+        QueueFeedback();
+    }
+
+    private double ClickThresholdX => Math.Max(1, SystemParameters.MinimumHorizontalDragDistance * _guideDpi.DpiScaleX);
+
+    private double ClickThresholdY => Math.Max(1, SystemParameters.MinimumVerticalDragDistance * _guideDpi.DpiScaleY);
 
     internal CaptureOverlayView(FrozenFrame frame, bool showMagnifier = true, bool showSelectionGrid = true)
         : this(frame.ScreenBounds, frame, showMagnifier, showSelectionGrid)
@@ -201,7 +313,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _visuals = new VisualCollection(this)
         {
             _desktopVisual, _dimmerVisual, _revealVisual, _horizontalGuideVisual, _verticalGuideVisual, _selectionVisual,
-            _instructionVisual, _anchorVisual, _pointerVisual, _magnifierVisual,
+            _instructionVisual, _anchorVisual, _pointerVisual, _magnifierVisual, _toastVisual,
         };
         _feedbackScheduler = new CompositionFrameScheduler(Dispatcher, RenderLayers);
         _horizontalGuideVisual.Clip = _horizontalGuideClip;
@@ -221,6 +333,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
         };
 
         Focusable = true;
+        // The selector never accepts text; keep single-letter commands out of the IME.
+        InputMethod.SetIsInputMethodEnabled(this, false);
         Cursor = Cursors.Cross;
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
@@ -293,7 +407,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _staticDirty = false;
             StaticRenderCount++;
             BuildGuidePens();
-            _instructionText = _anchorText = _precisionText = null;
+            _instructionText = _anchorText = _precisionText = _hintText = _textModeText = null;
             using (DrawingContext dc = _desktopVisual.RenderOpen())
                 if (_frame?.Bitmap is { } bitmap) dc.DrawImage(bitmap, new Rect(RenderSize));
             using (DrawingContext dc = _dimmerVisual.RenderOpen())
@@ -302,17 +416,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
             using (DrawingContext dc = _revealVisual.RenderOpen())
                 if (_frame?.Bitmap is { } revealBitmap) dc.DrawImage(revealBitmap, new Rect(RenderSize));
         }
-        if (rebuild || _drawnSelection != _selection)
+        RectD? hover = _selection.HasValue ? null : _hoverRegion;
+        if (rebuild || _drawnSelection != _selection || _drawnHover != hover)
         {
             _drawnSelection = _selection;
-            _revealVisual.Clip = new RectangleGeometry(_selection is { } selected
+            _drawnHover = hover;
+            RectD? revealed = _selection ?? hover;
+            _revealVisual.Clip = new RectangleGeometry(revealed is { } selected
                 ? ToDipRect(selected.ClampTo(FrameBounds)) : new Rect(0, 0, 0, 0));
             using DrawingContext dc = _selectionVisual.RenderOpen();
             if (_selection is { } selection) DrawSelection(dc, selection);
+            else if (hover is { } window) DrawDetectedWindow(dc, window);
         }
-        if (rebuild || _drawnPrecision != _precisionPointer.IsPrecision)
+        if (rebuild || _drawnPrecision != _precisionPointer.IsPrecision || _drawnTextMode != _textCaptureMode)
         {
+            if (_drawnTextMode != _textCaptureMode) _hintText = null;
             _drawnPrecision = _precisionPointer.IsPrecision;
+            _drawnTextMode = _textCaptureMode;
             using DrawingContext dc = _instructionVisual.RenderOpen();
             DrawInstructions(dc);
         }
@@ -343,6 +463,30 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 if (pointer.HasValue) DrawMagnifier(dc);
             }
         }
+        if (rebuild || _drawnToast != _toastMessage || (_toastMessage is not null && _drawnToastPointer != pointer))
+        {
+            _drawnToast = _toastMessage;
+            _drawnToastPointer = pointer;
+            using DrawingContext dc = _toastVisual.RenderOpen();
+            if (_toastMessage is { } message && !_ended) DrawToast(dc, message);
+        }
+    }
+
+    /// <summary>Short confirmation chip above and to the right of the pointer, clear of the magnifier.</summary>
+    private void DrawToast(DrawingContext dc, string message)
+    {
+        FormattedText text = CreateText(message, _uiTypeface, 12, _primaryTextBrush);
+        const double paddingX = 10;
+        const double paddingY = 6;
+        double width = text.Width + (paddingX * 2);
+        double height = text.Height + (paddingY * 2);
+        Point cursor = ToDipPoint(_cursorPixel);
+        double x = Math.Clamp(cursor.X + 16, 8, Math.Max(8, ActualWidth - width - 8));
+        double y = cursor.Y - height - 14;
+        if (y < 8) y = Math.Min(Math.Max(8, ActualHeight - height - 8), cursor.Y + 18);
+        var background = new Rect(x, y, width, height);
+        dc.DrawRoundedRectangle(_chromeBrush, _windowBorderPen, background, 7, 7);
+        dc.DrawText(text, new Point(x + paddingX, y + paddingY));
     }
 
     private void DrawPointerFeedback(DrawingContext dc, bool anchor)
@@ -371,7 +515,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
         Target(anchor ? _dragAnchor : _cursorPixel);
     }
 
-    private void DrawSelection(DrawingContext dc, RectD pixelRect)
+    private void DrawSelection(DrawingContext dc, RectD pixelRect) => DrawRegion(dc, pixelRect, borderPen: null);
+
+    /// <summary>The auto-detected window uses the same token colour with a 2px border.</summary>
+    private void DrawDetectedWindow(DrawingContext dc, RectD pixelRect) => DrawRegion(dc, pixelRect, _windowBorderPen);
+
+    private void DrawRegion(DrawingContext dc, RectD pixelRect, Pen? borderPen)
     {
         Rect mapped = ToDipRect(pixelRect.ToPixelBounds());
         double px = GuidePixelSizeX, py = GuidePixelSizeY;
@@ -386,7 +535,14 @@ internal sealed class CaptureOverlayView : FrameworkElement
         dc.Pop();
         var border = new Rect(rect.X + px / 2, rect.Y + py / 2,
             Math.Max(0, rect.Width - px), Math.Max(0, rect.Height - py));
-        dc.DrawRectangle(null, _selectionBorderPen, border);
+        if (borderPen is not null)
+        {
+            // The thicker detected-window border stays inside the window bounds like the 1px one.
+            double inset = borderPen.Thickness / 2;
+            border = new Rect(rect.X + inset, rect.Y + inset,
+                Math.Max(0, rect.Width - borderPen.Thickness), Math.Max(0, rect.Height - borderPen.Thickness));
+        }
+        dc.DrawRectangle(null, borderPen ?? _selectionBorderPen, border);
         DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect);
     }
 
@@ -471,6 +627,17 @@ internal sealed class CaptureOverlayView : FrameworkElement
         var background = new Rect(left, 18, width, text.Height + (paddingY * 2));
         dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, background, 10, 10);
         dc.DrawText(text, new Point(background.Left + paddingX, background.Top + paddingY));
+        double nextTop = background.Bottom + 6;
+        if (OverlayHintText is { } hint)
+        {
+            FormattedText hintText = _hintText ??= CreateText(hint, _uiTypeface, 12, _primaryTextBrush);
+            nextTop = DrawCenteredChip(dc, hintText, nextTop, _chipBorderPen) + 6;
+        }
+        if (_textCaptureMode)
+        {
+            FormattedText modeText = _textModeText ??= CreateText(UiText.Get("TextCapture_ModeActive"), _uiTypeface, 12, _primaryTextBrush);
+            DrawCenteredChip(dc, modeText, nextTop, _windowBorderPen);
+        }
         if (_precisionPointer.IsPrecision)
         {
             FormattedText precision = _precisionText ??= CreateText(UiText.Get("CapturePrecisionActive"), _uiTypeface, 12, _primaryTextBrush);
@@ -478,6 +645,32 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 new Rect(16, 64, precision.Width + 20, precision.Height + 12), 6, 6);
             dc.DrawText(precision, new Point(26, 70));
         }
+    }
+
+    /// <summary>Optional key hints for the features the owner enabled; null when none are.</summary>
+    internal string? OverlayHintText
+    {
+        get
+        {
+            var parts = new List<string>(3);
+            if (DetectWindows) parts.Add(UiText.Get("WindowDetect_OverlayHint"));
+            if (CopyColorText is not null) parts.Add(UiText.Get("ColorPick_OverlayHint"));
+            if (TextCaptureAvailable)
+                parts.Add(UiText.Get(_textCaptureMode ? "TextCapture_OverlayHintImage" : "TextCapture_OverlayHint"));
+            return parts.Count == 0 ? null : string.Join("  ·  ", parts);
+        }
+    }
+
+    private double DrawCenteredChip(DrawingContext dc, FormattedText text, double top, Pen border)
+    {
+        const double paddingX = 12;
+        const double paddingY = 6;
+        double width = text.Width + (paddingX * 2);
+        double left = Math.Max(16, (ActualWidth - width) / 2);
+        var background = new Rect(left, top, width, text.Height + (paddingY * 2));
+        dc.DrawRoundedRectangle(_chromeBrush, border, background, 8, 8);
+        dc.DrawText(text, new Point(background.Left + paddingX, background.Top + paddingY));
+        return background.Bottom;
     }
 
     private void DrawMagnifier(DrawingContext dc)
@@ -548,6 +741,14 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (_interaction == InteractionMode.Create)
         {
             PointD edge = ClampEdgePoint(rawPixel);
+            if (_hoverRegion.HasValue && !_dragBeyondClick)
+            {
+                // Inside the click threshold the press still targets the highlighted window.
+                if (WindowDetectHitTest.IsClick(_dragAnchor, edge, ClickThresholdX, ClickThresholdY)) return;
+                _dragBeyondClick = true;
+                ClearHover();
+            }
+
             if (PresetSize is { } preset && preset.Width > 0 && preset.Height > 0)
             {
                 // Fixed size: the drag only moves the box's top-left corner. The stored
@@ -579,7 +780,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
         _dragAnchor = point;
-        _selection = new RectD(point.X, point.Y, 0, 0);
+        _selectedWindow = null;
+        _dragBeyondClick = false;
+        // A press on a highlighted window keeps that highlight until the pointer leaves the
+        // click threshold; otherwise the free-region drag starts exactly as before.
+        _selection = _hoverRegion.HasValue ? null : new RectD(point.X, point.Y, 0, 0);
         _interaction = InteractionMode.Create;
         _ = Mouse.Capture(this);
         e.Handled = true;
@@ -597,7 +802,18 @@ internal sealed class CaptureOverlayView : FrameworkElement
         PointD rawPoint = UpdatePointer();
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
-        _selection = ResolveCompletedDrag(_dragAnchor, point, FrameBounds);
+        if (_hoverRegion is { } windowRegion && !_dragBeyondClick &&
+            WindowDetectHitTest.IsClick(_dragAnchor, point, ClickThresholdX, ClickThresholdY))
+        {
+            _selection = windowRegion.ClampTo(FrameBounds).ToPixelBounds();
+            _selectedWindow = _hoverWindow;
+            _hoverWindow = null;
+            _hoverRegion = null;
+        }
+        else
+        {
+            _selection = ResolveCompletedDrag(_dragAnchor, point, FrameBounds);
+        }
         _interaction = InteractionMode.None;
         Mouse.Capture(null);
         e.Handled = true;
@@ -620,7 +836,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         base.OnKeyDown(e);
 
-        switch (e.Key)
+        // A Korean IME in Hangul mode reports letters as ImeProcessed; C and T must still work.
+        Key key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
+        switch (key)
         {
             case Key.Escape:
                 RequestCancel();
@@ -636,7 +854,19 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 return;
             case Key.A when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
                 _selection = FrameBounds;
+                _selectedWindow = null;
+                ClearHover();
                 QueueFeedback();
+                e.Handled = true;
+                return;
+            // Plain C/T only: Shift may be held for precision, Ctrl/Alt chords stay untouched.
+            case Key.C when CopyColorText is not null && IsPlainOrShift(Keyboard.Modifiers):
+                UpdatePointer();
+                _ = CopyColorAtPointerAsync();
+                e.Handled = true;
+                return;
+            case Key.T when TextCaptureAvailable && IsPlainOrShift(Keyboard.Modifiers):
+                TextCaptureMode = !TextCaptureMode;
                 e.Handled = true;
                 return;
             case Key.Left:
@@ -692,6 +922,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
         double step = modifiers.HasFlag(ModifierKeys.Control) ? 10 : 1;
         bool resize = modifiers.HasFlag(ModifierKeys.Shift);
+        _selectedWindow = null;
 
         if (resize)
         {
@@ -736,7 +967,91 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
         _ended = true;
         EndPointerInteraction();
-        SelectionConfirmed?.Invoke(this, new RegionSelectionEventArgs(pixels));
+        SelectionConfirmed?.Invoke(this, new RegionSelectionEventArgs(pixels)
+        {
+            DetectedWindow = _selectedWindow,
+            TextCapture = _textCaptureMode,
+        });
+    }
+
+    private static bool IsPlainOrShift(ModifierKeys modifiers) =>
+        modifiers is ModifierKeys.None or ModifierKeys.Shift;
+
+    /// <summary>
+    /// Copies the frozen pixel under the pointer (the one the magnifier centres on) in the
+    /// configured format and shows a short confirmation inside the overlay. The overlay stays
+    /// open. Returns the copied value, or null when nothing was copied.
+    /// </summary>
+    internal async Task<string?> CopyColorAtPointerAsync()
+    {
+        if (_ended || _released || CopyColorText is not { } copy || !TrySampleColor(_cursorPixel, out byte red, out byte green, out byte blue))
+        {
+            return null;
+        }
+
+        string value = ColorSampleFormatter.Format(red, green, blue, ReadColorFormat());
+        bool copied;
+        try
+        {
+            copied = await copy(value).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            copied = false;
+        }
+
+        string message = copied ? UiText.Format("Tools_ColorCopied", value) : UiText.Get("ColorPick_CopyFailed");
+        if (Dispatcher.CheckAccess()) ShowToast(message);
+        else _ = Dispatcher.BeginInvoke(new Action(() => ShowToast(message)));
+        return copied ? value : null;
+    }
+
+    private bool TrySampleColor(PointD pixel, out byte red, out byte green, out byte blue)
+    {
+        red = green = blue = 0;
+        if (_frame is not { } frame || frame.PixelWidth < 1 || frame.PixelHeight < 1) return false;
+        int x = Math.Clamp((int)Math.Floor(pixel.X), 0, frame.PixelWidth - 1);
+        int y = Math.Clamp((int)Math.Floor(pixel.Y), 0, frame.PixelHeight - 1);
+        var rect = new Int32Rect(x, y, 1, 1);
+        byte[] sample = new byte[4];
+        BitmapSource source = frame.Bitmap;
+        if (source.Format == PixelFormats.Bgr32 || source.Format == PixelFormats.Bgra32 || source.Format == PixelFormats.Pbgra32)
+        {
+            source.CopyPixels(rect, sample, 4, 0);
+        }
+        else
+        {
+            // Same narrow conversion as the magnifier: never convert the whole desktop.
+            new FormatConvertedBitmap(new CroppedBitmap(source, rect), PixelFormats.Bgra32, null, 0)
+                .CopyPixels(sample, 4, 0);
+        }
+
+        blue = sample[0];
+        green = sample[1];
+        red = sample[2];
+        return true;
+    }
+
+    private void ShowToast(string message)
+    {
+        if (_released || _ended) return;
+        _toastMessage = message;
+        _toastTimer ??= CreateToastTimer();
+        _toastTimer.Stop();
+        _toastTimer.Start();
+        QueueFeedback();
+    }
+
+    private DispatcherTimer CreateToastTimer()
+    {
+        var timer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher) { Interval = ToastDuration };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _toastMessage = null;
+            QueueFeedback();
+        };
+        return timer;
     }
 
     private void RequestCancel()
@@ -844,6 +1159,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _guideShadowPen = Create("CaptureGuide.LineShadow", 2, new DashStyle([1.5, 1.5], 0));
         _guideLinePen = Create("CaptureGuide.Line", 1, new DashStyle([3, 3], 0));
         _selectionBorderPen = Create("CaptureGuide.SelectionBorder", 1);
+        _windowBorderPen = Create("CaptureGuide.SelectionBorder", 2);
         _innerGlowPen = Create("CaptureGuide.InnerGlow", 3);
         _chipBorderPen = Create("CaptureGuide.ChipBorder", 1);
         _magnifierBorderPen = Create("CaptureGuide.MagnifierBorder", 1);
@@ -907,4 +1223,10 @@ internal sealed class RegionSelectionEventArgs : EventArgs
     }
 
     internal RectD BitmapRegion { get; }
+
+    /// <summary>The auto-detected window a click selected, or null for a drag or keyboard selection.</summary>
+    internal WindowCandidate? DetectedWindow { get; init; }
+
+    /// <summary>True when the overlay was in text capture mode at confirmation.</summary>
+    internal bool TextCapture { get; init; }
 }
