@@ -82,7 +82,8 @@ internal sealed class ShortcutHelpWindow : Window
                     ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del")]),
                 ("Help.Video", [("Help.Play", "Space"), ("Help.Frame", "Ctrl+← / Ctrl+→"), ("Video.TrimIn", "I"), ("Video.TrimOut", "O"), ("Help.Gif", "G")]),
                 ("QuickAccess.Pin", [("QuickAccess.Pin", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
-                    ("Text_67FE4AF7D334", Display(keys.ToggleClickThrough)), ("QuickAccess.Copy", "Ctrl+C"), ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
+                    ("Text_67FE4AF7D334", Display(keys.ToggleClickThrough)), ("PinRestore_Command", Display(keys.RestoreClosedPin)),
+                    ("QuickAccess.Copy", "Ctrl+C"), ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
             ];
             var rows = new List<(string Search, FrameworkElement Row)>();
             foreach (var section in sections)

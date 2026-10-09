@@ -1,4 +1,5 @@
 using System.Windows.Media.Imaging;
+using MyCapture.Core.Pin;
 
 namespace MyCapture.App.Pinning;
 
@@ -49,6 +50,15 @@ internal sealed record PinContent
     /// scale factor when their initial window size is calculated.
     /// </summary>
     internal bool UsesDeviceIndependentPixels => Kind is PinContentKind.Text or PinContentKind.Table;
+
+    /// <summary>
+    /// Estimated bytes this content keeps alive: the decoded bitmap plus retained strings.
+    /// The closed-pin restore history budgets against this value.
+    /// </summary>
+    internal long EstimatedRetainedBytes =>
+        ClosedPinMemory.EstimatePixelBytes(Image.PixelWidth, Image.PixelHeight, Image.Format.BitsPerPixel)
+        + ClosedPinMemory.EstimateTextBytes(OriginalText)
+        + ClosedPinMemory.EstimateTextBytes(SourcePageUrl);
 
     internal static PinContent FromImage(BitmapSource image, string? sourcePageUrl = null) =>
         new(image, PinContentKind.Image, originalText: null, sourcePageUrl ?? string.Empty);

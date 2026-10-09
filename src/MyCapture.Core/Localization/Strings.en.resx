@@ -3341,4 +3341,13 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="RecordingPause_ResumeHelp" xml:space="preserve"><value>Resumes the recording. The video continues from the point where it was paused.</value></data>
   <data name="RecordingPause_Status" xml:space="preserve"><value>Paused · Resume, or press Esc or Stop to finish</value></data>
   <data name="RecordingPause_State" xml:space="preserve"><value>Paused</value></data>
+  <data name="PinRestore_Command" xml:space="preserve"><value>Reopen closed pin</value></data>
+  <data name="PinRestore_CommandHelp" xml:space="preserve"><value>Reopens the most recently closed pin at its last position, zoom, and opacity.</value></data>
+  <data name="PinRestore_HotkeyName" xml:space="preserve"><value>Reopen closed pin shortcut</value></data>
+  <data name="PinRestore_LimitLabel" xml:space="preserve"><value>Closed pin history</value></data>
+  <data name="PinRestore_LimitDescription" xml:space="preserve"><value>Number of closed pins kept in memory so they can be reopened. 0–100 (0 turns it off). The history is cleared when the app exits and is never saved to disk.</value></data>
+  <data name="PinRestore_NothingTitle" xml:space="preserve"><value>No closed pin</value></data>
+  <data name="PinRestore_NothingMessage" xml:space="preserve"><value>There is no closed pin to reopen.</value></data>
+  <data name="PinRestore_DisabledMessage" xml:space="preserve"><value>Closed pin history is off. Set the history count to 1 or more under Screen pins in Settings.</value></data>
+  <data name="PinRestore_FailedTitle" xml:space="preserve"><value>Could not reopen the closed pin</value></data>
 </root>

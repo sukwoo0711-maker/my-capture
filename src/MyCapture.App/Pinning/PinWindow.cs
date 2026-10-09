@@ -45,6 +45,7 @@ internal sealed class PinWindow : Window
     /// <summary>How long the bottom feedback overlay stays visible before auto-hiding.</summary>
     private static readonly TimeSpan FeedbackDuration = TimeSpan.FromMilliseconds(1000);
 
+    private readonly PinContent _content;
     private readonly BitmapSource _image;
     private readonly PinContentKind _contentKind;
     private readonly string? _originalText;
@@ -70,6 +71,8 @@ internal sealed class PinWindow : Window
     private IntPtr _handle;
     private bool _isClosed;
     private bool _saveInProgress;
+    private MenuItem? _restoreClosedItem;
+    private RectD? _restorePhysicalBounds;
 
     internal PinWindow(
         PinContent content,
@@ -80,6 +83,7 @@ internal sealed class PinWindow : Window
         IPinDragInput? dragInput = null)
     {
         ArgumentNullException.ThrowIfNull(content);
+        _content = content;
         _image = content.Image;
         _contentKind = content.Kind;
         _originalText = content.OriginalText;
@@ -199,6 +203,27 @@ internal sealed class PinWindow : Window
 
     /// <summary>Raised when the user asks to save the frozen source image.</summary>
     internal event EventHandler<PinSaveRequestedEventArgs>? SaveRequested;
+
+    /// <summary>Raised when the user asks (via this pin) to reopen the last closed pin.</summary>
+    internal event EventHandler? RestoreClosedRequested;
+
+    /// <summary>
+    /// Reports whether a closed pin can be reopened; drives the context-menu item state.
+    /// Set by the manager that owns the closed-pin history.
+    /// </summary>
+    internal Func<bool>? CanRestoreClosedPin { get; set; }
+
+    /// <summary>
+    /// The immutable content this pin shows. A restored pin reuses the same instance, so its
+    /// frozen source pixels and retained text are exactly what the closed pin had.
+    /// </summary>
+    internal PinContent PinnedContent => _content;
+
+    /// <summary>
+    /// Where this pin was on the virtual desktop when it began closing, or
+    /// <see langword="null"/> when it closed before it had a native window.
+    /// </summary>
+    internal PinClosedPlacement? ClosedPlacement { get; private set; }
 
     /// <summary>The pin's live presentation state.</summary>
     internal PinViewState State => _state;
@@ -343,6 +368,72 @@ internal sealed class PinWindow : Window
         AnimatePinReveal();
     }
 
+    /// <summary>
+    /// Requests that the native window land on <paramref name="physicalBounds"/>' top-left
+    /// once it exists. Used by restore, whose position is resolved in physical pixels so a
+    /// pin returns to the exact spot on a mixed-DPI desktop.
+    /// </summary>
+    internal void PlaceAtPhysicalOnShow(RectD physicalBounds) => _restorePhysicalBounds = physicalBounds;
+
+    /// <summary>
+    /// Moves the shown window onto the requested restore position. The first attempt runs
+    /// from <see cref="OnSourceInitialized"/> before the window is visible; calling it again
+    /// after <c>Show</c> only verifies (the positioner skips an unchanged position) and
+    /// corrects a shift caused by a DPI change on the way. The pin stays usable where WPF put
+    /// it if Windows refuses the move.
+    /// </summary>
+    /// <returns><see langword="false"/> only when a requested move failed.</returns>
+    internal bool ApplyRestorePlacement()
+    {
+        if (_restorePhysicalBounds is not { } bounds || _handle == IntPtr.Zero || _isClosed)
+        {
+            return true;
+        }
+
+        try
+        {
+            PhysicalWindowPositioner.Move(_handle, bounds);
+            return true;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Clears a completed restore placement request.</summary>
+    internal void CompleteRestorePlacement() => _restorePhysicalBounds = null;
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        if (!e.Cancel)
+        {
+            // Snapshot while the native window still exists; Closed fires after it is gone.
+            ClosedPlacement = CaptureClosedPlacement();
+        }
+    }
+
+    private PinClosedPlacement? CaptureClosedPlacement()
+    {
+        if (_handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        (int left, int top, int right, int bottom) = WindowStyleFacade.GetWindowBounds(_handle);
+        if (right <= left || bottom <= top)
+        {
+            return null;
+        }
+
+        MonitorInfo monitor = MonitorEnumerator.GetFromWindow(_handle);
+        return new PinClosedPlacement(
+            new RectD(left, top, right - left, bottom - top),
+            monitor.DeviceName,
+            monitor.Bounds);
+    }
+
     private void OnPinLoaded(object sender, RoutedEventArgs e)
     {
         _ = sender;
@@ -363,6 +454,10 @@ internal sealed class PinWindow : Window
         {
             WindowStyleFacade.SetClickThrough(_handle, enabled: true);
         }
+
+        // A restored pin moves to its physical position before it first becomes visible. A
+        // failure is retried and reported by the manager once the window is shown.
+        _ = ApplyRestorePlacement();
     }
 
     private void SetChromeHover(bool hovering)
@@ -995,10 +1090,43 @@ internal sealed class PinWindow : Window
             UiText.Format("Text_BE3D621D8A32", ClickThroughRecoveryHint()),
             "Icon.Select"));
         menu.Items.Add(new Separator());
+        _restoreClosedItem = MenuItemFor(
+            UiText.Get("PinRestore_Command"),
+            (_, _) => RestoreClosedRequested?.Invoke(this, EventArgs.Empty),
+            UiText.Get("PinRestore_CommandHelp"),
+            "Icon.Pin",
+            RestoreClosedGesture());
+        _restoreClosedItem.IsEnabled = false;
+        menu.Items.Add(_restoreClosedItem);
         menu.Items.Add(MenuItemFor(UiText.Get("Text_A925E80E33B3"), (_, _) => Close(), iconResourceKey: "Icon.Close"));
         menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
+        menu.Opened += (_, _) => RefreshRestoreClosedMenuItem();
 
         ContextMenu = menu;
+    }
+
+    /// <summary>
+    /// Enables the restore command only while the history has a closed pin, and refreshes its
+    /// gesture so a hotkey changed in settings is shown on pins that were already open.
+    /// </summary>
+    internal void RefreshRestoreClosedMenuItem()
+    {
+        if (_restoreClosedItem is null)
+        {
+            return;
+        }
+
+        _restoreClosedItem.IsEnabled = CanRestoreClosedPin?.Invoke() == true;
+        _restoreClosedItem.InputGestureText = RestoreClosedGesture();
+    }
+
+    /// <summary>Test hook: the context-menu restore command.</summary>
+    internal MenuItem? RestoreClosedMenuItemForTest => _restoreClosedItem;
+
+    private static string RestoreClosedGesture()
+    {
+        Hotkey key = ShortcutHelpWindow.ReadHotkeys().RestoreClosedPin;
+        return key.IsAssigned ? key.ToString() : string.Empty;
     }
 
     private static string ClickThroughRecoveryHint()

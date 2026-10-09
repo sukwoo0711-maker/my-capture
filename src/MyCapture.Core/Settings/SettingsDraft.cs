@@ -75,6 +75,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _captureFullScreenHotkey = string.Empty;
     private string _recordRegionHotkey = string.Empty;
     private string _uploadGitHubImageHotkey = string.Empty;
+    private string _restoreClosedPinHotkey = string.Empty;
 
     // ----- Storage -----
     private string _maxItems = string.Empty;
@@ -285,6 +286,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _uploadGitHubImageHotkey;
         set { if (Set(ref _uploadGitHubImageHotkey, value)) ValidateAllHotkeys(); }
+    }
+
+    public string RestoreClosedPinHotkey
+    {
+        get => _restoreClosedPinHotkey;
+        set { if (Set(ref _restoreClosedPinHotkey, value)) ValidateAllHotkeys(); }
     }
 
     // ================= Storage =================
@@ -522,6 +529,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _scrollingCaptureHotkey = s.Hotkeys.ScrollingCapture.ToString();
         _delayedCaptureHotkey = s.Hotkeys.DelayedCapture.ToString();
         _uploadGitHubImageHotkey = s.Hotkeys.UploadGitHubImage.ToString();
+        _restoreClosedPinHotkey = s.Hotkeys.RestoreClosedPin.ToString();
 
         _maxItems = Int(s.Queue.MaxItems);
         _maxGiB = Gib(s.Queue.MaxBytes);
@@ -656,6 +664,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 ScrollingCapture = ParseHotkey(_scrollingCaptureHotkey),
                 DelayedCapture = ParseHotkey(_delayedCaptureHotkey),
                 UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
+                RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
             },
             Queue =
             {
@@ -739,6 +748,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         DelayedCapture = ParseHotkey(_delayedCaptureHotkey),
         UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
         OpenLibrary = ParseHotkey(_openLibraryHotkey),
+        RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
     };
 
     // ================= INotifyDataErrorInfo =================
@@ -985,6 +995,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             (nameof(ScrollingCaptureHotkey), _scrollingCaptureHotkey),
             (nameof(DelayedCaptureHotkey), _delayedCaptureHotkey),
             (nameof(UploadGitHubImageHotkey), _uploadGitHubImageHotkey),
+            (nameof(RestoreClosedPinHotkey), _restoreClosedPinHotkey),
         ];
 
         var parsed = new Dictionary<string, Hotkey>(fields.Length);

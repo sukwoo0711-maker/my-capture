@@ -266,6 +266,9 @@ public partial class App : Application
                 new(UiText.Get("Text_38FF9B0AA541"), HandleDelayedCapture, Gesture: _settings!.Hotkeys.DelayedCapture.ToString()),
                 new(UiText.Get("Text_4F5AF20FAA6E"), HandleRecordRegion, Gesture: _settings!.Hotkeys.RecordRegion.ToString()),
             ]),
+            // Rebuilt on every open, so it is disabled exactly while nothing can be reopened.
+            new ThemedShellPresenter.MenuEntry(UiText.Get("PinRestore_Command"), HandleRestoreClosedPin,
+                Gesture: _settings!.Hotkeys.RestoreClosedPin.ToString(), IsEnabled: _pins?.CanRestoreClosed == true),
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_8739F6684453"), HandleGalleryRequested, Gesture: _settings!.Hotkeys.OpenLibrary.ToString()),
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_00480581AAB5"), HandleSettingsRequested),
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_72B6DBA8AAC5"), () => Shutdown(0)),
@@ -368,7 +371,7 @@ public partial class App : Application
         _settingsApply = new SettingsApplyService(
             _services.GetRequiredService<SettingsStore>(),
             () => _settings!,
-            updated => { _settings = updated; ShortcutPresentation.Refresh(); },
+            updated => { _settings = updated; ShortcutPresentation.Refresh(); _pins?.TrimClosedHistory(); },
             _queue,
             _hotkeys,
             _startupService,
@@ -461,6 +464,45 @@ public partial class App : Application
                 _log?.LogInformation("GitHub image URL hotkey requested");
                 HandleGitHubImageUpload();
                 break;
+            case GlobalHotkeyCommand.RestoreClosedPin:
+                _log?.LogInformation("Restore-closed-pin hotkey requested");
+                HandleRestoreClosedPin();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Reopens the most recently closed pin. With nothing to reopen, a quiet notice explains
+    /// why instead of the command silently doing nothing.
+    /// </summary>
+    private void HandleRestoreClosedPin()
+    {
+        if (_pins is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_pins.RestoreLastClosed() is null)
+            {
+                _tray?.ShowBalloon(
+                    UiText.Get("PinRestore_NothingTitle"),
+                    _settings?.Pin.ClosedWindowRestoreLimit == 0
+                        ? UiText.Get("PinRestore_DisabledMessage")
+                        : UiText.Get("PinRestore_NothingMessage"),
+                    TrayBalloonKind.Information,
+                    playSound: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Fail soft like paste-to-screen: a window failure must not end the tray process.
+            _log?.LogError(ex, "Restoring a closed pin failed");
+            _tray?.ShowBalloon(
+                UiText.Get("PinRestore_FailedTitle"),
+                MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
+                TrayBalloonKind.Error);
         }
     }
 
@@ -2112,10 +2154,11 @@ public partial class App : Application
             // Window already torn down; nothing to do.
         }
 
-        // Close every pinned window so no top-most orphan survives the process.
+        // Close every pinned window so no top-most orphan survives the process, and drop the
+        // closed-pin restore history so no screen content outlives it.
         try
         {
-            _pins?.CloseAll();
+            _pins?.CloseAllForExit();
         }
         catch (InvalidOperationException)
         {

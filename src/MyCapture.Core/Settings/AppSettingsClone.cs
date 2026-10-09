@@ -55,6 +55,7 @@ public static class AppSettingsClone
         CaptureFullScreen = s.CaptureFullScreen,
         RecordRegion = s.RecordRegion,
         UploadGitHubImage = s.UploadGitHubImage,
+        RestoreClosedPin = s.RestoreClosedPin,
     };
 
     private static QueueSettings Clone(QueueSettings s) => new()
