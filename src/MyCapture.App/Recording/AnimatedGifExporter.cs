@@ -24,7 +24,8 @@ internal sealed record GifFrameSchedule(
 /// There is no hard duration cap: a long GIF is the user's call, and its cost grows linearly
 /// with frame count, so the export dialog warns beyond 20 s while the quality presets keep
 /// CPU, file size and palette-quantization work predictable on modest PCs. Decoding prefers
-/// D3D11 hardware decode and encoding runs on a few worker threads (see
+/// D3D11 hardware decode and runs on its own thread, colour conversion and scaling run on a few
+/// worker threads, and composition and encoding stay on the calling STA thread (see
 /// <see cref="GifExportEngine"/>); <see cref="GifExportSession"/> reuses frames across option
 /// changes in one dialog.
 /// </summary>

@@ -525,7 +525,7 @@ internal static class VideoFrameRenderPipeline
 
 /// <summary>
 /// Reusable composition buffers for one thread: the decoded-frame bitmap, the drawing visual and
-/// the render target shared by MP4 rendering and the GIF encoder workers. The returned bitmap
+/// the render target shared by MP4 rendering and GIF export. The returned bitmap
 /// aliases the render target, so it must be consumed (encoded or copied) before the next
 /// <see cref="Compose(VideoFrameRenderRequest, IReadOnlyDictionary{Guid, BitmapSource}, byte[], int, int, int, double)"/>
 /// call on the same instance. Instances are bound to the thread that created them.

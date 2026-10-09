@@ -13,7 +13,7 @@ namespace MyCapture.App.Tests;
 
 public sealed class GifExportEngineTests
 {
-    private static readonly GifEngineOptions SoftwareFourThreads = new() { PreferHardwareDecode = false, EncoderThreads = 4 };
+    private static readonly GifEngineOptions SoftwareFourThreads = new() { PreferHardwareDecode = false, WorkerThreads = 4 };
 
     [Fact]
     public void AreaScaler_KeepsFlatColoursAndAveragesCoveredPixels()
@@ -116,10 +116,10 @@ public sealed class GifExportEngineTests
                 string path = Path.Combine(root, $"engine-{threads}.gif");
                 int frames = AnimatedGifExporter.ExportCore(
                     recording, document, path, null, default, speed, quality, null,
-                    new GifEngineOptions { PreferHardwareDecode = false, DecodeNv12 = false, EncoderThreads = threads },
+                    new GifEngineOptions { PreferHardwareDecode = false, DecodeNv12 = false, WorkerThreads = threads },
                     NullLogger.Instance, out GifRenderStatistics statistics);
                 Assert.Equal("software", statistics.FrameSource);
-                Assert.Equal(threads, statistics.EncoderThreads);
+                Assert.Equal(threads, statistics.WorkerThreads);
                 Assert.Equal(legacy, File.ReadAllBytes(path));
                 Assert.Equal(DecodeFrameCount(path), frames);
             }
@@ -135,6 +135,92 @@ public sealed class GifExportEngineTests
             OwnedTestDirectory.Delete(root);
         }
     });
+
+    /// <summary>
+    /// Regression for an intermittent mismatch and native heap corruption (0xC0000374): when
+    /// composition and GIF encoding ran on several STA worker threads, roughly one export in 600
+    /// under load produced a different palette for a frame or crashed the process. WPF imaging
+    /// now stays on the calling thread and only WPF-free conversion runs in parallel. Every frame
+    /// carries a frame layer and some carry text; repeated four-worker exports must equal a
+    /// single-worker export byte for byte. Set MYCAPTURE_GIF_STRESS=1 for a 300-export run.
+    /// </summary>
+    [Fact]
+    public void ParallelEngine_RepeatedLayerExportsStayByteIdentical() => RunSta(() =>
+    {
+        string root = OwnedTestDirectory.Create("mycapture-gif-determinism-");
+        try
+        {
+            RecordingResult recording = EncodeMovingClip(Path.Combine(root, "source.mp4"), 320, 180, 10, 12);
+            VideoEditDocument document = VideoEditDocument.CreateFor(recording.Width, recording.Height, recording.DurationMs);
+            document.FrameEditLayers.Add(new FrameEditLayer
+            {
+                StartMs = 0,
+                EndMs = recording.DurationMs,
+                OverlayPngBase64 = RedSquarePng(40, 40),
+                Bounds = new(0.55, 0.1, 0.25, 0.25),
+            });
+            document.TextOverlays.Add(new TimedTextOverlay { Text = "LAYER", StartMs = 300, EndMs = 900 });
+            var single = new GifEngineOptions { PreferHardwareDecode = false, DecodeNv12 = false, WorkerThreads = 1 };
+            var parallel = single with { WorkerThreads = 4 };
+            string referencePath = Path.Combine(root, "single.gif");
+            _ = AnimatedGifExporter.ExportCore(
+                recording, document, referencePath, null, default, 1.0, GifExportQuality.Smallest, null,
+                single, NullLogger.Instance, out _);
+            byte[] reference = File.ReadAllBytes(referencePath);
+            Assert.Equal(reference, LegacySequentialGif(recording, document, GifExportQuality.Smallest, 1.0));
+
+            int exports = Environment.GetEnvironmentVariable("MYCAPTURE_GIF_STRESS") == "1" ? 300 : 12;
+            string path = Path.Combine(root, "parallel.gif");
+            for (int export = 0; export < exports; export++)
+            {
+                _ = AnimatedGifExporter.ExportCore(
+                    recording, document, path, null, default, 1.0, GifExportQuality.Smallest, null,
+                    parallel, NullLogger.Instance, out _);
+                Assert.True(
+                    reference.AsSpan().SequenceEqual(File.ReadAllBytes(path)),
+                    $"Parallel export {export + 1} of {exports} differed from the single-thread export.");
+            }
+        }
+        finally
+        {
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void Engine_KeepsWpfWorkOnTheCallingStaThread()
+    {
+        string root = OwnedTestDirectory.Create("mycapture-gif-sta-");
+        try
+        {
+            RecordingResult recording = EncodeMovingClip(Path.Combine(root, "source.mp4"), 160, 90, 10, 3);
+            VideoEditDocument document = VideoEditDocument.CreateFor(160, 90, recording.DurationMs);
+            string destination = Path.Combine(root, "mta.gif");
+            Exception? failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    _ = AnimatedGifExporter.Export(recording, document, destination);
+                }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                }
+            });
+            thread.SetApartmentState(ApartmentState.MTA);
+            thread.Start();
+            thread.Join();
+            Assert.IsType<InvalidOperationException>(failure);
+            Assert.False(File.Exists(destination));
+            Assert.Empty(Directory.GetFiles(root, "*.tmp"));
+            Assert.Equal(0, GifExportEngine.LiveWorkerThreads);
+        }
+        finally
+        {
+            OwnedTestDirectory.Delete(root);
+        }
+    }
 
     [Fact]
     public void Nv12Engine_GivesIdenticalGifsForHardwareAndSoftwareDecode() => RunSta(() =>
