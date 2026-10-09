@@ -55,7 +55,8 @@ internal static class StoreScreenshotSelfTest
     internal static int Run(string outputDirectory, string? language)
     {
         string lang = string.Equals(language, "en", StringComparison.OrdinalIgnoreCase) ? "en" : "ko";
-        Directory.CreateDirectory(outputDirectory);
+        // The CLI path is resolved once to a local directory; every artifact is a checked child of it.
+        string root = DiagnosticOutputPaths.Create(outputDirectory);
         var report = new StringBuilder("MyCapture Store screenshots\n");
         report.AppendLine($"Language: {lang}; canvas {CanvasWidth}x{CanvasHeight}; window scale {RenderScale}x");
         bool? oldMotion = FluidMotion.AnimationsEnabledOverrideForTest;
@@ -65,7 +66,7 @@ internal static class StoreScreenshotSelfTest
         {
             using (UiText.UseLanguage(lang == "en" ? "en-US" : "ko-KR"))
             {
-                failures = RenderScenes(outputDirectory, lang == "en", report);
+                failures = RenderScenes(root, lang == "en", report);
             }
         }
         finally
@@ -74,13 +75,13 @@ internal static class StoreScreenshotSelfTest
         }
 
         report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
-        File.WriteAllText(Path.Combine(outputDirectory, "store-screenshots-report.txt"), report.ToString());
+        File.WriteAllText(DiagnosticOutputPaths.Child(root, "store-screenshots-report.txt"), report.ToString());
         return failures == 0 ? 0 : 1;
     }
 
     private static int RenderScenes(string output, bool english, StringBuilder report)
     {
-        AppPaths paths = AppPaths.CreateForRoot(Path.Combine(output, "fixtures-" + Guid.NewGuid().ToString("N")));
+        AppPaths paths = AppPaths.CreateForRoot(DiagnosticOutputPaths.Child(output, "fixtures-" + Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(paths.DataRoot);
         Directory.CreateDirectory(paths.CapturesRoot);
         using ILoggerFactory logs = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning));
@@ -93,7 +94,7 @@ internal static class StoreScreenshotSelfTest
             try
             {
                 BitmapSource image = render();
-                string path = Path.Combine(output, name + ".png");
+                string path = DiagnosticOutputPaths.Child(output, name + ".png");
                 Save(image, path);
                 report.AppendLine($"PASS {name}: {image.PixelWidth}x{image.PixelHeight}");
             }
@@ -110,7 +111,7 @@ internal static class StoreScreenshotSelfTest
         Scene("04-after-capture", () => QuickAccessScene(samples));
         Scene("05-pins", () => PinScene(settings, samples, english));
         Scene("06-ocr", () => OcrScene(samples, english));
-        RecordingResult recording = UxReviewSelfTest.CreateFixtureVideo(Path.Combine(paths.DataRoot, "store-demo.mp4"), samples.Dashboard720);
+        RecordingResult recording = UxReviewSelfTest.CreateFixtureVideo(DiagnosticOutputPaths.Child(paths.DataRoot, "store-demo.mp4"), samples.Dashboard720);
         BitmapSource? editor = null;
         Scene("07-video-editor", () => editor = VideoEditorScene(recording, paths, logs, english));
         Scene("08-gif-export", () => GifExportScene(recording, logs, editor, english));
@@ -125,7 +126,7 @@ internal static class StoreScreenshotSelfTest
         Samples samples, bool english, bool light)
     {
         ThemeService.Apply(theme);
-        AppPaths libraryPaths = AppPaths.CreateForRoot(Path.Combine(paths.DataRoot, "library-" + theme));
+        AppPaths libraryPaths = AppPaths.CreateForRoot(DiagnosticOutputPaths.Child(paths.DataRoot, "library-" + theme));
         Directory.CreateDirectory(libraryPaths.CapturesRoot);
         var queue = new CaptureQueue(libraryPaths, settings.Queue, logs.CreateLogger<CaptureQueue>());
         DateTimeOffset now = new(2026, 10, 8, 16, 40, 0, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 10, 8, 16, 40, 0)));
