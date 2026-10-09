@@ -7,9 +7,9 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 - **제품 이름**: `MyCapture` (Store ID `9PB33MC095VR`, https://apps.microsoft.com/detail/9PB33MC095VR)
 - **범주**: 생산성 또는 사진 및 비디오
 - **가격**: 무료
-- **개인정보처리방침 URL**: `https://github.com/sukwoo0711-maker/my-capture/blob/main/docs/store/PRIVACY.md` (main에 병합된 뒤 사용)
-- **지원 연락처**: `https://github.com/sukwoo0711-maker/my-capture/issues`
-- **웹 사이트**: `https://github.com/sukwoo0711-maker/my-capture`
+- **개인정보처리방침 URL**: `https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md`
+- **지원 연락처**: `https://github.com/sukwoo0711-maker/mycapture-support/issues`
+- **웹 사이트**: `https://github.com/sukwoo0711-maker/mycapture-support`
 - **저작권**: `Copyright (c) 2026 MyCapture contributors`
 - **앱 타일 아이콘(선택)**: 패키징 결과물 `StoreListingIcon-300.png`
 - **스크린샷**: `--selftest-store-shots`로 만든 언어별 10장 (만드는 방법은 [`README.md`](README.md#store-스크린샷-만들기))

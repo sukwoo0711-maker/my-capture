@@ -395,7 +395,9 @@ public sealed class SettingsStore
         }
         else
         {
-            s.GitHub.IssueUrl = issueUrl;
+            s.GitHub.IssueUrl = string.Equals(issueUrl, MyCapture.Core.GitHub.GitHubIssueImageUrl.LegacyDefaultIssueUrl, StringComparison.OrdinalIgnoreCase)
+                ? MyCapture.Core.GitHub.GitHubIssueImageUrl.DefaultIssueUrl
+                : issueUrl;
         }
 
         if (!Enum.IsDefined(s.General.AfterCapture)) s.General.AfterCapture = AfterCaptureAction.Editor;

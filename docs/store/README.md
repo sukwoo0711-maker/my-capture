@@ -1,12 +1,12 @@
 # Microsoft Store 배포
 
-GitHub 릴리스와 같은 self-contained 게시본을 MSIX로 묶어 Microsoft Store에 제출하는 절차입니다. Store는 인증을 통과한 패키지를 Microsoft 인증서로 다시 서명합니다. 그래서 Store에서 설치하면 SmartScreen과 "알 수 없는 게시자" 경고가 표시되지 않습니다. GitHub의 `setup.exe`와 포터블 ZIP은 지금처럼 서명되지 않은 상태로 유지됩니다.
+MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서는 `package.ps1`이 만든 self-contained 게시본을 MSIX로 묶어 Microsoft Store에 제출하는 절차입니다. Store는 인증을 통과한 패키지를 Microsoft 인증서로 다시 서명합니다. 그래서 Store에서 설치하면 SmartScreen과 "알 수 없는 게시자" 경고가 표시되지 않습니다. GitHub 릴리스는 4.0.2를 마지막으로 게시하지 않으며, 사용자 지원과 개인정보처리방침은 공개 [지원 저장소](https://github.com/sukwoo0711-maker/mycapture-support)에서 관리합니다.
 
 ## Store 빌드에서 달라지는 동작
 
 앱은 실행할 때 패키지 ID가 있는지 확인하고, 다음 항목만 Store 방식으로 바꿉니다. 같은 바이너리를 그대로 쓰므로 별도 빌드 구성은 없습니다.
 
-| 항목 | GitHub 설치본·포터블 | Store 빌드 |
+| 항목 | 개발 빌드(비패키지)와 기존 GitHub 설치본 | Store 빌드 |
 |---|---|---|
 | 업데이트 | 설정의 업데이트 탭에서 GitHub 릴리스를 확인하고 설치 | Microsoft Store가 업데이트. 업데이트 탭에는 안내만 표시 |
 | 로그인 시 자동 시작 | HKCU `Run` 키, 기본 켜짐 | 매니페스트 시작 작업(`MyCaptureStartup`), 기본 꺼짐 |
@@ -19,7 +19,7 @@ GitHub 릴리스와 같은 self-contained 게시본을 MSIX로 묶어 Microsoft 
 - **자동 시작**: 패키지 앱이 `Run` 키에 쓴 값은 가상화되어 로그인할 때 실행되지 않습니다. Store 정책 10.2.8은 Windows 시작 동작을 바꾸기 전에 사용자 동의를 요구합니다. 그래서 시작 작업은 꺼진 상태로 배포됩니다. 사용자가 MyCapture 설정이나 Windows 설정 > 앱 > 시작 프로그램에서 직접 켭니다. 앱 설정의 체크 상태는 Windows의 실제 상태를 따릅니다.
 - **저장 위치**: 패키지 앱이 AppData에 새로 만든 파일은 패키지 전용 위치로 리디렉션됩니다. 이 위치는 탐색기, 사진 앱, 드롭 대상이 원래 경로로 찾을 수 없습니다. 가상화를 끄는 `unvirtualizedResources` 기능은 게임용이어서 Store 승인을 기대하기 어렵습니다. 그래서 Store 빌드는 실제 경로인 패키지 폴더를 사용합니다.
 - **제거하면 데이터도 삭제됨**: Store 앱을 제거하면 패키지 폴더의 설정과 라이브러리도 함께 삭제됩니다. 라이브러리를 유지하려면 설정에서 캡처 폴더를 다른 위치로 지정하십시오. `사진\Captures`의 빠른 저장 파일은 남습니다.
-- **두 빌드의 관계**: Store 빌드와 GitHub 설치본은 데이터를 공유하지 않습니다. 설정은 설정 창의 내보내기·가져오기로 옮길 수 있습니다. 두 빌드는 같은 단일 실행 잠금을 쓰므로 동시에 상주하지 않습니다.
+- **두 빌드의 관계**: Store 빌드와 개발 빌드·기존 GitHub 설치본은 데이터를 공유하지 않습니다. 설정은 설정 창의 내보내기·가져오기로 옮길 수 있습니다. 두 빌드는 같은 단일 실행 잠금을 쓰므로 동시에 상주하지 않습니다.
 
 ## 1. Partner Center 준비 (최초 1회)
 
@@ -98,7 +98,7 @@ Get-AppxPackage MyCapture.LocalTest | Remove-AppxPackage
   - 첫 제출은 비공개 대상으로 올려 직접 설치해 보는 것을 권장합니다. 한 번 공개로 게시하면 비공개로 되돌릴 수 없습니다.
 - **속성**
   - 범주는 생산성 또는 사진 및 비디오를 고릅니다.
-  - 개인정보처리방침 URL에는 [`PRIVACY.md`](PRIVACY.md)의 GitHub 주소를 넣습니다. Win32 앱은 개인정보처리방침이 항상 필요합니다(정책 10.5.1).
+  - 개인정보처리방침 URL에는 지원 저장소의 `https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md`를 넣습니다. Win32 앱은 개인정보처리방침이 항상 필요합니다(정책 10.5.1). 방침을 고칠 때는 지원 저장소의 `PRIVACY.md`를 수정합니다.
 - **연령 등급**: IARC 설문에 답합니다. 사용자 간 소통이나 구매 기능은 없습니다.
 - **패키지**: `.msix` 파일을 올립니다.
 - **제출 옵션**: 제한 기능 `runFullTrust`의 사용 사유를 적습니다. 문구는 [`listing.md`](listing.md)에 있습니다.
