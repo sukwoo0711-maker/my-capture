@@ -595,7 +595,7 @@ internal static class UxReviewSelfTest
         return bitmap;
     }
 
-    private static RecordingResult CreateFixtureVideo(string path, BitmapSource image)
+    internal static RecordingResult CreateFixtureVideo(string path, BitmapSource image)
     {
         var converted = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
         byte[] pixels = new byte[image.PixelWidth * image.PixelHeight * 4];
@@ -691,7 +691,7 @@ internal static class UxReviewSelfTest
         }
     }
 
-    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    internal static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
     {
         var pending = new Stack<DependencyObject>();
         pending.Push(parent);
@@ -733,7 +733,7 @@ internal static class UxReviewSelfTest
         File.WriteAllText(path, JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static void Pump(TimeSpan duration)
+    internal static void Pump(TimeSpan duration)
     {
         var frame = new DispatcherFrame();
         var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = duration };
@@ -742,7 +742,7 @@ internal static class UxReviewSelfTest
         Dispatcher.PushFrame(frame);
     }
 
-    private sealed class FixtureOcr : IOcrService
+    internal sealed class FixtureOcr : IOcrService
     {
         public bool IsAvailable => true;
         public IReadOnlyList<string> SupportedLanguages => ["en", "ko"];
@@ -750,7 +750,7 @@ internal static class UxReviewSelfTest
             Task.FromResult(OcrResult.Success("Synthetic local fixture", "en", [], TimeSpan.Zero));
     }
 
-    private sealed class FixturePrivacy : IPrivacyRedactionService
+    internal sealed class FixturePrivacy : IPrivacyRedactionService
     {
         public bool IsAvailable => true;
         public Task<PrivacyRedactionResult> FindAsync(BitmapSource bitmap, CancellationToken cancellationToken = default) =>

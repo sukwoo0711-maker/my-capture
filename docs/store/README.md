@@ -48,7 +48,7 @@ GitHub 릴리스와 같은 self-contained 게시본을 MSIX로 묶어 Microsoft 
 릴리스 커밋의 깨끗한 작업 트리에서 실행합니다. `package-store.ps1`은 `package.ps1`이 검증한 게시 폴더(`artifacts\release\<버전>\publish-win-x64`)를 그대로 사용합니다. 따라서 GitHub 릴리스와 Store 패키지의 바이너리가 같습니다.
 
 ```powershell
-.\build\package.ps1 -Version 4.0.2
+.\build\package.ps1 -Version 4.0.3
 .\build\package-store.ps1 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
 ```
 
@@ -73,7 +73,7 @@ GitHub 릴리스와 같은 self-contained 게시본을 MSIX로 묶어 Microsoft 
 관리자 권한 PowerShell에서 설치합니다. Windows 11은 서명 없는 패키지를 `-AllowUnsigned`로 설치할 수 있지만, 실행 파일이 든 패키지는 관리자 권한이 필요합니다.
 
 ```powershell
-Add-AppxPackage -Path .\artifacts\store\4.0.2-localtest\MyCapture.LocalTest_4.0.2.0_x64.msix -AllowUnsigned
+Add-AppxPackage -Path .\artifacts\store\4.0.3-localtest\MyCapture.LocalTest_4.0.3.0_x64.msix -AllowUnsigned
 ```
 
 다음 항목을 확인합니다.
@@ -104,7 +104,20 @@ Get-AppxPackage MyCapture.LocalTest | Remove-AppxPackage
 - **제출 옵션**: 제한 기능 `runFullTrust`의 사용 사유를 적습니다. 문구는 [`listing.md`](listing.md)에 있습니다.
 - **Store 목록**
   - 매니페스트가 선언한 한국어(ko-KR)와 영어(en-US) 목록을 모두 작성합니다. 초안은 [`listing.md`](listing.md)에 있습니다.
-  - 스크린샷은 1장 이상 필요합니다. [`docs/guides/shots`](../guides/shots)의 화면을 쓸 수 있습니다.
+  - 스크린샷은 1장 이상 필요합니다. 아래 "Store 스크린샷 만들기"로 언어별 10장을 만들어 올립니다.
+
+## Store 스크린샷 만들기
+
+Store 목록용 스크린샷은 실제 MyCapture 창을 렌더링해 만듭니다. 화면에 들어가는 대시보드, 코드, 블로그 글, 고객 문의, 예산표는 모두 합성한 예시 데이터이고, 사용자 라이브러리·설정·화면·클립보드는 읽지 않습니다. Release 빌드의 실행 파일로 언어마다 한 번씩 실행합니다.
+
+```powershell
+.\src\MyCapture.App\bin\Release\net10.0-windows10.0.22000.0\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\ko ko
+.\src\MyCapture.App\bin\Release\net10.0-windows10.0.22000.0\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\en en
+```
+
+- 결과는 2560×1440 PNG 10장(라이브러리, 주석, 빠른 가리기, 캡처 후 카드, 화면 고정, 텍스트 인식, 영상 편집기, GIF 내보내기, 설정, 밝은 테마 라이브러리)과 `store-screenshots-report.txt`입니다.
+- 생성하는 동안 화면 왼쪽 위에 MyCapture 창이 잠깐씩 나타났다 닫힙니다.
+- 한국어(ko-KR) 목록에는 `ko`, 영어(en-US) 목록에는 `en` 결과를 올립니다.
 
 ## 5. 다음 버전 제출
 
