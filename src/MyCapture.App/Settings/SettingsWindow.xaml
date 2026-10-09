@@ -493,6 +493,26 @@
                         <TextBlock Style="{StaticResource Settings.Description}"
                                    Text="{loc:Text Text_669D90D96A45}" />
 
+                        <!-- Shown while a shortcut uses PrintScreen and Windows claims that key. -->
+                        <Border x:Name="PrtScGuidePanel" Visibility="Collapsed" Margin="0,4,0,14" Padding="12,10"
+                                CornerRadius="6" BorderThickness="1"
+                                Background="{DynamicResource Surface.Sunken}" BorderBrush="{DynamicResource State.Warning}"
+                                AutomationProperties.Name="{loc:Text PrtScGuide_Heading}"
+                                AutomationProperties.LiveSetting="Polite">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PrtScGuide_Heading}" />
+                                <TextBlock x:Name="PrtScGuideMessage" TextWrapping="Wrap" Margin="0,2,0,8"
+                                           Foreground="{DynamicResource Text.Primary}" FontSize="{StaticResource FontSize.Caption}"
+                                           Text="{loc:Text PrtScGuide_Message}" />
+                                <Button x:Name="PrtScGuideOpenSettings" Style="{StaticResource Button.Secondary}"
+                                        HorizontalAlignment="Left" MinWidth="140"
+                                        Content="{loc:Text PrtScGuide_OpenSettings}"
+                                        AutomationProperties.Name="{loc:Text PrtScGuide_OpenSettings}"
+                                        AutomationProperties.HelpText="{loc:Text PrtScGuide_Message}"
+                                        Click="OnPrtScGuideOpenSettings" />
+                            </StackPanel>
+                        </Border>
+
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_096A13A757DB}" />
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_AF588C59EB7B}" DefaultText="Ctrl+Shift+C" Text="{Binding CaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />

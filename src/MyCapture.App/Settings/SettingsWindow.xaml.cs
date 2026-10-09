@@ -66,6 +66,7 @@ internal sealed partial class SettingsWindow : Window
         InitializeComponent();
         InitializeUpdates();
         InitializeStoreRating();
+        InitializePrintScreenGuide();
 
         _draft = new SettingsDraft(_currentSettings());
         AttachDraftEvents();

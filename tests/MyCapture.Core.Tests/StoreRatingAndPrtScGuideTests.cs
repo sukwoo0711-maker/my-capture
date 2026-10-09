@@ -1,5 +1,9 @@
+using System.Reflection;
+using System.Security;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.Core.Localization;
+using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using Xunit;
@@ -251,5 +255,147 @@ public sealed class StoreRatingSettingsTests
 
         clone.StoreRating.SuccessfulCaptureCount = 9;
         Assert.Equal(4, source.StoreRating.SuccessfulCaptureCount);
+    }
+}
+
+public sealed class PrtScGuideTests
+{
+    private sealed class FakeSetting(Func<int?> read) : IWindowsPrintScreenSetting
+    {
+        public int? ReadValue() => read();
+    }
+
+    private static Hotkey Parse(string text)
+    {
+        Assert.True(Hotkey.TryParse(text, out Hotkey hotkey), text);
+        return hotkey;
+    }
+
+    private static HotkeySettings Unassigned()
+    {
+        var hotkeys = new HotkeySettings();
+        foreach (PropertyInfo property in HotkeyProperties()) property.SetValue(hotkeys, Hotkey.None);
+        return hotkeys;
+    }
+
+    private static PropertyInfo[] HotkeyProperties() => typeof(HotkeySettings).GetProperties()
+        .Where(property => property.PropertyType == typeof(Hotkey) && property.CanWrite).ToArray();
+
+    [Theory]
+    [InlineData("PrintScreen", true)]
+    [InlineData("Shift+PrintScreen", true)]
+    [InlineData("Ctrl+PrintScreen", false)]
+    [InlineData("Alt+PrintScreen", false)]
+    [InlineData("Ctrl+Shift+PrintScreen", false)]
+    [InlineData("F3", false)]
+    [InlineData("Shift+F3", false)]
+    [InlineData("", false)]
+    public void PrintScreenAloneOrWithShift_IsTheContestedChord(string chord, bool expected) =>
+        Assert.Equal(expected, PrintScreenKeyGuide.UsesPrintScreen(Parse(chord)));
+
+    [Theory]
+    [InlineData(1, 26200, true)]
+    [InlineData(0, 26200, false)]
+    [InlineData(null, 26200, true)]
+    [InlineData(null, 22621, true)]
+    [InlineData(null, 22000, false)]
+    [InlineData(2, 22000, true)]
+    [InlineData(0, 22000, false)]
+    public void StoredValueWins_AndAMissingValueFollowsTheWindowsDefault(int? stored, int build, bool expected)
+    {
+        Assert.Equal(expected, PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled(stored, build));
+        Assert.Equal(expected, PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled(new FakeSetting(() => stored), build));
+    }
+
+    [Fact]
+    public void UnreadableSetting_IsTreatedAsOff()
+    {
+        Assert.False(PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled(
+            new FakeSetting(() => throw new SecurityException("denied")), 26200));
+        Assert.False(PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled(
+            new FakeSetting(() => throw new UnauthorizedAccessException("denied")), 26200));
+    }
+
+    [Fact]
+    public void RegistryReader_UsesTheDocumentedValueAndOnlyReads()
+    {
+        Assert.Equal(@"Control Panel\Keyboard", RegistryPrintScreenSetting.KeyPath);
+        Assert.Equal("PrintScreenKeyForSnippingEnabled", RegistryPrintScreenSetting.ValueName);
+        int? value = new RegistryPrintScreenSetting().ReadValue();
+        Assert.True(value is null or >= 0);
+        Assert.Equal("ms-settings:easeofaccess-keyboard", PrintScreenKeyGuide.WindowsSettingsUri);
+    }
+
+    [Fact]
+    public void Warning_CoversEveryShortcutPropertyIncludingOnesAddedLater()
+    {
+        PropertyInfo[] properties = HotkeyProperties();
+        Assert.True(properties.Length >= 12);
+        Assert.Equal(properties.Length, PrintScreenKeyGuide.AllHotkeys(new HotkeySettings()).Count());
+        foreach (PropertyInfo property in properties)
+        {
+            HotkeySettings hotkeys = Unassigned();
+            property.SetValue(hotkeys, Parse("PrintScreen"));
+            Assert.True(PrintScreenKeyGuide.ShouldWarn(hotkeys, windowsCaptureKeyEnabled: true), property.Name);
+            Assert.False(PrintScreenKeyGuide.ShouldWarn(hotkeys, windowsCaptureKeyEnabled: false), property.Name);
+
+            property.SetValue(hotkeys, Parse("Ctrl+PrintScreen"));
+            Assert.False(PrintScreenKeyGuide.ShouldWarn(hotkeys, windowsCaptureKeyEnabled: true), property.Name);
+        }
+    }
+
+    [Fact]
+    public void DefaultShortcuts_NeverWarn() =>
+        Assert.False(PrintScreenKeyGuide.ShouldWarn(new HotkeySettings(), windowsCaptureKeyEnabled: true));
+
+    [Fact]
+    public void FailureNotice_OnlyForAPrintScreenFailureWhileWindowsClaimsTheKey()
+    {
+        Hotkey[] withPrintScreen = [Parse("Ctrl+Shift+C"), Parse("Shift+PrintScreen")];
+        Assert.Equal(UiText.Get("PrtScGuide_FailureNotice"), PrintScreenKeyGuide.FailureNotice(withPrintScreen, true));
+        Assert.Empty(PrintScreenKeyGuide.FailureNotice(withPrintScreen, false));
+        Assert.Empty(PrintScreenKeyGuide.FailureNotice([Parse("Ctrl+Shift+C"), Parse("Ctrl+PrintScreen")], true));
+        Assert.Empty(PrintScreenKeyGuide.FailureNotice([], true));
+    }
+
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void StartupNoticeWithThePrintScreenReason_FitsTheNativeBalloon(string language)
+    {
+        using IDisposable scope = UiText.UseLanguage(language);
+        var longestChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift | HotkeyModifiers.Windows, 0xFE);
+        string suffix = UiText.Format("Text_646F2DBF1852", int.MaxValue);
+        string message = UiText.Format("Text_114E1105C3EE", longestChord, suffix)
+            + "\n" + PrintScreenKeyGuide.FailureNotice([Parse("PrintScreen")], true);
+        Assert.InRange(message.Length, 1, 255);
+    }
+
+    [Fact]
+    public void NewCopy_FollowsTheKoreanStyleRules()
+    {
+        string[] keys =
+        [
+            "StoreRating_Button", "StoreRating_ButtonHelp", "StoreRating_OpenFailed",
+            "PrtScGuide_Heading", "PrtScGuide_Message", "PrtScGuide_OpenSettings",
+            "PrtScGuide_OpenSettingsFailed", "PrtScGuide_FailureNotice",
+        ];
+        using (UiText.UseLanguage("ko-KR"))
+        {
+            foreach (string key in keys)
+            {
+                string text = UiText.Get(key);
+                Assert.DoesNotContain("!", text, StringComparison.Ordinal);
+                Assert.DoesNotContain("요.", text, StringComparison.Ordinal);
+                Assert.DoesNotContain("주세요", text, StringComparison.Ordinal);
+                Assert.DoesNotMatch("[\\u2600-\\u27BF\\uD83C-\\uDBFF]", text);
+            }
+
+            // Sentences end in 합니다/하십시오체; labels and buttons stay noun forms.
+            Assert.EndsWith("십시오.", UiText.Get("PrtScGuide_Message"), StringComparison.Ordinal);
+            Assert.EndsWith("십시오.", UiText.Get("PrtScGuide_FailureNotice"), StringComparison.Ordinal);
+            Assert.Equal("Windows 설정 열기", UiText.Get("PrtScGuide_OpenSettings"));
+            Assert.Equal("Microsoft Store에서 평가", UiText.Get("StoreRating_Button"));
+        }
     }
 }

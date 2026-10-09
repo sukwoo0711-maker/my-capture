@@ -2,6 +2,8 @@ using System.IO;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Settings;
 using MyCapture.App.Store;
+using MyCapture.Core.Localization;
+using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Shell;
@@ -258,6 +260,41 @@ public sealed class StoreRatingAndPrtScGuideApplyTests : KoreanCaptionTest
             StoreRatingState persisted = store.Load().StoreRating;
             Assert.Equal(8, persisted.SuccessfulCaptureCount);
             Assert.Equal(attempted, persisted.RequestAttemptedUtc);
+        });
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PrtScGuide_ApplyFailureExplainsTheWindowsPrintScreenSetting(bool windowsClaimsKey)
+    {
+        Assert.True(Hotkey.TryParse("PrintScreen", out Hotkey printScreen));
+        WithApply(new BlockingRegistrar(printScreen), (_, live, apply) =>
+        {
+            apply.PrintScreenCaptureKeyEnabled = () => windowsClaimsKey;
+            var draft = new SettingsDraft(live()) { CaptureFullScreenHotkey = "PrintScreen" };
+
+            SettingsApplyResult result = apply.Apply(draft.ToAppSettings());
+
+            Assert.True(result.Saved);
+            Assert.False(result.HotkeysApplied);
+            Assert.Equal(Hotkey.None, live().Hotkeys.CaptureFullScreen);
+            string notice = UiText.Get("PrtScGuide_FailureNotice");
+            if (windowsClaimsKey) Assert.Contains(notice, result.Messages);
+            else Assert.DoesNotContain(notice, result.Messages);
+        });
+    }
+
+    [Fact]
+    public void PrtScGuide_DefaultApplyServiceNeverReadsTheMachineSetting()
+    {
+        Assert.True(Hotkey.TryParse("PrintScreen", out Hotkey printScreen));
+        WithApply(new BlockingRegistrar(printScreen), (_, live, apply) =>
+        {
+            var draft = new SettingsDraft(live()) { CaptureFullScreenHotkey = "PrintScreen" };
+            SettingsApplyResult result = apply.Apply(draft.ToAppSettings());
+            Assert.DoesNotContain(UiText.Get("PrtScGuide_FailureNotice"), result.Messages);
+            Assert.Equal(PrintScreenKeyGuide.VkSnapshot, printScreen.VirtualKey);
         });
     }
 }

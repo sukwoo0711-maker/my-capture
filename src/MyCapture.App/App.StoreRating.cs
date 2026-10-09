@@ -7,13 +7,15 @@ using MyCapture.App.Settings;
 using MyCapture.App.Store;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
+using MyCapture.Platform.Shell;
 
 namespace MyCapture.App;
 
 /// <summary>
-/// Shell glue for the one-time Store rating request. The capture pipeline only reports
-/// outcomes and flow ends; the decisions live in <see cref="StoreRatingCoordinator"/>
-/// and <see cref="StoreRatingPolicy"/>.
+/// Shell glue for the one-time Store rating request and the Print Screen key guidance.
+/// The capture pipeline only reports outcomes and flow ends; the decisions live in
+/// <see cref="StoreRatingCoordinator"/>, <see cref="StoreRatingPolicy"/> and
+/// <see cref="PrintScreenKeyGuide"/>.
 /// </summary>
 public partial class App
 {
@@ -31,6 +33,8 @@ public partial class App
             new StoreContextRatingRequester(),
             services.GetRequiredService<ILogger<StoreRatingCoordinator>>(),
             AppPackage.IsPackaged);
+        if (_settingsApply is not null)
+            _settingsApply.PrintScreenCaptureKeyEnabled = PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled;
     }
 
     /// <summary>Anything on screen that a Store dialog must not interrupt.</summary>
@@ -40,4 +44,16 @@ public partial class App
         || _pasteToScreenInFlight || HotkeyRecorder.Active is not null
         || Windows.OfType<Window>().Any(window => window.IsVisible
             && window is AnnotationEditorWindow or MyCapture.App.Recording.VideoEditorWindow or ShortcutHelpWindow);
+
+    /// <summary>
+    /// A line for the startup shortcut-failure notice when a failed shortcut uses Print Screen
+    /// while Windows claims that key for its own capture tool; otherwise empty.
+    /// </summary>
+    private static string PrintScreenFailureLine(IEnumerable<HotkeyRegistrationFailure> failures)
+    {
+        string notice = PrintScreenKeyGuide.FailureNotice(
+            failures.Select(failure => failure.Hotkey),
+            PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled());
+        return notice.Length == 0 ? string.Empty : "\n" + notice;
+    }
 }

@@ -14,9 +14,18 @@ namespace MyCapture.App.Tests;
 
 public sealed partial class SettingsThemePreviewTests
 {
+    private sealed class FixedPrintScreenSetting(int? value) : IWindowsPrintScreenSetting
+    {
+        public int? ReadValue() => value;
+    }
+
     [Fact]
     public Task StoreRating_ButtonAppearsOnlyInTheStoreBuild() =>
         RunIsolated(nameof(StoreRating_ButtonAppearsOnlyInTheStoreBuild), VerifyStoreRatingButton);
+
+    [Fact]
+    public Task PrtScGuide_FollowsTheShortcutsAndTheWindowsSetting() =>
+        RunIsolated(nameof(PrtScGuide_FollowsTheShortcutsAndTheWindowsSetting), VerifyPrintScreenGuide);
 
     private static Application CreateThemedApplication()
     {
@@ -29,7 +38,7 @@ public sealed partial class SettingsThemePreviewTests
         return application;
     }
 
-    private static SettingsWindow CreateOffscreenSettingsWindow(AppSettings saved)
+    private static SettingsWindow CreateOffscreenSettingsWindow(AppSettings saved, IWindowsPrintScreenSetting? printScreen = null)
     {
         string root = TestRecycleBin.CreateTempSubdirectory("mc-store-rating-prtsc-").FullName;
         var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
@@ -46,6 +55,7 @@ public sealed partial class SettingsThemePreviewTests
             Left = -10000, Top = -10000, Width = 940, Height = 700,
             ShowActivated = false, ShowInTaskbar = false,
         };
+        if (printScreen is not null) window.PrintScreenSetting = printScreen;
         FluidMotion.SetWindowEntrance(window, false);
         return window;
     }
@@ -88,6 +98,65 @@ public sealed partial class SettingsThemePreviewTests
         {
             application.Shutdown();
             AppPackage.IsPackagedOverride = null;
+        }
+    }
+
+    private static void VerifyPrintScreenGuide()
+    {
+        Application application = CreateThemedApplication();
+        try
+        {
+            foreach (string locale in new[] { "ko-KR", "en-US" })
+            {
+                using var language = UiText.UseLanguage(locale);
+                var saved = new AppSettings();
+                Assert.True(Hotkey.TryParse("PrintScreen", out Hotkey printScreen));
+                saved.Hotkeys.CaptureFullScreen = printScreen;
+                SettingsWindow window = CreateOffscreenSettingsWindow(saved, new FixedPrintScreenSetting(1));
+                try
+                {
+                    window.Show();
+                    var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
+                    var panel = Assert.IsType<Border>(window.FindName("PrtScGuidePanel"));
+                    tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => ReferenceEquals(
+                        LogicalTreeHelper.FindLogicalNode(tab, "PrtScGuidePanel"), panel));
+                    Drain(window);
+
+                    Assert.True(window.IsPrintScreenGuideVisible);
+                    Assert.True(panel.IsVisible);
+                    Assert.Equal(UiText.Get("PrtScGuide_Heading"), AutomationProperties.GetName(panel));
+                    Assert.Equal(UiText.Get("PrtScGuide_Message"),
+                        Assert.IsType<TextBlock>(window.FindName("PrtScGuideMessage")).Text);
+                    var open = Assert.IsType<Button>(window.FindName("PrtScGuideOpenSettings"));
+                    Assert.Equal(UiText.Get("PrtScGuide_OpenSettings"), AutomationProperties.GetName(open));
+                    Assert.True(open.IsVisible && open.IsEnabled && open.Focusable);
+
+                    // Turning the Windows option off hides the guide; turning it on shows it again.
+                    window.PrintScreenSetting = new FixedPrintScreenSetting(0);
+                    Assert.False(window.IsPrintScreenGuideVisible);
+                    window.PrintScreenSetting = new FixedPrintScreenSetting(1);
+                    Assert.True(window.IsPrintScreenGuideVisible);
+
+                    // The guide follows the edited, unsaved shortcuts.
+                    var draft = Assert.IsType<SettingsDraft>(window.DataContext);
+                    draft.CaptureFullScreenHotkey = "F8";
+                    Assert.False(window.IsPrintScreenGuideVisible);
+                    draft.RecordRegionHotkey = "Shift+PrintScreen";
+                    Assert.True(window.IsPrintScreenGuideVisible);
+                    draft.RecordRegionHotkey = "Ctrl+PrintScreen";
+                    Assert.False(window.IsPrintScreenGuideVisible);
+                    Drain(window);
+                    Assert.False(panel.IsVisible);
+                }
+                finally
+                {
+                    window.CloseForExit();
+                }
+            }
+        }
+        finally
+        {
+            application.Shutdown();
         }
     }
 }

@@ -388,6 +388,7 @@ public partial class App : Application
             _tray.ShowBalloon(
                 UiText.Get("Text_5564316AA7EB"),
                 UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix)
+                    + PrintScreenFailureLine(_hotkeys.Failures)
                     + (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys ? "\n" + UiText.Get("Hotkey.Migrated") : string.Empty),
                 TrayBalloonKind.Warning);
         }
