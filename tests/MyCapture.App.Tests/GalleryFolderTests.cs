@@ -15,6 +15,39 @@ namespace MyCapture.App.Tests;
 public sealed class GalleryFolderTests
 {
     [Fact]
+    public async Task MovingSelectedFolderIgnoresTransientSelectionDuringTreeRebuild()
+    {
+        var f = new Fixture();
+        var moving = await f.Queue.CreateFolderAsync("A moving");
+        var parent = await f.Queue.CreateFolderAsync("B parent");
+        var vm = f.ViewModel();
+        var selected = CaptureFolderScope.ForFolder(moving.Id);
+        vm.SelectScope(selected);
+        var date = Assert.Single(vm.FolderNodes);
+        var parentNode = Assert.Single(date.Children, n => n.FolderId == parent.Id);
+        bool observed = false;
+        parentNode.Children.CollectionChanged += (_, _) =>
+        {
+            if (observed) return;
+            observed = true;
+            vm.SelectScope(CaptureFolderScope.ForFolder(parent.Id));
+            vm.Refresh();
+        };
+
+        await f.Queue.MoveFolderAsync(moving.Id, parent.Id);
+        vm.Refresh();
+
+        Assert.True(observed);
+        Assert.Equal(selected, vm.SelectedScope);
+        Assert.Same(parentNode, Assert.Single(date.Children));
+        var movedNode = Assert.Single(parentNode.Children);
+        Assert.Equal(moving.Id, movedNode.FolderId);
+        Assert.True(movedNode.IsSelected);
+        vm.Refresh();
+        Assert.Same(movedNode, Assert.Single(parentNode.Children));
+    }
+
+    [Fact]
     public async Task TreeAndFolderScope_CombineSearchMediaFilterSortAndStableExpansion()
     {
         var f = new Fixture();

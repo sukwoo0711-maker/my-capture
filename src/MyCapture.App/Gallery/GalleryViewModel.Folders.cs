@@ -63,7 +63,7 @@ public sealed partial class GalleryViewModel
 
     public void SelectScope(CaptureFolderScope scope)
     {
-        if (scope == _scope) return;
+        if (IsRefreshingFolderTree || scope == _scope) return;
         _scope = scope;
         Refresh();
     }

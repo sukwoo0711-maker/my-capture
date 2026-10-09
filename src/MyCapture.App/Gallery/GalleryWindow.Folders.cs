@@ -45,7 +45,8 @@ internal sealed partial class GalleryWindow
 
     private async void OnFolderSelected(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        if (_folderNavigationUpdating || e.NewValue is not GalleryFolderNode node) return;
+        if (_folderNavigationUpdating || _viewModel.IsRefreshingFolderTree
+            || e.NewValue is not GalleryFolderNode node) return;
         await SelectFolderScopeAsync(node.Scope);
     }
 

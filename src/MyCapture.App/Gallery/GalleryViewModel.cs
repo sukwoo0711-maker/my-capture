@@ -199,10 +199,17 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         }
     }
 
+    internal bool IsRefreshingFolderTree { get; private set; }
+
     /// <summary>Rebuilds the grouped, filtered view from the current queue state.</summary>
     public void Refresh()
     {
-        RefreshFolderTree();
+        if (IsRefreshingFolderTree) return;
+        // Moving a selected node can raise WPF selection events while it is
+        // temporarily attached to both its old and new parent collections.
+        IsRefreshingFolderTree = true;
+        try { RefreshFolderTree(); }
+        finally { IsRefreshingFolderTree = false; }
         IReadOnlyList<GalleryGroupedRecords> grouped = _controller.BuildGroups(_searchQuery, _clock(), _scope, _sortOrder);
 
         var seenTiles = new HashSet<Guid>();
