@@ -15,6 +15,15 @@ namespace MyCapture.Core.Recording;
 /// never a sped-up clip.
 /// </para>
 /// <para>
+/// Frames are due on a fixed grid (one interval after the previous due time), not one
+/// interval after the moment the previous frame was actually taken. A loop that wakes a
+/// little late therefore catches up on the next frame instead of pushing every later frame
+/// back: with a sub-millisecond wake-up latency per frame the old "interval after the last
+/// frame" rule lost about 2% of the frames at 30 fps, and with a 15.6 ms system timer it
+/// turned 30 fps into 21.4 fps. Only a stall of a whole interval or more re-anchors the grid,
+/// one interval after the late frame, so missed slots are dropped rather than burst out.
+/// </para>
+/// <para>
 /// Pure and deterministic: elapsed milliseconds in, decisions out. No timers, no
 /// threads, no clocks of its own, so the drop behaviour is unit-tested exactly.
 /// </para>
@@ -24,6 +33,7 @@ public sealed class RecordingClock
     private readonly double _frameIntervalMs;
     private long _emittedFrames;
     private double _lastEmittedTimestampMs = -1;
+    private double _nextDueMs;
 
     public RecordingClock(int targetFps)
     {
@@ -47,10 +57,11 @@ public sealed class RecordingClock
     /// Given the elapsed time since recording started, decides whether a frame is due.
     /// </summary>
     /// <remarks>
-    /// A frame is due when at least one whole frame interval has passed since the last
-    /// emitted timestamp. If the loop was blocked and several intervals passed, only a
-    /// single frame is emitted at the current elapsed time — the intervening frames are
-    /// dropped — which is exactly the adaptive behaviour that protects a slow machine.
+    /// A frame is due once the elapsed time reaches the next slot of the frame grid; a frame
+    /// taken slightly late does not delay the slot after it. If the loop was blocked for a
+    /// whole interval or more, only a single frame is emitted at the current elapsed time —
+    /// the intervening frames are dropped — which is exactly the adaptive behaviour that
+    /// protects a slow machine.
     /// </remarks>
     public bool TryClaimFrame(double elapsedMs, out double timestampMs)
     {
@@ -59,11 +70,12 @@ public sealed class RecordingClock
             // First frame anchors the timeline at zero regardless of any warm-up jitter.
             timestampMs = 0;
             _lastEmittedTimestampMs = 0;
+            _nextDueMs = _frameIntervalMs;
             _emittedFrames++;
             return true;
         }
 
-        if (elapsedMs - _lastEmittedTimestampMs + 1e-6 < _frameIntervalMs)
+        if (elapsedMs + 1e-6 < _nextDueMs)
         {
             timestampMs = 0;
             return false;
@@ -72,6 +84,16 @@ public sealed class RecordingClock
         timestampMs = elapsedMs;
         _lastEmittedTimestampMs = elapsedMs;
         _emittedFrames++;
+
+        // Stay on the grid so wake-up latency never accumulates. If this frame is late by a
+        // whole interval or more, the slots in between are dropped and the grid restarts one
+        // interval after this frame, so the loop never bursts through the backlog.
+        _nextDueMs += _frameIntervalMs;
+        if (elapsedMs + 1e-6 >= _nextDueMs)
+        {
+            _nextDueMs = elapsedMs + _frameIntervalMs;
+        }
+
         return true;
     }
 
@@ -85,7 +107,6 @@ public sealed class RecordingClock
             return 0;
         }
 
-        double due = _lastEmittedTimestampMs + _frameIntervalMs;
-        return Math.Max(0, due - elapsedMs);
+        return Math.Max(0, _nextDueMs - elapsedMs);
     }
 }
