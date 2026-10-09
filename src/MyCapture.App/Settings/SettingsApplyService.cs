@@ -329,5 +329,6 @@ internal static class HotkeyCloneExtensions
         UploadGitHubImage = s.UploadGitHubImage,
         RestoreClosedPin = s.RestoreClosedPin,
         CaptureText = s.CaptureText,
+        PauseRecording = s.PauseRecording,
     };
 }

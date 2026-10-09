@@ -77,6 +77,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _uploadGitHubImageHotkey = string.Empty;
     private string _restoreClosedPinHotkey = string.Empty;
     private string _captureTextHotkey = string.Empty;
+    private string _pauseRecordingHotkey = string.Empty;
 
     // ----- Storage -----
     private string _maxItems = string.Empty;
@@ -308,6 +309,13 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _captureTextHotkey;
         set { if (Set(ref _captureTextHotkey, value)) ValidateAllHotkeys(); }
+    }
+
+    /// <summary>Optional chord that pauses or resumes the active region recording.</summary>
+    public string PauseRecordingHotkey
+    {
+        get => _pauseRecordingHotkey;
+        set { if (Set(ref _pauseRecordingHotkey, value)) ValidateAllHotkeys(); }
     }
 
     // ================= Storage =================
@@ -553,6 +561,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _uploadGitHubImageHotkey = s.Hotkeys.UploadGitHubImage.ToString();
         _restoreClosedPinHotkey = s.Hotkeys.RestoreClosedPin.ToString();
         _captureTextHotkey = s.Hotkeys.CaptureText.ToString();
+        _pauseRecordingHotkey = s.Hotkeys.PauseRecording.ToString();
 
         _maxItems = Int(s.Queue.MaxItems);
         _maxGiB = Gib(s.Queue.MaxBytes);
@@ -690,6 +699,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
                 RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
                 CaptureText = ParseHotkey(_captureTextHotkey),
+                PauseRecording = ParseHotkey(_pauseRecordingHotkey),
             },
             Queue =
             {
@@ -776,6 +786,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         OpenLibrary = ParseHotkey(_openLibraryHotkey),
         RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
         CaptureText = ParseHotkey(_captureTextHotkey),
+        PauseRecording = ParseHotkey(_pauseRecordingHotkey),
     };
 
     // ================= INotifyDataErrorInfo =================
@@ -1025,6 +1036,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             (nameof(UploadGitHubImageHotkey), _uploadGitHubImageHotkey),
             (nameof(RestoreClosedPinHotkey), _restoreClosedPinHotkey),
             (nameof(CaptureTextHotkey), _captureTextHotkey),
+            (nameof(PauseRecordingHotkey), _pauseRecordingHotkey),
         ];
 
         var parsed = new Dictionary<string, Hotkey>(fields.Length);

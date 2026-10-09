@@ -376,6 +376,7 @@ public sealed class SettingsStore
         s.Hotkeys.DelayedCapture = Safe(s.Hotkeys.DelayedCapture);
         s.Hotkeys.RestoreClosedPin = Safe(s.Hotkeys.RestoreClosedPin);
         s.Hotkeys.CaptureText = Safe(s.Hotkeys.CaptureText);
+        s.Hotkeys.PauseRecording = Safe(s.Hotkeys.PauseRecording);
         // --- Hotkeys ---
         // A capture hotkey that cannot be pressed makes the app inert, so an
         // unassigned value is restored rather than respected.
@@ -402,6 +403,7 @@ public sealed class SettingsStore
             s.Hotkeys.DelayedCapture = WithoutCaptureConflict(s.Hotkeys.DelayedCapture);
             s.Hotkeys.RestoreClosedPin = WithoutCaptureConflict(s.Hotkeys.RestoreClosedPin);
             s.Hotkeys.CaptureText = WithoutCaptureConflict(s.Hotkeys.CaptureText);
+            s.Hotkeys.PauseRecording = WithoutCaptureConflict(s.Hotkeys.PauseRecording);
         }
         if (migratedUnsafeHotkeys) warnings.Add(UiText.Get("Hotkey.Migrated"));
 
