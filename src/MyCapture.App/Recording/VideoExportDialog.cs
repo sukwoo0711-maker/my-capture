@@ -21,6 +21,8 @@ internal sealed class VideoExportDialog : Window
     private readonly RecordingResult _recording;
     private readonly VideoEditDocument _document;
     private readonly ILoggerFactory _logs;
+    // Reuses decoded/encoded GIF frames while only preset or speed changes in this dialog.
+    private readonly GifExportSession _gifSession;
     private readonly ComboBox _format = new() { MinHeight = 36 };
     private readonly Slider _target = new() { Minimum = 0, Maximum = 90, TickFrequency = 1, IsSnapToTickEnabled = true };
     private readonly TextBlock _targetLabel = new();
@@ -48,6 +50,7 @@ internal sealed class VideoExportDialog : Window
         // The owner is modal/paused; take a detached document so all worker inputs stay stable.
         _document = document.Clone();
         _logs = logs;
+        _gifSession = new GifExportSession(recording, _document, logs.CreateLogger("GifExport"));
         StandardWindowTheme.Apply(this);
         Title = UiText.Get("MediaExport_Title");
         Width = 580;
@@ -121,7 +124,7 @@ internal sealed class VideoExportDialog : Window
             e.Handled = true;
         };
         Closing += (_, e) => { if (_working) { e.Cancel = true; _closeRequested = true; _cancellation?.Cancel(); } };
-        Closed += (_, _) => { _closed = true; _cancellation?.Cancel(); _result?.Dispose(); _result = null; };
+        Closed += (_, _) => { _closed = true; _cancellation?.Cancel(); _result?.Dispose(); _result = null; _gifSession.Dispose(); };
         // GIF is the common share target: calculate the moment the dialog is shown so the
         // user sees a size and preview without pressing 계산. Loaded (not the ctor) so
         // headless construction in tests never starts a calculation pump.
@@ -193,7 +196,7 @@ internal sealed class VideoExportDialog : Window
         try
         {
             calculated = await StaThreadTask.RunAsync(() => gif
-                ? VideoExportCalculation.CalculateGif(path => AnimatedGifExporter.Export(_recording, _document, path, gifProgress, cancellation.Token, speed, quality), cancellation.Token)
+                ? VideoExportCalculation.CalculateGif(path => _gifSession.Export(path, quality, speed, gifProgress, cancellation.Token), cancellation.Token)
                 : VideoExportCalculation.Calculate(target, _document.TrimOutMs - _document.TrimInMs,
                     VideoEncoderOptions.DeriveBitrate(_recording.Width, _recording.Height, _recording.Fps),
                     (path, bitrate, baseline, token) => TrimReencoder.Reencode(_recording.OutputPath, path,
