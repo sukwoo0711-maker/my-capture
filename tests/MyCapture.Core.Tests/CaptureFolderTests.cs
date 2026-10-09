@@ -53,7 +53,10 @@ public sealed class CaptureFolderTests
         Assert.NotNull(f.Queue.Find(archived.Id));
         await f.Queue.MoveCapturesAsync([archived.Id], null);
         Assert.False(archived.IsPinned);
-        Assert.Equal(1, f.Queue.ExpireHistory(DateTimeOffset.Now));
+        Assert.Equal(0, f.Queue.ExpireHistory(DateTimeOffset.Now));
+        Assert.NotNull(archived.RetentionStartedAt);
+        Assert.Equal(archived.RetentionStartedAt, f.Reload().Find(archived.Id)!.RetentionStartedAt);
+        Assert.Equal(1, f.Queue.ExpireHistory(DateTimeOffset.Now.AddDays(8)));
 
         var pinned = f.Add(DateTimeOffset.Now.AddDays(-30), pinned: true);
         await f.Queue.MoveCapturesAsync([pinned.Id], folder.Id);
@@ -324,7 +327,7 @@ public sealed class CaptureFolderTests
         await f.Queue.MoveCapturesAsync([first.Id], folder.Id);
         var added = f.Add(DateTimeOffset.Now);
         await f.Queue.MoveCapturesAsync([added.Id], folder.Id);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Queue.DeleteFolderScopeAsync(
+        await Assert.ThrowsAsync<CaptureFolderChangedException>(() => f.Queue.DeleteFolderScopeAsync(
             CaptureFolderScope.ForFolder(folder.Id), expectedCaptureIds: [first.Id], expectedFolderIds: [folder.Id]));
         Assert.Equal(2, f.Queue.Count);
         Assert.Single(f.Queue.Folders);
@@ -359,6 +362,89 @@ public sealed class CaptureFolderTests
         queue.UpdateLimits(new QueueSettings { DefaultCaptureFolderId = Guid.NewGuid(), UseCurrentFolderForNewCaptures = true });
         Assert.Null(queue.DefaultCaptureFolderId);
         Assert.Equal(2, imported.Reload().Folders.Count);
+    }
+
+    [Fact]
+    public async Task LeavingAnOldFolderRestartsRetentionAndEvictionOrder_AndLegacyTimestampStillExpires()
+    {
+        var f = new Fixture();
+        var folder = await f.Queue.CreateFolderAsync("archive");
+        var old = f.Add(DateTimeOffset.Now.AddDays(-30));
+        await f.Queue.MoveCapturesAsync([old.Id], folder.Id);
+        var recent = f.Add(DateTimeOffset.Now.AddHours(-2));
+        await f.Queue.MoveCapturesAsync([old.Id], null);
+        Assert.Equal(0, f.Queue.ExpireHistory(DateTimeOffset.Now));
+        f.Queue.UpdateLimits(new QueueSettings { MaxItems = 2 });
+        var latest = f.Add(DateTimeOffset.Now);
+        Assert.NotNull(f.Queue.Find(old.Id));
+        Assert.NotNull(f.Queue.Find(latest.Id));
+        Assert.Null(f.Queue.Find(recent.Id));
+        var restored = f.Reload();
+        Assert.Equal(old.RetentionStartedAt, restored.Find(old.Id)!.RetentionStartedAt);
+        Assert.Equal(0, restored.ExpireHistory(DateTimeOffset.Now));
+        Assert.Equal(2, restored.ExpireHistory(DateTimeOffset.Now.AddDays(8)));
+        CaptureRecord legacy = JsonSerializer.Deserialize<CaptureRecord>("{\"CreatedAt\":\"2020-01-01T00:00:00Z\"}")!;
+        Assert.Null(legacy.RetentionStartedAt);
+        Assert.Equal(legacy.CreatedAt, legacy.RetentionReference);
+    }
+
+    [Fact]
+    public async Task ThreeHundredArchivedCapturesOverTwoGiB_DoNotEvictRecentHistoryOrReportPinPressure()
+    {
+        var f = new Fixture();
+        var folder = await f.Queue.CreateFolderAsync("archive");
+        await f.Queue.SetNewCaptureFolderAsync(folder.Id, true);
+        for (int index = 0; index < 300; index++)
+        {
+            var record = f.Record(DateTimeOffset.Now.AddDays(-30).AddSeconds(index));
+            record.TotalBytes = 8L * 1024 * 1024;
+            f.Add(record);
+        }
+        await f.Queue.SetNewCaptureFolderAsync(null, false);
+        f.Queue.UpdateLimits(new QueueSettings { MaxItems = 3, MaxBytes = 2L * 1024 * 1024 * 1024 });
+        var first = f.Add(DateTimeOffset.Now.AddMinutes(-2));
+        var second = f.Add(DateTimeOffset.Now.AddMinutes(-1));
+        var third = f.Add(DateTimeOffset.Now);
+        Assert.Equal(303, f.Queue.Count);
+        Assert.Equal(3, f.Queue.HistoryCount);
+        Assert.Equal(12, f.Queue.HistoryBytes);
+        Assert.Equal(300 * 8L * 1024 * 1024, f.Queue.FolderBytes);
+        Assert.True(f.Queue.IsFolderStorageLarge);
+        Assert.False(f.Queue.IsOverCapacityDueToPins);
+        Assert.All(new[] { first, second, third }, r => Assert.NotNull(f.Queue.Find(r.Id)));
+        f.Queue.ExpireHistory(DateTimeOffset.Now);
+        Assert.Equal(303, f.Queue.Count);
+        Assert.Equal(303, f.Reload().Count);
+    }
+
+    [Fact]
+    public async Task NewFolderUsesSelectedPastDateOrParentsDate()
+    {
+        var f = new Fixture();
+        DateOnly past = new(2020, 2, 3);
+        var root = await f.Queue.CreateFolderInScopeAsync("past", CaptureFolderScope.ForDate(past));
+        var child = await f.Queue.CreateFolderInScopeAsync("child", CaptureFolderScope.ForFolder(root.Id));
+        Assert.Equal(past, root.CreatedDate);
+        Assert.Equal(past, child.CreatedDate);
+        Assert.Equal(past, f.Queue.GetFolderDate(child.Id));
+    }
+
+    [Fact]
+    public async Task FailedFolderRemovalRestoresRetentionTimestampAlongWithAssignment()
+    {
+        var f = new Fixture();
+        var folder = await f.Queue.CreateFolderAsync("kept");
+        var record = f.Add(DateTimeOffset.Now.AddDays(-30));
+        await f.Queue.MoveCapturesAsync([record.Id], folder.Id);
+        int attempts = 0;
+        f.Queue.BeforePublicationWriteForTest = (path, _) =>
+        {
+            if (path == f.IndexFile && ++attempts == 1) throw new IOException("synthetic publication failure");
+        };
+        await Assert.ThrowsAsync<IOException>(() => f.Queue.MoveCapturesAsync([record.Id], null));
+        Assert.Equal(folder.Id, record.FolderId);
+        Assert.Null(record.RetentionStartedAt);
+        Assert.Equal(0, f.Queue.ExpireHistory(DateTimeOffset.Now));
     }
 
     private sealed class Fixture

@@ -603,9 +603,15 @@ internal sealed class AnnotationEditorControl : Grid
         SetStatus(UiText.Get("Text_3F8046019B34"));
     }
 
-    internal CropGrip? EdgeCropGripAt(PointD image) => _crop is null
-        ? CropSelection.HitTestEdge(new RectD(0, 0, _canvasWidth, _canvasHeight), image,
-            7 / Math.Max(double.Epsilon, _surface.DipPerPixel)) : null;
+    internal CropGrip? EdgeCropGripAt(PointD image)
+    {
+        if (_crop is not null || _controller.Tool is not (EditorTool.Select or EditorTool.Crop)) return null;
+        double scale = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        _controller.HitTolerance = 6 / scale;
+        if (_controller.Tool == EditorTool.Select && (_controller.HandleAt(image, 8 / scale) != ResizeHandle.None
+            || _controller.HitTest(image) is not null)) return null;
+        return CropSelection.HitTestEdge(new RectD(0, 0, _canvasWidth, _canvasHeight), image, 7 / scale);
+    }
 
     internal bool TryBeginEdgeCrop(PointD image)
     {
@@ -627,6 +633,15 @@ internal sealed class AnnotationEditorControl : Grid
         _crop.Drag(image, shift);
         RefreshCrop();
         return true;
+    }
+
+    internal void CompleteEdgeCropGesture(PointD image, bool shift)
+    {
+        if (_edgeCropStart is not PointD start) return;
+        ContinueEdgeCrop(image, shift);
+        _edgeCropStart = null;
+        // A click below the threshold still performs normal selection/deselection.
+        if (_crop is null) _controller.PointerDown(start);
     }
 
     private static Cursor CropCursor(CropGrip grip) => grip switch
@@ -751,9 +766,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         if (_edgeCropStart is not null)
         {
-            ContinueEdgeCrop(_surface.ToImagePoint(e.GetPosition(_surface)), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
-            _edgeCropStart = null;
-            if (_crop is null) { ReleasePointer(); e.Handled = true; return; }
+            CompleteEdgeCropGesture(_surface.ToImagePoint(e.GetPosition(_surface)), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
         }
 
         if (_mosaicDragging)

@@ -110,6 +110,15 @@ public sealed partial class CaptureQueue
         }, cancellationToken);
     }
 
+    public Task<CaptureFolder> CreateFolderInScopeAsync(string name, CaptureFolderScope scope,
+        CancellationToken cancellationToken = default)
+    {
+        DateOnly date = scope.FolderId is { } id ? GetFolderDate(id)
+            : scope.Date ?? DateOnly.FromDateTime(DateTime.Today);
+        return CreateFolderAsync(name, scope.FolderId,
+            new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue)), cancellationToken);
+    }
+
     public Task<bool> RenameFolderAsync(Guid id, string name, CancellationToken cancellationToken = default)
     {
         string normalized = CaptureFolderNaming.NormalizeFolderName(name);
@@ -210,6 +219,7 @@ public sealed partial class CaptureQueue
 
     private static void ClearFolderAssignment(CaptureRecord record)
     {
+        if (record.FolderId is not null) record.RetentionStartedAt = DateTimeOffset.Now;
         record.IsPinned = record.FolderPinBeforeAssignment ?? record.IsPinned;
         record.FolderPinBeforeAssignment = null;
         record.FolderId = null;
@@ -237,7 +247,7 @@ public sealed partial class CaptureQueue
         {
             if (expectedFolderIds is not null && !folders.SetEquals(expectedFolderIds)
                 || expectedCaptureIds is not null && !RecordsInScope(scope).Select(record => record.Id).ToHashSet().SetEquals(expectedCaptureIds))
-                throw new InvalidOperationException("The folder changed after deletion was confirmed.");
+                throw new CaptureFolderChangedException();
             _deletingFolders.UnionWith(folders);
             Guid[] targets = RecordsInScope(scope).Select(record => record.Id).ToArray();
             CaptureBatchRemovalResult result = await RemoveManyAsync(targets, canRemove, cancellationToken);
@@ -369,17 +379,21 @@ public sealed partial class CaptureQueue
         }
     }
 
-    private sealed record FolderRecordSnapshot(Guid? FolderId, long Sequence, bool? WasPinned, bool IsPinned)
+    private sealed record FolderRecordSnapshot(Guid? FolderId, long Sequence, bool? WasPinned, bool IsPinned,
+        DateTimeOffset? RetentionStartedAt)
     {
         internal FolderRecordSnapshot(CaptureRecord record)
-            : this(record.FolderId, record.FolderSequence, record.FolderPinBeforeAssignment, record.IsPinned) { }
+            : this(record.FolderId, record.FolderSequence, record.FolderPinBeforeAssignment, record.IsPinned,
+                record.RetentionStartedAt) { }
         internal bool ManualPin => FolderId is not null ? WasPinned ?? IsPinned : IsPinned;
         internal bool Matches(CaptureRecord record) => FolderId == record.FolderId
-            && Sequence == record.FolderSequence && WasPinned == record.FolderPinBeforeAssignment && IsPinned == record.IsPinned;
+            && Sequence == record.FolderSequence && WasPinned == record.FolderPinBeforeAssignment && IsPinned == record.IsPinned
+            && RetentionStartedAt == record.RetentionStartedAt;
         internal void Restore(CaptureRecord record)
         {
             record.FolderId = FolderId; record.FolderSequence = Sequence;
             record.FolderPinBeforeAssignment = WasPinned; record.IsPinned = IsPinned;
+            record.RetentionStartedAt = RetentionStartedAt;
         }
     }
 
@@ -446,6 +460,7 @@ public sealed partial class CaptureQueue
             // compatible pin, but remove dangling navigation rather than hiding their media.
             foreach (CaptureRecord record in records)
             {
+                if (record.FolderId is not null) record.RetentionStartedAt = DateTimeOffset.Now;
                 record.FolderId = null; record.FolderSequence = 0; record.FolderPinBeforeAssignment = null;
             }
             _limits.DefaultCaptureFolderId = null;

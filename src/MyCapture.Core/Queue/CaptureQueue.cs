@@ -93,6 +93,13 @@ public sealed partial class CaptureQueue
 
     public long TotalBytes => _totalBytes;
 
+    public int HistoryCount => _records.Count(record => record.FolderId is null);
+    public long HistoryBytes => _records.Where(record => record.FolderId is null)
+        .Aggregate(0L, (sum, record) => SaturatingAdd(sum, record.TotalBytes));
+    public long FolderBytes => _records.Where(record => record.FolderId is not null)
+        .Aggregate(0L, (sum, record) => SaturatingAdd(sum, record.TotalBytes));
+    public bool IsFolderStorageLarge => FolderBytes > _limits.MaxBytes;
+
     /// <summary>
     /// True when pinned records plus the protected current capture exceed a configured cap,
     /// so eviction can no longer bring the queue back within limits without data loss.
@@ -156,9 +163,9 @@ public sealed partial class CaptureQueue
 
         TimeSpan ttl = CaptureRetention.TimeToLive(_limits);
         CaptureRecord[] expired = _records
-            .Where(record => record.IsImage && record.CreatedAt <= now - ttl
+            .Where(record => record.IsImage && record.RetentionReference <= now - ttl
                              && !record.IsPinned && record.FolderId is null && !IsEvictionLeased(record.Id))
-            .OrderBy(record => record.CreatedAt)
+            .OrderBy(record => record.RetentionReference)
             .ToArray();
         foreach (CaptureRecord record in expired)
         {
@@ -662,7 +669,7 @@ public sealed partial class CaptureQueue
                 break;
             }
 
-            string reason = _records.Count > _limits.MaxItems ? "item-limit" : "byte-limit";
+            string reason = HistoryCount > _limits.MaxItems ? "item-limit" : "byte-limit";
 
             _records.Remove(victim);
             _totalBytes -= victim.TotalBytes;
@@ -684,7 +691,7 @@ public sealed partial class CaptureQueue
     }
 
     private bool IsOverCapacity() =>
-        _records.Count > _limits.MaxItems || _totalBytes > _limits.MaxBytes;
+        HistoryCount > _limits.MaxItems || HistoryBytes > _limits.MaxBytes;
 
     private void UpdatePinPressureFlag()
     {
@@ -692,7 +699,7 @@ public sealed partial class CaptureQueue
         long pinnedBytes = 0;
         foreach (CaptureRecord record in _records)
         {
-            if (!record.IsPinned)
+            if (!record.IsPinned || record.FolderId is not null)
             {
                 continue;
             }
@@ -703,7 +710,7 @@ public sealed partial class CaptureQueue
 
         int retainedCount = pinnedCount;
         long retainedBytes = pinnedBytes;
-        CaptureRecord? current = _records.FirstOrDefault();
+        CaptureRecord? current = _records.FirstOrDefault(record => record.FolderId is null);
         if (current is not null && !current.IsPinned)
         {
             retainedCount++;
@@ -747,7 +754,7 @@ public sealed partial class CaptureQueue
         // not make it disappear immediately just because those pins consume the cap. The only
         // unpinned capture can still be evicted when it is an older item explicitly unpinned to
         // relieve pressure. A queue containing only one oversized capture also stays useful.
-        CaptureRecord? newest = _records.FirstOrDefault();
+        CaptureRecord? newest = _records.FirstOrDefault(record => record.FolderId is null);
         if ((unpinnedCount == 1
              && soleUnpinned is not null
              && ReferenceEquals(newest, soleUnpinned))
@@ -757,7 +764,7 @@ public sealed partial class CaptureQueue
         }
 
         return candidates
-            .OrderBy(record => record.UpdatedAt)
+            .OrderBy(record => record.EvictionReference)
             .ThenBy(record => record.CreatedAt)
             .FirstOrDefault();
     }

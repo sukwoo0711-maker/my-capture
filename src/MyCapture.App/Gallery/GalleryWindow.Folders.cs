@@ -21,13 +21,15 @@ internal sealed partial class GalleryWindow
     private bool _folderNavigationUpdating;
     private GalleryFolderNode? _folderDragNode;
     private Point _folderDragStart;
+    private bool _folderDragging;
     private CancellationTokenSource? _folderDragCancellation;
 
     private void InitializeFolderActions()
     {
         InputBindings.Add(new KeyBinding(new RelayCommand(() => OnNewFolderClick(this, new RoutedEventArgs())),
             new KeyGesture(Key.N, ModifierKeys.Control | ModifierKeys.Shift)));
-        PreviewMouseLeftButtonUp += (_, _) => CancelFolderDragPreparation();
+        PreviewMouseLeftButtonUp += OnFolderPointerUp;
+        PreviewMouseMove += OnFolderPointerMove;
         IsVisibleChanged += (_, _) => { if (!IsVisible) CancelFolderDragPreparation(); };
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) CancelFolderDragPreparation(); };
     }
@@ -85,14 +87,14 @@ internal sealed partial class GalleryWindow
     private async void OnNewFolderClick(object sender, RoutedEventArgs e)
     {
         if (_foldersBusy) return;
-        Guid? parent = FolderScopeFromSender(sender).FolderId;
+        CaptureFolderScope scope = FolderScopeFromSender(sender);
         CaptureFolder? created = null;
         _foldersBusy = true;
         bool saved;
         try
         {
             var dialog = GalleryFolderEditDialog.ForName(string.Empty, true, async name =>
-            { created = await _queue.CreateFolderAsync(name, parent); });
+            { created = await _queue.CreateFolderInScopeAsync(name, scope); });
             dialog.Owner = this;
             saved = dialog.ShowDialog() == true;
         }
@@ -148,7 +150,8 @@ internal sealed partial class GalleryWindow
             var dialog = GalleryFolderEditDialog.ForMove(_queue, null, _viewModel.SelectedScope.FolderId, async destination =>
             {
                 int moved = await _queue.MoveCapturesAsync(ids, destination);
-                LibraryActionStatus.Text = UiText.Format("Folder410.MoveDone", moved);
+                LibraryActionStatus.Text = UiText.Format("Folder410.MoveDone", moved)
+                    + (destination is null ? " " + UiText.Get("Folder410.RetentionRestarted") : string.Empty);
             });
             dialog.Owner = this;
             if (dialog.ShowDialog() == true) RaiseCaptureChanged();
@@ -173,7 +176,7 @@ internal sealed partial class GalleryWindow
             ? _queue.GetFolderDate(id).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
                 + " / " + _queue.GetFolderDisplayPath(id)
             : scope.Date!.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-        var dialog = new GalleryFolderDeletionDialog(name, preview) { Owner = this };
+        var dialog = new GalleryFolderDeletionDialog(name, preview, scope.FolderId is null) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         _deleteInProgress = _foldersBusy = true;
         try
@@ -188,6 +191,10 @@ internal sealed partial class GalleryWindow
             if (result.CleanupPendingCount > 0)
                 status += "\n" + UiText.Format("LibrarySelection_CleanupPending", result.CleanupPendingCount);
             LibraryActionStatus.Text = status;
+        }
+        catch (CaptureFolderChangedException)
+        {
+            LibraryActionStatus.Text = UiText.Get("Folder410.DeleteChanged");
         }
         catch (Exception ex)
         {
@@ -227,7 +234,7 @@ internal sealed partial class GalleryWindow
         {
             _log.LogWarning(ex, "The selected folder export scope is no longer available");
             _viewModel.Refresh();
-            LibraryActionStatus.Text = UiText.Get("Folder410.ExportFailed");
+            LibraryActionStatus.Text = ExportFailureMessage(ex);
             return;
         }
         if (plan.RootNames.Count == 0 || plan.Entries.Any(entry => !EnsureRecordReady(entry.Record.Id))) return;
@@ -254,6 +261,7 @@ internal sealed partial class GalleryWindow
         LibraryActionStatus.Text = UiText.Get("Folder410.ExportPreparing");
         try
         {
+            if (zip) destination = UniqueArchivePath(destination);
             using var prepared = await exporter.PrepareAsync(plan, cancellation.Token);
             var progress = new Progress<int>(done =>
             {
@@ -262,19 +270,51 @@ internal sealed partial class GalleryWindow
             });
             if (zip) await GalleryFolderExportService.ExportZipAsync(prepared, destination, progress, cancellation.Token);
             else await GalleryFolderExportService.ExportDirectoryAsync(prepared, destination, progress, cancellation.Token);
-            LibraryActionStatus.Text = UiText.Format("Folder410.ExportDone", plan.Entries.Count);
+            LibraryActionStatus.Text = UiText.Format("Folder410.ExportDone", plan.Entries.Count)
+                + (zip ? " · " + Path.GetFileName(destination) : string.Empty);
         }
         catch (OperationCanceledException) { LibraryActionStatus.Text = UiText.Get("Library.Archive.Cancelled"); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             _log.LogWarning(ex, "Could not export a virtual folder tree");
-            LibraryActionStatus.Text = UiText.Get("Folder410.ExportFailed");
+            LibraryActionStatus.Text = ExportFailureMessage(ex);
         }
         finally
         {
             _archiveCancellation = null; ArchiveExportButton.IsEnabled = true;
             ArchiveCancelButton.Visibility = Visibility.Collapsed;
         }
+    }
+
+    internal static string UniqueArchivePath(string requested)
+    {
+        string parent = Path.GetDirectoryName(Path.GetFullPath(requested))!;
+        string stem = Path.GetFileNameWithoutExtension(requested);
+        string candidate = requested;
+        for (int suffix = 2; File.Exists(candidate) || Directory.Exists(candidate); suffix++)
+        {
+            if (suffix > 10_000) throw new IOException("No available archive name.");
+            candidate = Path.Combine(parent, stem + "~" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".zip");
+        }
+        return candidate;
+    }
+
+    private static string ExportFailureMessage(Exception ex)
+    {
+        int code = ex.InnerException is System.ComponentModel.Win32Exception native
+            ? native.NativeErrorCode : ex.HResult & 0xffff;
+        string key = ex switch
+        {
+            PathTooLongException => "Folder410.ExportPathTooLong",
+            UnauthorizedAccessException => "Dialog.Access",
+            FileNotFoundException or DirectoryNotFoundException => "Folder410.ExportMissing",
+            InvalidOperationException => "Folder410.ExportChanged",
+            _ when code is 80 or 183 => "Folder410.ExportNameExists",
+            _ when code is 32 or 33 => "Folder410.ExportLocked",
+            _ when code is 39 or 112 => "Folder410.ExportDiskFull",
+            _ => "Dialog.Storage",
+        };
+        return UiText.Get("Folder410.ExportFailed") + " " + UiText.Get(key);
     }
 
     private static GalleryFolderNode? NodeAt(object source)
@@ -290,17 +330,25 @@ internal sealed partial class GalleryWindow
     private void OnFolderPointerDown(object sender, MouseButtonEventArgs e)
     {
         if (_folderDragCancellation is not null || IsInsideButton(e.OriginalSource)) return;
+        if (_foldersBusy) return;
+        _folderDragging = false;
         _folderDragNode = NodeAt(e.OriginalSource);
         _folderDragStart = e.GetPosition(this);
     }
 
     private async void OnFolderPointerMove(object sender, MouseEventArgs e)
     {
+        if (_folderDragNode is not null && e.LeftButton != MouseButtonState.Pressed)
+        { CancelFolderDragPreparation(); return; }
         if (_folderDragNode is not { } node || _folderDragCancellation is not null
             || e.LeftButton != MouseButtonState.Pressed) return;
         Point point = e.GetPosition(this);
         if (Math.Abs(point.X - _folderDragStart.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(point.Y - _folderDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        _folderDragging = true;
+        if (!IsMouseCaptured) CaptureMouse();
+        e.Handled = true;
+        if (IsInsideFolderDragWindow(point)) return; // Internal moves never stage media.
         using var cancellation = new CancellationTokenSource();
         _folderDragCancellation = cancellation;
         e.Handled = true;
@@ -311,21 +359,52 @@ internal sealed partial class GalleryWindow
             if (plan.Entries.Any(entry => !EnsureRecordReady(entry.Record.Id))) return;
             using var prepared = await exporter.PrepareAsync(plan, cancellation.Token);
             if (!IsVisible || Mouse.LeftButton != MouseButtonState.Pressed || _folderDragNode != node) return;
+            ReleaseMouseCapture();
             DataObject data = GalleryDragExportService.CreateFileDropData(prepared.Paths);
             if (node.FolderId is { } id)
                 data.SetData(GalleryFolderDragPayload.Format, new GalleryFolderDragPayload(_folderDragOwner, [], id), false);
-            prepared.MarkPublished();
             _ = DragDrop.DoDragDrop(this, data, DragDropEffects.Copy);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        { LibraryActionStatus.Text = UiText.Get("Folder410.ExportFailed"); }
-        finally { _folderDragCancellation = null; _folderDragNode = null; }
+        { LibraryActionStatus.Text = ExportFailureMessage(ex); }
+        finally { _folderDragCancellation = null; CancelFolderDragPreparation(); }
+    }
+
+    private bool IsInsideFolderDragWindow(Point point) =>
+        new Rect(0, 0, ActualWidth, ActualHeight).Contains(point);
+
+    private async void OnFolderPointerUp(object sender, MouseButtonEventArgs e)
+    {
+        GalleryFolderNode? source = _folderDragNode;
+        bool internalMove = _folderDragging && _folderDragCancellation is null && IsInsideFolderDragWindow(e.GetPosition(this));
+        var hit = InputHitTest(e.GetPosition(this));
+        CaptureFolderScope target = NodeAt(hit!)?.Scope ?? CaptureFolderScope.All;
+        bool treeTarget = hit is DependencyObject obj && IsFolderTreeTarget(obj);
+        CancelFolderDragPreparation();
+        if (!internalMove || source?.FolderId is not { } id || !treeTarget) return;
+        e.Handled = true;
+        var payload = new GalleryFolderDragPayload(_folderDragOwner, [], id);
+        if (CanDropFolderPayload(_queue, payload, target)) await ApplyFolderDropAsync(payload, target);
+        else LibraryActionStatus.Text = UiText.Get("Folder410.InvalidMove");
+    }
+
+    private bool IsFolderTreeTarget(DependencyObject current)
+    {
+        while (true)
+        {
+            if (ReferenceEquals(current, FolderTree)) return true;
+            DependencyObject? parent = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current);
+            if (parent is null) return false;
+            current = parent;
+        }
     }
 
     private void CancelFolderDragPreparation()
     {
         _folderDragNode = null;
+        _folderDragging = false;
+        if (IsMouseCaptured) ReleaseMouseCapture();
         _folderDragCancellation?.Cancel();
     }
 
@@ -372,6 +451,11 @@ internal sealed partial class GalleryWindow
         e.Handled = true;
         e.Effects = allowed ? DragDropEffects.Copy : DragDropEffects.None;
         if (!allowed || payload is null) return;
+        await ApplyFolderDropAsync(payload, target);
+    }
+
+    private async Task ApplyFolderDropAsync(GalleryFolderDragPayload payload, CaptureFolderScope target)
+    {
         _foldersBusy = true;
         try
         {
@@ -379,7 +463,8 @@ internal sealed partial class GalleryWindow
             else
             {
                 int moved = await _queue.MoveCapturesAsync(payload.Captures, target.FolderId);
-                LibraryActionStatus.Text = UiText.Format("Folder410.MoveDone", moved);
+                LibraryActionStatus.Text = UiText.Format("Folder410.MoveDone", moved)
+                    + (target.FolderId is null ? " " + UiText.Get("Folder410.RetentionRestarted") : string.Empty);
             }
             RaiseCaptureChanged();
         }

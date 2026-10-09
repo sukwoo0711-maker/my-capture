@@ -186,7 +186,7 @@ public sealed class GalleryFolderTests
     }
 
     [Fact]
-    public async Task NamedCaptureBatchUsesFolderNames_AndPublishedTreeExpiresAfterTwoDays()
+    public async Task NamedCaptureBatchUsesFolderNames_AndDropDisposalRemovesStagingImmediately()
     {
         var f = new Fixture();
         var folder = await f.Queue.CreateFolderAsync("Names");
@@ -200,13 +200,8 @@ public sealed class GalleryFolderTests
             Assert.Equal("myCapture01.png", Path.GetFileName(path));
             prepared.MarkPublished();
         }
-        Assert.True(File.Exists(path));
-        exporter.CleanupExpiredBestEffort(DateTimeOffset.Now.AddDays(-2));
-        Assert.True(File.Exists(path));
-        string batch = Path.GetDirectoryName(path)!;
-        Directory.SetLastWriteTimeUtc(batch, DateTime.UtcNow.AddDays(-3));
-        exporter.CleanupExpiredBestEffort(DateTimeOffset.Now.AddDays(-2));
-        Assert.False(Directory.Exists(batch));
+        Assert.False(File.Exists(path));
+        Assert.False(Directory.Exists(Path.GetDirectoryName(path)!));
         Assert.True(File.Exists(f.Queue.GetFilePath(record, CaptureFileNames.Rendered)));
     }
 

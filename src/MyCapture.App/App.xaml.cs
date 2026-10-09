@@ -1683,7 +1683,8 @@ public partial class App : Application
             () => _settings!,
             next => _settingsApply!.Apply(next),
             _services.GetRequiredService<ILogger<SettingsWindow>>(),
-            () => _services.GetRequiredService<SettingsStore>());
+            () => _services.GetRequiredService<SettingsStore>(),
+            applyDraft: (next, edited) => _settingsApply!.Apply(next, edited));
 
         window.CanExitForUpdate = () =>
             _recorder?.IsActive != true && _overlay?.IsActive != true &&

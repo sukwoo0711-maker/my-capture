@@ -36,6 +36,17 @@ public sealed class CaptureRecord
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
 
+    /// <summary>Restarted when a capture leaves a folder; absent in legacy indexes.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? RetentionStartedAt { get; set; }
+
+    [JsonIgnore]
+    public DateTimeOffset RetentionReference => RetentionStartedAt ?? CreatedAt;
+
+    [JsonIgnore]
+    public DateTimeOffset EvictionReference => RetentionStartedAt is { } restarted && restarted > UpdatedAt
+        ? restarted : UpdatedAt;
+
     /// <summary>
     /// Media stored by this record. The zero value deliberately remains <see cref="CaptureMediaKind.Image"/>
     /// so indexes written before video-gallery support deserialize without migration.

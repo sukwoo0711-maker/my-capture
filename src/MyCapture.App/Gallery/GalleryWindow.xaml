@@ -38,7 +38,7 @@
             <MenuItem Header="{loc:Text Folder410.FolderExport}" CommandParameter="{Binding}" Click="OnExportFolderClick" />
             <MenuItem Header="{loc:Text Folder410.ZipExport}" CommandParameter="{Binding}" Click="OnExportFolderZipClick" />
             <Separator />
-            <MenuItem Header="{loc:Text Folder410.Delete}" CommandParameter="{Binding}"
+            <MenuItem Header="{Binding DeleteLabel, FallbackValue={loc:Text Folder410.Delete}}" CommandParameter="{Binding}"
                       InputGestureText="Delete" Foreground="{DynamicResource State.DangerHover}"
                       Click="OnDeleteFolderClick" />
         </ContextMenu>
@@ -660,6 +660,17 @@
                                 DragOver="OnFolderDragOver" Drop="OnFolderDrop" Margin="0,0,0,6" />
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                        <TextBlock Text="{Binding FolderStorageText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource Text.Secondary}" FontSize="12" />
+                        <TextBlock Text="{loc:Text Folder410.StorageInfo}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource Text.Secondary}" FontSize="12">
+                            <TextBlock.Style><Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers><DataTrigger Binding="{Binding ShowFolderStorageInfo}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger></Style.Triggers>
+                            </Style></TextBlock.Style>
+                        </TextBlock>
                         <TextBlock Text="{loc:Text Folder410.RetentionHint}" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Text.Muted}" FontSize="12" ToolTip="{loc:Text Workspace.RetentionHint}" />
                     </StackPanel>
@@ -669,7 +680,7 @@
                               ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"
                               VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling"
                               SelectedItemChanged="OnFolderSelected" PreviewKeyDown="OnFolderTreeKeyDown"
-                              PreviewMouseLeftButtonDown="OnFolderPointerDown" PreviewMouseMove="OnFolderPointerMove"
+                              PreviewMouseLeftButtonDown="OnFolderPointerDown"
                               AllowDrop="True" DragOver="OnFolderDragOver" Drop="OnFolderDrop">
                         <TreeView.Resources>
                             <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="{Binding Color, Source={StaticResource Accent.Default}}" />

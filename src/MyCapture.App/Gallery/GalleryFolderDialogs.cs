@@ -14,7 +14,7 @@ internal sealed class GalleryFolderEditDialog : Window
     internal Button CancelButton { get; }
 
     private GalleryFolderEditDialog(string titleKey, string labelKey, Control input,
-        string actionKey, string invalidKey, Func<Task> save)
+        string actionKey, string invalidKey, Func<Task> save, string? hintKey = null)
     {
         Input = input;
         Title = UiText.Get(titleKey);
@@ -28,6 +28,8 @@ internal sealed class GalleryFolderEditDialog : Window
         content.Children.Add(new TextBlock { Text = UiText.Get(labelKey), Margin = new Thickness(0, 0, 0, 8) });
         AutomationProperties.SetName(input, UiText.Get(labelKey));
         content.Children.Add(input);
+        if (hintKey is not null) content.Children.Add(new TextBlock { Text = UiText.Get(hintKey),
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) });
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) };
         AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Polite);
         content.Children.Add(error);
@@ -83,7 +85,8 @@ internal sealed class GalleryFolderEditDialog : Window
         input.SelectedItem = choices.FirstOrDefault(choice => choice.Id == initial) ?? choices[0];
         return new(sourceFolder is null ? "Folder410.MoveCaptures" : "Folder410.MoveFolder",
             "Folder410.Destination", input, sourceFolder is null ? "Folder410.MoveCaptures" : "Folder410.MoveFolder",
-            "Folder410.InvalidMove", () => save((input.SelectedItem as FolderDestination)?.Id));
+            "Folder410.InvalidMove", () => save((input.SelectedItem as FolderDestination)?.Id),
+            sourceFolder is null ? "Folder410.RetentionRestarted" : null);
     }
 
     private sealed record FolderDestination(Guid? Id, string Name);
@@ -93,7 +96,7 @@ internal sealed class GalleryFolderDeletionDialog : Window
 {
     internal Button CancelButton { get; }
     internal Button DeleteButton { get; }
-    internal GalleryFolderDeletionDialog(string name, CaptureFolderDeletionPreview preview)
+    internal GalleryFolderDeletionDialog(string name, CaptureFolderDeletionPreview preview, bool isDate = false)
     {
         Title = UiText.Get("Folder410.DeleteTitle");
         Width = 470; MinWidth = 360; SizeToContent = SizeToContent.Height;
@@ -105,6 +108,10 @@ internal sealed class GalleryFolderDeletionDialog : Window
         var content = new StackPanel { Margin = new Thickness(24) };
         content.Children.Add(new TextBlock { Text = UiText.Format("Folder410.DeleteConfirm", name,
             preview.SubfolderCount, preview.ImageCount, preview.VideoCount), TextWrapping = TextWrapping.Wrap });
+        if (isDate) content.Children.Add(new TextBlock { Text = UiText.Get("Folder410.DeleteDateIncludes"),
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) });
+        content.Children.Add(new TextBlock { Text = UiText.Get("Folder410.DeleteIrreversible"),
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) });
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 24, 0, 0) };
         CancelButton = new Button { Content = UiText.Get("Library.Action.Cancel"), IsCancel = true, IsDefault = true,

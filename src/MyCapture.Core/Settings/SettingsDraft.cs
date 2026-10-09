@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -322,8 +322,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     public bool UseCurrentFolderForNewCaptures
     {
         get => _useCurrentFolderForNewCaptures;
-        set => Set(ref _useCurrentFolderForNewCaptures, value);
+        set { if (Set(ref _useCurrentFolderForNewCaptures, value)) FolderDestinationEdited = true; }
     }
+
+    public bool FolderDestinationEdited { get; private set; }
 
     public string ImageRetentionHours
     {
@@ -529,6 +531,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             AppPaths.CreateDefault().CapturesRoot);
         _imageRetentionHours = Int(s.Queue.ImageRetentionHours);
         _folderFilePrefix = s.Queue.FolderFilePrefix;
+        FolderDestinationEdited = false;
         _useCurrentFolderForNewCaptures = s.Queue.UseCurrentFolderForNewCaptures;
         _defaultCaptureFolderId = s.Queue.DefaultCaptureFolderId;
 

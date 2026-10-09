@@ -3,6 +3,11 @@ using System.Text.Json.Serialization;
 
 namespace MyCapture.Core.Queue;
 
+public sealed class CaptureFolderChangedException : InvalidOperationException
+{
+    public CaptureFolderChangedException() : base("The folder changed after deletion was confirmed.") { }
+}
+
 /// <summary>A virtual folder. Capture payloads never move when this metadata changes.</summary>
 public sealed class CaptureFolder
 {

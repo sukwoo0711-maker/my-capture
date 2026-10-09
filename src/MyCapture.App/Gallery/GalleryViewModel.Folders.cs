@@ -18,6 +18,7 @@ public sealed class GalleryFolderNode : INotifyPropertyChanged
     public string Name { get => _name; internal set { if (_name != value) { _name = value; Raise(); Raise(nameof(Caption)); } } }
     private int _count;
     public int Count { get => _count; internal set { if (_count != value) { _count = value; Raise(); Raise(nameof(Caption)); } } }
+    public string DeleteLabel => UiText.Get(IsFolder ? "Folder410.Delete" : "Folder410.DeleteDate");
     public string Caption => UiText.Format("Folder410.Count", Name, Count);
     private bool _isExpanded = true;
     public bool IsExpanded { get => _isExpanded; set { if (_isExpanded != value) { _isExpanded = value; Raise(); } } }
@@ -30,6 +31,9 @@ public sealed class GalleryFolderNode : INotifyPropertyChanged
 
 public sealed partial class GalleryViewModel
 {
+    public string FolderStorageText => UiText.Format("Folder410.Storage", _controller.Queue.Folders.Count,
+        FormatBytes(_controller.Queue.FolderBytes));
+    public bool ShowFolderStorageInfo => _controller.Queue.IsFolderStorageLarge;
     public ObservableCollection<GalleryFolderNode> FolderNodes { get; } = [];
     private CaptureFolderScope _scope;
     public CaptureFolderScope SelectedScope => _scope;
@@ -103,6 +107,7 @@ public sealed partial class GalleryViewModel
             nodes.Add(node);
         }
         Replace(FolderNodes, nodes);
+        Raise(nameof(FolderStorageText)); Raise(nameof(ShowFolderStorageInfo));
         Raise(nameof(SelectedScope)); Raise(nameof(HasFolderScope)); Raise(nameof(CanSetNewCaptureFolder));
         Raise(nameof(UseCurrentFolderForNewCaptures)); Raise(nameof(CanChangeNewCaptureFolder)); Raise(nameof(NewCaptureDestinationText)); Raise(nameof(SearchPlaceholder));
     }

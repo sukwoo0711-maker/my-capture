@@ -106,6 +106,7 @@ internal sealed class GalleryFolderExportService
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (plan.RootNames.Count == 0) throw new InvalidOperationException("There is no folder or capture to export.");
+        plan = FitStagingPlan(plan);
         var leases = new List<IDisposable>();
         string? batch = null;
         try
@@ -134,10 +135,14 @@ internal sealed class GalleryFolderExportService
     internal string PrepareSingle(CaptureRecord record)
     {
         using IDisposable lease = _queue.AcquireEvictionLease(record.Id);
-        GalleryFolderExportPlan plan = BuildCapturePlan([record]);
+        GalleryFolderExportPlan plan = FitStagingPlan(BuildCapturePlan([record]));
         string batch = Stage(plan, CancellationToken.None);
         return GalleryExportFiles.RelativeChild(batch, plan.Entries[0].RelativePath);
     }
+
+    private GalleryFolderExportPlan FitStagingPlan(GalleryFolderExportPlan plan) =>
+        GalleryExportPathBudget.Fit(plan, Path.Combine(_stagingRoot,
+            GalleryExportFiles.FolderBatchPrefix + new string('0', 32)).Length);
 
     private string Stage(GalleryFolderExportPlan plan, CancellationToken cancellationToken)
     {
@@ -172,19 +177,24 @@ internal sealed class GalleryFolderExportService
         IProgress<int>? progress = null, CancellationToken cancellationToken = default) => Task.Run(() =>
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (Path.GetFullPath(destination).Length > GalleryExportPathBudget.MaximumPathLength)
+            throw new PathTooLongException("Choose a shorter archive path.");
+        GalleryFolderExportPlan outputPlan = GalleryExportPathBudget.Fit(prepared.Plan,
+            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(destination))!, Path.GetFileNameWithoutExtension(destination)).Length);
+        var sources = prepared.Plan.Entries.ToDictionary(e => e.Record.Id, e => e.RelativePath);
         GalleryExportFiles.WriteStreamNew(destination, stream =>
         {
             using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
-            foreach (string directory in prepared.Plan.Directories)
+            foreach (string directory in outputPlan.Directories)
             {
                 _ = GalleryExportFiles.RelativeChild(prepared.BatchRoot, directory);
                 archive.CreateEntry(directory + "/", CompressionLevel.NoCompression);
             }
             int done = 0;
-            foreach (GalleryFolderExportEntry entry in prepared.Plan.Entries)
+            foreach (GalleryFolderExportEntry entry in outputPlan.Entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string source = GalleryExportFiles.RelativeChild(prepared.BatchRoot, entry.RelativePath);
+                string source = GalleryExportFiles.RelativeChild(prepared.BatchRoot, sources[entry.Record.Id]);
                 using Stream output = archive.CreateEntry(entry.RelativePath, CompressionLevel.NoCompression).Open();
                 GalleryExportFiles.CopyToStream(source, output, cancellationToken);
                 progress?.Report(++done);
@@ -198,9 +208,12 @@ internal sealed class GalleryFolderExportService
     {
         cancellationToken.ThrowIfCancellationRequested();
         using GalleryExportFiles.DirectoryLease destinationLease = GalleryExportFiles.DirectoryLease.Open(destination, create: false);
+        // Root collision suffixes consume up to six extra characters (-9999).
+        GalleryFolderExportPlan outputPlan = GalleryExportPathBudget.Fit(prepared.Plan, Path.GetFullPath(destination).Length + 6);
+        var sources = prepared.Plan.Entries.ToDictionary(e => e.Record.Id, e => e.RelativePath);
         var roots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var outputs = new List<string>();
-        foreach (string root in prepared.Plan.RootNames.Where(root => prepared.Plan.Directories.Contains(root)))
+        foreach (string root in outputPlan.RootNames.Where(root => outputPlan.Directories.Contains(root)))
         {
             string allocated = GalleryExportFiles.CreateUniqueDirectory(destination, root);
             roots.Add(root, allocated);
@@ -213,16 +226,16 @@ internal sealed class GalleryFolderExportService
             foreach (string part in parts.Skip(1)) path = GalleryExportFiles.Child(path, part);
             return path;
         }
-        foreach (string directory in prepared.Plan.Directories)
+        foreach (string directory in outputPlan.Directories)
         {
             cancellationToken.ThrowIfCancellationRequested();
             GalleryExportFiles.EnsureDirectory(Target(directory));
         }
         int done = 0;
-        foreach (GalleryFolderExportEntry entry in prepared.Plan.Entries)
+        foreach (GalleryFolderExportEntry entry in outputPlan.Entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string source = GalleryExportFiles.RelativeChild(prepared.BatchRoot, entry.RelativePath);
+            string source = GalleryExportFiles.RelativeChild(prepared.BatchRoot, sources[entry.Record.Id]);
             if (entry.RelativePath.Contains('/'))
                 GalleryExportFiles.Copy(source, Target(entry.RelativePath), cancellationToken);
             else
@@ -247,7 +260,6 @@ internal sealed class GalleryFolderExportService
     internal sealed class PreparedFolderExport : IDisposable
     {
         private readonly List<IDisposable> _leases;
-        private bool _published;
         private bool _disposed;
         internal string BatchRoot { get; }
         internal GalleryFolderExportPlan Plan { get; }
@@ -259,12 +271,11 @@ internal sealed class GalleryFolderExportService
             Paths = plan.RootNames.Select(name => GalleryExportFiles.RelativeChild(batchRoot, name)).ToArray();
         }
 
-        internal void MarkPublished() => _published = true;
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
-            if (!_published) GalleryExportFiles.DeleteFolderBatchBestEffort(BatchRoot);
+            GalleryExportFiles.DeleteFolderBatchBestEffort(BatchRoot);
             foreach (IDisposable lease in _leases) lease.Dispose();
             _leases.Clear();
         }

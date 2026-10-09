@@ -3287,9 +3287,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Folder410.CurrentFolderOption" xml:space="preserve"><value>새 캡처를 현재 폴더에 저장</value></data>
   <data name="Folder410.DestinationHeader" xml:space="preserve"><value>새 캡처 저장 위치: {0}</value></data>
   <data name="Folder410.DefaultDestination" xml:space="preserve"><value>날짜별 라이브러리</value></data>
-  <data name="Folder410.StopDestination" xml:space="preserve"><value>끄기</value></data>
   <data name="Folder410.Delete" xml:space="preserve"><value>폴더와 캡처 삭제</value></data>
-  <data name="Folder410.DeleteDate" xml:space="preserve"><value>날짜의 폴더와 캡처 삭제</value></data>
+  <data name="Folder410.DeleteDate" xml:space="preserve"><value>이 날짜의 캡처 모두 삭제</value></data>
   <data name="Folder410.DeleteTitle" xml:space="preserve"><value>폴더 삭제</value></data>
   <data name="Folder410.DeleteConfirm" xml:space="preserve"><value>{0}
 하위 폴더 {1}개 · 이미지 {2}개 · 동영상 {3}개를 삭제합니다.</value></data>
@@ -3322,4 +3321,16 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store에서 설치한 MyCapture는 Microsoft Store가 업데이트합니다. 새 버전은 Microsoft Store 앱의 라이브러리에서 확인할 수 있습니다.</value></data>
   <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>Windows 설정에서 MyCapture 시작 앱이 꺼져 있습니다. 설정 &gt; 앱 &gt; 시작 프로그램에서 켜십시오.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>조직 정책이 시작 프로그램 설정을 관리합니다.</value></data>
+  <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>폴더에서 뺀 캡처는 오늘부터 보관 기간이 다시 적용됩니다.</value></data>
+  <data name="Folder410.DeleteChanged" xml:space="preserve"><value>확인한 뒤 폴더 항목이 변경되어 삭제를 중단했습니다. 내용을 확인한 후 다시 시도하십시오.</value></data>
+  <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>이 날짜의 폴더와 폴더에 넣지 않은 캡처, 핀으로 보관한 캡처가 모두 포함됩니다.</value></data>
+  <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>삭제한 폴더와 캡처는 되돌릴 수 없습니다.</value></data>
+  <data name="Folder410.Storage" xml:space="preserve"><value>폴더 {0}개 · {1}</value></data>
+  <data name="Folder410.StorageInfo" xml:space="preserve"><value>폴더 보관 용량이 일반 캡처의 용량 한도를 넘었습니다. 폴더 항목은 자동 삭제되지 않습니다.</value></data>
+  <data name="Folder410.ExportPathTooLong" xml:space="preserve"><value>선택한 저장 위치가 너무 깊습니다. 더 짧은 경로를 선택하십시오.</value></data>
+  <data name="Folder410.ExportNameExists" xml:space="preserve"><value>같은 이름의 파일이 있습니다. 다른 이름을 선택하십시오.</value></data>
+  <data name="Folder410.ExportMissing" xml:space="preserve"><value>원본 파일 또는 저장 폴더를 찾을 수 없습니다. 경로를 확인하십시오.</value></data>
+  <data name="Folder410.ExportChanged" xml:space="preserve"><value>내보내는 동안 캡처가 변경되었습니다. 다시 시도하십시오.</value></data>
+  <data name="Folder410.ExportLocked" xml:space="preserve"><value>파일이 다른 프로그램에서 사용 중입니다. 파일을 닫고 다시 시도하십시오.</value></data>
+  <data name="Folder410.ExportDiskFull" xml:space="preserve"><value>저장 공간이 부족합니다. 공간을 확보하거나 다른 위치를 선택하십시오.</value></data>
 </root>

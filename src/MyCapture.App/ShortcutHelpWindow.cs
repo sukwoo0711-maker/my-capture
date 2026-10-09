@@ -78,6 +78,8 @@ internal sealed class ShortcutHelpWindow : Window
                 ("Help.Annotation", [("Text_DC0760235344", "R"), ("Tools.Ellipse", "E"), ("Text_2785CE58DF74", "A"),
                     ("Text_37DB9D0B1C8E", "P"), ("Tools.Highlighter", "H"), ("Text_258AD4B095A1", "T"), ("Tools.StepNumber", "N"),
                     ("Text_3F8046019B32", "M"), ("Tools_Crop", "X"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
+                ("Folder410.Title", [("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2"),
+                    ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del")]),
                 ("Help.Video", [("Help.Play", "Space"), ("Help.Frame", "Ctrl+← / Ctrl+→"), ("Video.TrimIn", "I"), ("Video.TrimOut", "O"), ("Help.Gif", "G")]),
                 ("QuickAccess.Pin", [("QuickAccess.Pin", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
                     ("Text_67FE4AF7D334", Display(keys.ToggleClickThrough)), ("QuickAccess.Copy", "Ctrl+C"), ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
@@ -149,7 +151,10 @@ internal sealed class ShortcutHelpWindow : Window
         for (int a = 0; a < alternatives.Length; a++)
         {
             if (a > 0) keys.Children.Add(new TextBlock { Text = " / ", VerticalAlignment = VerticalAlignment.Center });
-            foreach (string key in alternatives[a].Split('+', StringSplitOptions.RemoveEmptyEntries))
+            string alternative = alternatives[a];
+            string[] parts = alternative.TrimEnd('+').Split('+', StringSplitOptions.RemoveEmptyEntries);
+            if (alternative.EndsWith('+')) parts = [.. parts, "+"];
+            foreach (string key in parts)
             {
                 var cap = new Border { CornerRadius = new CornerRadius(5), BorderThickness = new Thickness(1,1,1,2),
                     Padding = new Thickness(8,4,8,4), Margin = new Thickness(0,2,4,2),

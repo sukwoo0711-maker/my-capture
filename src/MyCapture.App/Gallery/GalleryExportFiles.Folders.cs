@@ -67,7 +67,8 @@ internal static partial class GalleryExportFiles
         string target = Child(Path.GetDirectoryName(Path.GetFullPath(destination))!, Path.GetFileName(destination));
         string parent = Path.GetDirectoryName(target)!;
         using DirectoryLease parents = DirectoryLease.Open(parent, create: false);
-        if (File.Exists(target) || Directory.Exists(target)) throw new IOException("Choose a new archive filename.");
+        if (File.Exists(target) || Directory.Exists(target))
+            throw new IOException("Choose a new archive filename.", new System.ComponentModel.Win32Exception(183));
         string stage = Child(parent, $".mycapture-folder-{Guid.NewGuid():N}.zip.partial");
         using SafeFileHandle handle = OpenRegularFile(stage, 0x40000000 | DeleteAccess, CreateNew);
         using var output = new FileStream(handle, FileAccess.Write);

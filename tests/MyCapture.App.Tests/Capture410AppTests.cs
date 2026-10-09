@@ -47,11 +47,8 @@ public sealed class Capture410AppTests
     });
 
     [Theory]
-    [InlineData("Rectangle")]
-    [InlineData("Pen")]
-    [InlineData("Text")]
     [InlineData("Select")]
-    public void DraggingAnEdgeEntersCropFromTheCurrentTool_AndEscDoesNotModifyPixels(string tool) => StaTestHost.Run(() =>
+    public void DraggingAnEmptyEdgeInSelectEntersCrop_AndEscDoesNotModifyPixels(string tool) => StaTestHost.Run(() =>
     {
         var editor = Editor();
         editor.ShortcutActions[tool]();
@@ -71,10 +68,50 @@ public sealed class Capture410AppTests
         Assert.Same(original, editor.DisplayedBitmap);
     });
 
+    [Theory]
+    [InlineData("Rectangle")]
+    [InlineData("Ellipse")]
+    [InlineData("Arrow")]
+    [InlineData("Image")]
+    [InlineData("Pen")]
+    [InlineData("Highlighter")]
+    [InlineData("Text")]
+    [InlineData("StepNumber")]
+    [InlineData("Mosaic")]
+    public void DrawingToolsKeepTheirEdgeInput(string tool) => StaTestHost.Run(() =>
+    {
+        var editor = Editor();
+        editor.ShortcutActions[tool]();
+        Assert.Null(editor.EdgeCropGripAt(new PointD(0, 50)));
+        Assert.False(editor.TryBeginEdgeCrop(new PointD(0, 50)));
+        Assert.False(editor.ContinueEdgeCrop(new PointD(30, 50), false));
+        Assert.Null(editor.PendingCrop);
+    });
+
+    [Fact]
+    public void EdgeAnnotationsAndResizeHandlesTakePriorityOverCrop() => StaTestHost.Run(() =>
+    {
+        var document = AnnotationDocument.CreateFor(160, 120);
+        var rectangle = new RectangleAnnotation { Rect = new RectD(0, 20, 30, 50), StrokeThickness = 3 };
+        document.Add(rectangle);
+        var editor = Editor(document: document);
+        editor.ShortcutActions["Select"]();
+        Assert.False(editor.TryBeginEdgeCrop(new PointD(0, 40)));
+        var controller = Field<AnnotationEditorController>(editor, "_controller");
+        controller.PointerDown(new PointD(0, 40)); controller.PointerUp(new PointD(0, 40));
+        Assert.False(editor.TryBeginEdgeCrop(new PointD(0, 20)));
+        Assert.True(editor.TryBeginEdgeCrop(new PointD(160, 100)));
+        editor.CompleteEdgeCropGesture(new PointD(160, 100), false);
+        controller.PointerUp(new PointD(160, 100));
+        Assert.Null(controller.Selected);
+        Assert.Null(editor.PendingCrop);
+    });
+
     [Fact]
     public void FractionalEdgeDragShowsThePixelDimensionsThatEnterActuallyProduces() => StaTestHost.Run(() =>
     {
         var editor = Editor();
+        editor.ShortcutActions["Select"]();
         Assert.True(editor.TryBeginEdgeCrop(new PointD(160, 120)));
         Assert.True(editor.ContinueEdgeCrop(new PointD(100.2, 80.2), false));
         editor.PendingCrop!.End();
@@ -89,6 +126,7 @@ public sealed class Capture410AppTests
     public void EdgeCropRetainsRatioNumericEnterUndoRedoAndX() => StaTestHost.Run(() =>
     {
         var editor = Editor();
+        editor.ShortcutActions["Select"]();
         Assert.True(editor.TryBeginEdgeCrop(new PointD(160, 120)));
         editor.ContinueEdgeCrop(new PointD(120, 90), true);
         var crop = editor.PendingCrop!;

@@ -174,6 +174,18 @@ internal static class HotfixUxSelfTest
                     }
                     // Kept cards enter only by a non-action background click.
                     var dimensions = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single();
+                    double originalLeft = keyboardCard.Left;
+                    Point dragStart = dimensions.PointToScreen(new Point(dimensions.ActualWidth / 2, dimensions.ActualHeight / 2));
+                    MoveCursor(inputHandle, (int)dragStart.X, (int)dragStart.Y);
+                    MouseButton(inputHandle, 0x0002); Pump(50);
+                    for (int delta = 10; delta <= 80; delta += 10)
+                    {
+                        MoveCursor(inputHandle, (int)dragStart.X - delta, (int)dragStart.Y); Pump(25);
+                    }
+                    MouseButton(inputHandle, 0x0004); Pump(80);
+                    Check("background drag moves the card without activating or invoking an action",
+                        Math.Abs(keyboardCard.Left - originalLeft) > 40 && GetForegroundWindow() == inputHandle
+                        && !keyboardCard.IsActive && copies == 1 && saves == 1);
                     Click(inputHandle, dimensions);
                     Check("background click activates the kept card", keyboardCard.IsActive && keyboardCard.IsKeyboardFocusWithin);
                     SendKey(cardHandle, 0x43); Pump(80);

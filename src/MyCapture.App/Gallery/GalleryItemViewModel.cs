@@ -154,12 +154,12 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     internal Func<DateTimeOffset> Clock { get; set; } = static () => DateTimeOffset.Now;
 
     public bool IsExpiringSoon => IsImage && !IsPinned && Record.FolderId is null && CaptureRetention.Remaining(
-        Record.CreatedAt, CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = RetentionHours() }),
+        Record.RetentionReference, CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = RetentionHours() }),
         Clock()) < TimeSpan.FromHours(24);
 
     /// <summary>TTL countdown matching the configured gallery retention.</summary>
     public string RetentionCaption => CaptureRetention.FormatCountdown(
-        Record.CreatedAt,
+        Record.RetentionReference,
         CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = RetentionHours() }),
         Clock(),
         IsImage,

@@ -157,7 +157,7 @@ internal sealed class QuickAccessWindow : Window
             long now = Stopwatch.GetTimestamp();
             TimeSpan elapsed = Stopwatch.GetElapsedTime(_lastTick, now);
             _lastTick = now;
-            Advance(elapsed, IsPointerOver || (_keyboardInteracting && IsKeyboardFocusWithin) || _busy);
+            Advance(elapsed, IsPointerOver || IsMouseCaptured || (_keyboardInteracting && IsKeyboardFocusWithin) || _busy);
         };
         SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
         Closed += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); _activationKey = null; };
@@ -169,11 +169,38 @@ internal sealed class QuickAccessWindow : Window
             if (IsVisible) { _lastTick = Stopwatch.GetTimestamp(); _timer.Start(); }
             UpdateActivationHotkey();
         };
-        PreviewMouseDown += (_, e) =>
+        Point? cardDrag = null;
+        Point cardOrigin = default;
+        bool cardMoved = false;
+        PreviewMouseLeftButtonDown += (_, e) =>
         {
-            if (!_keyboardAccess && e.ChangedButton == MouseButton.Left && IsKeyboardEntryBackground(e.OriginalSource as DependencyObject))
-                ActivateForKeyboard();
+            if (!IsKeyboardEntryBackground(e.OriginalSource as DependencyObject)) return;
+            cardDrag = PointToScreen(e.GetPosition(this));
+            cardOrigin = new Point(Left, Top);
+            cardMoved = false;
+            CaptureMouse();
+            e.Handled = true;
         };
+        PreviewMouseMove += (_, e) =>
+        {
+            if (cardDrag is not Point start || e.LeftButton != MouseButtonState.Pressed) return;
+            Point screen = PointToScreen(e.GetPosition(this));
+            var dpi = VisualTreeHelper.GetDpi(this);
+            Vector delta = screen - start;
+            if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance * dpi.DpiScaleX
+                && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance * dpi.DpiScaleY) return;
+            Left = cardOrigin.X + delta.X / dpi.DpiScaleX;
+            Top = cardOrigin.Y + delta.Y / dpi.DpiScaleY;
+            cardMoved = true;
+            e.Handled = true;
+        };
+        PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            if (cardDrag is null) return;
+            cardDrag = null; ReleaseMouseCapture(); e.Handled = true;
+            if (!cardMoved && !_keyboardAccess) ActivateForKeyboard();
+        };
+        LostMouseCapture += (_, _) => cardDrag = null;
         PreviewKeyDown += (_, e) =>
         {
             if (!_keyboardAccess || !IsKeyboardFocusWithin) return;

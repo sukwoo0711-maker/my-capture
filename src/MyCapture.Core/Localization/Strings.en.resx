@@ -3287,9 +3287,8 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Folder410.CurrentFolderOption" xml:space="preserve"><value>Save new captures in the selected folder</value></data>
   <data name="Folder410.DestinationHeader" xml:space="preserve"><value>New capture destination: {0}</value></data>
   <data name="Folder410.DefaultDestination" xml:space="preserve"><value>Library by date</value></data>
-  <data name="Folder410.StopDestination" xml:space="preserve"><value>Turn off</value></data>
   <data name="Folder410.Delete" xml:space="preserve"><value>Delete folder and captures</value></data>
-  <data name="Folder410.DeleteDate" xml:space="preserve"><value>Delete date and captures</value></data>
+  <data name="Folder410.DeleteDate" xml:space="preserve"><value>Delete all captures for this date</value></data>
   <data name="Folder410.DeleteTitle" xml:space="preserve"><value>Delete folder</value></data>
   <data name="Folder410.DeleteConfirm" xml:space="preserve"><value>{0}
 Delete {1} subfolders, {2} images and {3} videos.</value></data>
@@ -3322,4 +3321,16 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store keeps this copy of MyCapture up to date. Check for new versions in the Library of the Microsoft Store app.</value></data>
   <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>MyCapture is turned off in the Windows startup apps. Turn it on in Settings &gt; Apps &gt; Startup.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>An organization policy manages this startup setting.</value></data>
+  <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>Captures removed from a folder start a new retention period today.</value></data>
+  <data name="Folder410.DeleteChanged" xml:space="preserve"><value>The folder contents changed after confirmation. Review them and try again.</value></data>
+  <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>Includes folders, unassigned captures, and pinned captures for this date.</value></data>
+  <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>Deleted folders and captures cannot be restored.</value></data>
+  <data name="Folder410.Storage" xml:space="preserve"><value>{0} folders · {1}</value></data>
+  <data name="Folder410.StorageInfo" xml:space="preserve"><value>Folder storage exceeds the ordinary capture limit. Folder contents are kept until you delete them.</value></data>
+  <data name="Folder410.ExportPathTooLong" xml:space="preserve"><value>The destination is too deep. Choose a shorter path.</value></data>
+  <data name="Folder410.ExportNameExists" xml:space="preserve"><value>A file with this name exists. Choose another name.</value></data>
+  <data name="Folder410.ExportMissing" xml:space="preserve"><value>The source file or destination folder is missing. Check the path.</value></data>
+  <data name="Folder410.ExportChanged" xml:space="preserve"><value>A capture changed during export. Try again.</value></data>
+  <data name="Folder410.ExportLocked" xml:space="preserve"><value>Another program is using the file. Close it and try again.</value></data>
+  <data name="Folder410.ExportDiskFull" xml:space="preserve"><value>There is not enough free space. Free space or choose another destination.</value></data>
 </root>

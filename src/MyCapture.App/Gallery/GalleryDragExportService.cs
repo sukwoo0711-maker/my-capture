@@ -165,7 +165,7 @@ internal sealed class GalleryDragExportService
             var exporter = new GalleryFolderExportService(Queue, _stagingRoot, _clock)
                 { StagedFileForTest = StagedFileForTest };
             var prepared = await exporter.PrepareAsync(exporter.BuildCapturePlan(records), cancellationToken);
-            return new PreparedDrag(prepared.Paths.ToArray(), [], prepared.MarkPublished, prepared.Dispose);
+            return new PreparedDrag(prepared.Paths.ToArray(), [], null, prepared.Dispose);
         }
 
         var leases = new List<IDisposable>();
