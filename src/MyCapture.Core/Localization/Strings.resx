@@ -2993,7 +2993,6 @@
   <data name="MediaExport_TargetLabel" xml:space="preserve"><value>목표 파일 크기 감소율</value></data>
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>해상도와 프레임 속도는 유지합니다. 감소율은 목표이며, 실제 크기는 계산 후 확인하십시오. 화질이 낮아질 수 있습니다.</value></data>
   <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF는 프레임이 많아질수록 파일이 커집니다. 긴 변과 프레임 속도를 선택하십시오. 소리는 포함되지 않습니다.</value></data>
-  <data name="MediaExport_GifLongHint" xml:space="preserve"><value>20초를 넘는 GIF는 파일이 매우 커지고 계산에 오래 걸릴 수 있습니다.</value></data>
   <data name="Recording.FinishingBusy" xml:space="preserve"><value>녹화 저장을 마무리하는 중입니다. 잠시 후 다시 시도하십시오.</value></data>
   <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF 크기 및 프레임 속도</value></data>
   <data name="MediaExport_Speed" xml:space="preserve"><value>재생 속도</value></data>
@@ -3394,4 +3393,50 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="RecordingPauseHotkey_HotkeyName" xml:space="preserve"><value>녹화 일시정지/재개 단축키</value></data>
   <data name="RecordingPauseHotkey_Description" xml:space="preserve"><value>녹화 중에 누르면 일시정지 버튼과 같이 녹화를 일시정지하거나 재개합니다. 녹화 중이 아닐 때는 동작하지 않습니다.</value></data>
   <data name="RecordingPauseHotkey_HelpWithShortcut" xml:space="preserve"><value>{0} 단축키: {1}</value></data>
+  <data name="GifPreview_Heading" xml:space="preserve"><value>미리보기 샘플</value></data>
+  <data name="GifPreview_Preparing" xml:space="preserve"><value>샘플 만드는 중…</value></data>
+  <data name="GifPreview_Failed" xml:space="preserve"><value>샘플을 만들지 못했습니다: {0}</value></data>
+  <data name="GifPreview_Info" xml:space="preserve"><value>원본 {0:N1}~{1:N1}초 · {2} × {3} · {4}프레임 · {5:N1}초 반복</value></data>
+  <data name="GifPreview_MotionReduced" xml:space="preserve"><value>Windows 애니메이션 효과가 꺼져 있어 일시정지 상태로 시작합니다.</value></data>
+  <data name="GifPreview_Play" xml:space="preserve"><value>재생</value></data>
+  <data name="GifPreview_Pause" xml:space="preserve"><value>일시정지</value></data>
+  <data name="GifPreview_Position" xml:space="preserve"><value>샘플 프레임 위치</value></data>
+  <data name="GifPreview_Frame" xml:space="preserve"><value>{0}/{1}프레임</value></data>
+  <data name="GifPreview_Compare" xml:space="preserve"><value>원본 비교</value></data>
+  <data name="GifPreview_ActualSize" xml:space="preserve"><value>실제 크기</value></data>
+  <data name="GifPreview_Original" xml:space="preserve"><value>원본</value></data>
+  <data name="GifPreview_OriginalLoading" xml:space="preserve"><value>원본 불러오는 중…</value></data>
+  <data name="GifPreview_GifFrame" xml:space="preserve"><value>GIF 샘플 프레임</value></data>
+  <data name="GifPreview_OriginalFrame" xml:space="preserve"><value>같은 시점의 원본 프레임</value></data>
+  <data name="GifPreview_Target" xml:space="preserve"><value>공유 목표 크기</value></data>
+  <data name="GifPreview_Target5" xml:space="preserve"><value>5MB · Notion 무료</value></data>
+  <data name="GifPreview_Target10" xml:space="preserve"><value>10MB · GitHub 첨부</value></data>
+  <data name="GifPreview_Target15" xml:space="preserve"><value>15MB · X(350프레임 이하)</value></data>
+  <data name="GifPreview_Recommended" xml:space="preserve"><value>권장</value></data>
+  <data name="GifPreview_Estimate" xml:space="preserve"><value>예상 크기 {0} · {1:N0}프레임 · 재생 {2:N1}초 · 결과 계산 약 {3:N0}초</value></data>
+  <data name="GifPreview_Exact" xml:space="preserve"><value>크기 {0}(측정) · {1:N0}프레임 · 재생 {2:N1}초</value></data>
+  <data name="GifPreview_AdviceCurrent" xml:space="preserve"><value>현재 설정이 권장 설정입니다. 예상 크기 {0}로 목표 {1} 이내입니다.</value></data>
+  <data name="GifPreview_AdviceSwitch" xml:space="preserve"><value>권장 설정: {0}. 목표 {1} 이내에서 가장 알맞은 설정이며 예상 크기는 {2}입니다.</value></data>
+  <data name="GifPreview_AdviceCurrentOver" xml:space="preserve"><value>현재 설정은 예상 크기 {0}로 목표 {1}를 넘을 수 있습니다.</value></data>
+  <data name="GifPreview_AdviceMp4" xml:space="preserve"><value>가장 작은 GIF 설정도 예상 크기 {0}로 목표 {1}를 넘습니다. MP4로 내보내거나 구간을 약 {2:N0}초 이하로 줄이십시오.</value></data>
+  <data name="GifPreview_AdviceSpeed" xml:space="preserve"><value>재생 시간이 {0:N1}초입니다. {1:0.#}배속이면 {2:N1}초로 줄어듭니다. 배속은 파일 크기를 거의 줄이지 않습니다.</value></data>
+  <data name="GifPreview_ApplyAdvice" xml:space="preserve"><value>권장 설정 적용</value></data>
+  <data name="GifPreview_SwitchToMp4" xml:space="preserve"><value>MP4로 전환</value></data>
+  <data name="GifPreview_SizeMb" xml:space="preserve"><value>{0:0.#}MB</value></data>
+  <data name="GifPreview_SizeKb" xml:space="preserve"><value>{0:N0}KB</value></data>
+  <data name="GifPreview_Target20" xml:space="preserve"><value>20MB · Discord 무료</value></data>
+  <data name="GifPreview_TargetNone" xml:space="preserve"><value>제한 없음</value></data>
+  <data name="GifPreview_PresetSharpLowRate" xml:space="preserve"><value>선명하게 · 저속</value></data>
+  <data name="GifPreview_SamplePosition" xml:space="preserve"><value>샘플 위치</value></data>
+  <data name="GifPreview_SamplePositionValue" xml:space="preserve"><value>샘플 위치: {0:N1}초부터</value></data>
+  <data name="GifPreview_AdviceCurrentNoLimit" xml:space="preserve"><value>현재 설정이 권장 설정입니다. 크기 제한이 없으며 예상 크기는 {0}입니다.</value></data>
+  <data name="GifPreview_AdviceSwitchNoLimit" xml:space="preserve"><value>권장 설정: {0}. 크기 제한이 없어 가장 선명한 설정이며 예상 크기는 {1}입니다.</value></data>
+  <data name="GifPreview_AdviceMp4Frames" xml:space="preserve"><value>선택한 공유 대상은 GIF를 {0:N0}프레임 이하로 권장하지만 가장 작은 설정도 약 {1:N0}프레임입니다. 구간을 약 {2:N0}초 이하로 줄이거나 MP4로 내보내십시오.</value></data>
+  <data name="GifPreview_AdviceMp4Safety" xml:space="preserve"><value>가장 작은 설정도 약 {0:N0}프레임이라 결과 계산이 오래 걸리고 파일이 매우 커집니다. MP4로 내보내거나 구간을 약 {1:N0}초 이하로 줄이십시오.</value></data>
+  <data name="GifPreview_MotionStatic" xml:space="preserve"><value>화면 변화가 적어 글자 선명도를 우선했습니다.</value></data>
+  <data name="GifPreview_MotionModerate" xml:space="preserve"><value>화면 일부가 움직여 부드러운 재생을 먼저 유지했습니다.</value></data>
+  <data name="GifPreview_MotionHigh" xml:space="preserve"><value>움직임이 많아 부드러운 재생을 우선했습니다.</value></data>
+  <data name="GifPreview_SizeRange" xml:space="preserve"><value>{0}~{1}</value></data>
+  <data name="GifPreview_CompareHelp" xml:space="preserve"><value>같은 시점의 원본 프레임을 GIF 옆에 표시합니다.</value></data>
+  <data name="GifPreview_ActualSizeHelp" xml:space="preserve"><value>GIF 픽셀을 화면 픽셀과 1:1로 표시합니다.</value></data>
 </root>
