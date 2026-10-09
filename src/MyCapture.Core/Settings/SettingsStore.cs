@@ -361,6 +361,7 @@ public sealed class SettingsStore
         s.Hotkeys.UploadGitHubImage = Safe(s.Hotkeys.UploadGitHubImage);
         s.Hotkeys.ScrollingCapture = Safe(s.Hotkeys.ScrollingCapture);
         s.Hotkeys.DelayedCapture = Safe(s.Hotkeys.DelayedCapture);
+        s.Hotkeys.RestoreClosedPin = Safe(s.Hotkeys.RestoreClosedPin);
         // --- Hotkeys ---
         // A capture hotkey that cannot be pressed makes the app inert, so an
         // unassigned value is restored rather than respected.
@@ -385,6 +386,7 @@ public sealed class SettingsStore
             s.Hotkeys.UploadGitHubImage = WithoutCaptureConflict(s.Hotkeys.UploadGitHubImage);
             s.Hotkeys.ScrollingCapture = WithoutCaptureConflict(s.Hotkeys.ScrollingCapture);
             s.Hotkeys.DelayedCapture = WithoutCaptureConflict(s.Hotkeys.DelayedCapture);
+            s.Hotkeys.RestoreClosedPin = WithoutCaptureConflict(s.Hotkeys.RestoreClosedPin);
         }
         if (migratedUnsafeHotkeys) warnings.Add(UiText.Get("Hotkey.Migrated"));
 

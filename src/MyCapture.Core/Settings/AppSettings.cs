@@ -108,6 +108,13 @@ public sealed class HotkeySettings
     /// resulting user-attachments URL.
     /// </summary>
     public Hotkey UploadGitHubImage { get; set; } = new(HotkeyModifiers.None, Hotkey.VkF9);
+
+    /// <summary>Reopens the most recently closed pinned window.</summary>
+    /// <remarks>
+    /// Unassigned by default, like the other optional commands: a missing property in an
+    /// older settings file keeps this value, so upgrading never claims a chord silently.
+    /// </remarks>
+    public Hotkey RestoreClosedPin { get; set; } = Hotkey.None;
 }
 
 public sealed class QueueSettings
@@ -228,11 +235,13 @@ public sealed class PinSettings
     public double InitialOpacity { get; set; } = 1.0;
 
     /// <summary>
-    /// How many closed pinned windows can be restored by pressing the paste hotkey.
+    /// How many closed pinned windows can be reopened, most recent first. 0 turns it off.
     /// </summary>
     /// <remarks>
-    /// Snipaste defaults this to 1. 20 is kept here because the restore stack costs
-    /// only metadata: the images are already in the capture queue on disk.
+    /// Snipaste defaults this to 1. 20 is kept here because the restore history is also
+    /// bounded by a retained-byte budget (<c>ClosedPinMemory.DefaultMaxRetainedBytes</c>),
+    /// so the count never decides memory use on its own. The history is memory-only and is
+    /// discarded when the app exits.
     /// </remarks>
     public int ClosedWindowRestoreLimit { get; set; } = 20;
 
