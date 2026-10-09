@@ -1378,7 +1378,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_756622E6954E" xml:space="preserve">
-    <value>{0} captures the dragged region without snapping to windows. Release the mouse to open the editor.</value>
+    <value>{0} captures the dragged region. With window highlighting on, click without dragging to select the window under the pointer.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_764879D98E25" xml:space="preserve">

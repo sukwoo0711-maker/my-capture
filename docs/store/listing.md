@@ -28,15 +28,18 @@ MyCapture는 화면 캡처, 주석 편집, 화면 고정, OCR, 라이브러리, 
 ### 기능 목록
 
 - 모니터 경계를 넘나드는 영역 캡처와 창, 전체 화면, 지연, 스크롤 캡처
-- 실행 취소와 다시 실행을 지원하는 비파괴 주석 편집
-- 클립보드 이미지·텍스트·표를 항상 위에 보이는 창으로 고정
+- 포인터 아래 창을 강조하고 클릭으로 선택하는 창 감지와 색상 값 복사
+- 타원·형광펜·단계 번호·모자이크·블러를 포함한 비파괴 주석 편집과 실행 취소·다시 실행
+- 클립보드 이미지·텍스트·표를 항상 위에 보이는 창으로 고정하고, 닫은 창을 다시 열기
 - 한국어·영어 혼합 텍스트를 PC 안에서 인식하는 로컬 OCR
+- 영역을 선택하면 텍스트만 클립보드에 복사하는 텍스트 캡처
 - OCR로 찾은 민감정보를 한 번에 가리는 빠른 가리기
 - 이미지와 MP4를 함께 찾고 재생하는 통합 라이브러리
-- 영역 MP4 녹화와 비파괴 영상 편집
+- 일시정지를 지원하는 영역 MP4 녹화와 비파괴 영상 편집
 - 최대 20초 구간의 GIF 내보내기
 - 한국어·영어 인터페이스와 고대비를 포함한 6가지 테마
 - 키보드 조작과 스크린 리더 접근성
+- 계정, 광고, 캡처 횟수 제한 없음
 
 ### 이 버전의 새로운 기능 (4.1.0)
 
@@ -63,15 +66,18 @@ Recordings have no audio. Launch at sign-in starts turned off and can be turned 
 ### Features
 
 - Region capture across monitors, plus window, full screen, delayed and scrolling capture
-- Non-destructive annotation with undo and redo
-- Pin clipboard images, text and tables in always-on-top windows
+- Window highlighting with click-to-select and color value copying while selecting
+- Non-destructive annotation with ellipse, highlighter, step numbers, mosaic, blur, undo and redo
+- Pin clipboard images, text and tables in always-on-top windows, and reopen closed pins
 - On-device OCR for mixed Korean and English text
+- Text capture that copies only the recognized text of a selected region
 - Quick Redact for sensitive details found by OCR
 - One library for images and MP4 videos with in-app playback
-- Region MP4 recording with non-destructive video editing
+- Region MP4 recording with pause and non-destructive video editing
 - GIF export for clips up to 20 seconds
 - Korean and English interface with six themes, including high contrast
 - Keyboard and screen reader accessibility
+- No account, ads or capture limits
 
 ### What's new in this version (4.1.0)
 
@@ -93,4 +99,4 @@ Partner Center의 Submission options > Restricted capabilities에 영어로 입�
 
 ## 인증 참고 사항 (Notes for certification)
 
-> MyCapture runs in the notification area after launch and opens its library window. Default shortcuts: Ctrl+Shift+C region capture, Ctrl+Shift+X start or stop region recording, Ctrl+Shift+Z open the library, F3 pin clipboard content. Capture, editing, recording and OCR run on the PC. The only automatic network access is downloading missing OCR model files from modelscope.cn at startup; the optional GitHub image attachment requires the user's own GitHub account. Launch at sign-in is off by default and can be turned on in Settings > General. Updates are delivered only through the Microsoft Store; the in-app GitHub updater is disabled in the Store package.
+> MyCapture runs in the notification area after launch and opens its library window. Default shortcuts: Ctrl+Shift+C region capture, Ctrl+Shift+X start or stop region recording, Ctrl+Shift+Z open the library, F3 pin clipboard content. Capture, editing, recording and OCR run on the PC. The only automatic network access is downloading missing OCR model files from modelscope.cn at startup; the optional GitHub image attachment requires the user's own GitHub account. Launch at sign-in is off by default and can be turned on in Settings > General. Updates are delivered only through the Microsoft Store; the in-app GitHub updater is disabled in the Store package. After at least 10 successful captures over 3 or more days, the Store package calls StoreContext.RequestRateAndReviewAppAsync once and never asks again; Settings > Updates also offers a manual review link. The app reads the Windows Print Screen keyboard setting only to show guidance and never changes it.

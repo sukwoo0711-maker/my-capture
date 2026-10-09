@@ -1378,7 +1378,7 @@
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_756622E6954E" xml:space="preserve">
-    <value>{0}는 창 스냅 없이 드래그한 영역을 캡처합니다. 마우스를 놓으면 편집 창이 열립니다.</value>
+    <value>{0}는 드래그한 영역을 캡처합니다. 포인터 아래 창 강조가 켜져 있으면 드래그 없이 클릭해 그 창을 선택합니다.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_764879D98E25" xml:space="preserve">
