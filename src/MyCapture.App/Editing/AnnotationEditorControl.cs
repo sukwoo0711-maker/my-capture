@@ -65,6 +65,7 @@ internal sealed class AnnotationEditorControl : Grid
     private readonly Dictionary<EditorTool, ToggleButton> _toolButtons = new();
     private bool _mosaicDragging;
     private PointD _mosaicStart;
+    private int _mosaicBlockSize = 12;
     private CropSelection? _crop;
     private PointD? _edgeCropStart;
     private Button _autoTrimButton = null!;
@@ -189,6 +190,7 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize) ? Math.Clamp(defaults.FontSize, 8, 200) : 18;
         _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
         _controller.ApplyBlurRadius(defaults.BlurRadius);
+        _mosaicBlockSize = defaults.MosaicBlockSize;
         if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool == EditorTool.Crop ? EditorTool.Select : lastTool;
         _imageStore.PruneToReachable(document, undo);
         _blurCache = new AnnotationBlurCache(Dispatcher);
@@ -603,8 +605,10 @@ internal sealed class AnnotationEditorControl : Grid
         decoded.Freeze();
 
         (BitmapSource Bitmap, string AssetFileName) asset = _imageStore.RegisterInMemory(decoded);
-        double scale = Math.Max(1.0, _surface.DipPerPixel);
-        var rect = new RectD(normalized.X, normalized.Y, normalized.Width / scale, normalized.Height / scale);
+        // Annotation rects are in image pixels, so the patch sits exactly on the pixels it
+        // was sampled from. Scaling by the display zoom shrank it on enlarged small captures
+        // and left part of the selected content uncovered.
+        var rect = new RectD(x, y, width, height);
         _controller.AddImageAnnotation(asset.AssetFileName, width, height, rect);
         SelectTool(EditorTool.Select);
         SetStatus(UiText.Get("Text_3F8046019B34"));
@@ -784,7 +788,7 @@ internal sealed class AnnotationEditorControl : Grid
             PointD mosaicEnd = _surface.ToImagePoint(mosaicDip);
             ApplyMosaic(
                 new RectD(_mosaicStart.X, _mosaicStart.Y, mosaicEnd.X - _mosaicStart.X, mosaicEnd.Y - _mosaicStart.Y),
-                blockSize: 14);
+                _mosaicBlockSize);
             e.Handled = true;
             return;
         }
