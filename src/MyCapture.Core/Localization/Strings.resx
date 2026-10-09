@@ -201,7 +201,7 @@
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_13036A090EBA" xml:space="preserve">
-    <value>이미지와 동영상을 한곳에서 찾고 편집합니다. 동영상은 선택하거나 두 번 클릭하면 이 창 안에서 바로 재생됩니다.</value>
+    <value>이미지와 동영상을 한곳에서 찾고 편집합니다. 동영상은 이 창에서 바로 재생합니다.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_13A717215F51" xml:space="preserve">
@@ -253,7 +253,7 @@
     <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
   </data>
   <data name="Text_188B0AF9BE23" xml:space="preserve">
-    <value>녹화를 시작할 준비를 마치지 못했습니다. 저장 공간과 화면 녹화 설정을 확인해 주세요.
+    <value>녹화를 시작할 준비를 마치지 못했습니다. 저장 공간과 화면 녹화 설정을 확인하십시오.
 
 </value>
     <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
@@ -746,7 +746,7 @@
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_42DA25F8F77F" xml:space="preserve">
-    <value>업데이트 설치 또는 재시작을 확인하지 못했습니다. 이 창의 로그 경로를 확인하고 MyCapture를 다시 실행해 주세요.</value>
+    <value>업데이트 설치 또는 재시작을 확인하지 못했습니다. 이 창의 로그 경로를 확인하고 MyCapture를 다시 실행하십시오.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_45E6B157C051" xml:space="preserve">
@@ -874,7 +874,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_4E99F6190A6C" xml:space="preserve">
-    <value>시작 프로그램 설정을 이전 상태로 되돌리는 중 오류가 발생했습니다. 설정에서 직접 확인해 주세요.</value>
+    <value>시작 프로그램 설정을 이전 상태로 되돌리는 중 오류가 발생했습니다. 설정에서 직접 확인하십시오.</value>
     <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
   </data>
   <data name="Text_4F445554C9D0" xml:space="preserve">
@@ -1490,7 +1490,7 @@
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
   </data>
   <data name="Text_82B423E5AFB8" xml:space="preserve">
-    <value>취소하려면 트레이 메뉴에서 ‘스크롤 캡처 취소’를 선택하세요.</value>
+    <value>취소하려면 트레이 메뉴에서 ‘스크롤 캡처 취소’를 선택하십시오.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_8300472A5BE3" xml:space="preserve">
@@ -1562,7 +1562,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_884F73809F89" xml:space="preserve">
-    <value>다른 편집에서 이 캡처가 변경되었습니다. 현재 편집기를 닫고 다시 열어 주세요.</value>
+    <value>다른 편집에서 이 캡처가 변경되었습니다. 현재 편집기를 닫고 다시 여십시오.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_88DAAEEDFE4C" xml:space="preserve">
@@ -1626,7 +1626,7 @@
     <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
   </data>
   <data name="Text_90290F46A7D5" xml:space="preserve">
-    <value>녹화 준비 또는 마무리 중입니다. 잠시 후 다시 캡처해 주세요.</value>
+    <value>녹화 준비 또는 마무리 중입니다. 잠시 후 다시 캡처하십시오.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_91390EADFAD4" xml:space="preserve">
@@ -1666,7 +1666,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_932DB1A4ED7F" xml:space="preserve">
-    <value>PNG 파일 이름(.png)을 선택해 주세요.</value>
+    <value>PNG 파일 이름(.png)을 선택하십시오.</value>
     <comment>src\MyCapture.App\Editing\CaptureCommitService.cs</comment>
   </data>
   <data name="Text_93B88ACD46F6" xml:space="preserve">
@@ -1920,7 +1920,7 @@
     <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
   </data>
   <data name="Text_AA763F299972" xml:space="preserve">
-    <value>OCR 언어를 하나 이상 입력해 주세요 (예: ko-KR, en-US).</value>
+    <value>OCR 언어를 하나 이상 입력하십시오 (예: ko-KR, en-US).</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_AAED78A6EA00" xml:space="preserve">
@@ -1988,7 +1988,7 @@
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_B2B3E2E19B90" xml:space="preserve">
-    <value>이전 단축키를 복원하는 중 오류가 발생했습니다. 일부 단축키가 동작하지 않을 수 있으니 프로그램을 다시 시작해 주세요.</value>
+    <value>이전 단축키를 복원하는 중 오류가 발생했습니다. 일부 단축키가 동작하지 않을 수 있으니 프로그램을 다시 시작하십시오.</value>
     <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
   </data>
   <data name="Text_B2FD5E226F6B" xml:space="preserve">
@@ -2036,7 +2036,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_B64A6FFA1008" xml:space="preserve">
-    <value>시작 프로그램 설정을 이전 상태로 되돌리지 못했습니다. 설정에서 직접 확인해 주세요.</value>
+    <value>시작 프로그램 설정을 이전 상태로 되돌리지 못했습니다. 설정에서 직접 확인하십시오.</value>
     <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
   </data>
   <data name="Text_B64CA1BE6711" xml:space="preserve">
@@ -2044,7 +2044,7 @@
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_B651C2B6BDA9" xml:space="preserve">
-    <value>파일을 저장할 수 없습니다. 저장 위치와 권한을 확인해 주세요.</value>
+    <value>파일을 저장할 수 없습니다. 저장 위치와 권한을 확인하십시오.</value>
     <comment>src\MyCapture.App\Pinning\PinManager.cs</comment>
   </data>
   <data name="Text_B659038CC17D" xml:space="preserve">
@@ -2120,7 +2120,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_BA79DCE6BD5D" xml:space="preserve">
-    <value>녹화는 갤러리에 안전하게 저장했지만 편집 창을 열지 못했습니다. 갤러리에서 영상을 다시 열어 주세요.
+    <value>녹화는 갤러리에 안전하게 저장했지만 편집 창을 열지 못했습니다. 갤러리에서 영상을 다시 여십시오.
 
 </value>
     <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
@@ -2276,7 +2276,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_C68C66E8758A" xml:space="preserve">
-    <value>다운로드와 검증이 완료되었습니다. 작업을 저장한 뒤 설치해 주세요.</value>
+    <value>다운로드와 검증이 완료되었습니다. 작업을 저장한 뒤 설치하십시오.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_C7000F39A0DF" xml:space="preserve">
@@ -2426,7 +2426,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_D5A4B6986227" xml:space="preserve">
-    <value>이전 영역의 모니터가 연결되어 있지 않습니다. 새 영역을 선택해 주세요.</value>
+    <value>이전 영역의 모니터가 연결되어 있지 않습니다. 새 영역을 선택하십시오.</value>
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
   </data>
   <data name="Text_D5A82B3B1F83" xml:space="preserve">
@@ -2826,7 +2826,7 @@
     <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
   </data>
   <data name="Text_F371688B8EE8" xml:space="preserve">
-    <value>이 PC에 Windows OCR 언어 팩이 없어 텍스트 인식과 캡처 전문 검색을 사용할 수 없습니다. 설정 → 시간 및 언어 → 언어 및 지역에서 언어의 [언어 기능]에 '광학 문자 인식(OCR)'을 추가한 뒤 다시 시도하세요. 인터넷 연결 없이도 캡처·주석·녹화 등 나머지 기능은 정상 동작합니다.</value>
+    <value>이 PC에 Windows OCR 언어 팩이 없어 텍스트 인식과 캡처 전문 검색을 사용할 수 없습니다. 설정 → 시간 및 언어 → 언어 및 지역에서 언어의 [언어 기능]에 '광학 문자 인식(OCR)'을 추가한 뒤 다시 시도하십시오. 인터넷 연결 없이도 캡처·주석·녹화 등 나머지 기능은 정상 동작합니다.</value>
     <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
   </data>
   <data name="Text_F3C7FE27A258" xml:space="preserve">
@@ -2838,7 +2838,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_F47CC25B5D11" xml:space="preserve">
-    <value>이전 단축키를 복원하지 못했습니다. 일부 단축키가 동작하지 않을 수 있으니 프로그램을 다시 시작해 주세요.</value>
+    <value>이전 단축키를 복원하지 못했습니다. 일부 단축키가 동작하지 않을 수 있으니 프로그램을 다시 시작하십시오.</value>
     <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
   </data>
   <data name="Text_F5416FA54E13" xml:space="preserve">
@@ -2949,7 +2949,7 @@
     <value>선택 도구 · 주석을 클릭해 선택하십시오</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
-  <data name="GalleryImageChanged" xml:space="preserve"><value>이미지가 로딩 중 변경되었습니다. 다시 열어 주세요.</value></data>
+  <data name="GalleryImageChanged" xml:space="preserve"><value>이미지가 로딩 중 변경되었습니다. 다시 여십시오.</value></data>
   <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · 픽셀 정밀 이동</value></data>
   <data name="CaptureSelectionStart" xml:space="preserve"><value>시작점</value></data>
   <data name="ExportReduction_Title" xml:space="preserve"><value>용량 줄여 내보내기…</value></data>
@@ -2971,8 +2971,8 @@
   <data name="ExportReduction_Error" xml:space="preserve"><value>내보내기 실패: {0}</value></data>
   <data name="ExportReduction_Extension" xml:space="preserve"><value>이 결과는 {0} 확장자로 저장해야 합니다.</value></data>
   <data name="ShellRetake_ReadyTitle" xml:space="preserve"><value>{0} 준비 완료</value></data>
-  <data name="ShellRetake_ReadyMessage" xml:space="preserve"><value>{0} 키로 화면을 캡처하세요. 트레이 아이콘에서 설정과 라이브러리를 열 수 있습니다.</value></data>
-  <data name="ShellRetake_ReadyWithoutShortcut" xml:space="preserve"><value>트레이 아이콘에서 화면 캡처를 시작하거나 설정에서 캡처 단축키를 지정하세요.</value></data>
+  <data name="ShellRetake_ReadyMessage" xml:space="preserve"><value>{0} 키를 누르면 화면을 캡처합니다. 트레이 아이콘에서 설정과 라이브러리를 열 수 있습니다.</value></data>
+  <data name="ShellRetake_ReadyWithoutShortcut" xml:space="preserve"><value>트레이 아이콘에서 화면 캡처를 시작하거나 설정에서 캡처 단축키를 지정하십시오.</value></data>
   <data name="LibrarySelection_Count" xml:space="preserve"><value>{0}개 선택</value></data>
   <data name="LibrarySelection_Delete" xml:space="preserve"><value>삭제</value></data>
   <data name="LibrarySelection_Reduce" xml:space="preserve"><value>이미지 용량 줄이기</value></data>
@@ -3001,7 +3001,7 @@
   <data name="MediaExport_Close" xml:space="preserve"><value>닫기</value></data>
   <data name="MediaExport_SaveAs" xml:space="preserve"><value>다른 이름으로 저장</value></data>
   <data name="MediaExport_Target" xml:space="preserve"><value>목표 크기 감소: {0}%</value></data>
-  <data name="MediaExport_CalculateHint" xml:space="preserve"><value>설정을 선택한 후 결과를 계산하세요. 원본은 변경되지 않습니다.</value></data>
+  <data name="MediaExport_CalculateHint" xml:space="preserve"><value>설정을 선택한 후 결과를 계산하십시오. 원본은 변경되지 않습니다.</value></data>
   <data name="MediaExport_Working" xml:space="preserve"><value>결과를 계산하고 있습니다…</value></data>
   <data name="MediaExport_Progress" xml:space="preserve"><value>{0} · {1:N0}/{2:N0}프레임</value></data>
   <data name="MediaExport_BaselinePhase" xml:space="preserve"><value>표준 MP4 계산</value></data>
@@ -3025,7 +3025,7 @@
 <data name="Shell.Close" xml:space="preserve"><value>닫기</value></data>
 <data name="Shell.Help" xml:space="preserve"><value>사용 방법</value></data>
 <data name="Shell.HelpText" xml:space="preserve"><value>영역 캡처 / 다시 캡처: 설정에 지정된 캡처 단축키
-드래그로 영역을 정한 뒤 도형과 텍스트를 편집하세요.
+드래그로 영역을 정한 뒤 도형과 텍스트를 편집합니다.
 확인 또는 저장을 눌러야 갤러리에 추가됩니다. 취소하거나 다시 캡처한 초안은 저장되지 않습니다.
 Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
 트레이에서 갤러리, 설정, Language를 선택할 수 있습니다.</value></data>
@@ -3053,10 +3053,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>만료 없음</value></data>
   <data name="Gallery.RetentionExpired" xml:space="preserve"><value>자동 삭제 대기 중</value></data>
   <data name="Gallery.FloatFailed" xml:space="preserve"><value>이 이미지를 띄우지 못했습니다.</value></data>
-  <data name="GitHub.NeedImage" xml:space="preserve"><value>먼저 이미지를 복사한 뒤 F9를 누르세요.</value></data>
+  <data name="GitHub.NeedImage" xml:space="preserve"><value>먼저 이미지를 복사한 뒤 F9를 누르십시오.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>GitHub 이슈를 열고 이미지를 붙이는 중…</value></data>
   <data name="GitHub.Done" xml:space="preserve"><value>첨부 URL을 클립보드에 복사했습니다.</value></data>
-  <data name="GitHub.Failed" xml:space="preserve"><value>이미지 주소를 가져오지 못했습니다. GitHub에 로그인하고 설정한 이슈의 댓글·설명 입력란을 표시한 뒤, 이미지를 복사하고 F9를 눌러주세요. 업로드 중에는 해당 탭과 클립보드를 유지해주세요.</value></data>
+  <data name="GitHub.Failed" xml:space="preserve"><value>이미지 주소를 가져오지 못했습니다. GitHub에 로그인하고 설정한 이슈의 댓글·설명 입력란을 표시한 뒤, 이미지를 복사하고 F9를 누르십시오. 업로드 중에는 해당 탭과 클립보드를 유지하십시오.</value></data>
   <data name="GitHub.InvalidUrl" xml:space="preserve"><value>설정에 올바른 GitHub 이슈 URL이 필요합니다.</value></data>
   <data name="GitHub.Busy" xml:space="preserve"><value>이미 GitHub 업로드가 진행 중입니다.</value></data>
   <data name="Video.MarkIn" xml:space="preserve"><value>시작</value></data>
@@ -3104,7 +3104,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tools_CropApplied" xml:space="preserve"><value>자르기를 적용했습니다.</value></data>
   <data name="Settings_Export" xml:space="preserve"><value>설정 내보내기</value></data>
   <data name="Settings_Import" xml:space="preserve"><value>설정 가져오기</value></data>
-  <data name="Settings_ImportDone" xml:space="preserve"><value>설정을 불러왔습니다. 저장하려면 적용을 누르세요.</value></data>
+  <data name="Settings_ImportDone" xml:space="preserve"><value>설정을 불러왔습니다. 저장하려면 적용을 누르십시오.</value></data>
   <data name="Settings_ImportFailed" xml:space="preserve"><value>설정 파일을 읽을 수 없습니다.</value></data>
   <data name="Settings_ExportDone" xml:space="preserve"><value>설정을 내보냈습니다.</value></data>
   <data name="GitHub_TokenMode" xml:space="preserve"><value>토큰으로 업로드(실험)</value></data>
@@ -3131,17 +3131,17 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Organize.Saved" xml:space="preserve"><value>제목·태그를 저장했습니다. 입력한 말로 검색할 수 있습니다.</value></data>
   <data name="Library.Organize.Missing" xml:space="preserve"><value>라이브러리에 없는 캡처입니다. 입력한 내용은 이 창에 남아 있습니다.</value></data>
   <data name="Library.Organize.Invalid" xml:space="preserve"><value>제목 140자, 태그 최대 12개·각 32자 이내로 입력하십시오. 제어 문자는 사용할 수 없습니다.</value></data>
-  <data name="Library.Organize.Failed" xml:space="preserve"><value>저장하지 못했습니다. 디스크 공간과 폴더 권한을 확인하고 다시 시도하세요. 입력 내용은 유지됩니다.</value></data>
+  <data name="Library.Organize.Failed" xml:space="preserve"><value>저장하지 못했습니다. 디스크 공간과 폴더 권한을 확인하고 다시 시도하십시오. 입력 내용은 유지됩니다.</value></data>
   <data name="Library.Action.Cancel" xml:space="preserve"><value>취소</value></data>
   <data name="Library.Action.Save" xml:space="preserve"><value>저장</value></data>
   <data name="Library.Archive.Title" xml:space="preserve"><value>선택한 캡처를 새 ZIP으로 내보내기</value></data>
   <data name="Library.Archive.Action" xml:space="preserve"><value>ZIP 내보내기</value></data>
-  <data name="Library.Archive.Hint" xml:space="preserve"><value>편집된 PNG·현재 MP4만 포함합니다. 원본 이미지·OCR 색인·제목·태그·설정은 제외합니다. 새 파일명을 선택하세요.</value></data>
+  <data name="Library.Archive.Hint" xml:space="preserve"><value>편집된 PNG·현재 MP4만 포함합니다. 원본 이미지·OCR 색인·제목·태그·설정은 제외합니다. 새 파일명을 선택하십시오.</value></data>
   <data name="Library.Archive.Preparing" xml:space="preserve"><value>선택한 캡처의 안전한 복사본을 준비하고 있습니다…</value></data>
   <data name="Library.Archive.Progress" xml:space="preserve"><value>{1}개 중 {0}개 내보내는 중…</value></data>
   <data name="Library.Archive.Done" xml:space="preserve"><value>{0}개 파일을 내보냈습니다. 라이브러리 원본은 그대로 유지됩니다.</value></data>
   <data name="Library.Archive.Cancelled" xml:space="preserve"><value>내보내기를 취소했습니다. ZIP 파일은 생성되지 않았습니다.</value></data>
-  <data name="Library.Archive.Failed" xml:space="preserve"><value>내보내지 못했습니다. 새 파일명·디스크 공간·폴더 권한을 확인하세요. 기존 파일은 덮어쓰지 않았습니다.</value></data>
+  <data name="Library.Archive.Failed" xml:space="preserve"><value>내보내지 못했습니다. 새 파일명·디스크 공간·폴더 권한을 확인하십시오. 기존 파일은 덮어쓰지 않았습니다.</value></data>
   <data name="Library.Search.Count" xml:space="preserve"><value>전체 {1}개 중 {0}개</value></data>
   <data name="Library.Search.Reset" xml:space="preserve"><value>검색·필터 초기화</value></data>
   <data name="Library.Empty.Start" xml:space="preserve"><value>나의 캡처 작업 공간</value></data>

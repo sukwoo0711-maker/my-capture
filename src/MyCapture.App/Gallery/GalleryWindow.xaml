@@ -485,7 +485,7 @@
                        AutomationProperties.Name="MyCapture" />
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:Text Text_37AD4F28D422}" Style="{DynamicResource Text.Display}" FontSize="26" />
-                    <TextBlock Text="{loc:Text Text_13036A090EBA}"
+                    <TextBlock Text="{loc:Text Text_13036A090EBA}" ToolTip="{loc:Text Text_13036A090EBA}"
                                Style="{DynamicResource Text.MutedBlock}" Margin="0,5,0,0" MaxWidth="500" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                HorizontalAlignment="Left" />
                 </StackPanel>
@@ -641,7 +641,7 @@
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top">
                         <TextBlock Text="{loc:Text Workspace.Library}" FontWeight="SemiBold" Margin="4,6,0,8" />
-                        <TextBlock Text="{Binding ResultCountText}" Foreground="{DynamicResource Text.Muted}"
+                        <TextBlock themes:KoreanWordWrap.Text="{Binding ResultCountText}" Foreground="{DynamicResource Text.Muted}"
                                    TextWrapping="Wrap" Margin="4,0,0,12" AutomationProperties.LiveSetting="Polite" />
                         <UniformGrid Columns="2" Margin="0,0,0,4">
                         <RadioButton x:Name="AllLibraryFilter" Content="{loc:Text Workspace.All}" Tag="All"
@@ -662,7 +662,7 @@
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
                         <TextBlock Text="{Binding FolderStorageText}" TextWrapping="Wrap" Margin="0,0,0,8"
                                    Foreground="{DynamicResource Text.Secondary}" FontSize="12" />
-                        <TextBlock Text="{loc:Text Folder410.StorageInfo}" TextWrapping="Wrap" Margin="0,0,0,8"
+                        <TextBlock themes:KoreanWordWrap.Text="{loc:Text Folder410.StorageInfo}" TextWrapping="Wrap" Margin="0,0,0,8"
                                    Foreground="{DynamicResource Text.Secondary}" FontSize="12">
                             <TextBlock.Style><Style TargetType="TextBlock">
                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -671,7 +671,7 @@
                                 </DataTrigger></Style.Triggers>
                             </Style></TextBlock.Style>
                         </TextBlock>
-                        <TextBlock Text="{loc:Text Folder410.RetentionHint}" TextWrapping="Wrap"
+                        <TextBlock themes:KoreanWordWrap.Text="{loc:Text Folder410.RetentionHint}" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Text.Muted}" FontSize="12" ToolTip="{loc:Text Workspace.RetentionHint}" />
                     </StackPanel>
                     <TreeView x:Name="FolderTree" ItemsSource="{Binding FolderNodes}" Background="Transparent" BorderThickness="0"
