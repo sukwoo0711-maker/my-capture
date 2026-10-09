@@ -3333,4 +3333,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Folder410.ExportChanged" xml:space="preserve"><value>내보내는 동안 캡처가 변경되었습니다. 다시 시도하십시오.</value></data>
   <data name="Folder410.ExportLocked" xml:space="preserve"><value>파일이 다른 프로그램에서 사용 중입니다. 파일을 닫고 다시 시도하십시오.</value></data>
   <data name="Folder410.ExportDiskFull" xml:space="preserve"><value>저장 공간이 부족합니다. 공간을 확보하거나 다른 위치를 선택하십시오.</value></data>
+  <data name="RecordingPause_Pause" xml:space="preserve"><value>일시정지</value></data>
+  <data name="RecordingPause_Resume" xml:space="preserve"><value>재개</value></data>
+  <data name="RecordingPause_PauseName" xml:space="preserve"><value>녹화 일시정지</value></data>
+  <data name="RecordingPause_ResumeName" xml:space="preserve"><value>녹화 재개</value></data>
+  <data name="RecordingPause_PauseHelp" xml:space="preserve"><value>녹화를 일시정지합니다. 일시정지한 구간은 동영상에 포함되지 않습니다.</value></data>
+  <data name="RecordingPause_ResumeHelp" xml:space="preserve"><value>녹화를 다시 시작합니다. 동영상은 일시정지한 지점에서 이어집니다.</value></data>
+  <data name="RecordingPause_Status" xml:space="preserve"><value>일시정지됨 · 재개하거나 Esc 또는 정지로 종료</value></data>
+  <data name="RecordingPause_State" xml:space="preserve"><value>일시정지됨</value></data>
 </root>

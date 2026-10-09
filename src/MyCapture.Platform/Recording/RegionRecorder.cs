@@ -11,7 +11,7 @@ namespace MyCapture.Platform.Recording;
 /// Result of a finished recording.
 /// </summary>
 /// <param name="OutputPath">Path to the written MP4.</param>
-/// <param name="DurationMs">Wall-clock duration captured.</param>
+/// <param name="DurationMs">Recorded duration: capture time with every paused span excluded.</param>
 /// <param name="Fps">Target frame rate the clip was encoded at.</param>
 /// <param name="EmittedFrames">Frames actually written (after any drops).</param>
 /// <param name="Width">Frame width.</param>
@@ -26,23 +26,25 @@ public sealed record RecordingResult(
 {
     public RecordingPerformance? Performance { get; init; }
 
-    /// <summary>Frames that should have been produced over the elapsed wall-clock time.</summary>
-    public long ExpectedFrames => DurationMs > 0 && Fps > 0
-        ? Math.Max(EmittedFrames, (long)Math.Ceiling(DurationMs * Fps / 1000.0))
-        : Math.Max(0, EmittedFrames);
+    /// <summary>Wall-clock time spent paused. Never part of <see cref="DurationMs"/> or the clip.</summary>
+    public double PausedMs { get; init; }
+
+    /// <summary>Number of times the user paused this recording.</summary>
+    public int PauseCount { get; init; }
+
+    private RecordingFrameMetrics Metrics => new(DurationMs, Fps, EmittedFrames);
+
+    /// <summary>Frames that should have been produced over the recorded (unpaused) time.</summary>
+    public long ExpectedFrames => Metrics.ExpectedFrames;
 
     /// <summary>Whole frame intervals skipped to keep playback aligned to real time.</summary>
-    public long DroppedFrames => Math.Max(0, ExpectedFrames - EmittedFrames);
+    public long DroppedFrames => Metrics.DroppedFrames;
 
-    /// <summary>Frames actually encoded per second of wall-clock recording time.</summary>
-    public double EffectiveFps => DurationMs > 0
-        ? EmittedFrames * 1000.0 / DurationMs
-        : 0;
+    /// <summary>Frames actually encoded per second of recorded (unpaused) time.</summary>
+    public double EffectiveFps => Metrics.EffectiveFps;
 
     /// <summary>Ratio of skipped intervals to expected intervals, from 0 to 1.</summary>
-    public double DropRate => ExpectedFrames > 0
-        ? DroppedFrames / (double)ExpectedFrames
-        : 0;
+    public double DropRate => Metrics.DropRate;
 }
 
 /// <summary>Constant-space production timing totals, separate from the recorded duration.</summary>
@@ -64,14 +66,30 @@ public sealed record RecordingPerformance(double InitializationMs, double Captur
 /// <para>
 /// The encoder is created through a factory so tests inject a fake that only records
 /// timestamps, exercising the pacing and stop/finalise contract without Media
-/// Foundation.
+/// Foundation. The time source is injectable for the same reason.
+/// </para>
+/// <para>
+/// Pausing stops grabbing and encoding entirely; the encoder simply idles. A
+/// <see cref="RecordingPauseTimeline"/> removes every paused span from the timestamps, so
+/// the clip continues seamlessly after a resume and its length is the recorded time only.
 /// </para>
 /// </remarks>
 public sealed class RegionRecorder : IDisposable
 {
+    // Upper bound for one parked wait. Resume and Stop pulse the gate, so this only limits
+    // how long a missed pulse could delay the loop.
+    private const int PausedWaitMs = 250;
+
     private readonly RegionFrameGrabber _grabber;
     private readonly Func<VideoEncoderOptions, IVideoEncoder> _encoderFactory;
     private readonly ILogger _log;
+    private readonly TimeProvider _time;
+
+    // Guards the pause timeline and the parked flag; the capture thread and the UI thread
+    // read the time base inside this lock so the timeline only ever moves forwards.
+    private readonly object _pauseGate = new();
+    private RecordingPauseTimeline _pauses = new();
+    private bool _captureParked;
 
     private Thread? _thread;
     private volatile bool _stopRequested;
@@ -83,27 +101,113 @@ public sealed class RegionRecorder : IDisposable
 
     public bool IsReady => Interlocked.Read(ref _recordingStarted) != 0 && IsRecording && !_stopRequested;
 
+    /// <summary>Recorded time so far, excluding paused spans. Frozen while paused.</summary>
     public TimeSpan RecordedElapsed
     {
         get
         {
-            long started = Interlocked.Read(ref _recordingStarted);
-            long ended = Interlocked.Read(ref _recordingEnded);
-            return started == 0 ? TimeSpan.Zero : Stopwatch.GetElapsedTime(started, ended == 0 ? Stopwatch.GetTimestamp() : ended);
+            if (Interlocked.Read(ref _recordingStarted) == 0)
+            {
+                return TimeSpan.Zero;
+            }
+
+            lock (_pauseGate)
+            {
+                long ended = Interlocked.Read(ref _recordingEnded);
+                double raw = RawElapsedMs(ended == 0 ? _time.GetTimestamp() : ended);
+                return TimeSpan.FromMilliseconds(_pauses.ActiveElapsedMs(raw));
+            }
+        }
+    }
+
+    /// <summary>True between <see cref="Pause"/> and <see cref="Resume"/>.</summary>
+    public bool IsPaused
+    {
+        get
+        {
+            lock (_pauseGate)
+            {
+                return _pauses.IsPaused;
+            }
         }
     }
 
     public RegionRecorder(
         RegionFrameGrabber grabber,
         Func<VideoEncoderOptions, IVideoEncoder> encoderFactory,
-        ILogger log)
+        ILogger log,
+        TimeProvider? timeProvider = null)
     {
         _grabber = grabber ?? throw new ArgumentNullException(nameof(grabber));
         _encoderFactory = encoderFactory ?? throw new ArgumentNullException(nameof(encoderFactory));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _time = timeProvider ?? TimeProvider.System;
     }
 
     public bool IsRecording => _thread is { IsAlive: true };
+
+    /// <summary>
+    /// Pauses capture: no frame is grabbed or encoded until <see cref="Resume"/>, and the
+    /// paused span is excluded from the clip timeline and the frame-rate metrics.
+    /// </summary>
+    /// <returns><see langword="false"/> when not recording, stopping or already paused.</returns>
+    public bool Pause()
+    {
+        lock (_pauseGate)
+        {
+            if (!IsRecording || _stopRequested || !_pauses.TryPause(RawElapsedMs(_time.GetTimestamp())))
+            {
+                return false;
+            }
+        }
+
+        _log.LogInformation("Recording paused");
+        return true;
+    }
+
+    /// <summary>Resumes a paused recording; the next frame continues the clip timeline.</summary>
+    /// <returns><see langword="false"/> when the recording is not paused.</returns>
+    public bool Resume()
+    {
+        lock (_pauseGate)
+        {
+            if (!_pauses.TryResume(RawElapsedMs(_time.GetTimestamp())))
+            {
+                return false;
+            }
+
+            _captureParked = false;
+            Monitor.PulseAll(_pauseGate);
+        }
+
+        _log.LogInformation("Recording resumed");
+        return true;
+    }
+
+    /// <summary>
+    /// Waits until the capture loop has finished any frame already in flight and parked for
+    /// the current pause, so nothing drawn afterwards can reach the clip.
+    /// </summary>
+    /// <returns><see langword="true"/> once parked; <see langword="false"/> on timeout, resume or stop.</returns>
+    public bool WaitUntilCaptureParked(TimeSpan timeout)
+    {
+        long deadline = Environment.TickCount64 + (long)Math.Max(0, timeout.TotalMilliseconds);
+        lock (_pauseGate)
+        {
+            while (!_captureParked)
+            {
+                long remaining = deadline - Environment.TickCount64;
+                if (!_pauses.IsPaused || !IsRecording || remaining <= 0)
+                {
+                    return false;
+                }
+
+                Monitor.Wait(_pauseGate, (int)Math.Min(remaining, 50));
+            }
+
+            return true;
+        }
+    }
 
     /// <summary>
     /// Opens the encoder and starts the capture thread.
@@ -123,6 +227,11 @@ public sealed class RegionRecorder : IDisposable
         _stopRequested = false;
         _result = null;
         _failure = null;
+        lock (_pauseGate)
+        {
+            _pauses = new RecordingPauseTimeline();
+            _captureParked = false;
+        }
 
         _grabber.Open(screenRegion);
 
@@ -175,7 +284,7 @@ public sealed class RegionRecorder : IDisposable
             throw new InvalidOperationException("No recording is in progress.");
         }
 
-        _stopRequested = true;
+        RequestStopAndWake();
         _thread.Join();
         _thread = null;
 
@@ -189,7 +298,6 @@ public sealed class RegionRecorder : IDisposable
 
     private void CaptureLoop(RecordingClock clock, VideoEncoderOptions options)
     {
-        var stopwatch = new Stopwatch();
         long initializationStarted = Stopwatch.GetTimestamp();
         double captureTotal = 0, captureMax = 0, encodeTotal = 0, encodeMax = 0;
         try
@@ -198,17 +306,30 @@ public sealed class RegionRecorder : IDisposable
             // COM objects live in the same apartment that will write every frame.
             _encoder = _encoderFactory(options);
             double initializationMs = Stopwatch.GetElapsedTime(initializationStarted).TotalMilliseconds;
-            Interlocked.Exchange(ref _recordingStarted, Stopwatch.GetTimestamp());
-            stopwatch.Start();
+            Interlocked.Exchange(ref _recordingStarted, _time.GetTimestamp());
 
             // Always execute one capture iteration after encoder initialisation. H.264 MFT
             // startup can occasionally take longer than a very short recording; if Stop was
             // requested during that startup, finalising with zero samples fails with
             // MF_E_SINK_NO_SAMPLES_PROCESSED (0xC00D4A44). One timestamp-zero frame produces a
             // valid short clip without blocking the UI thread while the encoder warms up.
+            // The same rule holds for a pause requested during startup: the loop only parks
+            // once that first frame exists.
             while (true)
             {
-                double elapsed = stopwatch.Elapsed.TotalMilliseconds;
+                if (ParkWhilePaused(clock.EmittedFrames > 0))
+                {
+                    // Never grab while paused, not even on the way out: a frame taken now would
+                    // show the paused period at the timestamp where the recorded span ended.
+                    if (_stopRequested)
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+
+                double elapsed = ActiveElapsedMs();
                 if (clock.TryClaimFrame(elapsed, out double timestampMs))
                 {
                     long phaseStarted = Stopwatch.GetTimestamp();
@@ -233,7 +354,7 @@ public sealed class RegionRecorder : IDisposable
                     break;
                 }
 
-                double sleep = clock.MillisecondsUntilNextFrame(stopwatch.Elapsed.TotalMilliseconds);
+                double sleep = clock.MillisecondsUntilNextFrame(ActiveElapsedMs());
                 if (sleep >= 1)
                 {
                     // Cap the sleep so a stop request is honoured promptly even at low fps.
@@ -241,32 +362,50 @@ public sealed class RegionRecorder : IDisposable
                 }
             }
 
-            stopwatch.Stop();
-            Interlocked.Exchange(ref _recordingEnded, Stopwatch.GetTimestamp());
+            long endedAt = _time.GetTimestamp();
+            double recordedMs, pausedMs;
+            int pauseCount;
+            lock (_pauseGate)
+            {
+                // Stopping while paused closes the open span here, so the recorded duration
+                // ends where the last recorded span ended.
+                double rawEnd = RawElapsedMs(endedAt);
+                _pauses.End(rawEnd);
+                recordedMs = _pauses.ActiveElapsedMs(rawEnd);
+                pausedMs = _pauses.PausedMs(rawEnd);
+                pauseCount = _pauses.PauseCount;
+                Interlocked.Exchange(ref _recordingEnded, endedAt);
+            }
+
             long finalizeStarted = Stopwatch.GetTimestamp();
             _encoder!.Complete();
             double finalizationMs = Stopwatch.GetElapsedTime(finalizeStarted).TotalMilliseconds;
 
             _result = new RecordingResult(
                 options.OutputPath,
-                stopwatch.Elapsed.TotalMilliseconds,
+                recordedMs,
                 options.Fps,
                 clock.EmittedFrames,
                 _grabber.Width,
                 _grabber.Height)
             {
                 Performance = new RecordingPerformance(initializationMs, captureTotal, captureMax, encodeTotal, encodeMax, finalizationMs),
+                PausedMs = pausedMs,
+                PauseCount = pauseCount,
             };
 
             _log.LogInformation(
                 "Recording finished: {Frames}/{ExpectedFrames} frame(s) over {Duration:0}ms; " +
-                "dropped {DroppedFrames} ({DropRate:P1}), effective {EffectiveFps:0.0}fps",
+                "dropped {DroppedFrames} ({DropRate:P1}), effective {EffectiveFps:0.0}fps; " +
+                "paused {PauseCount} time(s) for {PausedMs:0}ms",
                 _result.EmittedFrames,
                 _result.ExpectedFrames,
                 _result.DurationMs,
                 _result.DroppedFrames,
                 _result.DropRate,
-                _result.EffectiveFps);
+                _result.EffectiveFps,
+                _result.PauseCount,
+                _result.PausedMs);
         }
         catch (Exception ex)
         {
@@ -291,9 +430,68 @@ public sealed class RegionRecorder : IDisposable
             finally
             {
                 _encoder = null;
-                Interlocked.CompareExchange(ref _recordingEnded, Stopwatch.GetTimestamp(), 0);
+                lock (_pauseGate)
+                {
+                    long endedAt = _time.GetTimestamp();
+                    _pauses.End(RawElapsedMs(endedAt));
+                    Interlocked.CompareExchange(ref _recordingEnded, endedAt, 0);
+                    // Release anyone waiting for the loop to park; it never will again.
+                    _captureParked = false;
+                    Monitor.PulseAll(_pauseGate);
+                }
+
                 _grabber.Dispose();
             }
+        }
+    }
+
+    /// <summary>
+    /// Parks the loop while a pause is active. Returns <see langword="true"/> when the caller
+    /// must not capture this iteration.
+    /// </summary>
+    private bool ParkWhilePaused(bool firstFrameWritten)
+    {
+        lock (_pauseGate)
+        {
+            bool park = firstFrameWritten && _pauses.IsPaused;
+            if (_captureParked != park)
+            {
+                _captureParked = park;
+                Monitor.PulseAll(_pauseGate);
+            }
+
+            if (park && !_stopRequested)
+            {
+                // No frame is grabbed or encoded while paused; the encoder idles with its
+                // pending samples intact until Resume or Stop pulses the gate.
+                Monitor.Wait(_pauseGate, PausedWaitMs);
+            }
+
+            return park;
+        }
+    }
+
+    private double ActiveElapsedMs()
+    {
+        lock (_pauseGate)
+        {
+            return _pauses.ActiveElapsedMs(RawElapsedMs(_time.GetTimestamp()));
+        }
+    }
+
+    /// <summary>Capture-session time since the encoder became ready; zero before that.</summary>
+    private double RawElapsedMs(long timestamp)
+    {
+        long started = Interlocked.Read(ref _recordingStarted);
+        return started == 0 ? 0 : _time.GetElapsedTime(started, timestamp).TotalMilliseconds;
+    }
+
+    private void RequestStopAndWake()
+    {
+        _stopRequested = true;
+        lock (_pauseGate)
+        {
+            Monitor.PulseAll(_pauseGate);
         }
     }
 
@@ -316,7 +514,7 @@ public sealed class RegionRecorder : IDisposable
         // thread has finished; touching the MF COM objects from here would cross apartments.
         if (IsRecording)
         {
-            _stopRequested = true;
+            RequestStopAndWake();
             _thread?.Join(2000);
         }
     }

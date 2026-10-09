@@ -3333,4 +3333,12 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Folder410.ExportChanged" xml:space="preserve"><value>A capture changed during export. Try again.</value></data>
   <data name="Folder410.ExportLocked" xml:space="preserve"><value>Another program is using the file. Close it and try again.</value></data>
   <data name="Folder410.ExportDiskFull" xml:space="preserve"><value>There is not enough free space. Free space or choose another destination.</value></data>
+  <data name="RecordingPause_Pause" xml:space="preserve"><value>Pause</value></data>
+  <data name="RecordingPause_Resume" xml:space="preserve"><value>Resume</value></data>
+  <data name="RecordingPause_PauseName" xml:space="preserve"><value>Pause recording</value></data>
+  <data name="RecordingPause_ResumeName" xml:space="preserve"><value>Resume recording</value></data>
+  <data name="RecordingPause_PauseHelp" xml:space="preserve"><value>Pauses the recording. Paused time is not included in the video.</value></data>
+  <data name="RecordingPause_ResumeHelp" xml:space="preserve"><value>Resumes the recording. The video continues from the point where it was paused.</value></data>
+  <data name="RecordingPause_Status" xml:space="preserve"><value>Paused · Resume, or press Esc or Stop to finish</value></data>
+  <data name="RecordingPause_State" xml:space="preserve"><value>Paused</value></data>
 </root>

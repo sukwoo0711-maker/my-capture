@@ -39,6 +39,9 @@ internal sealed class RecordingWallClockWindow : Window
     private readonly Border _container;
     private readonly Viewbox _viewbox;
     private readonly TextBlock _clockText;
+    private readonly TextBlock _pausedText;
+    private readonly StackPanel _content;
+    private bool _isPaused;
     private DispatcherTimer? _timer;
     private IntPtr _hwnd;
     private bool _dragging;
@@ -100,18 +103,41 @@ internal sealed class RecordingWallClockWindow : Window
             TextWrapping = TextWrapping.NoWrap,
         };
 
+        // Shown only while the recording is paused. The control window sets it after capture
+        // has parked and clears it before capture resumes, so it never appears in the clip.
+        _pausedText = new TextBlock
+        {
+            Text = UiText.Get("RecordingPause_State"),
+            FontFamily = TryFont("Font.Mono"),
+            FontSize = _currentFontSize,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = TryBrush("State.Warning", Color.FromRgb(0xF5, 0xB9, 0x42)),
+            Margin = new Thickness(0, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.NoWrap,
+            Visibility = Visibility.Collapsed,
+        };
+
+        _content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Children = { _pausedText, _clockText },
+        };
+
         _viewbox = new Viewbox
         {
             Stretch = Stretch.Uniform,
             StretchDirection = StretchDirection.DownOnly,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            Child = _clockText,
+            Child = _content,
         };
 
+        // Text.Badge is light in every theme, so it sits on the badge surface (dark in every
+        // theme) rather than the floating surface, which is white in the light themes.
         _container = new Border
         {
-            Background = TryBrush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
+            Background = TryBrush("Surface.Badge", Color.FromArgb(0xE6, 0x08, 0x0C, 0x12)),
             BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x2B, 0x3A, 0x50)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
@@ -140,6 +166,8 @@ internal sealed class RecordingWallClockWindow : Window
     internal double DpiScale => _dpiScale;
     internal int TargetFps => _targetFps;
     internal bool IsClosing => _isClosing;
+    internal bool IsPaused => _isPaused;
+    internal TextBlock PausedBadge => _pausedText;
     internal DispatcherTimer? Timer => _timer;
     internal bool IsTimerRunning => _timer is not null && _timer.IsEnabled;
     internal TimeSpan? TimerInterval => _timer?.Interval;
@@ -243,6 +271,23 @@ internal sealed class RecordingWallClockWindow : Window
         }
     }
 
+    /// <summary>
+    /// Shows or hides the paused badge next to the time. The clock keeps ticking so the time
+    /// jump at a resume stays visible in the clip.
+    /// </summary>
+    internal void SetPaused(bool paused)
+    {
+        if (_isClosing || _isPaused == paused)
+        {
+            return;
+        }
+
+        _isPaused = paused;
+        _pausedText.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
+        AutomationProperties.SetItemStatus(_container, paused ? _pausedText.Text : string.Empty);
+        RepositionAndPlace();
+    }
+
     internal void UpdateRecordingRegion(RectD newRegion, double dpiScale)
     {
         _recordingRegion = newRegion.Normalized().ToPixelBounds();
@@ -266,6 +311,11 @@ internal sealed class RecordingWallClockWindow : Window
         out double heightPx)
     {
         _container.Padding = new Thickness(8, 4, 8, 4);
+        // A direct Measure returns the cached size of a measure-valid parent even when a
+        // child changed (badge visibility, font size); mark the content chain dirty first.
+        _content.InvalidateMeasure();
+        _viewbox.InvalidateMeasure();
+        _container.InvalidateMeasure();
         _container.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         double desiredWidthDip = Math.Max(100.0, Math.Ceiling(_container.DesiredSize.Width) + 4.0);
         double desiredHeightDip = Math.Max(24.0, Math.Ceiling(_container.DesiredSize.Height));
@@ -425,6 +475,7 @@ internal sealed class RecordingWallClockWindow : Window
         {
             _currentFontSize = newSize;
             _clockText.FontSize = _currentFontSize;
+            _pausedText.FontSize = _currentFontSize;
             RepositionAndPlace();
         }
     }
