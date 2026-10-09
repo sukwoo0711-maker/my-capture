@@ -49,6 +49,7 @@ internal static class RecordingBackendBenchmarkSelfTest
     private const string RepeatsVariable = "MYCAPTURE_BENCH_REPEATS";
     private const string SoakSecondsVariable = "MYCAPTURE_SOAK_SECONDS";
     private const string SoakFpsVariable = "MYCAPTURE_SOAK_FPS";
+    private const string MatrixVariable = "MYCAPTURE_BENCH_MATRIX";
     private const double MegaByte = 1024 * 1024;
 
     private static readonly (int Width, int Height)[] Sizes = [(1920, 1080), (2560, 1440), (3440, 1440)];
@@ -77,7 +78,9 @@ internal static class RecordingBackendBenchmarkSelfTest
             Pump(500);
             measurements.Add(new { Kind = "fixture-only", Usage = MeasureIdle(seconds) });
             int pair = 0;
-            foreach ((int width, int height) in Sizes)
+            // MYCAPTURE_BENCH_MATRIX=0 skips the size matrix for a quick static/probe-only rerun.
+            bool matrix = ReadInt(MatrixVariable, 1, 0, 1) == 1;
+            foreach ((int width, int height) in matrix ? Sizes : [])
             {
                 if (width > monitor.Bounds.Width || height > monitor.Bounds.Height)
                 {
@@ -106,9 +109,12 @@ internal static class RecordingBackendBenchmarkSelfTest
             Pump(300);
             var staticRegion = new RectD(monitor.Bounds.Left, monitor.Bounds.Top,
                 Math.Min(1920, monitor.Bounds.Width), Math.Min(1080, monitor.Bounds.Height));
-            foreach (RecordingCaptureBackend backend in new[] { RecordingCaptureBackend.Gdi, RecordingCaptureBackend.WindowsGraphicsCapture })
+            foreach (RecordingFrameRate rate in Rates)
             {
-                measurements.Add(RecordSample(engine, backend, staticRegion, RecordingFrameRate.Fps30, seconds, outputDirectory, failures, table, "static-"));
+                foreach (RecordingCaptureBackend backend in new[] { RecordingCaptureBackend.Gdi, RecordingCaptureBackend.WindowsGraphicsCapture })
+                {
+                    measurements.Add(RecordSample(engine, backend, staticRegion, rate, seconds, outputDirectory, failures, table, "static-"));
+                }
             }
 
             fixture.Mode = FixtureMode.Animated;
@@ -1187,6 +1193,8 @@ internal static class RecordingBackendBenchmarkSelfTest
         private readonly RectD _bounds;
         private readonly Stopwatch _clock = Stopwatch.StartNew();
         private FixtureMode _mode = FixtureMode.Animated;
+        private bool _shown;
+        private bool _rendering;
 
         internal AnimatedFixture(RectD physicalBounds)
         {
@@ -1221,6 +1229,27 @@ internal static class RecordingBackendBenchmarkSelfTest
                 Visibility moving = value == FixtureMode.Animated ? Visibility.Visible : Visibility.Collapsed;
                 _bar.Visibility = moving;
                 _box.Visibility = moving;
+                // Only the animated scene keeps WPF's per-frame render loop running; a static scene
+                // leaves the process as idle as a real desktop being recorded.
+                SetRendering(_shown && value == FixtureMode.Animated);
+            }
+        }
+
+        private void SetRendering(bool enabled)
+        {
+            if (enabled == _rendering)
+            {
+                return;
+            }
+
+            _rendering = enabled;
+            if (enabled)
+            {
+                CompositionTarget.Rendering += OnRendering;
+            }
+            else
+            {
+                CompositionTarget.Rendering -= OnRendering;
             }
         }
 
@@ -1229,12 +1258,14 @@ internal static class RecordingBackendBenchmarkSelfTest
             _window.Show();
             PhysicalWindowPositioner.PlaceTopmost(new WindowInteropHelper(_window).Handle, _bounds);
             _window.UpdateLayout();
-            CompositionTarget.Rendering += OnRendering;
+            _shown = true;
+            SetRendering(_mode == FixtureMode.Animated);
         }
 
         internal void Close()
         {
-            CompositionTarget.Rendering -= OnRendering;
+            SetRendering(false);
+            _shown = false;
             _window.Close();
         }
 
