@@ -75,6 +75,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _captureFullScreenHotkey = string.Empty;
     private string _recordRegionHotkey = string.Empty;
     private string _uploadGitHubImageHotkey = string.Empty;
+    private string _captureTextHotkey = string.Empty;
 
     // ----- Storage -----
     private string _maxItems = string.Empty;
@@ -157,6 +158,13 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     public bool ShowSelectionGrid { get => _showSelectionGrid; set => Set(ref _showSelectionGrid, value); }
     public bool AbortOnFocusLoss { get => _abortOnFocusLoss; set => Set(ref _abortOnFocusLoss, value); }
+
+    /// <summary>Format the capture overlay's colour copy writes. Undefined values fall back to hex.</summary>
+    public ColorFormat ColorFormat
+    {
+        get => _preservedColorFormat;
+        set => Set(ref _preservedColorFormat, Enum.IsDefined(value) ? value : ColorFormat.Hex);
+    }
 
     public string DelaySeconds
     {
@@ -285,6 +293,13 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _uploadGitHubImageHotkey;
         set { if (Set(ref _uploadGitHubImageHotkey, value)) ValidateAllHotkeys(); }
+    }
+
+    /// <summary>Optional chord for the text-only region capture.</summary>
+    public string CaptureTextHotkey
+    {
+        get => _captureTextHotkey;
+        set { if (Set(ref _captureTextHotkey, value)) ValidateAllHotkeys(); }
     }
 
     // ================= Storage =================
@@ -522,6 +537,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _scrollingCaptureHotkey = s.Hotkeys.ScrollingCapture.ToString();
         _delayedCaptureHotkey = s.Hotkeys.DelayedCapture.ToString();
         _uploadGitHubImageHotkey = s.Hotkeys.UploadGitHubImage.ToString();
+        _captureTextHotkey = s.Hotkeys.CaptureText.ToString();
 
         _maxItems = Int(s.Queue.MaxItems);
         _maxGiB = Gib(s.Queue.MaxBytes);
@@ -656,6 +672,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 ScrollingCapture = ParseHotkey(_scrollingCaptureHotkey),
                 DelayedCapture = ParseHotkey(_delayedCaptureHotkey),
                 UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
+                CaptureText = ParseHotkey(_captureTextHotkey),
             },
             Queue =
             {
@@ -739,6 +756,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         DelayedCapture = ParseHotkey(_delayedCaptureHotkey),
         UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
         OpenLibrary = ParseHotkey(_openLibraryHotkey),
+        CaptureText = ParseHotkey(_captureTextHotkey),
     };
 
     // ================= INotifyDataErrorInfo =================
@@ -985,6 +1003,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             (nameof(ScrollingCaptureHotkey), _scrollingCaptureHotkey),
             (nameof(DelayedCaptureHotkey), _delayedCaptureHotkey),
             (nameof(UploadGitHubImageHotkey), _uploadGitHubImageHotkey),
+            (nameof(CaptureTextHotkey), _captureTextHotkey),
         ];
 
         var parsed = new Dictionary<string, Hotkey>(fields.Length);

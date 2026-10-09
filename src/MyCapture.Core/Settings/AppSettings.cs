@@ -108,6 +108,12 @@ public sealed class HotkeySettings
     /// resulting user-attachments URL.
     /// </summary>
     public Hotkey UploadGitHubImage { get; set; } = new(HotkeyModifiers.None, Hotkey.VkF9);
+
+    /// <summary>
+    /// Selects a region, recognises its text locally and copies only the text.
+    /// </summary>
+    /// <remarks>Unassigned by default, like the other optional capture commands.</remarks>
+    public Hotkey CaptureText { get; set; } = Hotkey.None;
 }
 
 public sealed class QueueSettings
