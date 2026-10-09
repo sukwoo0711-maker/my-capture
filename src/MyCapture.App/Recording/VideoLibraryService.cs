@@ -142,10 +142,15 @@ internal sealed class VideoLibraryService
             Path.Combine(directory, CaptureFileNames.VideoWriting));
     }
 
+    /// <param name="openLatency">
+    /// Optional stop-to-editor measurement; validation, thumbnail and publication are charged to
+    /// their stages as they complete.
+    /// </param>
     internal async Task<VideoLibraryItem> CompleteCaptureAsync(
         VideoCaptureWriteSession session,
         RecordingResult result,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        RecordingOpenLatency? openLatency = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(result);
@@ -189,6 +194,7 @@ internal sealed class VideoLibraryService
                 record.DurationMs,
                 cancellationToken,
                 allowShorterThanExpected: true);
+            openLatency?.Mark(RecordingOpenStage.Validate);
             // RegionRecorder's wall clock includes Media Foundation startup and a capture/encode
             // call already in flight when Stop is requested. The decoded container timeline is
             // the duration users can actually play, trim and export, so persist that canonical
@@ -216,6 +222,7 @@ internal sealed class VideoLibraryService
                 record.DurationMs);
             string editsJson = JsonSerializer.Serialize(document, JsonOptions);
             AtomicFile.WriteAllText(Path.Combine(directory, CaptureFileNames.VideoEdits), editsJson);
+            openLatency?.Mark(RecordingOpenStage.Publish);
 
             BitmapSource thumbnail = await CreateThumbnailAsync(
                 sourcePath,
@@ -228,6 +235,7 @@ internal sealed class VideoLibraryService
                 thumbnail,
                 Path.Combine(directory, CaptureFileNames.Thumbnail),
                 ImageCodec.ThumbnailJpegQuality);
+            openLatency?.Mark(RecordingOpenStage.Thumbnail);
 
             record.TotalBytes = MeasureMediaBytes(directory);
             _queue.SaveRecordMetaOrThrow(record);
@@ -251,6 +259,7 @@ internal sealed class VideoLibraryService
                 record.Height,
                 record.DurationMs,
                 record.TotalBytes);
+            openLatency?.Mark(RecordingOpenStage.Publish);
             return new VideoLibraryItem(record, ToRecordingResult(record, document), document);
         }
         finally

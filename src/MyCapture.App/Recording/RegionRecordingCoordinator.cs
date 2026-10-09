@@ -43,6 +43,7 @@ internal sealed class RegionRecordingCoordinator
     // recording from 0. This flag closes that race deterministically.
     private bool _finishing;
     private bool _completionInProgress;
+    private RecordingOpenLatency? _openLatency;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private SelectionPreparation? _selectionPreparation;
     internal Func<FrozenFrame>? AcquireSelectionFrame { get; set; }
@@ -358,11 +359,16 @@ internal sealed class RegionRecordingCoordinator
         }
     }
 
-    private void OnControlsStopping(object? sender, EventArgs e) => _finishing = true;
+    private void OnControlsStopping(object? sender, EventArgs e)
+    {
+        _finishing = true;
+        _openLatency = new RecordingOpenLatency(Stopwatch.GetTimestamp());
+    }
 
     private void OnControlsCancelled(object? sender, EventArgs e)
     {
         _log.LogInformation("Recording cancelled before or during capture");
+        _openLatency = null;
         _writeSession?.Dispose();
         _writeSession = null;
         _completionInProgress = false;
@@ -371,6 +377,7 @@ internal sealed class RegionRecordingCoordinator
     private void OnControlsFailed(object? sender, RecordingFailedEventArgs e)
     {
         _log.LogError(e.Exception, "Recording stopped without a completed video");
+        _openLatency = null;
         _writeSession?.Dispose();
         _writeSession = null;
         _completionInProgress = false;
@@ -427,6 +434,9 @@ internal sealed class RegionRecordingCoordinator
 
     private async void OnRecordingFinished(object? sender, RecordingResult result)
     {
+        RecordingOpenLatency openLatency = _openLatency ?? new RecordingOpenLatency(Stopwatch.GetTimestamp());
+        _openLatency = null;
+        openLatency.Mark(RecordingOpenStage.Finalize);
         _log.LogInformation(
             "Recording produced {Path} ({Frames}/{ExpectedFrames} frames, {Duration:0}ms, " +
             "dropped {DroppedFrames}, effective {EffectiveFps:0.0}fps)",
@@ -460,7 +470,7 @@ internal sealed class RegionRecordingCoordinator
         VideoLibraryItem item;
         try
         {
-            item = await _videoLibrary.CompleteCaptureAsync(writeSession, result);
+            item = await _videoLibrary.CompleteCaptureAsync(writeSession, result, openLatency: openLatency);
             writeSession.Dispose();
             _writeSession = null;
             _completionInProgress = false;
@@ -501,8 +511,11 @@ internal sealed class RegionRecordingCoordinator
             _finishing = false;
             editor.FrameImageCaptured += OnFrameImageCaptured;
             editor.Closed += OnEditorClosed;
+            ObserveFirstRender(editor, openLatency);
             editor.Show();
             _ = editor.Activate();
+            openLatency.Mark(RecordingOpenStage.EditorOpen);
+            LogOpenLatency(openLatency, result);
             (sender as RecordingControlWindow)?.CompleteAndClose();
         }
         catch (Exception ex)
@@ -516,6 +529,38 @@ internal sealed class RegionRecordingCoordinator
             MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_49020661A850"), ex);
             EndSessionIfIdle();
         }
+    }
+
+    /// <summary>
+    /// Logs where the stop-to-editor wait went. Durations only: the clip path and window titles
+    /// are deliberately absent so diagnostics can be shared without exposing user content.
+    /// </summary>
+    private void LogOpenLatency(RecordingOpenLatency latency, RecordingResult result) =>
+        _log.LogInformation(
+            "Recording open latency: finalize {FinalizeMs:0}ms (MP4 complete {EncoderCompleteMs:0}ms), " +
+            "validate {ValidateMs:0}ms, thumbnail {ThumbnailMs:0}ms, publish {PublishMs:0}ms, " +
+            "editor {EditorMs:0}ms; stop to editor {TotalMs:0}ms",
+            latency[RecordingOpenStage.Finalize],
+            result.Performance?.FinalizationMs ?? 0,
+            latency[RecordingOpenStage.Validate],
+            latency[RecordingOpenStage.Thumbnail],
+            latency[RecordingOpenStage.Publish],
+            latency[RecordingOpenStage.EditorOpen],
+            latency.TotalMs);
+
+    private void ObserveFirstRender(VideoEditorWindow editor, RecordingOpenLatency latency)
+    {
+        void OnContentRendered(object? sender, EventArgs e)
+        {
+            editor.ContentRendered -= OnContentRendered;
+            latency.Mark(RecordingOpenStage.EditorFirstRender);
+            _log.LogInformation(
+                "Recording editor first render {FirstRenderMs:0}ms after show; stop to first render {TotalMs:0}ms",
+                latency[RecordingOpenStage.EditorFirstRender],
+                latency.TotalMs);
+        }
+
+        editor.ContentRendered += OnContentRendered;
     }
 
     private void OnFrameImageCaptured(object? sender, AnnotationFrameCapturedEventArgs e) =>

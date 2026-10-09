@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using MyCapture.Core.Recording;
 
 namespace MyCapture.Platform.Recording;
 
@@ -76,8 +77,9 @@ internal sealed class DecodedVideoFrameSelector
 
 /// <summary>
 /// Synchronously decodes Windows-supported video files through Media Foundation's Source Reader.
-/// Requests may move forward without seeking; a backwards request performs one key-frame seek and
-/// then advances decoded samples to the requested presentation position.
+/// Nearby forward requests advance decoded samples without seeking. A backwards request, or a
+/// forward request beyond <see cref="ForwardSeekPolicy"/>'s threshold, performs one key-frame
+/// seek and then advances decoded samples to the exact requested presentation position.
 /// </summary>
 public sealed class MediaFoundationVideoFrameReader : IDisposable
 {
@@ -121,6 +123,10 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
     private DecodedVideoFrame? _unresolvedDurationFrame;
     private DecodedVideoFrame? _rawLookaheadFrame;
     private double _lastResolvedSampleDurationMs;
+    private double? _newestDecodedMs;
+    private bool _awaitingSeekLanding;
+    private double? _forwardSeekOriginMs;
+    private double _forwardSeekTargetMs;
 
     public MediaFoundationVideoFrameReader(string sourcePath)
     {
@@ -153,6 +159,21 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
 
     public double DurationMs { get; private set; }
 
+    /// <summary>Seeks performed so far (initial, backward and forward). Diagnostics and tests only.</summary>
+    internal int SeekCount { get; private set; }
+
+    /// <summary>Decoded samples delivered so far. Diagnostics and tests only.</summary>
+    internal int DecodedFrameCount { get; private set; }
+
+    /// <summary>Presentation time of the first sample decoded after the latest seek.</summary>
+    internal double? LastSeekLandingMs { get; private set; }
+
+    /// <summary>Newest decoded sample, from which a forward request's gap is measured.</summary>
+    internal double? NewestDecodedMs => _newestDecodedMs;
+
+    /// <summary>Forward-seek decision for this reader; tests replace it to compare against sequential decoding.</summary>
+    internal ForwardSeekPolicy ForwardSeekPolicy { get; set; } = new();
+
     /// <summary>
     /// Returns the frame presented at <paramref name="sourceTimeMs"/>. The reader retains at most
     /// one previous frame and one decoded look-ahead frame, so long exports stay memory bounded.
@@ -170,12 +191,81 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
         {
             Seek(sourceTimeMs);
         }
+        else if (DurationMs > 0 && ForwardSeekPolicy.ShouldSeek(_newestDecodedMs, sourceTimeMs, _endOfStream))
+        {
+            SeekForward(sourceTimeMs, _newestDecodedMs!.Value);
+        }
 
         _lastRequestedMs = sourceTimeMs;
         return _frameSelector.Select(
             sourceTimeMs,
-            () => ReadNextFrame(cancellationToken),
+            () => ReadTrackedFrame(cancellationToken),
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Skips to the key frame before a distant forward target, so the decoder walks at most one
+    /// key-frame interval instead of every intermediate sample (e.g. validating a clip's final
+    /// frame right after its first). The outcome must equal sequential decoding, so a source that
+    /// rejects the seek restarts from the beginning and continues sequentially.
+    /// </summary>
+    private void SeekForward(double sourceTimeMs, double originMs)
+    {
+        try
+        {
+            // Media Foundation rejects positions after the container duration
+            // (MF_E_OUT_OF_RANGE); the key frame before the end still serves a later request.
+            Seek(Math.Min(sourceTimeMs, DurationMs));
+        }
+        catch (InvalidOperationException)
+        {
+            ForwardSeekPolicy.Disable();
+            Seek(0);
+            return;
+        }
+
+        _forwardSeekOriginMs = originMs;
+        _forwardSeekTargetMs = sourceTimeMs;
+    }
+
+    /// <summary>
+    /// Records the decode position for the forward-seek decision. When a forward seek resumes
+    /// after the target, the frames it needs were skipped: restart from the beginning and decode
+    /// sequentially so frame selection stays exact.
+    /// </summary>
+    private DecodedVideoFrame? ReadTrackedFrame(CancellationToken cancellationToken)
+    {
+        DecodedVideoFrame? frame = ReadNextFrame(cancellationToken);
+        if (_awaitingSeekLanding)
+        {
+            _awaitingSeekLanding = false;
+            LastSeekLandingMs = frame?.TimestampMs;
+            if (_forwardSeekOriginMs is double origin)
+            {
+                _forwardSeekOriginMs = null;
+                ForwardSeekLanding landing = ForwardSeekPolicy.Evaluate(
+                    origin,
+                    _forwardSeekTargetMs,
+                    frame?.TimestampMs ?? double.NaN);
+                if (landing == ForwardSeekLanding.Overshot)
+                {
+                    // The selector has consumed nothing since the forward seek reset it, so a
+                    // restart cannot desynchronise its held or look-ahead frame.
+                    Seek(0);
+                    _awaitingSeekLanding = false;
+                    frame = ReadNextFrame(cancellationToken);
+                    LastSeekLandingMs = frame?.TimestampMs;
+                }
+            }
+        }
+
+        if (frame is not null)
+        {
+            DecodedFrameCount++;
+            _newestDecodedMs = frame.TimestampMs;
+        }
+
+        return frame;
     }
 
     private void Initialize(string fullPath)
@@ -362,6 +452,10 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
         _unresolvedDurationFrame = null;
         _rawLookaheadFrame = null;
         _lastResolvedSampleDurationMs = 0;
+        SeekCount++;
+        _newestDecodedMs = null;
+        _awaitingSeekLanding = true;
+        _forwardSeekOriginMs = null;
     }
 
     private DecodedVideoFrame? ReadNextFrame(CancellationToken cancellationToken)
