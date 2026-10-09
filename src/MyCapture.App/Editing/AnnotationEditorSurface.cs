@@ -217,7 +217,9 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         dc.PushTransform(new ScaleTransform(scale, scale));
 
         AnnotationItem? suppress = _controller.IsCreatingText ? _controller.Selected : null;
-        _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress);
+        // The editor's frame always starts at the selection origin, so the frame bitmap is the
+        // base capture in annotation pixel space that blur layers sample.
+        _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress, _frame.Bitmap);
         SourceWindowTitleRenderer.Draw(dc, SourceWindowTitle, _cropRegion.Width, _cropRegion.Height);
 
         dc.Pop();

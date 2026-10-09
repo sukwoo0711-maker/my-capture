@@ -1677,7 +1677,7 @@ internal sealed class VideoEditorWindow : Window
                     dc.PushTransform(new TranslateTransform((width - drawWidth) / 2, (height - drawHeight) / 2));
                     dc.PushTransform(new ScaleTransform(scale, scale));
                     dc.DrawImage(result.SelectedBitmap, new Rect(0, 0, canvasWidth, canvasHeight));
-                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0);
+                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0, blurSource: result.SelectedBitmap);
                     dc.Pop();
                     dc.Pop();
                 }
@@ -1687,7 +1687,9 @@ internal sealed class VideoEditorWindow : Window
                 using (DrawingContext dc = visual.RenderOpen())
                 {
                     dc.PushTransform(new TranslateTransform(result.CropOrigin.X, result.CropOrigin.Y));
-                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0);
+                    // Blur layers bake the edited frame's pixels into this overlay, like the
+                    // mosaic patches already do.
+                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0, blurSource: result.SelectedBitmap);
                     dc.Pop();
                 }
             }

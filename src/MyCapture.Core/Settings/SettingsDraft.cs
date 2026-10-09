@@ -119,6 +119,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _fontFamily = string.Empty;
     private string _mosaicBlockSize = string.Empty;
     private string _highlighterAlpha = string.Empty;
+    private string _blurRadius = string.Empty;
 
     /// <summary>
     /// Builds a draft from a deep copy of <paramref name="source"/>. The source object
@@ -484,6 +485,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _highlighterAlpha, value)) ValidateInt(value, SettingsRanges.HighlighterAlpha); }
     }
 
+    public string BlurRadius
+    {
+        get => _blurRadius;
+        set { if (Set(ref _blurRadius, value)) ValidateInt(value, SettingsRanges.BlurRadius); }
+    }
+
     // ================= Public operations =================
 
     /// <summary>
@@ -576,6 +583,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _fontFamily = s.Annotation.FontFamily;
         _mosaicBlockSize = Int(s.Annotation.MosaicBlockSize);
         _highlighterAlpha = Int(s.Annotation.HighlighterAlpha);
+        _blurRadius = Int(s.Annotation.BlurRadius);
 
         // Preserve members not surfaced in the UI so mapping back is lossless.
         _preservedSchemaVersion = s.SchemaVersion;
@@ -724,6 +732,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 MosaicBlockSize = ParseInt(_mosaicBlockSize),
                 HighlighterAlpha = (byte)ParseInt(_highlighterAlpha),
                 RecentColors = [.. _preservedRecentColors],
+                BlurRadius = ParseInt(_blurRadius),
             },
         };
 
@@ -801,6 +810,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ValidateNonEmpty(_fontFamily, nameof(FontFamily), UiText.Get("Text_B64CA1BE6711"));
         ValidateInt(_mosaicBlockSize, SettingsRanges.MosaicBlockSize, nameof(MosaicBlockSize));
         ValidateInt(_highlighterAlpha, SettingsRanges.HighlighterAlpha, nameof(HighlighterAlpha));
+        ValidateInt(_blurRadius, SettingsRanges.BlurRadius, nameof(BlurRadius));
         ValidateAllHotkeys();
     }
 

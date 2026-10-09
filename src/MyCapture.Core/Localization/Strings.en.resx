@@ -3358,4 +3358,13 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="PrtScGuide_OpenSettings" xml:space="preserve"><value>Open Windows Settings</value></data>
   <data name="PrtScGuide_OpenSettingsFailed" xml:space="preserve"><value>Could not open Windows Settings. Open Settings &gt; Accessibility &gt; Keyboard manually.</value></data>
   <data name="PrtScGuide_FailureNotice" xml:space="preserve"><value>Windows is set to open screen capture with the Print Screen key. Turn the option off in Windows Settings &gt; Accessibility &gt; Keyboard.</value></data>
+  <data name="EditorBlur_Name" xml:space="preserve"><value>Blur</value></data>
+  <data name="EditorBlur_ToolTip" xml:space="preserve"><value>Drag over the area to blur (B)</value></data>
+  <data name="EditorBlur_ToolTitle" xml:space="preserve"><value>Blur tool</value></data>
+  <data name="EditorBlur_Instruction" xml:space="preserve"><value>Drag to choose the area to blur.</value></data>
+  <data name="EditorBlur_ToolStatus" xml:space="preserve"><value>Blur tool · Drag on the image</value></data>
+  <data name="EditorBlur_Strength" xml:space="preserve"><value>Blur strength</value></data>
+  <data name="EditorBlur_StrengthHint" xml:space="preserve"><value>Higher values blur more strongly.</value></data>
+  <data name="EditorBlur_StrengthChanged" xml:space="preserve"><value>Blur strength changed to {0:0} px</value></data>
+  <data name="EditorBlur_StrengthRange" xml:space="preserve"><value>2–64 image pixels.</value></data>
 </root>

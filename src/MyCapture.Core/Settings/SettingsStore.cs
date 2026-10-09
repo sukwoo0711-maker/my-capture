@@ -326,6 +326,10 @@ public sealed class SettingsStore
         s.Annotation.MosaicBlockSize = ClampWithWarning(
             s.Annotation.MosaicBlockSize, 2, 128, nameof(AnnotationDefaults.MosaicBlockSize), warnings);
 
+        s.Annotation.BlurRadius = ClampWithWarning(
+            s.Annotation.BlurRadius, SettingsRanges.BlurRadius.Min, SettingsRanges.BlurRadius.Max,
+            nameof(AnnotationDefaults.BlurRadius), warnings);
+
         if (string.IsNullOrWhiteSpace(s.Annotation.FontFamily))
         {
             s.Annotation.FontFamily = "Malgun Gothic";
