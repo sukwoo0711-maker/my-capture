@@ -173,8 +173,10 @@ $manifestPath = Join-Path $stage 'AppxManifest.xml'
 
 # Index only the logo assets. Indexing the whole folder would turn the satellite assembly
 # folders (ko-KR\, en\) into language resources and bloat resources.pri with runtime files.
-Copy-Item -LiteralPath (Join-Path $stage 'Assets') -Destination $priRoot -Recurse
-Get-ChildItem -LiteralPath (Join-Path $priRoot 'Assets') -File | Where-Object { $_.Extension -ne '.png' } | Remove-Item
+$priAssets = Join-Path $priRoot 'Assets'
+New-Item -ItemType Directory -Path $priAssets -Force | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $stage 'Assets') -File -Filter '*.png' |
+    ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $priAssets }
 $priConfig = Join-Path $OutputRoot 'priconfig.xml'
 Invoke-Tool $makepri @('createconfig', '/cf', $priConfig, '/dq', 'ko-KR', '/pv', '10.0.0', '/o')
 # A single .msix carries every scale; the default config would describe split resource packs.

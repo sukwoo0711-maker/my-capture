@@ -45,11 +45,12 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 
 ## 2. 패키지 만들기
 
-릴리스 커밋의 깨끗한 작업 트리에서 실행합니다. `package-store.ps1`은 `package.ps1`이 검증한 게시 폴더(`artifacts\release\<버전>\publish-win-x64`)를 그대로 사용합니다. 따라서 GitHub 릴리스와 Store 패키지의 바이너리가 같습니다.
+병합된 main의 깨끗한 작업 트리에서 실행합니다. `package-store.ps1`은 `package.ps1`이 만든 게시 폴더(`artifacts\release\<버전>\publish-win-x64`)를 그대로 사용합니다. 패키지 self-test 8종을 단독 실행하여 통과한 바이너리를 Store 패키지로 묶습니다.
 
 ```powershell
 .\build\package.ps1 -Version 4.1.0
-.\build\package-store.ps1 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
+.\build\run-packaged-self-tests.ps1 -PublishRoot .\artifacts\release\4.1.0\publish-win-x64
+.\build\package-store.ps1 -Version 4.1.0 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
 ```
 
 - **결과물**: `artifacts\store\<버전>\` 아래에 다음 파일이 생깁니다.
@@ -111,8 +112,8 @@ Get-AppxPackage MyCapture.LocalTest | Remove-AppxPackage
 Store 목록용 스크린샷은 실제 MyCapture 창을 렌더링해 만듭니다. 화면에 들어가는 대시보드, 코드, 블로그 글, 고객 문의, 예산표는 모두 합성한 예시 데이터이고, 사용자 라이브러리·설정·화면·클립보드는 읽지 않습니다. Release 빌드의 실행 파일로 언어마다 한 번씩 실행합니다.
 
 ```powershell
-.\src\MyCapture.App\bin\Release\net10.0-windows10.0.22000.0\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\ko ko
-.\src\MyCapture.App\bin\Release\net10.0-windows10.0.22000.0\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\en en
+.\artifacts\release\4.1.0\publish-win-x64\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\4.1.0\ko ko
+.\artifacts\release\4.1.0\publish-win-x64\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\4.1.0\en en
 ```
 
 - 결과는 2560×1440 PNG 10장(라이브러리, 주석, 빠른 가리기, 캡처 후 카드, 화면 고정, 텍스트 인식, 영상 편집기, GIF 내보내기, 설정, 밝은 테마 라이브러리)과 `store-screenshots-report.txt`입니다.
