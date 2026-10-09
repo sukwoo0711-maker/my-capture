@@ -458,7 +458,7 @@
                        AutomationProperties.Name="MyCapture" />
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{loc:Text Text_37AD4F28D422}" Style="{DynamicResource Text.Display}" FontSize="26" />
-                    <TextBlock Text="{loc:Text Text_13036A090EBA}"
+                    <TextBlock Text="{loc:Text Text_13036A090EBA}" ToolTip="{loc:Text Text_13036A090EBA}"
                                Style="{DynamicResource Text.MutedBlock}" Margin="0,5,0,0" MaxWidth="500" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                HorizontalAlignment="Left" />
                 </StackPanel>
@@ -594,8 +594,8 @@
         </StackPanel>
         <Grid Grid.Row="4" x:Name="GalleryWorkspace"><Grid.ColumnDefinitions><ColumnDefinition Width="136" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
 <Border x:Name="GalleryFilterRail" Background="{DynamicResource Surface.Raised}" CornerRadius="10" Padding="10" Margin="0,0,10,0"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><DockPanel>
-<TextBlock DockPanel.Dock="Bottom" Text="{loc:Text Workspace.RetentionHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,16,0,0" />
-<StackPanel><TextBlock Text="{loc:Text Workspace.Library}" FontWeight="SemiBold" Margin="4,6,0,8" /><TextBlock Text="{Binding ResultCountText}" Foreground="{DynamicResource Text.Muted}" TextWrapping="Wrap" Margin="4,0,0,16" AutomationProperties.LiveSetting="Polite" />
+<TextBlock DockPanel.Dock="Bottom" themes:KoreanWordWrap.Text="{loc:Text Workspace.RetentionHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,16,0,0" />
+<StackPanel><TextBlock Text="{loc:Text Workspace.Library}" FontWeight="SemiBold" Margin="4,6,0,8" /><TextBlock themes:KoreanWordWrap.Text="{Binding ResultCountText}" Foreground="{DynamicResource Text.Muted}" TextWrapping="Wrap" Margin="4,0,0,16" AutomationProperties.LiveSetting="Polite" />
 <RadioButton x:Name="AllLibraryFilter" Content="{loc:Text Workspace.All}" Tag="All" GroupName="LibraryFilter" IsChecked="True" Checked="OnLibraryFilterChanged" Margin="0,0,0,14" />
 <RadioButton Content="{loc:Text Text_302BAE127938}" Tag="Images" GroupName="LibraryFilter"  Checked="OnLibraryFilterChanged" Margin="0,0,0,14" />
 <RadioButton Content="{loc:Text Text_C11734267E6B}" Tag="Videos" GroupName="LibraryFilter"  Checked="OnLibraryFilterChanged" Margin="0,0,0,14" />

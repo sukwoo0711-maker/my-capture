@@ -201,7 +201,7 @@
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_13036A090EBA" xml:space="preserve">
-    <value>이미지와 동영상을 한곳에서 찾고 편집합니다. 동영상은 선택하거나 두 번 클릭하면 이 창 안에서 바로 재생됩니다.</value>
+    <value>이미지와 동영상을 한곳에서 찾고 편집합니다. 동영상은 이 창에서 바로 재생합니다.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_13A717215F51" xml:space="preserve">
