@@ -232,6 +232,22 @@ internal static class VideoEditorResponsivenessSelfTest
             editor.UpdateLayout();
             timeline.FlushRenderForTest();
 
+            // WPF's NaturalDuration is Windows Media Player's whole-second value; the editor must
+            // use the container duration so the final fraction can be trimmed and exported.
+            double containerMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(clipPath);
+            double clipMs = editor.DurationMsForTest;
+            Line(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Durations: container {containerMs:0.###}ms, editor {clipMs:0.###}ms, " +
+                $"trim out {timeline.OutMs:0.###}ms, recorded {recording.DurationMs:0.###}ms"));
+            Gate(containerMs > 0
+                    && Math.Abs(clipMs - containerMs) <= 0.01
+                    && Math.Abs(timeline.OutMs - containerMs) <= 0.01,
+                "editor duration and initial trim end equal the exact container duration",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"editor duration {clipMs:0.###}ms / trim out {timeline.OutMs:0.###}ms differ from container {containerMs:0.###}ms"));
+
             Gate(timeline.FixedVisualCountForTest == 9,
                 "three surfaces retain exactly nine fixed DrawingVisual layers",
                 $"fixed visual count was {timeline.FixedVisualCountForTest}, expected 9");
@@ -256,7 +272,7 @@ internal static class VideoEditorResponsivenessSelfTest
             long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
             for (int i = 0; i < AllocationSamples; i++)
             {
-                double target = (i % 1000) / 1000.0 * Math.Min(recording.DurationMs, timeline.VisibleSpanMs);
+                double target = (i % 1000) / 1000.0 * Math.Min(clipMs, timeline.VisibleSpanMs);
                 long started = Stopwatch.GetTimestamp();
                 timeline.SetPlayhead(target, ensureVisible: false);
                 intentLatencies[i] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
@@ -300,14 +316,14 @@ internal static class VideoEditorResponsivenessSelfTest
                 previousCycle = Stopwatch.GetTimestamp();
 
                 double fraction = i / (double)(DragSamples - 1);
-                double target = recording.DurationMs * fraction;
+                double target = clipMs * fraction;
                 long started = Stopwatch.GetTimestamp();
                 timeline.SeekFromOverview(target);
                 pointerLatencies[i] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 PumpFor(TimeSpan.FromMilliseconds(16));
             }
 
-            long finalGeneration = coordinator.RequestExact(recording.DurationMs * 0.75);
+            long finalGeneration = coordinator.RequestExact(clipMs * 0.75);
             bool exactCompleted = PumpUntil(
                 () => coordinator.PresentedGeneration == finalGeneration,
                 TimeSpan.FromSeconds(3));
@@ -356,7 +372,7 @@ internal static class VideoEditorResponsivenessSelfTest
             var exactLatencies = new double[ExactSamples];
             for (int i = 0; i < ExactSamples; i++)
             {
-                double target = recording.DurationMs * ((i + 1.0) / (ExactSamples + 1.0));
+                double target = clipMs * ((i + 1.0) / (ExactSamples + 1.0));
                 long started = Stopwatch.GetTimestamp();
                 long generation = coordinator.RequestExact(target);
                 bool completed = PumpUntil(
@@ -375,8 +391,25 @@ internal static class VideoEditorResponsivenessSelfTest
                 $"exact seek p95 {exactP95:0.000}ms <= 250ms",
                 $"exact seek p95 {exactP95:0.000}ms exceeded 250ms");
 
-            timeline.SetIn(recording.DurationMs * 0.1);
-            timeline.SetOut(recording.DurationMs * 0.9);
+            // The final frame lies past Windows Media Player's whole-second length; the preview
+            // must still seek there instead of stopping at the truncated end.
+            double tailTarget = Math.Max(0, clipMs - (500.0 / Math.Max(1, recording.Fps)));
+            long tailGeneration = coordinator.RequestExact(tailTarget);
+            bool tailPresented = PumpUntil(
+                () => coordinator.PresentedGeneration == tailGeneration,
+                TimeSpan.FromSeconds(2));
+            double tailPresentedMs = coordinator.PresentedPositionMs;
+            Line(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Final-frame seek: requested {tailTarget:0.###}ms, presented {tailPresentedMs:0.###}ms"));
+            Gate(tailPresented && Math.Abs(tailPresentedMs - tailTarget) <= 5.0,
+                "preview seeks into the final frame of the exact duration",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"final-frame seek to {tailTarget:0.###}ms presented {tailPresentedMs:0.###}ms (completed={tailPresented})"));
+
+            timeline.SetIn(clipMs * 0.1);
+            timeline.SetOut(clipMs * 0.9);
             timeline.ZoomAroundPlayhead(0.5);
             timeline.FitAll();
             Gate(timeline.IsFitAll && timeline.InMs < timeline.OutMs,

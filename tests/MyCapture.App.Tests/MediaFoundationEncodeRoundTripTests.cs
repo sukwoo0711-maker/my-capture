@@ -93,9 +93,8 @@ public sealed class MediaFoundationEncodeRoundTripTests
             Assert.Equal(width, mediaWidth);
             Assert.Equal(height, mediaHeight);
 
-            // Duration should be in the right ballpark for 30 frames at 15fps (~2s).
-            // Allow a wide tolerance because container timebase rounding varies by encoder.
-            Assert.True(durationMs >= 1_000 && durationMs <= 4_000, $"unexpected duration {durationMs}ms");
+            // 30 frames at 15fps span 2000ms; the container stores that to one 1/15000s unit.
+            Assert.InRange(durationMs, 1_999.8, 2_000.01);
         }
         finally
         {
@@ -258,11 +257,11 @@ public sealed class MediaFoundationEncodeRoundTripTests
 
         int w = player.NaturalVideoWidth;
         int h = player.NaturalVideoHeight;
-        double durationMs = player.NaturalDuration.HasTimeSpan
-            ? player.NaturalDuration.TimeSpan.TotalMilliseconds
-            : 0;
-
         player.Close();
+
+        // MediaPlayer proves WPF can play the file, but its NaturalDuration is Windows Media
+        // Player's whole-second value; the container duration is the exact one.
+        double durationMs = opened && !failed ? MediaFoundationVideoFrameReader.ReadContainerDurationMs(path) : 0;
         return (opened && !failed, w, h, durationMs);
     }
 
@@ -332,9 +331,9 @@ public sealed class MediaFoundationEncodeRoundTripTests
             Assert.Equal(width, tw);
             Assert.Equal(height, th);
 
-            // The trimmed clip must be clearly shorter than the source and roughly the 1s window.
-            Assert.True(trimDurationMs < srcDurationMs, "trimmed clip is not shorter than the source");
-            Assert.True(trimDurationMs <= 2_000, $"trimmed duration {trimDurationMs}ms exceeds the selected window");
+            // The source spans 45 frames (3000ms) and the trim is exactly the 1000ms window.
+            Assert.InRange(srcDurationMs, 2_999.8, 3_000.01);
+            Assert.InRange(trimDurationMs, 999.8, 1_000.01);
         }
         finally
         {
