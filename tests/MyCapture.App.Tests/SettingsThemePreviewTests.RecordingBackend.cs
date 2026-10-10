@@ -53,7 +53,7 @@ public sealed partial class SettingsThemePreviewTests
 
             var selector = Assert.IsType<ComboBox>(window.FindName("RecordingCaptureModeSelector"));
             Assert.True(selector.IsVisible);
-            Assert.Equal("녹화 캡처 방식", AutomationProperties.GetName(selector));
+            Assert.Equal("녹화 방식", AutomationProperties.GetName(selector));
             Assert.Contains("호환 모드를 선택하십시오", AutomationProperties.GetHelpText(selector), StringComparison.Ordinal);
             Assert.Equal(
                 new[] { "자동(권장)", "호환 모드" },

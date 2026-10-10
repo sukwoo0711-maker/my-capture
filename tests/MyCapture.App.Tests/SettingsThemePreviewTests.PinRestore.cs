@@ -55,7 +55,7 @@ public sealed partial class SettingsThemePreviewTests
             TextBox limit = Descendants(window).OfType<TextBox>().Single(box =>
                 box.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.ClosedWindowRestoreLimit));
             Assert.True(limit.IsVisible);
-            Assert.Equal("닫은 화면 고정 기록 개수", AutomationProperties.GetName(limit));
+            Assert.Equal("닫은 고정 창 기록 개수", AutomationProperties.GetName(limit));
             Assert.Equal("20", limit.Text);
 
             limit.Text = "101";
@@ -72,7 +72,7 @@ public sealed partial class SettingsThemePreviewTests
             Drain(window);
             HotkeyRecorder recorder = Descendants(window).OfType<HotkeyRecorder>().Single(control =>
                 control.GetBindingExpression(HotkeyRecorder.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.RestoreClosedPinHotkey));
-            Assert.Equal("닫은 화면 고정 다시 열기 단축키", AutomationProperties.GetName(recorder));
+            Assert.Equal("닫은 고정 창 다시 열기 단축키", AutomationProperties.GetName(recorder));
             Assert.Equal(string.Empty, recorder.Text);
 
             draft.RestoreClosedPinHotkey = "Ctrl+Alt+F3";

@@ -125,6 +125,18 @@ public sealed class ImageExportEncoderTests
         return true;
     });
 
+    [Theory]
+    [InlineData("ko-KR", 0L, "1KB")]
+    [InlineData("ko-KR", 1536L, "2KB")]
+    [InlineData("ko-KR", 1572864L, "1.5MB")]
+    [InlineData("en", 2048L, "2 KB")]
+    [InlineData("en", 5242880L, "5 MB")]
+    public void Dialog_ShowsFileSizesInKilobytesAndMegabytesNotBytes(string language, long bytes, string expected)
+    {
+        using IDisposable scope = MyCapture.Core.Localization.UiText.UseLanguage(language);
+        Assert.Equal(expected, ImageReductionExportDialog.FormatFileSize(bytes));
+    }
+
     [Fact]
     public async Task Dialog_DefaultsToOriginalAndInvalidatesPreparedExportAfterTargetChanges() => await StaThreadTask.RunAsync(() =>
     {

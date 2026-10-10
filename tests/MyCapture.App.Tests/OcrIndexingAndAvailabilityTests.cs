@@ -34,7 +34,7 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         Assert.False(a.IsAvailable);
         Assert.Contains("언어 팩", a.Headline);
         // Detail must tell the user OCR/search is off AND that the rest of the app still works.
-        Assert.Contains("전문 검색", a.Detail);
+        Assert.Contains("캡처 검색", a.Detail);
         Assert.Contains("나머지 기능", a.Detail);
     }
 

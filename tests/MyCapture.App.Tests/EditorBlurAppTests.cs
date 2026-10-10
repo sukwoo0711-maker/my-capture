@@ -363,7 +363,7 @@ public sealed class EditorBlurAppTests : KoreanCaptionTest
         try
         {
             TabControl tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
-            TabItem annotation = tabs.Items.OfType<TabItem>().Single(tab => (string)tab.Header == "주석 편집기");
+            TabItem annotation = tabs.Items.OfType<TabItem>().Single(tab => (string)tab.Header == "이미지 편집기");
             var rows = (StackPanel)((ScrollViewer)annotation.Content).Content;
             UniformGrid row = rows.Children.OfType<UniformGrid>()
                 .Single(candidate => candidate.Children.OfType<TextBlock>().FirstOrDefault()?.Text == "블러");

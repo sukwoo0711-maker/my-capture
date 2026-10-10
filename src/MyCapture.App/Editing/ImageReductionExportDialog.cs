@@ -130,6 +130,11 @@ internal sealed class ImageReductionExportDialog : Window
         ? UiText.Get("ExportReduction_Original")
         : UiText.Format("ExportReduction_Target", (int)_target.Value);
 
+    /// <summary>A file size people can read, in the same 1024-based KB/MB File Explorer shows.</summary>
+    internal static string FormatFileSize(long bytes) => bytes >= 1024 * 1024
+        ? UiText.Format("CopyTerms_SizeMb", bytes / (1024d * 1024d))
+        : UiText.Format("CopyTerms_SizeKb", Math.Max(1, (long)Math.Ceiling(bytes / 1024d)));
+
     internal async Task UpdatePreviewAsync()
     {
         if (_working || _closed) return;
@@ -165,7 +170,7 @@ internal sealed class ImageReductionExportDialog : Window
             _stage = staged;
             _result = result;
             _imagePreview.Source = preview;
-            _status.Text = UiText.Format("ExportReduction_Result", original.LongLength.ToString("N0"), result.Bytes.LongLength.ToString("N0"), result.ActualReductionPercent.ToString("F1"), result.Extension)
+            _status.Text = UiText.Format("ExportReduction_Result", FormatFileSize(original.LongLength), FormatFileSize(result.Bytes.LongLength), result.ActualReductionPercent.ToString("F1"), result.Extension)
                 + Environment.NewLine + (result.PreservedTransparency ? UiText.Get("ExportReduction_Transparent")
                     : !result.TargetReached ? UiText.Get("ExportReduction_Unmet") : UiText.Get("ExportReduction_Ready"));
             _save.IsEnabled = _drag.IsEnabled = true;
