@@ -22,17 +22,38 @@ internal enum CaptureSelectorMode
     Color,
 }
 
+/// <summary>Something the selector hands back to the app instead of capturing: it closes and the app runs it.</summary>
+internal enum CaptureSelectorAction
+{
+    /// <summary>The record half of the capture/record switch: the recording region selector opens.</summary>
+    Record,
+
+    /// <summary>A delayed region capture after <see cref="CaptureSelectorRequest.DelaySeconds"/>.</summary>
+    DelayedCapture,
+
+    /// <summary>Scrolling capture of the window under the pointer.</summary>
+    ScrollingCapture,
+
+    /// <summary>The previous region again, without a selector.</summary>
+    RepeatLastRegion,
+}
+
+/// <summary>One request from the selector's switch or ⋯ menu; the app runs its existing command for it.</summary>
+internal sealed record CaptureSelectorRequest(CaptureSelectorAction Action, int DelaySeconds = 0);
+
 /// <summary>
 /// The capture selector's mode bar: icon-and-name buttons at the top of the monitor under the pointer,
-/// with the current mode filled in. It follows the Windows Snipping Tool convention of choosing a
-/// capture type from a bar instead of reading a list of keys, and keeps MyCapture's own modes.
+/// with the current mode filled in. It follows the Windows Snipping Tool convention of a capture/record
+/// switch beside the capture types, with the rarer commands (delay, scrolling, previous region) in a
+/// ⋯ menu, and keeps MyCapture's own modes.
 /// </summary>
 /// <remarks>
 /// The bar is drawn from the selector's capture-guide palette (all six themes and the guide colour
-/// override), not from the chrome tokens, so it matches the chips and the highlight around it. Every
-/// button has a tooltip and an automation name; the optional key badge follows the shortcut-hint
-/// setting. The bar only raises requests; the overlay view decides what they do. It is never part of
-/// a capture: the selection is cropped from the frozen frame, not from what the overlay draws.
+/// override), not from the chrome tokens, so it matches the highlight around it. Every button has a
+/// tooltip, an automation name and, where one exists, its key as tooltip text and accelerator key; the
+/// bar draws no key badges. The bar only raises requests; the overlay view decides what they do. It
+/// is never part of a capture: the selection is cropped from the frozen frame, not from what the
+/// overlay draws.
 /// </remarks>
 internal sealed class CaptureModeBar : Border
 {
@@ -43,6 +64,9 @@ internal sealed class CaptureModeBar : Border
     internal const string AccentKey = "CaptureBar.Accent";
     internal const string AccentTextKey = "CaptureBar.AccentText";
     internal const string HoverKey = "CaptureBar.Hover";
+
+    /// <summary>The delays the ⋯ menu offers, in seconds.</summary>
+    internal static readonly IReadOnlyList<int> DelayChoices = [3, 5, 10];
 
     // 20x20 outline glyphs on the shared symbol grid, stroked like Icon.Glyph.
     private static readonly Geometry RegionIcon = Geometry.Parse(
@@ -56,19 +80,30 @@ internal sealed class CaptureModeBar : Border
     private static readonly Geometry HelpIcon = Geometry.Parse(
         "M10,2.75 A7.25,7.25 0 1 1 9.99,2.75 M7.6,7.9 A2.45,2.45 0 1 1 10.9,10.2 C10.25,10.5 10,10.95 10,11.7 L10,12.2 M10,14.6 L10,14.7");
     private static readonly Geometry CancelIcon = Geometry.Parse("M5.25,5.25 L14.75,14.75 M14.75,5.25 L5.25,14.75");
+    private static readonly Geometry CameraIcon = Geometry.Parse(
+        "M3.5,6.5 L6.25,6.5 L7.5,4.5 L12.5,4.5 L13.75,6.5 L16.5,6.5 A1,1 0 0 1 17.5,7.5 L17.5,15 A1,1 0 0 1 16.5,16 L3.5,16 A1,1 0 0 1 2.5,15 L2.5,7.5 A1,1 0 0 1 3.5,6.5 Z M10,8.25 A2.75,2.75 0 1 1 9.99,8.25");
+    private static readonly Geometry RecordIcon = Geometry.Parse(
+        "M10,3.25 A6.75,6.75 0 1 1 9.99,3.25 M10,7.25 A2.75,2.75 0 1 1 9.99,7.25");
+    private static readonly Geometry MoreIcon = Geometry.Parse(
+        "M4.5,10 L4.6,10 M10,10 L10.1,10 M15.5,10 L15.6,10");
 
     private readonly RadioButton _capture;
     private readonly RadioButton _text;
     private readonly RadioButton _color;
+    private readonly RadioButton _captureKind;
+    private readonly RadioButton _recordKind;
     private readonly Button _fullScreen;
+    private readonly Button _more;
     private readonly Button _help;
     private readonly Button _cancel;
     private readonly TextBlock _captureLabel;
     private readonly FrameworkElement _textSeparator;
-    private readonly List<FrameworkElement> _keyBadges = [];
+    private readonly FrameworkElement _kindSwitch;
+    private readonly FrameworkElement _kindSeparator;
+    private ContextMenu? _moreMenu;
     private bool _syncing;
     private bool _detectWindows = true;
-    private bool _showShortcutHints = true;
+    private bool _canRepeatLastRegion = true;
 
     internal CaptureModeBar()
     {
@@ -82,25 +117,50 @@ internal sealed class CaptureModeBar : Border
         SetResourceReference(BorderBrushProperty, BorderKey);
         AutomationProperties.SetName(this, UiText.Get("CaptureGuide2_BarName"));
 
-        ControlTemplate modeTemplate = CreateTemplate(typeof(RadioButton), checkable: true);
-        ControlTemplate actionTemplate = CreateTemplate(typeof(Button), checkable: false);
+        ControlTemplate modeTemplate = CreateTemplate(typeof(RadioButton), checkable: true, subtleCheck: false);
+        ControlTemplate kindTemplate = CreateTemplate(typeof(RadioButton), checkable: true, subtleCheck: true);
+        ControlTemplate actionTemplate = CreateTemplate(typeof(Button), checkable: false, subtleCheck: false);
+
+        // Capture | Record. Capture is where the user already is; Record leaves for the recording selector.
+        _captureKind = KindButton(CameraIcon, UiText.Get("Onboard_BarCapture"), kindTemplate);
+        _captureKind.IsChecked = true;
+        _recordKind = KindButton(RecordIcon, UiText.Get("Onboard_BarRecord"), kindTemplate);
+        _recordKind.Checked += (_, _) =>
+        {
+            if (_syncing) return;
+            ActionRequested?.Invoke(new CaptureSelectorRequest(CaptureSelectorAction.Record));
+            ShowCaptureKind();
+        };
+        var kinds = new StackPanel { Orientation = Orientation.Horizontal };
+        kinds.Children.Add(_captureKind);
+        kinds.Children.Add(_recordKind);
+        AutomationProperties.SetName(kinds, UiText.Get("Onboard_BarKindName"));
+        _kindSwitch = kinds;
+        _kindSeparator = Divider();
+
         _captureLabel = new TextBlock();
-        _capture = ModeButton(CaptureSelectorMode.Capture, RegionIcon, _captureLabel, key: null, modeTemplate);
-        _fullScreen = ActionButton(FullScreenIcon, UiText.Get("CaptureGuide2_FullScreen"), key: null, actionTemplate);
-        _text = ModeButton(CaptureSelectorMode.Text, TextIcon, new TextBlock { Text = UiText.Get("CaptureGuide2_Text") }, "T", modeTemplate);
-        _color = ModeButton(CaptureSelectorMode.Color, ColorIcon, new TextBlock { Text = UiText.Get("CaptureGuide2_Color") }, "C", modeTemplate);
-        _help = ActionButton(HelpIcon, label: null, key: null, actionTemplate);
-        _cancel = ActionButton(CancelIcon, label: null, "Esc", actionTemplate);
+        _capture = ModeButton(CaptureSelectorMode.Capture, RegionIcon, _captureLabel, modeTemplate);
+        _fullScreen = ActionButton(FullScreenIcon, UiText.Get("CaptureGuide2_FullScreen"), actionTemplate);
+        _text = ModeButton(CaptureSelectorMode.Text, TextIcon, new TextBlock { Text = UiText.Get("CaptureGuide2_Text") }, modeTemplate);
+        _color = ModeButton(CaptureSelectorMode.Color, ColorIcon, new TextBlock { Text = UiText.Get("CaptureGuide2_Color") }, modeTemplate);
+        _more = ActionButton(MoreIcon, label: null, actionTemplate);
+        _help = ActionButton(HelpIcon, label: null, actionTemplate);
+        _cancel = ActionButton(CancelIcon, label: null, actionTemplate);
         _fullScreen.Click += (_, _) => FullScreenRequested?.Invoke();
+        _more.Click += (_, _) => OpenMoreMenu();
         _help.Click += (_, _) => HelpRequested?.Invoke();
         _cancel.Click += (_, _) => CancelRequested?.Invoke();
+        AutomationProperties.SetName(_more, UiText.Get("Onboard_BarMore"));
         AutomationProperties.SetName(_help, UiText.Get("CaptureGuide2_Help"));
         AutomationProperties.SetName(_cancel, UiText.Get("CaptureGuide2_Cancel"));
 
         _textSeparator = Divider();
         var items = new StackPanel { Orientation = Orientation.Horizontal };
         KeyboardNavigation.SetDirectionalNavigation(items, KeyboardNavigationMode.Cycle);
-        foreach (UIElement item in new UIElement[] { _capture, _fullScreen, _textSeparator, _text, _color, Divider(), _help, _cancel })
+        foreach (UIElement item in new UIElement[]
+                 {
+                     _kindSwitch, _kindSeparator, _capture, _fullScreen, _textSeparator, _text, _color, Divider(), _more, _help, _cancel,
+                 })
             items.Children.Add(item);
         Child = items;
         ApplyTexts();
@@ -108,6 +168,9 @@ internal sealed class CaptureModeBar : Border
 
     /// <summary>A mode button was chosen by click, keyboard or UI Automation.</summary>
     internal event Action<CaptureSelectorMode>? ModeRequested;
+
+    /// <summary>The record switch or a ⋯ menu command was chosen.</summary>
+    internal event Action<CaptureSelectorRequest>? ActionRequested;
 
     internal event Action? FullScreenRequested;
 
@@ -121,30 +184,36 @@ internal sealed class CaptureModeBar : Border
 
     internal RadioButton ColorButton => _color;
 
+    internal RadioButton CaptureKindButton => _captureKind;
+
+    internal RadioButton RecordKindButton => _recordKind;
+
     internal Button FullScreenButton => _fullScreen;
+
+    internal Button MoreButton => _more;
 
     internal Button HelpButton => _help;
 
     internal Button CancelButton => _cancel;
 
-    /// <summary>Visible key badges, in bar order; empty when shortcut hints are off.</summary>
-    internal IReadOnlyList<string> VisibleKeyBadgesForTest => _keyBadges
-        .Where(badge => badge.Visibility == Visibility.Visible && IsShown(badge))
-        .Select(badge => ((TextBlock)((Border)badge).Child).Text).ToArray();
+    /// <summary>The ⋯ menu while it is open.</summary>
+    internal ContextMenu? MoreMenuForTest => _moreMenu;
 
     /// <summary>
     /// Shows only what the owner enabled. Without window detection the first mode is a plain region;
-    /// text and colour need their owners' handlers. Shortcut hints add the key badges and tooltip keys.
+    /// text and colour need their owners' handlers; the capture/record switch and the ⋯ menu need an
+    /// owner that runs their commands.
     /// </summary>
-    internal void Configure(bool detectWindows, bool textAvailable, bool colorAvailable, bool showShortcutHints)
+    internal void Configure(bool detectWindows, bool textAvailable, bool colorAvailable, bool otherActions = false,
+        bool canRepeatLastRegion = true)
     {
         _detectWindows = detectWindows;
-        _showShortcutHints = showShortcutHints;
+        _canRepeatLastRegion = canRepeatLastRegion;
         _text.Visibility = textAvailable ? Visibility.Visible : Visibility.Collapsed;
         _color.Visibility = colorAvailable ? Visibility.Visible : Visibility.Collapsed;
         _textSeparator.Visibility = textAvailable || colorAvailable ? Visibility.Visible : Visibility.Collapsed;
-        foreach (FrameworkElement badge in _keyBadges)
-            badge.Visibility = showShortcutHints ? Visibility.Visible : Visibility.Collapsed;
+        Visibility others = otherActions ? Visibility.Visible : Visibility.Collapsed;
+        _kindSwitch.Visibility = _kindSeparator.Visibility = _more.Visibility = others;
         ApplyTexts();
     }
 
@@ -187,6 +256,53 @@ internal sealed class CaptureModeBar : Border
                 : LogicalTreeHelper.GetParent(child);
     }
 
+    /// <summary>
+    /// The ⋯ menu: delayed capture after 3, 5 or 10 seconds, scrolling capture and the previous
+    /// region. Each entry closes the selector and runs the app's existing command.
+    /// </summary>
+    internal ContextMenu CreateMoreMenu()
+    {
+        var menu = new ContextMenu { PlacementTarget = _more, Placement = PlacementMode.Bottom, VerticalOffset = 4 };
+        AutomationProperties.SetName(menu, UiText.Get("Onboard_BarMore"));
+        foreach (int seconds in DelayChoices)
+            menu.Items.Add(MenuItemFor(menu, UiText.Format("Onboard_DelayCapture", seconds),
+                new CaptureSelectorRequest(CaptureSelectorAction.DelayedCapture, seconds)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuItemFor(menu, UiText.Get("Text_4DBA30197C0A"), new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture)));
+        MenuItem repeat = MenuItemFor(menu, UiText.Get("Text_878A28AF568C"), new CaptureSelectorRequest(CaptureSelectorAction.RepeatLastRegion));
+        repeat.IsEnabled = _canRepeatLastRegion;
+        menu.Items.Add(repeat);
+        return menu;
+    }
+
+    private void OpenMoreMenu()
+    {
+        if (_moreMenu is { IsOpen: true }) return;
+        ContextMenu menu = CreateMoreMenu();
+        menu.Closed += (_, _) => { if (ReferenceEquals(_moreMenu, menu)) _moreMenu = null; };
+        _moreMenu = menu;
+        menu.IsOpen = true;
+    }
+
+    private MenuItem MenuItemFor(ContextMenu menu, string header, CaptureSelectorRequest request)
+    {
+        var item = new MenuItem { Header = header, MinHeight = 36 };
+        AutomationProperties.SetName(item, header);
+        item.Click += (_, _) =>
+        {
+            menu.IsOpen = false;
+            ActionRequested?.Invoke(request);
+        };
+        return item;
+    }
+
+    private void ShowCaptureKind()
+    {
+        _syncing = true;
+        try { _captureKind.IsChecked = true; }
+        finally { _syncing = false; }
+    }
+
     private void ApplyTexts()
     {
         _captureLabel.Text = UiText.Get(_detectWindows ? "CaptureGuide2_Region" : "CaptureGuide2_RegionOnly");
@@ -198,26 +314,29 @@ internal sealed class CaptureModeBar : Border
         Describe(_text, "CaptureGuide2_TextHelp", "T");
         AutomationProperties.SetName(_color, UiText.Get("CaptureGuide2_Color"));
         Describe(_color, "CaptureGuide2_ColorHelp", "C");
+        Describe(_captureKind, "Onboard_BarCaptureHelp", key: null);
+        Describe(_recordKind, "Onboard_BarRecordHelp", key: null);
+        Describe(_more, "Onboard_BarMoreHelp", key: null);
         Describe(_help, "CaptureGuide2_HelpTip", key: null);
         Describe(_cancel, "CaptureGuide2_CancelTip", "Esc");
     }
 
-    /// <summary>Tooltip and automation help; the key is appended like other MyCapture tooltips.</summary>
-    private void Describe(ButtonBase button, string helpKey, string? key)
+    /// <summary>Tooltip and automation help; a key goes into the tooltip and the accelerator key, never onto the bar.</summary>
+    private static void Describe(ButtonBase button, string helpKey, string? key)
     {
         string help = UiText.Get(helpKey);
         AutomationProperties.SetHelpText(button, help);
         if (key is not null) AutomationProperties.SetAcceleratorKey(button, key);
-        string tip = key is not null && _showShortcutHints ? $"{help} ({key})" : help;
+        string tip = key is not null ? $"{help} ({key})" : help;
         string name = AutomationProperties.GetName(button);
         button.ToolTip = string.IsNullOrEmpty(name) ? tip : $"{name}\n{tip}";
     }
 
-    private RadioButton ModeButton(CaptureSelectorMode mode, Geometry icon, TextBlock label, string? key, ControlTemplate template)
+    private RadioButton ModeButton(CaptureSelectorMode mode, Geometry icon, TextBlock label, ControlTemplate template)
     {
         var button = new RadioButton { Template = template };
         Decorate(button);
-        button.Content = ButtonContent(button, icon, label, key);
+        button.Content = ButtonContent(button, icon, label);
         button.Checked += (_, _) =>
         {
             if (!_syncing) ModeRequested?.Invoke(mode);
@@ -225,11 +344,21 @@ internal sealed class CaptureModeBar : Border
         return button;
     }
 
-    private Button ActionButton(Geometry icon, string? label, string? key, ControlTemplate template)
+    private static RadioButton KindButton(Geometry icon, string label, ControlTemplate template)
+    {
+        var button = new RadioButton { Template = template };
+        Decorate(button);
+        button.Padding = new Thickness(9, 0, 10, 0);
+        button.Content = ButtonContent(button, icon, new TextBlock { Text = label });
+        AutomationProperties.SetName(button, label);
+        return button;
+    }
+
+    private static Button ActionButton(Geometry icon, string? label, ControlTemplate template)
     {
         var button = new Button { Template = template };
         Decorate(button);
-        button.Content = ButtonContent(button, icon, label is null ? null : new TextBlock { Text = label }, key);
+        button.Content = ButtonContent(button, icon, label is null ? null : new TextBlock { Text = label });
         if (label is null) button.Padding = new Thickness(8, 0, 8, 0);
         return button;
     }
@@ -250,7 +379,7 @@ internal sealed class CaptureModeBar : Border
         ToolTipService.SetInitialShowDelay(button, 400);
     }
 
-    private FrameworkElement ButtonContent(ButtonBase owner, Geometry icon, TextBlock? label, string? key)
+    private static FrameworkElement ButtonContent(ButtonBase owner, Geometry icon, TextBlock? label)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         var glyph = new Path
@@ -265,6 +394,13 @@ internal sealed class CaptureModeBar : Border
             StrokeLineJoin = PenLineJoin.Round,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        if (ReferenceEquals(icon, MoreIcon))
+        {
+            // Three dots on the 20x20 grid: keep their spacing instead of stretching them into a line.
+            glyph.Stretch = Stretch.None;
+            glyph.StrokeThickness = 2.4;
+            glyph.Width = glyph.Height = 20;
+        }
         glyph.SetBinding(Shape.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = owner });
         panel.Children.Add(glyph);
         if (label is not null)
@@ -274,31 +410,6 @@ internal sealed class CaptureModeBar : Border
             label.Margin = new Thickness(7, 0, 0, 1);
             label.VerticalAlignment = VerticalAlignment.Center;
             panel.Children.Add(label);
-        }
-
-        if (key is not null)
-        {
-            var text = new TextBlock
-            {
-                Text = key,
-                FontSize = 11,
-                FontWeight = FontWeights.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            var badge = new Border
-            {
-                Child = text,
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(4),
-                Padding = new Thickness(4, 0, 4, 1),
-                Margin = new Thickness(7, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Opacity = 0.85,
-            };
-            badge.SetBinding(Border.BorderBrushProperty, new Binding(nameof(Control.Foreground)) { Source = owner });
-            AutomationProperties.SetName(badge, key);
-            _keyBadges.Add(badge);
-            panel.Children.Add(badge);
         }
 
         return panel;
@@ -319,25 +430,19 @@ internal sealed class CaptureModeBar : Border
         return line;
     }
 
-    private bool IsShown(FrameworkElement element)
-    {
-        for (DependencyObject? current = element; current is not null && !ReferenceEquals(current, this);
-             current = VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current))
-        {
-            if (current is UIElement { Visibility: not Visibility.Visible }) return false;
-        }
-        return true;
-    }
-
     /// <summary>
-    /// Chrome, content and an inset focus ring with no layout footprint. The checked mode is filled
-    /// with the guide accent and takes the accent's readable text colour; focus never moves anything.
+    /// Chrome, content and an inset focus ring with no layout footprint. A checked mode is filled
+    /// with the guide accent and takes the accent's readable text colour; the capture/record switch
+    /// marks its side with the quieter hover wash so the bar keeps one accent fill. Focus never moves
+    /// anything.
     /// </summary>
-    private static ControlTemplate CreateTemplate(Type type, bool checkable)
+    private static ControlTemplate CreateTemplate(Type type, bool checkable, bool subtleCheck)
     {
         var chrome = new FrameworkElementFactory(typeof(Border), "Chrome");
         chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
         chrome.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+        chrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+        chrome.SetValue(Border.BorderBrushProperty, Brushes.Transparent);
         var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
         presenter.SetValue(FrameworkElement.MarginProperty, new TemplateBindingExtension(Control.PaddingProperty));
         presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
@@ -361,7 +466,15 @@ internal sealed class CaptureModeBar : Border
         var pressed = new Trigger { Property = ButtonBase.IsPressedProperty, Value = true };
         pressed.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension(HoverKey), "Chrome"));
         template.Triggers.Add(pressed);
-        if (checkable)
+        if (checkable && subtleCheck)
+        {
+            // The quiet selected side: a wash and an outline in the text colour, which also reads in high contrast.
+            var on = new Trigger { Property = ToggleButton.IsCheckedProperty, Value = true };
+            on.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension(HoverKey), "Chrome"));
+            on.Setters.Add(new Setter(Border.BorderBrushProperty, new DynamicResourceExtension(MutedKey), "Chrome"));
+            template.Triggers.Add(on);
+        }
+        else if (checkable)
         {
             var on = new Trigger { Property = ToggleButton.IsCheckedProperty, Value = true };
             on.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension(AccentKey), "Chrome"));
@@ -372,7 +485,7 @@ internal sealed class CaptureModeBar : Border
         var focus = new Trigger { Property = UIElement.IsKeyboardFocusedProperty, Value = true };
         focus.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0, "FocusRing"));
         template.Triggers.Add(focus);
-        if (checkable)
+        if (checkable && !subtleCheck)
         {
             // On the accent fill the ring takes the fill's text colour, which stays visible in high contrast.
             var focusOn = new MultiTrigger();

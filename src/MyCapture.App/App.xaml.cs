@@ -148,7 +148,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             _log?.LogCritical(ex, "Could not initialize the resident shell");
-            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Dialog.AppFailure"), ex);
+            MyCapture.App.Themes.ThemedDialog.StartupFailure(ex);
             Shutdown(2);
             return;
         }
@@ -156,15 +156,20 @@ public partial class App : Application
         // Optional deterministic UI smoke: a normal first-instance launch with --settings
         // opens the settings window immediately. Used by the packaged UI smoke path; it does
         // not alter the process lifecycle otherwise.
-        if (FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0)
+        bool openSettings = FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0;
+        if (openSettings)
         {
             _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
         }
-        else if (!quietLaunch)
+        else if (FirstRunPlan.ForLaunch(_launchedFirstRun, quietLaunch, openSettings).OpenLibrary)
         {
+            // A first run opens the library only after its welcome window closes.
             _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
         }
     }
+
+    /// <summary>The settings said first run when this process started; the welcome window was shown.</summary>
+    private bool _launchedFirstRun;
 
     /// <summary>First-instance switch that opens the settings window on launch.</summary>
     internal const string SettingsCommandLineSwitch = "--settings";
@@ -253,28 +258,13 @@ public partial class App : Application
 
         _shellPresenter = new ThemedShellPresenter(() => _overlay?.IsActive == true || _recorder?.IsActive == true);
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
-        _tray.MenuPresenter = () => _shellPresenter.ShowMenu(
-        [
-            // Capture commands grouped into one branch, following Windows tray menu
-            // conventions (grouped actions, then destinations, then settings/exit).
-            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_50EE4EA7C243"), null,
-            [
-                new(UiText.Get("Text_2C20ADDA2018"), HandleCaptureRequested, Gesture: _settings!.Hotkeys.Capture.ToString()),
-                new(UiText.Get("TextCapture_Title"), HandleCaptureTextRequested, Gesture: _settings!.Hotkeys.CaptureText.ToString()),
-                new(UiText.Get("Text_EA1FBABE64F3"), HandleCaptureWindow, Gesture: _settings!.Hotkeys.CaptureWindow.ToString()),
-                new(UiText.Get("Text_65BB6610ACA0"), HandleCaptureFullScreen, Gesture: _settings!.Hotkeys.CaptureFullScreen.ToString()),
-                new(_scrollCancellation is not null ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"), HandleScrollingCapture, Gesture: _settings!.Hotkeys.ScrollingCapture.ToString()),
-                new(UiText.Get("Text_878A28AF568C"), HandleRepeatLastRegion, Gesture: _settings!.Hotkeys.RepeatLastRegion.ToString()),
-                new(UiText.Get("Text_38FF9B0AA541"), HandleDelayedCapture, Gesture: _settings!.Hotkeys.DelayedCapture.ToString()),
-                new(UiText.Get("Text_4F5AF20FAA6E"), HandleRecordRegion, Gesture: _settings!.Hotkeys.RecordRegion.ToString()),
-            ]),
-            // Rebuilt on every open, so it is disabled exactly while nothing can be reopened.
-            new ThemedShellPresenter.MenuEntry(UiText.Get("PinRestore_Command"), HandleRestoreClosedPin,
-                Gesture: _settings!.Hotkeys.RestoreClosedPin.ToString(), IsEnabled: _pins?.CanRestoreClosed == true),
-            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_8739F6684453"), HandleGalleryRequested, Gesture: _settings!.Hotkeys.OpenLibrary.ToString()),
-            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_00480581AAB5"), HandleSettingsRequested),
-            new ThemedShellPresenter.MenuEntry(UiText.Get("Text_72B6DBA8AAC5"), () => Shutdown(0)),
-        ], _settings!.General.Language, ChangeTrayLanguage);
+        // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return.
+        var trayCommands = new TrayMenuCommands(HandleCaptureRequested, HandleRecordRegion, HandleCaptureWindow,
+            HandleCaptureFullScreen, HandleScrollingCapture, () => HandleDelayedCapture(), HandleRepeatLastRegion,
+            HandleCaptureTextRequested, HandleRestoreClosedPin, HandleGalleryRequested, HandleSettingsRequested,
+            ShortcutHelpWindow.ShowHelp, () => Shutdown(0));
+        _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
+            _pins?.CanRestoreClosed == true, _scrollCancellation is not null));
         // A capture started from the tray menu races the menu's dismissal; the coordinator
         // uses this to decide whether the frozen frame must wait it out.
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
@@ -299,13 +289,30 @@ public partial class App : Application
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent, new System.Windows.Input.KeyEventHandler(ShortcutHelpWindow.OnWindowKey));
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent,
             new System.Windows.Input.KeyEventHandler(OnQuickAccessKeyboardRequested));
-        if (_settings.General.IsFirstRun)
+        // A first run shows one window: the welcome. The library follows once it closes.
+        LaunchPresentation launch = FirstRunPlan.ForLaunch(_settings.General.IsFirstRun, quietLaunch: false, openSettings: false);
+        _launchedFirstRun = launch.ShowWelcome;
+        if (launch.ShowWelcome)
         {
-            var welcome = new ShortcutHelpWindow(onboarding: true);
+            var welcome = new WelcomeWindow(_settings.Hotkeys, _settings.General.AfterCapture);
             welcome.Closed += (_, _) =>
             {
                 try { _services?.GetRequiredService<SettingsStore>().CompleteFirstRun(_settings!); }
                 catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
+                switch (FirstRunPlan.Next(welcome.Outcome))
+                {
+                    case AfterWelcome.OpenLibrary:
+                        _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
+                        break;
+                    case AfterWelcome.StartCapture:
+                        // The welcome has just left the screen; the frozen frame must not show it.
+                        _overlay?.NoteForegroundDismissal();
+                        _ = Dispatcher.BeginInvoke(new Action(HandleCaptureRequested));
+                        break;
+                    case AfterWelcome.OpenSettings:
+                        _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
+                        break;
+                }
             };
             welcome.Show();
         }
@@ -323,6 +330,18 @@ public partial class App : Application
             _storeRating?.NotifyFlowEnded();
         };
         _overlay.CommitRequested = HandleCommitAsync;
+        // The selector's record switch and ⋯ menu run the same commands as the tray and the hotkeys.
+        _overlay.CanRepeatLastRegion = () => _lastRegions?.Count > 0;
+        _overlay.SelectorActionRequested = request =>
+        {
+            switch (request.Action)
+            {
+                case CaptureSelectorAction.Record: HandleRecordRegion(); break;
+                case CaptureSelectorAction.DelayedCapture: HandleDelayedCapture(request.DelaySeconds); break;
+                case CaptureSelectorAction.ScrollingCapture: HandleScrollingCapture(); break;
+                case CaptureSelectorAction.RepeatLastRegion: HandleRepeatLastRegion(); break;
+            }
+        };
         _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
         _overlay.TransitionFailed += exception =>
             _tray?.ShowBalloon(UiText.Get("Text_B4B8EE7BE3D6"), MyCapture.App.Themes.ThemedDialog.RecoveryMessage(exception), TrayBalloonKind.Error);
@@ -405,7 +424,7 @@ public partial class App : Application
                 if (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys)
                     _tray.ShowBalloon(UiText.Get("Hotkey.MigratedTitle"), UiText.Get("Hotkey.Migrated"),
                         TrayBalloonKind.Information, playSound: false);
-                else
+                else if (launch.ShowReadyNotification)
                     _readyNotification.Notify(true, _settings.Hotkeys.Capture,
                         (title, message) => _tray.ShowBalloon(title, message, TrayBalloonKind.Information, playSound: false));
             }
@@ -682,22 +701,6 @@ public partial class App : Application
     private ThemedShellPresenter? _shellPresenter;
     private System.Windows.Threading.DispatcherTimer? _preferenceSaveTimer;
 
-    private void ChangeTrayLanguage(string language)
-    {
-        if (_settings is null || _services is null) return;
-        AppSettings next = _settings.DeepClone();
-        next.General.Language = language;
-        try
-        {
-            _services.GetRequiredService<SettingsStore>().Save(next);
-            _settings = next;
-            UiText.Configure(language);
-            _tray?.SetCaptureCount(_queue?.Count ?? 0);
-            _shellPresenter?.ShowNotification("Language", UiText.Get("Settings.LanguageRestart"), TrayBalloonKind.Information);
-        }
-        catch (Exception ex) { _log?.LogWarning(ex, "Could not save tray language"); }
-    }
-
     private void RememberEditorPreferences(AnnotationDefaults value)
     {
         if (_settings is null) return;
@@ -808,14 +811,15 @@ public partial class App : Application
     /// removed from the desktop before <see cref="ScreenCaptureEngine.CaptureMonitor"/> runs,
     /// preserving the capture-before-wait invariant.
     /// </remarks>
-    private void HandleDelayedCapture()
+    /// <param name="delaySeconds">The selector's ⋯ menu picks 3, 5 or 10; otherwise the setting applies.</param>
+    private void HandleDelayedCapture(int? delaySeconds = null)
     {
         if (_settings is null || !GuardStillCapture(UiText.Get("Text_38476EDDA50B")))
         {
             return;
         }
 
-        int seconds = Math.Max(0, _settings.Capture.DelaySeconds);
+        int seconds = Math.Max(0, delaySeconds ?? _settings.Capture.DelaySeconds);
         if (seconds == 0)
         {
             // Zero delay is an immediate region capture.
@@ -1235,6 +1239,8 @@ public partial class App : Application
                     else if (_settings?.General.AfterCapture == AfterCaptureAction.ClipboardOnly)
                         _shellPresenter?.ShowCaptureReceipt(UiText.Get(copied ? "Capture.CopiedAndSaved" : "Capture.Saved"),
                             () => EnsureGalleryWindow()?.OpenCapture(receipt.Id, edit: false));
+                    // The editor opened for this capture says it is already saved (and copied).
+                    else if (ReferenceEquals(_currentRecord, receipt)) _overlay?.CurrentEditor?.ShowCaptureReceipt(copied);
                 }
                 finally { pendingReceipt?.Dispose(); }
             }));
@@ -1407,7 +1413,8 @@ public partial class App : Application
                 return false;
             }
 
-            if (record is null)
+            // Copy only reaches the clipboard; the frame enters the library on Done or a save.
+            if (record is null && result.Action != EditorCommitAction.CopyToClipboard)
             {
                 try
                 {

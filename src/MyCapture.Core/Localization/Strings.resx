@@ -3573,4 +3573,168 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_UnsavedTitle" xml:space="preserve"><value>저장하지 않은 편집</value></data>
   <data name="VideoEditorUx_UnsavedPrompt" xml:space="preserve"><value>편집한 내용을 라이브러리에 저장하시겠습니까?
 예: 저장하고 닫기 · 아니요: 저장하지 않고 닫기 · 취소: 계속 편집</value></data>
+  <data name="SettingsUx_TabGeneral" xml:space="preserve"><value>일반</value></data>
+  <data name="SettingsUx_TabGeneralHelp" xml:space="preserve"><value>표시 언어, 테마, 자동 시작</value></data>
+  <data name="SettingsUx_TabCapture" xml:space="preserve"><value>캡처</value></data>
+  <data name="SettingsUx_TabCaptureHelp" xml:space="preserve"><value>캡처 후 동작, 캡처 화면, 지연 캡처</value></data>
+  <data name="SettingsUx_TabRecording" xml:space="preserve"><value>녹화</value></data>
+  <data name="SettingsUx_TabRecordingHelp" xml:space="preserve"><value>프레임 속도, 녹화 크기, 포인터, 녹화 방식</value></data>
+  <data name="SettingsUx_TabEditing" xml:space="preserve"><value>편집</value></data>
+  <data name="SettingsUx_TabEditingHelp" xml:space="preserve"><value>편집 도구 기본값, 화면 고정, 텍스트 인식</value></data>
+  <data name="SettingsUx_TabShortcuts" xml:space="preserve"><value>단축키</value></data>
+  <data name="SettingsUx_TabShortcutsHelp" xml:space="preserve"><value>전역 단축키, 버튼 아래 단축키 표시</value></data>
+  <data name="SettingsUx_TabStorage" xml:space="preserve"><value>저장 공간</value></data>
+  <data name="SettingsUx_TabStorageHelp" xml:space="preserve"><value>라이브러리 보관, 저장 폴더, 고급</value></data>
+  <data name="SettingsUx_TabAbout" xml:space="preserve"><value>정보</value></data>
+  <data name="SettingsUx_TabAboutHelp" xml:space="preserve"><value>버전, 업데이트, 설정 백업</value></data>
+  <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>그 밖의 단축키</value></data>
+  <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>필요한 기능에만 지정하십시오. 다른 프로그램이 쓰는 키와 겹치지 않는 조합을 고르십시오.</value></data>
+  <data name="SettingsUx_ShortcutHintsHeading" xml:space="preserve"><value>버튼 단축키 표시</value></data>
+  <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>켜면 편집기 버튼 아래에 단축키를 함께 표시합니다. 끄더라도 버튼에 마우스를 올리면 단축키가 보입니다.</value></data>
+  <data name="SettingsUx_RecordHotkeyTip" xml:space="preserve"><value>누른 뒤 사용할 키 조합을 입력하십시오.</value></data>
+  <data name="SettingsUx_MaxStorage" xml:space="preserve"><value>최대 저장 용량(GB)</value></data>
+  <data name="SettingsUx_MaxStorageRange" xml:space="preserve"><value>0.125 ~ 512 GB.</value></data>
+  <data name="SettingsUx_PreviewSize" xml:space="preserve"><value>미리보기 이미지 크기(픽셀)</value></data>
+  <data name="SettingsUx_PreviewSizeRange" xml:space="preserve"><value>긴 변 기준, 96 ~ 1024픽셀.</value></data>
+  <data name="SettingsUx_Retention" xml:space="preserve"><value>이미지 보관 기간(시간)</value></data>
+  <data name="SettingsUx_RetentionSummary" xml:space="preserve"><value>만든 지 {0}이 지난 라이브러리 이미지를 오래된 것부터 자동으로 지웁니다. 보관한 이미지, 편집 중인 이미지, 동영상, 따로 저장하거나 내보낸 파일은 지우지 않습니다.</value></data>
+  <data name="SettingsUx_RetentionRange" xml:space="preserve"><value>1 ~ 8760시간(365일) 사이로 입력하십시오.</value></data>
+  <data name="SettingsUx_DurationDay" xml:space="preserve"><value>{0}일</value></data>
+  <data name="SettingsUx_DurationDays" xml:space="preserve"><value>{0}일</value></data>
+  <data name="SettingsUx_DurationHour" xml:space="preserve"><value>{0}시간</value></data>
+  <data name="SettingsUx_DurationHours" xml:space="preserve"><value>{0}시간</value></data>
+  <data name="SettingsUx_DurationDaysHours" xml:space="preserve"><value>{0} {1}</value></data>
+  <data name="SettingsUx_SaveFilesHeading" xml:space="preserve"><value>파일로 저장</value></data>
+  <data name="SettingsUx_AdvancedHeading" xml:space="preserve"><value>고급</value></data>
+  <data name="SettingsUx_AdvancedHint" xml:space="preserve"><value>클립보드 이미지를 GitHub 이슈에 올리는 단축키에 쓰는 설정입니다.</value></data>
+  <data name="SettingsUx_GitHubIssueUrlHint" xml:space="preserve"><value>GitHub 업로드 단축키가 클립보드 이미지를 붙여 넣을 이슈입니다. 본인이 댓글을 쓸 수 있는 이슈를 지정하십시오. 비워 두면 안전한 기본 주소를 씁니다.</value></data>
+  <data name="SettingsUx_EditingDefaultsHeading" xml:space="preserve"><value>편집 도구 기본값</value></data>
+  <data name="SettingsUx_PinCopy" xml:space="preserve"><value>고정 창 복사</value></data>
+  <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>고정 창을 클릭한 뒤 Ctrl+C를 누르면 이미지를 복사합니다. Ctrl을 누른 채 두 번 클릭하면 원문 텍스트를 복사하고, 원문이 없는 이미지는 이 PC에서 인식한 텍스트를 복사합니다.</value></data>
+  <data name="SettingsUx_OcrHeading" xml:space="preserve"><value>텍스트 인식</value></data>
+  <data name="SettingsUx_OcrLanguages" xml:space="preserve"><value>인식 언어</value></data>
+  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows에 들어 있는 인식 기능을 씁니다. 정확은 영수증처럼 작은 글자에 강한 인식 모델을 씁니다. 가장 정확은 밝기·대비·선명도를 보정하고 이미지를 4배로 키운 뒤 인식하며, 처음 쓸 때 약 67MB를 내려받습니다.</value></data>
+  <data name="SettingsUx_OcrFast" xml:space="preserve"><value>빠름</value></data>
+  <data name="SettingsUx_OcrBalanced" xml:space="preserve"><value>보통</value></data>
+  <data name="SettingsUx_OcrAccurate" xml:space="preserve"><value>정확</value></data>
+  <data name="SettingsUx_OcrEnhanced" xml:space="preserve"><value>가장 정확</value></data>
+  <data name="SettingsUx_RecordingMethodAuto" xml:space="preserve"><value>자동(권장)</value></data>
+  <data name="SettingsUx_RecordingMethodCompatible" xml:space="preserve"><value>호환 모드</value></data>
+  <data name="SettingsUx_RecordingMethodHint" xml:space="preserve"><value>자동은 대부분의 화면을 가장 부드럽게 녹화합니다. 녹화한 화면이 깨지거나 멈추면 호환 모드를 선택하십시오.</value></data>
+  <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>설정 백업</value></data>
+  <data name="SettingsUx_BackupHint" xml:space="preserve"><value>설정을 파일로 내보내거나 가져옵니다. 가져온 설정은 적용을 눌러야 저장합니다. GitHub 토큰은 내보내지 않습니다.</value></data>
+  <data name="SettingsUx_CancelTip" xml:space="preserve"><value>변경 사항을 버리고 닫습니다.</value></data>
+  <data name="SettingsUx_CloseTitle" xml:space="preserve"><value>적용하지 않은 변경 사항</value></data>
+  <data name="SettingsUx_CloseMessage" xml:space="preserve"><value>바꾼 설정을 아직 적용하지 않았습니다. 적용하지 않고 닫으면 바꾼 값이 사라집니다.</value></data>
+  <data name="SettingsUx_CloseApply" xml:space="preserve"><value>적용하고 닫기</value></data>
+  <data name="SettingsUx_CloseDiscard" xml:space="preserve"><value>적용 안 함</value></data>
+  <data name="LibraryUx_NavName" xml:space="preserve"><value>라이브러리 탐색</value></data>
+  <data name="LibraryUx_NavAll" xml:space="preserve"><value>모든 항목</value></data>
+  <data name="LibraryUx_NavAllHint" xml:space="preserve"><value>날짜와 폴더에 관계없이 모든 캡처를 표시합니다. 캡처를 여기로 끌어 놓으면 폴더에서 뺍니다.</value></data>
+  <data name="LibraryUx_NavKept" xml:space="preserve"><value>보관함</value></data>
+  <data name="LibraryUx_NavKeptHint" xml:space="preserve"><value>자동 삭제되지 않도록 보관한 캡처입니다. 캡처의 더 보기 메뉴에서 보관합니다.</value></data>
+  <data name="LibraryUx_NavItemName" xml:space="preserve"><value>{0}, {1}개</value></data>
+  <data name="LibraryUx_FoldersHint" xml:space="preserve"><value>폴더에 넣은 캡처는 자동으로 정리하지 않습니다. 캡처를 폴더로 끌어 놓아 정리합니다.</value></data>
+  <data name="LibraryUx_NewFolderHint" xml:space="preserve"><value>새 폴더 (Ctrl+Shift+N)</value></data>
+  <data name="LibraryUx_DatesHeader" xml:space="preserve"><value>날짜</value></data>
+  <data name="LibraryUx_SaveHere" xml:space="preserve"><value>새 캡처를 이 폴더에 저장</value></data>
+  <data name="LibraryUx_SaveHereOn" xml:space="preserve"><value>새 캡처를 {0} 폴더에 저장합니다. 끄면 날짜별 라이브러리에 저장합니다.</value></data>
+  <data name="LibraryUx_SaveHereOff" xml:space="preserve"><value>새 캡처를 날짜별 라이브러리에 저장합니다. 켜면 {0} 폴더에 저장합니다.</value></data>
+  <data name="LibraryUx_CommandBarName" xml:space="preserve"><value>라이브러리 명령</value></data>
+  <data name="LibraryUx_SelectionBarName" xml:space="preserve"><value>선택 항목 명령</value></data>
+  <data name="LibraryUx_ClearSelection" xml:space="preserve"><value>선택 해제</value></data>
+  <data name="LibraryUx_ClearSelectionHint" xml:space="preserve"><value>선택 해제 (Esc)</value></data>
+  <data name="LibraryUx_MoveHint" xml:space="preserve"><value>폴더로 이동 (M)</value></data>
+  <data name="LibraryUx_DeleteHint" xml:space="preserve"><value>삭제 (Delete)</value></data>
+  <data name="LibraryUx_BreadcrumbName" xml:space="preserve"><value>현재 위치</value></data>
+  <data name="LibraryUx_StatusName" xml:space="preserve"><value>라이브러리 상태</value></data>
+  <data name="LibraryUx_CardKind" xml:space="preserve"><value>폴더</value></data>
+  <data name="LibraryUx_CardEmpty" xml:space="preserve"><value>빈 폴더</value></data>
+  <data name="LibraryUx_DropMoveTo" xml:space="preserve"><value>{0} 폴더로 이동 · {1}개</value></data>
+  <data name="LibraryUx_DropRemoveFromFolder" xml:space="preserve"><value>폴더에서 빼기 · {0}개</value></data>
+  <data name="LibraryUx_DropFolderInto" xml:space="preserve"><value>{0} 폴더 안으로 이동</value></data>
+  <data name="LibraryUx_DropFolderTop" xml:space="preserve"><value>최상위로 이동</value></data>
+  <data name="LibraryUx_MovedTo" xml:space="preserve"><value>캡처 {1}개를 {0} 폴더로 옮겼습니다.</value></data>
+  <data name="LibraryUx_TileDragImage" xml:space="preserve"><value>라이브러리 폴더로 끌어 놓으면 그 폴더로 옮깁니다. 바탕 화면이나 탐색기로 끌어 놓으면 PNG 파일로 내보냅니다.</value></data>
+  <data name="LibraryUx_TileDragVideo" xml:space="preserve"><value>라이브러리 폴더로 끌어 놓으면 그 폴더로 옮깁니다. 바탕 화면이나 탐색기로 끌어 놓으면 MP4 파일로 내보냅니다.</value></data>
+  <data name="LibraryUx_Keep" xml:space="preserve"><value>보관</value></data>
+  <data name="LibraryUx_Unkeep" xml:space="preserve"><value>보관 해제</value></data>
+  <data name="LibraryUx_KeepToggleName" xml:space="preserve"><value>보관 전환</value></data>
+  <data name="LibraryUx_KeptBadge" xml:space="preserve"><value>보관됨</value></data>
+  <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, 보관됨</value></data>
+  <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>더 보기 — 보관, 내보내기, 텍스트 인식</value></data>
+  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>제목, 창 이름, 이미지 속 글자 검색</value></data>
+  <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="LibraryUx_NavImages" xml:space="preserve"><value>이미지</value></data>
+  <data name="LibraryUx_NavVideos" xml:space="preserve"><value>동영상</value></data>
+  <data name="EditorFlow_SaveToFile" xml:space="preserve"><value>파일로 저장</value></data>
+  <data name="EditorFlow_SaveToFileHint" xml:space="preserve"><value>이미지를 파일로 저장</value></data>
+  <data name="EditorFlow_DoneHint" xml:space="preserve"><value>라이브러리에 저장하고 클립보드에 복사한 뒤 닫기</value></data>
+  <data name="EditorFlow_CancelHint" xml:space="preserve"><value>편집기 닫기</value></data>
+  <data name="EditorFlow_Copied" xml:space="preserve"><value>클립보드에 복사됨</value></data>
+  <data name="EditorFlow_CropHint" xml:space="preserve"><value>이미지 자르기와 회전</value></data>
+  <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>자르기 적용</value></data>
+  <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>자르기 취소</value></data>
+  <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>편집 명령</value></data>
+  <data name="EditorFlow_CropBarName" xml:space="preserve"><value>자르기 명령</value></data>
+  <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>선택 해제됨</value></data>
+  <data name="EditorFlow_Selected" xml:space="preserve"><value>선택: {0}</value></data>
+  <data name="EditorFlow_Added" xml:space="preserve"><value>{0} 추가 · Ctrl+Z로 취소</value></data>
+  <data name="EditorFlow_StepNumberAdded" xml:space="preserve"><value>{0}번 추가 · Ctrl+Z로 취소</value></data>
+  <data name="EditorFlow_CloseTitle" xml:space="preserve"><value>편집한 내용을 저장하시겠습니까?</value></data>
+  <data name="EditorFlow_CloseMessage" xml:space="preserve"><value>저장하지 않으면 이번에 편집한 내용이 사라집니다.</value></data>
+  <data name="EditorFlow_SaveAndClose" xml:space="preserve"><value>저장하고 닫기</value></data>
+  <data name="EditorFlow_DontSave" xml:space="preserve"><value>저장 안 함</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>지금 해 보기</value></data>
+  <data name="Onboard_TryNowHelp" xml:space="preserve"><value>이 창을 닫고 영역 캡처를 시작합니다.</value></data>
+  <data name="Onboard_StepsName" xml:space="preserve"><value>시작 안내</value></data>
+  <data name="Onboard_StepNumber" xml:space="preserve"><value>{0}단계</value></data>
+  <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>캡처한 다음</value></data>
+  <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 편집기가 열립니다.</value></data>
+  <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 빠른 작업 카드가 나타납니다.</value></data>
+  <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장됩니다.</value></data>
+  <data name="Onboard_TrayTitle" xml:space="preserve"><value>트레이 아이콘</value></data>
+  <data name="Onboard_TrayBody" xml:space="preserve"><value>MyCapture는 작업 표시줄 오른쪽 알림 영역에 있습니다. 아이콘을 클릭하면 라이브러리가, 오른쪽 클릭하면 메뉴가 열립니다. 아이콘이 보이지 않으면 ^ 단추를 누르십시오.</value></data>
+  <data name="Onboard_TrayMoreCaptures" xml:space="preserve"><value>다른 캡처</value></data>
+  <data name="Onboard_TrayCopyText" xml:space="preserve"><value>텍스트 복사</value></data>
+  <data name="Onboard_TrayReopenPin" xml:space="preserve"><value>닫은 고정 창 다시 열기</value></data>
+  <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>단축키 보기</value></data>
+  <data name="Onboard_TrayTipActions" xml:space="preserve"><value>클릭: 라이브러리 · 오른쪽 클릭: 메뉴</value></data>
+  <data name="Onboard_BarCapture" xml:space="preserve"><value>캡처</value></data>
+  <data name="Onboard_BarRecord" xml:space="preserve"><value>녹화</value></data>
+  <data name="Onboard_BarKindName" xml:space="preserve"><value>캡처 또는 녹화</value></data>
+  <data name="Onboard_BarCaptureHelp" xml:space="preserve"><value>화면을 이미지로 캡처합니다.</value></data>
+  <data name="Onboard_BarRecordHelp" xml:space="preserve"><value>녹화할 영역을 고르는 화면으로 바꿉니다.</value></data>
+  <data name="Onboard_BarMore" xml:space="preserve"><value>다른 캡처</value></data>
+  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>지연 캡처, 스크롤 캡처, 이전 영역 반복을 고릅니다.</value></data>
+  <data name="Onboard_DelayCapture" xml:space="preserve"><value>{0}초 후 캡처</value></data>
+  <data name="Onboard_GuideSentence" xml:space="preserve"><value>창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다.</value></data>
+  <data name="Onboard_GuideSentenceRegionOnly" xml:space="preserve"><value>드래그하면 원하는 영역을 캡처합니다.</value></data>
+  <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>녹화할 영역을 드래그하십시오</value></data>
+  <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — 녹화 영역 선택</value></data>
+  <data name="Onboard_RecordStop" xml:space="preserve"><value>정지</value></data>
+  <data name="Onboard_RecordMore" xml:space="preserve"><value>녹화 옵션</value></data>
+  <data name="Onboard_RecordMoreHelp" xml:space="preserve"><value>녹화 영역에 현재 시각을 표시할지 고릅니다.</value></data>
+  <data name="Onboard_RecordShowTime" xml:space="preserve"><value>시각 표시</value></data>
+  <data name="Onboard_RecordAreaTip" xml:space="preserve"><value>녹화 영역 {0}</value></data>
+  <data name="Onboard_PinTip" xml:space="preserve"><value>드래그: 이동 · 휠: 확대·축소 · 오른쪽 클릭: 메뉴</value></data>
+  <data name="Onboard_PinBarName" xml:space="preserve"><value>고정 창 도구</value></data>
+  <data name="Onboard_PinOpacity" xml:space="preserve"><value>투명도</value></data>
+  <data name="Onboard_PinZoomIn" xml:space="preserve"><value>확대</value></data>
+  <data name="Onboard_PinZoomOut" xml:space="preserve"><value>축소</value></data>
+  <data name="Onboard_PinMoreTransparent" xml:space="preserve"><value>더 투명하게</value></data>
+  <data name="Onboard_PinMoreOpaque" xml:space="preserve"><value>더 불투명하게</value></data>
+  <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+휠 아래</value></data>
+  <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+휠 위</value></data>
+  <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>뒤 창 클릭 허용</value></data>
+  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>마우스 입력을 뒤에 있는 창으로 보냅니다. 해제: {0}</value></data>
+  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>뒤 창 클릭 허용 켜짐 · 해제: {0}</value></data>
+  <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>뒤 창 클릭 허용 꺼짐</value></data>
+  <data name="Onboard_CaptureFromTray" xml:space="preserve"><value>단축키가 지정되지 않았습니다. 트레이 아이콘 메뉴에서 영역 캡처를 고를 수 있습니다.</value></data>
+  <data name="Onboard_QuickKeep" xml:space="preserve"><value>자동으로 닫지 않기</value></data>
+  <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q 또는 카드 클릭: 키보드 조작</value></data>
+  <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>카드 클릭: 키보드 조작</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 자세히의 내용을 복사해 문의할 때 첨부하십시오.</value></data>
+  <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture를 시작할 수 없습니다</value></data>
+  <data name="Onboard_StartFailureBody" xml:space="preserve"><value>MyCapture를 다시 실행하십시오. 계속 실패하면 컴퓨터를 다시 시작한 뒤 실행하십시오. 그래도 시작되지 않으면 자세히의 내용을 복사해 문의할 때 첨부하십시오.</value></data>
 </root>

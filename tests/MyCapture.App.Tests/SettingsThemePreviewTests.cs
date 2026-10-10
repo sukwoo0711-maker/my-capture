@@ -164,24 +164,47 @@ public sealed partial class SettingsThemePreviewTests
             Drain(window);
             Assert.Equal(AppThemeNames.Glass, selector.SelectedValue);
             SaveEvidence(window, "theme-after-cancel.png");
+            var prompts = new Queue<SettingsCloseChoice>();
+            int promptCount = 0;
+            window.ConfirmUnappliedChanges = () => { promptCount++; return prompts.Dequeue(); };
             SelectTheme(window, selector, AppThemeNames.Daylight);
             var escape = Assert.Single(window.InputBindings.OfType<KeyBinding>(), key => key.Key == Key.Escape);
-            Assert.Same(SettingsWindow.CancelCommand, escape.Command);
+            Assert.Same(SettingsWindow.CloseCommand, escape.Command);
+            prompts.Enqueue(SettingsCloseChoice.Cancel);
+            Assert.IsType<RoutedUICommand>(escape.Command).Execute(null, window);
+            Assert.True(window.IsVisible); // Cancel keeps editing, preview included.
+            AssertPalette(window, AppTheme.Daylight);
+            prompts.Enqueue(SettingsCloseChoice.Discard);
             Assert.IsType<RoutedUICommand>(escape.Command).Execute(null, window);
             Assert.False(window.IsVisible);
             AssertPalette(window, AppTheme.Glass);
+            Assert.Equal(2, promptCount);
 
             window.ShowSettings();
             SelectTheme(window, selector, AppThemeNames.Daylight);
+            prompts.Enqueue(SettingsCloseChoice.Discard);
             window.Close(); // Same Closing path as native X.
             Assert.False(window.IsVisible);
             AssertPalette(window, AppTheme.Glass);
+            Assert.Equal(3, promptCount);
+
+            window.ShowSettings();
+            window.Close(); // Nothing unapplied: closes without asking.
+            Assert.False(window.IsVisible);
+            Assert.Equal(3, promptCount);
 
             window.ShowSettings();
             SelectTheme(window, selector, AppThemeNames.Daylight);
-            window.ShowSettings(); // Reopening discards any prior visible draft, too.
+            window.ShowSettings(); // Reopening an open window keeps its unapplied draft.
             Drain(window);
+            AssertPalette(window, AppTheme.Daylight);
+            Assert.Equal(AppThemeNames.Daylight, selector.SelectedValue);
+            SettingsWindow.CancelCommand.Execute(null, window); // Cancel discards without asking.
+            Assert.False(window.IsVisible);
             AssertPalette(window, AppTheme.Glass);
+            Assert.Equal(3, promptCount);
+            window.ShowSettings();
+            Drain(window);
             Assert.Equal(AppThemeNames.Glass, selector.SelectedValue);
 
             SelectTheme(window, selector, AppThemeNames.Daylight);
@@ -279,10 +302,8 @@ public sealed partial class SettingsThemePreviewTests
             AssertBrush(tab.Foreground, colors["Text.Secondary"]);
         AssertBrush(Assert.IsType<Button>(window.FindName("CancelButton")).Foreground, colors["Text.Primary"]);
 
-        if (AppThemeNames.UsesBackdrop(theme))
-            Assert.Equal(Colors.Transparent, Assert.IsType<SolidColorBrush>(window.Background).Color);
-        else
-            AssertBrush(window.Background, colors["Surface.Base"]);
+        // Glass paints its base too: the native caption is coloured to match the visible body.
+        AssertBrush(window.Background, colors["Surface.Base"]);
     }
 
     private static void AssertBrush(Brush brush, ThemeColor expected) =>

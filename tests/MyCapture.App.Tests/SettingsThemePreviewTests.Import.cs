@@ -144,6 +144,10 @@ public sealed partial class SettingsThemePreviewTests
 
         window.ImportSettingsFrom(importPath);
         Assert.Equal("321", DraftOf(window).MaxItems);
+        Assert.True(DraftOf(window).HasUnappliedChanges);
+        window.ShowSettings(); // Already open: brought forward with the import still pending.
+        Assert.Equal("321", DraftOf(window).MaxItems);
+        SettingsWindow.CancelCommand.Execute(null, window);
         window.ShowSettings();
         Assert.NotEqual("321", DraftOf(window).MaxItems);
         AssertPalette(window, AppTheme.Glass);
@@ -169,7 +173,8 @@ public sealed partial class SettingsThemePreviewTests
         var apply = Assert.IsType<Button>(window.FindName("ApplyButton"));
         var bar = Assert.IsType<Grid>(VisualTreeHelper.GetParent(VisualTreeHelper.GetParent(apply)));
         Button[] buttons = Descendants(bar).OfType<Button>().ToArray();
-        Assert.Equal(5, buttons.Length);
+        Assert.Equal(3, buttons.Length); // Reset, Apply, Cancel; backup lives on the About tab.
+        Assert.Single(buttons, button => ReferenceEquals(button.Style, window.FindResource("Button.Primary")));
         foreach (Button button in buttons)
         {
             AssertFits(window, button);

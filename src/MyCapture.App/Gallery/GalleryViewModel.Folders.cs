@@ -24,6 +24,9 @@ public sealed class GalleryFolderNode : INotifyPropertyChanged
     public bool IsExpanded { get => _isExpanded; set { if (_isExpanded != value) { _isExpanded = value; Raise(); } } }
     private bool _isSelected;
     public bool IsSelected { get => _isSelected; set { if (_isSelected != value) { _isSelected = value; Raise(); } } }
+    private bool _isDropTarget;
+    /// <summary>True while captures dragged over this folder or date would move into it.</summary>
+    public bool IsDropTarget { get => _isDropTarget; internal set { if (_isDropTarget != value) { _isDropTarget = value; Raise(); } } }
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Raise([CallerMemberName] string? property = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));
@@ -103,7 +106,8 @@ public sealed partial class GalleryViewModel
     {
         Raise(nameof(UseCurrentFolderForNewCaptures)); Raise(nameof(SavesNewCapturesToFolder));
         Raise(nameof(CanChangeNewCaptureFolder)); Raise(nameof(NewCaptureDestinationText));
-        Raise(nameof(EmptyStateText));
+        Raise(nameof(EmptyStateText)); Raise(nameof(SavesNewCapturesHere)); Raise(nameof(SaveHereToolTip));
+        Raise(nameof(ShowNewCaptureDestination));
     }
 
     private GalleryFolderCardViewModel GetOrUpdateFolderCard(CaptureFolder folder, FolderCardIndex index,
@@ -166,7 +170,10 @@ public sealed partial class GalleryViewModel
     }
     public string SearchPlaceholder => _scope.FolderId is { } id
         ? UiText.Format("Folder410.SearchInFolder", _controller.Queue.GetFolderDisplayPath(id))
-        : UiText.Get("Text_59208AC2B48E");
+        : UiText.Get("LibraryUx_SearchPlaceholder");
+
+    /// <summary>The search shortcut lives in the tooltip, not in the placeholder.</summary>
+    public string SearchToolTip => UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_4B8D541EBE6D"), "Ctrl+F");
 
     private GallerySortOrder _sortOrder;
     public int SortIndex
@@ -216,6 +223,7 @@ public sealed partial class GalleryViewModel
         var roots = children[null].ToLookup(folder => folder.CreatedDate);
         var dates = loose.Keys.Concat(roots.Select(group => group.Key)).Distinct().OrderDescending();
         var nodes = new List<GalleryFolderNode>();
+        var rootFolders = new List<(GalleryFolderNode Node, DateOnly Date)>();
         foreach (DateOnly date in dates)
         {
             var node = Node(CaptureFolderScope.ForDate(date), date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
@@ -224,8 +232,12 @@ public sealed partial class GalleryViewModel
             Replace(node.Children, nested);
             node.Count = loose.GetValueOrDefault(date) + nested.Sum(child => child.Count);
             nodes.Add(node);
+            rootFolders.AddRange(nested.Select(folder => (folder, date)));
         }
         Replace(FolderNodes, nodes);
+        // The navigation pane lists folders on their own, by name across dates; newer first on a tie.
+        Replace(FolderRoots, rootFolders.OrderBy(root => root.Node.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ThenByDescending(root => root.Date).Select(root => root.Node));
         SyncBrowsingCaptureFolder();
         Raise(nameof(FolderStorageText)); Raise(nameof(ShowFolderStorageInfo));
         Raise(nameof(SelectedScope)); Raise(nameof(HasFolderScope)); Raise(nameof(CanSetNewCaptureFolder));

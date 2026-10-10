@@ -53,7 +53,8 @@ public sealed class CaptureModeBarTests
             Assert.True(view.TextCaptureMode);
             Assert.False(bar.CaptureButton.IsChecked);
             Render(view);
-            Assert.Equal(["드래그: 영역 텍스트 추출", "클릭: 창 텍스트 추출"], view.StatusTextsForTest);
+            // No status chip repeats the mode under the bar; the label beside the window says it.
+            Assert.Empty(view.StatusTextsForTest);
             Assert.Equal("클릭: 창 텍스트 추출  620 × 420", view.TargetLabelForTest);
 
             // T from the keyboard goes back, and the bar shows it.
@@ -69,7 +70,7 @@ public sealed class CaptureModeBarTests
             Assert.True(bar.ColorButton.IsChecked);
             Assert.Null(view.HoverRegionForTest);
             Render(view);
-            Assert.Equal(["클릭: 색상 복사"], view.StatusTextsForTest);
+            Assert.Empty(view.StatusTextsForTest);
             Assert.Null(view.TargetTabForTest);
 
             // From colour, T goes straight to text; the image button returns to capture.
@@ -229,7 +230,7 @@ public sealed class CaptureModeBarTests
     });
 
     [Fact]
-    public void StatusNamesTheMonitorOverTheDesktopAndLightsTheDragWhileDragging() => StaTestHost.Run(() =>
+    public void OnlyTheLabelBesideTheTargetNamesWindowOrMonitorAndNoChipRepeatsIt() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         FrozenFrame frame = Desktop();
@@ -241,23 +242,22 @@ public sealed class CaptureModeBarTests
             Render(desktop);
             Render(window);
             Render(drag);
-            Assert.Equal(["드래그: 영역 캡처", "클릭: 모니터 캡처"], desktop.StatusTextsForTest);
             Assert.Equal("클릭: 모니터 캡처  1280 × 720", desktop.TargetLabelForTest);
-            Assert.Equal(["드래그: 영역 캡처", "클릭: 창 캡처"], window.StatusTextsForTest);
+            Assert.Equal("클릭: 창 캡처  620 × 420", window.TargetLabelForTest);
             Assert.Equal(CaptureCueState.Drag, drag.CueState);
+            Assert.Null(drag.TargetLabelForTest);
 
-            // The status sits under the bar, the same size whichever wording it shows.
+            // The always-on "drag: … · click: …" chip under the bar is gone in every state: the bar
+            // is the only chrome, and nothing lights a status segment.
             Rect bar = desktop.ModeBarBoundsForTest!.Value;
-            Rect status = desktop.ChromeBoundsForTest[1];
-            Assert.Equal(bar, desktop.ChromeBoundsForTest[0]);
-            Assert.True(status.Top > bar.Bottom);
-            Near(bar.Left + (bar.Width / 2), status.Left + (status.Width / 2));
-            Assert.Equal(status, window.ChromeBoundsForTest[1]);
-            Assert.Equal(status, drag.ChromeBoundsForTest[1]);
-            Rect lit = drag.ActiveCueSegmentForTest!.Value;
-            Assert.True(status.Contains(lit));
-            Near(status.Left + 5, lit.Left);
-            // The detected window's tab keeps clear of the bar and the status.
+            foreach (CaptureOverlayView view in new[] { desktop, window, drag })
+            {
+                Assert.Equal([bar], view.ChromeBoundsForTest);
+                Assert.Empty(view.StatusTextsForTest);
+                Assert.Null(view.ActiveCueSegmentForTest);
+            }
+
+            // The detected window's tab keeps clear of the bar.
             Rect tab = window.TargetTabForTest!.Value;
             Assert.DoesNotContain(window.ChromeBoundsForTest, chrome => CaptureCueLayout.Overlaps(chrome, tab));
         }
@@ -282,8 +282,9 @@ public sealed class CaptureModeBarTests
             Assert.Equal("Full screen", AutomationProperties.GetName(bar.FullScreenButton));
             Assert.Equal("Extract text", AutomationProperties.GetName(bar.TextButton));
             Assert.Equal("Copy color", AutomationProperties.GetName(bar.ColorButton));
-            Assert.Equal("How to capture", view.StartGuideCardForTest!.TitleText);
-            Assert.StartsWith("Click a window to capture it, or drag", view.StartGuideCardForTest.BodyText, StringComparison.Ordinal);
+            Assert.Equal("Click a window to capture it, or drag to capture any area.", view.StartGuideCardForTest!.BodyText);
+            Assert.Equal("Capture", AutomationProperties.GetName(bar.CaptureKindButton));
+            Assert.Equal("Record", AutomationProperties.GetName(bar.RecordKindButton));
         }
         finally { view.ReleaseResources(); }
     });
@@ -302,10 +303,8 @@ public sealed class CaptureModeBarTests
             view.InitializePointer();
             Render(view);
             CaptureStartGuideCard card = view.StartGuideCardForTest!;
-            Assert.Equal("캡처 방법", card.TitleText);
-            Assert.Equal("창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다. Esc로 취소합니다. "
-                + "위쪽 막대에서 전체 화면, 텍스트 추출, 색상 복사를 고를 수 있습니다. "
-                + "도움말(?) 버튼을 누르면 이 안내를 다시 볼 수 있습니다.", card.BodyText);
+            // One sentence: what a click and a drag do. The bar's buttons explain themselves.
+            Assert.Equal("창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다.", card.BodyText);
             Assert.False(card.IsHitTestVisible);
             Assert.True(view.StartGuideTimerRunningForTest);
             Assert.Equal(TimeSpan.FromSeconds(8), CaptureOverlayView.StartGuideDuration);

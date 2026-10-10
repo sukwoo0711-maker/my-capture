@@ -42,6 +42,58 @@ public sealed class ThemeChromeTests
         Assert.Equal(theme is AppTheme.Glass or AppTheme.GlassLight, AppThemeNames.UsesBackdrop(theme));
     }
 
+    [Theory]
+    [InlineData("glass", false, 0x15, 0x17, 0x1F)]
+    [InlineData("glass-light", false, 0xF0, 0xF1, 0xF4)]
+    [InlineData("midnight", false, 0x0B, 0x0F, 0x17)]
+    [InlineData("daylight", false, 0xF7, 0xF8, 0xFB)]
+    [InlineData("high-contrast", false, 0x00, 0x00, 0x00)]
+    [InlineData("workspace", false, 0xED, 0xF3, 0xF2)]
+    [InlineData("workspace", true, 0x14, 0x1B, 0x22)]
+    public void CaptionColourIsTheBodyColourTheWindowActuallyShows(string themeId, bool videoEditor, int r, int g, int b)
+    {
+        AppTheme theme = AppThemeNames.Parse(themeId);
+        WorkspaceRole role = videoEditor ? WorkspaceRole.VideoEditor : WorkspaceRole.Gallery;
+        WindowChromePlan plan = ModernWindowChrome.ResolveChrome(theme, role, systemHighContrast: false);
+
+        // Glass surfaces are translucent and WPF clears the client to black under them.
+        Assert.Equal(ModernWindowChrome.ToColorRef(ThemeColor.Rgb((byte)r, (byte)g, (byte)b)), plan.CaptionColor);
+        Assert.Equal(ModernWindowChrome.UseDarkCaption(theme, role), plan.DarkMode);
+        ThemeColor caption = FromColorRef(plan.CaptionColor!.Value);
+        Assert.True(ThemeContrast.Ratio(FromColorRef(plan.TextColor!.Value), caption) >= 7.0, themeId + " caption text");
+        Assert.NotNull(plan.BorderColor);
+    }
+
+    [Fact]
+    public void EveryPaletteAndRoleColoursTheCaptionLikeItsBody()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        foreach (WorkspaceRole role in Enum.GetValues<WorkspaceRole>())
+        {
+            WindowChromePlan plan = ModernWindowChrome.ResolveChrome(theme, role, systemHighContrast: false);
+            ThemeColor body = ThemeContrast.Composite(ModernWindowChrome.ClientColors(theme, role)["Surface.Base"],
+                ThemeColor.Rgb(0, 0, 0));
+            Assert.Equal(ModernWindowChrome.ToColorRef(body), plan.CaptionColor);
+            // A dark caption flag on a light caption colour would draw unreadable caption buttons.
+            Assert.Equal(ThemeContrast.RelativeLuminance(body) < 0.18, plan.DarkMode);
+        }
+    }
+
+    [Fact]
+    public void SystemHighContrastKeepsTheUsersCaptionPalette()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            WindowChromePlan plan = ModernWindowChrome.ResolveChrome(theme, WorkspaceRole.Gallery, systemHighContrast: true);
+            Assert.Null(plan.CaptionColor);
+            Assert.Null(plan.TextColor);
+            Assert.Null(plan.BorderColor);
+        }
+    }
+
+    private static ThemeColor FromColorRef(int value) =>
+        ThemeColor.Rgb((byte)(value & 0xFF), (byte)((value >> 8) & 0xFF), (byte)((value >> 16) & 0xFF));
+
     [Fact]
     public void ColorRefUsesWindowsBgrOrder()
     {

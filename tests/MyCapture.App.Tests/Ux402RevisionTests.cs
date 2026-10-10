@@ -113,8 +113,10 @@ public sealed class Ux402RevisionTests
             Assert.False(editor.HandleShortcut(Key.Down, ModifierKeys.None));
             Assert.False(editor.HandleShortcut(Key.Enter, ModifierKeys.None));
             Assert.False(editor.HandleShortcut(Key.R, ModifierKeys.None));
+            // Apply and Cancel moved from the panel into the crop command bar.
             var cancel = Descendants(editor).OfType<Button>().Single(button =>
-                AutomationProperties.GetAcceleratorKey(button) == "Esc" && button.Parent is UniformGrid);
+                AutomationProperties.GetAcceleratorKey(button) == "Esc" && AutomationProperties.GetAutomationId(button) == "EditorFlowCropCancel");
+            Assert.True(cancel.IsVisible);
             cancel.Focus();
             Assert.False(editor.HandleShortcut(Key.Enter, ModifierKeys.None));
             RaiseKey(cancel, Key.Enter);
@@ -190,14 +192,19 @@ public sealed class Ux402RevisionTests
             Assert.True(button.Focus());
             Assert.False(editor.HandleShortcut(Key.Space, ModifierKeys.None));
             Assert.False(editor.HandleShortcut(Key.Enter, ModifierKeys.None));
-            foreach (var (key, tool) in new[] { (Key.R, "Rectangle"), (Key.E, "Ellipse"), (Key.X, "Crop") })
+            foreach (var (key, tool) in new[] { (Key.R, "Rectangle"), (Key.E, "Ellipse") })
             {
                 Assert.True(editor.HandleShortcut(key, ModifierKeys.None));
                 Assert.Equal(tool, Descendants(editor).OfType<ToggleButton>().Single(b => b.IsChecked == true)
                     .GetValue(System.Windows.Automation.AutomationProperties.AcceleratorKeyProperty) switch
-                    { "R" => "Rectangle", "E" => "Ellipse", "X" => "Crop", _ => "unexpected" });
+                    { "R" => "Rectangle", "E" => "Ellipse", _ => "unexpected" });
             }
+            // Crop is a mode of the command bar rather than a rail tool.
+            Assert.True(editor.HandleShortcut(Key.X, ModifierKeys.None));
+            Assert.NotNull(editor.PendingCrop); Assert.True(editor.IsCropCommandBarVisible);
+            Assert.DoesNotContain(Descendants(editor).OfType<ToggleButton>(), b => b.IsChecked == true);
             Assert.True(editor.HandleShortcut(Key.Escape, ModifierKeys.None)); Assert.Null(editor.PendingCrop);
+            Assert.False(editor.IsCropCommandBarVisible);
         }
         finally { window.Close(); }
     });

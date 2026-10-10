@@ -410,7 +410,9 @@ public sealed class CaptureTransactionRecoveryTests
             Assert.True(queue.TogglePin(record.Id));
             Assert.Equal(initialVersion, record.ContentRevision);
 
-            AnnotationEditingResult copy = EditingResult(EditorCommitAction.CopyToClipboard, 42, 26);
+            // Done saves first and then copies; its clipboard failure keeps the editor open with
+            // the session already advanced. (Copy alone no longer saves, so it cannot advance it.)
+            AnnotationEditingResult copy = EditingResult(EditorCommitAction.Done, 42, 26);
             bool firstClose = commit.CommitAsync(record, copy, first).GetAwaiter().GetResult();
 
             Assert.False(firstClose);

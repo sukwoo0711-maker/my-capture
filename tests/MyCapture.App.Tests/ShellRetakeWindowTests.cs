@@ -90,6 +90,40 @@ public sealed class ShellRetakeWindowTests
     });
 
     [Fact]
+    public void Retake_AsksBeforeDiscardingAnnotations_AndKeepsTheEditorWhenCancelled() => StaTestHost.Run(() =>
+    {
+        Window? editor = null;
+        int acquired = 0;
+        using var coordinator = Create(() => { acquired++; return Frame(); });
+        coordinator.RequiresCaptureExclusion = () => true;
+        coordinator.ApplyCaptureExclusion = window => { editor ??= window; return true; };
+        coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8));
+        PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+        var annotation = Assert.IsType<MyCapture.App.Editing.AnnotationEditorWindow>(editor);
+        int asked = 0;
+        annotation.ConfirmClose = () => { asked++; return MyCapture.App.Editing.EditorCloseChoice.Cancel; };
+        // A rotation is an edit the user would lose.
+        Assert.True(EditorKeysTests.Press(annotation, System.Windows.Input.Key.Q, ime: false));
+        Assert.True(annotation.Editor.HasUnsavedChanges);
+        try
+        {
+            coordinator.CloseEditorForRetake();
+            Assert.Equal(1, asked);
+            Assert.True(annotation.IsVisible);
+            Assert.True(coordinator.IsActive);
+            coordinator.Start(false, false, false);
+            Assert.Equal(0, acquired);
+
+            annotation.ConfirmClose = () => { asked++; return MyCapture.App.Editing.EditorCloseChoice.DontSave; };
+            coordinator.CloseEditorForRetake();
+            Assert.Equal(2, asked);
+            Assert.False(annotation.IsVisible);
+            Assert.False(coordinator.IsActive);
+        }
+        finally { coordinator.Cancel(); }
+    });
+
+    [Fact]
     public void PendingPersistence_CannotRetake_AndCancellationPreventsOldEditorReopening() => StaTestHost.Run(() =>
     {
         var persisted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

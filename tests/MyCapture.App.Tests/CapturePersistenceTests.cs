@@ -804,26 +804,55 @@ public sealed class CaptureCommitServiceTests
     });
 
     [Fact]
-    public void CopyToClipboard_FailureKeepsEditorOpenForRetry() => RunSta(() =>
+    public void CopyToClipboard_CopiesTheEditedPixelsOnlyAndLeavesTheLibraryUntouched() => RunSta(() =>
     {
+        // Copy is the editor's secondary action: the flattened edit reaches the clipboard, but
+        // the library keeps its current version until Done or a file save, whether or not the
+        // clipboard took the image. The result only reports the copy.
         string root = NewRoot();
         try
         {
-            var (commit, queue, record, _, _) = Build(root, (_, _) => Task.FromResult(false));
+            var copyResults = new Queue<bool>([false, true]);
+            var copied = new List<BitmapSource>();
+            var (commit, queue, record, _, _) = Build(root, (bitmap, _) =>
+            {
+                copied.Add(bitmap);
+                return Task.FromResult(copyResults.Dequeue());
+            });
+            string directory = queue.GetDirectory(record);
+            string layers = Path.Combine(directory, CaptureFileNames.Layers);
+            bool hadLayers = File.Exists(layers);
+            byte[] rendered = File.ReadAllBytes(Path.Combine(directory, CaptureFileNames.Rendered));
+            long revision = record.ContentRevision;
+            var document = AnnotationDocument.CreateFor(48, 32);
+            document.Add(new RectangleAnnotation { Rect = new RectD(4, 4, 30, 20), Stroke = ColorRgba.FromRgb(255, 0, 0), StrokeThickness = 4 });
+            AnnotationEditingResult copy = MakeResult(EditorCommitAction.CopyToClipboard, document, new Dictionary<string, BitmapSource>());
 
-            bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.CopyToClipboard)).GetAwaiter().GetResult();
+            Assert.False(commit.CommitAsync(record, copy).GetAwaiter().GetResult());
+            Assert.True(commit.CommitAsync(record, copy).GetAwaiter().GetResult());
 
-            Assert.False(close);
-            Assert.True(File.Exists(Path.Combine(queue.GetDirectory(record), CaptureFileNames.Rendered)));
+            Assert.Equal(2, copied.Count);
+            Assert.NotEqual(Pixels(Solid(48, 32)), Pixels(copied[^1]));
+            Assert.Equal(revision, record.ContentRevision);
+            Assert.Equal(rendered, File.ReadAllBytes(Path.Combine(directory, CaptureFileNames.Rendered)));
+            Assert.Equal(hadLayers, File.Exists(layers));
         }
         finally
         {
             DeleteRoot(root);
         }
+
+        static byte[] Pixels(BitmapSource bitmap)
+        {
+            var converted = new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+            byte[] pixels = new byte[converted.PixelWidth * converted.PixelHeight * 4];
+            converted.CopyPixels(pixels, converted.PixelWidth * 4, 0);
+            return pixels;
+        }
     });
 
     [Fact]
-    public void CopyToClipboard_RetryWithInsertedImageDoesNotMutateLiveDocumentAndPersistsSidecar() => RunSta(() =>
+    public void Done_RetryWithInsertedImageDoesNotMutateLiveDocumentAndPersistsSidecar() => RunSta(() =>
     {
         string root = NewRoot();
         try
@@ -849,8 +878,10 @@ public sealed class CaptureCommitServiceTests
             {
                 [sessionAssetName] = asset,
             };
+            // Done saves into the library and copies; a failed copy keeps the editor open, and the
+            // retry must neither mutate the live document nor lose the inserted image sidecar.
             AnnotationEditingResult result = MakeResult(
-                EditorCommitAction.CopyToClipboard,
+                EditorCommitAction.Done,
                 document,
                 assets);
 

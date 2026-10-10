@@ -86,12 +86,17 @@ public sealed partial class SettingsThemePreviewTests
             selectTool.Invoke(editor, [EditorTool.StepNumber]);
             Drain(window);
 
-            Assert.True(rotateLeft.IsVisible && rotateRight.IsVisible);
             BitmapSource full = RenderEditorWindow(window);
-            var bar = (FrameworkElement)rotateLeft.Parent;
-            SaveEditorUxEvidence(Crop(full, window, bar, 6), $"editor-rotate-commands-{theme}-{phase}.png");
             SaveEditorUxEvidence(Crop(full, window, inspector, 0), $"editor-step-inspector-{theme}-{phase}.png");
             SaveEditorUxEvidence(full, $"editor-step-window-{theme}-{phase}.png");
+
+            // The rotate commands are part of crop mode's command bar.
+            selectTool.Invoke(editor, [EditorTool.Crop]);
+            Drain(window);
+            Assert.True(rotateLeft.IsVisible && rotateRight.IsVisible);
+            BitmapSource cropping = RenderEditorWindow(window);
+            var bar = (FrameworkElement)rotateLeft.Parent;
+            SaveEditorUxEvidence(Crop(cropping, window, bar, 6), $"editor-rotate-commands-{theme}-{phase}.png");
         }
         finally
         {

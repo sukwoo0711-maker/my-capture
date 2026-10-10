@@ -530,6 +530,24 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// </summary>
     public void LoadFrom(AppSettings settings)
     {
+        LoadValues(settings);
+        _baseline = CaptureState();
+    }
+
+    /// <summary>
+    /// Replaces every field with <paramref name="settings"/> but keeps the values the draft was
+    /// loaded with as its baseline, so an imported file still counts as an unapplied change.
+    /// </summary>
+    public void ReplaceValues(AppSettings settings) => LoadValues(settings);
+
+    /// <summary>
+    /// True when any value differs from the settings this draft was loaded from. Typing a value
+    /// and then restoring it counts as unchanged.
+    /// </summary>
+    public bool HasUnappliedChanges => !CaptureState().SequenceEqual(_baseline, StringComparer.Ordinal);
+
+    private void LoadValues(AppSettings settings)
+    {
         ArgumentNullException.ThrowIfNull(settings);
         AppSettings s = settings.DeepClone();
 
@@ -636,11 +654,44 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     }
 
     /// <summary>
-    /// Resets every editable field to the built-in defaults. Deliberate and fully
-    /// reversible: nothing is written to disk until Apply, so a subsequent Cancel or a
-    /// re-<see cref="LoadFrom"/> restores the previous values.
+    /// Resets every editable field to the defaults a new installation starts with
+    /// (<see cref="NewInstallDefaults"/>). Deliberate and fully reversible: nothing is written
+    /// to disk until Apply, so a subsequent Cancel or a re-<see cref="LoadFrom"/> restores the
+    /// previous values. The baseline is kept, so the reset counts as an unapplied change.
     /// </summary>
-    public void ResetToDefaults() => LoadFrom(new AppSettings());
+    public void ResetToDefaults() => LoadValues(NewInstallDefaults.Create());
+
+    /// <summary>
+    /// Every value <see cref="ToAppSettings"/> writes, in a fixed order, as invariant text.
+    /// The GitHub token stays in memory only; it is compared, never logged.
+    /// </summary>
+    private string[] CaptureState() =>
+    [
+        B(_launchAtLogin), B(_notifyOnQuickSave), B(_playCaptureSound), _afterCapture.ToString(), B(_showShortcutHints),
+        _language, _theme, _captureGuideColorMode, IsCustomCaptureGuideColor ? _captureGuideColorHex : string.Empty,
+        B(_includeCursor), B(_autoDetectWindows), B(_showMagnifier), B(_showSelectionGrid), B(_abortOnFocusLoss),
+        _preservedColorFormat.ToString(), _delaySeconds, _regionHistoryLimit,
+        _recordingFrameRate, B(_useRecordingStartDelay), _recordingStartDelaySeconds, B(_recordingIncludeCursor),
+        B(_recordingCursorHighlight), _recordingPresetWidth, _recordingPresetHeight, _recordingCaptureMode,
+        Int(_preservedRecordingBitrateBitsPerSecond), Dbl(_preservedRecordingCoarseStepSeconds),
+        _captureHotkey, _openLibraryHotkey, _pasteToScreenHotkey, _hideAllPinsHotkey, _toggleClickThroughHotkey,
+        _repeatLastRegionHotkey, _captureWindowHotkey, _captureFullScreenHotkey, _recordRegionHotkey,
+        _scrollingCaptureHotkey, _delayedCaptureHotkey, _uploadGitHubImageHotkey, _restoreClosedPinHotkey,
+        _captureTextHotkey, _pauseRecordingHotkey,
+        _maxItems, _maxGiB, _thumbnailLongEdge, _capturesDirectoryOverride, _imageRetentionHours, _folderFilePrefix,
+        B(_useCurrentFolderForNewCaptures), _defaultCaptureFolderId?.ToString() ?? string.Empty,
+        _gitHubIssueUrl, _gitHubToken,
+        _quickSaveDirectoryOverride, B(_copyToClipboardOnQuickSave), B(_showSourceWindowTitle), _fileNamePattern,
+        B(_preservedPreserveTransparency),
+        B(_closeOnDoubleClick), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
+        _preferredLanguages, _ocrQuality, B(_cacheResults),
+        _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
+        _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _blurRadius,
+        _preservedStrokeColor.ToString(), _preservedTextColor.ToString(),
+        string.Join(";", _preservedRecentColors.Select(color => color.ToString())),
+    ];
+
+    private static string B(bool value) => value ? "1" : "0";
 
     /// <summary>
     /// Materialises the draft into a new <see cref="AppSettings"/>. Callers must check
@@ -1215,4 +1266,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _preservedIsFirstRun;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;
+
+    /// <summary>The state <see cref="LoadFrom"/> last loaded; see <see cref="HasUnappliedChanges"/>.</summary>
+    private string[] _baseline = [];
 }

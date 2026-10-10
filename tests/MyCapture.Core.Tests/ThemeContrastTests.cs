@@ -82,5 +82,33 @@ public sealed class ThemeContrastTests
         }
     }
 
+    /// <summary>
+    /// Library folder cards sit on the window base like capture cards (Surface.Raised) but use their
+    /// own warm surface, outline and glyph. Text stays AA, the glyph and outline stay visible as
+    /// UI graphics, and the card fill is visibly different from a capture card in every palette.
+    /// The window base is composited over WPF's black client clear, as the window shows it.
+    /// </summary>
+    [Fact]
+    public void FolderCardsStayReadableAndDistinctFromCaptureCardsInEveryPalette()
+    {
+        ThemeColor clear = ThemeColor.Rgb(0, 0, 0);
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
+            ThemeColor windowBase = ThemeContrast.Composite(colors["Surface.Base"], clear);
+            ThemeColor folder = ThemeContrast.Composite(colors["Surface.Folder"], windowBase);
+            ThemeColor capture = ThemeContrast.Composite(colors["Surface.Raised"], windowBase);
+            foreach (string key in new[] { "Text.Primary", "Text.Secondary", "Text.Muted" })
+                Assert.True(ThemeContrast.Ratio(colors[key], folder) >= 4.5, $"{theme} {key} on Surface.Folder");
+            Assert.True(ThemeContrast.Ratio(ThemeContrast.Composite(colors["Accent.Folder"], folder), folder) >= 3.0,
+                $"{theme} Accent.Folder glyph");
+            ThemeColor outline = ThemeContrast.Composite(colors["Border.Folder"], windowBase);
+            Assert.True(ThemeContrast.Ratio(outline, windowBase) >= 1.5, $"{theme} Border.Folder outline");
+            int distance = Math.Abs(folder.R - capture.R) + Math.Abs(folder.G - capture.G) + Math.Abs(folder.B - capture.B);
+            bool distinctOutline = colors["Border.Folder"] != colors["Border.Subtle"];
+            Assert.True(distance >= 24 && distinctOutline, $"{theme} folder card must differ from a capture card ({distance})");
+        }
+    }
+
     private static ThemeColor Opaque(ThemeColor color) => ThemeColor.Rgb(color.R, color.G, color.B);
 }

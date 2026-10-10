@@ -67,11 +67,30 @@ internal sealed class RecordingControlWindow : Window
     private readonly Func<string> _outputPathFactory;
     private readonly ILogger _log;
 
+    // Filled glyphs on the 20x20 symbol grid, drawn in the button's own text colour.
+    // Frozen: the bar is built on whichever UI thread opens it, and these shapes are shared.
+    private static readonly Geometry RecordGlyph = Frozen(new EllipseGeometry(new Point(10, 10), 5.5, 5.5));
+    private static readonly Geometry StopGlyph = Frozen(new RectangleGeometry(new Rect(4.5, 4.5, 11, 11), 1.5, 1.5));
+    private static readonly Geometry PauseGlyph = Geometry.Parse("M5,4 L8.5,4 L8.5,16 L5,16 Z M11.5,4 L15,4 L15,16 L11.5,16 Z");
+    private static readonly Geometry ResumeGlyph = Geometry.Parse("M6,3.75 L16,10 L6,16.25 Z");
+    private static readonly Geometry MoreGlyph = Geometry.Parse("M4.5,10 L4.6,10 M10,10 L10.1,10 M15.5,10 L15.6,10");
+    private static readonly Geometry CheckGlyph = Geometry.Parse("M3.75,10.25 L8.15,14.65 L16.25,5.35");
+
+    private static Geometry Frozen(Geometry geometry)
+    {
+        geometry.Freeze();
+        return geometry;
+    }
+
     private readonly Button _primaryButton;
     private readonly Button _pauseButton;
+    private readonly Button _moreButton;
+    private readonly Button _cancelButton;
     private readonly TextBlock _statusText;
     private readonly TextBlock _timerText;
-    private readonly CheckBox _clockCheckBox;
+    private bool _showTime;
+    private bool _showTimeAvailable = true;
+    private ContextMenu? _moreMenu;
     private readonly Border _regionFrame;
     private readonly Border _controlStrip;
     private readonly Canvas _root;
@@ -126,8 +145,10 @@ internal sealed class RecordingControlWindow : Window
         _regionFrame = BuildRegionFrame();
         _root.Children.Add(_regionFrame);
 
-        _controlStrip = BuildControlStrip(out _primaryButton, out _pauseButton, out _statusText, out _timerText, out _clockCheckBox);
+        _controlStrip = BuildControlStrip(out _primaryButton, out _pauseButton, out _statusText, out _timerText,
+            out _moreButton, out _cancelButton);
         _root.Children.Add(_controlStrip);
+        ShowReadyPrimary();
         UpdatePauseButton();
 
         Content = _root;
@@ -178,12 +199,171 @@ internal sealed class RecordingControlWindow : Window
     internal void ShowCompletionStatus(string text)
     {
         Opacity = 1;
-        _clockCheckBox.IsEnabled = false;
+        _showTimeAvailable = false;
         _statusText.Text = text;
-        _primaryButton.Content = UiText.Get("Text_88DAAEEDFE4C");
+        SetButtonContent(_primaryButton, glyph: null, UiText.Get("Text_88DAAEEDFE4C"));
         _primaryButton.IsEnabled = false;
         _completionProgress.Visibility = Visibility.Visible;
+        UpdateSessionButtons();
         AnnounceStatus();
+    }
+
+    /// <summary>
+    /// The time stamp drawn inside the recorded area (the ⋯ menu's "show time"). It replaces the
+    /// former "clock" check box on the bar.
+    /// </summary>
+    internal bool ShowTime
+    {
+        get => _showTime;
+        set
+        {
+            if (_showTime == value || (value && !_showTimeAvailable)) return;
+            _showTime = value;
+            SetWallClockEnabled(value);
+        }
+    }
+
+    /// <summary>The ⋯ menu while it is open.</summary>
+    internal ContextMenu? MoreMenuForTest => _moreMenu;
+
+    internal Button PrimaryButtonForTest => _primaryButton;
+
+    internal Button PauseButtonForTest => _pauseButton;
+
+    internal Button MoreButtonForTest => _moreButton;
+
+    internal Button CancelButtonForTest => _cancelButton;
+
+    /// <summary>The visible words on a bar button (its glyph is decoration).</summary>
+    internal static string ButtonLabel(Button button) => button.Content switch
+    {
+        string text => text,
+        Panel panel => panel.Children.OfType<TextBlock>().LastOrDefault()?.Text ?? string.Empty,
+        _ => string.Empty,
+    };
+
+    /// <summary>
+    /// The ⋯ menu: "show time" as a checked entry. It opens below the button and, like the bar, is
+    /// kept out of the recording.
+    /// </summary>
+    internal ContextMenu CreateMoreMenu()
+    {
+        var menu = new ContextMenu { PlacementTarget = _moreButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, VerticalOffset = 4 };
+        AutomationProperties.SetName(menu, UiText.Get("Onboard_RecordMore"));
+        var time = new MenuItem
+        {
+            Header = UiText.Get("Onboard_RecordShowTime"),
+            IsCheckable = true,
+            IsChecked = _showTime,
+            IsEnabled = _showTimeAvailable && !_stopping && !_finished,
+            MinHeight = 36,
+            ToolTip = UiText.Get("Text_E2395EBF6C65"),
+        };
+        // The shared menu template draws no check mark; the icon column carries it.
+        time.Icon = _showTime ? MenuGlyph(CheckGlyph) : null;
+        AutomationProperties.SetName(time, UiText.Get("Onboard_RecordShowTime"));
+        AutomationProperties.SetHelpText(time, UiText.Get("Text_E2395EBF6C65"));
+        time.Click += (_, _) =>
+        {
+            menu.IsOpen = false;
+            ShowTime = !ShowTime;
+        };
+        menu.Items.Add(time);
+        menu.Opened += (_, _) =>
+        {
+            // The popup is its own window; exclude it from capture like this bar.
+            if (PresentationSource.FromVisual(menu) is HwndSource popup)
+                _ = SetWindowDisplayAffinity(popup.Handle, WdaExcludeFromCapture);
+        };
+        return menu;
+    }
+
+    private void OpenMoreMenu()
+    {
+        if (_moreMenu is { IsOpen: true }) return;
+        ContextMenu menu = CreateMoreMenu();
+        menu.Closed += (_, _) => { if (ReferenceEquals(_moreMenu, menu)) _moreMenu = null; };
+        _moreMenu = menu;
+        menu.IsOpen = true;
+    }
+
+    private static FrameworkElement MenuGlyph(Geometry geometry)
+    {
+        var glyph = new System.Windows.Shapes.Path
+        {
+            Data = geometry, Width = 16, Height = 16, Stretch = Stretch.Uniform, StrokeThickness = 1.8,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
+        };
+        glyph.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Text.Primary");
+        return glyph;
+    }
+
+    /// <summary>An icon and a short name on one bar button; the glyph takes the button's text colour.</summary>
+    private static void SetButtonContent(Button button, Geometry? glyph, string label)
+    {
+        if (glyph is null)
+        {
+            button.Content = label;
+            return;
+        }
+
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        var path = new System.Windows.Shapes.Path
+        {
+            Data = glyph, Width = 12, Height = 12, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center,
+        };
+        path.SetBinding(System.Windows.Shapes.Shape.FillProperty,
+            new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = button });
+        panel.Children.Add(path);
+        panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        button.Content = panel;
+    }
+
+    /// <summary>Before recording: ● and "start recording", the area's size and frame rate in the tooltip.</summary>
+    private void ShowReadyPrimary()
+    {
+        string label = UiText.Get(_settings.UseStartDelay ? "Text_2AA27E2CEB7C" : "Text_255C28FD0AC2");
+        SetButtonContent(_primaryButton, RecordGlyph, label);
+        AutomationProperties.SetName(_primaryButton, label);
+        _primaryButton.ToolTip = UiText.Format("Onboard_RecordAreaTip", FormatReadyStatus());
+        AutomationProperties.SetHelpText(_primaryButton, (string)_primaryButton.ToolTip);
+    }
+
+    /// <summary>Cancel exists only before recording: once recording runs, stop is the way out.</summary>
+    /// <summary>While recording: ■ Stop in the danger style and ❚❚ Pause; cancel leaves the bar.</summary>
+    private void ShowRecordingControls()
+    {
+        SetButtonContent(_primaryButton, StopGlyph, UiText.Get("Onboard_RecordStop"));
+        AutomationProperties.SetName(_primaryButton, UiText.Get("Text_74C6AEBB2B6D"));
+        _primaryButton.Style = TryStyle("Button.Danger");
+        _pauseButton.Visibility = Visibility.Visible;
+        _pauseButton.IsEnabled = true;
+        UpdatePauseButton();
+        UpdateSessionButtons();
+    }
+
+    private bool _previewRecording;
+
+    /// <summary>
+    /// Evidence hook: the bar exactly as recording shows it (paused or not), without starting a
+    /// recorder or showing the window.
+    /// </summary>
+    internal void PreviewRecordingForTest(bool paused, TimeSpan elapsed)
+    {
+        _previewRecording = true;
+        _paused = paused;
+        _readyAnnounced = true;
+        ShowRecordingControls();
+        _statusText.Text = UiText.Get(paused ? "RecordingPause_Status" : "Text_38B12BA58C48");
+        _statusText.Foreground = paused ? TryBrush("Text.Primary", Colors.White) : TryBrush("State.Danger", Colors.OrangeRed);
+        _timerText.Text = elapsed.ToString(@"mm\:ss", CultureInfo.InvariantCulture);
+    }
+
+    private void UpdateSessionButtons()
+    {
+        bool beforeRecording = !IsRecording && !_previewRecording && !_stopping && !_completionPending && !_finished;
+        _cancelButton.Visibility = beforeRecording ? Visibility.Visible : Visibility.Collapsed;
+        _moreButton.IsEnabled = !_stopping && !_completionPending && !_finished;
     }
 
     private bool _completionPending;
@@ -250,7 +430,8 @@ internal sealed class RecordingControlWindow : Window
         out Button pause,
         out TextBlock status,
         out TextBlock timer,
-        out CheckBox clockCheck)
+        out Button more,
+        out Button cancel)
     {
         var panel = new Grid { Margin = new Thickness(10, 8, 10, 8) };
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -260,15 +441,14 @@ internal sealed class RecordingControlWindow : Window
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+        // ● Start recording, then ■ Stop: an icon and a short name, the size and rate in the tooltip.
         primary = new Button
         {
-            Content = _settings.UseStartDelay ? UiText.Get("Text_2AA27E2CEB7C") : UiText.Get("Text_255C28FD0AC2"),
             MinWidth = 108,
             VerticalAlignment = VerticalAlignment.Center,
             Style = TryStyle("Button.Primary"),
         };
         primary.Click += (_, _) => OnPrimaryClicked();
-        AutomationProperties.SetName(primary, UiText.Get("Text_78EFED021492"));
         Grid.SetColumn(primary, 0);
         panel.Children.Add(primary);
 
@@ -286,9 +466,9 @@ internal sealed class RecordingControlWindow : Window
         Grid.SetColumn(pause, 1);
         panel.Children.Add(pause);
 
+        // Results only: empty before recording, then the recording state.
         status = new TextBlock
         {
-            Text = FormatReadyStatus(),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(12, 0, 12, 0),
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
@@ -302,7 +482,7 @@ internal sealed class RecordingControlWindow : Window
         {
             Text = "00:00",
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 12, 0),
+            Margin = new Thickness(0, 0, 8, 0),
             Foreground = TryBrush("Text.Primary", Colors.White),
             FontFamily = TryFont("Font.Mono"),
             FontSize = 15,
@@ -311,26 +491,32 @@ internal sealed class RecordingControlWindow : Window
         Grid.SetColumn(timer, 3);
         panel.Children.Add(timer);
 
-        clockCheck = new CheckBox
+        // The time stamp option lives in the ⋯ menu instead of a check box on the bar.
+        more = new Button
         {
-            Content = UiText.Get("Text_A658DC1B9407"),
-            IsChecked = false,
+            MinWidth = 40,
+            Padding = new Thickness(6),
+            Margin = new Thickness(0, 0, 4, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0),
-            FontSize = 13,
-            Foreground = TryBrush("Text.Primary", Colors.White),
-            ToolTip = UiText.Get("Text_54A00B1A2FDB"),
+            Style = TryStyle("Button.Ghost"),
+            ToolTip = UiText.Get("Onboard_RecordMoreHelp"),
         };
-        clockCheck.Checked += (_, _) => SetWallClockEnabled(true);
-        clockCheck.Unchecked += (_, _) => SetWallClockEnabled(false);
-        AutomationProperties.SetName(clockCheck, UiText.Get("Text_D1E229E81B83"));
-        AutomationProperties.SetHelpText(
-            clockCheck,
-            UiText.Get("Text_E2395EBF6C65"));
-        Grid.SetColumn(clockCheck, 4);
-        panel.Children.Add(clockCheck);
+        var moreGlyph = new System.Windows.Shapes.Path
+        {
+            Data = MoreGlyph, Width = 20, Height = 20, StrokeThickness = 2.4,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+        };
+        moreGlyph.SetBinding(System.Windows.Shapes.Shape.StrokeProperty,
+            new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = more });
+        more.Content = moreGlyph;
+        more.Click += (_, _) => OpenMoreMenu();
+        AutomationProperties.SetName(more, UiText.Get("Onboard_RecordMore"));
+        AutomationProperties.SetHelpText(more, UiText.Get("Onboard_RecordMoreHelp"));
+        Grid.SetColumn(more, 4);
+        panel.Children.Add(more);
 
-        var cancel = new Button
+        // Before recording only; while recording, stop is the way out.
+        cancel = new Button
         {
             Content = UiText.Get("Text_BE876433993A"),
             MinWidth = 64,
@@ -469,7 +655,7 @@ internal sealed class RecordingControlWindow : Window
                     _screenRegion.Height)
                 .ClampTo(MonitorEnumerator.GetVirtualDesktopBounds())
                 .ToPixelBounds();
-            _statusText.Text = FormatReadyStatus();
+            ShowReadyPrimary();
             ApplyPhysicalLayout(positionHwnd: true);
         }
         catch (InvalidOperationException ex)
@@ -574,7 +760,7 @@ internal sealed class RecordingControlWindow : Window
         {
             _log.LogError(ex, "Could not start recording");
             CloseWallClock();
-            _clockCheckBox.IsChecked = false;
+            _showTime = false;
             _statusText.Text = UiText.Get("Text_48C3B6EBA637");
             _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
             AnnounceStatus();
@@ -587,11 +773,7 @@ internal sealed class RecordingControlWindow : Window
 
         _readyAnnounced = false;
         _paused = false;
-        _primaryButton.Content = UiText.Get("Text_74C6AEBB2B6D");
-        _primaryButton.Style = TryStyle("Button.Danger");
-        _pauseButton.Visibility = Visibility.Visible;
-        _pauseButton.IsEnabled = true;
-        UpdatePauseButton();
+        ShowRecordingControls();
         _statusText.Text = UiText.Get("Text_72A13C33A79E");
         _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         AnnounceStatus();
@@ -761,7 +943,9 @@ internal sealed class RecordingControlWindow : Window
 
     private void UpdatePauseButton()
     {
-        _pauseButton.Content = UiText.Get(_paused ? "RecordingPause_Resume" : "RecordingPause_Pause");
+        // ❚❚ Pause or ▶ Resume: the glyph shows what pressing it does.
+        SetButtonContent(_pauseButton, _paused ? ResumeGlyph : PauseGlyph,
+            UiText.Get(_paused ? "RecordingPause_Resume" : "RecordingPause_Pause"));
         string help = UiText.Get(_paused ? "RecordingPause_ResumeHelp" : "RecordingPause_PauseHelp");
         // Read on every refresh so a chord changed in settings shows on the next state change;
         // an unassigned chord adds nothing.
@@ -826,12 +1010,13 @@ internal sealed class RecordingControlWindow : Window
         _stopping = true;
         Opacity = 1;
         _controlStrip.Visibility = Visibility.Visible;
-        _clockCheckBox.IsEnabled = false;
+        _showTimeAvailable = false;
         _pauseButton.IsEnabled = false;
         Stopping?.Invoke(this, EventArgs.Empty);
         _elapsedTimer?.Stop();
         _primaryButton.IsEnabled = false;
-        _primaryButton.Content = UiText.Get("Text_4E7752D53B90");
+        SetButtonContent(_primaryButton, glyph: null, UiText.Get("Text_4E7752D53B90"));
+        UpdateSessionButtons();
         _completionProgress.Visibility = Visibility.Visible;
         _statusText.Text = UiText.Get("Text_542965B456C7");
         AnnounceStatus();
@@ -934,7 +1119,7 @@ internal sealed class RecordingControlWindow : Window
 
                 break;
             case Key.Enter or Key.Space when !IsRecording && _countdownTimer is null:
-                if (_clockCheckBox.IsKeyboardFocusWithin)
+                if (_moreButton.IsKeyboardFocusWithin || _cancelButton.IsKeyboardFocusWithin)
                 {
                     break;
                 }
@@ -973,7 +1158,7 @@ internal sealed class RecordingControlWindow : Window
                 _screenRegion.Height)
             .ClampTo(virtualPixels)
             .ToPixelBounds();
-        _statusText.Text = FormatReadyStatus();
+        ShowReadyPrimary();
         ApplyPhysicalLayout(positionHwnd: true);
     }
 
@@ -1112,9 +1297,9 @@ internal sealed class RecordingControlWindow : Window
                 _wallClock = null;
             }
 
-            if (_clockCheckBox.IsChecked == true && !_stopping && !_finished)
+            if (_showTime && !_stopping && !_finished)
             {
-                _clockCheckBox.IsChecked = false;
+                _showTime = false;
             }
         }
     }
