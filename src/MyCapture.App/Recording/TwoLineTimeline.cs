@@ -94,8 +94,20 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private double _dragAnchorMs;
     private double _dragStartX;
     private bool _dragMoved;
+    private TimelineRenderSurface? _dragStrip;
+    private TrimHandle _pendingHandle = TrimHandle.In;
 
-    private enum DragMode { None, Playhead, BrushBody, BrushLeft, BrushRight, TrimIn, TrimOut }
+    /// <summary>
+    /// True only after the user took hold of a handle (pressed it, dragged it, or chose it
+    /// with the Trim command). A plain click or drag on the strip seeks, and leaves the arrow
+    /// keys to the playhead; without this, every click turned ←/→ into handle nudges.
+    /// </summary>
+    private bool _handleArmed;
+
+    /// <summary>Half the width of the handle itself; a press here drags at once.</summary>
+    private const double HandleBodyGrab = 8.0;
+
+    private enum DragMode { None, Playhead, BrushBody, BrushLeft, BrushRight, TrimIn, TrimOut, TrimPending }
 
     private enum TrimHandle { In, Out }
 
@@ -258,6 +270,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _playheadMs = 0;
         _trimModeEnabled = true;
         _activeTrimHandle = TrimHandle.In;
+        _handleArmed = false;
 
         // The two strips must look different immediately. Select one coarse overview interval
         // by default so the bottom line visibly expands the frames between two heavy marks.
@@ -371,7 +384,22 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         }
 
         _activeTrimHandle = end ? TrimHandle.Out : TrimHandle.In;
+        _handleArmed = true;
         _ = Focus();
+        InvalidateRange();
+    }
+
+    /// <summary>Whether a handle is selected for keyboard adjustment (see <see cref="ActivateTrimHandle"/>).</summary>
+    internal bool IsHandleArmed => _handleArmed;
+
+    private void SetHandleArmed(bool armed)
+    {
+        if (_handleArmed == armed)
+        {
+            return;
+        }
+
+        _handleArmed = armed;
         InvalidateRange();
     }
 
@@ -397,6 +425,21 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     internal void MoveTrimDragForTest(double ms) => MoveTrimDrag(ms);
 
     internal void EndTrimDragForTest() => EndTrimDrag();
+
+    /// <summary>A pointer press on the trim strip (or the detail strip) at strip coordinates.</summary>
+    internal void PressForTest(double x, double y, bool overview = true) =>
+        PressAt(overview ? _overview : _detail, new Point(x, y), overview);
+
+    /// <summary>Pointer movement after <see cref="PressForTest"/>, without mouse capture.</summary>
+    internal void MoveForTest(double x) => DragTo(x);
+
+    /// <summary>Pointer release after <see cref="PressForTest"/>.</summary>
+    internal void ReleaseForTest(double x, double y) => ReleaseAt(new Point(x, y));
+
+    /// <summary>Pixel position of a source time on the trim strip, for tests that press there.</summary>
+    internal double OverviewPxForTest(double ms) => OverviewMsToPx(ms, _overview.ActualWidth);
+
+    internal double OverviewTrackMiddleForTest => (LabelLaneHeight + OverviewTrackBottom(_overview.ActualHeight)) / 2.0;
 
     /// <summary>Names the action a press at (<paramref name="x"/>, <paramref name="y"/>) on the trim strip starts.</summary>
     internal string OverviewHitForTest(double x, double y, double width) => HitTestOverview(x, y, width).ToString();
@@ -469,6 +512,23 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private void OnStripDown(TimelineRenderSurface strip, MouseButtonEventArgs e, bool isOverview)
     {
         Point position = e.GetPosition(strip);
+        if (strip.ActualWidth <= 0)
+        {
+            return;
+        }
+
+        PressAt(strip, position, isOverview);
+        strip.CaptureMouse();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// A pointer press on a strip. On a handle's own body or its chip the drag starts at once;
+    /// in the wider grab zone around a handle the press stays undecided until the pointer
+    /// moves, so a click there seeks like anywhere else and only a drag moves the handle.
+    /// </summary>
+    private void PressAt(TimelineRenderSurface strip, Point position, bool isOverview)
+    {
         double x = position.X;
         double width = strip.ActualWidth;
         if (width <= 0)
@@ -478,16 +538,25 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         _dragStartX = x;
         _dragMoved = false;
+        _dragStrip = strip;
         if (_trimModeEnabled)
         {
             _ = Focus();
         }
 
         DragMode mode;
+        bool onHandleBody = false;
         if (isOverview)
         {
             mode = HitTestOverview(x, position.Y, width);
-            if (mode == DragMode.BrushBody)
+            if (mode is DragMode.TrimIn or DragMode.TrimOut)
+            {
+                ChipLayout chips = LayoutChips(width);
+                double handlePx = OverviewMsToPx(mode == DragMode.TrimIn ? _trim.InMs : _trim.OutMs, width);
+                Rect chip = mode == DragMode.TrimIn ? chips.In : chips.Out;
+                onHandleBody = chip.Contains(x, position.Y) || Math.Abs(x - handlePx) <= HandleBodyGrab;
+            }
+            else if (mode == DragMode.BrushBody)
             {
                 _dragAnchorMs = OverviewPxToMs(x, width) - _viewport.ViewStartMs;
             }
@@ -511,7 +580,11 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             }
 
             mode = onIn ? DragMode.TrimIn : onOut ? DragMode.TrimOut : DragMode.Playhead;
-            if (mode == DragMode.Playhead)
+            if (mode is DragMode.TrimIn or DragMode.TrimOut)
+            {
+                onHandleBody = Math.Abs(x - (mode == DragMode.TrimIn ? inPx : outPx)) <= HandleBodyGrab;
+            }
+            else
             {
                 SeekTo(_viewport.PxToMs(x, width), snap: true, followDetail: false);
             }
@@ -519,16 +592,25 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         if (mode is DragMode.TrimIn or DragMode.TrimOut)
         {
-            BeginTrimDrag(mode == DragMode.TrimIn ? TrimHandle.In : TrimHandle.Out);
+            TrimHandle handle = mode == DragMode.TrimIn ? TrimHandle.In : TrimHandle.Out;
+            if (onHandleBody)
+            {
+                SetHandleArmed(true);
+                BeginTrimDrag(handle);
+            }
+            else
+            {
+                _pendingHandle = handle;
+                _drag = DragMode.TrimPending;
+            }
         }
         else
         {
+            SetHandleArmed(false);
             _drag = mode;
         }
 
-        strip.CaptureMouse();
         UpdateCursor(strip, position);
-        e.Handled = true;
     }
 
     private void OnStripMove(TimelineRenderSurface eventStrip, MouseEventArgs e)
@@ -539,25 +621,20 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             return;
         }
 
-        TimelineRenderSurface strip = _drag is DragMode.BrushBody or DragMode.BrushLeft or DragMode.BrushRight
-            ? _overview
-            : _detail;
-        if (_drag is DragMode.TrimIn or DragMode.TrimOut)
-        {
-            strip = _overview.IsMouseCaptured ? _overview : _detail;
-        }
-        if (_drag == DragMode.Playhead)
-        {
-            strip = _detail.IsMouseCaptured ? _detail : _overview;
-        }
+        TimelineRenderSurface strip = _dragStrip ?? eventStrip;
+        DragTo(e.GetPosition(strip).X);
+    }
 
+    /// <summary>Pointer movement while a press is held, in the pressed strip's coordinates.</summary>
+    private void DragTo(double x)
+    {
+        TimelineRenderSurface strip = _dragStrip ?? _overview;
         double width = strip.ActualWidth;
-        if (width <= 0)
+        if (_drag == DragMode.None || width <= 0)
         {
             return;
         }
 
-        double x = e.GetPosition(strip).X;
         if (Math.Abs(x - _dragStartX) >= SystemParameters.MinimumHorizontalDragDistance)
         {
             _dragMoved = true;
@@ -565,6 +642,16 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         switch (_drag)
         {
+            case DragMode.TrimPending:
+                if (_dragMoved)
+                {
+                    SetHandleArmed(true);
+                    BeginTrimDrag(_pendingHandle);
+                    MoveTrimDrag(ReferenceEquals(strip, _overview)
+                        ? OverviewPxToMs(x, width)
+                        : _viewport.PxToMs(x, width));
+                }
+                break;
             case DragMode.Playhead:
                 bool onDetail = ReferenceEquals(strip, _detail);
                 if (onDetail)
@@ -603,12 +690,27 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     private void EndDrag(TimelineRenderSurface strip, MouseButtonEventArgs e)
     {
+        TimelineRenderSurface pressed = _dragStrip ?? strip;
+        ReleaseAt(e.GetPosition(pressed));
+        if (pressed.IsMouseCaptured)
+        {
+            pressed.ReleaseMouseCapture();
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>Pointer release in the pressed strip's coordinates; a press that never moved seeks.</summary>
+    private void ReleaseAt(Point position)
+    {
+        TimelineRenderSurface strip = _dragStrip ?? _overview;
         DragMode completed = _drag;
-        bool coarseClick = completed == DragMode.BrushBody && !_dragMoved && ReferenceEquals(strip, _overview);
-        Point position = e.GetPosition(strip);
+        bool overview = ReferenceEquals(strip, _overview);
+        bool coarseClick = completed == DragMode.BrushBody && !_dragMoved && overview;
+        bool pendingClick = completed == DragMode.TrimPending;
         double width = strip.ActualWidth;
 
-        // Finish the drag before releasing capture, so LostMouseCapture does not report it twice.
+        // Finish the drag before capture is released, so LostMouseCapture does not report it twice.
         bool trim = completed is DragMode.TrimIn or DragMode.TrimOut;
         if (trim)
         {
@@ -619,26 +721,28 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             _drag = DragMode.None;
         }
 
-        if (strip.IsMouseCaptured)
-        {
-            strip.ReleaseMouseCapture();
-        }
-
+        _dragStrip = null;
         if (!trim)
         {
-            if (coarseClick && width > 0)
+            if ((coarseClick || pendingClick) && width > 0)
             {
-                SeekFromOverview(OverviewPxToMs(position.X, width));
+                if (overview)
+                {
+                    SeekFromOverview(OverviewPxToMs(position.X, width));
+                }
+                else
+                {
+                    SeekTo(_viewport.PxToMs(position.X, width), snap: true, followDetail: false);
+                }
             }
 
-            if (completed == DragMode.Playhead || coarseClick)
+            if (completed == DragMode.Playhead || coarseClick || pendingClick)
             {
                 PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
             }
         }
 
         UpdateCursor(strip, position);
-        e.Handled = true;
     }
 
     private void OnLostMouseCapture(object sender, MouseEventArgs e)
@@ -651,6 +755,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         bool reconcile = _drag == DragMode.Playhead;
         _drag = DragMode.None;
+        _dragStrip = null;
         if (reconcile)
         {
             PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
@@ -762,17 +867,22 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         PlayheadChanged?.Invoke(this, _playheadMs);
     }
 
+    /// <summary>
+    /// Keyboard nudges for a handle the user took hold of. Everything else, Tab included, is
+    /// left to the window: Tab keeps moving focus, ←/→ and Home/End move the playhead, and
+    /// X (the Trim command) switches handles. Esc lets go of the handle.
+    /// </summary>
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (!_trimModeEnabled || !IsKeyboardFocusWithin)
+        // Tunnelling key events only reach this control while focus is within it.
+        if (!_trimModeEnabled || !_handleArmed)
         {
             return;
         }
 
-        if (e.Key == Key.Tab)
+        if (e.Key == Key.Escape)
         {
-            _activeTrimHandle = _activeTrimHandle == TrimHandle.In ? TrimHandle.Out : TrimHandle.In;
-            InvalidateRange();
+            SetHandleArmed(false);
             e.Handled = true;
             return;
         }
@@ -784,8 +894,6 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         {
             Key.Left => current - step,
             Key.Right => current + step,
-            Key.Home => 0,
-            Key.End => _durationMs,
             _ => double.NaN,
         };
         if (!double.IsFinite(target))
@@ -1183,7 +1291,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     }
 
     private bool ShowsFocusOn(TrimHandle handle) =>
-        _activeTrimHandle == handle && (IsKeyboardFocusWithin || IsTrimDragging);
+        _activeTrimHandle == handle && _handleArmed && (IsKeyboardFocusWithin || IsTrimDragging);
 
     private readonly record struct ChipLayout(Rect In, Rect Out, FormattedText InText, FormattedText OutText);
 

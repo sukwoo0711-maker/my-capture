@@ -79,6 +79,12 @@ internal sealed class VideoEditorWindow : Window
     private int _commandBarLevel = -1;
     private bool _fittingCommandBar;
     private ScrollViewer? _layerTracksScroll;
+    private Border _layerPanel = null!;
+    private ColumnDefinition _layerPanelColumn = null!;
+    private System.Windows.Controls.Primitives.ToggleButton _layerPanelToggle = null!;
+    private TextBlock _layerPanelCount = null!;
+    private bool _layerPanelUserChoice;
+    private bool _settingLayerPanel;
     private readonly Border _trimPreviewBadge;
     private readonly TextBlock _trimPreviewBadgeText;
     private readonly MediaElementPreviewEngine _previewEngine;
@@ -322,6 +328,7 @@ internal sealed class VideoEditorWindow : Window
 
         KeyDown += OnKeyDown;
         PreviewKeyDown += OnPreviewImeKeyDown;
+        PreviewKeyDown += OnPreviewSpaceKeyDown;
         _hangulRelay = new HangulShortcutRelay(this,
             () => _mediaReady && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase,
             HandleShortcut);
@@ -534,6 +541,11 @@ internal sealed class VideoEditorWindow : Window
         layerPanel.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         Grid.SetRow(layerPanel, 1);
         Grid.SetColumn(layerPanel, 1); upper.Children.Add(layerPanel);
+        // A recording with nothing but a trim keeps the whole width for the preview: the
+        // layer panel only takes its column while it is shown.
+        _layerPanel = layerPanel;
+        _layerPanelColumn = upper.ColumnDefinitions[1];
+        ApplyLayerPanelVisibility();
         root.Children.Add(upper);
         // Fit the command bar to the window. Only a new width can change what fits, and
         // the grid, unlike the bar, does not grow with the bar's content.
@@ -590,8 +602,9 @@ internal sealed class VideoEditorWindow : Window
             // larger windows retain enough height for both time strips and layer tracks.
             // Grid.DesiredSize may already be clipped by its star-row allocation.
             // Reserve the independent minimum of its auto command rows and readable list.
-            double requiredLayers = ((Grid)tools).RowDefinitions.Sum(row =>
-                row.Height.IsStar ? row.MinHeight : row.ActualHeight);
+            double requiredLayers = layerPanel.Visibility == Visibility.Visible
+                ? ((Grid)tools).RowDefinitions.Sum(row => row.Height.IsStar ? row.MinHeight : row.ActualHeight)
+                : 0;
             double requiredPreview = header.DesiredSize.Height + Math.Max(
                 previewStack.MinHeight
                     + preview.Padding.Top + preview.Padding.Bottom + preview.BorderThickness.Top + preview.BorderThickness.Bottom,
@@ -696,6 +709,8 @@ internal sealed class VideoEditorWindow : Window
         editing.Children.Add(_trimToolButton);
         editing.Children.Add(_addTextToolButton);
         editing.Children.Add(frameEdit);
+        _layerPanelToggle = LayerPanelToggle();
+        editing.Children.Add(_layerPanelToggle);
         Grid.SetColumn(editing, 2);
         bar.Children.Add(editing);
 
@@ -731,6 +746,95 @@ internal sealed class VideoEditorWindow : Window
         button.Margin = new Thickness(0, 0, 6, 0);
         return button;
     }
+
+    /// <summary>
+    /// The switch for the layer panel, with the layer count. The panel opens by itself for
+    /// the first layer and closes again when the last one goes, unless the user chose a
+    /// state by hand; most recordings are only trimmed and keep the preview wide.
+    /// </summary>
+    private System.Windows.Controls.Primitives.ToggleButton LayerPanelToggle()
+    {
+        StackPanel content = BuildIconLabel("Icon.Layers", UiText.Get("VideoEditorUx_LayerPanel"));
+        content.MinHeight = 20;
+        _toolLabels.Add(content.Children.OfType<TextBlock>().Single());
+        _layerPanelCount = new TextBlock
+        {
+            Margin = new Thickness(4, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            FontWeight = FontWeights.SemiBold,
+            Visibility = Visibility.Collapsed,
+        };
+        content.Children.Add(_layerPanelCount);
+        var toggle = new System.Windows.Controls.Primitives.ToggleButton
+        {
+            Name = "VideoLayerPanelToggle",
+            Content = content,
+            MinWidth = 44,
+            MinHeight = 42,
+            Padding = new Thickness(8, 4, 8, 4),
+            Margin = new Thickness(0, 0, 6, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = UiText.Get("VideoEditorUx_LayerPanelHelp"),
+        };
+        AutomationProperties.SetName(toggle, UiText.Get("VideoEditorUx_LayerPanel"));
+        AutomationProperties.SetHelpText(toggle, UiText.Get("VideoEditorUx_LayerPanelHelp"));
+        toggle.Checked += (_, _) => OnLayerPanelToggled();
+        toggle.Unchecked += (_, _) => OnLayerPanelToggled();
+        return toggle;
+    }
+
+    private void OnLayerPanelToggled()
+    {
+        if (!_settingLayerPanel)
+        {
+            _layerPanelUserChoice = true;
+        }
+
+        ApplyLayerPanelVisibility();
+    }
+
+    private void ApplyLayerPanelVisibility()
+    {
+        if (_layerPanel is null || _layerPanelColumn is null || _layerPanelToggle is null)
+        {
+            return;
+        }
+
+        bool visible = _layerPanelToggle.IsChecked == true;
+        _layerPanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        _layerPanelColumn.MinWidth = visible ? 220 : 0;
+        _layerPanelColumn.MaxWidth = visible ? 330 : 0;
+        _layerPanelColumn.Width = visible ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+    }
+
+    /// <summary>Follows the document: the panel shows while there are layers, until the user decides.</summary>
+    private void SyncLayerPanelToLayers(int layerCount)
+    {
+        if (_layerPanelToggle is null)
+        {
+            return;
+        }
+
+        _layerPanelCount.Text = layerCount.ToString(CultureInfo.CurrentCulture);
+        _layerPanelCount.Visibility = layerCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+        bool shouldShow = layerCount > 0;
+        if (_layerPanelUserChoice || (_layerPanelToggle.IsChecked == true) == shouldShow)
+        {
+            return;
+        }
+
+        _settingLayerPanel = true;
+        try
+        {
+            _layerPanelToggle.IsChecked = shouldShow;
+        }
+        finally
+        {
+            _settingLayerPanel = false;
+        }
+    }
+
+    internal bool IsLayerPanelVisibleForTest => _layerPanel.Visibility == Visibility.Visible && _layerPanelColumn.ActualWidth > 0;
 
     private Border CommandSeparator() => new()
     {
@@ -812,9 +916,17 @@ internal sealed class VideoEditorWindow : Window
     /// </summary>
     internal void FitCommandBarForTest(double available) => _fitCommandBarForTest?.Invoke(available);
 
-    private void RefreshIdentityDetails(double durationMs) =>
+    private void RefreshIdentityDetails(double durationMs)
+    {
         _identityDetails.Text = UiText.Format("VideoEditorUx_HeaderDetails",
             TrimPresentation.Clock(durationMs), _recording.Width, _recording.Height, _recording.Fps);
+        // Recording health belongs with the clip's facts, not in every status line.
+        _identityDetails.ToolTip = RecordingHealth();
+    }
+
+    private string RecordingHealth() => _recording.DroppedFrames == 0
+        ? UiText.Get("Text_C1BE53C8ADAF")
+        : UiText.Format("Text_271908EF0BBE", _recording.DroppedFrames, _recording.DropRate);
 
     private Grid _timelineCache = null!;
 
@@ -1017,8 +1129,15 @@ internal sealed class VideoEditorWindow : Window
         controls.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         AutomationProperties.SetName(controls, UiText.Get("Text_A35D0E14E844"));
 
+        // One row, two groups: playback in the middle, as under any player, and the timeline
+        // view tools (zoom, fit, detail strip) at the right edge, next to what they change.
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var transport = new StackPanel
         {
+            Name = "VideoTransport",
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
@@ -1030,18 +1149,28 @@ internal sealed class VideoEditorWindow : Window
         play.MinWidth = 56;
         play.MinHeight = 48;
         play.Margin = new Thickness(0, 0, 3, 0);
+        _playButton = play;
+        UpdatePlayButton();
         transport.Children.Add(play);
         transport.Children.Add(MakeTransportIcon("Icon.FastForward", UiText.Get("Text_E5CAF7CFC916"), "Button.Ghost", () => StepCoarse(1)));
         transport.Children.Add(MakeTransportIcon("Icon.Last", UiText.Get("Text_DFCA22AB9F61"), "Button.Ghost", () => Seek(_timeline.OutMs)));
-        transport.Children.Add(Spacer(4));
+        transport.Children.Add(CommandSeparator());
         // Cluster 2: frame stepping.
         transport.Children.Add(MakeTransportIcon("Icon.StepBack", UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
         transport.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
-        transport.Children.Add(Spacer(4));
-        // Cluster 3: timeline view and range marks.
-        transport.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
-        transport.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
-        transport.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => { ShowDetailTimeline(); _timeline.FitAll(); }));
+        Grid.SetColumn(transport, 1);
+        row.Children.Add(transport);
+        // Cluster 3: timeline view, at the right edge of the row.
+        var view = new StackPanel
+        {
+            Name = "VideoTimelineViewTools",
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        view.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
+        view.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
+        view.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => { ShowDetailTimeline(); _timeline.FitAll(); }));
         // The frame-level detail strip is an expert view: folded by default so the trim
         // timeline is the one timeline people see first. Zooming opens it.
         _detailToggle = new System.Windows.Controls.Primitives.ToggleButton
@@ -1058,10 +1187,14 @@ internal sealed class VideoEditorWindow : Window
         _detailToggle.Checked += (_, _) => _timeline.SetDetailVisible(true);
         _detailToggle.Unchecked += (_, _) => _timeline.SetDetailVisible(false);
         _editControls.Add(_detailToggle);
-        transport.Children.Add(_detailToggle);
+        // Its caption folds with the tool captions in narrow windows; the icon and tooltip stay.
+        _toolLabels.Add(((StackPanel)_detailToggle.Content).Children.OfType<TextBlock>().Single());
+        view.Children.Add(_detailToggle);
+        Grid.SetColumn(view, 2);
+        row.Children.Add(view);
         // Start/end marks moved to the trim bar under the timeline, next to what they change.
-        Grid.SetRow(transport, 0);
-        controls.Children.Add(transport);
+        Grid.SetRow(row, 0);
+        controls.Children.Add(row);
 
         _cancelOperationButton = new Button
         {
@@ -1088,6 +1221,31 @@ internal sealed class VideoEditorWindow : Window
     }
 
     private static Border Spacer(double width) => new() { Width = width };
+
+    private Button? _playButton;
+
+    /// <summary>The play button shows what the next press does: play, or pause while playing.</summary>
+    private void UpdatePlayButton()
+    {
+        if (_playButton is null)
+        {
+            return;
+        }
+
+        bool playing = _isPlaying || _playRequested;
+        if (_playButton.Content is StackPanel content
+            && content.Children.OfType<System.Windows.Shapes.Path>().FirstOrDefault() is { } glyph)
+        {
+            glyph.Data = TryGeometry(playing ? "Icon.Pause" : "Icon.Play");
+        }
+
+        _playButton.ToolTip = UiText.Get(playing ? "VideoEditorUx_Pause" : "VideoEditorUx_Play");
+        _playButtonShowsPause = playing;
+    }
+
+    private bool _playButtonShowsPause;
+
+    internal bool PlayButtonShowsPauseForTest => _playButtonShowsPause;
 
     private void SetEditControlsEnabled(bool enabled)
     {
@@ -1215,6 +1373,7 @@ internal sealed class VideoEditorWindow : Window
         _media.Pause();
         _isPlaying = false;
         _playbackTimer.Stop();
+        UpdatePlayButton();
         if (_mediaReady)
         {
             // Windows Media Player reports the end position at its whole-second length (2000ms
@@ -1235,6 +1394,7 @@ internal sealed class VideoEditorWindow : Window
         _isPlaying = false;
         _playbackTimer.Stop();
         if (_mediaReady) { _media.Pause(); }
+        UpdatePlayButton();
     }
 
     private async void TogglePlay()
@@ -1242,11 +1402,13 @@ internal sealed class VideoEditorWindow : Window
         if (!_mediaReady || _operationRunning) { return; }
         if (_isPlaying || _playRequested)
         {
+            _resumeAfterScrub = false;
             PausePlayback();
             UpdateStatusForMode();
             return;
         }
         _playRequested = true;
+        UpdatePlayButton();
         long version = ++_playRequestVersion;
         double position = CurrentMs();
         if (position < _timeline.InMs || position >= _timeline.OutMs - 0.5) { position = _timeline.InMs; }
@@ -1261,12 +1423,13 @@ internal sealed class VideoEditorWindow : Window
                 _media.Play();
                 _isPlaying = true;
                 _playbackTimer.Start();
+                UpdatePlayButton();
                 _statusLabel.Text = UiText.Get("Text_FD6443988325");
             });
         }
         catch (OperationCanceledException)
         {
-            await Dispatcher.InvokeAsync(() => { if (version == _playRequestVersion) { _playRequested = false; } });
+            await Dispatcher.InvokeAsync(() => { if (version == _playRequestVersion) { _playRequested = false; UpdatePlayButton(); } });
         }
         catch (Exception ex)
         {
@@ -1288,12 +1451,23 @@ internal sealed class VideoEditorWindow : Window
         UpdatePositionLabel(clamped);
     }
 
+    /// <summary>
+    /// A scrub on the timeline during playback resumes it from the released position, as
+    /// players do; a trim drag or an explicit pause does not.
+    /// </summary>
+    private bool _resumeAfterScrub;
+
     /// <summary>Playhead visual intent moved during pointer interaction.</summary>
     private void OnTimelinePlayhead(object? sender, double ms)
     {
         if (!_mediaReady)
         {
             return;
+        }
+
+        if (_isPlaying || _playRequested)
+        {
+            _resumeAfterScrub = true;
         }
 
         PausePlayback();
@@ -1306,9 +1480,16 @@ internal sealed class VideoEditorWindow : Window
     /// <summary>Pointer release requests one priority exact reconciliation seek.</summary>
     private void OnTimelinePlayheadInteractionCompleted(object? sender, double ms)
     {
-        if (_mediaReady)
+        if (!_mediaReady)
         {
-            _previewSeeks.RequestExact(Math.Clamp(ms, 0, _durationMs));
+            return;
+        }
+
+        _previewSeeks.RequestExact(Math.Clamp(ms, 0, _durationMs));
+        if (_resumeAfterScrub && !_timeline.IsTrimDragging)
+        {
+            _resumeAfterScrub = false;
+            TogglePlay();
         }
     }
 
@@ -1383,6 +1564,7 @@ internal sealed class VideoEditorWindow : Window
             _isPlaying = false;
             _playbackTimer.Stop();
             position = _timeline.OutMs;
+            UpdatePlayButton();
             UpdateStatusForMode();
         }
 
@@ -1408,7 +1590,9 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
-        bool end = _timeline.IsKeyboardFocusWithin && !_timeline.IsEndHandleActive;
+        // The second press (button or X) moves on to the end handle; a mouse click on the
+        // button takes focus from the timeline, so the armed state decides, not focus.
+        bool end = _timeline.IsHandleArmed && !_timeline.IsEndHandleActive;
         _timeline.ActivateTrimHandle(end);
         Seek(end ? _timeline.OutMs : _timeline.InMs);
         _statusLabel.Text = UiText.Get(end ? "VideoEditorUx_TrimHandleEnd" : "VideoEditorUx_TrimHandleStart");
@@ -1453,6 +1637,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void BeginTrimInteraction()
     {
+        _resumeAfterScrub = false;
         PausePlayback();
         _trimInteractionBefore = _editDocument.Clone();
         UpdateTrimPreviewBadge();
@@ -1574,11 +1759,21 @@ internal sealed class VideoEditorWindow : Window
     private bool CanAddGraphic() => _mediaReady && !_operationRunning
         && _editDocument.FrameEditLayers.Count < VideoEditDocument.MaximumFrameLayerCount;
 
+    /// <summary>Default layer length, as in the layer dialog and the asset factory.</summary>
+    private const double DefaultLayerLengthMs = 3000;
+
+    /// <summary>
+    /// Where a new layer starts: at the playhead, pulled back so the layer gets its default
+    /// length inside the kept range. At the very end a layer would otherwise last one frame.
+    /// </summary>
+    private double NewLayerStartMs() =>
+        Math.Clamp(CurrentMs(), _timeline.InMs, Math.Max(_timeline.InMs, _timeline.OutMs - DefaultLayerLengthMs));
+
     private void AddShapeLayer(bool ellipse)
     {
         if (!CanAddGraphic()) { return; }
         AddGraphicLayer(VideoLayerAssets.CreateLayer(VideoLayerAssets.CreateShape(ellipse), ellipse ? UiText.Get("Text_C19FD6787279") : UiText.Get("Text_DC0760235344"),
-            CurrentMs(), _durationMs, _recording.Width, _recording.Height));
+            NewLayerStartMs(), _durationMs, _recording.Width, _recording.Height));
     }
 
     private async void AddImageLayer()
@@ -1586,7 +1781,7 @@ internal sealed class VideoEditorWindow : Window
         if (!CanAddGraphic()) { return; }
         var dialog = new OpenFileDialog { Title = UiText.Get("Text_21C405702C2B"), Filter = UiText.Get("Text_075F6F0A90DB"), CheckFileExists = true };
         if (dialog.ShowDialog(this) != true) { return; }
-        double time = CurrentMs();
+        double time = NewLayerStartMs();
         var operation = new CancellationTokenSource();
         _operationCts = operation;
         CancellationToken token = operation.Token;
@@ -1652,8 +1847,7 @@ internal sealed class VideoEditorWindow : Window
         }
 
         PausePlayback();
-        double start = Math.Clamp(CurrentMs(), _timeline.InMs, Math.Max(_timeline.InMs, _timeline.OutMs - 1));
-        var dialog = new TimedTextOverlayDialog(_durationMs, start, defaultEndMs: _timeline.OutMs) { Owner = this };
+        var dialog = new TimedTextOverlayDialog(_durationMs, NewLayerStartMs(), defaultEndMs: _timeline.OutMs) { Owner = this };
         if (dialog.ShowDialog() == true && dialog.Result is { } overlay)
         {
             RememberEdit();
@@ -1790,7 +1984,8 @@ internal sealed class VideoEditorWindow : Window
 
         if (seekTarget.HasValue)
         {
-            _previewSeeks.RequestExact(Math.Clamp(seekTarget.Value, 0, _durationMs));
+            // Move the playhead with the preview, so frame steps continue from what is shown.
+            Seek(seekTarget.Value);
         }
     }
 
@@ -1899,13 +2094,15 @@ internal sealed class VideoEditorWindow : Window
             _layerCanvas.Select(SelectedLayerId());
             // Layer tracks appear once there is a layer; empty "no layer" lanes are noise
             // under the trim tools. Add text / Add layer remain the entry points.
+            int layerCount = _editDocument.TextOverlays.Count + _editDocument.FrameEditLayers.Count;
             if (_layerTracksScroll is not null)
             {
-                _layerTracksScroll.Visibility = _editDocument.TextOverlays.Count + _editDocument.FrameEditLayers.Count > 0
+                _layerTracksScroll.Visibility = layerCount > 0
                     ? Visibility.Visible
                     : Visibility.Collapsed;
             }
 
+            SyncLayerPanelToLayers(layerCount);
             UpdateOverlayActionStates();
         }
         finally
@@ -2298,7 +2495,7 @@ internal sealed class VideoEditorWindow : Window
     }
     private void SetOperationRunning(bool running)
     {
-        if (running) { PausePlayback(); }
+        if (running) { _resumeAfterScrub = false; PausePlayback(); }
         _operationRunning = running;
         SetEditControlsEnabled(!running && _mediaReady);
         _overlayList.IsEnabled = !running && _mediaReady;
@@ -2432,6 +2629,21 @@ internal sealed class VideoEditorWindow : Window
     /// services, which mark it handled, so the bubbling KeyDown above never sees the letter
     /// while a Korean IME is in Hangul mode. Handling it here keeps it from the IME as well.
     /// </remarks>
+    /// <summary>
+    /// Space is play/pause everywhere outside text input. Without this a focused button (the
+    /// one just clicked, say "start here") would take Space as a click and repeat itself.
+    /// </summary>
+    private void OnPreviewSpaceKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space || Keyboard.Modifiers != ModifierKeys.None || !_mediaReady
+            || Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase)
+        {
+            return;
+        }
+
+        e.Handled = HandleShortcut(Key.Space, ModifierKeys.None);
+    }
+
     private void OnPreviewImeKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.ImeProcessed || !_mediaReady || Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
@@ -2465,15 +2677,29 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
 
-        string trim = TrimPresentation.KeptLength(_timeline.InMs, _timeline.OutMs) + " · "
-            + TrimPresentation.RemovedLength(_timeline.DurationMs, _timeline.InMs, _timeline.OutMs);
-        string recordingHealth = _recording.DroppedFrames == 0
-            ? UiText.Get("Text_C1BE53C8ADAF")
-            : UiText.Format("Text_271908EF0BBE", _recording.DroppedFrames, _recording.DropRate);
-        string layers = UiText.Format("Text_A610CF019CF2", _editDocument.TextOverlays.Count, _editDocument.FrameEditLayers.Count);
-        _statusLabel.Text = string.Create(
-            CultureInfo.CurrentCulture,
-            $"{trim} · {layers} · {recordingHealth}");
+        // The idle status says what to do next, not every count the editor knows: an
+        // untrimmed clip gets the trim hint, a trimmed one its result and how to apply it.
+        // Layer and drop counts appear only when there is something to report.
+        var parts = new List<string>(3)
+        {
+            _timeline.IsFullClip
+                ? UiText.Format("VideoEditorUx_StatusUntrimmed", TrimPresentation.Clock(_timeline.DurationMs))
+                : UiText.Format("VideoEditorUx_StatusTrimmed",
+                    TrimPresentation.KeptLength(_timeline.InMs, _timeline.OutMs),
+                    TrimPresentation.RemovedLength(_timeline.DurationMs, _timeline.InMs, _timeline.OutMs)),
+        };
+        int layerCount = _editDocument.TextOverlays.Count + _editDocument.FrameEditLayers.Count;
+        if (layerCount > 0)
+        {
+            parts.Add(UiText.Format("VideoEditorUx_StatusLayers", layerCount));
+        }
+
+        if (_recording.DroppedFrames > 0)
+        {
+            parts.Add(RecordingHealth());
+        }
+
+        _statusLabel.Text = string.Join(" · ", parts);
     }
 
     private void UpdatePositionLabel(double positionMs)
@@ -2557,6 +2783,7 @@ internal sealed class VideoEditorWindow : Window
         _timeline.Dispose();
         KeyDown -= OnKeyDown;
         PreviewKeyDown -= OnPreviewImeKeyDown;
+        PreviewKeyDown -= OnPreviewSpaceKeyDown;
         Closing -= OnClosingInternal;
         Loaded -= OnLoadedInternal;
         SourceInitialized -= OnSourceInitialized;

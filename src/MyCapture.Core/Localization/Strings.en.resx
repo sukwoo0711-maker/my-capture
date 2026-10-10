@@ -3503,7 +3503,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_NotTrimmed" xml:space="preserve"><value>Not trimmed</value></data>
   <data name="VideoEditorUx_TrimTimelineStatus" xml:space="preserve"><value>Start {0}, end {1}, kept {2}</value></data>
   <data name="VideoEditorUx_TrimTimelineName" xml:space="preserve"><value>Trim timeline</value></data>
-  <data name="VideoEditorUx_TrimTimelineHelp" xml:space="preserve"><value>The part between the two handles is kept; the dark hatched parts outside are cut when you save or export. Drag a handle, or press I and O to use the playhead as the start and end. With a handle selected, ←/→ moves one frame, Shift+←/→ moves ten frames, and Tab switches between the start and end handles.</value></data>
+  <data name="VideoEditorUx_TrimTimelineHelp" xml:space="preserve"><value>The part between the two handles is kept; the dark hatched parts outside are cut when you save or export. Drag a handle, or press I and O to use the playhead as the start and end. After pressing a handle or choosing it with Trim (X), ←/→ moves it one frame, Shift+←/→ ten frames, and X again switches between the start and end handles. Pressing anywhere else on the strip only moves the playhead.</value></data>
   <data name="VideoEditorUx_TrimOffHelp" xml:space="preserve"><value>Press Trim (X) to adjust the handles of the part to keep.</value></data>
   <data name="VideoEditorUx_ZoomLaneHelp" xml:space="preserve"><value>The box in the bottom lane is the range shown in the detailed timeline; drag it to move it, or drag its ends to resize it.</value></data>
   <data name="VideoEditorUx_TrimCut" xml:space="preserve"><value>Cut</value></data>
@@ -3515,8 +3515,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_ResetTrim" xml:space="preserve"><value>Full length</value></data>
   <data name="VideoEditorUx_ResetTrimHelp" xml:space="preserve"><value>Removes the trim and keeps the whole recording.</value></data>
   <data name="VideoEditorUx_TrimResetDone" xml:space="preserve"><value>Trim removed · full length kept</value></data>
-  <data name="VideoEditorUx_TrimHandleStart" xml:space="preserve"><value>Trim · start handle selected · ←/→ one frame, Shift ten frames, X or Tab for the end handle</value></data>
-  <data name="VideoEditorUx_TrimHandleEnd" xml:space="preserve"><value>Trim · end handle selected · ←/→ one frame, Shift ten frames, X or Tab for the start handle</value></data>
+  <data name="VideoEditorUx_TrimHandleStart" xml:space="preserve"><value>Trim · start handle selected · ←/→ one frame, Shift ten frames, X for the end handle, Esc to let go</value></data>
+  <data name="VideoEditorUx_TrimHandleEnd" xml:space="preserve"><value>Trim · end handle selected · ←/→ one frame, Shift ten frames, X for the start handle, Esc to let go</value></data>
   <data name="VideoEditorUx_TrimDraggingStart" xml:space="preserve"><value>Adjusting start · {0} · kept {1}</value></data>
   <data name="VideoEditorUx_TrimDraggingEnd" xml:space="preserve"><value>Adjusting end · {0} · kept {1}</value></data>
   <data name="VideoEditorUx_TrimStartSet" xml:space="preserve"><value>Start set to {0} · kept {1}</value></data>
@@ -3535,4 +3535,11 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>Add text</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Edit frame image</value></data>
+  <data name="VideoEditorUx_LayerPanel" xml:space="preserve"><value>Layers</value></data>
+  <data name="VideoEditorUx_LayerPanelHelp" xml:space="preserve"><value>Shows or hides the list and properties of text, shape and image layers. It opens by itself when a layer is added.</value></data>
+  <data name="VideoEditorUx_StatusUntrimmed" xml:space="preserve"><value>Full length {0} · drag a handle or press I and O to choose the part to keep</value></data>
+  <data name="VideoEditorUx_StatusTrimmed" xml:space="preserve"><value>{0} · {1} · Save edits or export to apply</value></data>
+  <data name="VideoEditorUx_StatusLayers" xml:space="preserve"><value>Layers {0}</value></data>
+  <data name="VideoEditorUx_Play" xml:space="preserve"><value>Play</value></data>
+  <data name="VideoEditorUx_Pause" xml:space="preserve"><value>Pause</value></data>
 </root>

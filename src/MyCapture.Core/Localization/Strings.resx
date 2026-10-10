@@ -3503,7 +3503,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_NotTrimmed" xml:space="preserve"><value>자르지 않음</value></data>
   <data name="VideoEditorUx_TrimTimelineStatus" xml:space="preserve"><value>시작 {0}, 끝 {1}, 남는 길이 {2}</value></data>
   <data name="VideoEditorUx_TrimTimelineName" xml:space="preserve"><value>자르기 타임라인</value></data>
-  <data name="VideoEditorUx_TrimTimelineHelp" xml:space="preserve"><value>두 손잡이 사이가 남는 구간이며, 바깥의 어두운 빗금 구간은 저장하거나 내보낼 때 잘립니다. 손잡이를 끌거나 I와 O로 재생 위치를 시작과 끝으로 정합니다. 손잡이를 고른 뒤 ←/→는 1프레임, Shift+←/→는 10프레임 이동하고, Tab은 시작과 끝 손잡이를 바꿉니다.</value></data>
+  <data name="VideoEditorUx_TrimTimelineHelp" xml:space="preserve"><value>두 손잡이 사이가 남는 구간이며, 바깥의 어두운 빗금 구간은 저장하거나 내보낼 때 잘립니다. 손잡이를 끌거나 I와 O로 재생 위치를 시작과 끝으로 정합니다. 손잡이를 누르거나 자르기(X)로 고른 뒤 ←/→는 1프레임, Shift+←/→는 10프레임 이동하고, X를 다시 누르면 시작과 끝 손잡이가 바뀝니다. 띠의 다른 곳을 누르면 재생 위치만 옮깁니다.</value></data>
   <data name="VideoEditorUx_TrimOffHelp" xml:space="preserve"><value>자르기(X)를 누르면 남길 구간의 손잡이를 조정할 수 있습니다.</value></data>
   <data name="VideoEditorUx_ZoomLaneHelp" xml:space="preserve"><value>아래쪽 띠의 상자는 세부 타임라인에 확대할 범위이며, 끌어서 옮기거나 양 끝을 끌어 크기를 바꿉니다.</value></data>
   <data name="VideoEditorUx_TrimCut" xml:space="preserve"><value>잘림</value></data>
@@ -3515,8 +3515,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_ResetTrim" xml:space="preserve"><value>원래 길이</value></data>
   <data name="VideoEditorUx_ResetTrimHelp" xml:space="preserve"><value>자르기를 없애고 녹화 전체를 남깁니다.</value></data>
   <data name="VideoEditorUx_TrimResetDone" xml:space="preserve"><value>자르기 해제 · 전체 길이 사용</value></data>
-  <data name="VideoEditorUx_TrimHandleStart" xml:space="preserve"><value>자르기 · 시작 손잡이 선택 · ←/→ 1프레임, Shift 10프레임, X 또는 Tab 끝 손잡이</value></data>
-  <data name="VideoEditorUx_TrimHandleEnd" xml:space="preserve"><value>자르기 · 끝 손잡이 선택 · ←/→ 1프레임, Shift 10프레임, X 또는 Tab 시작 손잡이</value></data>
+  <data name="VideoEditorUx_TrimHandleStart" xml:space="preserve"><value>자르기 · 시작 손잡이 선택 · ←/→ 1프레임, Shift 10프레임, X 끝 손잡이, Esc 선택 해제</value></data>
+  <data name="VideoEditorUx_TrimHandleEnd" xml:space="preserve"><value>자르기 · 끝 손잡이 선택 · ←/→ 1프레임, Shift 10프레임, X 시작 손잡이, Esc 선택 해제</value></data>
   <data name="VideoEditorUx_TrimDraggingStart" xml:space="preserve"><value>시작 손잡이 조정 · {0} · 남는 길이 {1}</value></data>
   <data name="VideoEditorUx_TrimDraggingEnd" xml:space="preserve"><value>끝 손잡이 조정 · {0} · 남는 길이 {1}</value></data>
   <data name="VideoEditorUx_TrimStartSet" xml:space="preserve"><value>시작 지정 {0} · 남는 길이 {1}</value></data>
@@ -3535,4 +3535,11 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>텍스트 추가</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>재생 위치부터 표시할 텍스트 레이어를 추가합니다.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>프레임 이미지 편집</value></data>
+  <data name="VideoEditorUx_LayerPanel" xml:space="preserve"><value>레이어</value></data>
+  <data name="VideoEditorUx_LayerPanelHelp" xml:space="preserve"><value>텍스트·도형·이미지 레이어 목록과 속성 패널을 표시하거나 숨깁니다. 레이어를 추가하면 자동으로 열립니다.</value></data>
+  <data name="VideoEditorUx_StatusUntrimmed" xml:space="preserve"><value>전체 길이 {0} · 손잡이를 끌거나 I·O로 남길 구간을 정합니다</value></data>
+  <data name="VideoEditorUx_StatusTrimmed" xml:space="preserve"><value>{0} · {1} · 편집 저장 또는 내보내기로 적용합니다</value></data>
+  <data name="VideoEditorUx_StatusLayers" xml:space="preserve"><value>레이어 {0}</value></data>
+  <data name="VideoEditorUx_Play" xml:space="preserve"><value>재생</value></data>
+  <data name="VideoEditorUx_Pause" xml:space="preserve"><value>일시정지</value></data>
 </root>
