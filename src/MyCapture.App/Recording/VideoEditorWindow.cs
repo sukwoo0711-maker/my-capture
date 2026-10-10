@@ -48,6 +48,7 @@ internal sealed class VideoEditorWindow : Window
 {
     private readonly Dictionary<string, Action> _shortcutActions = [];
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _shortcutActions;
+    private readonly HangulShortcutRelay _hangulRelay;
     private readonly RecordingResult _recording;
     private readonly AppPaths _paths;
     private readonly ILoggerFactory _loggerFactory;
@@ -281,6 +282,10 @@ internal sealed class VideoEditorWindow : Window
         SetEditControlsEnabled(false);
 
         KeyDown += OnKeyDown;
+        PreviewKeyDown += OnPreviewImeKeyDown;
+        _hangulRelay = new HangulShortcutRelay(this,
+            () => _mediaReady && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase,
+            HandleShortcut);
         Closing += OnClosingInternal;
         Loaded += OnLoadedInternal;
         Closed += OnClosedInternal;
@@ -2065,6 +2070,23 @@ internal sealed class VideoEditorWindow : Window
         Key key = ShortcutInput.Resolve(e.Key, e.ImeProcessedKey,
             Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase);
         e.Handled = HandleShortcut(key, Keyboard.Modifiers);
+        _hangulRelay.NoteKeyDown(e.Key, key, e.Handled);
+    }
+
+    /// <summary>
+    /// Runs Hangul-mode shortcut letters (I, O, E, G) in the preview stage.
+    /// </summary>
+    /// <remarks>
+    /// WPF hands an unhandled <see cref="Key.ImeProcessed"/> PreviewKeyDown to the text
+    /// services, which mark it handled, so the bubbling KeyDown above never sees the letter
+    /// while a Korean IME is in Hangul mode. Handling it here keeps it from the IME as well.
+    /// </remarks>
+    private void OnPreviewImeKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.ImeProcessed || !_mediaReady || Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
+        Key key = ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, textInputFocused: false);
+        e.Handled = HandleShortcut(key, Keyboard.Modifiers);
+        _hangulRelay.NoteKeyDown(e.Key, key, e.Handled);
     }
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
@@ -2173,6 +2195,7 @@ internal sealed class VideoEditorWindow : Window
         _previewEngine.Dispose();
         _timeline.Dispose();
         KeyDown -= OnKeyDown;
+        PreviewKeyDown -= OnPreviewImeKeyDown;
         Closing -= OnClosingInternal;
         Loaded -= OnLoadedInternal;
         SourceInitialized -= OnSourceInitialized;
