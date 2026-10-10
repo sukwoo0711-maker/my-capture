@@ -1,5 +1,9 @@
 ﻿# Generates multi-resolution .ico files for MyCapture.
 #
+# The mark is the Corner Seal (design-system/mycapture/MASTER.md): an open selection frame
+# whose release corner carries a square seal. The app icon and the idle tray icon use the
+# Signal Magenta seal; the tray state icons recolour the seal and keep the same frame.
+#
 # Each size is drawn independently so 16x16 tray icons stay crisp rather than
 # being downscaled from one large bitmap.
 #
@@ -43,14 +47,17 @@ if (-not $StoreMode) {
 $dibSizes = @(16, 20, 24, 32, 40, 48, 64)
 $pngSizes = @(128, 256)
 
-# Iris palette. Tray state colours are deliberately far apart in hue;
-# the tooltip/status text still carries the state so colour is never the only cue.
-$AccentFocus   = [System.Drawing.Color]::FromArgb(255, 124, 108, 255)
-$AccentAmber   = [System.Drawing.Color]::FromArgb(255, 245, 185, 66)
-$AccentEmerald = [System.Drawing.Color]::FromArgb(255, 69, 214, 162)
-$AccentCoral   = [System.Drawing.Color]::FromArgb(255, 255, 107, 116)
-$GraphitePlate = [System.Drawing.Color]::FromArgb(255, 11, 15, 23)
-$PortalWhite   = [System.Drawing.Color]::FromArgb(255, 246, 248, 252)
+# Corner Seal palette. Tray states only recolour the seal (and capturing turns it round, the
+# familiar REC dot); the tooltip/status text still carries the state so colour is never the
+# only cue.
+$SealMagenta  = [System.Drawing.Color]::FromArgb(255, 240, 54, 155)   # #F0369B idle / brand
+$SealAmber    = [System.Drawing.Color]::FromArgb(255, 245, 185, 66)   # #F5B942 capturing
+$SealEmerald  = [System.Drawing.Color]::FromArgb(255, 69, 214, 162)   # #45D6A2 busy / exporting
+$SealRed      = [System.Drawing.Color]::FromArgb(255, 255, 107, 95)   # #FF6B5F error
+$PlateTop     = [System.Drawing.Color]::FromArgb(255, 27, 32, 41)     # #1B2029
+$PlateBottom  = [System.Drawing.Color]::FromArgb(255, 13, 16, 22)     # #0D1016
+$PlateEdge    = [System.Drawing.Color]::FromArgb(40, 246, 248, 252)   # #F6F8FC at 16%
+$FrameWhite   = [System.Drawing.Color]::FromArgb(255, 246, 248, 252)  # #F6F8FC
 
 function New-RoundedPath {
     param([float]$X, [float]$Y, [float]$W, [float]$H, [float]$R)
@@ -71,119 +78,86 @@ function New-RoundedPath {
 function Draw-Icon {
     param(
         [int]$Size,
-        [System.Drawing.Color]$Accent,
+        [System.Drawing.Color]$Seal,
 
-        # 'Plate' draws the two-pane brand mark on a dark rounded square. Used for the
-        # application icon, where the host surface (Explorer, installer, Alt-Tab)
-        # is unpredictable but always reasonably large.
-        #
-        # 'Glyph' draws the two panes over a dark halo. Used for tray icons: at
-        # 16px a dark plate collapses into an indistinct blob on a dark taskbar,
-        # whereas a haloed glyph stays readable on both light and dark themes.
-        [ValidateSet('Plate', 'Glyph')]
-        [string]$Mode = 'Plate'
+        # Square is the seal; Round is the capturing state's REC dot.
+        [ValidateSet('Square', 'Round')]
+        [string]$SealShape = 'Square'
     )
 
     $bmp = New-Object System.Drawing.Bitmap($Size, $Size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    # Pixel (0,0) covers [0,1] so fractional geometry lands where the size table says.
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.Clear([System.Drawing.Color]::Transparent)
 
     $s = [float]$Size
 
-    if ($Mode -eq 'Plate') {
-        $pad = [Math]::Max(0.5, $s * 0.03)
-        $plateSize = $s - ($pad * 2)
-        $plate = New-RoundedPath -X $pad -Y $pad -W $plateSize -H $plateSize -R ($s * 0.22)
-        $bg = New-Object System.Drawing.SolidBrush($GraphitePlate)
-        $g.FillPath($bg, $plate)
-        $bg.Dispose()
-        $sheen = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-            ([System.Drawing.PointF]::new([float]$pad, [float]$pad)),
-            ([System.Drawing.PointF]::new([float]$pad, [float]($pad + ($plateSize * 0.55)))),
-            [System.Drawing.Color]::FromArgb(48, 255, 255, 255),
-            [System.Drawing.Color]::FromArgb(0, 255, 255, 255))
-        $g.FillPath($sheen, $plate)
-        $sheen.Dispose()
-        $edge = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(64, 246, 248, 252), [Math]::Max(1.0, $s * 0.018))
-        $g.DrawPath($edge, $plate)
-        $edge.Dispose()
-        $plate.Dispose()
+    # Plate: a graphite rounded square with a quiet top-to-bottom tone. The gradient brush spans
+    # the whole plate and mirrors past its ends; a brush shorter than the plate tiles by default
+    # and paints a hard band where the gradient restarts.
+    $pad = [Math]::Max(0.5, $s * 0.03)
+    $plateSize = $s - ($pad * 2)
+    $plateRadius = $s * 0.22
+    $plate = New-RoundedPath -X $pad -Y $pad -W $plateSize -H $plateSize -R $plateRadius
+    $toneRect = New-Object System.Drawing.RectangleF([float]$pad, [float]$pad, [float]$plateSize, [float]$plateSize)
+    $tone = New-Object System.Drawing.Drawing2D.LinearGradientBrush($toneRect, $PlateTop, $PlateBottom,
+        [System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
+    $tone.WrapMode = [System.Drawing.Drawing2D.WrapMode]::TileFlipXY
+    $g.FillPath($tone, $plate)
+    $tone.Dispose()
 
-        $margin = [Math]::Round($s * 0.17)
-        $thickness = [Math]::Max(1.5, [Math]::Round($s * 0.072))
+    # Inner edge: drawn inside the plate so it lifts the silhouette on dark taskbars without
+    # leaving a light halo outside the plate on light ones.
+    $edgeWidth = [Math]::Max(1.0, $s * 0.018)
+    $edgePath = New-RoundedPath -X ($pad + $edgeWidth / 2) -Y ($pad + $edgeWidth / 2) `
+        -W ($plateSize - $edgeWidth) -H ($plateSize - $edgeWidth) -R ($plateRadius - $edgeWidth / 2)
+    $edge = New-Object System.Drawing.Pen($PlateEdge, [float]$edgeWidth)
+    $g.DrawPath($edge, $edgePath)
+    $edge.Dispose()
+    $edgePath.Dispose()
+    $plate.Dispose()
+
+    # Frame: the selection the user drew. It stays open at the release corner, where the
+    # seal sits; small sizes stop the frame earlier so the gap survives resampling.
+    $thickness = [Math]::Max(1.5, [Math]::Round($s * 0.092))
+    $lo = $s * 0.233
+    $hi = $s * 0.725
+    $r = [Math]::Max(1.0, $s * 0.092)
+    $d = $r * 2
+    $openEnd = if ($Size -le 24) { $s * 0.43 } else { $s * 0.475 }
+
+    $frame = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $frame.AddLine([float]$openEnd, [float]$hi, [float]($lo + $r), [float]$hi)
+    $frame.AddArc([float]$lo, [float]($hi - $d), [float]$d, [float]$d, [float]90, [float]90)
+    $frame.AddLine([float]$lo, [float]($hi - $r), [float]$lo, [float]($lo + $r))
+    $frame.AddArc([float]$lo, [float]$lo, [float]$d, [float]$d, [float]180, [float]90)
+    $frame.AddLine([float]($lo + $r), [float]$lo, [float]($hi - $r), [float]$lo)
+    $frame.AddArc([float]($hi - $d), [float]$lo, [float]$d, [float]$d, [float]270, [float]90)
+    $frame.AddLine([float]$hi, [float]($lo + $r), [float]$hi, [float]$openEnd)
+
+    $pen = New-Object System.Drawing.Pen($FrameWhite, [float]$thickness)
+    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+    $g.DrawPath($pen, $frame)
+    $pen.Dispose()
+    $frame.Dispose()
+
+    # Seal: stamped where the drag was released, the moment the capture is kept.
+    $sealLo = $s * 0.558
+    $sealSize = ($s * 0.825) - $sealLo
+    $sealBrush = New-Object System.Drawing.SolidBrush($Seal)
+    if ($SealShape -eq 'Round') {
+        $g.FillEllipse($sealBrush, [float]$sealLo, [float]$sealLo, [float]$sealSize, [float]$sealSize)
     }
     else {
-        # No plate to sit inside, so the portal can use nearly the whole canvas and
-        # a heavier stroke compensates for the missing backdrop.
-        $margin = [Math]::Max(1.0, [Math]::Round($s * 0.08))
-        $thickness = [Math]::Max(2.0, [Math]::Round($s * 0.10))
+        $sealPath = New-RoundedPath -X $sealLo -Y $sealLo -W $sealSize -H $sealSize -R ([Math]::Max(0.8, $s * 0.0625))
+        $g.FillPath($sealBrush, $sealPath)
+        $sealPath.Dispose()
     }
-
-    if ($Mode -eq 'Glyph') {
-        # Refined glyph: a filled translucent shutter pane with a hairline aperture dot,
-        # plus a lighter rear pane. Fills survive dark/light taskbars better than the
-        # previous two raw strokes and read as "capture" at a glance.
-        $span = $s - ($margin * 2)
-        $paneSize = $span * 0.66
-        $offset = $span * 0.24
-        $radius = [Math]::Max(1.2, $s * 0.10)
-
-
-        # Front pane: accent-filled shutter with a small notch (aperture), the "live" pane.
-        $frontPath = New-RoundedPath -X $margin -Y ($margin + $offset * 0.4) -W $paneSize -H $paneSize -R $radius
-        $frontFill = New-Object System.Drawing.SolidBrush($Accent)
-        $g.FillPath($frontFill, $frontPath)
-        $frontFill.Dispose()
-
-        # Aperture: a centered dark dot on the shutter, the classic camera record mark.
-        $aperture = [Math]::Max(1.4, $s * 0.16)
-        $aperturePath = New-RoundedPath `
-            -X ($margin + ($paneSize - $aperture) / 2) `
-            -Y ($margin + $offset * 0.4 + ($paneSize - $aperture) / 2) `
-            -W $aperture -H $aperture -R ($aperture / 2)
-        $apertureBrush = New-Object System.Drawing.SolidBrush($GraphitePlate)
-        $g.FillPath($apertureBrush, $aperturePath)
-        $apertureBrush.Dispose()
-
-
-        
-        $frontPath.Dispose()
-        
-        $g.Dispose()
-        return $bmp
-    }
-
-    # Focus Portal: a captured source pane moves forward into a floating pane.
-    # Both rectangles are kept complete at small sizes; that silhouette survives
-    # Windows tray resampling much better than four disconnected crop corners.
-    $span = $s - ($margin * 2)
-    $paneSize = $span * 0.64
-    $offset = $span * 0.26
-    $radius = [Math]::Max(1.0, $s * 0.085)
-    $frontPath = New-RoundedPath -X $margin -Y $margin -W $paneSize -H $paneSize -R $radius
-    $rearPath = New-RoundedPath -X ($margin + $offset) -Y ($margin + $offset) -W $paneSize -H $paneSize -R $radius
-
-    if ($Mode -eq 'Glyph') {
-        $haloWidth = $thickness + [Math]::Max(1.5, $s * 0.055)
-        $haloColor = [System.Drawing.Color]::FromArgb(190, 8, 12, 18)
-
-        $halo = New-Object System.Drawing.Pen($haloColor, $haloWidth)
-        $halo.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-        $g.DrawPath($halo, $rearPath)
-        $g.DrawPath($halo, $frontPath)
-        $halo.Dispose()
-    }
-
-    $rearPen = New-Object System.Drawing.Pen($Accent, $thickness)
-
-    $frontColor = if ($Mode -eq 'Plate') { $PortalWhite } else { $Accent }
-    $frontPen = New-Object System.Drawing.Pen($frontColor, $thickness)
-    $frontPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-    $g.DrawPath($frontPen, $frontPath)
-    $frontPen.Dispose()
-    
-    $frontPath.Dispose()
+    $sealBrush.Dispose()
 
     $g.Dispose()
     return $bmp
@@ -258,21 +232,21 @@ function Get-PngBytes {
 function Save-Ico {
     param(
         [string]$Path,
-        [System.Drawing.Color]$Accent,
-        [ValidateSet('Plate', 'Glyph')]
-        [string]$Mode = 'Plate'
+        [System.Drawing.Color]$Seal,
+        [ValidateSet('Square', 'Round')]
+        [string]$SealShape = 'Square'
     )
 
     $entries = @()
 
     foreach ($size in $dibSizes) {
-        $bmp = Draw-Icon -Size $size -Accent $Accent -Mode $Mode
+        $bmp = Draw-Icon -Size $size -Seal $Seal -SealShape $SealShape
         $entries += , @{ Size = $size; Bytes = [byte[]](Get-DibBytes -Bitmap $bmp) }
         $bmp.Dispose()
     }
 
     foreach ($size in $pngSizes) {
-        $bmp = Draw-Icon -Size $size -Accent $Accent -Mode $Mode
+        $bmp = Draw-Icon -Size $size -Seal $Seal -SealShape $SealShape
         $entries += , @{ Size = $size; Bytes = [byte[]](Get-PngBytes -Bitmap $bmp) }
         $bmp.Dispose()
     }
@@ -308,8 +282,8 @@ function Save-Ico {
         $fs.Dispose()
     }
 
-    Write-Host ("  {0,-22} {1,9:N0} bytes  {2,-5} {3} sizes" -f `
-        [System.IO.Path]::GetFileName($Path), (Get-Item $Path).Length, $Mode, $entries.Count)
+    Write-Host ("  {0,-22} {1,9:N0} bytes  {2,-6} {3} sizes" -f `
+        [System.IO.Path]::GetFileName($Path), (Get-Item $Path).Length, $SealShape, $entries.Count)
 }
 
 function Resolve-OutputPath {
@@ -338,7 +312,7 @@ function Save-Png {
     $canvas = $null
     $g = $null
     try {
-        $icon = Draw-Icon -Size $Size -Accent $AccentFocus -Mode Plate
+        $icon = Draw-Icon -Size $Size -Seal $SealMagenta
         $target = $icon
         $detail = ''
 
@@ -438,11 +412,11 @@ if ($StoreMode) {
 else {
     Write-Host "Generating icons into $OutDir"
 
-    Save-Ico -Path (Join-Path $OutDir 'app.ico')            -Accent $AccentFocus   -Mode Plate
-    Save-Ico -Path (Join-Path $OutDir 'tray-idle.ico')      -Accent $AccentFocus   -Mode Glyph
-    Save-Ico -Path (Join-Path $OutDir 'tray-capturing.ico') -Accent $AccentAmber   -Mode Glyph
-    Save-Ico -Path (Join-Path $OutDir 'tray-busy.ico')      -Accent $AccentEmerald -Mode Glyph
-    Save-Ico -Path (Join-Path $OutDir 'tray-error.ico')     -Accent $AccentCoral   -Mode Glyph
+    Save-Ico -Path (Join-Path $OutDir 'app.ico')            -Seal $SealMagenta
+    Save-Ico -Path (Join-Path $OutDir 'tray-idle.ico')      -Seal $SealMagenta
+    Save-Ico -Path (Join-Path $OutDir 'tray-capturing.ico') -Seal $SealAmber   -SealShape Round
+    Save-Ico -Path (Join-Path $OutDir 'tray-busy.ico')      -Seal $SealEmerald
+    Save-Ico -Path (Join-Path $OutDir 'tray-error.ico')     -Seal $SealRed
 }
 
 Write-Host "Done."

@@ -66,10 +66,10 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         SetResourceReference(CropFrameShadowProperty, "Crop.FrameShadow");
 
         _dimmerBrush = Resource("Overlay.Dimmer", new SolidColorBrush(Color.FromArgb(115, 0, 0, 0)));
-        _selectionBrush = Resource("Accent.Default", new SolidColorBrush(Color.FromRgb(0x7C, 0x6C, 0xFF)));
+        _selectionBrush = Resource("Accent.Default", new SolidColorBrush(Color.FromRgb(0xF0, 0x36, 0x9B)));
         _handleFillBrush = Resource("Overlay.HandleFill", Brushes.White);
 
-        _handlePen = new Pen(Resource("Accent.Pressed", new SolidColorBrush(Color.FromRgb(0x7A, 0x68, 0xEE))), 1);
+        _handlePen = new Pen(Resource("Accent.Pressed", new SolidColorBrush(Color.FromRgb(0xE2, 0x2D, 0x8C))), 1);
         _handlePen.Freeze();
         _selectionOutlinePen = new Pen(_selectionBrush, 1) { DashStyle = new DashStyle([4, 3], 0) };
         _selectionOutlinePen.Freeze();

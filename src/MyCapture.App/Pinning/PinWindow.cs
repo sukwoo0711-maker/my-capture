@@ -402,7 +402,7 @@ internal sealed class PinWindow : Window
         }
 
         return hovering
-            ? Color.FromArgb(0xFF, 0x97, 0x89, 0xFF)
+            ? Color.FromArgb(0xFF, 0xFF, 0x5C, 0xAB)
             : Color.FromArgb(0xFF, 0x2B, 0x3A, 0x50);
     }
 

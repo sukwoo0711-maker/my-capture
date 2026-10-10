@@ -1,15 +1,17 @@
 <!--
   MyCapture design tokens: primitive values -> semantic aliases -> component dimensions.
 
-  Direction (design-system/mycapture/MASTER.md, "Iris"):
+  Direction (design-system/mycapture/MASTER.md, "Corner Seal"):
     * Captured pixels stay dominant on quiet graphite surfaces with clear depth hierarchy.
-    * Electric iris is reserved for primary actions, selection, keyboard focus, and the playhead.
-    * Accent fills always use dark ink; white-on-iris is intentionally prohibited.
+    * Signal Magenta is reserved for the one primary action, selection, keyboard focus and
+      the capture guide: the moments of intention. It is absent from the annotation palette
+      and far in hue from the violet/blue chrome of the apps people capture.
+    * Accent fills always use dark ink; white-on-magenta is intentionally prohibited.
     * Normal UI is flat and token-driven: no decorative gradients or unowned raw colours.
 
   Compatibility: every previously shipped resource key remains available. Legacy Warm,
-  Slate, Blue, Yellow, and Violet keys alias the Iris system so consuming windows and any
-  restored XAML continue to resolve without migration.
+  Slate, Blue, Yellow, and Violet keys alias the Signal Magenta system so consuming windows
+  and any restored XAML continue to resolve without migration.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -31,19 +33,30 @@
     <Color x:Key="Primitive.Warm100">#FFF6F8FC</Color> <!-- primary text -->
     <Color x:Key="Primitive.White">#FFFFFFFF</Color>
 
-    <!-- Iris brand ramp. Dark ink is the only text colour on these fills. -->
-    <Color x:Key="Primitive.Yellow300">#FF9789FF</Color> <!-- focus / hover -->
-    <Color x:Key="Primitive.Yellow400">#FF7C6CFF</Color> <!-- primary -->
-    <Color x:Key="Primitive.Yellow500">#FF7C6CFF</Color> <!-- border accent -->
-    <Color x:Key="Primitive.Yellow600">#FF7A68EE</Color> <!-- pressed -->
-    <Color x:Key="Primitive.Yellow900">#FF1A1733</Color> <!-- selected wash -->
-    <Color x:Key="Primitive.Ink">#FF061116</Color>
+    <!-- Signal Magenta brand ramp. Dark ink is the only text colour on these fills.
+         The Yellow* keys are the historical slot names the controls and tests bind to. -->
+    <Color x:Key="Primitive.Yellow300">#FFFF5CAB</Color> <!-- focus / hover / selection -->
+    <Color x:Key="Primitive.Yellow400">#FFF0369B</Color> <!-- primary -->
+    <Color x:Key="Primitive.Yellow500">#FFF0369B</Color> <!-- border accent -->
+    <Color x:Key="Primitive.Yellow600">#FFE22D8C</Color> <!-- pressed -->
+    <Color x:Key="Primitive.Yellow900">#FF2B1527</Color> <!-- selected wash -->
+    <Color x:Key="Primitive.Ink">#FF120810</Color>
 
-    <!-- Status colours stay semantically distinct from the brand yellow. -->
+    <!-- Canonical Signal Magenta names (same values as the slots above). -->
+    <Color x:Key="Primitive.Magenta100">#FFFCE7F2</Color> <!-- light selected wash -->
+    <Color x:Key="Primitive.Magenta300">#FFFF5CAB</Color>
+    <Color x:Key="Primitive.Magenta400">#FFF0369B</Color> <!-- the seal -->
+    <Color x:Key="Primitive.Magenta600">#FFE22D8C</Color>
+    <Color x:Key="Primitive.Magenta700">#FFC41C72</Color> <!-- light-theme focus and text -->
+    <Color x:Key="Primitive.Magenta800">#FFA8125F</Color> <!-- light-theme playhead and handles -->
+    <Color x:Key="Primitive.Magenta900">#FF2B1527</Color>
+
+    <!-- Status colours stay semantically distinct from the brand magenta: danger sits at a
+         warm red so a destructive action never reads as the primary action. -->
     <Color x:Key="Primitive.Orange400">#FFF5B942</Color>
     <Color x:Key="Primitive.Emerald400">#FF45D6A2</Color>
-    <Color x:Key="Primitive.Red500">#FFFF6B74</Color>
-    <Color x:Key="Primitive.Red400">#FFFF8A91</Color>
+    <Color x:Key="Primitive.Red500">#FFFF6B5F</Color>
+    <Color x:Key="Primitive.Red400">#FFFF8A80</Color>
 
     <!-- Canonical and legacy primitive aliases. -->
     <Color x:Key="Primitive.Graphite980">#FF080C12</Color>
@@ -68,15 +81,15 @@
     <Color x:Key="Primitive.Slate300">#FFC6D0DF</Color>
     <Color x:Key="Primitive.Slate100">#FFF6F8FC</Color>
 
-    <Color x:Key="Primitive.Blue300">#FF9789FF</Color>
-    <Color x:Key="Primitive.Blue400">#FF7C6CFF</Color>
-    <Color x:Key="Primitive.Blue500">#FF7C6CFF</Color>
-    <Color x:Key="Primitive.Blue600">#FF7A68EE</Color>
-    <Color x:Key="Primitive.Blue900">#FF1A1733</Color>
-    <Color x:Key="Primitive.Violet400">#FF9789FF</Color>
-    <Color x:Key="Primitive.Violet500">#FF7C6CFF</Color>
-    <Color x:Key="Primitive.Violet600">#FF7A68EE</Color>
-    <Color x:Key="Primitive.Violet900">#FF1A1733</Color>
+    <Color x:Key="Primitive.Blue300">#FFFF5CAB</Color>
+    <Color x:Key="Primitive.Blue400">#FFF0369B</Color>
+    <Color x:Key="Primitive.Blue500">#FFF0369B</Color>
+    <Color x:Key="Primitive.Blue600">#FFE22D8C</Color>
+    <Color x:Key="Primitive.Blue900">#FF2B1527</Color>
+    <Color x:Key="Primitive.Violet400">#FFFF5CAB</Color>
+    <Color x:Key="Primitive.Violet500">#FFF0369B</Color>
+    <Color x:Key="Primitive.Violet600">#FFE22D8C</Color>
+    <Color x:Key="Primitive.Violet900">#FF2B1527</Color>
     <Color x:Key="Primitive.Amber400">#FFF5B942</Color>
     <Color x:Key="Primitive.Emerald500">#FF45D6A2</Color>
 
@@ -134,18 +147,20 @@
     <SolidColorBrush x:Key="Border.Accent" Color="{StaticResource Primitive.Yellow500}" />
     <SolidColorBrush x:Key="Border.Badge" Color="#66F6F8FC" />
 
-    <!-- Video timeline semantics: layer identity, playhead, and destructive trim. -->
+    <!-- Video timeline semantics: layer identity, playhead, and destructive trim.
+         Layer colours are identity, not brand: text layers stay violet and frame layers teal,
+         so neither is mistaken for the magenta selection range. -->
     <SolidColorBrush x:Key="Timeline.Background" Color="{StaticResource Primitive.Graphite950}" />
     <SolidColorBrush x:Key="Timeline.Track" Color="{StaticResource Primitive.Graphite850}" />
     <SolidColorBrush x:Key="Timeline.TextLayer" Color="#FF8B7BFF" />
     <SolidColorBrush x:Key="Timeline.FrameLayer" Color="#FF3FD8C9" />
     <SolidColorBrush x:Key="Timeline.Grid" Color="{StaticResource Primitive.Graphite500}" />
     <!-- Dark palettes resolve the playhead to white; light themes override it at runtime
-         with a deep iris that keeps focus-weight contrast on pale surfaces. -->
+         with a deep magenta that keeps focus-weight contrast on pale surfaces. -->
     <SolidColorBrush x:Key="Timeline.Playhead" Color="#FFFFFFFF" />
-    <SolidColorBrush x:Key="Timeline.TrimDeleteFill" Color="#55FF6B74" />
+    <SolidColorBrush x:Key="Timeline.TrimDeleteFill" Color="#55FF6B5F" />
     <SolidColorBrush x:Key="Timeline.TrimDeleteHandle" Color="{StaticResource Primitive.Red400}" />
-    <SolidColorBrush x:Key="Timeline.TrimDeleteHatch" Color="#CCFFB0B6" />
+    <SolidColorBrush x:Key="Timeline.TrimDeleteHatch" Color="#CCFFB3AB" />
 
     <!-- ============================================================= -->
     <!-- Capture overlay                                               -->
@@ -153,18 +168,18 @@
     <SolidColorBrush x:Key="Overlay.Dimmer" Color="#FF080C12" Opacity="0.52" />
     <SolidColorBrush x:Key="Overlay.SelectionBorder" Color="{StaticResource Primitive.Yellow300}" />
     <!-- Capture410 guide roles; ThemeService resolves all six palettes and system high contrast. -->
-    <SolidColorBrush x:Key="CaptureGuide.SelectionBorder" Color="#FF9789FF" />
-    <SolidColorBrush x:Key="CaptureGuide.InnerGlow" Color="#209789FF" />
-    <SolidColorBrush x:Key="CaptureGuide.Line" Color="#789789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.SelectionBorder" Color="#FFFF5CAB" />
+    <SolidColorBrush x:Key="CaptureGuide.InnerGlow" Color="#20FF5CAB" />
+    <SolidColorBrush x:Key="CaptureGuide.Line" Color="#78FF5CAB" />
     <SolidColorBrush x:Key="CaptureGuide.LineShadow" Color="#40000000" />
-    <SolidColorBrush x:Key="CaptureGuide.Crosshair" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.Crosshair" Color="#FFFF5CAB" />
     <SolidColorBrush x:Key="CaptureGuide.CrosshairShadow" Color="#FF000000" />
-    <SolidColorBrush x:Key="CaptureGuide.StartPoint" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.StartPoint" Color="#FFFF5CAB" />
     <SolidColorBrush x:Key="CaptureGuide.ChipSurface" Color="#F2151E2B" />
-    <SolidColorBrush x:Key="CaptureGuide.ChipBorder" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.ChipBorder" Color="#FFFF5CAB" />
     <SolidColorBrush x:Key="CaptureGuide.Text" Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="CaptureGuide.MutedText" Color="#FFECF1F9" />
-    <SolidColorBrush x:Key="CaptureGuide.MagnifierBorder" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="CaptureGuide.MagnifierBorder" Color="#FFFF5CAB" />
     <SolidColorBrush x:Key="CaptureGuide.MagnifierGrid" Color="#32000000" />
     <SolidColorBrush x:Key="CaptureGuide.Dimmer" Color="#8C080C12" />
 

@@ -5,7 +5,7 @@ namespace MyCapture.Core.Settings;
 /// <summary>The independent capture-guide/brand override: empty or opaque #RRGGBB.</summary>
 public static class CaptureGuideColorValue
 {
-    public const string DefaultCustomColor = "#9789FF";
+    public const string DefaultCustomColor = "#FF5CAB";
 
     public static bool TryNormalize(string? value, out string normalized)
     {

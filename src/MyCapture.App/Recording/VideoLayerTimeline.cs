@@ -99,7 +99,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         _textSecondary = ResolveBrush("Text.Secondary", Color.FromRgb(0xC4, 0xCF, 0xDC));
         _muted = ResolveBrush("Text.Secondary", Color.FromRgb(0x8E, 0x9C, 0xAF));
         _gridPen = FrozenPen(ResolveBrush("Timeline.Grid", Color.FromRgb(0x2B, 0x3A, 0x50)), 1);
-        _playheadPen = FrozenPen(ResolveBrush("Timeline.Playhead", Color.FromRgb(0x97, 0x89, 0xFF)), 2);
+        _playheadPen = FrozenPen(ResolveBrush("Timeline.Playhead", Color.FromRgb(0xFF, 0x5C, 0xAB)), 2);
 
         FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");

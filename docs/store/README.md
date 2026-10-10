@@ -106,6 +106,8 @@ Get-AppxPackage MyCapture.LocalTest | Remove-AppxPackage
 - **Store 목록**
   - 매니페스트가 선언한 한국어(ko-KR)와 영어(en-US) 목록을 모두 작성합니다. 초안은 [`listing.md`](listing.md)에 있습니다.
   - 스크린샷은 1장 이상 필요합니다. 아래 "Store 스크린샷 만들기"로 언어별 10장을 만들어 올립니다.
+  - 스크린샷마다 [`listing.md`](listing.md)의 캡션을 같은 언어로 넣습니다. 스크린샷 이미지에는 로고나 홍보 문구를 덧붙이지 않습니다.
+  - 1:1 앱 타일 아이콘에는 패키징 결과물 `StoreListingIcon-300.png`를, 16:9 Super hero art에는 [`assets/hero-3840x2160.png`](assets/hero-3840x2160.png)를 올립니다.
 
 ## Store 스크린샷 만들기
 

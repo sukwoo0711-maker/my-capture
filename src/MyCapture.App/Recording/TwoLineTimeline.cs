@@ -92,9 +92,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _textSecondary = ResolveBrush("Text.Secondary", Colors.LightGray);
         _textMuted = ResolveBrush("Text.Secondary", Colors.Gray);
         _borderSubtle = ResolveBrush("Border.Subtle", Colors.DimGray);
-        _accent = ResolveBrush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF));
+        _accent = ResolveBrush("Accent.Default", Color.FromRgb(0xF0, 0x36, 0x9B));
         _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromRgb(0x15, 0x2F, 0x3E));
-        _playhead = ResolveBrush("Timeline.Playhead", Color.FromRgb(0x97, 0x89, 0xFF));
+        _playhead = ResolveBrush("Timeline.Playhead", Color.FromRgb(0xFF, 0x5C, 0xAB));
         _outside = ResolveBrush("Surface.Scrim", Color.FromArgb(0x86, 0x08, 0x0C, 0x12));
         _deleteFill = ResolveBrush("Timeline.TrimDeleteFill", Color.FromArgb(0x55, 0xFF, 0x6B, 0x74));
         _deleteHandle = ResolveBrush("Timeline.TrimDeleteHandle", Color.FromRgb(0xFF, 0x8A, 0x91));

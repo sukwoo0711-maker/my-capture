@@ -1,5 +1,9 @@
 # MyCapture
 
+<img src="src/MyCapture.App/Assets/mycapture-mark.svg" width="64" alt="MyCapture 모서리 낙관 마크">
+
+**보이는 그대로, 내 PC에 남깁니다.** 브랜드와 디자인 기준은 [`design-system/mycapture/MASTER.md`](design-system/mycapture/MASTER.md)에 있습니다.
+
 MyCapture는 캡처, 주석 편집, 화면 고정(pin), OCR, 라이브러리, 영역 녹화를 한곳에 모은 Windows용 데스크톱 도구입니다. 캡처와 인식 결과는 기본적으로 사용자 PC 안에서 처리하며, 반복 작업은 전역 단축키와 트레이 메뉴로 빠르게 이어집니다.
 
 > 현재 지원 하한은 **Windows 11 21H2(build 22000), x64**입니다. Windows 11 ARM64에서는 x64 에뮬레이션으로 실행할 수 있습니다. Windows 10은 지원하지 않습니다.

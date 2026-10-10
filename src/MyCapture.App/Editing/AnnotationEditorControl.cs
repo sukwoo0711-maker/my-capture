@@ -864,7 +864,7 @@ internal sealed class AnnotationEditorControl : Grid
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
             Foreground = annotation.Foreground.ToBrush(),
             Background = Brush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
-            BorderBrush = Brush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
+            BorderBrush = Brush("Accent.Default", Color.FromRgb(0xF0, 0x36, 0x9B)),
             BorderThickness = new Thickness(1),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,

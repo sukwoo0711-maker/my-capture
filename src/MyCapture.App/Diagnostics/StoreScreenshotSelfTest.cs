@@ -183,14 +183,16 @@ internal static class StoreScreenshotSelfTest
         ThemeService.Apply(AppTheme.Midnight);
         BitmapSource image = samples.Dashboard;
         var document = AnnotationDocument.CreateFor(image.PixelWidth, image.PixelHeight);
-        var iris = ColorRgba.FromRgb(124, 108, 255);
+        // Annotations are the user's content, drawn from the editor's own swatches; magenta stays
+        // the app's signal (selected tool, primary action) and never appears in the content.
+        var blue = ColorRgba.FromRgb(59, 130, 246);
         var coral = ColorRgba.FromRgb(255, 92, 102);
         document.Add(Rectangle(new RectD(248, 128, 592, 164), coral, 5));
-        document.Add(Step(new RectD(214, 96, 56, 56), "1", iris));
+        document.Add(Step(new RectD(214, 96, 56, 56), "1", blue));
         document.Add(Label(new RectD(1104, 318, 214, 56), english ? " Q3 peak" : " 3분기 최고", coral));
         document.Add(Arrow(new PointD(1150, 378), new PointD(1052, 410), coral, 6));
         document.Add(Highlight(new RectD(276, 756, 560, 44)));
-        document.Add(Step(new RectD(214, 750, 56, 56), "2", iris));
+        document.Add(Step(new RectD(214, 750, 56, 56), "2", blue));
         var region = new RectD(0, 0, image.PixelWidth, image.PixelHeight);
         var window = new AnnotationEditorWindow(new FrozenFrame(image, region, null, 0), region, image, initialDocument: document)
         {
@@ -482,15 +484,18 @@ internal static class StoreScreenshotSelfTest
 
     private static Brush Background(bool light)
     {
+        // A graphite (or paper) stage with one soft Signal Magenta glow. It stays off the darkest
+        // and lightest extremes the Store guidance warns about, so its caption overlays stay
+        // readable, and it is quiet enough that the captured content remains the subject.
         var group = new DrawingGroup();
         using (DrawingContext drawing = group.Open())
         {
             var rect = new Rect(0, 0, CanvasWidth, CanvasHeight);
             drawing.DrawRectangle(new LinearGradientBrush(
-                light ? Color.FromRgb(244, 246, 251) : Color.FromRgb(11, 15, 23),
-                light ? Color.FromRgb(226, 230, 244) : Color.FromRgb(24, 22, 48), 35), null, rect);
+                light ? Color.FromRgb(245, 246, 249) : Color.FromRgb(23, 27, 34),
+                light ? Color.FromRgb(239, 231, 238) : Color.FromRgb(36, 27, 38), 35), null, rect);
             drawing.DrawRectangle(new RadialGradientBrush(
-                Color.FromArgb(light ? (byte)70 : (byte)110, 124, 108, 255), Color.FromArgb(0, 124, 108, 255))
+                Color.FromArgb(light ? (byte)46 : (byte)70, 240, 54, 155), Color.FromArgb(0, 240, 54, 155))
             {
                 Center = new Point(0.82, 0.12),
                 GradientOrigin = new Point(0.82, 0.12),
@@ -645,6 +650,8 @@ internal static class StoreScreenshotSelfTest
         return Rasterize(width, height, d =>
         {
             d.PushTransform(new ScaleTransform(s, s));
+            // Synthetic third-party pages use a neutral product blue, so MyCapture's own magenta
+            // reads as the app and never as part of the captured page.
             d.DrawRectangle(Rgb(246, 247, 251), null, new Rect(0, 0, 1440, 900 / s * s));
             BrowserChrome(d, 1440, "analytics.northwind.example/sales");
             d.DrawRectangle(Rgb(26, 30, 46), null, new Rect(0, 56, 220, 900));
@@ -652,7 +659,7 @@ internal static class StoreScreenshotSelfTest
             string[] nav = english ? ["Overview", "Sales", "Customers", "Products", "Reports"] : ["개요", "매출", "고객", "상품", "보고서"];
             for (int i = 0; i < nav.Length; i++)
             {
-                if (i == 1) d.DrawRoundedRectangle(Rgb(124, 108, 255), null, new Rect(16, 136 + i * 46, 188, 38), 8, 8);
+                if (i == 1) d.DrawRoundedRectangle(Rgb(59, 130, 246), null, new Rect(16, 136 + i * 46, 188, 38), 8, 8);
                 d.DrawText(Text(nav[i], Ui, 16, i == 1 ? Brushes.White : Rgb(170, 176, 196)), new Point(34, 145 + i * 46));
             }
 
@@ -677,7 +684,7 @@ internal static class StoreScreenshotSelfTest
             {
                 double h = values[i] * 2.6;
                 var bar = new Rect(chart.X + 50 + i * 88, chart.Bottom - 40 - h, 46, h);
-                d.DrawRoundedRectangle(i == 8 ? Rgb(124, 108, 255) : Rgb(196, 190, 255), null, bar, 6, 6);
+                d.DrawRoundedRectangle(i == 8 ? Rgb(59, 130, 246) : Rgb(191, 214, 254), null, bar, 6, 6);
                 d.DrawText(Text((i + 1) + (english ? "" : "월"), Ui, 13, Rgb(120, 126, 140)), new Point(bar.X + 6, chart.Bottom - 30));
             }
 
@@ -756,12 +763,12 @@ internal static class StoreScreenshotSelfTest
         {
             d.DrawRectangle(Brushes.White, null, new Rect(0, 0, 1440, 900));
             BrowserChrome(d, 1440, english ? "blog.example.com/capture-tips" : "blog.example.com/capture-tips");
-            d.DrawText(Text(english ? "Productivity · 5 min read" : "업무 팁 · 5분 읽기", Ui, 16, Rgb(124, 108, 255)), new Point(220, 110));
+            d.DrawText(Text(english ? "Productivity · 5 min read" : "업무 팁 · 5분 읽기", Ui, 16, Rgb(37, 99, 235)), new Point(220, 110));
             d.DrawText(Text(title, UiBold, 40, Rgb(20, 24, 34)), new Point(220, 140));
             for (int i = 0; i < body.Length; i++)
                 d.DrawText(Text(body[i], Ui, 22, Rgb(52, 56, 70)), new Point(220, 230 + i * 52));
             d.DrawRoundedRectangle(Rgb(238, 240, 247), null, new Rect(220, 560, 1000, 280), 14, 14);
-            d.DrawRoundedRectangle(Rgb(124, 108, 255), null, new Rect(560, 620, 320, 160), 12, 12);
+            d.DrawRoundedRectangle(Rgb(37, 99, 235), null, new Rect(560, 620, 320, 160), 12, 12);
             d.DrawText(Text("Ctrl + Shift + C", UiBold, 30, Brushes.White), new Point(605, 680));
         });
         return (image, title + Environment.NewLine + Environment.NewLine + string.Join(Environment.NewLine, body));
@@ -868,7 +875,7 @@ internal static class StoreScreenshotSelfTest
             g.LineTo(new Point(points[^1].X, 390), true, true);
         }
 
-        d.DrawGeometry(new LinearGradientBrush(Color.FromArgb(90, 124, 108, 255), Color.FromArgb(0, 124, 108, 255), 90), null, geometry);
+        d.DrawGeometry(new LinearGradientBrush(Color.FromArgb(90, 59, 130, 246), Color.FromArgb(0, 59, 130, 246), 90), null, geometry);
         var line = new StreamGeometry();
         using (StreamGeometryContext g = line.Open())
         {
@@ -876,6 +883,6 @@ internal static class StoreScreenshotSelfTest
             foreach (Point p in points.Skip(1)) g.LineTo(p, true, true);
         }
 
-        d.DrawGeometry(null, new Pen(Rgb(124, 108, 255), 4) { LineJoin = PenLineJoin.Round }, line);
+        d.DrawGeometry(null, new Pen(Rgb(59, 130, 246), 4) { LineJoin = PenLineJoin.Round }, line);
     });
 }
