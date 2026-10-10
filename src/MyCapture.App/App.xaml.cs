@@ -330,6 +330,18 @@ public partial class App : Application
             _storeRating?.NotifyFlowEnded();
         };
         _overlay.CommitRequested = HandleCommitAsync;
+        // The selector's record switch and ⋯ menu run the same commands as the tray and the hotkeys.
+        _overlay.CanRepeatLastRegion = () => _lastRegions?.Count > 0;
+        _overlay.SelectorActionRequested = request =>
+        {
+            switch (request.Action)
+            {
+                case CaptureSelectorAction.Record: HandleRecordRegion(); break;
+                case CaptureSelectorAction.DelayedCapture: HandleDelayedCapture(request.DelaySeconds); break;
+                case CaptureSelectorAction.ScrollingCapture: HandleScrollingCapture(); break;
+                case CaptureSelectorAction.RepeatLastRegion: HandleRepeatLastRegion(); break;
+            }
+        };
         _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
         _overlay.TransitionFailed += exception =>
             _tray?.ShowBalloon(UiText.Get("Text_B4B8EE7BE3D6"), MyCapture.App.Themes.ThemedDialog.RecoveryMessage(exception), TrayBalloonKind.Error);

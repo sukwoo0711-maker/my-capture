@@ -58,6 +58,7 @@ internal sealed class CaptureOverlayWindow : Window
 
         _view.SelectionConfirmed += OnSelectionConfirmed;
         _view.CancelRequested += OnCancelRequested;
+        _view.ActionRequested += OnActionRequested;
         SourceInitialized += OnSourceInitialized;
         ContentRendered += OnContentRendered;
         DpiChanged += OnDpiChanged;
@@ -187,6 +188,36 @@ internal sealed class CaptureOverlayWindow : Window
     {
         get => _view.ShowStartGuide;
         set => _view.ShowStartGuide = value;
+    }
+
+    /// <summary>The bar's capture/record switch and ⋯ menu; the owner runs <see cref="ActionRequested"/>.</summary>
+    internal bool OffersOtherActions
+    {
+        get => _view.OffersOtherActions;
+        set => _view.OffersOtherActions = value;
+    }
+
+    internal Func<bool> CanRepeatLastRegion
+    {
+        get => _view.CanRepeatLastRegion;
+        set => _view.CanRepeatLastRegion = value ?? (() => true);
+    }
+
+    /// <summary>
+    /// Raised when the record switch or a ⋯ command was chosen. The selector then closes without a
+    /// capture, like a cancel, and the owner starts the command once it is gone.
+    /// </summary>
+    internal event EventHandler<CaptureSelectorRequest>? ActionRequested;
+
+    /// <summary>The recording region selector's wording and colour.</summary>
+    internal bool RecordingSelection
+    {
+        get => _view.RecordingSelection;
+        set
+        {
+            _view.RecordingSelection = value;
+            Title = UiText.Get(value ? "Onboard_RecordSelectTitle" : "Text_3816B940D53C");
+        }
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -331,6 +362,15 @@ internal sealed class CaptureOverlayWindow : Window
 
     private void OnCancelRequested(object? sender, EventArgs e) => Cancel();
 
+    private void OnActionRequested(object? sender, CaptureSelectorRequest request)
+    {
+        if (_completed) return;
+        _completed = true;
+        Hide();
+        try { ActionRequested?.Invoke(this, request); }
+        finally { Close(); }
+    }
+
     private void OnDeactivated(object? sender, EventArgs e)
     {
         _view.EndPointerInteraction();
@@ -364,6 +404,7 @@ internal sealed class CaptureOverlayWindow : Window
         SourceWindows = [];
         _view.SelectionConfirmed -= OnSelectionConfirmed;
         _view.CancelRequested -= OnCancelRequested;
+        _view.ActionRequested -= OnActionRequested;
         SourceInitialized -= OnSourceInitialized;
         ContentRendered -= OnContentRendered;
         Deactivated -= OnDeactivated;

@@ -115,6 +115,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private bool _detectWindows;
     private bool _textCaptureAvailable;
     private bool _showShortcutHints = true;
+    private bool _offersOtherActions;
+    private bool _recordingSelection;
+    private Brush _recordingBrush = RecordingSelectionCue.Resolve();
+    private Pen _recordingPen = null!;
+    private Pen _recordingEdgePen = null!;
     private Func<string, Task<bool>>? _copyColorText;
     private CaptureSelectorMode _drawnMode;
     private CaptureSelectorMode _drawnSelectionMode;
@@ -230,6 +235,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 bar.FullScreenRequested += OnFullScreenRequested;
                 bar.HelpRequested += OnHelpRequested;
                 bar.CancelRequested += RequestCancel;
+                bar.ActionRequested += OnBarActionRequested;
                 _modeBar = bar;
                 AddGuideChild(bar);
             }
@@ -239,6 +245,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 bar.FullScreenRequested -= OnFullScreenRequested;
                 bar.HelpRequested -= OnHelpRequested;
                 bar.CancelRequested -= RequestCancel;
+                bar.ActionRequested -= OnBarActionRequested;
                 RemoveGuideChild(bar);
                 _modeBar = null;
                 _modeBarBounds = null;
@@ -318,9 +325,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
     }
 
     /// <summary>
-    /// General.ShowShortcutHints: shows the key badges in the mode bar and the keys in its tooltips.
-    /// The status, the detected-target tab and the button names describe the current state, so they
-    /// show regardless.
+    /// General.ShowShortcutHints, read per selector. The mode bar no longer draws key badges: its keys
+    /// are in the tooltips and accelerator keys whatever this says, like the target tab and the names.
     /// </summary>
     internal bool ShowShortcutHints
     {
@@ -329,6 +335,57 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             _showShortcutHints = value;
             ConfigureGuides();
+        }
+    }
+
+    /// <summary>
+    /// Offers the bar's capture/record switch and its ⋯ menu (delay, scrolling, previous region). The
+    /// owner must run <see cref="ActionRequested"/>; off by default.
+    /// </summary>
+    internal bool OffersOtherActions
+    {
+        get => _offersOtherActions;
+        set
+        {
+            _offersOtherActions = value;
+            ConfigureGuides();
+        }
+    }
+
+    /// <summary>Whether a previous region exists; the ⋯ menu's entry is dimmed without one.</summary>
+    internal Func<bool> CanRepeatLastRegion { get; set; } = () => true;
+
+    /// <summary>
+    /// The selector closes and the owner runs one of its existing commands: the recording selector,
+    /// a delayed or scrolling capture, or the previous region.
+    /// </summary>
+    internal event EventHandler<CaptureSelectorRequest>? ActionRequested;
+
+    /// <summary>
+    /// The recording region selector: its instruction says "record", starts with a record dot, and the
+    /// monitor edge and the selection take the recording colour, so it never reads as a screenshot.
+    /// </summary>
+    internal bool RecordingSelection
+    {
+        get => _recordingSelection;
+        set
+        {
+            if (_recordingSelection == value) return;
+            _recordingSelection = value;
+            _staticDirty = true;
+            QueueFeedback();
+        }
+    }
+
+    /// <summary>The recording colour: the theme's danger token, or the system highlight in high contrast.</summary>
+    internal Brush RecordingBrush
+    {
+        get => _recordingBrush;
+        set
+        {
+            _recordingBrush = value ?? throw new ArgumentNullException(nameof(value));
+            _staticDirty = true;
+            QueueFeedback();
         }
     }
 
@@ -435,6 +492,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             bar.FullScreenRequested -= OnFullScreenRequested;
             bar.HelpRequested -= OnHelpRequested;
             bar.CancelRequested -= RequestCancel;
+            bar.ActionRequested -= OnBarActionRequested;
         }
         foreach (FrameworkElement child in new FrameworkElement?[] { _modeBar, _startGuide }.OfType<FrameworkElement>())
             RemoveLogicalChild(child);
@@ -735,9 +793,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private void ConfigureGuides()
     {
         if (_released) return;
-        _modeBar?.Configure(DetectWindows, TextCaptureAvailable, CopyColorText is not null, ShowShortcutHints);
+        _modeBar?.Configure(DetectWindows, TextCaptureAvailable, CopyColorText is not null, OffersOtherActions,
+            CanRepeatLastRegion());
         _modeBar?.ShowMode(Mode);
-        _startGuide?.Configure(DetectWindows, _modeBar is not null);
+        _startGuide?.Configure(DetectWindows);
         _staticDirty = true;
         QueueFeedback();
     }
@@ -747,6 +806,16 @@ internal sealed class CaptureOverlayView : FrameworkElement
         DismissStartGuide();
         SelectMode(mode);
         ReturnFocusAfterPointer();
+    }
+
+    /// <summary>The record switch or a ⋯ command: the selector ends without a capture and the owner runs it.</summary>
+    private void OnBarActionRequested(CaptureSelectorRequest request)
+    {
+        if (_ended || !OffersOtherActions) return;
+        DismissStartGuide();
+        _ended = true;
+        EndPointerInteraction();
+        ActionRequested?.Invoke(this, request);
     }
 
     private void OnFullScreenRequested()
@@ -798,7 +867,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             AddGuideChild(card);
         }
 
-        _startGuide.Configure(DetectWindows, _modeBar is not null);
+        _startGuide.Configure(DetectWindows);
         _startGuide.BeginAnimation(OpacityProperty, null);
         _startGuide.Opacity = 1;
         _startGuide.Visibility = Visibility.Visible;
@@ -1006,9 +1075,18 @@ internal sealed class CaptureOverlayView : FrameworkElement
         dc.PushClip(new RectangleGeometry(rect));
         dc.DrawRectangle(null, _innerGlowPen, rect);
         dc.Pop();
-        var border = new Rect(rect.X + px / 2, rect.Y + py / 2,
-            Math.Max(0, rect.Width - px), Math.Max(0, rect.Height - py));
-        dc.DrawRectangle(null, _selectionBorderPen, border);
+        if (RecordingSelection)
+        {
+            // Two physical pixels of the recording colour, inside the selected bounds.
+            double inset = _recordingPen.Thickness / 2;
+            dc.DrawRectangle(null, _recordingPen, Deflate(rect, inset));
+        }
+        else
+        {
+            var border = new Rect(rect.X + px / 2, rect.Y + py / 2,
+                Math.Max(0, rect.Width - px), Math.Max(0, rect.Height - py));
+            dc.DrawRectangle(null, _selectionBorderPen, border);
+        }
         DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect);
     }
 
@@ -1157,13 +1235,14 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
 
         var background = new Rect(x, y, width, height);
-        dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, background, 7, 7);
+        dc.DrawRoundedRectangle(_chromeBrush, RecordingSelection ? _recordingPen : _chipBorderPen, background, 7, 7);
         dc.DrawText(formatted, new Point(x + paddingX, y + paddingY));
     }
 
     /// <summary>
-    /// Draws the status under the mode bar (or the top instruction without one) and the precision
-    /// chip, and records them after the bar in <paramref name="chrome"/>.
+    /// Draws the top instruction (none under the mode bar: the bar's buttons and the label beside the
+    /// highlighted window already say what a click and a drag do) and the precision chip, and records
+    /// them after the bar in <paramref name="chrome"/>.
     /// </summary>
     private void DrawInstructions(DrawingContext dc, CaptureCueState cue, List<Rect> chrome)
     {
@@ -1171,18 +1250,35 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (bar is { } barBounds) chrome.Add(barBounds);
         double scale = bar.HasValue ? _guideScale : 1;
         double centerX = bar is { } b ? b.Left + (b.Width / 2) : ActualWidth / 2;
-        double top = bar is { } above ? above.Bottom + (8 * scale) : 18;
-        Rect primary = DetectWindows || ShowModeBar
-            ? DrawCueInstruction(dc, cue, centerX, top, scale)
-            : DrawPlainInstruction(dc);
-        chrome.Add(primary);
+        Rect? primary = null;
+        if (ShowModeBar)
+        {
+            _activeCueSegment = null;
+            StatusTextsForTest = [];
+        }
+        else
+        {
+            primary = RecordingSelection ? DrawRecordingInstruction(dc)
+                : DetectWindows ? DrawCueInstruction(dc, cue, centerX, 18, scale)
+                : DrawPlainInstruction(dc);
+            chrome.Add(primary.Value);
+        }
+
+        if (RecordingSelection)
+        {
+            // The monitor edge in the recording colour: this selector records, it does not capture.
+            double edge = _recordingEdgePen.Thickness;
+            dc.DrawRectangle(null, _recordingEdgePen, new Rect(edge / 2, edge / 2,
+                Math.Max(0, ActualWidth - edge), Math.Max(0, ActualHeight - edge)));
+        }
+
         if (_precisionPointer.IsPrecision)
         {
             FormattedText precision = _precisionText ??= CreateText(UiText.Get("CapturePrecisionActive"), _uiTypeface, 12, _primaryTextBrush);
             var size = new Size(precision.Width + 20, precision.Height + 12);
-            // Under the status when the bar is shown; at the old top-left spot otherwise.
-            Rect chip = bar.HasValue
-                ? new Rect(centerX - (size.Width * scale / 2), primary.Bottom + (6 * scale), size.Width * scale, size.Height * scale)
+            // Under the bar when it is shown; at the old top-left spot otherwise.
+            Rect chip = bar is { } under
+                ? new Rect(centerX - (size.Width * scale / 2), under.Bottom + (8 * scale), size.Width * scale, size.Height * scale)
                 : new Rect(new Point(16, 64), size);
             dc.PushTransform(new MatrixTransform(scale, 0, 0, scale, chip.Left, chip.Top));
             dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, new Rect(size), 6, 6);
@@ -1207,6 +1303,38 @@ internal sealed class CaptureOverlayView : FrameworkElement
         dc.DrawText(text, new Point(background.Left + paddingX, background.Top + paddingY));
         return background;
     }
+
+    /// <summary>
+    /// The recording selector's instruction: a record dot, "drag the area to record" and a quieter
+    /// "Esc: cancel", on a chip outlined in the recording colour.
+    /// </summary>
+    private Rect DrawRecordingInstruction(DrawingContext dc)
+    {
+        _activeCueSegment = null;
+        string sentence = RecordingInstructionText;
+        string escape = UiText.Get("CaptureGuide2_Esc");
+        StatusTextsForTest = [sentence, escape];
+        FormattedText text = _instructionText ??= CreateText(sentence, _uiTypeface, 14, _primaryTextBrush);
+        FormattedText hint = CreateText(escape, _uiTypeface, 12, _mutedTextBrush);
+        const double paddingX = 14;
+        const double paddingY = 9;
+        const double dot = 10;
+        const double gap = 9;
+        const double hintGap = 18;
+        double width = paddingX + dot + gap + text.Width + hintGap + hint.Width + paddingX;
+        double height = Math.Max(text.Height, dot) + (paddingY * 2);
+        double left = Math.Max(16, (ActualWidth - width) / 2);
+        var background = new Rect(left, 18, width, height);
+        dc.DrawRoundedRectangle(_chromeBrush, _recordingPen, background, 10, 10);
+        dc.DrawEllipse(_recordingBrush, null, new Point(left + paddingX + (dot / 2), background.Top + (height / 2)), dot / 2, dot / 2);
+        double x = left + paddingX + dot + gap;
+        dc.DrawText(text, new Point(x, background.Top + ((height - text.Height) / 2)));
+        dc.DrawText(hint, new Point(x + text.Width + hintGap, background.Top + ((height - hint.Height) / 2)));
+        return background;
+    }
+
+    /// <summary>The recording selector's sentence.</summary>
+    internal static string RecordingInstructionText => UiText.Get("Onboard_RecordSelectInstruction");
 
     /// <summary>
     /// What a drag and a click do in the current mode, side by side, with the part that applies now
@@ -1823,6 +1951,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         if (_released) return;
         _guidePalette = CaptureGuidePalette.Resolve();
+        _recordingBrush = RecordingSelectionCue.Resolve();
         ApplyGuideBrushes();
         _staticDirty = true;
         QueueFeedback();
@@ -1852,6 +1981,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _chipBorderPen = Create("CaptureGuide.ChipBorder", 1);
         _magnifierBorderPen = Create("CaptureGuide.MagnifierBorder", 1);
         _magnifierGridPen = Create("CaptureGuide.MagnifierGrid", 0.5);
+        _recordingPen = new Pen(_recordingBrush, 2 * pixel);
+        _recordingPen.Freeze();
+        _recordingEdgePen = new Pen(_recordingBrush, 3 * pixel);
+        _recordingEdgePen.Freeze();
     }
 
     private FormattedText CreateText(string text, Typeface typeface, double size, Brush brush) =>

@@ -90,6 +90,8 @@ public sealed class CaptureCueEvidenceTests
             CopyColorText = _ => Task.FromResult(true),
             TextCaptureAvailable = true,
             ShowModeBar = true,
+            // The app runs the record switch and the ⋯ menu, so the coordinator always offers them.
+            OffersOtherActions = true,
             ShowStartGuide = state == "first-open",
         };
         UsePalette(view, CaptureGuidePalette.Create(theme, customColor: null, systemHighContrast: false));

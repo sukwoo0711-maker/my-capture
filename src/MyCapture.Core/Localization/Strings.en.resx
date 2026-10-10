@@ -3550,4 +3550,16 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Onboard_TrayReopenPin" xml:space="preserve"><value>Reopen closed pin</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>Keyboard shortcuts</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>Click: library · Right-click: menu</value></data>
+  <data name="Onboard_BarCapture" xml:space="preserve"><value>Capture</value></data>
+  <data name="Onboard_BarRecord" xml:space="preserve"><value>Record</value></data>
+  <data name="Onboard_BarKindName" xml:space="preserve"><value>Capture or record</value></data>
+  <data name="Onboard_BarCaptureHelp" xml:space="preserve"><value>Captures the screen as an image.</value></data>
+  <data name="Onboard_BarRecordHelp" xml:space="preserve"><value>Switches to choosing an area to record.</value></data>
+  <data name="Onboard_BarMore" xml:space="preserve"><value>More captures</value></data>
+  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>Delayed capture, scrolling capture or the previous region.</value></data>
+  <data name="Onboard_DelayCapture" xml:space="preserve"><value>Capture in {0} seconds</value></data>
+  <data name="Onboard_GuideSentence" xml:space="preserve"><value>Click a window to capture it, or drag to capture any area.</value></data>
+  <data name="Onboard_GuideSentenceRegionOnly" xml:space="preserve"><value>Drag to capture any area.</value></data>
+  <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>Drag over the area to record</value></data>
+  <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — Select an area to record</value></data>
 </root>

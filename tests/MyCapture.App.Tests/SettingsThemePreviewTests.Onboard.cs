@@ -2,12 +2,16 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Capture;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Themes;
+using MyCapture.Platform.Capture;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -70,6 +74,8 @@ public sealed partial class SettingsThemePreviewTests
                     () => { }, () => { }, () => { }, () => { }), new HotkeySettings(), canRestoreClosedPin: true, scrollingActive: false);
                 ContextMenu menu = presenter.CreateMenu(entries);
                 Save(RenderMenu(menu, openBranch: 2), "tray-menu");
+
+                RenderCaptureScenes(theme, Save);
             }
         }
         finally
@@ -77,6 +83,73 @@ public sealed partial class SettingsThemePreviewTests
             FluidMotion.AnimationsEnabledOverrideForTest = motion;
             application.Shutdown();
         }
+    }
+
+    /// <summary>The screenshot selector (first open, window hover, ⋯ menu) and the recording selector mid-drag.</summary>
+    private static void RenderCaptureScenes(AppTheme theme, Action<BitmapSource, string> save)
+    {
+        FrozenFrame frame = CaptureCueEvidenceTests.Desktop();
+        foreach (string state in new[] { "first-open", "window-hover" })
+        {
+            CaptureOverlayView view = CaptureCueEvidenceTests.EvidenceView(frame, theme, state);
+            try { save(CaptureCueEvidenceTests.Render(view), "capture-" + state); }
+            finally { view.ReleaseResources(); }
+        }
+
+        CaptureOverlayView more = CaptureCueEvidenceTests.EvidenceView(frame, theme, "window-hover");
+        try
+        {
+            more.CanRepeatLastRegion = () => true;
+            more.OffersOtherActions = true;
+            RenderTargetBitmap selector = CaptureCueEvidenceTests.Render(more);
+            Button button = more.ModeBarForTest!.MoreButton;
+            Point anchor = button.TranslatePoint(new Point(0, button.ActualHeight + 4), more);
+            BitmapSource menu = RenderMenuCard(more.ModeBarForTest.CreateMoreMenu());
+            var visual = new DrawingVisual();
+            using (DrawingContext dc = visual.RenderOpen())
+            {
+                dc.DrawImage(selector, new Rect(0, 0, selector.PixelWidth, selector.PixelHeight));
+                dc.DrawImage(menu, new Rect(anchor.X, anchor.Y, menu.PixelWidth, menu.PixelHeight));
+            }
+            var composed = new RenderTargetBitmap(selector.PixelWidth, selector.PixelHeight, 96, 96, PixelFormats.Pbgra32);
+            composed.Render(visual);
+            save(composed, "capture-more-menu");
+        }
+        finally { more.ReleaseResources(); }
+
+        PointD pointer = new(320, 210);
+        var record = new CaptureOverlayView(frame, showMagnifier: false)
+        {
+            ReadCursor = () => pointer,
+            ReadMonitors = () => CaptureCueEvidenceTests.Monitors,
+            RecordingSelection = true,
+        };
+        CaptureCueEvidenceTests.UsePalette(record, CaptureGuidePalette.Create(theme, customColor: null, systemHighContrast: false));
+        record.RecordingBrush = RecordingSelectionCue.Create(theme, systemHighContrast: false);
+        try
+        {
+            record.InitializePointer();
+            save(CaptureCueEvidenceTests.Render(record), "record-select-ready");
+            WindowDetectOverlayTests.Invoke(record, "OnMouseLeftButtonDown", WindowDetectOverlayTests.Button(UIElement.MouseLeftButtonDownEvent));
+            pointer = new PointD(900, 560);
+            WindowDetectOverlayTests.Invoke(record, "OnMouseMove", new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseMoveEvent });
+            save(CaptureCueEvidenceTests.Render(record), "record-select");
+        }
+        finally { record.ReleaseResources(); }
+    }
+
+    /// <summary>A context menu's items on its own card, without a popup.</summary>
+    private static BitmapSource RenderMenuCard(ContextMenu menu)
+    {
+        object[] items = menu.Items.Cast<object>().ToArray();
+        menu.Items.Clear();
+        FrameworkElement card = MenuCard(items);
+        card.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        card.Arrange(new Rect(card.DesiredSize));
+        card.UpdateLayout();
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(card.ActualWidth), (int)Math.Ceiling(card.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(card);
+        return bitmap;
     }
 
     /// <summary>

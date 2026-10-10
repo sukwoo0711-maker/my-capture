@@ -135,7 +135,7 @@ public sealed class CaptureCueOverlayTests
     });
 
     [Fact]
-    public void ShortcutHintSettingHidesOnlyTheKeyBadges() => StaTestHost.Run(() =>
+    public void TheBarDrawsNoKeyBadgesItsKeysLiveInTooltipsAndAcceleratorKeys() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         FrozenFrame frame = Desktop();
@@ -144,36 +144,38 @@ public sealed class CaptureCueOverlayTests
         hidden.ShowShortcutHints = false;
         try
         {
-            // The keys live on the bar's buttons now; there is no separate key-hint chip.
-            Assert.Equal(["T", "C", "Esc"], shown.ModeBarForTest!.VisibleKeyBadgesForTest);
-            Assert.Empty(hidden.ModeBarForTest!.VisibleKeyBadgesForTest);
-            Assert.EndsWith("(T)", (string)shown.ModeBarForTest.TextButton.ToolTip, StringComparison.Ordinal);
-            Assert.DoesNotContain("(T)", (string)hidden.ModeBarForTest.TextButton.ToolTip, StringComparison.Ordinal);
             Render(shown);
             Render(hidden);
-            // Bar and status only; the status keeps its size and stays centred under the bar.
-            Assert.Equal(2, shown.ChromeBoundsForTest.Count);
-            Assert.Equal(2, hidden.ChromeBoundsForTest.Count);
-            Rect shownStatus = shown.ChromeBoundsForTest[1];
-            Rect hiddenStatus = hidden.ChromeBoundsForTest[1];
-            Assert.Equal(shownStatus.Size, hiddenStatus.Size);
-            Assert.True(Math.Abs(shownStatus.Left - hiddenStatus.Left) <= 1, $"{shownStatus} vs {hiddenStatus}");
-            Assert.True(hidden.ChromeBoundsForTest[0].Width < shown.ChromeBoundsForTest[0].Width);
+            // No key text on the bar in either setting: the keys are in the tooltip and the
+            // accelerator key, the way the rest of MyCapture shows them.
+            foreach (CaptureOverlayView view in new[] { shown, hidden })
+            {
+                CaptureModeBar bar = view.ModeBarForTest!;
+                string[] barText = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().Select(text => text.Text).ToArray();
+                Assert.DoesNotContain("T", barText);
+                Assert.DoesNotContain("C", barText);
+                Assert.DoesNotContain("Esc", barText);
+                Assert.EndsWith("(T)", (string)bar.TextButton.ToolTip, StringComparison.Ordinal);
+                Assert.EndsWith("(Esc)", (string)bar.CancelButton.ToolTip, StringComparison.Ordinal);
+                Assert.Equal("T", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(bar.TextButton));
+                Assert.Contains(UiText.Get("CaptureGuide2_Text"), barText);
+            }
+
+            // The bar alone: no status chip under it, and the setting changes nothing about its size.
+            Assert.Single(shown.ChromeBoundsForTest);
+            Assert.Equal(shown.ChromeBoundsForTest[0], hidden.ChromeBoundsForTest[0]);
 
             // State cues and button names are not shortcut hints: they stay.
             Assert.Equal(CaptureCueState.Click, hidden.CueState);
-            Assert.NotNull(hidden.ActiveCueSegmentForTest);
             Assert.Equal(shown.TargetLabelForTest, hidden.TargetLabelForTest);
             Assert.Equal(UiText.Get("CaptureGuide2_Text"),
-                System.Windows.Automation.AutomationProperties.GetName(hidden.ModeBarForTest.TextButton));
+                System.Windows.Automation.AutomationProperties.GetName(hidden.ModeBarForTest!.TextButton));
 
             // Without the owners' handlers the text and colour buttons are not offered at all.
             hidden.CopyColorText = null;
             hidden.TextCaptureAvailable = false;
-            hidden.ShowShortcutHints = true;
             Assert.Equal(Visibility.Collapsed, hidden.ModeBarForTest.TextButton.Visibility);
             Assert.Equal(Visibility.Collapsed, hidden.ModeBarForTest.ColorButton.Visibility);
-            Assert.Equal(["Esc"], hidden.ModeBarForTest.VisibleKeyBadgesForTest);
         }
         finally
         {
@@ -181,6 +183,16 @@ public sealed class CaptureCueOverlayTests
             hidden.ReleaseResources();
         }
     });
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, index);
+            yield return child;
+            foreach (DependencyObject descendant in Descendants(child)) yield return descendant;
+        }
+    }
 
     [Fact]
     public void CoordinatorReadsTheShortcutHintSettingForEachSelector() => StaTestHost.Run(() =>
