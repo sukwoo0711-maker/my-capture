@@ -9,13 +9,15 @@ namespace MyCapture.Core.Annotations;
 /// <remarks>
 /// Carries its own <see cref="Rect"/> rather than measuring on demand so that the
 /// stored layer file renders identically on a machine that lacks the original font.
-/// The box is authoritative; the renderer fits text into it.
+/// The text itself is never trimmed: the box's width is where lines wrap (unless
+/// <see cref="AutoSize"/> is on), and the editor keeps the box sized to the laid-out text.
 /// </remarks>
 public sealed class TextAnnotation : AnnotationItem
 {
     /// <summary>Optional numbered badge; remains a text layer for older readers.</summary>
     public bool IsStepNumber { get; set; }
     private RectD _rect;
+    private bool _autoSize;
     private string _text = string.Empty;
     private ColorRgba _foreground = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
     private ColorRgba _background = ColorRgba.Transparent;
@@ -30,6 +32,21 @@ public sealed class TextAnnotation : AnnotationItem
     {
         get => _rect;
         set => SetProperty(ref _rect, value.Normalized());
+    }
+
+    /// <summary>
+    /// Whether the box follows its text: each paragraph stays on one line and the box is
+    /// as wide as the longest line. When off, <see cref="Rect"/>'s width is the wrapping width.
+    /// </summary>
+    /// <remarks>
+    /// Text the editor creates starts on. A layer saved before this flag existed reads as
+    /// off, so its stored width keeps wrapping exactly where it did; older readers ignore
+    /// the field.
+    /// </remarks>
+    public bool AutoSize
+    {
+        get => _autoSize;
+        set => SetProperty(ref _autoSize, value);
     }
 
     public string Text
@@ -149,6 +166,7 @@ public sealed class TextAnnotation : AnnotationItem
         {
             IsStepNumber = IsStepNumber,
             Rect = Rect,
+            AutoSize = AutoSize,
             Text = Text,
             Foreground = Foreground,
             Background = Background,
