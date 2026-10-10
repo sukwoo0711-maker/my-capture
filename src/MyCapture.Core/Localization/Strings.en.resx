@@ -3483,4 +3483,17 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="CaptureGuide2_IntroBodyRegionOnly" xml:space="preserve"><value>Drag to capture the region you want. Press Esc to cancel.</value></data>
   <data name="CaptureGuide2_IntroBar" xml:space="preserve"><value>Use the bar at the top for full screen, text extraction and color copy.</value></data>
   <data name="CaptureGuide2_IntroAgain" xml:space="preserve"><value>Select Help (?) to see this guide again.</value></data>
+  <data name="EditorUx_RotateLeft" xml:space="preserve"><value>Rotate left</value></data>
+  <data name="EditorUx_RotateRight" xml:space="preserve"><value>Rotate right</value></data>
+  <data name="EditorUx_RotateLeftHint" xml:space="preserve"><value>Rotate the image 90° left</value></data>
+  <data name="EditorUx_RotateRightHint" xml:space="preserve"><value>Rotate the image 90° right</value></data>
+  <data name="EditorUx_StepNumberToolTip" xml:space="preserve"><value>Step number — Adds 1, 2, 3… in order with each click</value></data>
+  <data name="EditorUx_StepNumberInstruction" xml:space="preserve"><value>Each click adds the next number: 1, 2, 3… Use it to show the order of steps in a procedure.</value></data>
+  <data name="EditorUx_StepNumberNext" xml:space="preserve"><value>Next number</value></data>
+  <data name="EditorUx_StepNumberNextHint" xml:space="preserve"><value>Your next click adds this number.</value></data>
+  <data name="EditorUx_StepNumberNextName" xml:space="preserve"><value>Next number to add: {0}</value></data>
+  <data name="EditorUx_StepNumberStatus" xml:space="preserve"><value>Step number · Click to add number {0}</value></data>
+  <data name="EditorUx_StepNumberSelected" xml:space="preserve"><value>Step number {0}</value></data>
+  <data name="EditorUx_StepNumberAdded" xml:space="preserve"><value>Added step number {0} · Next {1} · Ctrl+Z to undo</value></data>
+  <data name="EditorUx_HangulShortcutNotice" xml:space="preserve"><value>The shortcut did not run because the Korean input method did not report which key was pressed. Switch to English input with the Han/Eng key and press it again.</value></data>
 </root>

@@ -57,6 +57,9 @@ internal class AnnotationEditorWindow : Window
         Height = Math.Min(desiredHeight, Math.Max(MinHeight, work.Height - 64));
 
         AutomationProperties.SetName(this, UiText.Get("Text_53DCBAF22F42"));
+        // The window itself never takes text; while it briefly holds focus a Hangul-mode IME
+        // must not start a hidden composition either (the editor's text boxes opt back in).
+        InputMethod.SetIsInputMethodEnabled(this, false);
 
         _editor = new AnnotationEditorControl(
             sourceFrame,

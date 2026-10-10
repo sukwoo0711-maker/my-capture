@@ -943,10 +943,16 @@ internal sealed class AnnotationEditorController
         SetSelected(null);
     }
 
+    /// <summary>
+    /// The number the step tool adds next: one more than the highest number on the image, so
+    /// deleting or undoing the last badge gives its number back.
+    /// </summary>
+    internal int NextStepNumber => _document.Items.OfType<TextAnnotation>().Where(t => t.IsStepNumber)
+        .Select(t => int.TryParse(t.Text, out int n) ? n : 0).DefaultIfEmpty(0).Max() + 1;
+
     internal TextAnnotation AddStepNumber(PointD point)
     {
-        int number = _document.Items.OfType<TextAnnotation>().Where(t => t.IsStepNumber)
-            .Select(t => int.TryParse(t.Text, out int n) ? n : 0).DefaultIfEmpty(0).Max() + 1;
+        int number = NextStepNumber;
         double size = Math.Max(32, DefaultFontSize * 2);
         var badge = new TextAnnotation { IsStepNumber = true, Text = number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             Rect = new RectD(point.X, point.Y, size, size), FontSize = Math.Max(16, DefaultFontSize),

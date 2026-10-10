@@ -3483,4 +3483,17 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="CaptureGuide2_IntroBodyRegionOnly" xml:space="preserve"><value>드래그하면 원하는 영역을 캡처합니다. Esc로 취소합니다.</value></data>
   <data name="CaptureGuide2_IntroBar" xml:space="preserve"><value>위쪽 막대에서 전체 화면, 텍스트 추출, 색상 복사를 고를 수 있습니다.</value></data>
   <data name="CaptureGuide2_IntroAgain" xml:space="preserve"><value>도움말(?) 버튼을 누르면 이 안내를 다시 볼 수 있습니다.</value></data>
+  <data name="EditorUx_RotateLeft" xml:space="preserve"><value>왼쪽 회전</value></data>
+  <data name="EditorUx_RotateRight" xml:space="preserve"><value>오른쪽 회전</value></data>
+  <data name="EditorUx_RotateLeftHint" xml:space="preserve"><value>이미지를 왼쪽으로 90도 회전</value></data>
+  <data name="EditorUx_RotateRightHint" xml:space="preserve"><value>이미지를 오른쪽으로 90도 회전</value></data>
+  <data name="EditorUx_StepNumberToolTip" xml:space="preserve"><value>단계 번호 — 클릭할 때마다 1, 2, 3… 순서 번호를 붙입니다</value></data>
+  <data name="EditorUx_StepNumberInstruction" xml:space="preserve"><value>클릭할 때마다 1, 2, 3… 순서 번호를 붙입니다. 사용 순서나 절차를 설명할 때 씁니다.</value></data>
+  <data name="EditorUx_StepNumberNext" xml:space="preserve"><value>다음 번호</value></data>
+  <data name="EditorUx_StepNumberNextHint" xml:space="preserve"><value>클릭하면 이 번호가 붙습니다.</value></data>
+  <data name="EditorUx_StepNumberNextName" xml:space="preserve"><value>다음에 붙을 번호 {0}</value></data>
+  <data name="EditorUx_StepNumberStatus" xml:space="preserve"><value>단계 번호 · 클릭하면 {0}번을 붙입니다</value></data>
+  <data name="EditorUx_StepNumberSelected" xml:space="preserve"><value>단계 번호 {0}</value></data>
+  <data name="EditorUx_StepNumberAdded" xml:space="preserve"><value>단계 번호 {0}을(를) 추가했습니다 · 다음 번호 {1} · Ctrl+Z로 취소</value></data>
+  <data name="EditorUx_HangulShortcutNotice" xml:space="preserve"><value>한글 입력 상태에서 누른 키를 확인할 수 없어 단축키를 실행하지 못했습니다. 한/영 키로 영문 입력으로 바꾼 뒤 다시 누르십시오.</value></data>
 </root>
