@@ -97,11 +97,19 @@ internal static class LocalizationSelfTest
                     Check(statusText.ActualHeight >= statusText.DesiredSize.Height - .5, $"Video {width}: complete status glyph height");
                     Check(statusText.TranslatePoint(new Point(0, statusText.ActualHeight), client).Y <= client.ActualHeight + .5,
                         $"Video {width}: status inside native client");
+                    // The connector belongs to the detailed timeline, which is folded by default so
+                    // the trim timeline comes first; open it for the check, then fold it again.
+                    var detailToggle = Descendants(layout).OfType<System.Windows.Controls.Primitives.ToggleButton>()
+                        .Single(toggle => AutomationProperties.GetName(toggle) == UiText.Get("VideoEditorUx_DetailTimeline"));
+                    detailToggle.IsChecked = true;
+                    video.UpdateLayout();
                     var connector = Descendants(layout).OfType<TimelineRenderSurface>().Single(surface => !surface.IsHitTestVisible);
                     var hint = new FormattedText("The selected interval above fills the timeline below.", CultureInfo.InvariantCulture,
                         FlowDirection.LeftToRight, new Typeface(video.FontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
                         10.5, Brushes.White, VisualTreeHelper.GetDpi(video).PixelsPerDip);
-                    Check(connector.ActualHeight >= hint.Height, $"Video {width}: complete connector hint glyph height");
+                    Check(connector.IsVisible && connector.ActualHeight >= hint.Height, $"Video {width}: complete connector hint glyph height");
+                    detailToggle.IsChecked = false;
+                    video.UpdateLayout();
                     foreach (Button button in Descendants(layout).OfType<Button>().Where(b => b.IsVisible))
                     {
                         Point bottom = button.TranslatePoint(new Point(button.ActualWidth, button.ActualHeight), layout);

@@ -117,6 +117,7 @@ internal sealed class AnnotationEditorControl : Grid
     private TextBlock _statusText = null!;
     private TextBlock _dimensionsText = null!;
     private bool _inspectorCompact;
+    private TextBlock[] _rotateLabels = [];
     private FrameworkElement _stepSection = null!;
     private Border _stepPreview = null!;
     private Path _stepPreviewNumber = null!;
@@ -1272,6 +1273,8 @@ internal sealed class AnnotationEditorControl : Grid
         // Paint: a bare curved arrow beside Undo and Redo read as another history command.
         _rotateLeftButton = IconTextButton(UiText.Get("EditorUx_RotateLeft"), UiText.Get("EditorUx_RotateLeftHint"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
         _rotateRightButton = IconTextButton(UiText.Get("EditorUx_RotateRight"), UiText.Get("EditorUx_RotateRightHint"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
+        _rotateLabels = [.. new[] { _rotateLeftButton, _rotateRightButton }
+            .Select(button => ((Panel)button.Content).Children.OfType<TextBlock>().Single())];
         AutomationName(_rotateLeftButton, UiText.Get("EditorUx_RotateLeftHint"));
         AutomationName(_rotateRightButton, UiText.Get("EditorUx_RotateRightHint"));
         left.Children.Add(_rotateLeftButton);
@@ -2740,6 +2743,14 @@ internal sealed class AnnotationEditorControl : Grid
 
         // Keep styling reachable in compact windows; vertical scrolling handles short heights.
         bool compact = ActualWidth > 0 && ActualWidth < InspectorCompactWidth;
+
+        // Narrow windows keep the rotate icons and Q/W; the label stays in the tooltip and the
+        // accessible name, so the commands after it (crop, redaction) still fit.
+        foreach (TextBlock label in _rotateLabels)
+        {
+            label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        }
+
         if (compact == _inspectorCompact)
         {
             return;
