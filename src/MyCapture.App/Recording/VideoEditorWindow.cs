@@ -544,6 +544,7 @@ internal sealed class VideoEditorWindow : Window
                 FitCommandBar(header, upper.ActualWidth);
             }
         };
+        _fitCommandBarForTest = available => FitCommandBar(header, available);
 
         Grid timeline = BuildTimeline();
         var timelineScroll = new ScrollViewer
@@ -802,6 +803,14 @@ internal sealed class VideoEditorWindow : Window
     }
 
     internal int CommandBarLevelForTest => _commandBarLevel;
+
+    private Action<double>? _fitCommandBarForTest;
+
+    /// <summary>
+    /// Fits the command bar to a container width chosen by a test. A runner screen smaller than
+    /// the requested window clamps the window, and with it the width the bar is fitted to.
+    /// </summary>
+    internal void FitCommandBarForTest(double available) => _fitCommandBarForTest?.Invoke(available);
 
     private void RefreshIdentityDetails(double durationMs) =>
         _identityDetails.Text = UiText.Format("VideoEditorUx_HeaderDetails",

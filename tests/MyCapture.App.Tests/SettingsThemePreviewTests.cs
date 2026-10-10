@@ -65,7 +65,10 @@ public sealed partial class SettingsThemePreviewTests
         Task<string> error = child.StandardError.ReadToEndAsync();
         try
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            // The GIF preview check renders and plays real samples in six themes: about 20 s on a
+            // developer PC but over 60 s on a loaded GPU-less CI runner. The limit only guards
+            // against a hung child; no assertion depends on it.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(150));
             try
             {
                 await child.WaitForExitAsync(timeout.Token);

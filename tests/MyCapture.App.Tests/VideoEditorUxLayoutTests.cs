@@ -25,6 +25,7 @@ public sealed class VideoEditorUxLayoutTests
         try
         {
             editor = OpenReadyEditor(root, 10_000, show: true, 1400, 820);
+            FitWide(editor);
             // WindowIdentity puts the product first, as in every MyCapture window.
             Assert.Equal("MyCapture — 녹화 동영상 편집", editor.Title);
             Assert.Equal("녹화 동영상 편집 창", AutomationProperties.GetName(editor));
@@ -40,6 +41,16 @@ public sealed class VideoEditorUxLayoutTests
         }
     });
 
+    /// <summary>
+    /// Fits the bar to a 1400 DIP window even where the runner screen is smaller and clamps the
+    /// real window; the fitting rule, not the screen, is under test.
+    /// </summary>
+    private static void FitWide(VideoEditorWindow editor)
+    {
+        editor.FitCommandBarForTest(1360);
+        editor.UpdateLayout();
+    }
+
     [Fact]
     public void CommandBarGroupsHistoryToolsAndOutputInOrder() => StaTestHost.Run(() =>
     {
@@ -49,6 +60,7 @@ public sealed class VideoEditorUxLayoutTests
         try
         {
             editor = OpenReadyEditor(root, 10_000, show: true, 1400, 820);
+            FitWide(editor);
             var bar = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
             Assert.Equal(UiText.Get("VideoEditorUx_CommandBarName"), AutomationProperties.GetName(bar));
             double X(string name)
@@ -132,7 +144,11 @@ public sealed class VideoEditorUxLayoutTests
             editor = OpenReadyEditor(root, 10_000, show: true, 1400, 820);
             var layout = (Grid)editor.Content;
             var bar = Assert.Single(Descendants(layout).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
-            Assert.Equal(0, editor.CommandBarLevelForTest);
+            // A runner screen smaller than 1400x820 clamps the window, so the widest level is
+            // whatever that screen allows; the bar must compact when narrowed and return to it.
+            int wide = editor.CommandBarLevelForTest;
+            Assert.InRange(wide, 0, 2);
+            int narrowest = wide;
             foreach (var (width, height) in new[] { (760, 555), (960, 516), (1180, 760), (760, 555), (1400, 820) })
             {
                 editor.MinHeight = Math.Min(editor.MinHeight, height);
@@ -141,9 +157,11 @@ public sealed class VideoEditorUxLayoutTests
                 editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
                 Button export = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_ExportFormats"));
                 AssertInside(export, layout, layout.ActualHeight);
+                if (width == 760) narrowest = Math.Max(narrowest, editor.CommandBarLevelForTest);
             }
 
-            Assert.Equal(0, editor.CommandBarLevelForTest);
+            Assert.True(narrowest > wide, $"760 DIP kept level {narrowest}, the wide window had {wide}");
+            Assert.Equal(wide, editor.CommandBarLevelForTest);
         }
         finally
         {
