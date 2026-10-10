@@ -35,8 +35,8 @@ public sealed partial class GalleryViewModel
     public bool IsKeptView => _scope.IsAll && _filter == GalleryFilter.Pinned;
 
     public string AllItemsAccessibleName => NavName("LibraryUx_NavAll", AllItemsCount);
-    public string ImagesAccessibleName => NavName("Text_302BAE127938", ImageCount);
-    public string VideosAccessibleName => NavName("Text_C11734267E6B", VideoCount);
+    public string ImagesAccessibleName => NavName("LibraryUx_NavImages", ImageCount);
+    public string VideosAccessibleName => NavName("LibraryUx_NavVideos", VideoCount);
     public string KeptAccessibleName => NavName("LibraryUx_NavKept", KeptCount);
 
     /// <summary>Retention rule and folder storage, shown as the folder section's tooltip instead of body text.</summary>

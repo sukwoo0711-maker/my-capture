@@ -3572,4 +3572,6 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>더 보기 — 보관, 내보내기, 텍스트 인식</value></data>
   <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>제목, 창 이름, 이미지 속 글자 검색</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="LibraryUx_NavImages" xml:space="preserve"><value>이미지</value></data>
+  <data name="LibraryUx_NavVideos" xml:space="preserve"><value>동영상</value></data>
 </root>

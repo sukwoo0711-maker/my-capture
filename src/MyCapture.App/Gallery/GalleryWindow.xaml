@@ -1284,7 +1284,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Path Data="{StaticResource Icon.Image}" Style="{StaticResource LibraryUx.NavGlyph}" />
-                            <TextBlock Grid.Column="1" Text="{loc:Text Text_302BAE127938}" Margin="10,0,8,0" VerticalAlignment="Center"
+                            <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavImages}" Margin="10,0,8,0" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding ImageCount}" Style="{StaticResource LibraryUx.NavCount}" />
                         </Grid>
@@ -1299,7 +1299,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Path Data="{StaticResource LibraryUx.Icon.Video}" Style="{StaticResource LibraryUx.NavGlyph}" />
-                            <TextBlock Grid.Column="1" Text="{loc:Text Text_C11734267E6B}" Margin="10,0,8,0" VerticalAlignment="Center"
+                            <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavVideos}" Margin="10,0,8,0" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding VideoCount}" Style="{StaticResource LibraryUx.NavCount}" />
                         </Grid>

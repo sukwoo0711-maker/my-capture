@@ -3572,4 +3572,6 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More — keep, export and recognize text</value></data>
   <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, apps, image text</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="LibraryUx_NavImages" xml:space="preserve"><value>Images</value></data>
+  <data name="LibraryUx_NavVideos" xml:space="preserve"><value>Videos</value></data>
 </root>
