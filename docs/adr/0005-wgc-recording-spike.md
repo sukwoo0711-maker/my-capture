@@ -1,6 +1,6 @@
 # ADR 0005 — Windows Graphics Capture 녹화 백엔드 스파이크
 
-상태: 스파이크 측정 완료, 미채택(조건부 진행 권고)
+상태: 스파이크 측정 완료. 단일 모니터 영역 녹화의 기본값으로 채택됨([ADR 0006](0006-wgc-recording-default.md), 사용자 실기 검증 전)
 기준: `67bc397`, 브랜치 `spike/wgc-recording`(통합 브랜치에 병합하지 않는다)
 관련: [ADR 0002](0002-region-recording.md)(GDI BitBlt 채택), [경쟁 매트릭스 P0](../competitive-matrix.md#다음-우선순위),
 [v1.8.0 녹화 캡처 증거](../performance/v1.8.0-recording-capture-evidence.md)
@@ -206,6 +206,13 @@ BGRA 버퍼를 만든 뒤 Media Foundation H.264 인코더에 넘긴다. 녹화 
 중단 조건: 22000 실기기나 MSIX에서 테두리를 끌 수 없거나, HDR에서 GDI보다 품질이 나쁘고 셰이더 비용이 크거나,
 보안 데스크톱·장치 제거에서 GDI보다 나쁜 실패가 확인되면 WGC 기본값 전환을 중단하고 60fps 고해상도 전용 선택지로만
 남긴다.
+
+### 채택
+
+권고 1의 고해상도 대기 타이머가 #68로 들어간 뒤 같은 PC에서 다시 측정하니 정지 장면 60fps의 WGC 역전(32.0fps)이
+사라졌다(59.9~60.1fps). 이에 따라 권고 2를 건너뛰고 단일 모니터 영역 녹화의 기본값을 WGC로 바꾸되, 사용자가 설정에서
+바로 GDI로 돌릴 수 있는 "호환 모드"와 진단 스위치, GDI 폴백, MSIX `graphicsCaptureWithoutBorder` 선언을 함께 넣었다.
+권고 3의 실기 항목은 사용자 검증으로 남겼다. 결정·새 측정값·검증 항목은 [ADR 0006](0006-wgc-recording-default.md)에 있다.
 
 ## 재현
 
