@@ -34,6 +34,20 @@ public static class CaptureGuideTokens
             ["CaptureGuide.MagnifierBorder"] = accent,
             ["CaptureGuide.MagnifierGrid"] = contrast with { A = 50 },
             ["CaptureGuide.Dimmer"] = palette["Overlay.Dimmer"] with { A = 140 },
+            ["CaptureGuide.AccentText"] = ReadableTextOn(accent),
         };
+    }
+
+    /// <summary>
+    /// Black or white, whichever has the higher WCAG contrast on <paramref name="accent"/>. One of
+    /// them always reaches at least 4.58:1 on an opaque colour, so accent-filled labels stay readable
+    /// for every palette and any custom guide colour.
+    /// </summary>
+    public static ThemeColor ReadableTextOn(ThemeColor accent)
+    {
+        ThemeColor opaque = accent with { A = 255 };
+        ThemeColor black = ThemeColor.Rgb(0, 0, 0);
+        ThemeColor white = ThemeColor.Rgb(255, 255, 255);
+        return ThemeContrast.Ratio(black, opaque) >= ThemeContrast.Ratio(white, opaque) ? black : white;
     }
 }

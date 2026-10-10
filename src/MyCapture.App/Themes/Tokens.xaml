@@ -167,6 +167,8 @@
     <SolidColorBrush x:Key="CaptureGuide.MagnifierBorder" Color="#FF9789FF" />
     <SolidColorBrush x:Key="CaptureGuide.MagnifierGrid" Color="#32000000" />
     <SolidColorBrush x:Key="CaptureGuide.Dimmer" Color="#8C080C12" />
+    <!-- Text on accent-filled guide labels: black or white by WCAG contrast with the accent. -->
+    <SolidColorBrush x:Key="CaptureGuide.AccentText" Color="#FF000000" />
 
     <SolidColorBrush x:Key="Overlay.HandleFill" Color="{StaticResource Primitive.Warm100}" />
     <SolidColorBrush x:Key="Overlay.HandleStroke" Color="{StaticResource Primitive.Yellow600}" />
