@@ -3442,4 +3442,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="GifPreview_SizeRange" xml:space="preserve"><value>{0}~{1}</value></data>
   <data name="GifPreview_CompareHelp" xml:space="preserve"><value>같은 시점의 원본 프레임을 GIF 옆에 표시합니다.</value></data>
   <data name="GifPreview_ActualSizeHelp" xml:space="preserve"><value>GIF 픽셀을 화면 픽셀과 1:1로 표시합니다.</value></data>
+  <data name="RecordingBackend_Label" xml:space="preserve"><value>녹화 캡처 방식</value></data>
+  <data name="RecordingBackend_Hint" xml:space="preserve"><value>자동은 녹화 영역이 모니터 하나 안에 있으면 Windows Graphics Capture로 녹화하고, 여러 모니터에 걸치거나 사용할 수 없으면 GDI로 녹화합니다. 녹화 화면이 깨지거나 멈추면 호환 모드를 선택하십시오.</value></data>
+  <data name="RecordingBackend_Auto" xml:space="preserve"><value>자동(Windows Graphics Capture 우선)</value></data>
+  <data name="RecordingBackend_Gdi" xml:space="preserve"><value>호환 모드(GDI)</value></data>
 </root>

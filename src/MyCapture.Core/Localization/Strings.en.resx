@@ -3442,4 +3442,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="GifPreview_SizeRange" xml:space="preserve"><value>{0}–{1}</value></data>
   <data name="GifPreview_CompareHelp" xml:space="preserve"><value>Shows the original frame of the same moment beside the GIF.</value></data>
   <data name="GifPreview_ActualSizeHelp" xml:space="preserve"><value>Shows GIF pixels 1:1 with screen pixels.</value></data>
+  <data name="RecordingBackend_Label" xml:space="preserve"><value>Recording capture method</value></data>
+  <data name="RecordingBackend_Hint" xml:space="preserve"><value>Automatic records with Windows Graphics Capture when the region lies within one monitor, and with GDI when it spans monitors or Windows Graphics Capture is unavailable. Choose compatibility mode if recordings look broken or freeze.</value></data>
+  <data name="RecordingBackend_Auto" xml:space="preserve"><value>Automatic (Windows Graphics Capture first)</value></data>
+  <data name="RecordingBackend_Gdi" xml:space="preserve"><value>Compatibility mode (GDI)</value></data>
 </root>
