@@ -892,22 +892,22 @@
                 </ScrollViewer>
             </TabItem>
             <TabItem x:Name="UpdateTab">
-                <StackPanel Margin="20">
-                    <TextBlock x:Name="UpdateVersionLabel" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Text.Primary}" />
-                    <TextBlock x:Name="UpdateDescription" TextWrapping="Wrap" Margin="0,12,0,20" Foreground="{DynamicResource Text.Primary}" />
-                    <Button x:Name="StoreRatingButton" Style="{StaticResource Button.Secondary}" Visibility="Collapsed"
-                            HorizontalAlignment="Left" MinWidth="140" Margin="0,0,0,20"
-                            Content="{loc:Text StoreRating_Button}"
-                            AutomationProperties.Name="{loc:Text StoreRating_Button}"
-                            AutomationProperties.HelpText="{loc:Text StoreRating_ButtonHelp}"
-                            Click="OnStoreRatingClick" />
-                    <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap" Margin="0,0,0,12" Foreground="{DynamicResource Text.Primary}" AutomationProperties.LiveSetting="Polite" />
-                    <ProgressBar x:Name="UpdateDownloadProgress" Height="8" Minimum="0" Maximum="100" Margin="0,0,0,20" />
-                    <WrapPanel>
-                        <Button x:Name="UpdateAction" Style="{StaticResource Button.Primary}" Click="OnUpdateAction" MinWidth="140" />
-                        <Button x:Name="UpdateCancel" Style="{StaticResource Button.Secondary}" Click="OnUpdateCancel" IsEnabled="False" Margin="8,0,0,0" MinWidth="120" />
-                    </WrapPanel>
-                </StackPanel>
+                <!-- The unpackaged guidance and the status line can outgrow the minimum window. -->
+                <ScrollViewer x:Name="UpdateScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="20">
+                        <TextBlock x:Name="UpdateVersionLabel" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Text.Primary}" />
+                        <TextBlock x:Name="UpdateDescription" TextWrapping="Wrap" Margin="0,12,0,20" Foreground="{DynamicResource Text.Primary}" />
+                        <WrapPanel>
+                            <Button x:Name="UpdateAction" Style="{StaticResource Button.Primary}" Click="OnUpdateAction" MinWidth="140" Margin="0,0,8,8" />
+                            <Button x:Name="StoreRatingButton" Style="{StaticResource Button.Secondary}" Visibility="Collapsed"
+                                    MinWidth="140" Margin="0,0,8,8"
+                                    Content="{loc:Text StoreRating_Button}"
+                                    AutomationProperties.Name="{loc:Text StoreRating_Button}"
+                                    AutomationProperties.HelpText="{loc:Text StoreRating_ButtonHelp}"
+                                    Click="OnStoreRatingClick" />
+                        </WrapPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
 

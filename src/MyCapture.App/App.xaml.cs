@@ -1770,12 +1770,6 @@ public partial class App : Application
             () => _services.GetRequiredService<SettingsStore>(),
             applyDraft: (next, edited) => _settingsApply!.Apply(next, edited));
 
-        window.CanExitForUpdate = () =>
-            _recorder?.IsActive != true && _overlay?.IsActive != true &&
-            _activeCountdown is null && _scrollCancellation is null &&
-            !_pasteToScreenInFlight && _currentEditSession is null &&
-            !Windows.OfType<Window>().Any(w => w is MyCapture.App.Recording.VideoEditorWindow or AnnotationEditorWindow);
-        window.ExitForUpdate = () => Shutdown(0);
         window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).

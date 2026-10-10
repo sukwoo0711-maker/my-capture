@@ -70,7 +70,6 @@ internal sealed partial class SettingsWindow : Window
 
         _draft = new SettingsDraft(_currentSettings());
         AttachDraftEvents();
-        _settingsEdited = false;
         DataContext = _draft;
 
         // ApplyCommand / CancelCommand back the Ctrl+S and Esc key bindings. They are added in
@@ -133,9 +132,6 @@ internal sealed partial class SettingsWindow : Window
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
     internal void CloseForExit()
     {
-        ++_updateProgressGeneration;
-        _updates.Cancel();
-        if (!_installingUpdate) _stagedUpdate?.Cleanup();
         _allowClose = true;
         Close();
     }
@@ -167,7 +163,6 @@ internal sealed partial class SettingsWindow : Window
         DetachDraftEvents();
         _draft = new SettingsDraft(settings);
         AttachDraftEvents();
-        _settingsEdited = false;
         DataContext = _draft;
         ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
         SetStatusMessage(string.Empty);
@@ -190,7 +185,6 @@ internal sealed partial class SettingsWindow : Window
 
     private void OnDraftPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        _settingsEdited = true;
         // ResetToDefaults raises a whole-draft notification instead of one for Theme.
         if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName is nameof(SettingsDraft.Theme)
             or nameof(SettingsDraft.CaptureGuideColorMode) or nameof(SettingsDraft.CaptureGuideColorHex))
@@ -287,9 +281,6 @@ internal sealed partial class SettingsWindow : Window
             ReloadDraftFrom(imported);
             // Exports never carry the GitHub PAT, so the import must not wipe the live one.
             _draft.GitHubToken = _currentSettings().GitHub.Token;
-            // Import replaces the entire draft; an empty saved token may not raise any
-            // property change. Keep update/restart blocked until Apply or discard.
-            _settingsEdited = true;
             SetStatusMessage(UiText.Get("Settings_ImportDone"));
             RefreshErrorSummary();
         }
@@ -348,8 +339,6 @@ internal sealed partial class SettingsWindow : Window
 
     private void CancelToTray()
     {
-        ++_updateProgressGeneration;
-        _updates.Cancel();
         // Discard edits by dropping the draft, then hide.
         if (_draft is not null)
         {
