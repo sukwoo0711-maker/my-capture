@@ -358,7 +358,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         {
             _format = DecodedVideoPixelFormat.Nv12;
             RefreshOutputFormat();
-            DurationMs = ReadDurationMs();
+            DurationMs = ReadDurationMs(_reader!);
             return;
         }
 

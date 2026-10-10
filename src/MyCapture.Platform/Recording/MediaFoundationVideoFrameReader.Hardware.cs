@@ -97,7 +97,7 @@ public sealed partial class MediaFoundationVideoFrameReader
             reader = null;
             d3d = null;
             RefreshOutputFormat();
-            DurationMs = ReadDurationMs();
+            DurationMs = ReadDurationMs(_reader!);
             return null;
         }
         catch (Exception ex) when (ex is InvalidOperationException
