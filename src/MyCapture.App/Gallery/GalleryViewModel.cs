@@ -174,12 +174,21 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
     public int VisibleCount => _groups.Sum(group => group.Items.Count);
     public string ResultCountText => UiText.Format("Library.Search.Count", VisibleCount, _controller.Count);
-    public string EmptyStateTitle => UiText.Get(HasFolderScope && string.IsNullOrWhiteSpace(SearchQuery) && Filter == GalleryFilter.All
+    public string EmptyStateTitle => UiText.Get(IsBrowsingFolderWithoutQuery
         ? "Folder410.EmptyFolder" : QueueIsEmpty ? "Library.Empty.Start" : "Library.Empty.NoResults");
+
+    /// <summary>
+    /// True when the empty state comes from a search or filter that resetting can clear; an
+    /// empty folder viewed without either has nothing to reset.
+    /// </summary>
+    public bool CanResetEmptySearch => !QueueIsEmpty && !IsBrowsingFolderWithoutQuery;
+
+    private bool IsBrowsingFolderWithoutQuery =>
+        HasFolderScope && string.IsNullOrWhiteSpace(SearchQuery) && Filter == GalleryFilter.All;
 
     /// <summary>Empty-state message, tailored to whether a search is active.</summary>
     public string EmptyStateText =>
-        HasFolderScope && string.IsNullOrWhiteSpace(SearchQuery) && Filter == GalleryFilter.All
+        IsBrowsingFolderWithoutQuery
             ? UiText.Get(NewCaptureFolderId is { } destination && destination == _scope.FolderId
                 ? "LibraryFolder_EmptyFolderSavesHere" : "Folder410.EmptyFolderHint")
             : QueueIsEmpty
@@ -268,6 +277,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         Raise(nameof(QueueIsEmpty));
         Raise(nameof(EmptyStateText));
         Raise(nameof(EmptyStateTitle));
+        Raise(nameof(CanResetEmptySearch));
         Raise(nameof(VisibleCount));
         Raise(nameof(ResultCountText));
         Raise(nameof(SummaryText));

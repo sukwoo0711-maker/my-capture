@@ -853,9 +853,9 @@
                                TextAlignment="Center"
                                AutomationProperties.Name="{Binding EmptyStateText}" TextWrapping="Wrap" />
                     <Button Content="{loc:Text Text_2C20ADDA2018}" Style="{StaticResource Button.Primary}" Click="OnCaptureRegionClick" Margin="0,16,0,0" Visibility="{Binding QueueIsEmpty, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Content="{loc:Text Library.Search.Reset}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0">
-                        <Button.Style><Style TargetType="Button" BasedOn="{StaticResource Button.Secondary}"><Style.Triggers><DataTrigger Binding="{Binding QueueIsEmpty}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></Button.Style>
-                    </Button>
+                    <Button Content="{loc:Text Library.Search.Reset}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0"
+                            Style="{StaticResource Button.Secondary}"
+                            Visibility="{Binding CanResetEmptySearch, Converter={StaticResource BoolToVisibility}}" />
                 </StackPanel>
             </Border>
         </Grid>
