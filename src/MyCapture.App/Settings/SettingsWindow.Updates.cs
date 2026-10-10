@@ -22,7 +22,8 @@ internal sealed partial class SettingsWindow
     private void InitializeUpdates()
     {
         UpdateTab.Header = UpdateStrings.Title;
-        UpdateVersionLabel.Text = AppIdentity.Label + " · " + UpdateStrings.Current(CurrentUpdateVersion);
+        // The label already carries the version, so name the product without it.
+        UpdateVersionLabel.Text = AppIdentity.WindowLabel + " · " + UpdateStrings.Current(CurrentUpdateVersion);
         if (AppPackage.IsPackaged)
         {
             // The Store updates the packaged build; the button only opens its listing.
