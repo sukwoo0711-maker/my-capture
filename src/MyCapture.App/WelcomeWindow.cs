@@ -63,8 +63,11 @@ internal sealed class WelcomeWindow : Window
         AfterCaptureText = AfterCaptureSentence(afterCapture);
         var steps = new StackPanel();
         AutomationProperties.SetName(steps, UiText.Get("Onboard_StepsName"));
-        steps.Children.Add(Step(1, CaptureIllustration(), UiText.Get("Text_096A13A757DB"),
-            ShortcutHelpWindow.Keycaps(Display(keys.Capture)), TryNowButton));
+        // Only a key that is really assigned is shown; otherwise the tray menu is the way in.
+        FrameworkElement captureKeys = keys.Capture.IsAssigned
+            ? ShortcutHelpWindow.Keycaps(keys.Capture.ToString())
+            : Sentence(UiText.Get("Onboard_CaptureFromTray"));
+        steps.Children.Add(Step(1, CaptureIllustration(), UiText.Get("Text_096A13A757DB"), captureKeys, TryNowButton));
         steps.Children.Add(Step(2, AfterCaptureIllustration(afterCapture), UiText.Get("Onboard_AfterCaptureTitle"),
             Sentence(AfterCaptureText), action: null));
         steps.Children.Add(Step(3, TrayIllustration(), UiText.Get("Onboard_TrayTitle"),
@@ -123,8 +126,6 @@ internal sealed class WelcomeWindow : Window
         Outcome = outcome;
         Close();
     }
-
-    private static string Display(Hotkey key) => key.IsAssigned ? key.ToString() : UiText.Get("Hotkey.Unassigned");
 
     private static FrameworkElement Step(int number, FrameworkElement illustration, string title, FrameworkElement body,
         FrameworkElement? action)

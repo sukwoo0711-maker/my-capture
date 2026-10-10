@@ -78,13 +78,18 @@ public sealed class FirstRunWelcomeTests
         }
         finally { welcome.Close(); }
 
+        // A key that is not assigned is not shown at all: the tray menu is named instead, and the
+        // library is reached by clicking the tray icon, never by a key that may be unassigned.
         using var english = UiText.UseLanguage("en-US");
-        var unassigned = new WelcomeWindow(new HotkeySettings { Capture = Hotkey.None }, AfterCaptureAction.Editor);
+        var unassigned = new WelcomeWindow(new HotkeySettings { Capture = Hotkey.None, OpenLibrary = Hotkey.None }, AfterCaptureAction.Editor);
         try
         {
             Assert.Equal("Try it now", unassigned.TryNowButton.Content);
-            Assert.Contains(Descendants(unassigned).OfType<WrapPanel>(),
-                panel => AutomationProperties.GetName(panel) == UiText.Get("Hotkey.Unassigned"));
+            Assert.Empty(Descendants(unassigned).OfType<WrapPanel>());
+            string text = string.Join(" ", Descendants(unassigned).OfType<TextBlock>().Select(AutomationProperties.GetName));
+            Assert.Contains("Choose Region capture from the tray icon menu.", text, StringComparison.Ordinal);
+            Assert.Contains("Click its icon for the library", text, StringComparison.Ordinal);
+            Assert.DoesNotContain(UiText.Get("Hotkey.Unassigned"), text, StringComparison.Ordinal);
         }
         finally { unassigned.Close(); }
     });

@@ -6,9 +6,13 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Capture;
+using MyCapture.App.Pinning;
+using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Pin;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Themes;
 using MyCapture.Platform.Capture;
@@ -76,6 +80,8 @@ public sealed partial class SettingsThemePreviewTests
                 Save(RenderMenu(menu, openBranch: 2), "tray-menu");
 
                 RenderCaptureScenes(theme, Save);
+                RenderRecordingBarScenes(Save);
+                RenderPinHoverScene(Save);
             }
         }
         finally
@@ -136,6 +142,84 @@ public sealed partial class SettingsThemePreviewTests
             save(CaptureCueEvidenceTests.Render(record), "record-select");
         }
         finally { record.ReleaseResources(); }
+    }
+
+    /// <summary>The recording bar before, during and paused, laid out without showing its window.</summary>
+    private static void RenderRecordingBarScenes(Action<BitmapSource, string> save)
+    {
+        RecordingControlWindow Bar() => new(new RectD(200, 200, 1280, 720), new RecordingSettings(),
+            () => throw new InvalidOperationException("Evidence only: no recorder starts."), () => "unused.mp4",
+            Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        foreach ((string name, bool? paused) in new[] { ("record-bar-ready", (bool?)null), ("record-bar-recording", false), ("record-bar-paused", true) })
+        {
+            RecordingControlWindow window = Bar();
+            try
+            {
+                if (paused is { } isPaused) window.PreviewRecordingForTest(isPaused, TimeSpan.FromSeconds(12));
+                var strip = (FrameworkElement)typeof(RecordingControlWindow)
+                    .GetField("_controlStrip", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                    .GetValue(window)!;
+                save(RenderPlaced(strip), name);
+            }
+            finally { window.Close(); }
+        }
+    }
+
+    /// <summary>A hovered pin with its bar in the corner, both kept off the desktop.</summary>
+    private static void RenderPinHoverScene(Action<BitmapSource, string> save)
+    {
+        BitmapSource image = PinEvidenceImage();
+        var pin = new PinWindow(PinContent.FromImage(image), new PinViewState(image.PixelWidth, image.PixelHeight, 1, 1, 0.1),
+            -10000, -10000, () => new PinSettings())
+        {
+            ShowActivated = false,
+            ReadWorkArea = _ => new RectD(-12000, -12000, 4000, 4000),
+        };
+        try
+        {
+            pin.Show();
+            pin.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseEnterEvent });
+            PinHoverBar bar = pin.HoverBarForTest!;
+            Drain(pin);
+            bar.UpdateLayout();
+            var pinContent = (FrameworkElement)pin.Content;
+            var barContent = (FrameworkElement)bar.Content;
+            RectD placed = PinHoverBar.Place(new RectD(0, 0, pin.ActualWidth, pin.ActualHeight), bar.ActualWidth, bar.ActualHeight,
+                new RectD(-1000, -1000, 4000, 4000), 1);
+            const double margin = 24;
+            var visual = new DrawingVisual();
+            using (DrawingContext dc = visual.RenderOpen())
+            {
+                dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x2F, 0x55, 0x7A), Color.FromRgb(0x7A, 0x9C, 0xB8), 35), null,
+                    new Rect(0, 0, pin.ActualWidth + (margin * 2), pin.ActualHeight + (margin * 2)));
+                dc.DrawRectangle(new VisualBrush(pinContent) { Stretch = Stretch.None }, null,
+                    new Rect(margin, margin, pinContent.ActualWidth, pinContent.ActualHeight));
+                dc.DrawRectangle(new VisualBrush(barContent) { Stretch = Stretch.None }, null,
+                    new Rect(margin + placed.Left, margin + placed.Top, barContent.ActualWidth, barContent.ActualHeight));
+            }
+            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(pin.ActualWidth + (margin * 2)),
+                (int)Math.Ceiling(pin.ActualHeight + (margin * 2)), 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            save(bitmap, "pin-hover");
+        }
+        finally { pin.Close(); }
+    }
+
+    private static BitmapSource PinEvidenceImage()
+    {
+        var visual = new DrawingVisual();
+        using (DrawingContext dc = visual.RenderOpen())
+        {
+            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xF7, 0xF8, 0xFA)), null, new Rect(0, 0, 360, 220));
+            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xE4, 0xE8, 0xEE)), null, new Rect(0, 0, 360, 30));
+            for (int line = 0; line < 5; line++)
+                dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(0x66, 0x2B, 0x31, 0x3B)), null,
+                    new Rect(20, 50 + line * 30, 300 - (line % 2) * 80, 10), 4, 4);
+        }
+        var bitmap = new RenderTargetBitmap(360, 220, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
     }
 
     /// <summary>A context menu's items on its own card, without a popup.</summary>
