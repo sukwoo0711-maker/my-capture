@@ -3446,4 +3446,10 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="RecordingBackend_Hint" xml:space="preserve"><value>Automatic records with Windows Graphics Capture when the region lies within one monitor, and with GDI when it spans monitors or Windows Graphics Capture is unavailable. Choose compatibility mode if recordings look broken or freeze.</value></data>
   <data name="RecordingBackend_Auto" xml:space="preserve"><value>Automatic (Windows Graphics Capture first)</value></data>
   <data name="RecordingBackend_Gdi" xml:space="preserve"><value>Compatibility mode (GDI)</value></data>
+  <data name="LibraryFolder_CardCount" xml:space="preserve"><value>Captures: {0}</value></data>
+  <data name="LibraryFolder_CardCountWithFolders" xml:space="preserve"><value>Folders: {1} · Captures: {0}</value></data>
+  <data name="LibraryFolder_CardAccessibleName" xml:space="preserve"><value>Folder {0}, {1}</value></data>
+  <data name="LibraryFolder_CardOpenHint" xml:space="preserve"><value>Open folder (Enter)</value></data>
+  <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>Keep saving new captures to the last folder after closing the library</value></data>
+  <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>New captures are saved to this folder. You can also drag captures here.</value></data>
 </root>

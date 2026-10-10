@@ -50,3 +50,20 @@ public sealed class IsHeaderRowConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+/// True when the bound row is a <see cref="GalleryFolderRow"/>, used by the outer list's
+/// container style to swap in the folder card template.
+/// </summary>
+/// <remarks>
+/// Declared in <c>GalleryWindow.xaml</c> rather than <c>App.xaml</c>: tests that host the
+/// gallery with their own application resources keep working without registering it.
+/// </remarks>
+public sealed class IsFolderRowConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is GalleryFolderRow;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

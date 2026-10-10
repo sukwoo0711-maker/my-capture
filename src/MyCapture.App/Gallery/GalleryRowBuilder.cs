@@ -55,8 +55,9 @@ public static class GalleryRowBuilder
 
     /// <summary>
     /// Flattens <paramref name="groups"/> into a header/tile-row sequence: for each group, a
-    /// <see cref="GalleryHeaderRow"/> followed by its tiles chunked into
-    /// <see cref="GalleryTileRow"/>s of at most <paramref name="columns"/> tiles each.
+    /// <see cref="GalleryHeaderRow"/>, then its folder cards chunked into
+    /// <see cref="GalleryFolderRow"/>s, then its tiles chunked into
+    /// <see cref="GalleryTileRow"/>s, each row holding at most <paramref name="columns"/> items.
     /// </summary>
     /// <param name="groups">The date groups, already ordered newest-first.</param>
     /// <param name="columns">Tiles per row; values below <see cref="MinColumns"/> are raised.</param>
@@ -70,6 +71,12 @@ public static class GalleryRowBuilder
         foreach (GalleryGroupViewModel group in groups)
         {
             rows.Add(new GalleryHeaderRow(group.Heading));
+
+            IReadOnlyList<GalleryFolderCardViewModel> folders = group.Folders;
+            for (int start = 0; start < folders.Count; start += perRow)
+            {
+                rows.Add(new GalleryFolderRow(folders.Skip(start).Take(perRow).ToArray()));
+            }
 
             IReadOnlyList<GalleryItemViewModel> tiles = group.Items;
             for (int start = 0; start < tiles.Count; start += perRow)

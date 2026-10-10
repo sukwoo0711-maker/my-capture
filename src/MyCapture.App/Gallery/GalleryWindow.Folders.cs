@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using MyCapture.Core.Queue;
@@ -53,9 +54,7 @@ internal sealed partial class GalleryWindow
     private async Task SelectFolderScopeAsync(CaptureFolderScope scope)
     {
         if (_viewModel.SelectedScope == scope) return;
-        _folderNavigationUpdating = true;
-        try { CloseInlinePlayer(); _viewModel.SelectScope(scope); }
-        finally { _folderNavigationUpdating = false; }
+        ShowScope(scope);
         if (_queue.UseCurrentFolderForNewCaptures && _queue.DefaultCaptureFolderId != scope.FolderId)
         {
             try { await _queue.SetNewCaptureFolderAsync(scope.FolderId, true); }
@@ -65,19 +64,99 @@ internal sealed partial class GalleryWindow
         }
     }
 
+    /// <summary>Shows a scope without changing the saved keep-after-close destination.</summary>
+    private void ShowScope(CaptureFolderScope scope)
+    {
+        if (_viewModel.SelectedScope == scope) return;
+        _folderNavigationUpdating = true;
+        try { CloseInlinePlayer(); _viewModel.SelectScope(scope); }
+        finally { _folderNavigationUpdating = false; }
+    }
+
     private async void OnAllFolderDatesClick(object sender, RoutedEventArgs e) =>
         await SelectFolderScopeAsync(CaptureFolderScope.All);
 
     private async void OnFolderCaptureTargetClick(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            bool enabled = CurrentFolderCaptureCheck.IsChecked == true;
-            await _queue.SetNewCaptureFolderAsync(enabled ? _viewModel.SelectedScope.FolderId : null, enabled);
-        }
+        try { await _viewModel.SetFolderCaptureEnabledAsync(CurrentFolderCaptureCheck.IsChecked == true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or AggregateException)
         { LibraryActionStatus.Text = UiText.Get("Folder410.OperationFailed"); }
-        finally { _viewModel.Refresh(); }
+    }
+
+    private async void OnFolderCardClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: GalleryFolderCardViewModel card })
+            await OpenFolderCardAsync(card, fromKeyboard: false);
+    }
+
+    private async void OnFolderCardKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: GalleryFolderCardViewModel card }
+            || Keyboard.Modifiers != ModifierKeys.None) return;
+        switch (e.Key)
+        {
+            case Key.Enter:
+            case Key.Space:
+                e.Handled = true;
+                await OpenFolderCardAsync(card, fromKeyboard: true);
+                break;
+            case Key.Left:
+            case Key.Right:
+                e.Handled = true;
+                if (GallerySelectionNavigation.FindFolderNeighbor(_viewModel.Rows, card, e.Key == Key.Left ? -1 : 1)
+                    is { } neighbor) FocusFolderCard(neighbor);
+                break;
+            case Key.Up:
+            case Key.Down:
+                e.Handled = true;
+                object? target = GallerySelectionNavigation.FindVertical(_viewModel.Rows, card, e.Key == Key.Up ? -1 : 1);
+                if (target is GalleryFolderCardViewModel above) FocusFolderCard(above);
+                else if (target is GalleryItemViewModel tile)
+                {
+                    _viewModel.Select(tile.Id);
+                    GalleryTileRow? row = _viewModel.Rows.OfType<GalleryTileRow>().FirstOrDefault(r => r.Tiles.Contains(tile));
+                    if (row is not null) RowsList.ScrollIntoView(row);
+                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusTile(RowsList, tile)));
+                }
+                break;
+        }
+    }
+
+    private async Task OpenFolderCardAsync(GalleryFolderCardViewModel card, bool fromKeyboard)
+    {
+        if (_queue.FindFolder(card.FolderId) is null) { _viewModel.Refresh(); return; }
+        await SelectFolderScopeAsync(card.Scope);
+        if (!fromKeyboard) return;
+        // Keep keyboard users in the opened folder: its first card or capture, else the tree.
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            GalleryRow? first = _viewModel.Rows.FirstOrDefault(row => row is GalleryFolderRow or GalleryTileRow);
+            if (first is GalleryFolderRow { Folders.Count: > 0 } folders) FocusFolderCard(folders.Folders[0]);
+            else if (first is GalleryTileRow { Tiles.Count: > 0 } tiles)
+            {
+                _viewModel.Select(tiles.Tiles[0].Id);
+                RowsList.ScrollIntoView(tiles);
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusTile(RowsList, tiles.Tiles[0])));
+            }
+            else _ = FolderTree.Focus();
+        }));
+    }
+
+    private void FocusFolderCard(GalleryFolderCardViewModel card)
+    {
+        GalleryFolderRow? row = _viewModel.Rows.OfType<GalleryFolderRow>().FirstOrDefault(r => r.Folders.Contains(card));
+        if (row is null) return;
+        RowsList.ScrollIntoView(row);
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusFolderCard(RowsList, card)));
+    }
+
+    private static bool FocusFolderCard(DependencyObject parent, GalleryFolderCardViewModel card)
+    {
+        if (parent is Button { DataContext: GalleryFolderCardViewModel candidate } button && candidate == card)
+            return button.Focus();
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            if (FocusFolderCard(VisualTreeHelper.GetChild(parent, i), card)) return true;
+        return false;
     }
 
     private CaptureFolderScope FolderScopeFromSender(object sender) =>

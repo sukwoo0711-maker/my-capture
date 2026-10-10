@@ -3446,4 +3446,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="RecordingBackend_Hint" xml:space="preserve"><value>자동은 녹화 영역이 모니터 하나 안에 있으면 Windows Graphics Capture로 녹화하고, 여러 모니터에 걸치거나 사용할 수 없으면 GDI로 녹화합니다. 녹화 화면이 깨지거나 멈추면 호환 모드를 선택하십시오.</value></data>
   <data name="RecordingBackend_Auto" xml:space="preserve"><value>자동(Windows Graphics Capture 우선)</value></data>
   <data name="RecordingBackend_Gdi" xml:space="preserve"><value>호환 모드(GDI)</value></data>
+  <data name="LibraryFolder_CardCount" xml:space="preserve"><value>캡처 {0}개</value></data>
+  <data name="LibraryFolder_CardCountWithFolders" xml:space="preserve"><value>폴더 {1}개 · 캡처 {0}개</value></data>
+  <data name="LibraryFolder_CardAccessibleName" xml:space="preserve"><value>폴더 {0}, {1}</value></data>
+  <data name="LibraryFolder_CardOpenHint" xml:space="preserve"><value>폴더 열기 (Enter)</value></data>
+  <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>라이브러리를 닫아도 마지막 폴더에 새 캡처 저장</value></data>
+  <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>새 캡처를 이 폴더에 저장합니다. 기존 캡처는 끌어 넣을 수 있습니다.</value></data>
 </root>

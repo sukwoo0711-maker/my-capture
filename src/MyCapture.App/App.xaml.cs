@@ -224,6 +224,7 @@ public partial class App : Application
         _persistence!.ImagePersisted += (_, _) =>
             _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
             {
+                _galleryWindow?.RefreshFromQueue();
                 MaintainHistory();
                 RunAutomaticIndexing();
             }));

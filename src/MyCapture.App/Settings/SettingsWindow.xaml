@@ -666,7 +666,7 @@
                             <TextBox Style="{StaticResource Settings.TextBox}" MaxLength="40"
                                      AutomationProperties.Name="{loc:Text Folder410.PrefixLabel}"
                                      Text="{Binding FolderFilePrefix, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                            <CheckBox Content="{loc:Text Folder410.CurrentFolderOption}" Margin="0,12,0,0"
+                            <CheckBox Content="{loc:Text LibraryFolder_KeepAfterClose}" Margin="0,12,0,0"
                                       IsChecked="{Binding UseCurrentFolderForNewCaptures}" />
                         </StackPanel>
 

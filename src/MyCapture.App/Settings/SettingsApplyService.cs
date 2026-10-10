@@ -50,7 +50,9 @@ public sealed class SettingsApplyService
     {
         if (queue is null) return;
         if (!edited) next.UseCurrentFolderForNewCaptures = queue.UseCurrentFolderForNewCaptures;
-        next.DefaultCaptureFolderId = next.UseCurrentFolderForNewCaptures ? queue.DefaultCaptureFolderId : null;
+        // Turning on "keep after closing" while the library shows a folder keeps that folder.
+        next.DefaultCaptureFolderId = next.UseCurrentFolderForNewCaptures
+            ? queue.DefaultCaptureFolderId ?? queue.BrowsingCaptureFolderId : null;
     }
 
     private readonly SettingsStore _store;

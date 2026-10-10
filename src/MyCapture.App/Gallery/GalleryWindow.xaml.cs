@@ -53,6 +53,9 @@ internal sealed partial class GalleryWindow : Window
     private readonly ILogger _log;
 
     private bool _allowClose;
+    // Header capture buttons hide the library without closing it, so the shown folder stays
+    // the destination of the capture they start.
+    private bool _hiddenForCapture;
     private int _visibilityGeneration;
     private bool _imagePreparationInProgress;
     private Point _dragStart;
@@ -114,7 +117,9 @@ internal sealed partial class GalleryWindow : Window
         {
             _visibilityGeneration++;
             if (!IsVisible) ResetDragGesture();
+            else _hiddenForCapture = false;
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
+            _viewModel.SetLibraryOpen(IsVisible || _hiddenForCapture);
         };
 
         // F2 edits the selected capture's searchable title/tags without altering pixels.
@@ -140,6 +145,10 @@ internal sealed partial class GalleryWindow : Window
     internal void OpenCapture(Guid id, bool edit)
     {
         ShowGallery();
+        // "Show in library" must find the capture even when another folder is open.
+        if (_controller.Find(id) is { } record
+            && !_queue.RecordsInScope(_viewModel.SelectedScope).Any(candidate => candidate.Id == id))
+            ShowScope(record.FolderId is { } folderId ? CaptureFolderScope.ForFolder(folderId) : CaptureFolderScope.All);
         _viewModel.Select(id);
         if (edit && _viewModel.FindTile(id) is { } tile) OpenReedit(tile);
     }
@@ -200,6 +209,10 @@ internal sealed partial class GalleryWindow : Window
         {
             e.Cancel = true;
             CloseInlinePlayer();
+            // Closing ends the folder session: new captures return to the date library unless
+            // the saved keep-after-close option names a folder, and reopening starts at All.
+            _hiddenForCapture = false;
+            ShowScope(CaptureFolderScope.All);
             Hide();
             return;
         }
@@ -487,6 +500,14 @@ internal sealed partial class GalleryWindow : Window
                 _viewModel.Refresh();
                 e.Handled = true;
                 break;
+            // Plain Up/Down can leave the tiles for the folder cards above them; range
+            // selection with Ctrl or Shift stays on tiles.
+            case Key.Up or Key.Down when Keyboard.Modifiers == ModifierKeys.None
+                && GallerySelectionNavigation.FindVertical(_viewModel.Rows, tile,
+                    e.Key == Key.Up ? -1 : 1) is GalleryFolderCardViewModel card:
+                FocusFolderCard(card);
+                e.Handled = true;
+                break;
             case Key.Left:
             case Key.Right:
             case Key.Up:
@@ -762,6 +783,7 @@ internal sealed partial class GalleryWindow : Window
     /// <summary>Header toolbar: start a region capture, mirroring the tray command.</summary>
     private void OnCaptureRegionClick(object sender, RoutedEventArgs e)
     {
+        _hiddenForCapture = true;
         Window.GetWindow(this)?.Hide();
         CaptureRegionRequested?.Invoke();
     }
@@ -769,6 +791,7 @@ internal sealed partial class GalleryWindow : Window
     /// <summary>Header toolbar: start (or stop) a region recording, mirroring the tray command.</summary>
     private void OnRecordRegionClick(object sender, RoutedEventArgs e)
     {
+        _hiddenForCapture = true;
         Window.GetWindow(this)?.Hide();
         RecordRegionRequested?.Invoke();
     }
