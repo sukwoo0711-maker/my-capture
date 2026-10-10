@@ -1,0 +1,111 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using MyCapture.App.Capture;
+using MyCapture.App.Themes;
+using MyCapture.Core.Localization;
+using MyCapture.Core.Settings;
+using Xunit;
+
+namespace MyCapture.App.Tests;
+
+/// <summary>The quick access card names its actions and says plainly what the lock does.</summary>
+public sealed class QuickAccessCardLabelTests
+{
+    [Theory]
+    [InlineData("ko", new[] { "복사", "편집", "화면 고정", "저장" }, "자동으로 닫지 않기")]
+    [InlineData("en", new[] { "Copy", "Edit", "Pin", "Save" }, "Keep open")]
+    public void ActionsShowAShortNameUnderTheIconAndTheLockSaysKeepOpen(string language, string[] names, string keep) =>
+        StaTestHost.Run(() =>
+        {
+            using var culture = UiText.UseLanguage(language);
+            var image = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
+            var card = new QuickAccessWindow(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
+                () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"));
+            try
+            {
+                var row = ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().First();
+                Button[] actions = row.Children.OfType<UniformGrid>().Single().Children.OfType<Button>().ToArray();
+                Assert.Equal(names, actions.Select(button => LogicalText(button)));
+                // The key is not written on the face; it is the tooltip's and the accelerator key's.
+                Assert.All(actions, button => Assert.False(string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))));
+                ToggleButton lockButton = row.Children.OfType<ToggleButton>().Single();
+                Assert.Equal(keep, lockButton.ToolTip);
+                Assert.Equal(keep, AutomationProperties.GetName(lockButton));
+                // The card's own tooltip is one short line, not a paragraph of keys.
+                Assert.True(((string)card.ToolTip).Length <= 40, (string)card.ToolTip);
+            }
+            finally { card.Close(); }
+        });
+
+    /// <summary>The visible name on a button face (the icon is a shape; a key hint, when shown, is not a name).</summary>
+    private static string LogicalText(DependencyObject root)
+    {
+        foreach (object child in LogicalTreeHelper.GetChildren(root))
+        {
+            if (child is StackPanel { Children.Count: 2 } face && face.Children[0] is System.Windows.Shapes.Path
+                && face.Children[1] is TextBlock name) return name.Text;
+            if (child is DependencyObject node && LogicalText(node) is { Length: > 0 } text) return text;
+        }
+
+        return string.Empty;
+    }
+}
+
+/// <summary>The help names the frame keys the recording editor really uses.</summary>
+public sealed class ShortcutHelpFrameKeysTests
+{
+    [Fact]
+    public void FrameStepKeysMatchTheEditorsStepButtons() => StaTestHost.Run(() =>
+    {
+        Assert.Equal(", / .", ShortcutHelpWindow.FrameStepKeys);
+        Assert.Equal(",", ShortcutCatalog.Get(ShortcutScope.Video, "PreviousFrame").Hint);
+        Assert.Equal("PreviousFrame", ShortcutCatalog.Match(ShortcutScope.Video, System.Windows.Input.Key.OemComma, System.Windows.Input.ModifierKeys.None));
+        Assert.Equal("NextFrame", ShortcutCatalog.Match(ShortcutScope.Video, System.Windows.Input.Key.OemPeriod, System.Windows.Input.ModifierKeys.None));
+
+        using var language = UiText.UseLanguage("ko-KR");
+        var help = new ShortcutHelpWindow();
+        try
+        {
+            var tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
+            TabItem video = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Help.Video")));
+            var rows = ((StackPanel)((ScrollViewer)video.Content).Content).Children.OfType<UniformGrid>();
+            UniformGrid frame = rows.Single(row => row.Children.OfType<TextBlock>().First().Text == UiText.Get("Help.Frame"));
+            Assert.Equal(", / .", AutomationProperties.GetName(frame.Children.OfType<WrapPanel>().Single()));
+            // The window title is in the title bar only.
+            Assert.DoesNotContain(((DockPanel)help.Content).Children.OfType<TextBlock>(), text => text.Text == help.Title);
+        }
+        finally { help.Close(); }
+    });
+}
+
+/// <summary>Failure dialogs say what to do next, and a failed start does not say "return to your work".</summary>
+public sealed class AppFailureGuidanceTests
+{
+    [Fact]
+    public void UnhandledAndStartupFailuresNameTheNextStep()
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        string unhandled = ThemedDialog.UnhandledMessage(new InvalidOperationException("The tray icon has not been initialized."));
+        Assert.StartsWith(UiText.Get("Dialog.Unexpected"), unhandled, StringComparison.Ordinal);
+        Assert.Contains("다시 실행하십시오", unhandled, StringComparison.Ordinal);
+        Assert.Contains("자세히", unhandled, StringComparison.Ordinal);
+        Assert.DoesNotContain("tray icon", unhandled, StringComparison.Ordinal);
+        Assert.Equal(UiText.Get("Dialog.Storage") + "\n\n" + UiText.Get("Onboard_ErrorNextStep"),
+            ThemedDialog.UnhandledMessage(new IOException("private-path")));
+
+        Assert.Equal("MyCapture를 시작할 수 없습니다", UiText.Get("Onboard_StartFailureTitle"));
+        Assert.DoesNotContain("작업 화면", UiText.Get("Onboard_StartFailureBody"), StringComparison.Ordinal);
+        Assert.Contains("다시 실행하십시오", UiText.Get("Onboard_StartFailureBody"), StringComparison.Ordinal);
+
+        // The fallback (when even the themed dialog fails) keeps its plain message.
+        string? fallback = null;
+        var changed = new InvalidOperationException("x");
+        ThemedDialog.ShowUnhandled(changed, _ => throw new InvalidOperationException("theme failure"), (text, _) => fallback = text);
+        Assert.Equal(ThemedDialog.RecoveryMessage(changed), fallback);
+    }
+}

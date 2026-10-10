@@ -43,10 +43,11 @@ public sealed class ColorPickOverlayTests
                 Assert.Equal(0, cancelled);
                 Assert.Equal(0, confirmed);
                 // C is a shortcut, not a mode switch: the bar still shows image capture, and its
-                // colour button carries the C badge instead of a separate key-hint chip.
+                // colour button names C as its accelerator key and in its tooltip (no badge on the bar).
                 Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
                 Assert.Equal(System.Windows.Visibility.Visible, view.ModeBarForTest!.ColorButton.Visibility);
-                Assert.Contains("C", view.ModeBarForTest.VisibleKeyBadgesForTest);
+                Assert.Equal("C", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(view.ModeBarForTest.ColorButton));
+                Assert.EndsWith("(C)", (string)view.ModeBarForTest.ColorButton.ToolTip, StringComparison.Ordinal);
             }
             finally { view.ReleaseResources(); }
         });

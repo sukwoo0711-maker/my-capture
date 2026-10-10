@@ -3647,4 +3647,56 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorFlow_CloseMessage" xml:space="preserve"><value>저장하지 않으면 이번에 편집한 내용이 사라집니다.</value></data>
   <data name="EditorFlow_SaveAndClose" xml:space="preserve"><value>저장하고 닫기</value></data>
   <data name="EditorFlow_DontSave" xml:space="preserve"><value>저장 안 함</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>지금 해 보기</value></data>
+  <data name="Onboard_TryNowHelp" xml:space="preserve"><value>이 창을 닫고 영역 캡처를 시작합니다.</value></data>
+  <data name="Onboard_StepsName" xml:space="preserve"><value>시작 안내</value></data>
+  <data name="Onboard_StepNumber" xml:space="preserve"><value>{0}단계</value></data>
+  <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>캡처한 다음</value></data>
+  <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 편집기가 열립니다.</value></data>
+  <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 빠른 작업 카드가 나타납니다.</value></data>
+  <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장됩니다.</value></data>
+  <data name="Onboard_TrayTitle" xml:space="preserve"><value>트레이 아이콘</value></data>
+  <data name="Onboard_TrayBody" xml:space="preserve"><value>MyCapture는 작업 표시줄 오른쪽 알림 영역에 있습니다. 아이콘을 클릭하면 라이브러리가, 오른쪽 클릭하면 메뉴가 열립니다. 아이콘이 보이지 않으면 ^ 단추를 누르십시오.</value></data>
+  <data name="Onboard_TrayMoreCaptures" xml:space="preserve"><value>다른 캡처</value></data>
+  <data name="Onboard_TrayCopyText" xml:space="preserve"><value>텍스트 복사</value></data>
+  <data name="Onboard_TrayReopenPin" xml:space="preserve"><value>닫은 고정 창 다시 열기</value></data>
+  <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>단축키 보기</value></data>
+  <data name="Onboard_TrayTipActions" xml:space="preserve"><value>클릭: 라이브러리 · 오른쪽 클릭: 메뉴</value></data>
+  <data name="Onboard_BarCapture" xml:space="preserve"><value>캡처</value></data>
+  <data name="Onboard_BarRecord" xml:space="preserve"><value>녹화</value></data>
+  <data name="Onboard_BarKindName" xml:space="preserve"><value>캡처 또는 녹화</value></data>
+  <data name="Onboard_BarCaptureHelp" xml:space="preserve"><value>화면을 이미지로 캡처합니다.</value></data>
+  <data name="Onboard_BarRecordHelp" xml:space="preserve"><value>녹화할 영역을 고르는 화면으로 바꿉니다.</value></data>
+  <data name="Onboard_BarMore" xml:space="preserve"><value>다른 캡처</value></data>
+  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>지연 캡처, 스크롤 캡처, 이전 영역 반복을 고릅니다.</value></data>
+  <data name="Onboard_DelayCapture" xml:space="preserve"><value>{0}초 후 캡처</value></data>
+  <data name="Onboard_GuideSentence" xml:space="preserve"><value>창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다.</value></data>
+  <data name="Onboard_GuideSentenceRegionOnly" xml:space="preserve"><value>드래그하면 원하는 영역을 캡처합니다.</value></data>
+  <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>녹화할 영역을 드래그하십시오</value></data>
+  <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — 녹화 영역 선택</value></data>
+  <data name="Onboard_RecordStop" xml:space="preserve"><value>정지</value></data>
+  <data name="Onboard_RecordMore" xml:space="preserve"><value>녹화 옵션</value></data>
+  <data name="Onboard_RecordMoreHelp" xml:space="preserve"><value>녹화 영역에 현재 시각을 표시할지 고릅니다.</value></data>
+  <data name="Onboard_RecordShowTime" xml:space="preserve"><value>시각 표시</value></data>
+  <data name="Onboard_RecordAreaTip" xml:space="preserve"><value>녹화 영역 {0}</value></data>
+  <data name="Onboard_PinTip" xml:space="preserve"><value>드래그: 이동 · 휠: 확대·축소 · 오른쪽 클릭: 메뉴</value></data>
+  <data name="Onboard_PinBarName" xml:space="preserve"><value>고정 창 도구</value></data>
+  <data name="Onboard_PinOpacity" xml:space="preserve"><value>투명도</value></data>
+  <data name="Onboard_PinZoomIn" xml:space="preserve"><value>확대</value></data>
+  <data name="Onboard_PinZoomOut" xml:space="preserve"><value>축소</value></data>
+  <data name="Onboard_PinMoreTransparent" xml:space="preserve"><value>더 투명하게</value></data>
+  <data name="Onboard_PinMoreOpaque" xml:space="preserve"><value>더 불투명하게</value></data>
+  <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+휠 아래</value></data>
+  <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+휠 위</value></data>
+  <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>뒤 창 클릭 허용</value></data>
+  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>마우스 입력을 뒤에 있는 창으로 보냅니다. 해제: {0}</value></data>
+  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>뒤 창 클릭 허용 켜짐 · 해제: {0}</value></data>
+  <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>뒤 창 클릭 허용 꺼짐</value></data>
+  <data name="Onboard_CaptureFromTray" xml:space="preserve"><value>단축키가 지정되지 않았습니다. 트레이 아이콘 메뉴에서 영역 캡처를 고를 수 있습니다.</value></data>
+  <data name="Onboard_QuickKeep" xml:space="preserve"><value>자동으로 닫지 않기</value></data>
+  <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q 또는 카드 클릭: 키보드 조작</value></data>
+  <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>카드 클릭: 키보드 조작</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 자세히의 내용을 복사해 문의할 때 첨부하십시오.</value></data>
+  <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture를 시작할 수 없습니다</value></data>
+  <data name="Onboard_StartFailureBody" xml:space="preserve"><value>MyCapture를 다시 실행하십시오. 계속 실패하면 컴퓨터를 다시 시작한 뒤 실행하십시오. 그래도 시작되지 않으면 자세히의 내용을 복사해 문의할 때 첨부하십시오.</value></data>
 </root>

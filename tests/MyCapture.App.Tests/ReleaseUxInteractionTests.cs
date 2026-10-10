@@ -46,14 +46,12 @@ public sealed class ReleaseUxInteractionTests
                 root.Children.OfType<Grid>().Single().Children.OfType<TextBox>().Single().Text = "Ctrl+F8";
                 Assert.Single(capture.Children.OfType<UniformGrid>(), row => row.Visibility == Visibility.Visible);
                 help.Close();
-                var onboarding = new ShortcutHelpWindow(onboarding: true);
-                var steps = Assert.IsType<DockPanel>(onboarding.Content).Children.OfType<StackPanel>().Single();
-                var next = steps.Children.OfType<Button>().First();
-                next.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Assert.Equal("2 / 3", steps.Children.OfType<TextBlock>().First().Text);
-                next.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Assert.Equal("3 / 3", steps.Children.OfType<TextBlock>().First().Text);
-                onboarding.Close();
+                // The first-run welcome moved to its own window (FirstRunWelcomeTests); it still
+                // shows the configured capture keys.
+                var welcome = new WelcomeWindow(ShortcutHelpWindow.ReadHotkeys(), AfterCaptureAction.Editor);
+                Assert.Contains(FirstRunWelcomeTests.Descendants(welcome).OfType<WrapPanel>(),
+                    keys => System.Windows.Automation.AutomationProperties.GetName(keys) == "Ctrl+F8");
+                welcome.Close();
             }
             finally { ShortcutHelpWindow.ReadHotkeys = previous; }
         });

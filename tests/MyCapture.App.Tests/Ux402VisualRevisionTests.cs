@@ -15,8 +15,8 @@ namespace MyCapture.App.Tests;
 public sealed class Ux402VisualRevisionTests
 {
     [Theory]
-    [InlineData("ko", "복사 (C)", "편집 (E)", "화면 고정 (P)", "저장 (S)", "카드 유지")]
-    [InlineData("en", "Copy (C)", "Edit (E)", "Pin (P)", "Save (S)", "Keep card")]
+    [InlineData("ko", "복사 (C)", "편집 (E)", "화면 고정 (P)", "저장 (S)", "자동으로 닫지 않기")]
+    [InlineData("en", "Copy (C)", "Edit (E)", "Pin (P)", "Save (S)", "Keep open")]
     public void CardActionsExposeMatchingShortTooltipsAndAccessibleToggleState(string language,
         string copy, string edit, string pin, string save, string keep) => StaTestHost.Run(() =>
     {

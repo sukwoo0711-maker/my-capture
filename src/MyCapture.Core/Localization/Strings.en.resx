@@ -3647,4 +3647,56 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="EditorFlow_CloseMessage" xml:space="preserve"><value>If you don't save, the edits you made will be lost.</value></data>
   <data name="EditorFlow_SaveAndClose" xml:space="preserve"><value>Save and close</value></data>
   <data name="EditorFlow_DontSave" xml:space="preserve"><value>Don't save</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>Try it now</value></data>
+  <data name="Onboard_TryNowHelp" xml:space="preserve"><value>Closes this window and starts a region capture.</value></data>
+  <data name="Onboard_StepsName" xml:space="preserve"><value>Getting started</value></data>
+  <data name="Onboard_StepNumber" xml:space="preserve"><value>Step {0}</value></data>
+  <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
+  <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and opened in the editor.</value></data>
+  <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and shown on a quick access card.</value></data>
+  <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>Each capture is copied to the clipboard and saved to the library.</value></data>
+  <data name="Onboard_TrayTitle" xml:space="preserve"><value>Tray icon</value></data>
+  <data name="Onboard_TrayBody" xml:space="preserve"><value>MyCapture sits in the notification area at the right end of the taskbar. Click its icon for the library or right-click it for the menu. If you cannot see it, select ^.</value></data>
+  <data name="Onboard_TrayMoreCaptures" xml:space="preserve"><value>More captures</value></data>
+  <data name="Onboard_TrayCopyText" xml:space="preserve"><value>Copy text</value></data>
+  <data name="Onboard_TrayReopenPin" xml:space="preserve"><value>Reopen closed pin</value></data>
+  <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>Keyboard shortcuts</value></data>
+  <data name="Onboard_TrayTipActions" xml:space="preserve"><value>Click: library · Right-click: menu</value></data>
+  <data name="Onboard_BarCapture" xml:space="preserve"><value>Capture</value></data>
+  <data name="Onboard_BarRecord" xml:space="preserve"><value>Record</value></data>
+  <data name="Onboard_BarKindName" xml:space="preserve"><value>Capture or record</value></data>
+  <data name="Onboard_BarCaptureHelp" xml:space="preserve"><value>Captures the screen as an image.</value></data>
+  <data name="Onboard_BarRecordHelp" xml:space="preserve"><value>Switches to choosing an area to record.</value></data>
+  <data name="Onboard_BarMore" xml:space="preserve"><value>More captures</value></data>
+  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>Delayed capture, scrolling capture or the previous region.</value></data>
+  <data name="Onboard_DelayCapture" xml:space="preserve"><value>Capture in {0} seconds</value></data>
+  <data name="Onboard_GuideSentence" xml:space="preserve"><value>Click a window to capture it, or drag to capture any area.</value></data>
+  <data name="Onboard_GuideSentenceRegionOnly" xml:space="preserve"><value>Drag to capture any area.</value></data>
+  <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>Drag over the area to record</value></data>
+  <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — Select an area to record</value></data>
+  <data name="Onboard_RecordStop" xml:space="preserve"><value>Stop</value></data>
+  <data name="Onboard_RecordMore" xml:space="preserve"><value>Recording options</value></data>
+  <data name="Onboard_RecordMoreHelp" xml:space="preserve"><value>Choose whether the recording shows the current time.</value></data>
+  <data name="Onboard_RecordShowTime" xml:space="preserve"><value>Show time</value></data>
+  <data name="Onboard_RecordAreaTip" xml:space="preserve"><value>Recording area {0}</value></data>
+  <data name="Onboard_PinTip" xml:space="preserve"><value>Drag: move · Wheel: zoom · Right-click: menu</value></data>
+  <data name="Onboard_PinBarName" xml:space="preserve"><value>Pin tools</value></data>
+  <data name="Onboard_PinOpacity" xml:space="preserve"><value>Opacity</value></data>
+  <data name="Onboard_PinZoomIn" xml:space="preserve"><value>Zoom in</value></data>
+  <data name="Onboard_PinZoomOut" xml:space="preserve"><value>Zoom out</value></data>
+  <data name="Onboard_PinMoreTransparent" xml:space="preserve"><value>More transparent</value></data>
+  <data name="Onboard_PinMoreOpaque" xml:space="preserve"><value>More opaque</value></data>
+  <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+wheel down</value></data>
+  <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+wheel up</value></data>
+  <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>Click through to windows behind</value></data>
+  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Turn off: {0}</value></data>
+  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click-through on · Turn off: {0}</value></data>
+  <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>Click-through off</value></data>
+  <data name="Onboard_CaptureFromTray" xml:space="preserve"><value>No shortcut is assigned. Choose Region capture from the tray icon menu.</value></data>
+  <data name="Onboard_QuickKeep" xml:space="preserve"><value>Keep open</value></data>
+  <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q or click the card: use the keys</value></data>
+  <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>Click the card: use the keys</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, copy the text under Details and include it when you report the problem.</value></data>
+  <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture could not start</value></data>
+  <data name="Onboard_StartFailureBody" xml:space="preserve"><value>Start MyCapture again. If it still fails, restart the computer and try once more. If it still does not start, copy the text under Details and include it when you report the problem.</value></data>
 </root>

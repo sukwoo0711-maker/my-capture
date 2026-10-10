@@ -466,9 +466,16 @@ public sealed class TrayIconService : IDisposable
             _ => UiText.Get("Text_F296CB19F0A2"),
         };
 
-        return Truncate(MyCapture.Core.Platform.AppIdentity.Label + "\n" +
-            UiText.Format("Text_608AF5822E3A", status, _captureCount), 127);
+        return ComposeTooltip(MyCapture.Core.Platform.AppIdentity.Label, status, _captureCount);
     }
+
+    /// <summary>
+    /// The icon's tooltip: name, state and count, then what a left and a right click do, since a
+    /// tray icon shows neither on its own.
+    /// </summary>
+    internal static string ComposeTooltip(string label, string status, int captureCount) =>
+        Truncate(label + "\n" + UiText.Format("Text_608AF5822E3A", status, captureCount)
+            + "\n" + UiText.Get("Onboard_TrayTipActions"), 127);
 
     private IntPtr LoadIcon(string path)
     {

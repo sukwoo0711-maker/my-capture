@@ -31,10 +31,10 @@ public sealed class Ux410PolishTests
         var help = new ShortcutHelpWindow();
         Assert.Equal(ResizeMode.NoResize, help.ResizeMode);
         help.Close();
-        var welcome = new ShortcutHelpWindow(true);
+        // The first-run welcome is its own window now; its first step still shows the capture keycaps.
+        var welcome = new WelcomeWindow(ShortcutHelpWindow.ReadHotkeys(), MyCapture.Core.Settings.AfterCaptureAction.Editor);
         Assert.Equal(ResizeMode.NoResize, welcome.ResizeMode);
-        var panel = ((DockPanel)welcome.Content).Children.OfType<StackPanel>().Single();
-        var chord = Assert.IsType<WrapPanel>(panel.Children.OfType<ContentControl>().Single(c => c is not Button).Content);
+        WrapPanel chord = FirstRunWelcomeTests.Descendants(welcome).OfType<WrapPanel>().Single();
         Assert.Equal(ShortcutHelpWindow.ReadHotkeys().Capture.ToString(), AutomationProperties.GetName(chord));
         Assert.NotEmpty(chord.Children.OfType<Border>());
         welcome.Close();

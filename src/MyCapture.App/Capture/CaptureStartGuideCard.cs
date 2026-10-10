@@ -8,18 +8,17 @@ namespace MyCapture.App.Capture;
 
 /// <summary>
 /// Short start guide shown in the middle of the selector's monitor for a user's first captures and
-/// whenever the mode bar's help button is pressed. It never takes input: clicks and drags go through
-/// to the selector, and the overlay view decides when it fades away.
+/// whenever the mode bar's help button is pressed: one sentence saying what a click and a drag do.
+/// The bar's buttons explain themselves with names and tooltips, so the card does not repeat them.
+/// It never takes input: clicks and drags go through to the selector, and the overlay view decides
+/// when it fades away.
 /// </summary>
 internal sealed class CaptureStartGuideCard : Border
 {
     /// <summary>Widest line of guide text, in DIPs before display scaling.</summary>
     internal const double TextWidth = 400;
 
-    private readonly TextBlock _title;
-    private readonly TextBlock _body;
-    private readonly TextBlock _bar;
-    private readonly TextBlock _again;
+    private readonly TextBlock _sentence;
 
     internal CaptureStartGuideCard()
     {
@@ -28,45 +27,26 @@ internal sealed class CaptureStartGuideCard : Border
         SnapsToDevicePixels = true;
         BorderThickness = new Thickness(1);
         CornerRadius = new CornerRadius(12);
-        Padding = new Thickness(22, 18, 22, 18);
+        Padding = new Thickness(22, 16, 22, 16);
         SetResourceReference(BackgroundProperty, CaptureModeBar.SurfaceKey);
         SetResourceReference(BorderBrushProperty, CaptureModeBar.BorderKey);
-        _title = Line(16, FontWeights.SemiBold, CaptureModeBar.TextKey, new Thickness(0, 0, 0, 8));
-        _body = Line(14, FontWeights.Normal, CaptureModeBar.TextKey, new Thickness(0, 0, 0, 6));
-        _bar = Line(14, FontWeights.Normal, CaptureModeBar.TextKey, new Thickness(0, 0, 0, 10));
-        _again = Line(12.5, FontWeights.Normal, CaptureModeBar.MutedKey, new Thickness(0));
-        var lines = new StackPanel { MaxWidth = TextWidth };
-        lines.Children.Add(_title);
-        lines.Children.Add(_body);
-        lines.Children.Add(_bar);
-        lines.Children.Add(_again);
-        Child = lines;
-        Configure(detectWindows: true, withBar: true);
+        _sentence = new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, MaxWidth = TextWidth };
+        _sentence.SetResourceReference(TextBlock.ForegroundProperty, CaptureModeBar.TextKey);
+        Child = _sentence;
+        Configure(detectWindows: true);
     }
 
-    internal string TitleText => AutomationProperties.GetName(_title);
+    /// <summary>The guide sentence without the joiners that keep Korean words whole.</summary>
+    internal string BodyText => AutomationProperties.GetName(_sentence);
 
-    /// <summary>The guide sentences without the joiners that keep Korean words whole.</summary>
-    internal string BodyText => string.Join(" ", new[] { _body, _bar, _again }
-        .Where(line => line.Visibility == Visibility.Visible)
-        .Select(line => AutomationProperties.GetName(line)));
-
-    /// <summary>
-    /// Says what a click and a drag do (only a drag without window detection) and, with the mode bar,
-    /// where the other capture types are and how to see the guide again.
-    /// </summary>
-    internal void Configure(bool detectWindows, bool withBar)
+    /// <summary>What a click and a drag do (only a drag without window detection).</summary>
+    internal void Configure(bool detectWindows)
     {
-        KoreanWordWrap.SetText(_title, UiText.Get("CaptureGuide2_IntroTitle"));
-        KoreanWordWrap.SetText(_body, UiText.Get(detectWindows ? "CaptureGuide2_IntroBody" : "CaptureGuide2_IntroBodyRegionOnly"));
-        KoreanWordWrap.SetText(_bar, UiText.Get("CaptureGuide2_IntroBar"));
-        KoreanWordWrap.SetText(_again, UiText.Get("CaptureGuide2_IntroAgain"));
-        _bar.Visibility = _again.Visibility = withBar ? Visibility.Visible : Visibility.Collapsed;
-        _body.Margin = new Thickness(0, 0, 0, withBar ? 6 : 0);
-        AutomationProperties.SetName(this, AutomationProperties.GetName(_title) + ". " + BodyText);
+        KoreanWordWrap.SetText(_sentence, UiText.Get(detectWindows ? "Onboard_GuideSentence" : "Onboard_GuideSentenceRegionOnly"));
+        AutomationProperties.SetName(this, BodyText);
     }
 
-    /// <summary>Same brushes as the mode bar and the chips.</summary>
+    /// <summary>Same brushes as the mode bar.</summary>
     internal void ApplyPalette(IReadOnlyDictionary<string, Brush> palette)
     {
         ArgumentNullException.ThrowIfNull(palette);
@@ -74,12 +54,5 @@ internal sealed class CaptureStartGuideCard : Border
         Resources[CaptureModeBar.BorderKey] = palette["CaptureGuide.ChipBorder"];
         Resources[CaptureModeBar.TextKey] = palette["CaptureGuide.Text"];
         Resources[CaptureModeBar.MutedKey] = palette["CaptureGuide.MutedText"];
-    }
-
-    private static TextBlock Line(double size, FontWeight weight, string brushKey, Thickness margin)
-    {
-        var line = new TextBlock { FontSize = size, FontWeight = weight, TextWrapping = TextWrapping.Wrap, Margin = margin };
-        line.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
-        return line;
     }
 }

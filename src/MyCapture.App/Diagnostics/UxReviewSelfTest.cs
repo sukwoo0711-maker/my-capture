@@ -170,7 +170,7 @@ internal static class UxReviewSelfTest
             windows.Add(("error", new ThemedDialog(UiText.Get("Dialog.Storage"), UiText.Get("Dialog.AppFailure"),
                 MessageBoxButton.OK, MessageBoxResult.OK, "Synthetic diagnostic details — 0x80070070")));
             windows.Add(("shortcuts", new ShortcutHelpWindow()));
-            windows.Add(("onboarding", new ShortcutHelpWindow(onboarding: true)));
+            windows.Add(("onboarding", new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor)));
             var region = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
             var annotations = MyCapture.Core.Annotations.AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight);
             var annotationController = new AnnotationEditorController(annotations, new MyCapture.Core.Undo.UndoStack());
