@@ -442,32 +442,34 @@
                                   AutomationProperties.Name="{loc:Text WindowDetect_Setting}"
                                   IsChecked="{Binding AutoDetectWindows}" />
 
-                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture410.GuideColor}" Margin="0,12,0,0" />
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
-                            <ComboBox x:Name="CaptureGuideColorModeSelector" SelectedValue="{Binding CaptureGuideColorMode}" SelectedValuePath="Tag"
-                                      AutomationProperties.Name="{loc:Text Capture410.GuideColor}" MinWidth="220" HorizontalAlignment="Left">
-                                <ComboBoxItem Tag="theme" Content="{loc:Text Capture410.GuideColorTheme}" />
-                                <ComboBoxItem Tag="custom" Content="{loc:Text Capture410.GuideColorCustom}" />
-                            </ComboBox>
-                            <Border x:Name="CaptureGuideColorSwatch" Width="32" Height="32" Margin="10,0,0,0" CornerRadius="4"
-                                    Background="{DynamicResource CaptureGuide.SelectionBorder}" BorderBrush="{DynamicResource Border.Strong}" BorderThickness="1"
-                                    AutomationProperties.Name="{loc:Text Capture410.GuideColorSwatch}" />
-                        </StackPanel>
-                        <StackPanel Margin="0,4,0,8">
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsCustomCaptureGuideColor}" Value="True">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </StackPanel.Style>
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture410.GuideColorHex}" />
-                            <TextBox x:Name="CaptureGuideColorHexBox" Style="{StaticResource Settings.TextBox}" Width="150" MaxLength="32"
-                                     HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Capture410.GuideColorHex}"
-                                     Text="{Binding CaptureGuideColorHex, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        <StackPanel Style="{StaticResource Settings.Field}" Margin="0,12,0,14">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture410.GuideColor}" />
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+                                <ComboBox x:Name="CaptureGuideColorModeSelector" SelectedValue="{Binding CaptureGuideColorMode}" SelectedValuePath="Tag"
+                                          AutomationProperties.Name="{loc:Text Capture410.GuideColor}" MinWidth="220" HorizontalAlignment="Left">
+                                    <ComboBoxItem Tag="theme" Content="{loc:Text Capture410.GuideColorTheme}" />
+                                    <ComboBoxItem Tag="custom" Content="{loc:Text Capture410.GuideColorCustom}" />
+                                </ComboBox>
+                                <Border x:Name="CaptureGuideColorSwatch" Width="32" Height="32" Margin="10,0,0,0" CornerRadius="4"
+                                        Background="{DynamicResource CaptureGuide.SelectionBorder}" BorderBrush="{DynamicResource Border.Strong}" BorderThickness="1"
+                                        AutomationProperties.Name="{loc:Text Capture410.GuideColorSwatch}" />
+                            </StackPanel>
+                            <StackPanel Margin="0,4,0,8">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCustomCaptureGuideColor}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture410.GuideColorHex}" />
+                                <TextBox x:Name="CaptureGuideColorHexBox" Style="{StaticResource Settings.TextBox}" Width="150" MaxLength="32"
+                                         HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Capture410.GuideColorHex}"
+                                         Text="{Binding CaptureGuideColorHex, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            </StackPanel>
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
