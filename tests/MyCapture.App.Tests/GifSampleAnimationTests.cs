@@ -103,6 +103,24 @@ public sealed class GifSampleAnimationTests
     });
 
     [Fact]
+    public void MotionAnalysis_CountsAMergedImageAsStillFramesAtTheNominalDelay() => RunSta(() =>
+    {
+        BitmapSource gray = Solid(32, 32, 120, 120, 120);
+        BitmapSource bright = Solid(32, 32, 240, 240, 240);
+
+        // Gray for one frame, bright held for three merged frames, gray again: of the four
+        // frame-to-frame transitions only two moved.
+        var merged = new GifSampleFrames([gray, bright, gray], [10, 30, 10], 32, 32);
+        Assert.Equal(1.0, GifMotionAnalysis.ChangedFraction(merged), 6);
+        Assert.Equal(0.5, GifMotionAnalysis.ChangedFraction(merged, GifMotionAnalysis.LumaThreshold, default, 10), 6);
+
+        // At 2x the nominal delay halves; a short layer-boundary frame still counts once.
+        var fast = new GifSampleFrames([gray, bright, gray], [5, 2, 15], 32, 32);
+        Assert.Equal(2.0 / 4, GifMotionAnalysis.ChangedFraction(fast, GifMotionAnalysis.LumaThreshold, default, 5), 6);
+        Assert.Equal(100.0 / 10 / 2, GifPreviewSample.NominalDelayCentiseconds(GifExportQuality.Standard, 2));
+    });
+
+    [Fact]
     public void Player_SeeksPausesAndNeverPlaysASingleFrame() => RunSta(() =>
     {
         var player = new GifSamplePlayer(Dispatcher.CurrentDispatcher);

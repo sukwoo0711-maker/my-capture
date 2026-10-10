@@ -109,9 +109,12 @@ internal sealed class GifExportSession : IDisposable
 /// (a 10 s 1080p clip needs about 207 MiB). Otherwise each export decodes again.
 /// </para>
 /// <para>
-/// Encoded tier: per output size, the finished single-frame GIF payloads by source time, so a
-/// speed change or a return to an earlier preset only rewrites the container. Limited to 64 MiB
-/// by default; least recently used sizes are evicted first and a set larger than the budget is
+/// Encoded tier: per output size, the writer's frame updates (changed rectangles with their
+/// single-frame GIF payloads, or "unchanged") for one exact frame sequence, so a speed change or
+/// a return to an earlier preset only rewrites the container. An update is a difference from
+/// the previous frame of its own sequence, so only the identical source times are served; a
+/// 5 fps export of the same size is encoded again from the decoded tier. Limited to 64 MiB by
+/// default; least recently used sizes are evicted first and a set larger than the budget is
 /// not kept.
 /// </para>
 /// <para>
@@ -208,15 +211,18 @@ internal sealed class GifFrameCache
         }
     }
 
-    /// <summary>Encoded payloads aligned to <paramref name="times"/>, or null unless all are cached.</summary>
-    internal byte[][]? TryGetEncoded(int width, int height, IReadOnlyList<double> times)
+    /// <summary>
+    /// Frame updates of exactly the sequence <paramref name="times"/>, or null. A subset is never
+    /// served: each update depends on the frame before it in its own sequence.
+    /// </summary>
+    internal GifFrameUpdate[]? TryGetEncoded(int width, int height, IReadOnlyList<double> times)
     {
         lock (_gate)
         {
             for (int index = _encoded.Count - 1; index >= 0; index--)
             {
                 EncodedSet set = _encoded[index];
-                if (set.Width != width || set.Height != height || Map(times, set.Times) is not { } map)
+                if (set.Width != width || set.Height != height || !set.Times.AsSpan().SequenceEqual(times.ToArray()))
                 {
                     continue;
                 }
@@ -224,21 +230,22 @@ internal sealed class GifFrameCache
                 // Most recently used sets live at the end.
                 _encoded.RemoveAt(index);
                 _encoded.Add(set);
-                return Array.ConvertAll(map, position => set.Frames[position]);
+                return (GifFrameUpdate[])set.Frames.Clone();
             }
 
             return null;
         }
     }
 
-    internal void StoreEncoded(int width, int height, IReadOnlyList<double> times, byte[][] frames)
+    internal void StoreEncoded(int width, int height, IReadOnlyList<double> times, GifFrameUpdate[] frames)
     {
         if (frames.Length != times.Count || frames.Any(frame => frame is null))
         {
             return;
         }
 
-        long bytes = frames.Sum(frame => (long)frame.Length);
+        // An unchanged update shares one empty payload; count a small fixed cost per entry.
+        long bytes = frames.Sum(frame => (long)frame.Payload.Length + 64);
         lock (_gate)
         {
             if (_closed || bytes > _encodedBudget)
@@ -299,5 +306,5 @@ internal sealed class GifFrameCache
 
     private sealed record DecodedSet(int Width, int Height, double[] Times, GifSourceFrame[] Frames, long Bytes);
 
-    private sealed record EncodedSet(int Width, int Height, double[] Times, byte[][] Frames, long Bytes);
+    private sealed record EncodedSet(int Width, int Height, double[] Times, GifFrameUpdate[] Frames, long Bytes);
 }

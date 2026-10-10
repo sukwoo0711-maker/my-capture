@@ -195,10 +195,11 @@ public sealed class GifExportEngineBenchmarkTests
     });
 
     /// <summary>
-    /// Quality comparison of the <c>before</c> result set with the labelled one: GIF
-    /// shape (size, frame count, delays) must match, and both are scored by PSNR against an
-    /// ideal reference (software-decoded source frames, area-averaged to the output size,
-    /// without palette quantisation).
+    /// Quality comparison of the <c>before</c> result set with the labelled one. Both are
+    /// composited like a browser (changed rectangles over the kept canvas, merged frames held
+    /// for their summed delay) and scored at every scheduled frame by PSNR against an ideal
+    /// reference (software-decoded source frames, area-averaged to the output size, without
+    /// palette quantisation). The playback length must match.
     /// </summary>
     private static void CompareWithBaseline(string root, string label)
     {
@@ -239,34 +240,48 @@ public sealed class GifExportEngineBenchmarkTests
             double betweenError = 0;
             double beforeTruthError = 0;
             double afterTruthError = 0;
+            double worstFrameDeltaDb = double.PositiveInfinity;
+            int framesWorse = 0;
             byte[] painted = new byte[SourceWidth * SourceHeight * 4];
+            double frameSamples = (double)width * height * 3;
             using (var reader = new MediaFoundationVideoFrameReader(recording.OutputPath))
             {
-                List<byte[]> beforeFrames = DecodeGif(beforePath);
-                List<byte[]> afterFrames = DecodeGif(afterPath);
+                var beforePlayer = new GifSizeReductionEvidenceTests.GifPlayer(beforePath);
+                var afterPlayer = new GifSizeReductionEvidenceTests.GifPlayer(afterPath);
+                int startCs = 0;
                 for (int index = 0; index < schedule.SourceTimesMs.Count; index++)
                 {
                     double time = schedule.SourceTimesMs[index];
                     DecodedVideoFrame source = reader.ReadFrameAt(time);
                     byte[] reference = BgraFrameScaler.Downscale(source.Pixels, source.Width, source.Height, source.Stride, width, height);
-                    beforeError += SquaredError(reference, beforeFrames[index]);
-                    afterError += SquaredError(reference, afterFrames[index]);
-                    betweenError += SquaredError(beforeFrames[index], afterFrames[index]);
+                    byte[] beforeFrame = (byte[])beforePlayer.At(startCs, out _).Clone();
+                    byte[] afterFrame = afterPlayer.At(startCs, out _);
+                    startCs += schedule.FrameDelaysCentiseconds[index];
+                    double beforeFrameError = SquaredError(reference, beforeFrame);
+                    double afterFrameError = SquaredError(reference, afterFrame);
+                    beforeError += beforeFrameError;
+                    afterError += afterFrameError;
+                    betweenError += SquaredError(beforeFrame, afterFrame);
+                    double delta = Psnr(afterFrameError / frameSamples) - Psnr(beforeFrameError / frameSamples);
+                    worstFrameDeltaDb = Math.Min(worstFrameDeltaDb, delta);
+                    framesWorse += delta < -0.01 ? 1 : 0;
 
                     // Ground truth: the exact painted frame before H.264, area-averaged.
                     PaintDocumentFrame(painted, SourceWidth, SourceHeight, (int)Math.Round(time * SourceFps / 1000.0));
                     byte[] truth = BgraFrameScaler.Downscale(painted, SourceWidth, SourceHeight, SourceWidth * 4, width, height);
-                    beforeTruthError += SquaredError(truth, beforeFrames[index]);
-                    afterTruthError += SquaredError(truth, afterFrames[index]);
+                    beforeTruthError += SquaredError(truth, beforeFrame);
+                    afterTruthError += SquaredError(truth, afterFrame);
                 }
             }
 
             double samples = (double)schedule.SourceTimesMs.Count * width * height * 3;
             report[name] = new
             {
-                SameShape = before == after,
+                SameDuration = before.Delays.Split(',').Sum(int.Parse) == after.Delays.Split(',').Sum(int.Parse),
                 Before = before,
                 After = after,
+                WorstFrameDeltaPsnrDb = worstFrameDeltaDb,
+                FramesWorseThanBefore = framesWorse,
                 BeforePsnrVsPaintedDb = Psnr(beforeTruthError / samples),
                 AfterPsnrVsPaintedDb = Psnr(afterTruthError / samples),
                 BeforePsnrDb = Psnr(beforeError / samples),
@@ -304,26 +319,6 @@ public sealed class GifExportEngineBenchmarkTests
         }
 
         return sum;
-    }
-
-    private static List<byte[]> DecodeGif(string path)
-    {
-        using FileStream stream = File.OpenRead(path);
-        var decoder = new System.Windows.Media.Imaging.GifBitmapDecoder(
-            stream,
-            System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
-            System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
-        var frames = new List<byte[]>();
-        foreach (System.Windows.Media.Imaging.BitmapFrame frame in decoder.Frames)
-        {
-            var bgra = new System.Windows.Media.Imaging.FormatConvertedBitmap(
-                frame, System.Windows.Media.PixelFormats.Bgra32, null, 0);
-            byte[] pixels = new byte[bgra.PixelWidth * bgra.PixelHeight * 4];
-            bgra.CopyPixels(pixels, bgra.PixelWidth * 4, 0);
-            frames.Add(pixels);
-        }
-
-        return frames;
     }
 
     internal sealed record GifShape(int Width, int Height, int Frames, string Delays);

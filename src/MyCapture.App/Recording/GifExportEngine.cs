@@ -39,6 +39,13 @@ internal sealed record GifEngineOptions
     /// </summary>
     internal int WorkerThreads { get; init; }
 
+    /// <summary>
+    /// How consecutive frames become GIF images. <see cref="GifFrameDifferencing.ErrorBounded"/>
+    /// (default) merges identical frames and repaints only what the full-frame error bound
+    /// needs; the other modes are kept for size and quality comparisons.
+    /// </summary>
+    internal GifFrameDifferencing Differencing { get; init; } = GifFrameDifferencing.ErrorBounded;
+
     internal int ResolveWorkerThreads() =>
         WorkerThreads > 0
             ? Math.Min(WorkerThreads, 16)
@@ -82,15 +89,17 @@ internal sealed record GifRenderPlan(
     IReadOnlyList<int> FrameDelaysCentiseconds);
 
 /// <summary>Where one export's frames came from and what it cost.</summary>
+/// <param name="Images">GIF images written; fewer than <paramref name="Frames"/> when identical frames merged.</param>
 internal sealed record GifRenderStatistics(
     string FrameSource,
     int Frames,
     int DecodedFrames,
     int WorkerThreads,
-    double ElapsedMs);
+    double ElapsedMs,
+    int Images);
 
 /// <summary>
-/// Streams a GIF frame schedule as decode → normalise → scale → compose → encode → append.
+/// Streams a GIF frame schedule as decode → normalise → scale → compose → difference → encode → append.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -99,8 +108,9 @@ internal sealed record GifRenderStatistics(
 /// middle on plain managed arrays: NV12 conversion to the base size, area-average scaling to the
 /// preset and the opaque copy the encoder needs. The calling STA thread does every WPF
 /// operation — composition only for frames with an active text or frame layer, the GIF encode —
-/// and appends frames strictly in output order, exactly as the original single-threaded exporter
-/// did.
+/// and hands frames to <see cref="AnimatedGifWriter"/> strictly in output order, exactly as the
+/// original single-threaded exporter did, so the writer's frame differencing sees the same
+/// sequence on every path.
 /// </para>
 /// <para>
 /// WPF imaging stays on one thread on purpose. Running composition and GifBitmapEncoder on
@@ -152,7 +162,7 @@ internal static class GifExportEngine
         IReadOnlyList<double> times = plan.SourceTimesMs;
         int total = times.Count;
 
-        // Fastest reuse: every frame of this preset is already encoded (speed-only change or a
+        // Fastest reuse: this exact frame sequence is already encoded (speed-only change or a
         // return to an earlier preset). Only the container and delays are written.
         if (cache?.TryGetEncoded(plan.Request.Width, plan.Request.Height, times) is { } encodedHit)
         {
@@ -183,7 +193,7 @@ internal static class GifExportEngine
         IReadOnlyDictionary<Guid, BitmapSource> layerBitmaps =
             FrameEditLayerRenderer.Decode(plan.Request.FrameEditLayers);
         int threads = options.ResolveWorkerThreads();
-        var encodedForCache = cache is not null ? new byte[total][] : null;
+        var encodedForCache = cache is not null ? new GifFrameUpdate[total] : null;
         var decodedForCache = buildDecodedCache ? new GifSourceFrame[decodeTimes.Count] : null;
         VideoFrameCompositor? compositor = null;
         int written = 0;
@@ -205,16 +215,19 @@ internal static class GifExportEngine
                 PixelResult result = run.Take(slot);
                 if (result.Output >= 0)
                 {
-                    byte[] encoded = EncodeOutputFrame(
+                    byte[] pixels = ComposeOutputFrame(
                         result.Target,
                         plan.Request,
                         layerBitmaps,
                         result.SourceTimeMs,
                         ref compositor);
-                    writer.AddEncodedFrame(encoded, plan.FrameDelaysCentiseconds[result.Output]);
+                    GifFrameUpdate update = writer.AddFrame(
+                        pixels,
+                        plan.Request.Width * 4,
+                        plan.FrameDelaysCentiseconds[result.Output]);
                     if (encodedForCache is not null)
                     {
-                        encodedForCache[result.Output] = encoded;
+                        encodedForCache[result.Output] = update;
                     }
 
                     written++;
@@ -257,10 +270,12 @@ internal static class GifExportEngine
                 total,
                 decoded,
                 workerThreads,
-                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                writer.ImageCount);
             log.LogInformation(
-                "GIF rendered {Frames} frame(s) at {Width}x{Height} from {Source}: {Decoded} decoded, {Threads} pixel thread(s), {Elapsed:0} ms",
+                "GIF rendered {Frames} frame(s) as {Images} image(s) at {Width}x{Height} from {Source}: {Decoded} decoded, {Threads} pixel thread(s), {Elapsed:0} ms",
                 statistics.Frames,
+                statistics.Images,
                 plan.Request.Width,
                 plan.Request.Height,
                 statistics.FrameSource,
@@ -384,54 +399,43 @@ internal static class GifExportEngine
     }
 
     /// <summary>
-    /// Composes when needed and encodes one output frame on the calling STA thread. A frame
-    /// with nothing drawn over it skips <see cref="RenderTargetBitmap"/> and goes straight to the
-    /// encoder as an opaque BGRA32 bitmap.
+    /// Returns one output frame as tightly packed opaque BGRA, composing it on the calling STA
+    /// thread when something is drawn over it. A frame with nothing drawn over it skips
+    /// <see cref="RenderTargetBitmap"/> and WPF entirely: composition would only copy it, and
+    /// the composed result is the same opaque pixels.
     /// </summary>
-    internal static byte[] EncodeOutputFrame(
+    internal static byte[] ComposeOutputFrame(
         GifSourceFrame frame,
         VideoFrameRenderRequest request,
         IReadOnlyDictionary<Guid, BitmapSource> layerBitmaps,
         double sourceTimeMs,
         ref VideoFrameCompositor? compositor)
     {
-        BitmapSource bitmap;
         GifSourceFrame? fitted = FitFrame(frame, request.Width, request.Height);
         if (fitted is { } target
             && VideoFrameRenderPipeline.CanBypassComposition(request, layerBitmaps, target.Width, target.Height, sourceTimeMs))
         {
-            // The WIC GIF encoder quantises BGR32 and BGRA32 input differently even for equal
-            // colours. Composition always produced opaque BGRA32, so a bypassed frame must too
-            // for the encoded bytes to stay identical. Decoder buffers carry X=0 and may be
-            // shared, so they are copied; BitmapSource.Create copies the opaque ones itself.
-            byte[] opaque = target.Opaque ? target.Pixels : OpaqueCopy(target);
-            bitmap = BitmapSource.Create(
-                target.Width,
-                target.Height,
-                96,
-                96,
-                PixelFormats.Bgra32,
-                null,
-                opaque,
-                target.Opaque ? target.Stride : target.Width * 4);
-        }
-        else
-        {
-            // Scale with the area averager first when possible so composed and bypassed frames
-            // share one resampling filter; the compositor then draws 1:1.
-            GifSourceFrame source = fitted ?? frame;
-            compositor ??= new VideoFrameCompositor(request.Width, request.Height);
-            bitmap = compositor.Compose(
-                request,
-                layerBitmaps,
-                source.Pixels,
-                source.Width,
-                source.Height,
-                source.Stride,
-                sourceTimeMs);
+            // Decoder buffers carry X=0 and may be shared, so they are copied with opaque
+            // alpha; scaled and converted frames already are opaque and tightly packed.
+            return target.Opaque && target.Stride == target.Width * 4 ? target.Pixels : OpaqueCopy(target);
         }
 
-        return AnimatedGifWriter.EncodeFrame(bitmap).ToArray();
+        // Scale with the area averager first when possible so composed and bypassed frames
+        // share one resampling filter; the compositor then draws 1:1.
+        GifSourceFrame source = fitted ?? frame;
+        compositor ??= new VideoFrameCompositor(request.Width, request.Height);
+        BitmapSource bitmap = compositor.Compose(
+            request,
+            layerBitmaps,
+            source.Pixels,
+            source.Width,
+            source.Height,
+            source.Stride,
+            sourceTimeMs);
+        int stride = request.Width * 4;
+        byte[] pixels = GC.AllocateUninitializedArray<byte>(checked(stride * request.Height));
+        bitmap.CopyPixels(pixels, stride, 0);
+        return pixels;
     }
 
     /// <summary>Tightly packed copy of a BGRX frame with every fourth byte set to opaque 255.</summary>

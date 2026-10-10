@@ -104,7 +104,7 @@ public sealed class GifPreviewPolicyTests
 
         Assert.False(estimate.IsExact);
         Assert.Equal(20_000_000, estimate.ExpectedBytes);
-        Assert.Equal(16_600_000, estimate.LowBytes);
+        Assert.Equal(9_800_000, estimate.LowBytes);
         Assert.Equal(25_100_000, estimate.HighBytes);
     }
 
@@ -137,9 +137,10 @@ public sealed class GifPreviewPolicyTests
     public void Estimate_ScalesOtherPresetsByCadenceAndPixelsWithAnExtraMargin()
     {
         var measured = new GifPresetMeasurement(GifExportQuality.Standard, 4_000_000, 20_000, 0.5);
+        GifEstimateCalibration calibration = GifEstimateCalibration.Default;
         double factor = GifSizeEstimator.ScaleFactor(GifExportQuality.Standard, GifExportQuality.Smallest, 1920, 1080);
-        Assert.Equal(0.5 * Math.Pow(0.25, GifEstimateCalibration.Default.PixelScalingExponent), factor, 6);
-        Assert.Equal(0.5, GifSizeEstimator.ScaleFactor(GifExportQuality.Standard, GifSharePolicy.SharpLowRate, 1920, 1080), 6);
+        Assert.Equal(Math.Pow(0.5, calibration.CadenceScalingExponent) * Math.Pow(0.25, calibration.PixelScalingExponent), factor, 6);
+        Assert.Equal(Math.Pow(0.5, calibration.CadenceScalingExponent), GifSizeEstimator.ScaleFactor(GifExportQuality.Standard, GifSharePolicy.SharpLowRate, 1920, 1080), 6);
         // A 400 px source is never enlarged, so 960 and 640 px presets are the same size.
         Assert.Equal(1, GifSizeEstimator.ScaleFactor(GifExportQuality.Standard, GifExportQuality.Compact, 400, 300), 6);
 
@@ -160,6 +161,51 @@ public sealed class GifPreviewPolicyTests
         GifPresetMeasurement combined = measurement.Including(1_500, 1_000).Including(500, 1_000);
 
         Assert.Equal((5_000L, 5_000d, 0.4), (combined.Bytes, combined.SourceMs, combined.CalculationMsPerSourceMs));
+    }
+
+    [Fact]
+    public void Estimate_PaysOneHeadAndScalesOnlyTheSettledHalves()
+    {
+        var tight = new GifEstimateCalibration(0, 0, 0, 1);
+
+        // A centred 3 s segment: its first half (the full-canvas image and the settling
+        // repaints) took 700 kB, its second half 300 kB.
+        GifPresetMeasurement centre = GifPresetMeasurement.Of(GifExportQuality.Standard, new GifSegmentSize(1_000_000, 400_000, 700_000, 0.5), 3_000, 0, startsRange: false);
+        Assert.Equal(700_000 + (long)Math.Round(300_000 / 1_500.0 * 13_500), GifSizeEstimator.FromMeasurement(centre, 15_000, tight).ExpectedBytes);
+
+        // Two 1 s end segments: one average head for the range, and every settled half sets the rate.
+        GifPresetMeasurement three = centre
+            .Including(new GifSegmentSize(500_000, 300_000, 400_000, 0.5), 1_000, startsRange: false)
+            .Including(new GifSegmentSize(500_000, 300_000, 400_000, 0.5), 1_000, startsRange: false);
+        Assert.Equal((2_000_000L, 5_000d, 3), (three.Bytes, three.SourceMs, three.Segments.Count));
+        double head = (700_000 + 400_000 + 400_000) / 3.0;
+        double headMs = (1_500 + 500 + 500) / 3.0;
+        Assert.Equal((long)Math.Round(head + (500_000 / 2_500.0 * (20_000 - headMs))), GifSizeEstimator.FromMeasurement(three, 20_000, tight).ExpectedBytes);
+
+        // A segment that starts the range is the export's own beginning; the others set the rate.
+        GifPresetMeasurement led = centre.Including(new GifSegmentSize(600_000, 300_000, 550_000, 0.5), 1_000, startsRange: true);
+        Assert.Equal(600_000 + (long)Math.Round(300_000 / 1_500.0 * 19_000), GifSizeEstimator.FromMeasurement(led, 20_000, tight).ExpectedBytes);
+
+        // Without block sizes it is the plain proportional estimate, and a whole-range
+        // measurement stays exact.
+        GifPresetMeasurement plain = centre.Including(500_000, 1_000);
+        Assert.Empty(plain.Segments);
+        Assert.Equal(GifSizeEstimator.FromSample(1_500_000, 4_000, 15_000), GifSizeEstimator.FromMeasurement(plain, 15_000));
+        Assert.Equal(GifSizeEstimate.Exact(1_000_000), GifSizeEstimator.FromMeasurement(centre with { SourceMs = 15_000 }, 15_000));
+    }
+
+    [Fact]
+    public void Estimate_ScalesTheFirstImageByPixelsAndTheRestAlsoByCadence()
+    {
+        var tight = new GifEstimateCalibration(0, 0, 0, 1);
+        GifPresetMeasurement whole = GifPresetMeasurement.Of(GifExportQuality.Standard, new GifSegmentSize(3_000_000, 1_000_000, 2_000_000, 0.5), 20_000, 0, startsRange: true);
+
+        // 960/10 -> 960/5: the first image stays, the rest halves.
+        Assert.Equal(2_000_000, GifSizeEstimator.FromOtherPreset(whole, GifSharePolicy.SharpLowRate, 1920, 1080, 20_000, tight).ExpectedBytes);
+
+        // 960/10 -> 480/5: a quarter of the pixels for both, half the frames for the rest.
+        Assert.Equal(250_000 + 250_000, GifSizeEstimator.FromOtherPreset(whole, GifExportQuality.Smallest, 1920, 1080, 20_000, tight).ExpectedBytes);
+        Assert.Equal(0.25, GifSizeEstimator.PixelFactor(GifExportQuality.Standard, GifExportQuality.Smallest, 1920, 1080, tight), 6);
     }
 
     [Fact]
@@ -199,8 +245,8 @@ public sealed class GifPreviewPolicyTests
     [InlineData(0.40, "640/10")]
     public void Recommend_OrdersFallbacksByMotion(double motion, string expected)
     {
-        // 960/10 needs ~13 to 17 MB for 10 s; 960/5 and 640/10 both fit 10 MB.
-        GifRecommendation recommendation = Recommend(standardBytesPerSecond: 1_300_000, spanMs: 10_000, motion: motion);
+        // 960/10 needs ~9 to 11 MB for 10 s; 960/5 (about 0.7 of it) and 640/10 both fit 10 MB.
+        GifRecommendation recommendation = Recommend(standardBytesPerSecond: 900_000, spanMs: 10_000, motion: motion);
 
         Assert.Equal(GifRecommendationKind.SwitchPreset, recommendation.Kind);
         Assert.Equal(expected, $"{recommendation.Quality.LongEdge}/{recommendation.Quality.FramesPerSecond}");

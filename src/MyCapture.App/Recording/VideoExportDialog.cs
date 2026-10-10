@@ -385,7 +385,7 @@ internal sealed class VideoExportDialog : Window
             _sample = sample;
             sample = null;
             _sampleMotion = _sample.MotionFraction;
-            GifPresetMeasurement measurement = _sample.Measurement;
+            GifPresetMeasurement measurement = _sample.MeasurementFrom(trimIn);
             Remember(measurement);
             // A sample of the whole kept range is the exact export: make it saveable at once.
             VideoExportCalculation? whole = _working || _result is not null ? null : _sample.TakeWholeRangeResult();
@@ -403,7 +403,7 @@ internal sealed class VideoExportDialog : Window
             foreach (GifSampleWindow segment in GifPreviewSampling.PlanRefinement(trimIn, trimOut, window))
             {
                 VideoEditDocument segmentDocument = GifPreviewSampling.CreateSampleDocument(_document, segment);
-                long bytes = await StaThreadTask.RunAsync(
+                GifSegmentSize segmentSize = await StaThreadTask.RunAsync(
                     () => GifPreviewSample.MeasureSegment(_recording, segmentDocument, quality, speed, token),
                     "MyCapture GIF estimate segment");
                 if (!IsCurrentSample(revision, request, cancellation)
@@ -413,7 +413,7 @@ internal sealed class VideoExportDialog : Window
                     return; // Superseded, or replaced by an exact full calculation.
                 }
 
-                measurement = measurement.Including(bytes, segment.DurationMs);
+                measurement = measurement.Including(segmentSize, segment.DurationMs, Math.Abs(segment.StartMs - trimIn) < 0.5);
                 _measurements[quality] = measurement;
                 UpdateGuidance();
             }
@@ -489,7 +489,7 @@ internal sealed class VideoExportDialog : Window
         int frames = GifPreviewSampling.EstimateFrameCount(span, quality.FramesPerSecond, layers);
         if (_measurements.TryGetValue(quality, out GifPresetMeasurement? measured))
         {
-            GifSizeEstimate own = GifSizeEstimator.FromSample(measured.Bytes, measured.SourceMs, span);
+            GifSizeEstimate own = GifSizeEstimator.FromMeasurement(measured, span);
             _estimate.Text = own.IsExact
                 ? UiText.Format("GifPreview_Exact", FormatSize(own.ExpectedBytes), frames, playbackSeconds)
                 : UiText.Format("GifPreview_Estimate", FormatRange(own), frames, playbackSeconds,
@@ -620,6 +620,8 @@ internal sealed class VideoExportDialog : Window
                     cancellation.Token), "MyCapture export calculation");
             double elapsed = stopwatch.Elapsed.TotalMilliseconds;
             cancellation.Token.ThrowIfCancellationRequested();
+            string resultPath = calculated.ResultPath;
+            GifSegmentSize? gifSize = gif ? await Task.Run(() => GifSegmentSize.Measure(resultPath)) : null;
             BitmapSource? preview = gif ? null : await StaThreadTask.RunAsync(() =>
             {
                 cancellation.Token.ThrowIfCancellationRequested();
@@ -639,7 +641,9 @@ internal sealed class VideoExportDialog : Window
             {
                 // The animated sample above is the visual check; the measured file now
                 // replaces the sample-based estimate for this preset.
-                Remember(new GifPresetMeasurement(quality, _result.ResultBytes, SpanMs, elapsed / SpanMs));
+                Remember(gifSize is { } size
+                    ? GifPresetMeasurement.Of(quality, size, SpanMs, elapsed / SpanMs, startsRange: true)
+                    : new GifPresetMeasurement(quality, _result.ResultBytes, SpanMs, elapsed / SpanMs));
                 UpdateGuidance();
             }
             else
