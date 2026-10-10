@@ -185,6 +185,8 @@ internal static class RecordingSelfTest
             report.AppendLine(string.Create(
                 CultureInfo.InvariantCulture,
                 $"{label}: {result.EmittedFrames} frame(s), {result.DurationMs:0}ms, {result.Width}x{result.Height} -> {Path.GetFileName(outputPath)}"));
+            report.AppendLine($"{label}: capture backend requested={grabber.RequestedBackend} active={grabber.ActiveBackend}" +
+                (grabber.FallbackReason is null ? string.Empty : $" fallback={grabber.FallbackReason}"));
             CheckContainerEndsAtLastFrame(outputPath, observer?.LastTimestampMs, result.Fps, report, failures, label);
 
             return result;

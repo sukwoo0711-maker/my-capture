@@ -299,6 +299,13 @@ public sealed class SettingsStore
             nameof(RecordingSettings.StartDelaySeconds),
             warnings);
 
+        // The JSON converter already reads unknown names and numbers as Auto; this catches a
+        // value assigned in code so an undefined mode never reaches the recorder.
+        if (!Enum.IsDefined(s.Recording.CaptureMode))
+        {
+            s.Recording.CaptureMode = RecordingCaptureMode.Auto;
+        }
+
         // --- Pin ---
         // The upper bound keeps a mistyped value from making Ctrl+click feel broken.
         s.Pin.CtrlClickDebounceMs = ClampWithWarning(

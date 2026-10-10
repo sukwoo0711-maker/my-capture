@@ -61,6 +61,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _recordingCursorHighlight;
     private string _recordingPresetWidth = "0";
     private string _recordingPresetHeight = "0";
+    private string _recordingCaptureMode = RecordingCaptureModeNames.Auto;
 
     private string _scrollingCaptureHotkey = string.Empty;
     private string _delayedCaptureHotkey = string.Empty;
@@ -232,6 +233,13 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _recordingPresetHeight;
         set { if (Set(ref _recordingPresetHeight, value)) ValidateInt(value, SettingsRanges.ThumbnailLongEdge); }
+    }
+
+    /// <summary>Recording capture method as its setting name: <c>auto</c> (WGC first) or <c>gdi</c>.</summary>
+    public string RecordingCaptureMode
+    {
+        get => _recordingCaptureMode;
+        set => Set(ref _recordingCaptureMode, RecordingCaptureModeNames.ToSetting(RecordingCaptureModeNames.Parse(value)));
     }
 
     public string ScrollingCaptureHotkey { get => _scrollingCaptureHotkey; set { if (Set(ref _scrollingCaptureHotkey, value)) ValidateAllHotkeys(); } }
@@ -546,6 +554,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _recordingCursorHighlight = s.Recording.CursorHighlight;
         _recordingPresetWidth = (s.Recording.PresetWidth ?? 0).ToString(CultureInfo.InvariantCulture);
         _recordingPresetHeight = (s.Recording.PresetHeight ?? 0).ToString(CultureInfo.InvariantCulture);
+        _recordingCaptureMode = RecordingCaptureModeNames.ToSetting(s.Recording.CaptureMode);
 
         _captureHotkey = s.Hotkeys.Capture.ToString();
         _openLibraryHotkey = s.Hotkeys.OpenLibrary.ToString();
@@ -682,6 +691,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 CoarseStepSeconds = _preservedRecordingCoarseStepSeconds,
                 PresetWidth = ParseOptionalInt(_recordingPresetWidth),
                 PresetHeight = ParseOptionalInt(_recordingPresetHeight),
+                CaptureMode = RecordingCaptureModeNames.Parse(_recordingCaptureMode),
             },
             Hotkeys =
             {

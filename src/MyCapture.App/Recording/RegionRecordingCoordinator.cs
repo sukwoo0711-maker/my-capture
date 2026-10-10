@@ -310,7 +310,17 @@ internal sealed class RegionRecordingCoordinator
 
             RegionRecorder BuildRecorder()
             {
-                var grabber = new RegionFrameGrabber(_captureEngine, settings.IncludeCursor, settings.CursorHighlight);
+                // The diagnostic environment switch outranks the user's capture-method setting.
+                string? backendOverride = RecordingCaptureBackendSelection.EnvironmentOverrideValue();
+                RecordingCaptureBackend backend = RecordingCaptureBackendSelection.Resolve(settings.CaptureMode, backendOverride);
+                _log.LogInformation(
+                    "Recording capture backend request: {Backend} (setting {Mode}, {Variable}={Override})",
+                    backend,
+                    RecordingCaptureModeNames.ToSetting(settings.CaptureMode),
+                    RecordingCaptureBackendSelection.EnvironmentVariable,
+                    RecordingCaptureBackendSelection.ParseOverride(backendOverride)?.ToString() ?? "unset");
+                var grabber = new RegionFrameGrabber(_captureEngine, settings.IncludeCursor, settings.CursorHighlight,
+                    backend, _loggerFactory.CreateLogger<RegionFrameGrabber>());
                 return new RegionRecorder(
                     grabber,
                     options => new MediaFoundationVideoEncoder(

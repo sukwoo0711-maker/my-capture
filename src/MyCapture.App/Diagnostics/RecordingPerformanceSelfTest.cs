@@ -191,7 +191,8 @@ internal static class RecordingPerformanceSelfTest
         Func<RegionRecorder, List<Phase>>? concurrentWork, List<string> failures)
     {
         string metadataPath = DiagnosticOutputPaths.Child(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".json");
-        using var recorder = new RegionRecorder(new RegionFrameGrabber(engine, false),
+        var grabber = new RegionFrameGrabber(engine, false);
+        using var recorder = new RegionRecorder(grabber,
             options => new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance), NullLogger.Instance);
         using Process process = Process.GetCurrentProcess();
         recorder.Start(region, path, new RecordingSettings { FrameRate = RecordingFrameRate.Fps30, IncludeCursor = false });
@@ -236,6 +237,8 @@ internal static class RecordingPerformanceSelfTest
             return true;
         }));
         return new { Kind = concurrentWork is null ? "sustained-recording" : "concurrent-recording",
+            CaptureBackend = new { Requested = grabber.RequestedBackend.ToString(), Active = grabber.ActiveBackend?.ToString(),
+                grabber.FallbackReason, Wgc = grabber.WgcDiagnostics },
             Result = result, WallSampleMs = wallMs, ProcessCpuMs = cpuMs,
             NormalizedCpuPercent = cpuMs / wallMs / Environment.ProcessorCount * 100,
             AllocatedBytes = allocations, Phases = phases };

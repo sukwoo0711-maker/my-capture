@@ -1942,6 +1942,20 @@ public partial class App : Application
             return RunSelfTest(outputDirectory, "recording-performance-report.txt", RecordingPerformanceSelfTest.Run);
         }
 
+        int recordingBackendsIndex = FindSwitch(args, RecordingBackendBenchmarkSelfTest.CommandLineSwitch);
+        if (recordingBackendsIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(args, recordingBackendsIndex, "mycapture-recording-backends");
+            return RunSelfTest(outputDirectory, "recording-backends-report.txt", RecordingBackendBenchmarkSelfTest.Run);
+        }
+
+        int recordingSoakIndex = FindSwitch(args, RecordingBackendBenchmarkSelfTest.SoakCommandLineSwitch);
+        if (recordingSoakIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(args, recordingSoakIndex, "mycapture-recording-soak");
+            return RunSelfTest(outputDirectory, "recording-soak-report.txt", RecordingBackendBenchmarkSelfTest.RunSoak);
+        }
+
         int recordingIndex = FindSwitch(args, RecordingSelfTest.CommandLineSwitch);
         if (recordingIndex >= 0)
         {

@@ -497,6 +497,18 @@
                                   Content="{loc:Text Recording_CursorHighlight}"
                                   AutomationProperties.Name="{loc:Text Recording_CursorHighlight}"
                                   IsChecked="{Binding RecordingCursorHighlight}" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingBackend_Label}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text RecordingBackend_Hint}" />
+                            <ComboBox x:Name="RecordingCaptureModeSelector" SelectedValue="{Binding RecordingCaptureMode}" SelectedValuePath="Tag"
+                                      AutomationProperties.Name="{loc:Text RecordingBackend_Label}"
+                                      AutomationProperties.HelpText="{loc:Text RecordingBackend_Hint}"
+                                      MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
+                                <ComboBoxItem Tag="auto" Content="{loc:Text RecordingBackend_Auto}" />
+                                <ComboBoxItem Tag="gdi" Content="{loc:Text RecordingBackend_Gdi}" />
+                            </ComboBox>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MyCapture.Core.Recording;
 
 /// <summary>
@@ -80,4 +82,15 @@ public sealed class RecordingSettings
     public int? PresetHeight { get; set; }
 
     public int TargetFps => (int)FrameRate;
+
+    /// <summary>
+    /// How recordings grab frames: Windows.Graphics.Capture first (default) or GDI only.
+    /// </summary>
+    /// <remarks>
+    /// Compatibility mode lets a user return to the GDI path at once if WGC misbehaves on their
+    /// hardware. The <c>MYCAPTURE_RECORDING_BACKEND</c> environment switch still overrides this
+    /// for diagnostics.
+    /// </remarks>
+    [JsonConverter(typeof(RecordingCaptureModeJsonConverter))]
+    public RecordingCaptureMode CaptureMode { get; set; } = RecordingCaptureMode.Auto;
 }

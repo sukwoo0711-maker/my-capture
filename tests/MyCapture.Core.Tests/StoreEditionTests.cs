@@ -222,12 +222,39 @@ public sealed class StoreManifestContractTests
             .Select(element => (string)element.Attribute("Name")!)
             .ToArray();
         // unvirtualizedResources is reserved for games and is not granted to Store apps; the
-        // app keeps its data in package folders instead of relying on it.
-        Assert.Equal(new[] { "runFullTrust" }, capabilities);
+        // app keeps its data in package folders instead of relying on it. Borderless graphics
+        // capture is the only other capability: WGC recordings need it to drop the yellow border.
+        Assert.Equal(new[] { "runFullTrust", "graphicsCaptureWithoutBorder" }, capabilities);
         Assert.Equal("MyCapture.exe", (string?)Single(manifest, "Application").Attribute("Executable"));
         Assert.Equal(
             "10.0." + WindowsSupportPolicy.MinimumBuild + ".0",
             (string?)Single(manifest, "TargetDeviceFamily").Attribute("MinVersion"));
+    }
+
+    [Fact]
+    public void BorderlessGraphicsCapture_IsAnIgnorableUap11Capability()
+    {
+        const string Uap11 = "http://schemas.microsoft.com/appx/manifest/uap/windows10/11";
+        System.Xml.Linq.XDocument manifest = Manifest();
+        System.Xml.Linq.XElement package = manifest.Root!;
+        System.Xml.Linq.XElement borderless = manifest.Descendants()
+            .Single(element => element.Name.LocalName == "Capability"
+                && (string?)element.Attribute("Name") == "graphicsCaptureWithoutBorder");
+
+        // learn.microsoft.com uap11:Capability: namespace .../uap/windows10/11, minimum build 19645.
+        Assert.Equal(Uap11, borderless.Name.NamespaceName);
+        string prefix = package.GetPrefixOfNamespace(Uap11)!;
+        Assert.Equal("uap11", prefix);
+        Assert.Contains(prefix, ((string)package.Attribute("IgnorableNamespaces")!).Split(' '));
+        Assert.InRange(WindowsSupportPolicy.MinimumBuild, 19645, int.MaxValue);
+        Assert.Same(
+            manifest.Descendants().Single(element => element.Name.LocalName == "Capabilities"),
+            borderless.Parent);
+
+        // CreateForMonitor (HMONITOR interop) does not need the WindowId/DisplayId capability.
+        Assert.DoesNotContain(
+            manifest.Descendants().Where(element => element.Name.LocalName == "Capability"),
+            element => (string?)element.Attribute("Name") == "graphicsCaptureProgrammatic");
     }
 
     [Fact]
