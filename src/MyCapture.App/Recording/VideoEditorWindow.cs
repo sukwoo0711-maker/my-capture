@@ -1146,6 +1146,7 @@ internal sealed class VideoEditorWindow : Window
         RefreshIdentityDetails(_durationMs);
 
         _timeline.Initialize(_durationMs, _recording.Fps);
+        _timeline.SetFilmstripSource(_recording.OutputPath, _recording.Width, _recording.Height, _loggerFactory);
         _layerTimeline.Initialize(_durationMs);
         _editDocument = _editDocument.NormalizeFor(
             _recording.Width,
