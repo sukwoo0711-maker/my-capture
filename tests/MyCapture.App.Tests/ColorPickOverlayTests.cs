@@ -25,6 +25,7 @@ public sealed class ColorPickOverlayTests
                 ReadCursor = () => new PointD(120, 80),
                 CopyColorText = text => { copied.Add(text); return Task.FromResult(true); },
                 ReadColorFormat = () => format,
+                ShowModeBar = true,
             };
             int cancelled = 0;
             int confirmed = 0;
@@ -41,7 +42,11 @@ public sealed class ColorPickOverlayTests
                 Assert.Equal(UiText.Format("Tools_ColorCopied", expected), view.ToastMessageForTest);
                 Assert.Equal(0, cancelled);
                 Assert.Equal(0, confirmed);
-                Assert.Contains(UiText.Get("ColorPick_OverlayHint"), view.OverlayHintText);
+                // C is a shortcut, not a mode switch: the bar still shows image capture, and its
+                // colour button carries the C badge instead of a separate key-hint chip.
+                Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
+                Assert.Equal(System.Windows.Visibility.Visible, view.ModeBarForTest!.ColorButton.Visibility);
+                Assert.Contains("C", view.ModeBarForTest.VisibleKeyBadgesForTest);
             }
             finally { view.ReleaseResources(); }
         });

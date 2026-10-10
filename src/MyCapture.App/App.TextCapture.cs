@@ -5,13 +5,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
+using MyCapture.Core.Settings;
 using MyCapture.Ocr;
 using MyCapture.Platform.Shell;
 
 namespace MyCapture.App;
 
 /// <summary>
-/// Shell wiring for the capture overlay's window auto-detect, colour copy and text capture.
+/// Shell wiring for the capture overlay's window auto-detect, colour copy, text capture and the
+/// start guide count.
 /// </summary>
 /// <remarks>
 /// Kept in its own partial so the resident shell's main file only carries the hooks.
@@ -41,6 +43,13 @@ public partial class App
         _overlay.CopyColorText = ClipboardImageService.CopyTextAsync;
         _overlay.ReadColorFormat = () => _settings?.Capture.ColorFormat ?? MyCapture.Core.Settings.ColorFormat.Hex;
         _overlay.TextCaptureRequested = OnTextCaptureSelected;
+        ServiceProvider services = _services;
+        var startGuide = new CaptureStartGuideBookkeeping(
+            () => _settings,
+            settings => services.GetRequiredService<SettingsStore>().Save(settings),
+            write => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, write),
+            services.GetRequiredService<ILogger<CaptureOverlayCoordinator>>());
+        _overlay.ClaimStartGuide = startGuide.Claim;
         if (_tray is not null) _tray.CaptureTextRequested += (_, _) => HandleCaptureTextRequested();
     }
 

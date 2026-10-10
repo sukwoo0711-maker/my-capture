@@ -18,8 +18,9 @@ using static MyCapture.App.Tests.WindowDetectOverlayTests;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Renders the capture selector's window-detect states on a synthetic desktop in all six palettes.
-/// Set MYCAPTURE_CAPTURE_CUE_EVIDENCE to a directory to keep the PNGs for visual review.
+/// Renders the screenshot selector (mode bar, status, start guide, window-detect cues and the text and
+/// colour modes) on a synthetic desktop in all six palettes. Set MYCAPTURE_CAPTURE_CUE_EVIDENCE to a
+/// directory to keep the PNGs for visual review.
 /// </summary>
 public sealed class CaptureCueEvidenceTests
 {
@@ -38,14 +39,18 @@ public sealed class CaptureCueEvidenceTests
     internal static readonly IReadOnlyList<MonitorInfo> Monitors =
         [new(@"\\.\DISPLAY1", new RectD(0, 0, Width, Height), new RectD(0, 0, Width, 672), 96, IsPrimary: true)];
 
+    /// <summary>Every state the screenshot selector shows, as the evidence set names them.</summary>
+    internal static readonly string[] States =
+        ["first-open", "window-hover", "drag", "desktop-hover", "text-mode", "color-mode"];
+
     [Fact]
-    public void WindowHoverDragAndDesktopRenderInEveryPalette() => StaTestHost.Run(() =>
+    public void EverySelectorStateRendersInEveryPalette() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         FrozenFrame frame = Desktop();
         foreach (AppTheme theme in Enum.GetValues<AppTheme>())
         {
-            foreach (string state in new[] { "window-hover", "drag", "desktop-hover" })
+            foreach (string state in States)
             {
                 CaptureOverlayView view = EvidenceView(frame, theme, state);
                 try
@@ -53,6 +58,8 @@ public sealed class CaptureCueEvidenceTests
                     RenderTargetBitmap rendered = Render(view);
                     Assert.Equal(Width, rendered.PixelWidth);
                     Assert.Equal(Height, rendered.PixelHeight);
+                    Assert.NotNull(view.ModeBarBoundsForTest);
+                    Assert.Equal(state == "first-open", view.ShowStartGuide);
                     SaveEvidence(rendered, $"{AppThemeNames.ToSetting(theme)}-{state}.png");
                 }
                 finally { view.ReleaseResources(); }
@@ -60,12 +67,18 @@ public sealed class CaptureCueEvidenceTests
         }
     });
 
+    /// <summary>
+    /// The screenshot selector as the coordinator configures it (mode bar on), in one state. The
+    /// start guide shows only in "first-open", where the pointer rests over the browser window.
+    /// </summary>
     internal static CaptureOverlayView EvidenceView(FrozenFrame frame, AppTheme theme, string state)
     {
         PointD pointer = state switch
         {
+            "first-open" => new PointD(900, 520),
             "desktop-hover" => new PointD(1000, 120),
             "drag" => new PointD(300, 250),
+            "color-mode" => new PointD(700, 300),
             _ => new PointD(300, 300),
         };
         var view = new CaptureOverlayView(frame, showMagnifier: false)
@@ -76,9 +89,13 @@ public sealed class CaptureCueEvidenceTests
             WindowCandidates = [Browser, Notes, Taskbar, Shell],
             CopyColorText = _ => Task.FromResult(true),
             TextCaptureAvailable = true,
+            ShowModeBar = true,
+            ShowStartGuide = state == "first-open",
         };
         UsePalette(view, CaptureGuidePalette.Create(theme, customColor: null, systemHighContrast: false));
         view.InitializePointer();
+        if (state == "text-mode") view.SelectMode(CaptureSelectorMode.Text);
+        if (state == "color-mode") view.SelectMode(CaptureSelectorMode.Color);
         if (state == "drag")
         {
             Invoke(view, "OnMouseLeftButtonDown", Button(UIElement.MouseLeftButtonDownEvent));

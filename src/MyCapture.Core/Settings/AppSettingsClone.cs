@@ -92,6 +92,7 @@ public static class AppSettingsClone
         DelaySeconds = s.DelaySeconds,
         AbortOnFocusLoss = s.AbortOnFocusLoss,
         RegionHistoryLimit = s.RegionHistoryLimit,
+        StartGuideShownCount = s.StartGuideShownCount,
     };
 
     private static Recording.RecordingSettings Clone(Recording.RecordingSettings s) => new()

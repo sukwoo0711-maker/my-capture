@@ -40,7 +40,7 @@ public sealed class CaptureCueOverlayTests
             view.InitializePointer();
             RenderTargetBitmap hover = Render(view);
             Assert.Equal(CaptureCueState.Click, view.CueState);
-            Assert.Equal(UiText.Get("CaptureCue_ClickWindow") + "  620 × 420", view.TargetLabelForTest);
+            Assert.Equal(UiText.Get("CaptureGuide2_ClickWindow") + "  620 × 420", view.TargetLabelForTest);
             Assert.Equal(CaptureCueTabPlacement.Above, view.TargetTabPlacementForTest);
             Rect tab = view.TargetTabForTest!.Value;
             Assert.Equal(120, tab.Left, 6);
@@ -87,7 +87,7 @@ public sealed class CaptureCueOverlayTests
             Render(desktop);
             Assert.True(desktop.HoverWholeMonitorForTest);
             Assert.Equal(CaptureCueState.Click, desktop.CueState);
-            Assert.Equal(UiText.Get("CaptureCue_ClickMonitor") + "  1280 × 720", desktop.TargetLabelForTest);
+            Assert.Equal(UiText.Get("CaptureGuide2_ClickMonitor") + "  1280 × 720", desktop.TargetLabelForTest);
             Assert.Equal(CaptureCueTabPlacement.InsideTop, desktop.TargetTabPlacementForTest);
             Rect monitorTab = desktop.TargetTabForTest!.Value;
             Assert.Equal(new Point(0, 0), monitorTab.TopLeft);
@@ -106,11 +106,11 @@ public sealed class CaptureCueOverlayTests
         {
             view.InitializePointer();
             Render(view);
-            Assert.Equal("Click to capture this window  620 × 420", view.TargetLabelForTest);
+            Assert.Equal("Click: Capture window  620 × 420", view.TargetLabelForTest);
             pointer = new PointD(1000, 120);
             view.UpdatePointer(false, false);
             Render(view);
-            Assert.Equal("Click to capture this entire monitor  1280 × 720", view.TargetLabelForTest);
+            Assert.Equal("Click: Capture monitor  1280 × 720", view.TargetLabelForTest);
         }
         finally { view.ReleaseResources(); }
     });
@@ -135,7 +135,7 @@ public sealed class CaptureCueOverlayTests
     });
 
     [Fact]
-    public void ShortcutHintSettingHidesOnlyTheKeyHintChip() => StaTestHost.Run(() =>
+    public void ShortcutHintSettingHidesOnlyTheKeyBadges() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         FrozenFrame frame = Desktop();
@@ -144,25 +144,36 @@ public sealed class CaptureCueOverlayTests
         hidden.ShowShortcutHints = false;
         try
         {
-            // The click hint moved into the instruction, so the chip keeps only C and T.
-            Assert.Equal(UiText.Get("ColorPick_OverlayHint") + "  ·  " + UiText.Get("TextCapture_OverlayHint"),
-                shown.OverlayHintText);
-            Assert.Null(hidden.OverlayHintText);
+            // The keys live on the bar's buttons now; there is no separate key-hint chip.
+            Assert.Equal(["T", "C", "Esc"], shown.ModeBarForTest!.VisibleKeyBadgesForTest);
+            Assert.Empty(hidden.ModeBarForTest!.VisibleKeyBadgesForTest);
+            Assert.EndsWith("(T)", (string)shown.ModeBarForTest.TextButton.ToolTip, StringComparison.Ordinal);
+            Assert.DoesNotContain("(T)", (string)hidden.ModeBarForTest.TextButton.ToolTip, StringComparison.Ordinal);
             Render(shown);
             Render(hidden);
+            // Bar and status only; the status keeps its size and stays centred under the bar.
             Assert.Equal(2, shown.ChromeBoundsForTest.Count);
-            Assert.Equal(shown.ChromeBoundsForTest[0], Assert.Single(hidden.ChromeBoundsForTest));
+            Assert.Equal(2, hidden.ChromeBoundsForTest.Count);
+            Rect shownStatus = shown.ChromeBoundsForTest[1];
+            Rect hiddenStatus = hidden.ChromeBoundsForTest[1];
+            Assert.Equal(shownStatus.Size, hiddenStatus.Size);
+            Assert.True(Math.Abs(shownStatus.Left - hiddenStatus.Left) <= 1, $"{shownStatus} vs {hiddenStatus}");
+            Assert.True(hidden.ChromeBoundsForTest[0].Width < shown.ChromeBoundsForTest[0].Width);
 
-            // State cues are not shortcut hints: they stay.
+            // State cues and button names are not shortcut hints: they stay.
             Assert.Equal(CaptureCueState.Click, hidden.CueState);
             Assert.NotNull(hidden.ActiveCueSegmentForTest);
             Assert.Equal(shown.TargetLabelForTest, hidden.TargetLabelForTest);
+            Assert.Equal(UiText.Get("CaptureGuide2_Text"),
+                System.Windows.Automation.AutomationProperties.GetName(hidden.ModeBarForTest.TextButton));
 
-            // Disabled hints with nothing else enabled: no chip at all, even with detection on.
+            // Without the owners' handlers the text and colour buttons are not offered at all.
             hidden.CopyColorText = null;
             hidden.TextCaptureAvailable = false;
             hidden.ShowShortcutHints = true;
-            Assert.Null(hidden.OverlayHintText);
+            Assert.Equal(Visibility.Collapsed, hidden.ModeBarForTest.TextButton.Visibility);
+            Assert.Equal(Visibility.Collapsed, hidden.ModeBarForTest.ColorButton.Visibility);
+            Assert.Equal(["Esc"], hidden.ModeBarForTest.VisibleKeyBadgesForTest);
         }
         finally
         {
@@ -195,6 +206,7 @@ public sealed class CaptureCueOverlayTests
             Assert.False(overlay.IsVisible);
             Assert.True(overlay.DetectWindows);
             Assert.Equal(expected, overlay.ShowShortcutHints);
+            Assert.True(overlay.ShowModeBar);
             coordinator.Cancel();
         }
     });
