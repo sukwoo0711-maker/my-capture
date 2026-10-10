@@ -3317,7 +3317,6 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Folder410.InvalidMove" xml:space="preserve"><value>Cannot move to this location.</value></data>
   <data name="Folder410.EmptyFolder" xml:space="preserve"><value>This folder has no captures.</value></data>
   <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>Drag captures here or select this folder for new captures.</value></data>
-  <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store keeps this copy of MyCapture up to date. Check for new versions in the Library of the Microsoft Store app.</value></data>
   <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>MyCapture is turned off in the Windows startup apps. Turn it on in Settings &gt; Apps &gt; Startup.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>An organization policy manages this startup setting.</value></data>
   <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>Captures removed from a folder start a new retention period today.</value></data>
@@ -3446,4 +3445,12 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="RecordingBackend_Hint" xml:space="preserve"><value>Automatic records with Windows Graphics Capture when the region lies within one monitor, and with GDI when it spans monitors or Windows Graphics Capture is unavailable. Choose compatibility mode if recordings look broken or freeze.</value></data>
   <data name="RecordingBackend_Auto" xml:space="preserve"><value>Automatic (Windows Graphics Capture first)</value></data>
   <data name="RecordingBackend_Gdi" xml:space="preserve"><value>Compatibility mode (GDI)</value></data>
+  <data name="StoreUpdate_StoreDescription" xml:space="preserve"><value>Microsoft Store keeps this copy of MyCapture up to date. Check for updates opens the MyCapture page in the Microsoft Store app.</value></data>
+  <data name="StoreUpdate_CheckInStore" xml:space="preserve"><value>Check for updates in Microsoft Store</value></data>
+  <data name="StoreUpdate_CheckInStoreHelp" xml:space="preserve"><value>Opens the MyCapture page in the Microsoft Store app, where a new version can be installed.</value></data>
+  <data name="StoreUpdate_UnpackagedDescription" xml:space="preserve"><value>MyCapture is distributed through the Microsoft Store. This copy does not check for or download updates. Install the Microsoft Store version to receive updates.</value></data>
+  <data name="StoreUpdate_UnpackagedNote" xml:space="preserve"><value>The Microsoft Store version does not share settings or the library with this copy. Move your settings with Export settings and Import settings below. The two versions cannot run at the same time, so exit this copy from the tray menu before starting the Microsoft Store version.</value></data>
+  <data name="StoreUpdate_OpenStore" xml:space="preserve"><value>Open in Microsoft Store</value></data>
+  <data name="StoreUpdate_OpenStoreHelp" xml:space="preserve"><value>Opens the MyCapture page in the Microsoft Store app, or in a browser when the Store app cannot open.</value></data>
+  <data name="StoreUpdate_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Open {0} in a browser.</value></data>
 </root>

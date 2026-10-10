@@ -8,7 +8,7 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 
 | 항목 | 개발 빌드(비패키지)와 기존 GitHub 설치본 | Store 빌드 |
 |---|---|---|
-| 업데이트 | 설정의 업데이트 탭에서 GitHub 릴리스를 확인하고 설치 | Microsoft Store가 업데이트. 업데이트 탭에는 안내만 표시 |
+| 업데이트 | 앱 안의 업데이트 확인·다운로드 없음. 업데이트 탭에 Store 버전 설치 안내와 "Microsoft Store에서 열기" 버튼 | Microsoft Store가 업데이트. 업데이트 탭의 "Microsoft Store에서 업데이트 확인" 버튼으로 Store 앱의 MyCapture 페이지 열기 |
 | 로그인 시 자동 시작 | HKCU `Run` 키, 기본 켜짐 | 매니페스트 시작 작업(`MyCaptureStartup`), 기본 꺼짐 |
 | 설정·라이브러리 | `%APPDATA%\MyCapture` | `%LOCALAPPDATA%\Packages\<패키지 패밀리 이름>\LocalState` |
 | OCR 모델 | `%LOCALAPPDATA%\MyCapture\ocr-models` | 같은 패키지 폴더의 `LocalCache\ocr-models` |
@@ -16,7 +16,7 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | 빠른 저장 | `사진\Captures` | 같음 |
 | 평가 요청 | 없음 | 성공한 캡처 10회와 최초 실행 후 3일이 지나면 Microsoft Store 평가 창을 한 번만 표시. 설정 > 업데이트 탭에 "Microsoft Store에서 평가" 버튼 |
 
-- **업데이트**: Store 빌드에서 GitHub 설치 파일을 받으면 패키지 옆에 비패키지 사본이 하나 더 설치됩니다. 그래서 Store 빌드에서는 업데이트 동작을 막았습니다.
+- **업데이트**: 어느 빌드도 앱 안에서 업데이트를 확인하거나 내려받지 않으며, 업데이트를 위해 앱이 직접 보내는 네트워크 요청은 없습니다. 업데이트 탭의 버튼은 Microsoft Store 앱의 MyCapture 페이지(`ms-windows-store://pdp/?productid=9PB33MC095VR`)를 열고, 열 수 없으면 브라우저에서 https://apps.microsoft.com/detail/9PB33MC095VR 를 엽니다. 둘 다 열 수 없으면 설정 창 아래 상태 줄에 주소를 표시합니다. GitHub 업데이트 코드는 소스에 남아 있지만 화면에 연결하지 않습니다.
 - **평가 요청**: 요청 시점을 정하려고 성공한 캡처 수(최대 10), 최초 실행 시각, 직전 캡처 실패 여부, 요청 시각을 `settings.json`의 `storeRating`에만 저장하며 어디에도 전송하지 않습니다. 요청은 오버레이·편집기·녹화·빠른 작업 카드가 모두 닫힌 뒤 비차단으로 한 번만 시도하고, 결과와 관계없이 다시 묻지 않습니다. 평가 창과 평가 내용은 Microsoft Store가 처리합니다.
 - **PrintScreen 안내**: 단축키에 PrintScreen을 지정하면 `HKCU\Control Panel\Keyboard`의 `PrintScreenKeyForSnippingEnabled` 값을 읽기만 해서, Windows가 PrtSc로 캡처 도구를 여는 상태인지 판단합니다. 값이 없으면 빌드 22621 이상에서 켜짐으로 봅니다. 값을 바꾸지 않고 Windows 설정 바로 가기만 제공합니다.
 - **자동 시작**: 패키지 앱이 `Run` 키에 쓴 값은 가상화되어 로그인할 때 실행되지 않습니다. Store 정책 10.2.8은 Windows 시작 동작을 바꾸기 전에 사용자 동의를 요구합니다. 그래서 시작 작업은 꺼진 상태로 배포됩니다. 사용자가 MyCapture 설정이나 Windows 설정 > 앱 > 시작 프로그램에서 직접 켭니다. 앱 설정의 체크 상태는 Windows의 실제 상태를 따릅니다.
@@ -83,7 +83,7 @@ Add-AppxPackage -Path .\artifacts\store\4.1.0-localtest\MyCapture.LocalTest_4.1.
 다음 항목을 확인합니다.
 
 - 시작 메뉴와 작업 표시줄 아이콘
-- 설정 > 업데이트 탭의 Store 안내
+- 설정 > 업데이트 탭의 Store 안내와 "Microsoft Store에서 업데이트 확인" 버튼으로 Store 앱의 MyCapture 페이지가 열리는지 여부
 - 설정에서 로그인 시 자동 시작을 켜면 Windows 설정 > 앱 > 시작 프로그램에 MyCapture가 표시되는지 여부
 - 캡처 후 라이브러리에서 탐색기로 드래그하거나 다른 앱에서 열기
 

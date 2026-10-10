@@ -1,5 +1,4 @@
 using System.IO;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
@@ -9,7 +8,6 @@ using System.Windows.Media;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
-using MyCapture.App.Updates;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
@@ -76,7 +74,7 @@ public sealed partial class SettingsThemePreviewTests
         FluidMotion.SetWindowEntrance(window, false);
         window.Show();
         Drain(window);
-        Assert.False(IsDraftDirty(window));
+        Assert.NotEqual("321", DraftOf(window).MaxItems);
         window.ImportSettingsFrom(importPath);
         Drain(window);
         Assert.Equal(AppThemeNames.Glass, saved.General.Theme);
@@ -94,12 +92,11 @@ public sealed partial class SettingsThemePreviewTests
         SaveEvidence(window, $"settings-import-{locale}-780x560.png");
         AssertCommandBarFits(window);
 
-        Assert.True(IsDraftDirty(window), "An imported draft must block an update restart even when the saved GitHub token is empty.");
+        Assert.Equal("321", DraftOf(window).MaxItems);
         TextBlock status = Assert.IsType<TextBlock>(window.FindName("SettingsStatus"));
         Assert.Equal(UiText.Get("Settings_ImportDone"), status.Text);
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(status));
         AssertStatusFits(window, status);
-        AssertImportedDraftBlocksUpdate(window, root);
         var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
         tabs.SelectedIndex = 1;
         Drain(window);
@@ -107,14 +104,13 @@ public sealed partial class SettingsThemePreviewTests
         tabs.SelectedItem = window.FindName("UpdateTab");
         Drain(window);
         AssertStatusFits(window, status);
-        Assert.Equal(UpdateStrings.Busy, Assert.IsType<TextBlock>(window.FindName("UpdateStatus")).Text);
         tabs.SelectedIndex = 0;
 
         SettingsDraft pending = Assert.IsType<SettingsDraft>(window.DataContext);
         window.ImportSettingsFrom(invalidPath);
         Drain(window);
         Assert.Same(pending, window.DataContext);
-        Assert.True(IsDraftDirty(window));
+        Assert.Equal("321", pending.MaxItems);
         Assert.Equal(UiText.Get("Settings_ImportFailed"), status.Text);
         AssertStatusFits(window, status);
         AssertCommandBarFits(window);
@@ -126,14 +122,14 @@ public sealed partial class SettingsThemePreviewTests
         window.ImportSettingsFrom(missingPath);
         Drain(window);
         Assert.Same(pending, window.DataContext);
-        Assert.True(IsDraftDirty(window));
+        Assert.Equal("321", pending.MaxItems);
         Assert.StartsWith(UiText.Get("Settings_ImportFailed"), status.Text, StringComparison.Ordinal);
         Assert.Contains("missing-settings.json", status.Text, StringComparison.Ordinal);
         AssertStatusFits(window, status);
         AssertCommandBarFits(window);
 
         SettingsWindow.CancelCommand.Execute(null, window);
-        Assert.False(IsDraftDirty(window));
+        Assert.NotEqual("321", DraftOf(window).MaxItems);
         AssertPalette(window, AppTheme.Glass);
         Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
         window.ShowSettings();
@@ -143,19 +139,22 @@ public sealed partial class SettingsThemePreviewTests
         SettingsDraft clean = Assert.IsType<SettingsDraft>(window.DataContext);
         window.ImportSettingsFrom(invalidPath);
         Assert.Same(clean, window.DataContext);
-        Assert.False(IsDraftDirty(window));
+        Assert.NotEqual("321", clean.MaxItems);
         AssertPalette(window, AppTheme.Glass);
 
         window.ImportSettingsFrom(importPath);
-        Assert.True(IsDraftDirty(window));
+        Assert.Equal("321", DraftOf(window).MaxItems);
         window.ShowSettings();
-        Assert.False(IsDraftDirty(window));
+        Assert.NotEqual("321", DraftOf(window).MaxItems);
         AssertPalette(window, AppTheme.Glass);
         Assert.True(string.IsNullOrEmpty(status.Text));
 
         window.ImportSettingsFrom(importPath);
+        SettingsDraft applied = DraftOf(window);
         SettingsWindow.ApplyCommand.Execute(null, window);
-        Assert.False(IsDraftDirty(window));
+        // Apply reloads a fresh draft from the saved settings, which now hold the import.
+        Assert.NotSame(applied, window.DataContext);
+        Assert.Equal("321", DraftOf(window).MaxItems);
         Assert.False(window.IsVisible);
         Assert.Equal(AppThemeNames.Daylight, saved.General.Theme);
         Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
@@ -163,40 +162,7 @@ public sealed partial class SettingsThemePreviewTests
         AssertPalette(window, AppTheme.Daylight);
     }
 
-    private static bool IsDraftDirty(SettingsWindow window) =>
-        (bool)typeof(SettingsWindow).GetField("_settingsEdited", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(window)!;
-
-    private static void AssertImportedDraftBlocksUpdate(SettingsWindow window, string root)
-    {
-        const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
-        FieldInfo staged = typeof(SettingsWindow).GetField("_stagedUpdate", flags)!;
-        FieldInfo target = typeof(SettingsWindow).GetField("_updateTarget", flags)!;
-        object? originalTarget = target.GetValue(window);
-        var package = new VerifiedUpdatePackage(new UpdateVersion(9, 0, 0), Path.Combine(root, "never-executed.exe"),
-            "fixture", "fixture", 1, root, "Fixture", "", new Uri("https://example.invalid/release"), DateTimeOffset.UtcNow);
-        int exitChecks = 0;
-        window.CanExitForUpdate = () => { exitChecks++; return false; };
-        window.ExitForUpdate = () => Assert.Fail("An imported draft must never exit for an update.");
-        try
-        {
-            staged.SetValue(window, package);
-            target.SetValue(window, new UpdateTarget(root, root, false));
-            int generation = (int)typeof(SettingsWindow).GetField("_updateProgressGeneration", flags)!.GetValue(window)!;
-            Task install = Assert.IsAssignableFrom<Task>(typeof(SettingsWindow)
-                .GetMethod("InstallStagedUpdateAsync", flags)!.Invoke(window, [generation]));
-            install.GetAwaiter().GetResult();
-            Assert.Equal(0, exitChecks); // The dirty draft short-circuits before any handoff checks.
-        }
-        finally
-        {
-            // No package files exist or were executed. Do not invoke package cleanup on
-            // the fixture root; retain all settings/evidence for inspection.
-            staged.SetValue(window, null);
-            target.SetValue(window, originalTarget);
-            window.CanExitForUpdate = null;
-            window.ExitForUpdate = null;
-        }
-    }
+    private static SettingsDraft DraftOf(SettingsWindow window) => Assert.IsType<SettingsDraft>(window.DataContext);
 
     private static void AssertCommandBarFits(SettingsWindow window)
     {

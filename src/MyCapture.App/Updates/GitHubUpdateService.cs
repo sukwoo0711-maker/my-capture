@@ -14,6 +14,12 @@ namespace MyCapture.App.Updates;
 /// Performs bounded HTTPS requests, canonical URL verification, SHA-256 integrity validation,
 /// and isolated staging directory management without executing installers.
 /// </summary>
+/// <remarks>
+/// Not connected to the UI. MyCapture is distributed only through the Microsoft Store, and the
+/// settings update tab opens the Store listing instead (<c>MyCapture.App.Store.StoreUpdateLink</c>).
+/// The GitHub updater stays in the source for its tests and the build tools that read the
+/// embedded update helper; removing it is a separate decision.
+/// </remarks>
 public sealed class GitHubUpdateService : IUpdateService
 {
     private const int MaxApiByteLimit = 1024 * 1024; // 1 MiB streaming bound for API metadata

@@ -3317,7 +3317,6 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Folder410.InvalidMove" xml:space="preserve"><value>이 위치로 이동할 수 없습니다.</value></data>
   <data name="Folder410.EmptyFolder" xml:space="preserve"><value>폴더에 캡처가 없습니다.</value></data>
   <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>캡처를 끌어 넣거나 새 캡처 저장 위치로 지정하십시오.</value></data>
-  <data name="Update.StoreManaged" xml:space="preserve"><value>Microsoft Store에서 설치한 MyCapture는 Microsoft Store가 업데이트합니다. 새 버전은 Microsoft Store 앱의 라이브러리에서 확인할 수 있습니다.</value></data>
   <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>Windows 설정에서 MyCapture 시작 앱이 꺼져 있습니다. 설정 &gt; 앱 &gt; 시작 프로그램에서 켜십시오.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>조직 정책이 시작 프로그램 설정을 관리합니다.</value></data>
   <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>폴더에서 뺀 캡처는 오늘부터 보관 기간이 다시 적용됩니다.</value></data>
@@ -3446,4 +3445,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="RecordingBackend_Hint" xml:space="preserve"><value>자동은 녹화 영역이 모니터 하나 안에 있으면 Windows Graphics Capture로 녹화하고, 여러 모니터에 걸치거나 사용할 수 없으면 GDI로 녹화합니다. 녹화 화면이 깨지거나 멈추면 호환 모드를 선택하십시오.</value></data>
   <data name="RecordingBackend_Auto" xml:space="preserve"><value>자동(Windows Graphics Capture 우선)</value></data>
   <data name="RecordingBackend_Gdi" xml:space="preserve"><value>호환 모드(GDI)</value></data>
+  <data name="StoreUpdate_StoreDescription" xml:space="preserve"><value>Microsoft Store에서 설치한 MyCapture는 Microsoft Store가 업데이트합니다. 업데이트 확인을 누르면 Microsoft Store 앱의 MyCapture 페이지가 열립니다.</value></data>
+  <data name="StoreUpdate_CheckInStore" xml:space="preserve"><value>Microsoft Store에서 업데이트 확인</value></data>
+  <data name="StoreUpdate_CheckInStoreHelp" xml:space="preserve"><value>Microsoft Store 앱에서 MyCapture 페이지를 엽니다. 새 버전이 있으면 그 페이지에서 업데이트할 수 있습니다.</value></data>
+  <data name="StoreUpdate_UnpackagedDescription" xml:space="preserve"><value>MyCapture는 Microsoft Store에서 배포합니다. 이 버전은 앱 안에서 업데이트를 확인하거나 내려받지 않습니다. 업데이트를 받으려면 Microsoft Store 버전을 설치하십시오.</value></data>
+  <data name="StoreUpdate_UnpackagedNote" xml:space="preserve"><value>Microsoft Store 버전은 이 버전과 설정·라이브러리를 공유하지 않습니다. 설정은 아래의 설정 내보내기와 설정 가져오기로 옮길 수 있습니다. 두 버전은 동시에 실행되지 않으므로 Microsoft Store 버전을 실행하기 전에 트레이 메뉴에서 이 버전을 종료하십시오.</value></data>
+  <data name="StoreUpdate_OpenStore" xml:space="preserve"><value>Microsoft Store에서 열기</value></data>
+  <data name="StoreUpdate_OpenStoreHelp" xml:space="preserve"><value>Microsoft Store 앱에서 MyCapture 페이지를 엽니다. Store 앱을 열 수 없으면 브라우저에서 엽니다.</value></data>
+  <data name="StoreUpdate_OpenFailed" xml:space="preserve"><value>Microsoft Store를 열 수 없습니다. 브라우저에서 {0} 주소를 여십시오.</value></data>
 </root>
