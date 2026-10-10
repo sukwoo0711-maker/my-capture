@@ -1235,6 +1235,8 @@ public partial class App : Application
                     else if (_settings?.General.AfterCapture == AfterCaptureAction.ClipboardOnly)
                         _shellPresenter?.ShowCaptureReceipt(UiText.Get(copied ? "Capture.CopiedAndSaved" : "Capture.Saved"),
                             () => EnsureGalleryWindow()?.OpenCapture(receipt.Id, edit: false));
+                    // The editor opened for this capture says it is already saved (and copied).
+                    else if (ReferenceEquals(_currentRecord, receipt)) _overlay?.CurrentEditor?.ShowCaptureReceipt(copied);
                 }
                 finally { pendingReceipt?.Dispose(); }
             }));
