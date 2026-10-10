@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using MyCapture.App.Editing;
 using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Recording;
@@ -241,7 +242,7 @@ public sealed class VideoEditorUxInteractionTests
             Assert.True(editor.HasUnsavedEditsForTest);
 
             int prompts = 0;
-            MessageBoxResult answer = MessageBoxResult.Cancel;
+            EditorCloseChoice answer = EditorCloseChoice.Cancel;
             editor.UnsavedEditsPromptForTest = () => { prompts++; return answer; };
 
             // The close box asks; "취소" keeps the editor open with its edits.
@@ -274,7 +275,7 @@ public sealed class VideoEditorUxInteractionTests
             editor = OpenReadyEditor(root, 10_000, show: true);
             Assert.True(editor.TimelineForTest.SetTrimRange(2_000, 8_000));
             int prompts = 0;
-            editor.UnsavedEditsPromptForTest = () => { prompts++; return MessageBoxResult.No; };
+            editor.UnsavedEditsPromptForTest = () => { prompts++; return EditorCloseChoice.DontSave; };
             editor.MarkUserCloseRequestedForTest();
             editor.Close();
             Assert.Equal(1, prompts);
@@ -282,7 +283,7 @@ public sealed class VideoEditorUxInteractionTests
 
             // Without edits the close box never asks.
             editor = OpenReadyEditor(root, 10_000, show: true);
-            editor.UnsavedEditsPromptForTest = () => { prompts++; return MessageBoxResult.Cancel; };
+            editor.UnsavedEditsPromptForTest = () => { prompts++; return EditorCloseChoice.Cancel; };
             editor.MarkUserCloseRequestedForTest();
             editor.Close();
             Assert.Equal(1, prompts);

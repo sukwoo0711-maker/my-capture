@@ -3570,9 +3570,9 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_Pause" xml:space="preserve"><value>Pause</value></data>
   <data name="VideoEditorUx_SaveEditsHelp" xml:space="preserve"><value>Applies the trim and layers to this recording in the library. The original is kept and can be edited again later.</value></data>
   <data name="VideoEditorUx_ExportHelp" xml:space="preserve"><value>Creates a new MP4 or GIF file with the trim and layers applied. The recording in the library is unchanged.</value></data>
-  <data name="VideoEditorUx_UnsavedTitle" xml:space="preserve"><value>Unsaved edits</value></data>
-  <data name="VideoEditorUx_UnsavedPrompt" xml:space="preserve"><value>Save your edits to the library?
-Yes: save and close · No: close without saving · Cancel: keep editing</value></data>
+  <data name="VideoEditorUx_UnsavedTitle" xml:space="preserve"><value>Save your edits to the library?</value></data>
+  <data name="VideoEditorUx_UnsavedPrompt" xml:space="preserve"><value>If you don't save, the trim and layer edits you made will be lost. The original recording stays as it is.</value></data>
+  <data name="VideoEditorUx_SaveAndClose" xml:space="preserve"><value>Save to library and close</value></data>
   <data name="SettingsUx_TabGeneral" xml:space="preserve"><value>General</value></data>
   <data name="SettingsUx_TabGeneralHelp" xml:space="preserve"><value>Display language, theme, start at sign-in</value></data>
   <data name="SettingsUx_TabCapture" xml:space="preserve"><value>Capture</value></data>

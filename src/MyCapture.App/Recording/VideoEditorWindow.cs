@@ -387,8 +387,31 @@ internal sealed class VideoEditorWindow : Window
     /// <summary>Marks the next Close() as the user's own, as the close box would.</summary>
     internal void MarkUserCloseRequestedForTest() => _userRequestedClose = true;
 
-    /// <summary>Replaces the unsaved-edits dialog in tests; null shows the themed dialog.</summary>
-    internal Func<MessageBoxResult>? UnsavedEditsPromptForTest { get; set; }
+    /// <summary>Replaces the unsaved-edits dialog in tests; null shows the shared close dialog.</summary>
+    internal Func<EditorCloseChoice>? UnsavedEditsPromptForTest { get; set; }
+
+    /// <summary>
+    /// The same three-way close confirmation as the image editor and the settings window:
+    /// the filled action first, the alternative next, Cancel last; Enter saves, Esc cancels.
+    /// </summary>
+    private EditorCloseChoice AskUnsavedEdits()
+    {
+        if (UnsavedEditsPromptForTest is not null)
+        {
+            return UnsavedEditsPromptForTest();
+        }
+
+        var dialog = new EditorCloseDialog(
+            UiText.Get("VideoEditorUx_UnsavedTitle"),
+            UiText.Get("VideoEditorUx_UnsavedPrompt"),
+            UiText.Get("VideoEditorUx_SaveAndClose"),
+            UiText.Get("EditorFlow_DontSave"),
+            UiText.Get("Dialog.Cancel"));
+        if (IsVisible) dialog.Owner = this;
+        else dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        _ = dialog.ShowDialog();
+        return dialog.Choice;
+    }
 
     internal bool HasUnsavedEditsForTest => HasUnsavedEdits();
 
@@ -2768,17 +2791,14 @@ internal sealed class VideoEditorWindow : Window
         if (userClose && !_operationRunning && HasUnsavedEdits())
         {
             // Closing from the title bar with edits: save to the library, drop them, or stay.
-            MessageBoxResult choice = UnsavedEditsPromptForTest?.Invoke()
-                ?? MyCapture.App.Themes.ThemedDialog.Show(this,
-                    UiText.Get("VideoEditorUx_UnsavedPrompt"), UiText.Get("VideoEditorUx_UnsavedTitle"),
-                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Yes);
-            if (choice == MessageBoxResult.Cancel)
+            EditorCloseChoice choice = AskUnsavedEdits();
+            if (choice == EditorCloseChoice.Cancel)
             {
                 e.Cancel = true;
                 return;
             }
 
-            if (choice == MessageBoxResult.Yes)
+            if (choice == EditorCloseChoice.SaveAndClose)
             {
                 // CommitTrim closes the window itself once the edit is saved.
                 e.Cancel = true;
