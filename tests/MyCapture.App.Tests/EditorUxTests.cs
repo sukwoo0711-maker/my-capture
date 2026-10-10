@@ -242,8 +242,10 @@ public sealed class EditorUxTests
         Drain(host.Editor);
         Assert.Equal(notice, host.Editor.StatusText);
 
-        // Repeats inside a few seconds do not re-announce.
-        Assert.True(Press(host.Editor, Key.R, ime: false));
+        // Repeats inside a few seconds do not re-announce. (A result replaces the notice first:
+        // switching tools reports nothing, so a rotation stands in for "something happened".)
+        Assert.True(Press(host.Editor, Key.W, ime: false));
+        Assert.NotEqual(notice, host.Editor.StatusText);
         Assert.False(PressUnidentified(host.Editor));
         Drain(host.Editor);
         Assert.NotEqual(notice, host.Editor.StatusText);
@@ -328,7 +330,7 @@ public sealed class EditorUxTests
     }
 
     [Fact]
-    public void StepToolExplainsItsPurposeAndPreviewsTheNextNumber() => StaTestHost.Run(() =>
+    public void StepToolKeepsItsPurposeOnTheToolAndShowsOnlyValuesAndResults() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         using EditorWindowHost host = EditorWindowHost.Create();
@@ -337,11 +339,16 @@ public sealed class EditorUxTests
         Assert.True(Press(editor, Key.N, ime: false));
         host.Window.UpdateLayout();
 
+        // The purpose sentence lives on the tool (tooltip and help text) and nowhere else: the
+        // panel shows the next number, and choosing the tool reports nothing.
         string purpose = "클릭할 때마다 1, 2, 3… 순서 번호를 붙입니다. 사용 순서나 절차를 설명할 때 씁니다.";
-        Assert.Equal(purpose, Field<TextBlock>(editor, "_inspectorInstruction").Text);
+        var inspector = Field<Border>(editor, "_inspectorPanel");
+        Assert.DoesNotContain(Descendants(inspector).OfType<TextBlock>(), text => text.IsVisible
+            && (text.Text == purpose || text.Text == UiText.Get("EditorUx_StepNumberNextHint")));
         Assert.Equal(Visibility.Visible, Field<FrameworkElement>(editor, "_stepSection").Visibility);
+        Assert.Contains(Descendants(Field<FrameworkElement>(editor, "_stepSection")).OfType<TextBlock>(), text => text.Text == "다음 번호");
         Assert.Equal("다음에 붙을 번호 1", editor.StepPreviewName);
-        Assert.Equal("단계 번호 · 클릭하면 1번을 붙입니다", editor.StatusText);
+        Assert.Equal(string.Empty, editor.StatusText);
 
         ToggleButton button = Field<Dictionary<EditorTool, ToggleButton>>(editor, "_toolButtons")[EditorTool.StepNumber];
         Assert.Equal("단계 번호 — 클릭할 때마다 1, 2, 3… 순서 번호를 붙입니다 (N)", button.ToolTip);
@@ -352,9 +359,10 @@ public sealed class EditorUxTests
         controller.PointerDown(new PointD(80, 80));
         controller.PointerUp(new PointD(80, 80));
         Assert.Equal("다음에 붙을 번호 2", editor.StepPreviewName);
-        Assert.Equal("단계 번호 1을(를) 추가했습니다 · 다음 번호 2 · Ctrl+Z로 취소", editor.StatusText);
+        Assert.Equal("1번 추가 · Ctrl+Z로 취소", editor.StatusText);
+        Assert.DoesNotContain("(를)", editor.StatusText, StringComparison.Ordinal);
         Assert.Equal("단계 번호 1", Field<TextBlock>(editor, "_inspectorTitle").Text);
-        Assert.Equal(purpose, Field<TextBlock>(editor, "_inspectorInstruction").Text);
+        Assert.DoesNotContain(Descendants(inspector).OfType<TextBlock>(), text => text.IsVisible && text.Text == purpose);
         Assert.Equal(EditorCursorKind.StepNumber, editor.CanvasCursorKind);
 
         Assert.True(Press(editor, Key.V, ime: false));
@@ -385,7 +393,14 @@ public sealed class EditorUxTests
         host.Window.UpdateLayout();
         Button left = Field<Button>(host.Editor, "_rotateLeftButton");
         Button right = Field<Button>(host.Editor, "_rotateRightButton");
-        Button undo = Field<Button>(host.Editor, "_undoButton");
+        // Rotation belongs to crop mode (as in Photos); outside it the bar has no rotate buttons.
+        Assert.False(left.IsVisible);
+        Assert.False(right.IsVisible);
+        Assert.True(Press(host.Editor, Key.X, ime: false));
+        host.Window.UpdateLayout();
+        Assert.True(left.IsVisible && right.IsVisible);
+        // Compared with the crop bar's Apply button, the bar's other full-height command.
+        Button apply = Descendants(host.Editor).OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "EditorFlowCropApply");
 
         Assert.Equal("이미지를 왼쪽으로 90도 회전", AutomationProperties.GetName(left));
         Assert.Equal("이미지를 오른쪽으로 90도 회전", AutomationProperties.GetName(right));
@@ -396,11 +411,11 @@ public sealed class EditorUxTests
         Assert.Contains(Descendants(left).OfType<TextBlock>(), block => block.Text == "왼쪽 회전");
         Assert.Contains(Descendants(right).OfType<TextBlock>(), block => block.Text == "오른쪽 회전");
 
-        // Same row height and vertical centre as the neighbouring history buttons.
-        Assert.InRange(left.ActualHeight, undo.ActualHeight - 0.5, undo.ActualHeight + 0.5);
-        Assert.InRange(right.ActualHeight, undo.ActualHeight - 0.5, undo.ActualHeight + 0.5);
+        // Same row height and vertical centre as the bar's other commands.
+        Assert.InRange(left.ActualHeight, apply.ActualHeight - 0.5, apply.ActualHeight + 0.5);
+        Assert.InRange(right.ActualHeight, apply.ActualHeight - 0.5, apply.ActualHeight + 0.5);
         double Centre(FrameworkElement element) => element.TranslatePoint(new Point(0, element.ActualHeight / 2), host.Window).Y;
-        Assert.InRange(Centre(left), Centre(undo) - 0.5, Centre(undo) + 0.5);
+        Assert.InRange(Centre(left), Centre(apply) - 0.5, Centre(apply) + 0.5);
 
         left.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         Assert.Equal(3, Controller(host.Editor).RotationTurns);

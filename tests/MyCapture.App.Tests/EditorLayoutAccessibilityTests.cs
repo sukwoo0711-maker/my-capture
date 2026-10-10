@@ -98,11 +98,12 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
         {
             using EditorHost host = EditorHost.Create();
 
-            // Tool-rail toggle buttons (Select/Rectangle/Arrow/Pen/Text/Image/Mosaic/Blur/Crop)
-            // and every command bar button carry a name; icon-bearing controls also carry a tooltip.
+            // Tool-rail toggle buttons (every tool except Crop, which is a command bar button
+            // since the rail lost its second crop entry point) and every command bar button carry
+            // a name; icon-bearing controls also carry a tooltip.
             IReadOnlyList<ToggleButton> tools = FindDescendants<ToggleButton>(host.Editor)
                 .Where(button => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))).ToList();
-            Assert.Equal(12, tools.Count);
+            Assert.Equal(Enum.GetValues<EditorTool>().Length - 1, tools.Count);
             foreach (ToggleButton tool in tools)
             {
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(tool)),

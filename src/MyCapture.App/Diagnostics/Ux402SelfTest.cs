@@ -144,7 +144,8 @@ internal static class Ux402SelfTest
                             }
                             ToggleButton[] tools = Descendants(annotation.Editor).OfType<ToggleButton>()
                                 .Where(tool => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(tool))).ToArray();
-                            int toolCount = Enum.GetValues<EditorTool>().Length;
+                            // Every tool but Crop: crop is entered from the command bar, not the rail.
+                            int toolCount = Enum.GetValues<EditorTool>().Length - 1;
                             bool fits = tools.Length == toolCount && tools.All(tool =>
                             {
                                 Rect bounds = tool.TransformToAncestor(window).TransformBounds(new Rect(tool.RenderSize));

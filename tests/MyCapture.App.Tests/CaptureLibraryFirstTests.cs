@@ -403,7 +403,7 @@ public sealed class CaptureLibraryFirstTests
     }
 
     [Fact]
-    public void Selection_IsDurableBeforeEditorOpens_AndEscapeKeepsLibraryOriginal() => StaTestHost.Run(() =>
+    public void Selection_IsDurableBeforeEditorOpens_AndClosingUneditedKeepsLibraryOriginal() => StaTestHost.Run(() =>
     {
         using var fixture = new Fixture();
         using var entered = new ManualResetEventSlim();
@@ -445,7 +445,13 @@ public sealed class CaptureLibraryFirstTests
             release.Set();
             PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
             Assert.NotNull(editor);
+            // Esc steps back inside the editor and never closes it.
             Assert.True(editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
+            Assert.True(editor.IsVisible);
+            Assert.True(coordinator.IsActive);
+            // Nothing was edited, so Cancel closes without asking and the original stays.
+            editor.ConfirmClose = () => throw new Xunit.Sdk.XunitException("An unedited editor must close without asking.");
+            editor.RequestClose();
             Assert.False(coordinator.IsActive);
             var reloaded = new CaptureQueue(fixture.Paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
             reloaded.Load();
