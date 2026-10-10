@@ -1,9 +1,13 @@
 ﻿using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using MyCapture.Core.Recording;
 
 namespace MyCapture.App.Recording;
@@ -17,17 +21,31 @@ namespace MyCapture.App.Recording;
 /// </summary>
 /// <remarks>
 /// All time/pixel maths is delegated to <see cref="TimelineViewport"/>,
-/// <see cref="TrimSelection"/> and <see cref="FrameStepCalculator"/>. Rendering uses three
-/// fixed DrawingVisual layers per strip; pointer input only mutates state and marks layers
-/// dirty, and loaded controls draw at most once on the next composition frame.
+/// <see cref="TrimSelection"/>, <see cref="FrameStepCalculator"/> and
+/// <see cref="FilmstripLayout"/>. Rendering uses three fixed DrawingVisual layers per strip;
+/// pointer input only mutates state and marks layers dirty, and loaded controls draw at most
+/// once on the next composition frame. The top strip's track shows a filmstrip of frame
+/// thumbnails (decoded off the UI thread by <see cref="TimelineFilmstrip"/>) under its ticks,
+/// so the user sees what the cut ranges remove.
 /// </remarks>
 internal sealed class TwoLineTimeline : ContentControl, IDisposable
 {
     /// <summary>Top strip height while the detail strip is also shown.</summary>
-    private const double OverviewHeight = 44.0;
+    private const double OverviewHeight = 60.0;
 
     /// <summary>Top strip height when it is the only (trim) timeline.</summary>
-    private const double OverviewTrimHeight = 58.0;
+    private const double OverviewTrimHeight = 74.0;
+
+    /// <summary>
+    /// The strip heights of a short window. The editor's minimum window gives the timeline
+    /// about 195 DIP; the taller strips would push the first layer track out of that
+    /// viewport whenever a layer is selected, so these keep the pre-filmstrip geometry there.
+    /// </summary>
+    private const double OverviewCompactHeight = 44.0;
+    private const double OverviewTrimCompactHeight = 58.0;
+
+    /// <summary>Host windows at least this tall show the full-height strips.</summary>
+    internal const double FullStripWindowHeight = 600.0;
     private const double DetailHeight = 42.0;
     // The connector also draws a 10.5pt explanatory line; reserve its complete glyph height.
     private const double ConnectorHeight = 18.0;
@@ -44,6 +62,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// touch-optimized size (the visible handle can be narrower than its target).
     /// </summary>
     internal const double TrimHandleGrab = 22.0;
+
+    /// <summary>How long the strip width must hold before a changed tile count decodes new thumbnails.</summary>
+    private static readonly TimeSpan FilmstripResampleDelay = TimeSpan.FromMilliseconds(250);
 
     private readonly TimelineRenderSurface _overview;
     private readonly TimelineRenderSurface _connector;
@@ -68,6 +89,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private readonly Brush _cutFill;
     private readonly Pen _majorTickPen;
     private readonly Pen _minorTickPen;
+    private readonly Pen _overviewMajorTickPen;
+    private readonly Pen _overviewMinorTickPen;
     private readonly Pen _detailGroupPen;
     private readonly Pen _accentOutlinePen;
     private readonly Pen _connectorPen;
@@ -107,6 +130,18 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// <summary>Half the width of the handle itself; a press here drags at once.</summary>
     private const double HandleBodyGrab = 8.0;
 
+    private readonly DispatcherTimer _filmstripResample;
+    private string? _filmstripPath;
+    private int _filmstripSourceWidth;
+    private int _filmstripSourceHeight;
+    private ILogger? _filmstripLog;
+    private TimelineFilmstrip? _filmstrip;
+    private TimelineFilmstrip? _filmstripFallback;
+    private FilmstripSlotCache _filmstripSlots = FilmstripSlotCache.Empty;
+    private Window? _hostWindow;
+    private bool _fullStrip;
+    private bool _disposed;
+
     private enum DragMode { None, Playhead, BrushBody, BrushLeft, BrushRight, TrimIn, TrimOut, TrimPending }
 
     private enum TrimHandle { In, Out }
@@ -135,6 +170,10 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
         _majorTickPen = CreatePen(_textSecondary, 2.0);
         _minorTickPen = CreatePen(_borderSubtle, 1.0);
+        // The trim strip's ticks sit over frame thumbnails: thin and translucent, so they
+        // still mark the ruler without hiding the frames.
+        _overviewMajorTickPen = CreatePen(WithOpacity(_textSecondary, 0.55), 1.0);
+        _overviewMinorTickPen = CreatePen(WithOpacity(_textSecondary, 0.35), 1.0);
         _detailGroupPen = CreatePen(_textMuted, 1.6);
         _accentOutlinePen = CreatePen(_accent, 2.0);
         _connectorPen = CreatePen(_accent, 2.0);
@@ -152,12 +191,18 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _playheadMarker = BuildPlayheadMarker();
 
         _renderScheduler = new CompositionFrameScheduler(Dispatcher, RenderDirtyLayers);
-        _overview = new TimelineRenderSurface(OverviewHeight, DrawOverviewLayer);
+        _overview = new TimelineRenderSurface(StripHeight(), DrawOverviewLayer);
         _connector = new TimelineRenderSurface(ConnectorHeight, DrawConnectorLayer) { IsHitTestVisible = false };
         _detail = new TimelineRenderSurface(DetailHeight, DrawDetailLayer);
         _overview.LayersInvalidated += OnLayersInvalidated;
         _connector.LayersInvalidated += OnLayersInvalidated;
         _detail.LayersInvalidated += OnLayersInvalidated;
+        _overview.SizeChanged += OnOverviewSizeChanged;
+        _filmstripResample = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = FilmstripResampleDelay,
+        };
+        _filmstripResample.Tick += OnFilmstripResampleTick;
 
         _overviewCaption = BuildCaption();
         _detailCaption = BuildCaption();
@@ -191,8 +236,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         // The keyboard-selected handle shows a focus ring only while the timeline has focus.
         IsKeyboardFocusWithinChanged += (_, _) => InvalidateRange();
         IsEnabledChanged += (_, _) => Opacity = IsEnabled ? 1.0 : 0.5;
-        Loaded += (_, _) => RequestRenderIfDirty();
-        Unloaded += (_, _) => _renderScheduler.CancelPending();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     /// <summary>Raised for immediate visual intent while the user moves the playhead.</summary>
@@ -247,6 +292,12 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     internal FrameworkElement TrimStripForTest => _overview;
 
+    /// <summary>The thumbnail sampler of the trim strip, or null before a source is set.</summary>
+    internal TimelineFilmstrip? FilmstripForTest => _filmstrip;
+
+    /// <summary>True while the host window is tall enough for the full-height strips.</summary>
+    internal bool IsFullStripForTest => _fullStrip;
+
     internal int FixedVisualCountForTest =>
         _overview.FixedVisualCount + _connector.FixedVisualCount + _detail.FixedVisualCount;
 
@@ -284,6 +335,30 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         UpdateTrimStatus();
         UpdateOverviewHelp();
         InvalidateAll();
+        ScheduleFilmstrip(immediate: true);
+    }
+
+    /// <summary>
+    /// Shows frame thumbnails of <paramref name="sourcePath"/> in the trim strip. Decoding runs
+    /// off the UI thread and starts as soon as the strip has a width; a clip that cannot be
+    /// decoded leaves the strip as it was. Call after <see cref="Initialize"/>.
+    /// </summary>
+    internal void SetFilmstripSource(string sourcePath, int sourceWidth, int sourceHeight, ILoggerFactory loggerFactory)
+    {
+        ArgumentNullException.ThrowIfNull(loggerFactory);
+        _filmstripLog = loggerFactory.CreateLogger<TimelineFilmstrip>();
+        ClearFilmstrip();
+        if (string.IsNullOrWhiteSpace(sourcePath) || sourceWidth < 1 || sourceHeight < 1 || !File.Exists(sourcePath))
+        {
+            _filmstripLog.LogDebug(
+                "No filmstrip for {Path}: the clip is unavailable or reports no size", sourcePath);
+            return;
+        }
+
+        _filmstripPath = sourcePath;
+        _filmstripSourceWidth = sourceWidth;
+        _filmstripSourceHeight = sourceHeight;
+        ScheduleFilmstrip(immediate: true);
     }
 
     /// <summary>Externally sets the playhead and keeps it inside the detail viewport.</summary>
@@ -368,8 +443,59 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _overviewCaption.Visibility = detail;
         _connector.Visibility = detail;
         _detailPanel.Visibility = detail;
-        _overview.Height = visible ? OverviewHeight : OverviewTrimHeight;
+        _overview.Height = StripHeight();
         UpdateOverviewHelp();
+        InvalidateAll();
+    }
+
+    private double StripHeight() => _detailVisible
+        ? (_fullStrip ? OverviewHeight : OverviewCompactHeight)
+        : (_fullStrip ? OverviewTrimHeight : OverviewTrimCompactHeight);
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        AttachHostWindow(Window.GetWindow(this));
+        RequestRenderIfDirty();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        AttachHostWindow(null);
+        _renderScheduler.CancelPending();
+    }
+
+    private void AttachHostWindow(Window? window)
+    {
+        if (!ReferenceEquals(window, _hostWindow))
+        {
+            if (_hostWindow is not null)
+            {
+                _hostWindow.SizeChanged -= OnHostWindowSizeChanged;
+            }
+
+            _hostWindow = window;
+            if (window is not null)
+            {
+                window.SizeChanged += OnHostWindowSizeChanged;
+            }
+        }
+
+        UpdateStripMode();
+    }
+
+    private void OnHostWindowSizeChanged(object sender, SizeChangedEventArgs e) => UpdateStripMode();
+
+    /// <summary>Switches between the full and the compact strip heights as the host window's height allows.</summary>
+    private void UpdateStripMode()
+    {
+        bool full = _hostWindow is { ActualHeight: >= FullStripWindowHeight };
+        if (full == _fullStrip)
+        {
+            return;
+        }
+
+        _fullStrip = full;
+        _overview.Height = StripHeight();
         InvalidateAll();
     }
 
@@ -931,6 +1057,266 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         TrimChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    // ---- filmstrip thumbnails ----
+
+    private void OnOverviewSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_filmstripPath is null || _disposed)
+        {
+            return;
+        }
+
+        if (_filmstrip is null)
+        {
+            // The first width the strip receives starts the first decode at once.
+            ScheduleFilmstrip(immediate: true);
+            return;
+        }
+
+        // A width that keeps the tile count only re-spaces the cached tiles (the surface
+        // already redraws its static layer); a changed count waits for the resize to settle.
+        FilmstripLayout? layout = PlanFilmstrip(e.NewSize.Width);
+        if (layout is not null && !_filmstrip.Layout.SamplesSameFramesAs(layout))
+        {
+            ScheduleFilmstrip(immediate: false);
+        }
+    }
+
+    private void OnFilmstripResampleTick(object? sender, EventArgs e)
+    {
+        _filmstripResample.Stop();
+        EnsureFilmstrip();
+    }
+
+    private void ScheduleFilmstrip(bool immediate)
+    {
+        _filmstripResample.Stop();
+        if (_filmstripPath is null || _disposed)
+        {
+            return;
+        }
+
+        if (immediate)
+        {
+            EnsureFilmstrip();
+        }
+        else
+        {
+            _filmstripResample.Start();
+        }
+    }
+
+    /// <summary>Plans tiles as tall as the strip's track, so a thumbnail is decoded at the size it is drawn.</summary>
+    private FilmstripLayout? PlanFilmstrip(double width)
+    {
+        double tileHeight = OverviewTrackBottom(_overview.Height) - LabelLaneHeight;
+        return _filmstripPath is null || !double.IsFinite(width) || width <= 0 || tileHeight < 1
+            ? null
+            : FilmstripLayout.Create(
+                _durationMs,
+                _filmstripSourceWidth,
+                _filmstripSourceHeight,
+                width,
+                tileHeight,
+                _fps);
+    }
+
+    /// <summary>Starts a sampler for the current strip width unless the running one already decodes the same frames.</summary>
+    private void EnsureFilmstrip()
+    {
+        if (_disposed || _filmstripPath is null || _filmstripLog is null)
+        {
+            return;
+        }
+
+        FilmstripLayout? layout = PlanFilmstrip(_overview.ActualWidth);
+        if (layout is null || _filmstrip?.Layout.SamplesSameFramesAs(layout) == true)
+        {
+            return;
+        }
+
+        // The previous tiles stay on screen, re-spaced to the new width, until the new
+        // decode publishes: a resize never blanks the strip.
+        TimelineFilmstrip? previous = _filmstrip;
+        previous?.Dispose();
+        if (previous is { PublishedCount: > 0 })
+        {
+            _filmstripFallback?.Dispose();
+            _filmstripFallback = previous;
+        }
+
+        _filmstrip = TimelineFilmstrip.Start(
+            _filmstripPath,
+            layout,
+            VisualTreeHelper.GetDpi(this),
+            Dispatcher,
+            OnFilmstripTilesPublished,
+            _filmstripLog);
+        _overview.InvalidateLayers(TimelineRenderLayer.Static);
+    }
+
+    private void OnFilmstripTilesPublished(TimelineFilmstrip sender)
+    {
+        // A sampler cancelled by a resize may still report; only the current one redraws.
+        if (!_disposed && ReferenceEquals(sender, _filmstrip))
+        {
+            _filmstripFallback?.Dispose();
+            _filmstripFallback = null;
+            _overview.InvalidateLayers(TimelineRenderLayer.Static);
+        }
+    }
+
+    private void ClearFilmstrip()
+    {
+        _filmstripResample.Stop();
+        _filmstripPath = null;
+        _filmstrip?.Dispose();
+        _filmstrip = null;
+        _filmstripFallback?.Dispose();
+        _filmstripFallback = null;
+        _filmstripSlots = FilmstripSlotCache.Empty;
+    }
+
+    /// <summary>
+    /// Draws the published thumbnails edge to edge under the ticks. Each tile covers its share
+    /// of the strip at the source aspect and is clipped to it, so a strip whose width changed
+    /// since the decode crops a little instead of stretching the frames.
+    /// </summary>
+    private void DrawFilmstrip(DrawingContext dc, double width, double top, double bottom)
+    {
+        TimelineFilmstrip? filmstrip = _filmstrip;
+        if (filmstrip is null || width <= 0 || bottom - top <= 0)
+        {
+            return;
+        }
+
+        int published = filmstrip.PublishedCount;
+        if (published == 0 && _filmstripFallback is { PublishedCount: > 0 } fallback)
+        {
+            filmstrip = fallback;
+            published = fallback.PublishedCount;
+        }
+
+        if (published == 0)
+        {
+            return;
+        }
+
+        if (!_filmstripSlots.Matches(filmstrip.Layout, width, top, bottom))
+        {
+            _filmstripSlots = FilmstripSlotCache.Build(filmstrip.Layout, width, top, bottom);
+        }
+
+        FilmstripSlotCache slots = _filmstripSlots;
+        dc.PushClip(slots.Track);
+        for (int index = 0; index < published; index++)
+        {
+            BitmapSource? tile = filmstrip.Tile(index);
+            if (tile is null)
+            {
+                continue;
+            }
+
+            RectangleGeometry? clip = slots.Clips[index];
+            if (clip is not null)
+            {
+                dc.PushClip(clip);
+            }
+
+            dc.DrawImage(tile, slots.Images[index]);
+            if (clip is not null)
+            {
+                dc.Pop();
+            }
+        }
+
+        dc.Pop();
+    }
+
+    /// <summary>
+    /// The clip and image rectangles of every thumbnail for one strip width and track. Built
+    /// when the static layer first draws a new size, never per pointer event.
+    /// </summary>
+    private sealed class FilmstripSlotCache
+    {
+        internal static readonly FilmstripSlotCache Empty = new(null, 0, 0, 0, Frozen(new RectangleGeometry()), [], []);
+
+        private readonly FilmstripLayout? _layout;
+        private readonly double _width;
+        private readonly double _top;
+        private readonly double _bottom;
+
+        private FilmstripSlotCache(
+            FilmstripLayout? layout,
+            double width,
+            double top,
+            double bottom,
+            RectangleGeometry track,
+            Rect[] images,
+            RectangleGeometry?[] clips)
+        {
+            _layout = layout;
+            _width = width;
+            _top = top;
+            _bottom = bottom;
+            Track = track;
+            Images = images;
+            Clips = clips;
+        }
+
+        internal RectangleGeometry Track { get; }
+
+        internal Rect[] Images { get; }
+
+        /// <summary>Per tile: a frozen clip when its image overflows its slot, otherwise null.</summary>
+        internal RectangleGeometry?[] Clips { get; }
+
+        internal bool Matches(FilmstripLayout layout, double width, double top, double bottom) =>
+            ReferenceEquals(_layout, layout) && _width == width && _top == top && _bottom == bottom;
+
+        internal static FilmstripSlotCache Build(FilmstripLayout layout, double width, double top, double bottom)
+        {
+            int count = layout.TileCount;
+            double height = bottom - top;
+            var images = new Rect[count];
+            var clips = new RectangleGeometry?[count];
+            for (int index = 0; index < count; index++)
+            {
+                double left = index * width / count;
+                double right = index == count - 1 ? width : (index + 1) * width / count;
+                var slot = new Rect(left, top, right - left, height);
+                // Cover the slot at the tile aspect: the overflow on one axis is clipped away.
+                double scale = Math.Max(slot.Width / layout.TileWidth, height / layout.TileHeight);
+                double imageWidth = layout.TileWidth * scale;
+                double imageHeight = layout.TileHeight * scale;
+                images[index] = new Rect(
+                    slot.X + ((slot.Width - imageWidth) / 2),
+                    slot.Y + ((height - imageHeight) / 2),
+                    imageWidth,
+                    imageHeight);
+                if (imageWidth > slot.Width + 0.01 || imageHeight > height + 0.01)
+                {
+                    clips[index] = Frozen(new RectangleGeometry(slot));
+                }
+            }
+
+            return new FilmstripSlotCache(
+                layout,
+                width,
+                top,
+                bottom,
+                Frozen(new RectangleGeometry(new Rect(0, top, width, height))),
+                images,
+                clips);
+        }
+
+        private static RectangleGeometry Frozen(RectangleGeometry geometry)
+        {
+            geometry.Freeze();
+            return geometry;
+        }
+    }
+
     // ---- dirty-layer scheduling ----
 
     private void InvalidateAll()
@@ -1037,9 +1423,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             case TimelineRenderLayer.Static:
                 dc.DrawRectangle(_surfaceSunken, null, new Rect(size));
                 DrawLine(dc, _laneSeparatorPen, 0, trackTop - 0.5, width, trackTop - 0.5);
+                DrawFilmstrip(dc, width, trackTop, trackBottom);
                 double majorMs = CoarseIntervalMs;
                 double minorMs = majorMs / 4.0;
-                double trackHeight = trackBottom - trackTop;
                 int minorCount = Math.Max(1, (int)Math.Ceiling(_durationMs / minorMs));
                 double labelRight = double.NegativeInfinity;
                 for (int index = 0; index <= minorCount; index++)
@@ -1047,8 +1433,10 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                     double time = Math.Min(_durationMs, index * minorMs);
                     double x = OverviewMsToPx(time, width);
                     bool major = index % 4 == 0;
-                    DrawLine(dc, major ? _majorTickPen : _minorTickPen, x,
-                        trackBottom - (trackHeight * (major ? 0.42 : 0.22)), x, trackBottom);
+                    // Over the thumbnails a major tick spans the track and a minor one only
+                    // marks the bottom edge; both are translucent hairlines.
+                    DrawLine(dc, major ? _overviewMajorTickPen : _overviewMinorTickPen, x,
+                        major ? trackTop : trackBottom - 6, x, trackBottom);
                     if (major)
                     {
                         // A ruler along the top lane; the handle chips draw over it. A label
@@ -1507,6 +1895,18 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     }
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        ClearFilmstrip();
+        AttachHostWindow(null);
+        Loaded -= OnLoaded;
+        Unloaded -= OnUnloaded;
+        _filmstripResample.Tick -= OnFilmstripResampleTick;
+        _overview.SizeChanged -= OnOverviewSizeChanged;
         _overview.LayersInvalidated -= OnLayersInvalidated;
         _connector.LayersInvalidated -= OnLayersInvalidated;
         _detail.LayersInvalidated -= OnLayersInvalidated;
