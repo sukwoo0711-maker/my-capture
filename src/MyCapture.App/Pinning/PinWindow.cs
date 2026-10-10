@@ -60,6 +60,9 @@ internal sealed class PinWindow : Window
     private readonly DispatcherTimer _feedbackTimer;
     private readonly DispatcherTimer _ctrlClickTimer;
     private readonly DispatcherTimer _zoomSettleTimer;
+    private readonly DispatcherTimer _hoverHideTimer;
+    private PinHoverBar? _hoverBar;
+    private double _labeledHoverBarWidth;
 
     private bool _liveZooming;
     private bool _dragging;
@@ -72,6 +75,7 @@ internal sealed class PinWindow : Window
     private bool _isClosed;
     private bool _saveInProgress;
     private MenuItem? _restoreClosedItem;
+    private MenuItem? _clickThroughItem;
     private RectD? _restorePhysicalBounds;
 
     internal PinWindow(
@@ -152,9 +156,8 @@ internal sealed class PinWindow : Window
 
         Content = _chrome;
 
-        ToolTip = _originalText is null
-            ? UiText.Get("Text_73D6AF7EE15B")
-            : UiText.Get("Text_338C1B26A06A");
+        // The hover bar shows copy, save, opacity and close; the tooltip only names the gestures.
+        ToolTip = UiText.Get("Onboard_PinTip");
         AutomationProperties.SetName(this, UiText.Get("Text_85E926C7F694"));
         AutomationProperties.SetHelpText(
             this,
@@ -183,10 +186,125 @@ internal sealed class PinWindow : Window
         };
         _zoomSettleTimer.Tick += OnZoomSettleTick;
 
+        // The hover bar leaves shortly after the pointer leaves both the pin and the bar, so the
+        // pointer can travel from the image onto the bar.
+        _hoverHideTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
+        {
+            Interval = HoverBarHideDelay,
+        };
+        _hoverHideTimer.Tick += OnHoverHideTick;
+
         SourceInitialized += OnSourceInitialized;
         Loaded += OnPinLoaded;
-        MouseEnter += (_, _) => SetChromeHover(true);
-        MouseLeave += (_, _) => SetChromeHover(false);
+        MouseEnter += (_, _) =>
+        {
+            SetChromeHover(true);
+            ShowHoverBar();
+        };
+        MouseLeave += (_, _) =>
+        {
+            SetChromeHover(false);
+            ScheduleHoverBarHide();
+        };
+        LocationChanged += (_, _) => PlaceHoverBar();
+        SizeChanged += (_, _) => PlaceHoverBar();
+    }
+
+    /// <summary>How long the hover bar stays after the pointer leaves the pin and the bar.</summary>
+    internal static readonly TimeSpan HoverBarHideDelay = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>The work area the hover bar is kept on; tests keep it off the desktop.</summary>
+    internal Func<IntPtr, RectD> ReadWorkArea { get; set; } = handle => MonitorEnumerator.GetFromWindow(handle).WorkArea;
+
+    /// <summary>The hover bar, once the pointer has been over the pin.</summary>
+    internal PinHoverBar? HoverBarForTest => _hoverBar;
+
+    internal bool IsHoverBarShown => _hoverBar?.IsVisible == true;
+
+    /// <summary>Test hook: the hide timer's tick, without waiting for it.</summary>
+    internal void ForceHoverBarHideForTest() => OnHoverHideTick(this, EventArgs.Empty);
+
+    /// <summary>
+    /// Shows copy, save, opacity and close in the pin's top-right corner (or just above a small pin).
+    /// Not while the pin is hidden, passes clicks through, is being dragged or is closing.
+    /// </summary>
+    internal void ShowHoverBar()
+    {
+        if (_isClosed || _state.IsHidden || _state.IsClickThrough || _dragging || !IsVisible) return;
+        _hoverHideTimer.Stop();
+        PinHoverBar bar = _hoverBar ??= CreateHoverBar();
+        if (!bar.IsVisible)
+        {
+            // Start next to the pin so the first frame never lands on another monitor.
+            bar.Left = Left + Math.Max(0, Width - 180);
+            bar.Top = Top + PinHoverBar.EdgeGap;
+            bar.Show();
+            bar.Reveal();
+        }
+
+        PlaceHoverBar();
+    }
+
+    internal void HideHoverBar()
+    {
+        _hoverHideTimer.Stop();
+        if (_hoverBar is { IsVisible: true } bar) bar.Hide();
+    }
+
+    private PinHoverBar CreateHoverBar()
+    {
+        var bar = new PinHoverBar { Owner = this, ReadOpacity = () => _state.Opacity };
+        bar.CopyRequested += CopyImageToClipboard;
+        bar.SaveRequested += () => RequestSave(PinSaveMode.QuickSave);
+        bar.OpacityRequested += opacity =>
+        {
+            double target = AdjustOpacity(opacity - _state.Opacity);
+            ShowFeedback(UiText.Format("Text_C740003A2150", target * 100));
+        };
+        bar.CloseRequested += Close;
+        bar.MouseEnter += (_, _) => _hoverHideTimer.Stop();
+        bar.MouseLeave += (_, _) => ScheduleHoverBarHide();
+        bar.SizeChanged += (_, _) => PlaceHoverBar();
+        bar.Compact = false;
+        bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        _labeledHoverBarWidth = bar.DesiredSize.Width;
+        return bar;
+    }
+
+    private void ScheduleHoverBarHide()
+    {
+        if (_hoverBar is not { IsVisible: true }) return;
+        _hoverHideTimer.Stop();
+        _hoverHideTimer.Start();
+    }
+
+    private void OnHoverHideTick(object? sender, EventArgs e)
+    {
+        _hoverHideTimer.Stop();
+        if (IsMouseOver || _hoverBar?.IsMouseOver == true || _hoverBar?.IsMenuOpen == true) return;
+        HideHoverBar();
+    }
+
+    private void PlaceHoverBar()
+    {
+        if (_hoverBar is not { IsVisible: true } bar || _handle == IntPtr.Zero || _isClosed) return;
+        IntPtr barHandle = new WindowInteropHelper(bar).Handle;
+        if (barHandle == IntPtr.Zero) return;
+        // A narrow pin keeps the icons and drops the names, which stay in the tooltips.
+        bar.Compact = Width < _labeledHoverBarWidth + (PinHoverBar.EdgeGap * 4);
+        bar.UpdateLayout();
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        (int left, int top, int right, int bottom) = WindowStyleFacade.GetWindowBounds(_handle);
+        RectD target = PinHoverBar.Place(new RectD(left, top, right - left, bottom - top),
+            bar.ActualWidth * dpi.DpiScaleX, bar.ActualHeight * dpi.DpiScaleY, ReadWorkArea(_handle), dpi.DpiScaleX);
+        try
+        {
+            PhysicalWindowPositioner.Move(barHandle, target);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // The bar is a convenience; the pin keeps working where Windows leaves it.
+        }
     }
 
     /// <summary>Raised when the user asks (via this pin) to close every pin.</summary>
@@ -318,7 +436,8 @@ internal sealed class PinWindow : Window
             WindowStyleFacade.SetClickThrough(_handle, enabled);
         }
 
-        ShowFeedback(enabled ? UiText.Format("Text_41216A109463", ClickThroughRecoveryHint()) : UiText.Get("Text_FA24C3FC395F"));
+        if (enabled) HideHoverBar();
+        ShowFeedback(enabled ? UiText.Format("Onboard_PinClickThroughOn", ClickThroughRecoveryHint()) : UiText.Get("Onboard_PinClickThroughOff"));
     }
 
     /// <summary>Toggles click-through and returns the new state.</summary>
@@ -337,6 +456,7 @@ internal sealed class PinWindow : Window
     internal void HidePin()
     {
         _state.IsHidden = true;
+        HideHoverBar();
         if (!FluidMotion.AnimationsEnabled || !IsVisible)
         {
             Hide();
@@ -540,6 +660,7 @@ internal sealed class PinWindow : Window
         }
 
         EndDrag();
+        HideHoverBar();
         try
         {
             // Capture can fail (for example while another native control owns input).
@@ -606,11 +727,13 @@ internal sealed class PinWindow : Window
 
     private void EndDrag()
     {
+        bool wasDragging = _dragging;
         _dragging = false;
         _dragDesktop = null;
         _lastDragCursorX = int.MinValue;
         _lastDragCursorY = int.MinValue;
         if (_dragInput.HasCapture(this)) _dragInput.Release(this);
+        if (wasDragging && !_isClosed && IsMouseOver) ShowHoverBar();
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -1068,37 +1191,40 @@ internal sealed class PinWindow : Window
         {
             menu.Items.Add(MenuItemFor(UiText.Get("Text_03A1596F1681"), (_, _) => RequestOcr(), iconResourceKey: "Icon.Copy", inputGestureText: UiText.Get("Text_C7011B8D345C")));
         }
+        // Every key sits in the right-hand column; the names carry no key text.
         menu.Items.Add(new Separator());
-        menu.Items.Add(MenuItemFor("100% (0)", (_, _) => ResetZoomCentered()));
-        menu.Items.Add(MenuItemFor(UiText.Get("Text_3063398CDECD"), (_, _) => ZoomCentered(1), iconResourceKey: "Icon.ZoomIn"));
-        menu.Items.Add(MenuItemFor(UiText.Get("Text_D65A9E5A4C1A"), (_, _) => ZoomCentered(-1), iconResourceKey: "Icon.ZoomOut"));
+        menu.Items.Add(MenuItemFor("100%", (_, _) => ResetZoomCentered(), inputGestureText: "0"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Onboard_PinZoomIn"), (_, _) => ZoomCentered(1), iconResourceKey: "Icon.ZoomIn", inputGestureText: "+"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Onboard_PinZoomOut"), (_, _) => ZoomCentered(-1), iconResourceKey: "Icon.ZoomOut", inputGestureText: "-"));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MenuItemFor(UiText.Get("Text_182650FB6543"), (_, _) =>
+        menu.Items.Add(MenuItemFor(UiText.Get("Onboard_PinMoreTransparent"), (_, _) =>
         {
             double opacity = AdjustOpacity(-OpacityStep);
             ShowFeedback(UiText.Format("Text_C740003A2150", opacity * 100));
-        }));
-        menu.Items.Add(MenuItemFor(UiText.Get("Text_D0113E3B1184"), (_, _) =>
+        }, inputGestureText: UiText.Get("Onboard_PinWheelDown")));
+        menu.Items.Add(MenuItemFor(UiText.Get("Onboard_PinMoreOpaque"), (_, _) =>
         {
             double opacity = AdjustOpacity(OpacityStep);
             ShowFeedback(UiText.Format("Text_C740003A2150", opacity * 100));
-        }));
+        }, inputGestureText: UiText.Get("Onboard_PinWheelUp")));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MenuItemFor(
-            UiText.Get("Text_67FE4AF7D334"),
+        _clickThroughItem = MenuItemFor(
+            UiText.Get("Onboard_PinAllowClickThrough"),
             (_, _) => ToggleClickThrough(),
-            UiText.Format("Text_BE3D621D8A32", ClickThroughRecoveryHint()),
-            "Icon.Select"));
+            UiText.Format("Onboard_PinAllowClickThroughHelp", ClickThroughRecoveryHint()),
+            "Icon.Select",
+            ClickThroughGesture());
+        menu.Items.Add(_clickThroughItem);
         menu.Items.Add(new Separator());
         _restoreClosedItem = MenuItemFor(
-            UiText.Get("PinRestore_Command"),
+            UiText.Get("Onboard_TrayReopenPin"),
             (_, _) => RestoreClosedRequested?.Invoke(this, EventArgs.Empty),
             UiText.Get("PinRestore_CommandHelp"),
             "Icon.Pin",
             RestoreClosedGesture());
         _restoreClosedItem.IsEnabled = false;
         menu.Items.Add(_restoreClosedItem);
-        menu.Items.Add(MenuItemFor(UiText.Get("Text_A925E80E33B3"), (_, _) => Close(), iconResourceKey: "Icon.Close"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Dialog.Close"), (_, _) => Close(), iconResourceKey: "Icon.Close", inputGestureText: "Esc"));
         menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
         menu.Opened += (_, _) => RefreshRestoreClosedMenuItem();
 
@@ -1118,6 +1244,13 @@ internal sealed class PinWindow : Window
 
         _restoreClosedItem.IsEnabled = CanRestoreClosedPin?.Invoke() == true;
         _restoreClosedItem.InputGestureText = RestoreClosedGesture();
+        if (_clickThroughItem is not null) _clickThroughItem.InputGestureText = ClickThroughGesture();
+    }
+
+    private static string ClickThroughGesture()
+    {
+        Hotkey key = ShortcutHelpWindow.ReadHotkeys().ToggleClickThrough;
+        return key.IsAssigned ? key.ToString() : string.Empty;
     }
 
     /// <summary>Test hook: the context-menu restore command.</summary>
@@ -1146,6 +1279,7 @@ internal sealed class PinWindow : Window
     {
         var item = new MenuItem { Header = header, InputGestureText = inputGestureText };
         AutomationProperties.SetName(item, header);
+        if (!string.IsNullOrEmpty(inputGestureText)) AutomationProperties.SetAcceleratorKey(item, inputGestureText);
         if (helpText is not null)
         {
             AutomationProperties.SetHelpText(item, helpText);
@@ -1196,6 +1330,10 @@ internal sealed class PinWindow : Window
         _ctrlClickTimer.Tick -= OnCtrlClickTimerTick;
         _zoomSettleTimer.Stop();
         _zoomSettleTimer.Tick -= OnZoomSettleTick;
+        _hoverHideTimer.Stop();
+        _hoverHideTimer.Tick -= OnHoverHideTick;
+        _hoverBar?.Close();
+        _hoverBar = null;
         SourceInitialized -= OnSourceInitialized;
         Loaded -= OnPinLoaded;
         base.OnClosed(e);

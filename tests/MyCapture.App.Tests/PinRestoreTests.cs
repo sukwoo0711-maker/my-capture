@@ -355,8 +355,9 @@ public sealed class PinRestoreTests : KoreanCaptionTest
 
                 keeper.RefreshRestoreClosedMenuItem();
                 Assert.False(item.IsEnabled);
-                Assert.Equal("닫은 화면 고정 다시 열기", item.Header);
-                Assert.Equal("닫은 화면 고정 다시 열기", AutomationProperties.GetName(item));
+                // Same words as the tray menu's entry (glossary: "고정 창").
+                Assert.Equal("닫은 고정 창 다시 열기", item.Header);
+                Assert.Equal("닫은 고정 창 다시 열기", AutomationProperties.GetName(item));
                 Assert.Equal("Ctrl+Alt+F3", item.InputGestureText);
 
                 closing.Close();
