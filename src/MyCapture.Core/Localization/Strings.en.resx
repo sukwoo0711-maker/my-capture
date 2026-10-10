@@ -3544,7 +3544,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and shown on a quick access card.</value></data>
   <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>Each capture is copied to the clipboard and saved to the library.</value></data>
   <data name="Onboard_TrayTitle" xml:space="preserve"><value>Tray icon</value></data>
-  <data name="Onboard_TrayBody" xml:space="preserve"><value>MyCapture sits in the notification area at the right end of the taskbar. If you cannot see its icon, select ^ to show hidden icons.</value></data>
+  <data name="Onboard_TrayBody" xml:space="preserve"><value>MyCapture sits in the notification area at the right end of the taskbar. Click its icon for the library or right-click it for the menu. If you cannot see it, select ^.</value></data>
   <data name="Onboard_TrayMoreCaptures" xml:space="preserve"><value>More captures</value></data>
   <data name="Onboard_TrayCopyText" xml:space="preserve"><value>Copy text</value></data>
   <data name="Onboard_TrayReopenPin" xml:space="preserve"><value>Reopen closed pin</value></data>
@@ -3562,4 +3562,23 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Onboard_GuideSentenceRegionOnly" xml:space="preserve"><value>Drag to capture any area.</value></data>
   <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>Drag over the area to record</value></data>
   <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — Select an area to record</value></data>
+  <data name="Onboard_RecordStop" xml:space="preserve"><value>Stop</value></data>
+  <data name="Onboard_RecordMore" xml:space="preserve"><value>Recording options</value></data>
+  <data name="Onboard_RecordMoreHelp" xml:space="preserve"><value>Choose whether the recording shows the current time.</value></data>
+  <data name="Onboard_RecordShowTime" xml:space="preserve"><value>Show time</value></data>
+  <data name="Onboard_RecordAreaTip" xml:space="preserve"><value>Recording area {0}</value></data>
+  <data name="Onboard_PinTip" xml:space="preserve"><value>Drag: move · Wheel: zoom · Right-click: menu</value></data>
+  <data name="Onboard_PinBarName" xml:space="preserve"><value>Pin tools</value></data>
+  <data name="Onboard_PinOpacity" xml:space="preserve"><value>Opacity</value></data>
+  <data name="Onboard_PinZoomIn" xml:space="preserve"><value>Zoom in</value></data>
+  <data name="Onboard_PinZoomOut" xml:space="preserve"><value>Zoom out</value></data>
+  <data name="Onboard_PinMoreTransparent" xml:space="preserve"><value>More transparent</value></data>
+  <data name="Onboard_PinMoreOpaque" xml:space="preserve"><value>More opaque</value></data>
+  <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+wheel down</value></data>
+  <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+wheel up</value></data>
+  <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>Click through to windows behind</value></data>
+  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Turn off: {0}</value></data>
+  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click-through on · Turn off: {0}</value></data>
+  <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>Click-through off</value></data>
+  <data name="Onboard_CaptureFromTray" xml:space="preserve"><value>No shortcut is assigned. Choose Region capture from the tray icon menu.</value></data>
 </root>
