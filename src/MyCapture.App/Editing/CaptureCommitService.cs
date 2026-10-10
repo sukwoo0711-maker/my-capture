@@ -19,9 +19,10 @@ namespace MyCapture.App.Editing;
 /// <remarks>
 /// <para>
 /// This is the single place the four commit actions converge. All of them flatten the
-/// annotations onto the original at 1:1 physical pixels and finalise the capture in the
-/// queue; they differ only in the extra step (clipboard, quick save, save dialog) and in
-/// whether a failure keeps the editor open.
+/// annotations onto the original at 1:1 physical pixels. Done, Quick Save and Save As also
+/// finalise the capture in the queue (the library) and copy the result, then close the
+/// editor; Copy only puts the pixels on the clipboard and leaves the editor open. See
+/// <see cref="EditorCommitAction"/> for each action's exact steps.
 /// </para>
 /// <para>
 /// The WPF flatten and optional file dialog run on the UI thread. Clipboard PNG encoding and
@@ -123,8 +124,10 @@ internal sealed class CaptureCommitService
     /// Runs the commit for <paramref name="record"/> against <paramref name="result"/>.
     /// </summary>
     /// <returns>
-    /// <see langword="true"/> when the editor should close. A cancelled/failed Save As or a
-    /// failed explicit clipboard copy returns <see langword="false"/> so the user can retry.
+    /// Whether the action succeeded. For Done, Quick Save and Save As that means the editor
+    /// should close; a cancelled/failed save or a failed clipboard copy returns
+    /// <see langword="false"/> so the user can retry. For Copy it only reports whether the
+    /// clipboard took the image; the editor stays open either way.
     /// </returns>
     internal async Task<bool> CommitAsync(
         CaptureRecord? record,
@@ -204,15 +207,13 @@ internal sealed class CaptureCommitService
                 return quickSaveCopied;
 
             case EditorCommitAction.CopyToClipboard:
-                await PersistFinalIfAvailableAsync(
-                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
+                // Copy is the editor's secondary action: the edited pixels go to the clipboard
+                // and nothing else changes. The library keeps its current version until the
+                // user finishes with Done (or saves a file), and the editor stays open.
                 bool clipboardCopied = await _copyImageAsync(flattened, exportRecord?.SourcePageUrl);
                 if (!clipboardCopied)
                 {
-                    _log.LogWarning(
-                        record is null
-                            ? "Recovery clipboard copy failed; keeping the editor open"
-                            : "Capture persisted, but explicit clipboard copy failed");
+                    _log.LogWarning("Explicit clipboard copy of the edited image failed");
                 }
 
                 return clipboardCopied;

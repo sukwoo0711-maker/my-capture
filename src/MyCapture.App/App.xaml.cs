@@ -1407,7 +1407,8 @@ public partial class App : Application
                 return false;
             }
 
-            if (record is null)
+            // Copy only reaches the clipboard; the frame enters the library on Done or a save.
+            if (record is null && result.Action != EditorCommitAction.CopyToClipboard)
             {
                 try
                 {

@@ -155,12 +155,20 @@ public sealed class Capture410AppTests
     {
         CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
         var editor = Editor(width: width);
-        foreach (string id in new[] { "Capture410Crop", "Capture410AutoTrim" })
+        // Crop is the one top command that opens crop mode; the automatic margin finder sets the
+        // crop frame, so it is a command of crop mode's bar.
+        foreach ((string id, bool cropMode) in new[] { ("Capture410Crop", false), ("Capture410AutoTrim", true) })
         {
+            if (cropMode)
+            {
+                Assert.True(editor.HandleShortcut(Key.X, ModifierKeys.None));
+                editor.UpdateLayout();
+            }
+
             Button button = Assert.Single(Descendants(editor).OfType<Button>(),
                 candidate => AutomationProperties.GetAutomationId(candidate) == id);
             Rect bounds = button.TransformToAncestor(editor).TransformBounds(new Rect(button.RenderSize));
-            Assert.Equal(Visibility.Visible, button.Visibility);
+            Assert.True(Shown(button), $"{id} is not shown in its mode");
             Assert.True(bounds.Left >= 0 && bounds.Right <= editor.ActualWidth + 0.1, $"{id}: {bounds}, width {editor.ActualWidth}");
             Assert.True(bounds.Top >= 0 && bounds.Bottom < 140);
             Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
@@ -337,6 +345,13 @@ public sealed class Capture410AppTests
 
     private static T Field<T>(object target, string name) =>
         (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
+
+    private static bool Shown(UIElement element)
+    {
+        for (DependencyObject? node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+            if (node is UIElement { Visibility: not Visibility.Visible }) return false;
+        return true;
+    }
 
     private static AnnotationEditorControl Editor(bool uniform = false, AnnotationDocument? document = null, int width = 1100)
     {

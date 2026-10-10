@@ -99,7 +99,9 @@ internal static class HotfixUxSelfTest
             report.AppendLine(card.TimeoutStateForTest);
             Check("passive receipt closes on its real dispatcher timer", !card.IsVisible);
             Check("editor Esc command accepted", editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
-            Pump(50); Check("Esc closes editor", !editor.IsVisible);
+            // Esc steps back inside the editor (selection, tool) and never closes it.
+            Pump(50); Check("Esc keeps editor open", editor.IsVisible);
+            editor.Close(); Pump(50); Check("editor closes from code", !editor.IsVisible);
 
             // A separate application/process owns the input. It has no capture-card code,
             // global shortcuts, user document, or profile. Its paste/drop handlers

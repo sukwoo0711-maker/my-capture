@@ -2,8 +2,10 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
@@ -70,7 +72,8 @@ internal class AnnotationEditorWindow : Window
             privacyRedactionService,
             sourceWindowTitle);
         _editor.EditingCompleted += OnEditingCompleted;
-        _editor.EditingCancelled += OnEditingCancelled;
+        _editor.CloseRequested += OnCloseRequested;
+        ConfirmClose = () => EditorCloseDialog.Ask(this);
         Content = _editor;
 
         ContentRendered += OnContentRendered;
@@ -84,18 +87,85 @@ internal class AnnotationEditorWindow : Window
 
     internal event EventHandler<AnnotationEditingResult>? Committed;
 
+    /// <summary>Raised once when the window closes without a successful commit.</summary>
     internal event EventHandler? Cancelled;
 
     internal bool WasCommitted => _committed;
 
     internal AnnotationEditorControl Editor => _editor;
 
+    /// <summary>
+    /// Asks what to do with unsaved edits when the user closes the window. Tests replace it;
+    /// the default shows <see cref="EditorCloseDialog"/> over this window.
+    /// </summary>
+    internal Func<EditorCloseChoice> ConfirmClose { get; set; }
+
+    /// <summary>
+    /// Closes the way the title bar's close button does: unsaved edits are confirmed first.
+    /// </summary>
+    /// <remarks>
+    /// A plain <see cref="Window.Close"/> from code (a retake, the owner closing, application
+    /// exit) does not ask; WPF ignores a cancelled close during exit, so a question there could
+    /// not be honoured.
+    /// </remarks>
+    internal void RequestClose()
+    {
+        _closeAsked = true;
+        Close();
+    }
+
+    private bool _closeAsked;
+    private bool _cancelRaised;
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        // The caption close button, Alt+F4, the system menu and the taskbar all arrive as
+        // SC_CLOSE before WM_CLOSE; only those user closes are confirmed.
+        HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(OnWindowMessage);
+    }
+
+    private IntPtr OnWindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int SystemCommand = 0x0112, CloseCommand = 0xF060;
+        if (message == SystemCommand && ((int)(wParam.ToInt64() & 0xFFF0)) == CloseCommand)
+        {
+            _closeAsked = true;
+        }
+
+        return IntPtr.Zero;
+    }
+
     protected override void OnClosing(CancelEventArgs e)
     {
         if (_editor.IsCommitInProgress)
         {
             e.Cancel = true;
+            _closeAsked = false;
             return;
+        }
+
+        bool ask = _closeAsked && !_committed && _editor.HasUnsavedChanges;
+        _closeAsked = false;
+        if (ask)
+        {
+            switch (ConfirmClose())
+            {
+                case EditorCloseChoice.SaveAndClose:
+                    // The Done commit closes the window itself once the edit is saved, and keeps
+                    // it open (with the failure in the status line) when saving fails. Started
+                    // after this close is cancelled: a commit that finishes synchronously
+                    // must not re-enter Close while the window is still closing.
+                    e.Cancel = true;
+                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, _editor.SaveAndClose);
+                    return;
+                case EditorCloseChoice.DontSave:
+                    break;
+                default:
+                    e.Cancel = true;
+                    _ = _editor.Focus();
+                    return;
+            }
         }
 
         base.OnClosing(e);
@@ -126,17 +196,19 @@ internal class AnnotationEditorWindow : Window
         Close();
     }
 
-    private void OnEditingCancelled(object? sender, EventArgs e)
-    {
-        Cancelled?.Invoke(this, EventArgs.Empty);
-        Close();
-    }
+    private void OnCloseRequested(object? sender, EventArgs e) => RequestClose();
 
     protected override void OnClosed(EventArgs e)
     {
         _editor.EditingCompleted -= OnEditingCompleted;
-        _editor.EditingCancelled -= OnEditingCancelled;
+        _editor.CloseRequested -= OnCloseRequested;
         ContentRendered -= OnContentRendered;
+        if (!_committed && !_cancelRaised)
+        {
+            _cancelRaised = true;
+            Cancelled?.Invoke(this, EventArgs.Empty);
+        }
+
         base.OnClosed(e);
     }
 }

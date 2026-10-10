@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using Xunit;
@@ -89,9 +90,12 @@ public sealed class CaptureEditorFlowTests
 
             bool handled = editor.HandleShortcut(Key.C, ModifierKeys.Control);
 
+            // Copy is a secondary action: it hands the pixels over and the editor stays open.
             Assert.True(handled);
             Assert.NotNull(requested);
-            Assert.Same(requested, completed);
+            Assert.Null(completed);
+            Assert.False(editor.IsCommitInProgress);
+            Assert.Equal(UiText.Get("EditorFlow_Copied"), editor.StatusText);
             Assert.Equal(EditorCommitAction.CopyToClipboard, requested!.Action);
             Assert.Equal(frame.ScreenBounds, requested.Frame.ScreenBounds);
             Assert.Equal(frame.Monitor, requested.Frame.Monitor);
