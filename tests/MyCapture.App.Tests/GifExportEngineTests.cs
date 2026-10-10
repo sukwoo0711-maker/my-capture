@@ -115,7 +115,9 @@ public sealed class GifExportEngineTests
 
             // With the original software RGB converter the only differences left are parallel
             // encoding, per-frame composition bypass and worker composition: none may change a byte.
-            byte[] legacy = LegacySequentialGif(recording, document, quality, speed);
+            // The original pipeline encoded with WPF; the direct WIC encoder writes the same file.
+            byte[] legacy = LegacySequentialGif(recording, document, quality, speed, GifImageEncoder.Wpf);
+            Assert.Equal(legacy, LegacySequentialGif(recording, document, quality, speed));
             foreach (int threads in new[] { 1, 4 })
             {
                 string path = Path.Combine(root, $"engine-{threads}.gif");
@@ -129,6 +131,26 @@ public sealed class GifExportEngineTests
                 Assert.Equal(statistics.Frames, frames);
                 Assert.Equal(DecodeFrameCount(path), statistics.Images);
                 Assert.InRange(statistics.Images, 1, frames);
+
+                // Frames without text or layer were encoded on the workers, layered ones were not.
+                Assert.InRange(statistics.PreEncodedImages, 1, frames - 1);
+                Assert.Equal(statistics.WorkerEncodes, statistics.PreEncodedImages);
+            }
+
+            // Encoding everything on the calling thread, with WIC or with WPF, changes nothing.
+            foreach ((string name, GifEngineOptions options) in new[]
+                     {
+                         ("wic-caller", new GifEngineOptions { EncodeOnWorkers = false }),
+                         ("wpf", new GifEngineOptions { Encoder = GifImageEncoder.Wpf }),
+                     })
+            {
+                string path = Path.Combine(root, $"engine-{name}.gif");
+                _ = AnimatedGifExporter.ExportCore(
+                    recording, document, path, null, default, speed, quality, null,
+                    options, NullLogger.Instance, out GifRenderStatistics statistics);
+                Assert.Equal(legacy, File.ReadAllBytes(path));
+                Assert.Equal(0, statistics.PreEncodedImages);
+                Assert.Equal(0, statistics.WorkerEncodes);
             }
 
             // The production default — GPU decode when available, NV12 read back and converted
@@ -193,6 +215,149 @@ public sealed class GifExportEngineTests
             OwnedTestDirectory.Delete(root);
         }
     });
+
+    /// <summary>
+    /// Worker encoding over cached frames, where every source buffer is known: frames with
+    /// nothing drawn over them are encoded on the workers except repeats the writer will merge,
+    /// a texted frame is composed and encoded on the calling thread, and the file equals the
+    /// WPF-encoded one.
+    /// </summary>
+    [Theory]
+    [InlineData((int)GifFrameDifferencing.ErrorBounded, 4, 3)]
+    [InlineData((int)GifFrameDifferencing.MergeIdentical, 4, 3)]
+    [InlineData((int)GifFrameDifferencing.None, 7, 7)]
+    public void CachedFrames_WorkersEncodeOnlyFramesTheWriterWillWrite(int differencing, int workerEncodes, int preEncoded) => RunSta(() =>
+    {
+        var mode = (GifFrameDifferencing)differencing;
+        const int width = 96;
+        const int height = 54;
+        string root = OwnedTestDirectory.Create("mycapture-gif-candidates-");
+        try
+        {
+            // Never opened: every frame comes from the decoded cache.
+            string source = Path.Combine(root, "placeholder.mp4");
+            File.WriteAllBytes(source, [0]);
+            byte[] a = Noise(width, height, seed: 1, alpha: 255);
+            byte[] b = Noise(width, height, seed: 2, alpha: 255);
+            byte[] c = Noise(width, height, seed: 3, alpha: 255);
+            byte[] bgrx = (byte[])b.Clone();
+            for (int offset = 3; offset < bgrx.Length; offset += 4)
+            {
+                bgrx[offset] = 0;
+            }
+
+            GifSourceFrame[] frames =
+            [
+                Opaque(a),                  // 0 encoded
+                Opaque(a),                  // 1 same buffer: skipped, merges
+                Opaque((byte[])a.Clone()),  // 2 equal copy: skipped, merges
+                Opaque(b),                  // 3 encoded
+                new(bgrx, width, height, width * 4), // 4 other source, same output: encoded, merges
+                Opaque(c),                  // 5 texted: composed and encoded on the calling thread
+                Opaque(c),                  // 6 encoded (differs from the texted frame)
+                Opaque((byte[])c.Clone()),  // 7 equal copy: skipped, merges
+            ];
+            double[] times = Enumerable.Range(0, frames.Length).Select(index => index * 100.0).ToArray();
+            var overlay = new TimedTextOverlay { Text = "TEXT", StartMs = 500, EndMs = 600, Placement = VideoTextPlacement.Center };
+            var plan = new GifRenderPlan(
+                new VideoFrameRenderRequest(source, 0, 800, 10, width, height, width, height, [overlay], []),
+                width,
+                height,
+                times,
+                Enumerable.Repeat(10, frames.Length).ToArray());
+
+            byte[] reference = RenderCached(new GifEngineOptions { Encoder = GifImageEncoder.Wpf, WorkerThreads = 1 }, out GifRenderStatistics wpf);
+            Assert.Equal(0, wpf.WorkerEncodes);
+            foreach (int threads in new[] { 1, 4 })
+            {
+                byte[] actual = RenderCached(new GifEngineOptions { WorkerThreads = threads }, out GifRenderStatistics statistics);
+                Assert.Equal("cache-decoded", statistics.FrameSource);
+                Assert.Equal(reference, actual);
+                Assert.Equal(workerEncodes, statistics.WorkerEncodes);
+                Assert.Equal(preEncoded, statistics.PreEncodedImages);
+                Assert.Equal(wpf.Images, statistics.Images);
+            }
+
+            byte[] RenderCached(GifEngineOptions options, out GifRenderStatistics statistics)
+            {
+                var cache = new GifFrameCache(decodedBudgetBytes: 64L * 1024 * 1024, encodedBudgetBytes: 0);
+                cache.StoreDecoded(width, height, times, frames);
+                using var stream = new MemoryStream();
+                using (var writer = new AnimatedGifWriter(stream, width, height, 10, 0, leaveOpen: true, mode, options.Encoder))
+                {
+                    statistics = GifExportEngine.Render(plan, writer, cache, options with { Differencing = mode }, NullLogger.Instance, null, default);
+                    writer.Complete();
+                }
+
+                return stream.ToArray();
+            }
+        }
+        finally
+        {
+            OwnedTestDirectory.Delete(root);
+        }
+
+        static GifSourceFrame Opaque(byte[] pixels) => new(pixels, width, height, width * 4, Opaque: true);
+    });
+
+    /// <summary>
+    /// Repeated production exports with the GIF encodes running on four pixel workers while the
+    /// calling thread composes text and layer frames with WPF must equal the WPF-encoded file
+    /// byte for byte. Set MYCAPTURE_GIF_STRESS=1 for a 1,000-export run.
+    /// </summary>
+    [Fact]
+    public void ParallelEngine_WorkerEncodedExportsMatchTheWpfPathUnderRepetition() => BenchmarkSta.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mycapture-gif-worker-encode-");
+        try
+        {
+            RecordingResult recording = EncodeMovingClip(Path.Combine(root, "source.mp4"), 640, 360, 10, 12);
+            VideoEditDocument document = EditedDocument(recording);
+            string referencePath = Path.Combine(root, "wpf.gif");
+            _ = AnimatedGifExporter.ExportCore(
+                recording, document, referencePath, null, default, 1.0, GifExportQuality.Standard, null,
+                new GifEngineOptions { PreferHardwareDecode = false, WorkerThreads = 1, Encoder = GifImageEncoder.Wpf },
+                NullLogger.Instance, out _);
+            byte[] reference = File.ReadAllBytes(referencePath);
+
+            int exports = Environment.GetEnvironmentVariable("MYCAPTURE_GIF_STRESS") == "1" ? 1_000 : 6;
+            var options = new GifEngineOptions { WorkerThreads = 4 };
+            string path = Path.Combine(root, "workers.gif");
+            int workerEncodes = 0;
+            for (int export = 0; export < exports; export++)
+            {
+                _ = AnimatedGifExporter.ExportCore(
+                    recording, document, path, null, default, 1.0, GifExportQuality.Standard, null,
+                    options, NullLogger.Instance, out GifRenderStatistics statistics);
+                Assert.True(
+                    reference.AsSpan().SequenceEqual(File.ReadAllBytes(path)),
+                    $"Worker-encoded export {export + 1} of {exports} differed from the WPF-encoded export.");
+                Assert.True(statistics.PreEncodedImages > 0, "No image was encoded on the pixel workers.");
+                workerEncodes += statistics.WorkerEncodes;
+            }
+
+            Assert.Equal(0, WicGifFrameEncoder.Failures);
+            Assert.True(workerEncodes >= exports, $"{workerEncodes} worker encodes in {exports} exports.");
+        }
+        finally
+        {
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void SameSourceFrame_ComparesLayoutAndPixels()
+    {
+        byte[] pixels = [1, 2, 3, 4, 5, 6, 7, 8];
+        var frame = new GifSourceFrame(pixels, 2, 1, 8, Opaque: true);
+        Assert.True(GifExportEngine.SameSourceFrame(frame, frame));
+        Assert.True(GifExportEngine.SameSourceFrame(frame, frame with { Pixels = (byte[])pixels.Clone() }));
+        Assert.False(GifExportEngine.SameSourceFrame(frame, frame with { Pixels = [1, 2, 3, 4, 5, 6, 7, 9] }));
+        Assert.False(GifExportEngine.SameSourceFrame(frame, frame with { Opaque = false }));
+        Assert.False(GifExportEngine.SameSourceFrame(frame, frame with { Width = 1, Stride = 8 }));
+        Assert.False(GifExportEngine.SameSourceFrame(frame, frame with { Format = DecodedVideoPixelFormat.Nv12 }));
+        Assert.False(GifExportEngine.SameSourceFrame(frame, frame with { Yuv = new VideoYuvEncoding(true, false) }));
+    }
 
     [Fact]
     public void Engine_KeepsWpfWorkOnTheCallingStaThread()
@@ -602,13 +767,14 @@ public sealed class GifExportEngineTests
         RecordingResult recording,
         VideoEditDocument document,
         GifExportQuality quality,
-        double speed)
+        double speed,
+        GifImageEncoder encoder = GifImageEncoder.Wic)
     {
         VideoEditDocument normalized = document.NormalizeFor(recording.Width, recording.Height, recording.DurationMs);
         GifFrameSchedule schedule = AnimatedGifExporter.BuildFrameSchedule(normalized, speed, quality.FramesPerSecond);
         (int width, int height) = AnimatedGifExporter.FitWithin(recording.Width, recording.Height, quality.LongEdge);
         using var stream = new MemoryStream();
-        using (var writer = new AnimatedGifWriter(stream, width, height, 10, 0, leaveOpen: true))
+        using (var writer = new AnimatedGifWriter(stream, width, height, 10, 0, leaveOpen: true, encoder: encoder))
         {
             _ = VideoFrameRenderPipeline.RenderScheduled(
                 new VideoFrameRenderRequest(

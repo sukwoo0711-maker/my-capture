@@ -22,16 +22,76 @@ internal sealed record GifFrameUpdate(GifPixelRect Bounds, byte[] Payload)
     internal bool IsUnchanged => Payload.Length == 0;
 }
 
+/// <summary>Which caller of the platform GIF codec encodes each image; both give the same bytes.</summary>
+internal enum GifImageEncoder
+{
+    /// <summary>
+    /// <see cref="WicGifFrameEncoder"/>: WIC called directly, usable from any thread (default).
+    /// Falls back to <see cref="Wpf"/> for an image whose direct call fails.
+    /// </summary>
+    Wic,
+
+    /// <summary>WPF's <see cref="GifBitmapEncoder"/> on the writer's thread, as before; kept for comparison.</summary>
+    Wpf,
+}
+
+/// <summary>
+/// A whole-canvas image encoded ahead of <see cref="AnimatedGifWriter.AddFrame(byte[], int, int, GifEncodedCandidate?)"/>,
+/// possibly on another thread. It depends only on the pixels of <see cref="Source"/>, which
+/// must not change afterwards; the writer uses it only for that exact buffer.
+/// </summary>
+internal sealed class GifEncodedCandidate
+{
+    internal GifEncodedCandidate(
+        byte[] source,
+        int stride,
+        int width,
+        int height,
+        byte[] payload,
+        AnimatedGifWriter.EncodedGifFrame parsed,
+        bool decoded,
+        GifBoundedCanvas.Candidate? read)
+    {
+        Source = source;
+        Stride = stride;
+        Width = width;
+        Height = height;
+        Payload = payload;
+        Parsed = parsed;
+        Decoded = decoded;
+        Read = read;
+    }
+
+    internal byte[] Source { get; }
+
+    internal int Stride { get; }
+
+    internal int Width { get; }
+
+    internal int Height { get; }
+
+    /// <summary>The single-frame GIF the writer would have encoded for the whole canvas.</summary>
+    internal byte[] Payload { get; }
+
+    internal AnimatedGifWriter.EncodedGifFrame Parsed { get; }
+
+    /// <summary>Whether <see cref="Read"/> holds the error-bounded reading of the payload.</summary>
+    internal bool Decoded { get; }
+
+    /// <summary><see cref="GifBoundedCanvas.ReadCandidate"/> of the payload; null when unreadable.</summary>
+    internal GifBoundedCanvas.Candidate? Read { get; }
+}
+
 /// <summary>
 /// Writes a fixed-size animated GIF without retaining previously added frames.
 /// </summary>
 /// <remarks>
 /// <para>
-/// WPF's <see cref="GifBitmapEncoder"/> provides the platform palette quantizer and LZW
-/// encoder, but it cannot attach dependable per-frame timing metadata or image offsets. Each
-/// image is therefore encoded as one temporary, single-frame GIF. This writer validates that
-/// payload, promotes its colour table to a local table, and appends the image data behind an
-/// explicit Graphic Control Extension and Image Descriptor.
+/// The platform (WIC) GIF codec provides the palette quantizer and LZW encoder, but it cannot
+/// attach dependable per-frame timing metadata or image offsets. Each image is therefore
+/// encoded as one temporary, single-frame GIF. This writer validates that payload, promotes its
+/// colour table to a local table, and appends the image data behind an explicit Graphic Control
+/// Extension and Image Descriptor.
 /// </para>
 /// <para>
 /// With <see cref="GifFrameDifferencing.ErrorBounded"/> (the default) only the first image
@@ -46,10 +106,14 @@ internal sealed record GifFrameUpdate(GifPixelRect Bounds, byte[] Payload)
 /// <para>
 /// The newest image is held back until the next different frame (or <see cref="Complete"/>)
 /// fixes its delay, so memory is bounded by one encoded image plus one canvas of source pixels.
-/// Instances are not thread-safe. WPF encoding runs on the calling thread, which must also obey
-/// the dispatcher-affinity rules of a supplied <see cref="BitmapSource"/>. Keep WPF encoding on
-/// one thread: concurrent WPF imaging work on several threads was measured to corrupt the
-/// native heap (see <see cref="GifExportEngine"/>).
+/// Instances are not thread-safe. Images are encoded with <see cref="WicGifFrameEncoder"/>,
+/// which calls WIC exactly as WPF's <see cref="GifBitmapEncoder"/> does and gives the same
+/// bytes; unlike WPF imaging it may also run on other threads, so a caller can encode
+/// whole-canvas candidates ahead of time with <see cref="EncodeCandidate"/> and pass them to
+/// <see cref="AddFrame(byte[], int, int, GifEncodedCandidate?)"/>. The writer's own encodes
+/// (and the WPF fallback) run on the calling thread, which must also obey the
+/// dispatcher-affinity rules of a supplied <see cref="BitmapSource"/>; WPF imaging itself must
+/// stay on one thread (see <see cref="GifExportEngine"/>).
 /// </para>
 /// </remarks>
 internal sealed class AnimatedGifWriter : IDisposable
@@ -67,6 +131,7 @@ internal sealed class AnimatedGifWriter : IDisposable
     private readonly ushort _loopCount;
     private readonly bool _leaveOpen;
     private readonly GifFrameDifferencing _differencing;
+    private readonly GifImageEncoder _encoder;
 
     /// <summary>
     /// Source pixels of the latest frame (tightly packed BGRA), or null before the first frame
@@ -79,6 +144,7 @@ internal sealed class AnimatedGifWriter : IDisposable
     private PendingImage? _pending;
     private int _frameCount;
     private int _imageCount;
+    private int _preEncodedImages;
     private bool _completed;
     private bool _faulted;
     private bool _disposed;
@@ -97,6 +163,7 @@ internal sealed class AnimatedGifWriter : IDisposable
     /// </param>
     /// <param name="leaveOpen">Whether disposing this writer leaves <paramref name="output"/> open.</param>
     /// <param name="differencing">How consecutive frames become GIF images.</param>
+    /// <param name="encoder">Which caller of the platform codec encodes images; same bytes either way.</param>
     internal AnimatedGifWriter(
         Stream output,
         int width,
@@ -104,7 +171,8 @@ internal sealed class AnimatedGifWriter : IDisposable
         int frameDelayCentiseconds,
         int loopCount = 0,
         bool leaveOpen = false,
-        GifFrameDifferencing differencing = GifFrameDifferencing.ErrorBounded)
+        GifFrameDifferencing differencing = GifFrameDifferencing.ErrorBounded,
+        GifImageEncoder encoder = GifImageEncoder.Wic)
     {
         ArgumentNullException.ThrowIfNull(output);
         if (!output.CanWrite)
@@ -124,7 +192,13 @@ internal sealed class AnimatedGifWriter : IDisposable
             throw new ArgumentOutOfRangeException(nameof(differencing));
         }
 
+        if (!Enum.IsDefined(encoder))
+        {
+            throw new ArgumentOutOfRangeException(nameof(encoder));
+        }
+
         _differencing = differencing;
+        _encoder = encoder;
         _output = output;
         _leaveOpen = leaveOpen;
 
@@ -137,6 +211,24 @@ internal sealed class AnimatedGifWriter : IDisposable
     /// merged; a hold longer than 655.35 s adds a repeat of the same image.
     /// </summary>
     internal int ImageCount => _imageCount;
+
+    /// <summary>Images whose encoding came from a <see cref="GifEncodedCandidate"/> instead of this writer.</summary>
+    internal int PreEncodedImages => _preEncodedImages;
+
+    /// <summary>
+    /// Whether <see cref="GifEncodedCandidate"/>s can be used: only with the direct WIC encoder,
+    /// so a <see cref="GifImageEncoder.Wpf"/> writer encodes every image with WPF.
+    /// </summary>
+    internal bool AcceptsEncodedCandidates => _encoder == GifImageEncoder.Wic;
+
+    /// <summary>Whether candidates should carry their error-bounded reading (<see cref="GifEncodedCandidate.Decoded"/>).</summary>
+    internal bool ReadsCandidates => _differencing == GifFrameDifferencing.ErrorBounded;
+
+    /// <summary>
+    /// Whether a frame equal to the previous one is written as unchanged, without encoding; a
+    /// caller then need not encode a candidate for it.
+    /// </summary>
+    internal bool MergesIdenticalFrames => _differencing != GifFrameDifferencing.None;
 
     private GifPixelRect FullCanvas => new(0, 0, _width, _height);
 
@@ -167,14 +259,24 @@ internal sealed class AnimatedGifWriter : IDisposable
         int stride = _width * 4;
         byte[] pixels = new byte[checked(stride * _height)];
         bgra.CopyPixels(pixels, stride, 0);
-        return AddFrameCore(pixels, stride, delay);
+        return AddFrameCore(pixels, stride, delay, encoded: null);
     }
 
     /// <summary>
     /// Adds one full-canvas frame given as 32-bit BGRA rows (normally opaque) and returns what
     /// it changed. The buffer is only read; the writer keeps its own copy of changed pixels.
     /// </summary>
-    internal GifFrameUpdate AddFrame(byte[] pixels, int stride, int frameDelayCentiseconds)
+    internal GifFrameUpdate AddFrame(byte[] pixels, int stride, int frameDelayCentiseconds) =>
+        AddFrame(pixels, stride, frameDelayCentiseconds, encoded: null);
+
+    /// <summary>
+    /// Adds one frame like <see cref="AddFrame(byte[], int, int)"/>, taking the whole-canvas
+    /// encoding from <paramref name="encoded"/> when it was made from this very buffer. The
+    /// written bytes are the same with or without it: the candidate only replaces the encode
+    /// this writer would otherwise run, and is ignored whenever that encode would be skipped,
+    /// cover a smaller rectangle or use another encoder.
+    /// </summary>
+    internal GifFrameUpdate AddFrame(byte[] pixels, int stride, int frameDelayCentiseconds, GifEncodedCandidate? encoded)
     {
         ArgumentNullException.ThrowIfNull(pixels);
         ThrowIfCannotWrite();
@@ -189,12 +291,62 @@ internal sealed class AnimatedGifWriter : IDisposable
                 nameof(pixels));
         }
 
-        return AddFrameCore(pixels, stride, delay);
+        bool usable = encoded is not null
+            && AcceptsEncodedCandidates
+            && ReferenceEquals(encoded.Source, pixels)
+            && encoded.Stride == stride
+            && encoded.Width == _width
+            && encoded.Height == _height;
+        return AddFrameCore(pixels, stride, delay, usable ? encoded : null);
     }
 
     /// <summary>
-    /// Encodes one image as a complete single-frame GIF with the platform encoder. This touches
-    /// no writer state.
+    /// Encodes the whole of a <paramref name="width"/> x <paramref name="height"/> BGRA frame
+    /// as a writer candidate, on any thread, with the direct WIC encoder; and, when
+    /// <paramref name="read"/> is set, reads it for error-bounded differencing. Touches no
+    /// writer state. Returns null when the direct encoder is unavailable or fails, leaving the
+    /// encode to the writer. <paramref name="pixels"/> must not change afterwards.
+    /// </summary>
+    internal static GifEncodedCandidate? EncodeCandidate(byte[] pixels, int stride, int width, int height, bool read)
+    {
+        ArgumentNullException.ThrowIfNull(pixels);
+        if (!WicGifFrameEncoder.IsAvailable)
+        {
+            return null;
+        }
+
+        byte[] payload;
+        try
+        {
+            payload = WicGifFrameEncoder.Encode(pixels, width, height, stride);
+        }
+        catch (Exception ex) when (WicGifFrameEncoder.IsInteropFailure(ex))
+        {
+            return null;
+        }
+
+        // A payload the writer cannot parse would fail there too; let the writer's own encode
+        // report it in frame order.
+        EncodedGifFrame parsed;
+        try
+        {
+            parsed = ParseSingleFrame(payload, width, height);
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+
+        GifBoundedCanvas.Candidate? candidate = read
+            ? GifBoundedCanvas.ReadCandidate(payload, parsed, checked(width * height))
+            : null;
+        return new GifEncodedCandidate(pixels, stride, width, height, payload, parsed, read, candidate);
+    }
+
+    /// <summary>
+    /// Encodes one image as a complete single-frame GIF with WPF's <see cref="GifBitmapEncoder"/>
+    /// (the reference and fallback for <see cref="WicGifFrameEncoder"/>). Touches no writer state;
+    /// must run on a thread that may use WPF imaging.
     /// </summary>
     internal static ReadOnlyMemory<byte> EncodeFrame(BitmapSource frame)
     {
@@ -332,7 +484,7 @@ internal sealed class AnimatedGifWriter : IDisposable
         }
     }
 
-    private GifFrameUpdate AddFrameCore(byte[] pixels, int stride, ushort delay)
+    private GifFrameUpdate AddFrameCore(byte[] pixels, int stride, ushort delay, GifEncodedCandidate? encoded)
     {
         // Without a readable candidate the bounded mode degrades to whole frames, which still
         // merges identical frames and never loses quality.
@@ -358,12 +510,26 @@ internal sealed class AnimatedGifWriter : IDisposable
 
         // The platform encoder owns quantisation and LZW compression. Parsing finishes before
         // the first destination byte of this frame is written, so an invalid or truncated
-        // platform payload cannot leave a half-added GIF frame.
-        byte[] payload = EncodeRegion(pixels, stride, bounds);
-        EncodedGifFrame parsed = ParseSingleFrame(payload, bounds.Width, bounds.Height);
+        // platform payload cannot leave a half-added GIF frame. A whole-canvas encode of these
+        // exact pixels made ahead of time is the same payload.
+        byte[] payload;
+        EncodedGifFrame parsed;
+        if (encoded is not null && bounds == FullCanvas)
+        {
+            payload = encoded.Payload;
+            parsed = encoded.Parsed;
+            _preEncodedImages++;
+        }
+        else
+        {
+            encoded = null;
+            payload = EncodeRegion(pixels, stride, bounds);
+            parsed = ParseSingleFrame(payload, bounds.Width, bounds.Height);
+        }
+
         if (mode == GifFrameDifferencing.ErrorBounded)
         {
-            return AddBoundedFrame(pixels, stride, delay, payload, parsed);
+            return AddBoundedFrame(pixels, stride, delay, payload, parsed, encoded);
         }
 
         var update = new GifFrameUpdate(bounds, payload);
@@ -374,10 +540,18 @@ internal sealed class AnimatedGifWriter : IDisposable
     }
 
     /// <summary>Writes the part of a whole-frame candidate that the error bound requires.</summary>
-    private GifFrameUpdate AddBoundedFrame(byte[] pixels, int stride, ushort delay, byte[] candidatePayload, EncodedGifFrame parsed)
+    private GifFrameUpdate AddBoundedFrame(
+        byte[] pixels,
+        int stride,
+        ushort delay,
+        byte[] candidatePayload,
+        EncodedGifFrame parsed,
+        GifEncodedCandidate? encoded)
     {
         _bounded ??= new GifBoundedCanvas(_width, _height);
-        GifBoundedCanvas.Candidate? candidate = _bounded.Read(candidatePayload, parsed);
+        GifBoundedCanvas.Candidate? candidate = encoded is { Decoded: true }
+            ? encoded.Read
+            : _bounded.Read(candidatePayload, parsed);
         GifBoundedCanvas.Plan? plan = candidate is not null && _boundedShown
             ? _bounded.Choose(candidate, pixels, stride)
             : null;
@@ -418,7 +592,8 @@ internal sealed class AnimatedGifWriter : IDisposable
     /// <summary>
     /// Encodes the <paramref name="bounds"/> part of a frame. Every image is encoded from
     /// BGRA32: the WIC GIF encoder quantises BGR32 and BGRA32 input differently even for equal
-    /// colours, so a single input format keeps equal pixels at equal bytes on every path.
+    /// colours, so a single input format keeps equal pixels at equal bytes on every path
+    /// (including <see cref="EncodeCandidate"/>).
     /// </summary>
     private byte[] EncodeRegion(byte[] pixels, int stride, GifPixelRect bounds)
     {
@@ -437,6 +612,19 @@ internal sealed class AnimatedGifWriter : IDisposable
                     region,
                     row * rowBytes,
                     rowBytes);
+            }
+        }
+
+        if (_encoder == GifImageEncoder.Wic && WicGifFrameEncoder.IsAvailable)
+        {
+            try
+            {
+                return WicGifFrameEncoder.Encode(region, bounds.Width, bounds.Height, regionStride);
+            }
+            catch (Exception ex) when (WicGifFrameEncoder.IsInteropFailure(ex))
+            {
+                // WPF drives the same codec through the same calls, so the fallback writes the
+                // same bytes; a codec failure it shares surfaces from there.
             }
         }
 

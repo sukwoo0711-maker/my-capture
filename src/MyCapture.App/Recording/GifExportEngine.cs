@@ -34,8 +34,8 @@ internal sealed record GifEngineOptions
     internal bool GpuResize { get; init; }
 
     /// <summary>
-    /// Pixel worker threads for colour conversion and scaling; zero picks half the logical
-    /// processors, from 1 to 4. They never touch WPF.
+    /// Pixel worker threads for colour conversion, scaling and candidate encoding; zero picks
+    /// half the logical processors, from 1 to 4. They never touch WPF.
     /// </summary>
     internal int WorkerThreads { get; init; }
 
@@ -45,6 +45,21 @@ internal sealed record GifEngineOptions
     /// needs; the other modes are kept for size and quality comparisons.
     /// </summary>
     internal GifFrameDifferencing Differencing { get; init; } = GifFrameDifferencing.ErrorBounded;
+
+    /// <summary>
+    /// Which caller of the platform GIF codec encodes images. <see cref="GifImageEncoder.Wic"/>
+    /// (default) and <see cref="GifImageEncoder.Wpf"/> write identical bytes; WPF encodes every
+    /// image on the calling thread and is kept for comparison.
+    /// </summary>
+    internal GifImageEncoder Encoder { get; init; } = GifImageEncoder.Wic;
+
+    /// <summary>
+    /// Encode (and read) the whole-canvas image of every frame with nothing drawn over it on the
+    /// pixel workers (default), so the calling thread only differences and appends. When false,
+    /// or with <see cref="GifImageEncoder.Wpf"/>, every image is encoded on the calling thread.
+    /// The output is the same.
+    /// </summary>
+    internal bool EncodeOnWorkers { get; init; } = true;
 
     internal int ResolveWorkerThreads() =>
         WorkerThreads > 0
@@ -90,13 +105,17 @@ internal sealed record GifRenderPlan(
 
 /// <summary>Where one export's frames came from and what it cost.</summary>
 /// <param name="Images">GIF images written; fewer than <paramref name="Frames"/> when identical frames merged.</param>
+/// <param name="PreEncodedImages">Images whose encoding the pixel workers supplied.</param>
+/// <param name="WorkerEncodes">Encodes the pixel workers ran; more than <paramref name="PreEncodedImages"/> only when the writer merged or cropped a frame the workers could not foresee.</param>
 internal sealed record GifRenderStatistics(
     string FrameSource,
     int Frames,
     int DecodedFrames,
     int WorkerThreads,
     double ElapsedMs,
-    int Images);
+    int Images,
+    int PreEncodedImages = 0,
+    int WorkerEncodes = 0);
 
 /// <summary>
 /// Streams a GIF frame schedule as decode → normalise → scale → compose → difference → encode → append.
@@ -106,18 +125,25 @@ internal sealed record GifRenderStatistics(
 /// Three kinds of thread share the work. One decode thread runs the Media Foundation reader
 /// (or reads cached frames) in schedule order. A few pixel workers do the CPU-heavy, WPF-free
 /// middle on plain managed arrays: NV12 conversion to the base size, area-average scaling to the
-/// preset and the opaque copy the encoder needs. The calling STA thread does every WPF
-/// operation — composition only for frames with an active text or frame layer, the GIF encode —
+/// preset, the opaque copy the encoder needs and, for every frame with nothing drawn over it,
+/// the whole-canvas GIF encode and its LZW reading (<see cref="AnimatedGifWriter.EncodeCandidate"/>,
+/// which calls WIC directly). The calling STA thread does every WPF operation — composition
+/// only for frames with an active text or frame layer — encodes those composed frames itself,
 /// and hands frames to <see cref="AnimatedGifWriter"/> strictly in output order, exactly as the
-/// original single-threaded exporter did, so the writer's frame differencing sees the same
-/// sequence on every path.
+/// original single-threaded exporter did, so the writer's frame differencing (which depends on
+/// the previous frame) sees the same sequence and writes the same bytes on every path.
 /// </para>
 /// <para>
 /// WPF imaging stays on one thread on purpose. Running composition and GifBitmapEncoder on
 /// several STA threads at once corrupted the native heap (0xC0000374) or changed a frame's GIF
 /// palette in roughly one export in 600 under load, with software or hardware decode and with or
-/// without frame layers; the test assembly disables parallel tests for the same reason. Encoding
-/// therefore overlaps decoding and conversion instead of running beside other encodes.
+/// without frame layers; the test assembly disables parallel tests for the same reason. The
+/// workers' encodes do not use WPF: <see cref="WicGifFrameEncoder"/> makes the WIC calls WPF
+/// makes, through a free-threaded factory, with every per-image object owned by one call. Its
+/// bytes equal WPF's, and 128,000 concurrent encodes on eight MTA threads beside STA WPF imaging
+/// matched the sequential WPF bytes with no failure (WicGifFrameEncoderTests,
+/// MYCAPTURE_GIF_STRESS=1). A frame equal to the previous output frame is not encoded at all,
+/// since the writer merges it.
 /// </para>
 /// <para>
 /// Memory is bounded: at most <c>workers + 2</c> frames are in flight between decode and append.
@@ -173,7 +199,7 @@ internal static class GifExportEngine
                 progress?.Report(new VideoFrameRenderProgress(index + 1, total, times[index]));
             }
 
-            return Finish("cache-encoded", 0, 0);
+            return Finish("cache-encoded", 0, 0, 0);
         }
 
         GifSourceFrame[]? decodedHit = cache?.TryGetDecoded(plan.BaseWidth, plan.BaseHeight, times);
@@ -192,6 +218,19 @@ internal static class GifExportEngine
 
         IReadOnlyDictionary<Guid, BitmapSource> layerBitmaps =
             FrameEditLayerRenderer.Decode(plan.Request.FrameEditLayers);
+        bool[]? encodeOnWorker = null;
+        if (options.EncodeOnWorkers && options.Encoder == GifImageEncoder.Wic && writer.AcceptsEncodedCandidates)
+        {
+            // Frames with nothing drawn over them reach the writer as the workers' own buffers
+            // (ComposeOutputFrame bypasses WPF), so their whole-canvas encode can run there.
+            encodeOnWorker = new bool[total];
+            for (int index = 0; index < total; index++)
+            {
+                encodeOnWorker[index] = VideoFrameRenderPipeline.CanBypassComposition(
+                    plan.Request, layerBitmaps, plan.Request.Width, plan.Request.Height, times[index]);
+            }
+        }
+
         int threads = options.ResolveWorkerThreads();
         var encodedForCache = cache is not null ? new GifFrameUpdate[total] : null;
         var decodedForCache = buildDecodedCache ? new GifSourceFrame[decodeTimes.Count] : null;
@@ -199,6 +238,7 @@ internal static class GifExportEngine
         int written = 0;
         string frameSource;
         int decodedFrames;
+        int workerEncodes;
         using (var run = new PixelPipeline(
                    plan,
                    decodeTimes,
@@ -207,6 +247,7 @@ internal static class GifExportEngine
                    options,
                    log,
                    threads,
+                   new CandidatePolicy(encodeOnWorker, writer.ReadsCandidates, writer.MergesIdenticalFrames),
                    cancellationToken))
         {
             for (int slot = 0; slot < decodeTimes.Count; slot++)
@@ -224,7 +265,8 @@ internal static class GifExportEngine
                     GifFrameUpdate update = writer.AddFrame(
                         pixels,
                         plan.Request.Width * 4,
-                        plan.FrameDelaysCentiseconds[result.Output]);
+                        plan.FrameDelaysCentiseconds[result.Output],
+                        result.Candidate);
                     if (encodedForCache is not null)
                     {
                         encodedForCache[result.Output] = update;
@@ -243,6 +285,7 @@ internal static class GifExportEngine
             run.Complete();
             frameSource = run.FrameSource;
             decodedFrames = run.DecodedFrames;
+            workerEncodes = run.WorkerEncodes;
         }
 
         if (written != total)
@@ -261,9 +304,9 @@ internal static class GifExportEngine
             cache!.StoreEncoded(plan.Request.Width, plan.Request.Height, times, encodedForCache);
         }
 
-        return Finish(frameSource, decodedFrames, threads);
+        return Finish(frameSource, decodedFrames, threads, workerEncodes);
 
-        GifRenderStatistics Finish(string source, int decoded, int workerThreads)
+        GifRenderStatistics Finish(string source, int decoded, int workerThreads, int encodedOnWorkers)
         {
             var statistics = new GifRenderStatistics(
                 source,
@@ -271,9 +314,11 @@ internal static class GifExportEngine
                 decoded,
                 workerThreads,
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds,
-                writer.ImageCount);
+                writer.ImageCount,
+                writer.PreEncodedImages,
+                encodedOnWorkers);
             log.LogInformation(
-                "GIF rendered {Frames} frame(s) as {Images} image(s) at {Width}x{Height} from {Source}: {Decoded} decoded, {Threads} pixel thread(s), {Elapsed:0} ms",
+                "GIF rendered {Frames} frame(s) as {Images} image(s) at {Width}x{Height} from {Source}: {Decoded} decoded, {Threads} pixel thread(s), {PreEncoded} encoded on them, {Elapsed:0} ms",
                 statistics.Frames,
                 statistics.Images,
                 plan.Request.Width,
@@ -281,6 +326,7 @@ internal static class GifExportEngine
                 statistics.FrameSource,
                 statistics.DecodedFrames,
                 statistics.WorkerThreads,
+                statistics.PreEncodedImages,
                 statistics.ElapsedMs);
             return statistics;
         }
@@ -456,9 +502,36 @@ internal static class GifExportEngine
         return copy;
     }
 
-    private sealed record PixelJob(int Slot, int Output, double SourceTimeMs, GifSourceFrame Frame);
+    /// <summary>
+    /// True when two decoded frames carry the same pixels and layout, so that normalising and
+    /// scaling them gives the same output frame.
+    /// </summary>
+    internal static bool SameSourceFrame(GifSourceFrame first, GifSourceFrame second) =>
+        first.Width == second.Width
+        && first.Height == second.Height
+        && first.Stride == second.Stride
+        && first.Format == second.Format
+        && first.Yuv == second.Yuv
+        && first.Opaque == second.Opaque
+        && (ReferenceEquals(first.Pixels, second.Pixels) || first.Pixels.AsSpan().SequenceEqual(second.Pixels));
 
-    private sealed record PixelResult(int Slot, int Output, double SourceTimeMs, GifSourceFrame Target, GifSourceFrame? Base);
+    /// <param name="PreviousOutput">The decoded frame of the previous output frame, if any.</param>
+    private sealed record PixelJob(int Slot, int Output, double SourceTimeMs, GifSourceFrame Frame, GifSourceFrame? PreviousOutput);
+
+    private sealed record PixelResult(
+        int Slot,
+        int Output,
+        double SourceTimeMs,
+        GifSourceFrame Target,
+        GifSourceFrame? Base,
+        GifEncodedCandidate? Candidate);
+
+    /// <summary>
+    /// Which output frames the workers encode for the writer. <paramref name="EncodeOutput"/> is
+    /// null when they encode none; <paramref name="Read"/> adds the error-bounded reading;
+    /// <paramref name="SkipRepeats"/> skips a frame that will merge with an equal predecessor.
+    /// </summary>
+    private sealed record CandidatePolicy(bool[]? EncodeOutput, bool Read, bool SkipRepeats);
 
     /// <summary>
     /// The decode thread, the pixel workers and the slot-ordered result window of one export.
@@ -472,6 +545,7 @@ internal static class GifExportEngine
         private readonly bool _keepBase;
         private readonly GifEngineOptions _options;
         private readonly ILogger _log;
+        private readonly CandidatePolicy _candidates;
         private readonly int _maxInFlight;
         private readonly BlockingCollection<PixelJob> _jobs = new(new ConcurrentQueue<PixelJob>());
         private readonly Dictionary<int, PixelResult> _results = [];
@@ -481,6 +555,7 @@ internal static class GifExportEngine
         private readonly List<Thread> _threads = [];
         private ExceptionDispatchInfo? _failure;
         private int _taken;
+        private int _workerEncodes;
 
         internal PixelPipeline(
             GifRenderPlan plan,
@@ -490,6 +565,7 @@ internal static class GifExportEngine
             GifEngineOptions options,
             ILogger log,
             int workerCount,
+            CandidatePolicy candidates,
             CancellationToken cancellationToken)
         {
             _plan = plan;
@@ -498,6 +574,7 @@ internal static class GifExportEngine
             _keepBase = keepBase;
             _options = options;
             _log = log;
+            _candidates = candidates;
             _maxInFlight = workerCount + 2;
             FrameSource = cachedFrames is null ? "software" : "cache-decoded";
             _stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -519,6 +596,9 @@ internal static class GifExportEngine
         internal string FrameSource { get; private set; }
 
         internal int DecodedFrames { get; private set; }
+
+        /// <summary>Candidates the workers encoded; final once every slot has been taken.</summary>
+        internal int WorkerEncodes => Volatile.Read(ref _workerEncodes);
 
         /// <summary>Waits for the result of <paramref name="slot"/> (taken strictly in order).</summary>
         internal PixelResult Take(int slot)
@@ -605,6 +685,7 @@ internal static class GifExportEngine
 
                 IReadOnlyList<double> outputTimes = _plan.SourceTimesMs;
                 int nextOutput = 0;
+                GifSourceFrame? previousOutput = null;
                 for (int slot = 0; slot < _decodeTimes.Count; slot++)
                 {
                     lock (_gate)
@@ -620,12 +701,15 @@ internal static class GifExportEngine
                     double sourceTime = _decodeTimes[slot];
                     GifSourceFrame frame = _cachedFrames is not null ? _cachedFrames[slot] : Decode(reader!, sourceTime);
                     int output = -1;
+                    GifSourceFrame? previous = null;
                     if (nextOutput < outputTimes.Count && outputTimes[nextOutput] == sourceTime)
                     {
                         output = nextOutput++;
+                        previous = previousOutput;
+                        previousOutput = frame;
                     }
 
-                    _jobs.Add(new PixelJob(slot, output, sourceTime, frame), _stop.Token);
+                    _jobs.Add(new PixelJob(slot, output, sourceTime, frame, previous), _stop.Token);
                 }
 
                 _jobs.CompleteAdding();
@@ -687,7 +771,8 @@ internal static class GifExportEngine
                         job.Output,
                         job.SourceTimeMs,
                         target,
-                        _keepBase ? baseFrame : null);
+                        _keepBase ? baseFrame : null,
+                        EncodeCandidate(job, target));
                     lock (_gate)
                     {
                         _results[job.Slot] = result;
@@ -702,6 +787,46 @@ internal static class GifExportEngine
             {
                 Fail(ex);
             }
+        }
+
+        /// <summary>
+        /// The writer's whole-canvas encode of an output frame that will reach it unchanged (no
+        /// composition, already the output size, opaque and tightly packed, so
+        /// <see cref="ComposeOutputFrame"/> passes this very buffer on), or null. A frame whose
+        /// source equals the previous output frame's is skipped when the writer will merge it.
+        /// </summary>
+        private GifEncodedCandidate? EncodeCandidate(PixelJob job, GifSourceFrame target)
+        {
+            int width = _plan.Request.Width;
+            int height = _plan.Request.Height;
+            if (job.Output < 0
+                || _candidates.EncodeOutput is not { } encode
+                || !encode[job.Output]
+                || target.Width != width
+                || target.Height != height
+                || !target.Opaque
+                || target.Stride != width * 4)
+            {
+                return null;
+            }
+
+            if (_candidates.SkipRepeats
+                && job.Output > 0
+                && encode[job.Output - 1]
+                && job.PreviousOutput is { } previous
+                && SameSourceFrame(previous, job.Frame))
+            {
+                return null;
+            }
+
+            GifEncodedCandidate? candidate = AnimatedGifWriter.EncodeCandidate(
+                target.Pixels, target.Stride, width, height, _candidates.Read);
+            if (candidate is not null)
+            {
+                _ = Interlocked.Increment(ref _workerEncodes);
+            }
+
+            return candidate;
         }
 
         private void Fail(Exception ex)

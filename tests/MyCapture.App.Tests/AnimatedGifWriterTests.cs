@@ -543,6 +543,143 @@ public sealed class AnimatedGifWriterTests
         Assert.Throws<ArgumentException>(() => GifFrameDifference.ChangedBounds(before, stride, packed[..^1], width * 4, width, height));
     }
 
+    /// <summary>
+    /// The direct WIC encoder and WPF's encoder write the same animation in every differencing
+    /// mode, over frames that merge, change in part, change whole and carry alpha.
+    /// </summary>
+    [Fact]
+    public void WicAndWpfEncoders_WriteIdenticalAnimationsInEveryDifferencingMode() => RunSta(() =>
+    {
+        const int width = 120;
+        const int height = 68;
+        byte[][] frames = AnimationFrames(width, height);
+        foreach (GifFrameDifferencing mode in Enum.GetValues<GifFrameDifferencing>())
+        {
+            byte[] wpf = Write(frames, width, height, mode, GifImageEncoder.Wpf, candidates: null, out _);
+            byte[] wic = Write(frames, width, height, mode, GifImageEncoder.Wic, candidates: null, out _);
+            Assert.True(wpf.AsSpan().SequenceEqual(wic), $"{mode}: the WIC and WPF encoders wrote different files.");
+        }
+
+        Assert.Equal(0, WicGifFrameEncoder.Failures);
+    });
+
+    /// <summary>
+    /// Candidates encoded on another thread replace exactly the writer's whole-canvas encodes:
+    /// same bytes, used only for their own buffer, never by a WPF writer.
+    /// </summary>
+    [Fact]
+    public void EncodedCandidates_ChangeNoByteAndAreUsedOnlyForTheirOwnBuffer() => RunSta(() =>
+    {
+        const int width = 120;
+        const int height = 68;
+        byte[][] frames = AnimationFrames(width, height);
+        GifEncodedCandidate?[] candidates = EncodeOnMta(frames, width, height, read: true);
+        Assert.All(candidates, candidate => Assert.NotNull(candidate));
+
+        foreach (GifFrameDifferencing mode in Enum.GetValues<GifFrameDifferencing>())
+        {
+            byte[] expected = Write(frames, width, height, mode, GifImageEncoder.Wic, candidates: null, out int none);
+            Assert.Equal(0, none);
+            byte[] actual = Write(frames, width, height, mode, GifImageEncoder.Wic, candidates, out int used);
+            Assert.True(expected.AsSpan().SequenceEqual(actual), $"{mode}: candidates changed the file.");
+
+            // Merged frames need no encode, and a changed rectangle is encoded by the writer.
+            int expectedUse = mode switch
+            {
+                GifFrameDifferencing.None => frames.Length,
+                GifFrameDifferencing.ChangedRectangle => 2, // the first frame and the whole-frame change
+                _ => frames.Length - 1, // one repeat merges
+            };
+            Assert.Equal(expectedUse, used);
+
+            // A candidate of other pixels (or of an equal copy) is never taken for a buffer.
+            GifEncodedCandidate?[] shifted = [.. candidates.Skip(1), candidates[0]];
+            Assert.True(expected.AsSpan().SequenceEqual(Write(frames, width, height, mode, GifImageEncoder.Wic, shifted, out int misused)));
+            Assert.Equal(0, misused);
+            byte[][] copies = frames.Select(frame => (byte[])frame.Clone()).ToArray();
+            Assert.True(expected.AsSpan().SequenceEqual(Write(copies, width, height, mode, GifImageEncoder.Wic, candidates, out int copied)));
+            Assert.Equal(0, copied);
+            Assert.True(expected.AsSpan().SequenceEqual(Write(frames, width, height, mode, GifImageEncoder.Wpf, candidates, out int wpfUsed)));
+            Assert.Equal(0, wpfUsed);
+        }
+
+        // Without the error-bounded reading the writer reads the payload itself.
+        GifEncodedCandidate?[] unread = EncodeOnMta(frames, width, height, read: false);
+        Assert.True(Write(frames, width, height, GifFrameDifferencing.ErrorBounded, GifImageEncoder.Wic, candidates: null, out _)
+            .AsSpan()
+            .SequenceEqual(Write(frames, width, height, GifFrameDifferencing.ErrorBounded, GifImageEncoder.Wic, unread, out _)));
+    });
+
+    /// <summary>
+    /// Six frames: a noisy start, a repeat, a small patch, a moved block, a whole-frame colour
+    /// change and a frame with partial alpha.
+    /// </summary>
+    private static byte[][] AnimationFrames(int width, int height)
+    {
+        var random = new Random(23);
+        byte[] first = new byte[width * height * 4];
+        random.NextBytes(first);
+        for (int offset = 3; offset < first.Length; offset += 4)
+        {
+            first[offset] = 255;
+        }
+
+        byte[] repeat = (byte[])first.Clone();
+        byte[] patched = (byte[])first.Clone();
+        Paint(patched, width, 10, 12, 6, 5, 250, 30, 30);
+        byte[] moved = (byte[])patched.Clone();
+        Paint(moved, width, 70, 40, 20, 14, 20, 220, 90);
+        byte[] recoloured = SolidPixels(width, height, 40, 80, 160);
+        Paint(recoloured, width, 0, 0, width / 2, height / 3, 200, 200, 30);
+        byte[] alpha = (byte[])recoloured.Clone();
+        for (int offset = 3; offset < alpha.Length / 2; offset += 28)
+        {
+            alpha[offset] = (byte)(offset & 0x7F);
+        }
+
+        return [first, repeat, patched, moved, recoloured, alpha];
+    }
+
+    private static GifEncodedCandidate?[] EncodeOnMta(byte[][] frames, int width, int height, bool read)
+    {
+        var candidates = new GifEncodedCandidate?[frames.Length];
+        var thread = new Thread(() =>
+        {
+            for (int index = 0; index < frames.Length; index++)
+            {
+                candidates[index] = AnimatedGifWriter.EncodeCandidate(frames[index], width * 4, width, height, read);
+            }
+        });
+        thread.SetApartmentState(ApartmentState.MTA);
+        thread.Start();
+        thread.Join();
+        return candidates;
+    }
+
+    private static byte[] Write(
+        byte[][] frames,
+        int width,
+        int height,
+        GifFrameDifferencing mode,
+        GifImageEncoder encoder,
+        GifEncodedCandidate?[]? candidates,
+        out int preEncoded)
+    {
+        using var output = new MemoryStream();
+        using (var writer = new AnimatedGifWriter(output, width, height, 10, leaveOpen: true, differencing: mode, encoder: encoder))
+        {
+            for (int index = 0; index < frames.Length; index++)
+            {
+                _ = writer.AddFrame(frames[index], width * 4, 10, candidates?[index]);
+            }
+
+            writer.Complete();
+            preEncoded = writer.PreEncodedImages;
+        }
+
+        return output.ToArray();
+    }
+
     private static byte[] SolidPixels(int width, int height, byte red, byte green, byte blue)
     {
         byte[] pixels = new byte[width * height * 4];
