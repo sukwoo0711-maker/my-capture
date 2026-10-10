@@ -656,10 +656,11 @@ internal sealed class VideoEditorWindow : Window
 
         AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_CommandBarName"));
 
-        // 1. Identity: this is the recording (video) editor, with the clip's facts.
+        // 1. Identity: this is the recording (video) editor, with the clip's facts. The mark is
+        // the recording glyph, not a play triangle that would look like a second play button.
         var mark = new System.Windows.Shapes.Path
         {
-            Data = TryGeometry("Icon.Play"),
+            Data = TryGeometry("Icon.Record"),
             Width = 14,
             Height = 14,
             Stretch = Stretch.Uniform,
@@ -716,13 +717,15 @@ internal sealed class VideoEditorWindow : Window
 
         // 4. Output, at the right edge: save into the library, or export a new file.
         var output = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        // Each button says what it does to the library and to the original; the shared hint
+        // left people unsure which one keeps the recording intact.
         Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"));
-        saveEdits.ToolTip = UiText.Get("Workspace.VideoHint");
-        AutomationProperties.SetHelpText(saveEdits, UiText.Get("Workspace.VideoHint"));
+        saveEdits.ToolTip = UiText.Get("VideoEditorUx_SaveEditsHelp");
+        AutomationProperties.SetHelpText(saveEdits, UiText.Get("VideoEditorUx_SaveEditsHelp"));
         saveEdits.Click += (_, _) => CommitTrim();
         Button export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_ExportFormats"), "MediaExport_ArrowExport", true);
-        export.ToolTip = UiText.Get("Workspace.VideoHint");
-        AutomationProperties.SetHelpText(export, UiText.Get("Workspace.VideoHint"));
+        export.ToolTip = UiText.Get("VideoEditorUx_ExportHelp");
+        AutomationProperties.SetHelpText(export, UiText.Get("VideoEditorUx_ExportHelp"));
         export.Click += (_, _) => OpenExport();
         _editControls.Add(saveEdits); _editControls.Add(export);
         output.Children.Add(saveEdits); output.Children.Add(export);
