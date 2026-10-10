@@ -485,6 +485,71 @@ public sealed class Mp4Nv12ExportTests
         }
     });
 
+    [Fact]
+    public void Nv12Export_FeedsTheEncoderIdenticalFrames_AcrossRunsAndDecoders() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-nv12-determinism-");
+        try
+        {
+            RecordingResult recording = SyntheticDocumentClip.Encode(Path.Combine(root, "source.mp4"), 640, 360, 30, 30);
+            TimedTextOverlay[] caption = [new() { Text = "MyCapture 시간 텍스트", StartMs = 200, EndMs = 600 }];
+            FrameEditLayer[] graphic =
+            [
+                new() { StartMs = 400, EndMs = 900, OverlayPngBase64 = GradientPng(90, 60), Bounds = new VideoLayerBounds(0.6, 0.1, 0.3, 0.3) },
+            ];
+
+            List<string> Run(Mp4RenderOptions? options)
+            {
+                var hashes = new List<string>();
+                _ = TrimReencoder.Reencode(
+                    recording.OutputPath,
+                    Path.Combine(root, "unused.mp4"),
+                    0,
+                    1000,
+                    recording,
+                    encoderOptions => new HashingEncoder(encoderOptions, hashes),
+                    NullLogger.Instance,
+                    caption,
+                    graphic,
+                    renderOptions: options);
+                return hashes;
+            }
+
+            List<string> first = Run(null);
+            Assert.Equal(30, first.Count);
+            Assert.Equal(first, Run(null));
+            Assert.Equal(first, Run(new Mp4RenderOptions { PreferHardwareDecode = false }));
+        }
+        finally
+        {
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    /// <summary>Records each submitted frame's format, timestamp and pixel hash; writes no file.</summary>
+    private sealed class HashingEncoder(VideoEncoderOptions options, List<string> hashes) : IVideoEncoder
+    {
+        public int Width => options.Width;
+
+        public int Height => options.Height;
+
+        public void WriteFrame(in EncoderFrame frame)
+        {
+            int length = frame.Format == VideoEncoderInputFormat.Nv12
+                ? frame.Stride * frame.Height * 3 / 2
+                : frame.Stride * frame.Height;
+            hashes.Add($"{frame.Format}:{frame.TimestampMs:R}:{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(frame.Pixels.AsSpan(0, length)))}");
+        }
+
+        public void Complete()
+        {
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
     private sealed class InlineProgress(Action<VideoFrameRenderProgress> report) : IProgress<VideoFrameRenderProgress>
     {
         public void Report(VideoFrameRenderProgress value) => report(value);
