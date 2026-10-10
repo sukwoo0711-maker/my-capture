@@ -3446,4 +3446,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="RecordingBackend_Hint" xml:space="preserve"><value>자동은 녹화 영역이 모니터 하나 안에 있으면 Windows Graphics Capture로 녹화하고, 여러 모니터에 걸치거나 사용할 수 없으면 GDI로 녹화합니다. 녹화 화면이 깨지거나 멈추면 호환 모드를 선택하십시오.</value></data>
   <data name="RecordingBackend_Auto" xml:space="preserve"><value>자동(Windows Graphics Capture 우선)</value></data>
   <data name="RecordingBackend_Gdi" xml:space="preserve"><value>호환 모드(GDI)</value></data>
+  <data name="CaptureCue_ClickWindow" xml:space="preserve"><value>클릭하면 이 창 캡처</value></data>
+  <data name="CaptureCue_ClickMonitor" xml:space="preserve"><value>클릭하면 이 모니터 전체 캡처</value></data>
+  <data name="CaptureCue_Drag" xml:space="preserve"><value>드래그: 영역 직접 선택</value></data>
+  <data name="CaptureCue_Click" xml:space="preserve"><value>클릭: 창 캡처</value></data>
+  <data name="CaptureCue_Shift" xml:space="preserve"><value>Shift: 정밀 이동</value></data>
+  <data name="CaptureCue_Esc" xml:space="preserve"><value>Esc: 취소</value></data>
 </root>

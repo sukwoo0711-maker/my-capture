@@ -167,6 +167,13 @@ internal sealed class CaptureOverlayWindow : Window
         set => _view.TextCaptureMode = value;
     }
 
+    /// <summary>Shows the optional C/T key-hint chip; the instruction and target tab always show.</summary>
+    internal bool ShowShortcutHints
+    {
+        get => _view.ShowShortcutHints;
+        set => _view.ShowShortcutHints = value;
+    }
+
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         // EnsureHandle may create this HWND solely to apply recording exclusion.

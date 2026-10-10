@@ -59,6 +59,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Reads Capture.AutoDetectWindows when each selector opens. Off unless the app wires it.</summary>
     internal Func<bool> AutoDetectWindows { get; set; } = () => false;
 
+    /// <summary>Reads General.ShowShortcutHints when each selector opens; off hides only the key-hint chip.</summary>
+    internal Func<bool> ShowShortcutHints { get; set; } = () => true;
+
     /// <summary>Copies the overlay's sampled colour (C key). Null leaves the key unbound.</summary>
     internal Func<string, Task<bool>>? CopyColorText { get; set; }
 
@@ -284,6 +287,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         _activeOverlay = overlay;
         overlay.SourceWindows = _preparation?.SourceWindows ?? [];
         overlay.DetectWindows = AutoDetectWindows();
+        overlay.ShowShortcutHints = ShowShortcutHints();
         overlay.CopyColorText = CopyColorText;
         overlay.ReadColorFormat = ReadColorFormat;
         overlay.TextCaptureAvailable = TextCaptureRequested is not null;
