@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using System.Globalization;
 using Microsoft.Win32;
 using MyCapture.App.Ocr;
@@ -211,9 +212,9 @@ internal sealed class AnnotationEditorControl : Grid
         SetResourceReference(BackgroundProperty, "Surface.Base");
         Focusable = true;
         FocusVisualStyle = null;
-
         BuildShortcutActions();
         BuildLayout();
+        DisableImeOutsideTextInputs(this);
 
         _controller.SelectionChanged += (_, _) => OnSelectionChanged();
         undo.Changed += (_, _) => OnHistoryChanged();
@@ -308,7 +309,10 @@ internal sealed class AnnotationEditorControl : Grid
     internal bool HandleKeyDown(KeyEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
-        return HandleShortcut(e.Key, Keyboard.Modifiers);
+        // Hangul mode reports letters as ImeProcessed. Outside a text input they are still
+        // shortcuts; inside one the IME keeps the key so a composition and its Esc stay intact.
+        bool textInput = _activeTextBox is not null || Keyboard.FocusedElement is TextBoxBase;
+        return HandleShortcut(ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, textInput), Keyboard.Modifiers);
     }
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
@@ -882,6 +886,7 @@ internal sealed class AnnotationEditorControl : Grid
             Padding = new Thickness(4, 2, 4, 2),
         };
         AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
+        InputMethod.SetIsInputMethodEnabled(textBox, true);
 
         Canvas.SetLeft(textBox, box.Left);
         Canvas.SetTop(textBox, box.Top);
@@ -977,6 +982,10 @@ internal sealed class AnnotationEditorControl : Grid
         TextAnnotation annotation = _editingText;
         _activeTextBox = null;
         _editingText = null;
+        // Esc, Ctrl+Enter and a canvas click commit from inside the box; give the keyboard back
+        // to the canvas so the next letter is a shortcut. A commit caused by focus moving
+        // elsewhere (a slider, a swatch) leaves that new focus alone.
+        bool hadKeyboardFocus = box.IsKeyboardFocusWithin;
 
         box.TextChanged -= OnLiveTextBoxTextChanged;
         _overlayCanvas.Children.Remove(box);
@@ -991,6 +1000,10 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.CommitTextEdit(annotation, box.Text ?? string.Empty);
         SetStatus(hadText ? UiText.Get("Text_B09611FF35C1") : UiText.Get("Text_8BDB6F46B7FF"));
         UpdateInspector();
+        if (hadKeyboardFocus)
+        {
+            Focus();
+        }
     }
 
     /// <summary>
@@ -1447,6 +1460,7 @@ internal sealed class AnnotationEditorControl : Grid
             _crop?.SetRatio(_cropRatio.SelectedIndex switch { 1 => (double)_canvasWidth / _canvasHeight, 2 => 1, 3 => 4.0 / 3, 4 => 16.0 / 9, 5 => 9.0 / 16, _ => null });
             RefreshCrop();
         };
+        ReturnFocusAfterMousePick(_cropRatio);
         panel.Children.Add(_cropRatio);
         var dimensions = new UniformGrid { Columns = 2, Margin = new Thickness(0, 10, 0, 10) };
         _cropWidth = new TextBox { MinHeight = 30, Margin = new Thickness(0, 0, 4, 0) };
@@ -1461,6 +1475,7 @@ internal sealed class AnnotationEditorControl : Grid
             _cropInputErrors.Add(box, (border, error));
             field.Children.Add(border); field.Children.Add(error); dimensions.Children.Add(field);
             AutomationName(box, UiText.Get(key));
+            InputMethod.SetIsInputMethodEnabled(box, false); // pixel counts only
             box.TextChanged += (_, _) =>
             {
                 if (!_syncingInspector && _crop is not null) _dirtyCropInputs.Add(box);
@@ -1556,23 +1571,83 @@ internal sealed class AnnotationEditorControl : Grid
         panel.Children.Add(_swatchPanel);
         var custom = new TextBox { Text = _controller.StrokeColor.ToHex(), MinHeight = 32, Margin = new Thickness(0, 4, 0, 4) };
         AutomationName(custom, UiText.Get("Tools.CustomColor"));
+        InputMethod.SetIsInputMethodEnabled(custom, true);
+        // Enter applies and Esc restores; both hand the keyboard back to the canvas so the next
+        // letter is a tool shortcut again instead of more text in this box. A composing IME
+        // reports ImeProcessed here and keeps its own Enter/Esc.
+        custom.PreviewKeyDown += (_, e) =>
+        {
+            if (Keyboard.Modifiers != ModifierKeys.None) return;
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                if (ApplyCustomColor(custom.Text)) Focus();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                custom.Text = _controller.StrokeColor.ToHex();
+                Focus();
+            }
+        };
         panel.Children.Add(custom);
         var apply = new Button { Content = UiText.Get("Tools.CustomColor"), MinHeight = 36 };
         AutomationName(apply, UiText.Get("Tools.CustomColor"));
         PreserveEditorMouseFocus(apply);
-        apply.Click += (_, _) =>
-        {
-            if (ColorRgba.TryParse(custom.Text, out ColorRgba color))
-            {
-                _controller.ApplyStrokeColor(color);
-                RememberPreferences();
-                SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
-            }
-            else SetStatus(UiText.Get("Tools.InvalidColor"));
-        };
+        apply.Click += (_, _) => ApplyCustomColor(custom.Text);
         panel.Children.Add(apply);
         return panel;
     }
+
+    /// <summary>
+    /// Turns the IME off for <paramref name="root"/> and every non-text control under it.
+    /// </summary>
+    /// <remarks>
+    /// The canvas, tool buttons, sliders and lists never take text, so a Hangul-mode IME must
+    /// not hold a hidden composition there: a typed T would become an invisible ㅅ that later
+    /// lands in a text box. WPF reads the setting from the focused element only (it does not
+    /// inherit), so each control gets it. Text inputs keep their own setting.
+    /// </remarks>
+    private static void DisableImeOutsideTextInputs(DependencyObject root)
+    {
+        InputMethod.SetIsInputMethodEnabled(root, false);
+        foreach (object child in LogicalTreeHelper.GetChildren(root))
+        {
+            if (child is DependencyObject element and not TextBoxBase)
+            {
+                DisableImeOutsideTextInputs(element);
+            }
+        }
+    }
+
+    private bool ApplyCustomColor(string text)
+    {
+        if (!ColorRgba.TryParse(text, out ColorRgba color))
+        {
+            SetStatus(UiText.Get("Tools.InvalidColor"));
+            return false;
+        }
+
+        _controller.ApplyStrokeColor(color);
+        RememberPreferences();
+        SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
+        return true;
+    }
+
+    /// <summary>
+    /// After a mouse pick from <paramref name="combo"/>'s list, returns the keyboard to the
+    /// canvas so letter shortcuts work again. A keyboard user keeps focus on the list.
+    /// </summary>
+    private void ReturnFocusAfterMousePick(ComboBox combo) =>
+        combo.DropDownClosed += (_, _) =>
+        {
+            if (InputManager.Current.MostRecentInputDevice is not MouseDevice) return;
+            // Deferred: the combo box restores its own focus while the drop-down closes.
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+            {
+                if (combo.IsKeyboardFocusWithin) Focus();
+            });
+        };
 
     private FrameworkElement BuildThicknessSection()
     {
@@ -1636,6 +1711,7 @@ internal sealed class AnnotationEditorControl : Grid
                 UpdateInspector();
             }
         };
+        ReturnFocusAfterMousePick(_strokeStyleComboBox);
         panel.Children.Add(_strokeStyleComboBox);
         _fillTransparencyLabel = SectionLabel(UiText.Get("Text_1E0DD4F46A0C"));
         _fillTransparencyLabel.Margin = new Thickness(0, 16, 0, 4);

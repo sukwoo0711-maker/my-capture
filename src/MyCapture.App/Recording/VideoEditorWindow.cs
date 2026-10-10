@@ -2061,7 +2061,10 @@ internal sealed class VideoEditorWindow : Window
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         if (!_mediaReady || Keyboard.FocusedElement is TextBox) return;
-        e.Handled = HandleShortcut(e.Key, Keyboard.Modifiers);
+        // Hangul mode reports I, O, E and G as ImeProcessed; outside a text box they are shortcuts.
+        Key key = ShortcutInput.Resolve(e.Key, e.ImeProcessedKey,
+            Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase);
+        e.Handled = HandleShortcut(key, Keyboard.Modifiers);
     }
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
