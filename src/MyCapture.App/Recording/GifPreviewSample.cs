@@ -16,7 +16,7 @@ internal sealed class GifPreviewSample : IDisposable
         GifSampleWindow window,
         GifExportQuality quality,
         double speed,
-        long bytes,
+        GifSegmentSize size,
         double elapsedMs,
         GifSampleFrames frames,
         double motionFraction,
@@ -25,7 +25,7 @@ internal sealed class GifPreviewSample : IDisposable
         Window = window;
         Quality = quality;
         Speed = speed;
-        Bytes = bytes;
+        Size = size;
         ElapsedMs = elapsedMs;
         Frames = frames;
         MotionFraction = motionFraction;
@@ -38,7 +38,10 @@ internal sealed class GifPreviewSample : IDisposable
 
     internal double Speed { get; }
 
-    internal long Bytes { get; }
+    internal long Bytes => Size.Bytes;
+
+    /// <summary>Whole file, head and first-image bytes; see <see cref="GifSegmentSize"/>.</summary>
+    internal GifSegmentSize Size { get; }
 
     /// <summary>Wall-clock export time of the sample, excluding preview decoding.</summary>
     internal double ElapsedMs { get; }
@@ -48,7 +51,9 @@ internal sealed class GifPreviewSample : IDisposable
     /// <summary>Mean changed-block share between frames; see <see cref="GifMotionAnalysis"/>.</summary>
     internal double MotionFraction { get; }
 
-    internal GifPresetMeasurement Measurement => new(Quality, Bytes, Window.DurationMs, ElapsedMs / Window.DurationMs);
+    /// <summary>The sample as a measurement of the range that starts at <paramref name="rangeStartMs"/>.</summary>
+    internal GifPresetMeasurement MeasurementFrom(double rangeStartMs) =>
+        GifPresetMeasurement.Of(Quality, Size, Window.DurationMs, ElapsedMs / Window.DurationMs, Math.Abs(Window.StartMs - rangeStartMs) < 0.5);
 
     /// <summary>Source time of a sample frame, from its output start time and the speed.</summary>
     internal double SourceTimeOf(int frameIndex) =>
@@ -79,16 +84,20 @@ internal sealed class GifPreviewSample : IDisposable
         {
             double elapsed = stopwatch.Elapsed.TotalMilliseconds;
             GifSampleFrames frames = GifSampleDecoder.Decode(calculation.ResultPath, cancellationToken);
-            double motion = GifMotionAnalysis.ChangedFraction(frames, cancellationToken);
+            double motion = GifMotionAnalysis.ChangedFraction(
+                frames,
+                GifMotionAnalysis.LumaThreshold,
+                cancellationToken,
+                NominalDelayCentiseconds(quality, speed));
             cancellationToken.ThrowIfCancellationRequested();
-            long bytes = calculation.ResultBytes;
+            GifSegmentSize size = GifSegmentSize.Measure(calculation.ResultPath);
             if (!window.CoversWholeRange)
             {
                 calculation.Dispose();
                 calculation = null;
             }
 
-            var sample = new GifPreviewSample(window, quality, speed, bytes, elapsed, frames, motion, calculation);
+            var sample = new GifPreviewSample(window, quality, speed, size, elapsed, frames, motion, calculation);
             calculation = null;
             return sample;
         }
@@ -99,10 +108,10 @@ internal sealed class GifPreviewSample : IDisposable
     }
 
     /// <summary>
-    /// Renders an estimate-only segment and returns its GIF bytes; the file is discarded.
+    /// Renders an estimate-only segment and returns its GIF sizes; the file is discarded.
     /// Must run on an STA worker thread.
     /// </summary>
-    internal static long MeasureSegment(
+    internal static GifSegmentSize MeasureSegment(
         RecordingResult recording,
         VideoEditDocument segmentDocument,
         GifExportQuality quality,
@@ -112,8 +121,12 @@ internal sealed class GifPreviewSample : IDisposable
         using VideoExportCalculation calculation = VideoExportCalculation.CalculateGif(
             path => AnimatedGifExporter.Export(recording, segmentDocument, path, null, cancellationToken, speed, quality),
             cancellationToken);
-        return calculation.ResultBytes;
+        return GifSegmentSize.Measure(calculation.ResultPath);
     }
+
+    /// <summary>The exporter's frame delay before identical frames merge, in centiseconds.</summary>
+    internal static double NominalDelayCentiseconds(GifExportQuality quality, double speed) =>
+        100.0 / quality.FramesPerSecond / speed;
 
     public void Dispose()
     {

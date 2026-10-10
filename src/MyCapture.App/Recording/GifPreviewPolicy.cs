@@ -1,3 +1,4 @@
+using System.IO;
 using MyCapture.Core.Recording;
 
 namespace MyCapture.App.Recording;
@@ -184,14 +185,138 @@ internal sealed record GifPresetMeasurement(
     double SourceMs,
     double CalculationMsPerSourceMs)
 {
+    /// <summary>The segments with their block sizes, when they were read; see <see cref="GifSizeEstimator"/>.</summary>
+    internal IReadOnlyList<GifMeasuredSegment> Segments { get; init; } = [];
+
+    /// <summary>A measurement of one rendered segment.</summary>
+    /// <param name="startsRange">Whether the segment begins exactly at the start of the kept range.</param>
+    internal static GifPresetMeasurement Of(GifExportQuality quality, GifSegmentSize size, double sourceMs, double calculationMsPerSourceMs, bool startsRange) =>
+        new(quality, size.Bytes, sourceMs, calculationMsPerSourceMs) { Segments = [new GifMeasuredSegment(size, sourceMs, startsRange)] };
+
     internal GifPresetMeasurement Including(long bytes, double sourceMs) =>
-        this with { Bytes = Bytes + bytes, SourceMs = SourceMs + sourceMs };
+        this with { Bytes = Bytes + bytes, SourceMs = SourceMs + sourceMs, Segments = [] };
+
+    /// <inheritdoc cref="Of"/>
+    internal GifPresetMeasurement Including(GifSegmentSize segment, double sourceMs, bool startsRange) =>
+        this with
+        {
+            Bytes = Bytes + segment.Bytes,
+            SourceMs = SourceMs + sourceMs,
+            Segments = Segments.Count == 0 && Bytes > 0 ? [] : [.. Segments, new GifMeasuredSegment(segment, sourceMs, startsRange)],
+        };
+}
+
+/// <summary>One rendered segment of a measurement.</summary>
+/// <param name="Size">Its block sizes.</param>
+/// <param name="SourceMs">Source time it covers.</param>
+/// <param name="StartsRange">
+/// True when it begins at the start of the kept range: its bytes are then exactly the first
+/// bytes of the whole export, because the writer's output depends only on earlier frames.
+/// </param>
+internal sealed record GifMeasuredSegment(GifSegmentSize Size, double SourceMs, bool StartsRange)
+{
+    internal double HeadMs => Size.HeadShare * SourceMs;
+
+    internal long TailBytes => Math.Max(0, Size.Bytes - Size.HeadBytes);
+
+    internal double TailMs => SourceMs - HeadMs;
+}
+
+/// <summary>
+/// Sizes of one rendered GIF, read from its blocks. Its first image always covers the canvas,
+/// and the next few repaint more than later ones while the kept canvas settles (see
+/// <see cref="GifBoundedCanvas"/>); a whole export pays that start only once. The head is the
+/// container plus every image that starts in the first half of the playback, and the bytes
+/// after it show the settled rate.
+/// </summary>
+/// <param name="Bytes">Whole file.</param>
+/// <param name="FirstImageBytes">Header, loop extension, first image and trailer; zero when unknown.</param>
+/// <param name="HeadBytes">Header, loop extension, images starting in the first half, and trailer; zero when unknown.</param>
+/// <param name="HeadShare">Share of the playback the head images cover, from 0 to 1.</param>
+internal readonly record struct GifSegmentSize(long Bytes, long FirstImageBytes, long HeadBytes, double HeadShare)
+{
+    /// <summary>Reads the sizes of a written GIF; zero head and first image when it is malformed.</summary>
+    internal static GifSegmentSize Measure(string path)
+    {
+        byte[] bytes = File.ReadAllBytes(path);
+        return Read(bytes);
+    }
+
+    internal static GifSegmentSize Read(ReadOnlySpan<byte> gif)
+    {
+        var images = new List<(long End, int Delay)>();
+        try
+        {
+            if (gif.Length < 13 || !gif[..3].SequenceEqual("GIF"u8))
+            {
+                return new GifSegmentSize(gif.Length, 0, 0, 0);
+            }
+
+            int index = 13 + ((gif[10] & 0x80) != 0 ? 3 * (1 << ((gif[10] & 0x07) + 1)) : 0);
+            int delay = 0;
+            while (gif[index] != 0x3B)
+            {
+                if (gif[index] == 0x21)
+                {
+                    if (gif[index + 1] == 0xF9)
+                    {
+                        delay = gif[index + 4] | (gif[index + 5] << 8);
+                    }
+
+                    index = SkipSubBlocks(gif, index + 2);
+                }
+                else if (gif[index] == 0x2C)
+                {
+                    byte packed = gif[index + 9];
+                    index += 10 + ((packed & 0x80) != 0 ? 3 * (1 << ((packed & 0x07) + 1)) : 0);
+                    index = SkipSubBlocks(gif, index + 1);
+                    images.Add((index, delay));
+                    delay = 0;
+                }
+                else
+                {
+                    return new GifSegmentSize(gif.Length, 0, 0, 0);
+                }
+            }
+        }
+        catch (IndexOutOfRangeException)
+        {
+            return new GifSegmentSize(gif.Length, 0, 0, 0);
+        }
+
+        if (images.Count == 0)
+        {
+            return new GifSegmentSize(gif.Length, 0, 0, 0);
+        }
+
+        long total = images.Sum(image => (long)image.Delay);
+        long start = 0;
+        int head = 0;
+        while (head < images.Count && (total == 0 ? head == 0 : start * 2 < total))
+        {
+            start += images[head].Delay;
+            head++;
+        }
+
+        double share = total == 0 || head == images.Count ? 1 : (double)start / total;
+        return new GifSegmentSize(gif.Length, images[0].End + 1, images[head - 1].End + 1, share);
+
+        static int SkipSubBlocks(ReadOnlySpan<byte> data, int index)
+        {
+            while (data[index] != 0)
+            {
+                index += data[index] + 1;
+            }
+
+            return index + 1;
+        }
+    }
 }
 
 /// <summary>
 /// Coefficients of the size estimate, kept together so they can be re-fitted from the
 /// MYCAPTURE_GIF_ESTIMATE_EVIDENCE report whenever the GIF engine changes how frames are
-/// encoded (for example changed-rectangle frames, which make bytes depend on motion).
+/// encoded.
 /// </summary>
 /// <param name="LowMargin">
 /// Relative margin below the estimate when none of the range is sampled; it shrinks linearly
@@ -199,38 +324,62 @@ internal sealed record GifPresetMeasurement(
 /// </param>
 /// <param name="HighMargin">Same, above the estimate.</param>
 /// <param name="ScaledPresetMargin">Extra margin for a preset estimated from another preset.</param>
-/// <param name="PixelScalingExponent">Bytes per frame follow the pixel count to this power.</param>
+/// <param name="PixelScalingExponent">Bytes per image follow the pixel count to this power.</param>
+/// <param name="RepaintMargin">
+/// Further margin on both sides, in full-canvas first images per unsampled range: large
+/// repaints (an encoder keyframe that shifts a still page, a page change) cost up to about one
+/// full image each, and a few seconds of samples cannot tell how many the rest holds.
+/// </param>
+/// <param name="CadenceScalingExponent">
+/// Bytes after the first image follow the frame-rate ratio to this power: at a lower rate each
+/// image repaints what several frames changed.
+/// </param>
 internal sealed record GifEstimateCalibration(
     double LowMargin,
     double HighMargin,
     double ScaledPresetMargin,
-    double PixelScalingExponent)
+    double PixelScalingExponent,
+    double RepaintMargin = 0,
+    double CadenceScalingExponent = 1)
 {
     /// <summary>
     /// Fitted to 1080p30 synthetic recordings of 10 to 20 s (GifPreviewEstimateEvidenceTests:
-    /// scrolling text, still page, still/scroll/code-page mix, panning photo) with the current
-    /// full-frame GIF encoding. The centred 3 s sample plus the 1 s start and end segments put
-    /// the full size at 0.94 to 1.03 of the estimate at every preset (the centre alone 0.90 to
-    /// 1.04; a leading 3 s sample alone was off by 1.19 on the mixed clip). Full exports at
-    /// 960, 640 and 480 px implied pixel exponents of 0.71 to 1.05; 0.87 keeps the cross-preset
-    /// error within 16%. Bytes did not depend on the playback speed.
+    /// scrolling text, still page, still/scroll/code-page mix, panning photo) with changed-area
+    /// frames (<see cref="GifFrameDifferencing.ErrorBounded"/>). The centred 3 s sample plus the
+    /// 1 s start and end segments put the full size at 0.61 to 1.43 of the estimate: the mixed
+    /// clip scrolls only around the centre the sample sees (0.61 to 0.63), and two encoder
+    /// keyframe repaints of the still page fall outside the samples (1.27 and 1.43, about 80 kB
+    /// at 960 px). A low margin of 0.6 and one first image of repaint margin keep all 16
+    /// estimates inside their ranges; the high margin is unchanged. Bytes after the first image
+    /// followed the frame rate to the power 0.22 to 0.71 (0.5 used) and the pixel count around
+    /// 0.87; with a 25% margin all 48 cross-preset estimates held. The playback speed did not
+    /// change the size at all.
     /// </summary>
-    internal static GifEstimateCalibration Default { get; } = new(0.2, 0.3, 0.2, 0.87);
+    internal static GifEstimateCalibration Default { get; } = new(0.6, 0.3, 0.25, 0.87, 1.0, 0.5);
 }
 
 /// <summary>
-/// Scales measured samples to the whole kept range. The GIF exporter samples the source at a
-/// fixed cadence and writes every frame, so the frame count and the bytes grow linearly with
-/// the source span; the playback speed only changes frame delays.
+/// Scales measured samples to the whole kept range. A GIF starts with a full-canvas image and
+/// a few larger repaints while the kept canvas settles (the head); after that the writer stores
+/// only what changed, so the remaining bytes grow with the source span at the rate the
+/// segments' later halves measured. A segment that starts the range is the whole export's own
+/// beginning, byte for byte, so it is counted as is. The playback speed only changes frame
+/// delays.
 /// </summary>
 internal static class GifSizeEstimator
 {
-    internal static GifSizeEstimate FromSample(long sampleBytes, double sampleSourceMs, double fullSourceMs, GifEstimateCalibration? calibration = null)
+    /// <summary>Estimate from bytes alone, without block sizes: plain proportional scaling.</summary>
+    internal static GifSizeEstimate FromSample(long sampleBytes, double sampleSourceMs, double fullSourceMs, GifEstimateCalibration? calibration = null) =>
+        FromMeasurement(new GifPresetMeasurement(GifExportQuality.Standard, sampleBytes, sampleSourceMs, 0), fullSourceMs, calibration);
+
+    /// <summary>Estimate of the whole range from a measurement; see the class remarks.</summary>
+    internal static GifSizeEstimate FromMeasurement(GifPresetMeasurement measurement, double fullSourceMs, GifEstimateCalibration? calibration = null)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleBytes);
-        if (!double.IsFinite(sampleSourceMs) || sampleSourceMs <= 0)
+        ArgumentNullException.ThrowIfNull(measurement);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(measurement.Bytes);
+        if (!double.IsFinite(measurement.SourceMs) || measurement.SourceMs <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(sampleSourceMs));
+            throw new ArgumentOutOfRangeException(nameof(measurement));
         }
 
         if (!double.IsFinite(fullSourceMs) || fullSourceMs <= 0)
@@ -238,19 +387,47 @@ internal static class GifSizeEstimator
             throw new ArgumentOutOfRangeException(nameof(fullSourceMs));
         }
 
-        if (sampleSourceMs >= fullSourceMs - 0.5)
+        if (measurement.SourceMs >= fullSourceMs - 0.5)
         {
-            return GifSizeEstimate.Exact(sampleBytes);
+            return GifSizeEstimate.Exact(measurement.Bytes);
         }
 
         calibration ??= GifEstimateCalibration.Default;
-        double uncovered = 1 - (sampleSourceMs / fullSourceMs);
-        double expected = sampleBytes * (fullSourceMs / sampleSourceMs);
+        double expected = ExpectedBytes(measurement, fullSourceMs);
+        double uncovered = 1 - (measurement.SourceMs / fullSourceMs);
+        double repaints = calibration.RepaintMargin * uncovered * FirstImageOf(measurement);
         return new GifSizeEstimate(
-            ToBytes(expected * (1 - (calibration.LowMargin * uncovered))),
+            ToBytes((expected * (1 - (calibration.LowMargin * uncovered))) - repaints),
             ToBytes(expected),
-            ToBytes(expected * (1 + (calibration.HighMargin * uncovered))),
+            ToBytes((expected * (1 + (calibration.HighMargin * uncovered))) + repaints),
             false);
+    }
+
+    /// <summary>Average full-canvas first image of the measured segments, or zero when unknown.</summary>
+    private static double FirstImageOf(GifPresetMeasurement measurement) =>
+        measurement.Segments.Count == 0 ? 0 : measurement.Segments.Average(segment => (double)segment.Size.FirstImageBytes);
+
+    private static double ExpectedBytes(GifPresetMeasurement measurement, double fullSourceMs)
+    {
+        IReadOnlyList<GifMeasuredSegment> segments = measurement.Segments;
+        if (segments.Count == 0 || segments.Any(segment => segment.Size.HeadBytes <= 0))
+        {
+            return measurement.Bytes * (fullSourceMs / measurement.SourceMs);
+        }
+
+        GifMeasuredSegment? lead = segments.FirstOrDefault(segment => segment.StartsRange);
+        IReadOnlyList<GifMeasuredSegment> rated = lead is not null && segments.Count > 1
+            ? segments.Where(segment => !ReferenceEquals(segment, lead)).ToList()
+            : segments;
+        double restPerMs = rated.Sum(segment => (double)segment.TailBytes) / Math.Max(1, rated.Sum(segment => segment.TailMs));
+        if (lead is not null)
+        {
+            return lead.Size.Bytes + (restPerMs * Math.Max(0, fullSourceMs - lead.SourceMs));
+        }
+
+        double head = segments.Average(segment => (double)segment.Size.HeadBytes);
+        double headMs = segments.Average(segment => segment.HeadMs);
+        return head + (restPerMs * Math.Max(0, fullSourceMs - headMs));
     }
 
     /// <summary>Wall-clock time of a full calculation, scaled from a sample render.</summary>
@@ -261,7 +438,8 @@ internal static class GifSizeEstimator
 
     /// <summary>
     /// Estimates <paramref name="target"/> from a measurement of another preset over the same
-    /// content. Frame count follows the cadence; bytes per frame follow the pixel count.
+    /// content. The first image follows the pixel count; the rest follows the pixel count and
+    /// the frame rate.
     /// </summary>
     internal static GifSizeEstimate FromOtherPreset(
         GifPresetMeasurement measured,
@@ -274,13 +452,16 @@ internal static class GifSizeEstimator
         ArgumentNullException.ThrowIfNull(measured);
         ArgumentNullException.ThrowIfNull(target);
         calibration ??= GifEstimateCalibration.Default;
-        GifSizeEstimate basis = FromSample(measured.Bytes, measured.SourceMs, fullSourceMs, calibration);
+        GifSizeEstimate basis = FromMeasurement(measured, fullSourceMs, calibration);
         if (measured.Quality == target)
         {
             return basis;
         }
 
-        double factor = ScaleFactor(measured.Quality, target, sourceWidth, sourceHeight, calibration);
+        double firstImage = Math.Min(FirstImageOf(measured), basis.ExpectedBytes);
+        double pixels = PixelFactor(measured.Quality, target, sourceWidth, sourceHeight, calibration);
+        double rest = ScaleFactor(measured.Quality, target, sourceWidth, sourceHeight, calibration);
+        double factor = ((firstImage * pixels) + ((basis.ExpectedBytes - firstImage) * rest)) / Math.Max(1, basis.ExpectedBytes);
         return new GifSizeEstimate(
             ToBytes(basis.LowBytes * factor * (1 - calibration.ScaledPresetMargin)),
             ToBytes(basis.ExpectedBytes * factor),
@@ -288,14 +469,24 @@ internal static class GifSizeEstimator
             false);
     }
 
+    /// <summary>Factor for the bytes after the first image: frame rate and pixels, each to its fitted power.</summary>
     internal static double ScaleFactor(GifExportQuality from, GifExportQuality to, int sourceWidth, int sourceHeight, GifEstimateCalibration? calibration = null)
     {
+        calibration ??= GifEstimateCalibration.Default;
+        double cadence = (double)to.FramesPerSecond / from.FramesPerSecond;
+        return Math.Pow(cadence, calibration.CadenceScalingExponent) * PixelFactor(from, to, sourceWidth, sourceHeight, calibration);
+    }
+
+    /// <summary>Factor for one image: the pixel-count ratio to the fitted power.</summary>
+    internal static double PixelFactor(GifExportQuality from, GifExportQuality to, int sourceWidth, int sourceHeight, GifEstimateCalibration? calibration = null)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(to);
         calibration ??= GifEstimateCalibration.Default;
         (int fromWidth, int fromHeight) = AnimatedGifExporter.FitWithin(sourceWidth, sourceHeight, from.LongEdge);
         (int toWidth, int toHeight) = AnimatedGifExporter.FitWithin(sourceWidth, sourceHeight, to.LongEdge);
         double pixels = (double)toWidth * toHeight / Math.Max(1, (double)fromWidth * fromHeight);
-        double cadence = (double)to.FramesPerSecond / from.FramesPerSecond;
-        return cadence * Math.Pow(pixels, calibration.PixelScalingExponent);
+        return Math.Pow(pixels, calibration.PixelScalingExponent);
     }
 
     private static long ToBytes(double value) => (long)Math.Max(1, Math.Round(value));
@@ -357,8 +548,10 @@ internal sealed record GifRecommendation(
 internal static class GifSharePolicy
 {
     /// <summary>
-    /// 960 px at 5 fps: half the bytes of 960/10 with the same text sharpness, for still UI
-    /// walkthroughs where 640 px would blur small text (bytes follow the frame count exactly).
+    /// 960 px at 5 fps: the text sharpness of 960/10 for still UI walkthroughs where 640 px
+    /// would blur small text. With changed-area frames it measured 0.6 to 0.9 of the bytes of
+    /// 960/10 (scrolling text to a still page), not half: an unchanged frame costs nothing at
+    /// either rate.
     /// </summary>
     internal static GifExportQuality SharpLowRate { get; } = new(UiText.Get("GifPreview_PresetSharpLowRate"), 960, 5);
 
@@ -410,10 +603,10 @@ internal static class GifSharePolicy
     /// <summary>
     /// Motion class boundaries for the mean changed-block share of the sample. research-gif.md
     /// proposed still UI under 5% and high motion over 25% of changed pixels; with 4x4 blocks
-    /// the evidence clips measured 0.1 to 0.2% for a still page with a moving pointer, 11% for
-    /// a slow photo pan and 16 to 18% for scrolling text, which the research counts as high
+    /// the evidence clips measured 0.1 to 0.2% for a still page with a moving pointer, 8 to 11%
+    /// for a slow photo pan and 16 to 18% for scrolling text, which the research counts as high
     /// motion, so the high boundary is 15%. Between moderate and high only the 960/5 fallback
-    /// differs, and it is about the size of 640/10, so the boundary rarely changes the advice.
+    /// differs (1.2 to 1.8 times the size of 640/10 with changed-area frames).
     /// </summary>
     internal const double StaticMotionLimit = 0.05;
 
@@ -511,7 +704,7 @@ internal static class GifSharePolicy
     {
         GifPresetMeasurement reference = Reference(preset, measurements);
         return reference.Quality == preset
-            ? GifSizeEstimator.FromSample(reference.Bytes, reference.SourceMs, fullSourceMs, calibration)
+            ? GifSizeEstimator.FromMeasurement(reference, fullSourceMs, calibration)
             : GifSizeEstimator.FromOtherPreset(reference, preset, sourceWidth, sourceHeight, fullSourceMs, calibration);
     }
 

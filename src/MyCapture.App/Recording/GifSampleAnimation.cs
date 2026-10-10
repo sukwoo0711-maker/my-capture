@@ -279,7 +279,20 @@ internal static class GifMotionAnalysis
         ChangedFraction(frames, LumaThreshold, cancellationToken);
 
     /// <inheritdoc cref="ChangedFraction(GifSampleFrames, CancellationToken)"/>
-    internal static double ChangedFraction(GifSampleFrames frames, double lumaThreshold, CancellationToken cancellationToken = default)
+    /// <param name="frames">Decoded sample.</param>
+    /// <param name="lumaThreshold">Block mean change, in luma levels, that counts as motion.</param>
+    /// <param name="cancellationToken">Stops the analysis between frames.</param>
+    /// <param name="nominalDelayCentiseconds">
+    /// The exporter's frame delay before merging (100 / fps / speed). The GIF writer merges
+    /// identical frames into one longer image, so an image held for n frame delays stands for
+    /// n - 1 still transitions; counting them keeps the share per exported frame, as before the
+    /// merge. Zero treats every image as one frame.
+    /// </param>
+    internal static double ChangedFraction(
+        GifSampleFrames frames,
+        double lumaThreshold,
+        CancellationToken cancellationToken = default,
+        double nominalDelayCentiseconds = 0)
     {
         ArgumentNullException.ThrowIfNull(frames);
         if (frames.Frames.Count < 2)
@@ -289,10 +302,14 @@ internal static class GifMotionAnalysis
 
         double[]? previous = null;
         double changed = 0;
-        foreach (BitmapSource frame in frames.Frames)
+        long transitions = -1;
+        for (int frameIndex = 0; frameIndex < frames.Frames.Count; frameIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            double[] blocks = BlockLuma(frame);
+            transitions += nominalDelayCentiseconds > 0
+                ? Math.Max(1, (long)Math.Round(frames.DelaysCentiseconds[frameIndex] / nominalDelayCentiseconds, MidpointRounding.AwayFromZero))
+                : 1;
+            double[] blocks = BlockLuma(frames.Frames[frameIndex]);
             if (previous is not null && previous.Length == blocks.Length)
             {
                 int moved = 0;
@@ -307,7 +324,7 @@ internal static class GifMotionAnalysis
             previous = blocks;
         }
 
-        return changed / (frames.Frames.Count - 1);
+        return changed / Math.Max(1, transitions);
     }
 
     private static double[] BlockLuma(BitmapSource frame)

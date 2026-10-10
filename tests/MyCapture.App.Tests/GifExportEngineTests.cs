@@ -63,10 +63,15 @@ public sealed class GifExportEngineTests
         }
 
         VideoFrameCompositor? unused = null;
-        byte[] bypassed = GifExportEngine.EncodeOutputFrame(
+        byte[] bypassed = GifExportEngine.ComposeOutputFrame(
             new GifSourceFrame(noise, width, height, width * 4), request, layers, 500, ref unused);
         Assert.Null(unused);
-        Assert.Equal(AnimatedGifWriter.EncodeFrame(composed).ToArray(), bypassed);
+        Assert.Equal(composedPixels, bypassed);
+
+        // The writer encodes every image from BGRA32, so the composed bitmap and the bypassed
+        // pixels give the same GIF bytes.
+        Assert.Equal(WriteSingleFrame(width, height, writer => writer.AddFrame(composed, 10)),
+            WriteSingleFrame(width, height, writer => writer.AddFrame(bypassed, width * 4, 10)));
     });
 
     [Fact]
@@ -90,10 +95,10 @@ public sealed class GifExportEngineTests
         Assert.Equal(Pixels(expected), Pixels(actual));
 
         VideoFrameCompositor? workerCompositor = null;
-        byte[] encoded = GifExportEngine.EncodeOutputFrame(
+        byte[] composedPixels = GifExportEngine.ComposeOutputFrame(
             new GifSourceFrame(noise, width, height, width * 4), request, bitmaps, 500, ref workerCompositor);
         Assert.NotNull(workerCompositor);
-        Assert.Equal(AnimatedGifWriter.EncodeFrame(expected).ToArray(), encoded);
+        Assert.Equal(Pixels(expected), composedPixels);
     });
 
     [Theory]
@@ -121,7 +126,9 @@ public sealed class GifExportEngineTests
                 Assert.Equal("software", statistics.FrameSource);
                 Assert.Equal(threads, statistics.WorkerThreads);
                 Assert.Equal(legacy, File.ReadAllBytes(path));
-                Assert.Equal(DecodeFrameCount(path), frames);
+                Assert.Equal(statistics.Frames, frames);
+                Assert.Equal(DecodeFrameCount(path), statistics.Images);
+                Assert.InRange(statistics.Images, 1, frames);
             }
 
             // The production default — GPU decode when available, NV12 read back and converted
@@ -662,24 +669,48 @@ public sealed class GifExportEngineTests
         return new RecordingResult(path, frames * 1000.0 / fps, fps, frames, width, height);
     }
 
+    /// <summary>
+    /// Canvas size, and image delays that partition the schedule: identical frames merge into
+    /// one image whose delay is the sum of theirs, so the playback length never changes.
+    /// </summary>
     private static void AssertGifShape(string path, int width, int height, IReadOnlyList<int> delays)
     {
-        byte[] bytes = File.ReadAllBytes(path);
-        Assert.Equal(width, bytes[6] | (bytes[7] << 8));
-        Assert.Equal(height, bytes[8] | (bytes[9] << 8));
-        var found = new List<int>();
-        for (int index = 13; index + 7 < bytes.Length; index++)
+        GifExportEngineBenchmarkTests.GifShape shape = GifExportEngineBenchmarkTests.ReadShape(File.ReadAllBytes(path));
+        Assert.Equal((width, height), (shape.Width, shape.Height));
+        int[] found = shape.Delays.Split(',').Select(int.Parse).ToArray();
+        AssertMergedDelays(delays, found);
+        Assert.Equal(found.Length, DecodeFrameCount(path));
+    }
+
+    internal static void AssertMergedDelays(IReadOnlyList<int> scheduled, IReadOnlyList<int> written)
+    {
+        Assert.Equal(scheduled.Sum(), written.Sum());
+        int next = 0;
+        foreach (int delay in written)
         {
-            // Graphic Control Extensions written by AnimatedGifWriter: 21 F9 04 <packed> <delay>.
-            if (bytes[index] == 0x21 && bytes[index + 1] == 0xF9 && bytes[index + 2] == 0x04
-                && bytes[index + 7] == 0x00 && (bytes[index + 3] & 0x1C) == 0x04)
+            int sum = 0;
+            do
             {
-                found.Add(bytes[index + 4] | (bytes[index + 5] << 8));
+                Assert.True(next < scheduled.Count, "The GIF holds images longer than the schedule.");
+                sum += scheduled[next++];
             }
+            while (sum < delay);
+            Assert.True(sum == delay, $"Image delay {delay} does not end on a scheduled frame boundary.");
         }
 
-        Assert.Equal(delays, found);
-        Assert.Equal(delays.Count, DecodeFrameCount(path));
+        Assert.Equal(scheduled.Count, next);
+    }
+
+    private static byte[] WriteSingleFrame(int width, int height, Action<AnimatedGifWriter> add)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new AnimatedGifWriter(stream, width, height, 10, 0, leaveOpen: true))
+        {
+            add(writer);
+            writer.Complete();
+        }
+
+        return stream.ToArray();
     }
 
     private static int DecodeFrameCount(string path)

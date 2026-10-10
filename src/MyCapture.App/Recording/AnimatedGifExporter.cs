@@ -21,9 +21,10 @@ internal sealed record GifFrameSchedule(
 
 /// <summary>
 /// Streams a trimmed, text-composited recording to animated GIF using only Windows/WPF codecs.
-/// There is no hard duration cap: a long GIF is the user's call, and its cost grows linearly
-/// with frame count, so the export dialog warns beyond 20 s while the quality presets keep
-/// CPU, file size and palette-quantization work predictable on modest PCs. Decoding prefers
+/// There is no hard duration cap: a long GIF is the user's call. Processing cost grows linearly
+/// with frame count, while file size follows how much of the picture changes, because
+/// <see cref="AnimatedGifWriter"/> merges identical frames and repaints only what changed;
+/// the quality presets keep CPU, file size and palette-quantization work predictable on modest PCs. Decoding prefers
 /// D3D11 hardware decode and runs on its own thread, colour conversion and scaling run on a few
 /// worker threads, and composition and encoding stay on the calling STA thread (see
 /// <see cref="GifExportEngine"/>); <see cref="GifExportSession"/> reuses frames across option
@@ -222,7 +223,8 @@ internal static class AnimatedGifExporter
             plan.Request.Height,
             frameDelayCentiseconds: 10,
             loopCount: 0,
-            leaveOpen: true);
+            leaveOpen: true,
+            engineOptions.Differencing);
         try
         {
             GifRenderStatistics statistics = GifExportEngine.Render(
