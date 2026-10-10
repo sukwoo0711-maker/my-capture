@@ -4,7 +4,8 @@ using Microsoft.Extensions.Logging;
 namespace MyCapture.Platform.Recording;
 
 /// <summary>
-/// Encodes BGRA32 frames to an H.264 MP4 using the Media Foundation Sink Writer.
+/// Encodes BGRA32 (or, when requested, NV12) frames to an H.264 MP4 using the Media Foundation
+/// Sink Writer.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,6 +21,12 @@ namespace MyCapture.Platform.Recording;
 /// top-down BGRA, so a negative stride is supplied to <c>MFCopyImage</c> equivalent
 /// (handled by copying row-by-row) to keep the picture upright.
 /// </para>
+/// <para>
+/// An NV12 input type (<see cref="VideoEncoderOptions.InputFormat"/>) feeds the encoder MFT
+/// directly, with no colour converter. Re-encoding decoded H.264 that way avoids a Y'CbCr to RGB
+/// to Y'CbCr round trip: faster, and the unchanged samples cannot lose precision. Y'CbCr is
+/// top-down in Media Foundation, so NV12 rows are copied in order.
+/// </para>
 /// </remarks>
 public sealed class MediaFoundationVideoEncoder : IVideoEncoder
 {
@@ -29,6 +36,7 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     private static readonly Guid MFMediaType_Video = new("73646976-0000-0010-8000-00AA00389B71");
     private static readonly Guid MFVideoFormat_H264 = new("34363248-0000-0010-8000-00AA00389B71");
     private static readonly Guid MFVideoFormat_RGB32 = new("00000016-0000-0010-8000-00AA00389B71");
+    private static readonly Guid MFVideoFormat_NV12 = new("3231564E-0000-0010-8000-00AA00389B71");
 
     private static readonly Guid MF_MT_MAJOR_TYPE = new("48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
     private static readonly Guid MF_MT_SUBTYPE = new("f7e34c9a-42e8-4714-b74b-cb29d72c35e5");
@@ -56,6 +64,13 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        if (options.InputFormat == VideoEncoderInputFormat.Nv12
+            && ((options.Width & 1) != 0 || (options.Height & 1) != 0))
+        {
+            throw new ArgumentException(
+                $"NV12 input needs an even frame size ({options.Width}x{options.Height}).",
+                nameof(options));
+        }
 
         Check(MFStartup(MF_VERSION, MFSTARTUP_LITE), nameof(MFStartup));
         _startedMf = true;
@@ -117,12 +132,15 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             Marshal.ReleaseComObject(outType);
         }
 
-        // Input type: uncompressed RGB32 (BGRA byte order in memory).
+        // Input type: uncompressed RGB32 (BGRA byte order in memory), or NV12 when requested.
         Check(MFCreateMediaType(out IMFMediaType inType), nameof(MFCreateMediaType));
         try
         {
             SetGuidAttr(inType, MF_MT_MAJOR_TYPE, MFMediaType_Video);
-            SetGuidAttr(inType, MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+            SetGuidAttr(
+                inType,
+                MF_MT_SUBTYPE,
+                _options.InputFormat == VideoEncoderInputFormat.Nv12 ? MFVideoFormat_NV12 : MFVideoFormat_RGB32);
             SetU32(inType, MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
             SetU32(inType, MF_MT_ALL_SAMPLES_INDEPENDENT, 1);
             SetFrameSize(inType, (uint)_options.Width, (uint)_options.Height);
@@ -147,15 +165,21 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             return;
         }
 
-        int rowBytes = _options.Width * 4;
-        int bufferBytes = rowBytes * _options.Height;
-        if (frame.Width != _options.Width || frame.Height != _options.Height
+        // NV12 is a luma plane plus a half-height interleaved chroma plane with the same row
+        // length, so both layouts are a sequence of equally long rows.
+        bool nv12 = _options.InputFormat == VideoEncoderInputFormat.Nv12;
+        int rowBytes = nv12 ? _options.Width : _options.Width * 4;
+        int rows = nv12 ? _options.Height + (_options.Height / 2) : _options.Height;
+        int bufferBytes = rowBytes * rows;
+        if (frame.Format != _options.InputFormat
+            || frame.Width != _options.Width || frame.Height != _options.Height
             || frame.Stride < rowBytes
-            || frame.Pixels.Length < checked((frame.Stride * (_options.Height - 1)) + rowBytes))
+            || frame.Pixels.Length < checked((frame.Stride * (rows - 1)) + rowBytes))
         {
             throw new ArgumentException(
-                "Encoder frame does not match the dimensions the encoder was opened with "
-                + $"(frame {frame.Width}x{frame.Height} stride {frame.Stride}, expected {_options.Width}x{_options.Height}).",
+                "Encoder frame does not match the format and dimensions the encoder was opened with "
+                + $"(frame {frame.Format} {frame.Width}x{frame.Height} stride {frame.Stride}, "
+                + $"expected {_options.InputFormat} {_options.Width}x{_options.Height}).",
                 nameof(frame));
         }
 
@@ -172,16 +196,18 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
                 // flip vertically here — source row y is written to destination row
                 // (Height-1-y) — so the encoded frame is upright. (Left/right is unaffected;
                 // BGRA byte order within a row is unchanged, so there is no horizontal mirror.)
+                // Y'CbCr formats such as NV12 are always top-down and are copied in order.
                 unsafe
                 {
                     fixed (byte* source = frame.Pixels)
                     {
                         byte* destination = (byte*)dest;
-                        for (int y = 0; y < _options.Height; y++)
+                        for (int y = 0; y < rows; y++)
                         {
+                            int target = nv12 ? y : _options.Height - 1 - y;
                             Buffer.MemoryCopy(
                                 source + (y * frame.Stride),
-                                destination + ((_options.Height - 1 - y) * rowBytes),
+                                destination + (target * rowBytes),
                                 rowBytes,
                                 rowBytes);
                         }
@@ -200,7 +226,14 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             {
                 Check(sample.AddBuffer(buffer), nameof(IMFSample.AddBuffer));
 
-                long timeTicks = (long)(frame.TimestampMs * 10_000.0);
+                // RGB32 input reaches the encoder through the Sink Writer's colour converter,
+                // which delivers sample times rounded to the nearest 100 ns tick. NV12 skips
+                // that converter, so it is rounded here: the same timestamps then give the same
+                // sample table and container duration through either input (truncating loses a
+                // tick at 30 fps whenever the frame index is a multiple of three).
+                long timeTicks = nv12
+                    ? (long)Math.Round(frame.TimestampMs * 10_000.0)
+                    : (long)(frame.TimestampMs * 10_000.0);
                 Check(sample.SetSampleTime(timeTicks), nameof(IMFSample.SetSampleTime));
                 Check(sample.SetSampleDuration(_sampleDurationTicks), nameof(IMFSample.SetSampleDuration));
 
