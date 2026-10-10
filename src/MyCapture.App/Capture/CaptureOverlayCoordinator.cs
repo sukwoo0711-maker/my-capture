@@ -59,8 +59,14 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Reads Capture.AutoDetectWindows when each selector opens. Off unless the app wires it.</summary>
     internal Func<bool> AutoDetectWindows { get; set; } = () => false;
 
-    /// <summary>Reads General.ShowShortcutHints when each selector opens; off hides only the key-hint chip.</summary>
+    /// <summary>Reads General.ShowShortcutHints when each selector opens; off hides only the key badges.</summary>
     internal Func<bool> ShowShortcutHints { get; set; } = () => true;
+
+    /// <summary>
+    /// Asked once per selector whether it opens with the short start guide. The owner counts the
+    /// showings and persists them (Capture.StartGuideShownCount); off unless the app wires it.
+    /// </summary>
+    internal Func<bool> ClaimStartGuide { get; set; } = () => false;
 
     /// <summary>Copies the overlay's sampled colour (C key). Null leaves the key unbound.</summary>
     internal Func<string, Task<bool>>? CopyColorText { get; set; }
@@ -292,6 +298,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         overlay.ReadColorFormat = ReadColorFormat;
         overlay.TextCaptureAvailable = TextCaptureRequested is not null;
         overlay.TextCaptureMode = _preparation?.TextCapture == true;
+        // The screenshot selector always offers its modes as a bar; recording keeps the plain selector.
+        overlay.ShowModeBar = true;
+        overlay.ShowStartGuide = ClaimStartGuide();
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
         overlay.Closed += OnOverlayClosed;
         overlay.ContentRendered += OnFirstRendered;

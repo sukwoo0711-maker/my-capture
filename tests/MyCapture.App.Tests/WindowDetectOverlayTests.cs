@@ -94,7 +94,7 @@ public sealed class WindowDetectOverlayTests
         {
             view.InitializePointer();
             Assert.Null(view.HoverRegionForTest);
-            Assert.Null(view.OverlayHintText);
+            Assert.Null(view.ModeBarForTest);
             Render(view);
             Assert.True(Visual(view, "_selectionVisual").ContentBounds.IsEmpty);
 

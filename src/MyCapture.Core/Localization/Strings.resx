@@ -3373,12 +3373,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="TextCapture_Failed" xml:space="preserve"><value>텍스트를 인식하지 못했습니다. 다시 시도하십시오.</value></data>
   <data name="TextCapture_Unavailable" xml:space="preserve"><value>이 PC에서는 텍스트 인식을 사용할 수 없습니다.</value></data>
   <data name="TextCapture_OpenAdvanced" xml:space="preserve"><value>고급 추출 열기</value></data>
-  <data name="TextCapture_OverlayHint" xml:space="preserve"><value>T 텍스트 캡처</value></data>
-  <data name="TextCapture_OverlayHintImage" xml:space="preserve"><value>T 이미지 캡처</value></data>
-  <data name="TextCapture_ModeActive" xml:space="preserve"><value>텍스트 캡처 모드 · 선택 영역의 텍스트만 복사</value></data>
   <data name="TextCapture_HelpToggle" xml:space="preserve"><value>선택 중 텍스트 캡처 전환</value></data>
   <data name="TextCapture_HotkeyHint" xml:space="preserve"><value>영역을 선택하면 텍스트만 인식해 복사합니다. 이미지는 라이브러리에 저장하지 않습니다.</value></data>
-  <data name="ColorPick_OverlayHint" xml:space="preserve"><value>C 색상 복사</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>색상을 복사하지 못했습니다.</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>색상 복사 형식</value></data>
   <data name="ColorPick_FormatHint" xml:space="preserve"><value>캡처 영역을 선택하는 중 C 키를 누르면 포인터 아래 색상을 이 형식으로 복사합니다.</value></data>
@@ -3453,16 +3449,38 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="StoreUpdate_OpenStore" xml:space="preserve"><value>Microsoft Store에서 열기</value></data>
   <data name="StoreUpdate_OpenStoreHelp" xml:space="preserve"><value>Microsoft Store 앱에서 MyCapture 페이지를 엽니다. Store 앱을 열 수 없으면 브라우저에서 엽니다.</value></data>
   <data name="StoreUpdate_OpenFailed" xml:space="preserve"><value>Microsoft Store를 열 수 없습니다. 브라우저에서 {0} 주소를 여십시오.</value></data>
-  <data name="CaptureCue_ClickWindow" xml:space="preserve"><value>클릭하면 이 창 캡처</value></data>
-  <data name="CaptureCue_ClickMonitor" xml:space="preserve"><value>클릭하면 이 모니터 전체 캡처</value></data>
-  <data name="CaptureCue_Drag" xml:space="preserve"><value>드래그: 영역 직접 선택</value></data>
-  <data name="CaptureCue_Click" xml:space="preserve"><value>클릭: 창 캡처</value></data>
-  <data name="CaptureCue_Shift" xml:space="preserve"><value>Shift: 정밀 이동</value></data>
-  <data name="CaptureCue_Esc" xml:space="preserve"><value>Esc: 취소</value></data>
   <data name="LibraryFolder_CardCount" xml:space="preserve"><value>캡처 {0}개</value></data>
   <data name="LibraryFolder_CardCountWithFolders" xml:space="preserve"><value>폴더 {1}개 · 캡처 {0}개</value></data>
   <data name="LibraryFolder_CardAccessibleName" xml:space="preserve"><value>폴더 {0}, {1}</value></data>
   <data name="LibraryFolder_CardOpenHint" xml:space="preserve"><value>폴더 열기 (Enter)</value></data>
   <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>라이브러리를 닫아도 마지막 폴더에 새 캡처 저장</value></data>
   <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>새 캡처를 이 폴더에 저장합니다. 기존 캡처는 끌어 넣을 수 있습니다.</value></data>
+  <data name="CaptureGuide2_BarName" xml:space="preserve"><value>캡처 방법</value></data>
+  <data name="CaptureGuide2_Region" xml:space="preserve"><value>영역·창</value></data>
+  <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>영역</value></data>
+  <data name="CaptureGuide2_RegionHelp" xml:space="preserve"><value>창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다. 바탕 화면을 클릭하면 그 모니터 전체를 캡처합니다. Shift를 누른 채 움직이면 한 픽셀씩 이동합니다.</value></data>
+  <data name="CaptureGuide2_RegionOnlyHelp" xml:space="preserve"><value>드래그하면 원하는 영역을 캡처합니다. Shift를 누른 채 움직이면 한 픽셀씩 이동합니다.</value></data>
+  <data name="CaptureGuide2_FullScreen" xml:space="preserve"><value>전체 화면</value></data>
+  <data name="CaptureGuide2_FullScreenHelp" xml:space="preserve"><value>이 모니터의 화면 전체를 바로 캡처합니다.</value></data>
+  <data name="CaptureGuide2_Text" xml:space="preserve"><value>텍스트 추출</value></data>
+  <data name="CaptureGuide2_TextHelp" xml:space="preserve"><value>클릭한 창이나 드래그한 영역의 글자를 인식해 클립보드에 복사합니다. 이미지는 저장하지 않습니다.</value></data>
+  <data name="CaptureGuide2_Color" xml:space="preserve"><value>색상 복사</value></data>
+  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>클릭한 위치의 색상 코드를 클립보드에 복사합니다.</value></data>
+  <data name="CaptureGuide2_Help" xml:space="preserve"><value>도움말</value></data>
+  <data name="CaptureGuide2_HelpTip" xml:space="preserve"><value>캡처 방법 안내를 다시 표시합니다.</value></data>
+  <data name="CaptureGuide2_Cancel" xml:space="preserve"><value>취소</value></data>
+  <data name="CaptureGuide2_CancelTip" xml:space="preserve"><value>캡처를 취소합니다.</value></data>
+  <data name="CaptureGuide2_DragCapture" xml:space="preserve"><value>드래그: 영역 캡처</value></data>
+  <data name="CaptureGuide2_ClickWindow" xml:space="preserve"><value>클릭: 창 캡처</value></data>
+  <data name="CaptureGuide2_ClickMonitor" xml:space="preserve"><value>클릭: 모니터 캡처</value></data>
+  <data name="CaptureGuide2_DragText" xml:space="preserve"><value>드래그: 영역 텍스트 추출</value></data>
+  <data name="CaptureGuide2_ClickWindowText" xml:space="preserve"><value>클릭: 창 텍스트 추출</value></data>
+  <data name="CaptureGuide2_ClickMonitorText" xml:space="preserve"><value>클릭: 모니터 텍스트 추출</value></data>
+  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>클릭: 색상 복사</value></data>
+  <data name="CaptureGuide2_Esc" xml:space="preserve"><value>Esc: 취소</value></data>
+  <data name="CaptureGuide2_IntroTitle" xml:space="preserve"><value>캡처 방법</value></data>
+  <data name="CaptureGuide2_IntroBody" xml:space="preserve"><value>창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다. Esc로 취소합니다.</value></data>
+  <data name="CaptureGuide2_IntroBodyRegionOnly" xml:space="preserve"><value>드래그하면 원하는 영역을 캡처합니다. Esc로 취소합니다.</value></data>
+  <data name="CaptureGuide2_IntroBar" xml:space="preserve"><value>위쪽 막대에서 전체 화면, 텍스트 추출, 색상 복사를 고를 수 있습니다.</value></data>
+  <data name="CaptureGuide2_IntroAgain" xml:space="preserve"><value>도움말(?) 버튼을 누르면 이 안내를 다시 볼 수 있습니다.</value></data>
 </root>

@@ -105,7 +105,8 @@ internal sealed class CaptureOverlayWindow : Window
             RegionSelectionEventArgs? details = _pendingSelectionDetails;
             _pendingSelection = null;
             _pendingSelectionDetails = null;
-            CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true);
+            CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true,
+                details?.WholeMonitor == true);
         }
     }
 
@@ -167,11 +168,25 @@ internal sealed class CaptureOverlayWindow : Window
         set => _view.TextCaptureMode = value;
     }
 
-    /// <summary>Shows the optional C/T key-hint chip; the instruction and target tab always show.</summary>
+    /// <summary>Shows the key badges in the mode bar; the status and target tab always show.</summary>
     internal bool ShowShortcutHints
     {
         get => _view.ShowShortcutHints;
         set => _view.ShowShortcutHints = value;
+    }
+
+    /// <summary>The screenshot selector's mode bar at the top of the pointer's monitor.</summary>
+    internal bool ShowModeBar
+    {
+        get => _view.ShowModeBar;
+        set => _view.ShowModeBar = value;
+    }
+
+    /// <summary>The short start guide in the middle of the bar's monitor.</summary>
+    internal bool ShowStartGuide
+    {
+        get => _view.ShowStartGuide;
+        set => _view.ShowStartGuide = value;
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -239,12 +254,13 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
 
-        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture);
+        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture, e.WholeMonitor);
     }
 
     internal void CompleteSelection(RectD bitmapRegion) => CompleteSelection(bitmapRegion, null, false);
 
-    internal void CompleteSelection(RectD bitmapRegion, WindowCandidate? detectedWindow, bool textCapture)
+    internal void CompleteSelection(RectD bitmapRegion, WindowCandidate? detectedWindow, bool textCapture,
+        bool wholeMonitor = false)
     {
         if (_completed)
         {
@@ -268,7 +284,13 @@ internal sealed class CaptureOverlayWindow : Window
             bitmapRegion.Width, bitmapRegion.Height);
         string sourceTitle = WindowCandidateService.ResolveSourceTitle(SourceWindows, selectedScreenRegion);
         string sourcePageUrl = WindowCandidateService.ResolveSourcePageUrl(SourceWindows, selectedScreenRegion);
-        if (detectedWindow is not null)
+        if (wholeMonitor)
+        {
+            // The full-screen button, like a desktop click, captures a monitor rather than a window.
+            sourceTitle = string.Empty;
+            sourcePageUrl = string.Empty;
+        }
+        else if (detectedWindow is not null)
         {
             // A clicked window is the source even when another window overlaps its centre.
             // Prefer the latest candidate snapshot, which may carry a page URL read after the freeze.

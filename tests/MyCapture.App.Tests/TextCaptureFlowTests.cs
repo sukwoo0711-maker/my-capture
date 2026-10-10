@@ -23,21 +23,31 @@ public sealed class TextCaptureFlowTests
     {
         using var language = UiText.UseLanguage("ko-KR");
         PointD pointer = new(100, 100);
-        var view = new CaptureOverlayView(Frame(), showMagnifier: false) { ReadCursor = () => pointer, TextCaptureAvailable = true };
+        var view = new CaptureOverlayView(Frame(), showMagnifier: false)
+        {
+            ReadCursor = () => pointer,
+            TextCaptureAvailable = true,
+            ShowModeBar = true,
+        };
         var plain = new CaptureOverlayView(Frame(), showMagnifier: false) { ReadCursor = () => pointer };
         RegionSelectionEventArgs? confirmed = null;
         view.SelectionConfirmed += (_, e) => confirmed = e;
         try
         {
             view.InitializePointer();
-            Assert.Equal(UiText.Get("TextCapture_OverlayHint"), view.OverlayHintText);
+            CaptureModeBar bar = view.ModeBarForTest!;
+            Assert.True(bar.CaptureButton.IsChecked);
+            Assert.False(bar.TextButton.IsChecked);
             KeyEventArgs first = KeyArgs(Key.T);
             view.RaiseEvent(first);
             Assert.True(first.Handled);
             Assert.True(view.TextCaptureMode);
-            Assert.Equal(UiText.Get("TextCapture_OverlayHintImage"), view.OverlayHintText);
+            // The bar fills in the text button, so T needs no separate hint chip.
+            Assert.True(bar.TextButton.IsChecked);
+            Assert.False(bar.CaptureButton.IsChecked);
             view.RaiseEvent(KeyArgs(Key.T));
             Assert.False(view.TextCaptureMode);
+            Assert.True(bar.CaptureButton.IsChecked);
             view.RaiseEvent(KeyArgs(Key.T));
 
             Invoke(view, "OnMouseLeftButtonDown", Button(System.Windows.UIElement.MouseLeftButtonDownEvent));

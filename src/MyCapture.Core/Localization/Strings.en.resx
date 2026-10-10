@@ -3373,12 +3373,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="TextCapture_Failed" xml:space="preserve"><value>Text recognition failed. Try again.</value></data>
   <data name="TextCapture_Unavailable" xml:space="preserve"><value>Text recognition is not available on this PC.</value></data>
   <data name="TextCapture_OpenAdvanced" xml:space="preserve"><value>Open advanced extraction</value></data>
-  <data name="TextCapture_OverlayHint" xml:space="preserve"><value>T Text capture</value></data>
-  <data name="TextCapture_OverlayHintImage" xml:space="preserve"><value>T Image capture</value></data>
-  <data name="TextCapture_ModeActive" xml:space="preserve"><value>Text capture mode · Copies only the text in the selection</value></data>
   <data name="TextCapture_HelpToggle" xml:space="preserve"><value>Switch to text capture while selecting</value></data>
   <data name="TextCapture_HotkeyHint" xml:space="preserve"><value>Select a region to recognize and copy only its text. The image is not saved to the library.</value></data>
-  <data name="ColorPick_OverlayHint" xml:space="preserve"><value>C Copy color</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>Could not copy the color.</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>Color copy format</value></data>
   <data name="ColorPick_FormatHint" xml:space="preserve"><value>Press C while selecting a capture region to copy the color under the pointer in this format.</value></data>
@@ -3453,16 +3449,38 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="StoreUpdate_OpenStore" xml:space="preserve"><value>Open in Microsoft Store</value></data>
   <data name="StoreUpdate_OpenStoreHelp" xml:space="preserve"><value>Opens the MyCapture page in the Microsoft Store app, or in a browser when the Store app cannot open.</value></data>
   <data name="StoreUpdate_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Open {0} in a browser.</value></data>
-  <data name="CaptureCue_ClickWindow" xml:space="preserve"><value>Click to capture this window</value></data>
-  <data name="CaptureCue_ClickMonitor" xml:space="preserve"><value>Click to capture this entire monitor</value></data>
-  <data name="CaptureCue_Drag" xml:space="preserve"><value>Drag: Select a region</value></data>
-  <data name="CaptureCue_Click" xml:space="preserve"><value>Click: Capture window</value></data>
-  <data name="CaptureCue_Shift" xml:space="preserve"><value>Shift: Pixel precision</value></data>
-  <data name="CaptureCue_Esc" xml:space="preserve"><value>Esc: Cancel</value></data>
   <data name="LibraryFolder_CardCount" xml:space="preserve"><value>Captures: {0}</value></data>
   <data name="LibraryFolder_CardCountWithFolders" xml:space="preserve"><value>Folders: {1} · Captures: {0}</value></data>
   <data name="LibraryFolder_CardAccessibleName" xml:space="preserve"><value>Folder {0}, {1}</value></data>
   <data name="LibraryFolder_CardOpenHint" xml:space="preserve"><value>Open folder (Enter)</value></data>
   <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>Keep saving new captures to the last folder after closing the library</value></data>
   <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>New captures are saved to this folder. You can also drag captures here.</value></data>
+  <data name="CaptureGuide2_BarName" xml:space="preserve"><value>Capture options</value></data>
+  <data name="CaptureGuide2_Region" xml:space="preserve"><value>Region or window</value></data>
+  <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>Region</value></data>
+  <data name="CaptureGuide2_RegionHelp" xml:space="preserve"><value>Click a window to capture it, or drag to capture the region you want. Click the desktop to capture that whole monitor. Hold Shift to move one pixel at a time.</value></data>
+  <data name="CaptureGuide2_RegionOnlyHelp" xml:space="preserve"><value>Drag to capture the region you want. Hold Shift to move one pixel at a time.</value></data>
+  <data name="CaptureGuide2_FullScreen" xml:space="preserve"><value>Full screen</value></data>
+  <data name="CaptureGuide2_FullScreenHelp" xml:space="preserve"><value>Captures this entire monitor right away.</value></data>
+  <data name="CaptureGuide2_Text" xml:space="preserve"><value>Extract text</value></data>
+  <data name="CaptureGuide2_TextHelp" xml:space="preserve"><value>Recognizes the text in the window you click or the region you drag and copies it to the clipboard. The image is not saved.</value></data>
+  <data name="CaptureGuide2_Color" xml:space="preserve"><value>Copy color</value></data>
+  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Copies the color code of the spot you click to the clipboard.</value></data>
+  <data name="CaptureGuide2_Help" xml:space="preserve"><value>Help</value></data>
+  <data name="CaptureGuide2_HelpTip" xml:space="preserve"><value>Shows how to capture again.</value></data>
+  <data name="CaptureGuide2_Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="CaptureGuide2_CancelTip" xml:space="preserve"><value>Cancels this capture.</value></data>
+  <data name="CaptureGuide2_DragCapture" xml:space="preserve"><value>Drag: Capture region</value></data>
+  <data name="CaptureGuide2_ClickWindow" xml:space="preserve"><value>Click: Capture window</value></data>
+  <data name="CaptureGuide2_ClickMonitor" xml:space="preserve"><value>Click: Capture monitor</value></data>
+  <data name="CaptureGuide2_DragText" xml:space="preserve"><value>Drag: Extract text from region</value></data>
+  <data name="CaptureGuide2_ClickWindowText" xml:space="preserve"><value>Click: Extract text from window</value></data>
+  <data name="CaptureGuide2_ClickMonitorText" xml:space="preserve"><value>Click: Extract text from monitor</value></data>
+  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click: Copy color</value></data>
+  <data name="CaptureGuide2_Esc" xml:space="preserve"><value>Esc: Cancel</value></data>
+  <data name="CaptureGuide2_IntroTitle" xml:space="preserve"><value>How to capture</value></data>
+  <data name="CaptureGuide2_IntroBody" xml:space="preserve"><value>Click a window to capture it, or drag to capture the region you want. Press Esc to cancel.</value></data>
+  <data name="CaptureGuide2_IntroBodyRegionOnly" xml:space="preserve"><value>Drag to capture the region you want. Press Esc to cancel.</value></data>
+  <data name="CaptureGuide2_IntroBar" xml:space="preserve"><value>Use the bar at the top for full screen, text extraction and color copy.</value></data>
+  <data name="CaptureGuide2_IntroAgain" xml:space="preserve"><value>Select Help (?) to see this guide again.</value></data>
 </root>
