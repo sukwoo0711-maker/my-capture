@@ -146,6 +146,9 @@ public sealed class GifExportEngineBenchmarkTests
                          ("960px-10fps-gpu-video-processor", new GifEngineOptions { DecodeNv12 = false }),
                          ("960px-10fps-gpu-resize", new GifEngineOptions { GpuResize = true }),
                          ("960px-10fps-1-pixel-thread", new GifEngineOptions { WorkerThreads = 1 }),
+                         ("960px-10fps-default-stats", GifEngineOptions.Default),
+                         ("960px-10fps-wic-on-caller", new GifEngineOptions { EncodeOnWorkers = false }),
+                         ("960px-10fps-wpf-encoder", new GifEngineOptions { Encoder = GifImageEncoder.Wpf }),
                      })
             {
                 string gif = Path.Combine(output, $"{name}.gif");
@@ -154,7 +157,15 @@ public sealed class GifExportEngineBenchmarkTests
                     recording, document, gif, null, default, 1.0, GifExportQuality.Standard, null,
                     options, NullLogger.Instance, out GifRenderStatistics statistics);
                 Add(name, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-                details[name] = new { statistics.FrameSource, Bytes = new FileInfo(gif).Length };
+                details[name] = new
+                {
+                    statistics.FrameSource,
+                    Bytes = new FileInfo(gif).Length,
+                    statistics.Images,
+                    statistics.PreEncodedImages,
+                    statistics.WorkerEncodes,
+                    SameBytesAs960px10fps = File.ReadAllBytes(gif).AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(output, "960px-10fps.gif"))),
+                };
                 if (name == "960px-10fps-software-decode")
                 {
                     details["hardware-equals-software-decode"] = File.ReadAllBytes(gif)
@@ -289,6 +300,7 @@ public sealed class GifExportEngineBenchmarkTests
                 BeforeVsAfterPsnrDb = Psnr(betweenError / samples),
                 BeforeBytes = new FileInfo(beforePath).Length,
                 AfterBytes = new FileInfo(afterPath).Length,
+                SameBytesAsBefore = File.ReadAllBytes(beforePath).AsSpan().SequenceEqual(File.ReadAllBytes(afterPath)),
             };
         }
 

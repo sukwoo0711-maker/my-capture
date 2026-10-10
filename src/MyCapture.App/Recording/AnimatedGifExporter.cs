@@ -25,8 +25,9 @@ internal sealed record GifFrameSchedule(
 /// with frame count, while file size follows how much of the picture changes, because
 /// <see cref="AnimatedGifWriter"/> merges identical frames and repaints only what changed;
 /// the quality presets keep CPU, file size and palette-quantization work predictable on modest PCs. Decoding prefers
-/// D3D11 hardware decode and runs on its own thread, colour conversion and scaling run on a few
-/// worker threads, and composition and encoding stay on the calling STA thread (see
+/// D3D11 hardware decode and runs on its own thread; colour conversion, scaling and the GIF
+/// encode of frames with nothing drawn over them run on a few worker threads; WPF composition,
+/// frame differencing and writing stay on the calling STA thread (see
 /// <see cref="GifExportEngine"/>); <see cref="GifExportSession"/> reuses frames across option
 /// changes in one dialog.
 /// </summary>
@@ -224,7 +225,8 @@ internal static class AnimatedGifExporter
             frameDelayCentiseconds: 10,
             loopCount: 0,
             leaveOpen: true,
-            engineOptions.Differencing);
+            engineOptions.Differencing,
+            engineOptions.Encoder);
         try
         {
             GifRenderStatistics statistics = GifExportEngine.Render(
