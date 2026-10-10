@@ -160,8 +160,9 @@ internal static class SettingsSelfTest
 
                 var escKey = FindKeyBinding(settingsWindow, Key.Escape, ModifierKeys.None);
                 Check(report, "Esc binding present", escKey is not null);
-                Check(report, "Esc invokes CancelCommand",
-                    ReferenceEquals(escKey!.Command, SettingsWindow.CancelCommand));
+                // Esc closes like the title bar button and asks first about unapplied changes.
+                Check(report, "Esc invokes CloseCommand",
+                    ReferenceEquals(escKey!.Command, SettingsWindow.CloseCommand));
 
                 var themeSelector = settingsWindow.FindName("ThemeSelector") as ComboBox;
                 Check(report, "Theme selector is present", themeSelector is not null);

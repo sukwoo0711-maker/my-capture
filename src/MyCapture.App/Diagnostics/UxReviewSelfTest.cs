@@ -163,7 +163,7 @@ internal static class UxReviewSelfTest
             var hotkeySettings = new SettingsWindow(() => settings,
                 _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance);
             hotkeySettings.CategoryTabs.SelectedItem = hotkeySettings.CategoryTabs.Items.OfType<TabItem>()
-                .Single(tab => Equals(tab.Header, UiText.Get("Text_086F41200B47")));
+                .Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabShortcuts")));
             windows.Add(("hotkeys", hotkeySettings));
             windows.Add(("quick-access", new QuickAccessWindow(sample, () => { receiptCopies++; return Task.FromResult(true); }, () => { },
                 () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("fixture.png")) { IsKept = true }));
@@ -444,7 +444,7 @@ internal static class UxReviewSelfTest
                     if (name == "hotkeys")
                     {
                         var preferences = (SettingsWindow)window;
-                        preferences.CategoryTabs.SelectedItem = preferences.CategoryTabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Text_086F41200B47")));
+                        preferences.CategoryTabs.SelectedItem = preferences.CategoryTabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabShortcuts")));
                         window.UpdateLayout();
                         HotkeyRecorder recorder = Descendants(window).OfType<HotkeyRecorder>().Single(control =>
                             control.GetBindingExpression(HotkeyRecorder.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.CaptureHotkey));

@@ -3535,4 +3535,59 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>텍스트 추가</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>재생 위치부터 표시할 텍스트 레이어를 추가합니다.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>프레임 이미지 편집</value></data>
+  <data name="SettingsUx_TabGeneral" xml:space="preserve"><value>일반</value></data>
+  <data name="SettingsUx_TabGeneralHelp" xml:space="preserve"><value>표시 언어, 테마, 자동 시작</value></data>
+  <data name="SettingsUx_TabCapture" xml:space="preserve"><value>캡처</value></data>
+  <data name="SettingsUx_TabCaptureHelp" xml:space="preserve"><value>캡처 후 동작, 캡처 화면, 지연 캡처</value></data>
+  <data name="SettingsUx_TabRecording" xml:space="preserve"><value>녹화</value></data>
+  <data name="SettingsUx_TabRecordingHelp" xml:space="preserve"><value>프레임 속도, 녹화 크기, 포인터, 녹화 방식</value></data>
+  <data name="SettingsUx_TabEditing" xml:space="preserve"><value>편집</value></data>
+  <data name="SettingsUx_TabEditingHelp" xml:space="preserve"><value>편집 도구 기본값, 화면 고정, 텍스트 인식</value></data>
+  <data name="SettingsUx_TabShortcuts" xml:space="preserve"><value>단축키</value></data>
+  <data name="SettingsUx_TabShortcutsHelp" xml:space="preserve"><value>전역 단축키, 버튼 아래 단축키 표시</value></data>
+  <data name="SettingsUx_TabStorage" xml:space="preserve"><value>저장 공간</value></data>
+  <data name="SettingsUx_TabStorageHelp" xml:space="preserve"><value>라이브러리 보관, 저장 폴더, 고급</value></data>
+  <data name="SettingsUx_TabAbout" xml:space="preserve"><value>정보</value></data>
+  <data name="SettingsUx_TabAboutHelp" xml:space="preserve"><value>버전, 업데이트, 설정 백업</value></data>
+  <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>그 밖의 단축키</value></data>
+  <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>필요한 기능에만 지정하십시오. 다른 프로그램이 쓰는 키와 겹치지 않는 조합을 고르십시오.</value></data>
+  <data name="SettingsUx_ShortcutHintsHeading" xml:space="preserve"><value>버튼 단축키 표시</value></data>
+  <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>켜면 편집기 버튼 아래에 단축키를 함께 표시합니다. 끄더라도 버튼에 마우스를 올리면 단축키가 보입니다.</value></data>
+  <data name="SettingsUx_RecordHotkeyTip" xml:space="preserve"><value>누른 뒤 사용할 키 조합을 입력하십시오.</value></data>
+  <data name="SettingsUx_MaxStorage" xml:space="preserve"><value>최대 저장 용량(GB)</value></data>
+  <data name="SettingsUx_MaxStorageRange" xml:space="preserve"><value>0.125 ~ 512 GB.</value></data>
+  <data name="SettingsUx_PreviewSize" xml:space="preserve"><value>미리보기 이미지 크기(픽셀)</value></data>
+  <data name="SettingsUx_PreviewSizeRange" xml:space="preserve"><value>긴 변 기준, 96 ~ 1024픽셀.</value></data>
+  <data name="SettingsUx_Retention" xml:space="preserve"><value>이미지 보관 기간(시간)</value></data>
+  <data name="SettingsUx_RetentionSummary" xml:space="preserve"><value>만든 지 {0}이 지난 라이브러리 이미지를 오래된 것부터 자동으로 지웁니다. 보관한 이미지, 편집 중인 이미지, 동영상, 따로 저장하거나 내보낸 파일은 지우지 않습니다.</value></data>
+  <data name="SettingsUx_RetentionRange" xml:space="preserve"><value>1 ~ 8760시간(365일) 사이로 입력하십시오.</value></data>
+  <data name="SettingsUx_DurationDay" xml:space="preserve"><value>{0}일</value></data>
+  <data name="SettingsUx_DurationDays" xml:space="preserve"><value>{0}일</value></data>
+  <data name="SettingsUx_DurationHour" xml:space="preserve"><value>{0}시간</value></data>
+  <data name="SettingsUx_DurationHours" xml:space="preserve"><value>{0}시간</value></data>
+  <data name="SettingsUx_DurationDaysHours" xml:space="preserve"><value>{0} {1}</value></data>
+  <data name="SettingsUx_SaveFilesHeading" xml:space="preserve"><value>파일로 저장</value></data>
+  <data name="SettingsUx_AdvancedHeading" xml:space="preserve"><value>고급</value></data>
+  <data name="SettingsUx_AdvancedHint" xml:space="preserve"><value>클립보드 이미지를 GitHub 이슈에 올리는 단축키에 쓰는 설정입니다.</value></data>
+  <data name="SettingsUx_GitHubIssueUrlHint" xml:space="preserve"><value>GitHub 업로드 단축키가 클립보드 이미지를 붙여 넣을 이슈입니다. 본인이 댓글을 쓸 수 있는 이슈를 지정하십시오. 비워 두면 안전한 기본 주소를 씁니다.</value></data>
+  <data name="SettingsUx_EditingDefaultsHeading" xml:space="preserve"><value>편집 도구 기본값</value></data>
+  <data name="SettingsUx_PinCopy" xml:space="preserve"><value>고정 창 복사</value></data>
+  <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>고정 창을 클릭한 뒤 Ctrl+C를 누르면 이미지를 복사합니다. Ctrl을 누른 채 두 번 클릭하면 원문 텍스트를 복사하고, 원문이 없는 이미지는 이 PC에서 인식한 텍스트를 복사합니다.</value></data>
+  <data name="SettingsUx_OcrHeading" xml:space="preserve"><value>텍스트 인식</value></data>
+  <data name="SettingsUx_OcrLanguages" xml:space="preserve"><value>인식 언어</value></data>
+  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows에 들어 있는 인식 기능을 씁니다. 정확은 영수증처럼 작은 글자에 강한 인식 모델을 씁니다. 가장 정확은 밝기·대비·선명도를 보정하고 이미지를 4배로 키운 뒤 인식하며, 처음 쓸 때 약 67MB를 내려받습니다.</value></data>
+  <data name="SettingsUx_OcrFast" xml:space="preserve"><value>빠름</value></data>
+  <data name="SettingsUx_OcrBalanced" xml:space="preserve"><value>보통</value></data>
+  <data name="SettingsUx_OcrAccurate" xml:space="preserve"><value>정확</value></data>
+  <data name="SettingsUx_OcrEnhanced" xml:space="preserve"><value>가장 정확</value></data>
+  <data name="SettingsUx_RecordingMethodAuto" xml:space="preserve"><value>자동(권장)</value></data>
+  <data name="SettingsUx_RecordingMethodCompatible" xml:space="preserve"><value>호환 모드</value></data>
+  <data name="SettingsUx_RecordingMethodHint" xml:space="preserve"><value>자동은 대부분의 화면을 가장 부드럽게 녹화합니다. 녹화한 화면이 깨지거나 멈추면 호환 모드를 선택하십시오.</value></data>
+  <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>설정 백업</value></data>
+  <data name="SettingsUx_BackupHint" xml:space="preserve"><value>설정을 파일로 내보내거나 가져옵니다. 가져온 설정은 적용을 눌러야 저장합니다. GitHub 토큰은 내보내지 않습니다.</value></data>
+  <data name="SettingsUx_CancelTip" xml:space="preserve"><value>변경 사항을 버리고 닫습니다.</value></data>
+  <data name="SettingsUx_CloseTitle" xml:space="preserve"><value>적용하지 않은 변경 사항</value></data>
+  <data name="SettingsUx_CloseMessage" xml:space="preserve"><value>바꾼 설정을 아직 적용하지 않았습니다. 적용하지 않고 닫으면 바꾼 값이 사라집니다.</value></data>
+  <data name="SettingsUx_CloseApply" xml:space="preserve"><value>적용하고 닫기</value></data>
+  <data name="SettingsUx_CloseDiscard" xml:space="preserve"><value>적용 안 함</value></data>
 </root>

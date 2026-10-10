@@ -209,9 +209,11 @@ public sealed class SettingsStoreTests
         Assert.Equal(300, settings.Queue.MaxItems);
         Assert.Equal(2L * 1024 * 1024 * 1024, settings.Queue.MaxBytes);
         Assert.Equal("Ctrl+Shift+C", settings.Hotkeys.Capture.ToString());
-        Assert.Equal("Ctrl+Shift+Z", settings.Hotkeys.OpenLibrary.ToString());
         Assert.Equal("Ctrl+Shift+X", settings.Hotkeys.RecordRegion.ToString());
-        Assert.Equal("F3", settings.Hotkeys.PasteToScreen.ToString());
+        // A new installation assigns only capture and recording; see SettingsUxDefaultsTests.
+        Assert.Equal(Hotkey.None, settings.Hotkeys.OpenLibrary);
+        Assert.Equal(Hotkey.None, settings.Hotkeys.PasteToScreen);
+        Assert.False(settings.General.ShowShortcutHints);
         Assert.True(settings.Export.CopyToClipboardOnQuickSave);
         Assert.Equal(RecordingFrameRate.Fps30, settings.Recording.FrameRate);
     }

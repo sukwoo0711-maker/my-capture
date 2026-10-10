@@ -85,7 +85,11 @@ public sealed class SettingsStore
                 _log.LogWarning("Settings file exists but could not be parsed; using defaults");
             }
 
-            settings = new AppSettings { General = { IsFirstRun = !existed } };
+            // A missing file is a new installation and starts from the new-install defaults.
+            // An unreadable existing file belongs to an existing user, whose legacy defaults
+            // (and so whose global shortcuts) stay exactly as before.
+            settings = existed ? new AppSettings() : NewInstallDefaults.Create();
+            settings.General.IsFirstRun = !existed;
         }
         else if (TryDeserialize(text, out AppSettings? parsed) && parsed is not null)
         {
