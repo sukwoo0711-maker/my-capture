@@ -102,6 +102,9 @@ public static class AppSettingsClone
         IncludeCursor = s.IncludeCursor,
         BitrateBitsPerSecond = s.BitrateBitsPerSecond,
         CoarseStepSeconds = s.CoarseStepSeconds,
+        CursorHighlight = s.CursorHighlight,
+        PresetWidth = s.PresetWidth,
+        PresetHeight = s.PresetHeight,
     };
 
     private static PinSettings Clone(PinSettings s) => new()
