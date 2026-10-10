@@ -3535,4 +3535,19 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>텍스트 추가</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>재생 위치부터 표시할 텍스트 레이어를 추가합니다.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>프레임 이미지 편집</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>지금 해 보기</value></data>
+  <data name="Onboard_TryNowHelp" xml:space="preserve"><value>이 창을 닫고 영역 캡처를 시작합니다.</value></data>
+  <data name="Onboard_StepsName" xml:space="preserve"><value>시작 안내</value></data>
+  <data name="Onboard_StepNumber" xml:space="preserve"><value>{0}단계</value></data>
+  <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>캡처한 다음</value></data>
+  <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 편집기가 열립니다.</value></data>
+  <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 빠른 작업 카드가 나타납니다.</value></data>
+  <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장됩니다.</value></data>
+  <data name="Onboard_TrayTitle" xml:space="preserve"><value>트레이 아이콘</value></data>
+  <data name="Onboard_TrayBody" xml:space="preserve"><value>MyCapture는 작업 표시줄 오른쪽 알림 영역에 있습니다. 아이콘이 보이지 않으면 ^ 단추를 눌러 숨겨진 아이콘을 여십시오.</value></data>
+  <data name="Onboard_TrayMoreCaptures" xml:space="preserve"><value>다른 캡처</value></data>
+  <data name="Onboard_TrayCopyText" xml:space="preserve"><value>텍스트 복사</value></data>
+  <data name="Onboard_TrayReopenPin" xml:space="preserve"><value>닫은 고정 창 다시 열기</value></data>
+  <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>단축키 보기</value></data>
+  <data name="Onboard_TrayTipActions" xml:space="preserve"><value>클릭: 라이브러리 · 오른쪽 클릭: 메뉴</value></data>
 </root>

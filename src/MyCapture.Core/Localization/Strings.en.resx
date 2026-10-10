@@ -3535,4 +3535,19 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>Add text</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Edit frame image</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>Try it now</value></data>
+  <data name="Onboard_TryNowHelp" xml:space="preserve"><value>Closes this window and starts a region capture.</value></data>
+  <data name="Onboard_StepsName" xml:space="preserve"><value>Getting started</value></data>
+  <data name="Onboard_StepNumber" xml:space="preserve"><value>Step {0}</value></data>
+  <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
+  <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and opened in the editor.</value></data>
+  <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and shown on a quick access card.</value></data>
+  <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>Each capture is copied to the clipboard and saved to the library.</value></data>
+  <data name="Onboard_TrayTitle" xml:space="preserve"><value>Tray icon</value></data>
+  <data name="Onboard_TrayBody" xml:space="preserve"><value>MyCapture sits in the notification area at the right end of the taskbar. If you cannot see its icon, select ^ to show hidden icons.</value></data>
+  <data name="Onboard_TrayMoreCaptures" xml:space="preserve"><value>More captures</value></data>
+  <data name="Onboard_TrayCopyText" xml:space="preserve"><value>Copy text</value></data>
+  <data name="Onboard_TrayReopenPin" xml:space="preserve"><value>Reopen closed pin</value></data>
+  <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>Keyboard shortcuts</value></data>
+  <data name="Onboard_TrayTipActions" xml:space="preserve"><value>Click: library · Right-click: menu</value></data>
 </root>

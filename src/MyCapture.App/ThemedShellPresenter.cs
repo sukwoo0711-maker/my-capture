@@ -25,7 +25,13 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     /// A command or a submenu branch in the tray tree. A null Action marks a branch. A command
     /// with <c>IsEnabled</c> false stays visible but cannot be invoked.
     /// </summary>
-    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "", bool IsEnabled = true);
+    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "", bool IsEnabled = true)
+    {
+        /// <summary>A divider between groups; it runs nothing.</summary>
+        internal static MenuEntry Separator { get; } = new(string.Empty, null) { IsSeparator = true };
+
+        internal bool IsSeparator { get; private init; }
+    }
 
     internal void ShowNotification(string title, string message, TrayBalloonKind kind)
     {
@@ -86,43 +92,49 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         window.Show(); _timer.Start();
     }
 
-    internal void ShowMenu(IEnumerable<MenuEntry> commands, string language, Action<string> chooseLanguage)
+    /// <summary>
+    /// Opens the tray menu at the pointer. The language is chosen in Settings only; the menu
+    /// carries just the entries it is given, in their order (see <see cref="TrayMenuLayout"/>).
+    /// </summary>
+    internal void ShowMenu(IEnumerable<MenuEntry> commands)
     {
         Dismiss();
-        var menu = new ContextMenu { Placement = PlacementMode.MousePoint, MinWidth = 240 };
-        AppendEntries(menu.Items, commands, menu);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(new MenuItem { Header = "Language", IsEnabled = false, MinHeight = 36 });
-        foreach ((string label, string code) in new[] { ("한국어", "ko"), ("English", "en") })
-        {
-            bool selected = language.StartsWith(code, StringComparison.OrdinalIgnoreCase)
-                || (string.IsNullOrEmpty(language) && UiText.Culture.TwoLetterISOLanguageName == code);
-            // The shared MenuItem template has no submenu/check presenter. Keep these
-            // directly reachable and show selection in the header using that existing style.
-            var item = new MenuItem { Header = selected ? "✓ " + label : "   " + label, MinHeight = 36 };
-            item.Click += (_, _) => { menu.IsOpen = false; chooseLanguage(code); };
-            menu.Items.Add(item);
-        }
-        var help = new MenuItem { Header = UiText.Get("Shell.Help"), MinHeight = 36 };
-        help.Click += (_, _) => { menu.IsOpen = false; ShowHelp(); };
-        menu.Items.Add(help);
+        ContextMenu menu = CreateMenu(commands);
         _menu = menu;
         menu.IsOpen = true;
+    }
+
+    /// <summary>Builds the themed menu without opening it.</summary>
+    internal ContextMenu CreateMenu(IEnumerable<MenuEntry> commands)
+    {
+        var menu = new ContextMenu { Placement = PlacementMode.MousePoint, MinWidth = 240 };
+        AppendEntries(menu.Items, commands, menu);
+        return menu;
     }
 
     private void AppendEntries(ItemCollection items, IEnumerable<MenuEntry> entries, ContextMenu root)
     {
         foreach (MenuEntry entry in entries)
         {
+            if (entry.IsSeparator)
+            {
+                items.Add(new Separator());
+                continue;
+            }
+
             if (entry.Action is null && entry.Children is { Count: > 0 } children)
             {
-                var branch = new MenuItem { Header = entry.Label, MinHeight = 36 };
+                // The shared MenuItem template draws a flat command row with no submenu popup,
+                // so a branch carries its own template that opens its children beside it.
+                var branch = new MenuItem { Header = entry.Label, MinHeight = 36, Template = CreateSubmenuTemplate() };
+                System.Windows.Automation.AutomationProperties.SetName(branch, entry.Label);
                 AppendEntries(branch.Items, children, root);
                 items.Add(branch);
                 continue;
             }
 
             var item = new MenuItem { Header = entry.Label, MinHeight = 36, InputGestureText = entry.Gesture, IsEnabled = entry.IsEnabled };
+            if (entry.Gesture.Length > 0) System.Windows.Automation.AutomationProperties.SetAcceleratorKey(item, entry.Gesture);
             Action action = entry.Action ?? (() => { });
             item.Click += (_, _) =>
             {
@@ -136,7 +148,54 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         }
     }
 
-    private void ShowHelp() => ShortcutHelpWindow.ShowHelp();
+    /// <summary>
+    /// A branch row in the shared menu look, with a chevron and a popup that lists its children to
+    /// the right. WPF opens it on hover, click or the right arrow key.
+    /// </summary>
+    /// <remarks>Parsed per menu: a template belongs to the dispatcher that first uses it.</remarks>
+    internal static ControlTemplate CreateSubmenuTemplate() => (ControlTemplate)System.Windows.Markup.XamlReader.Parse("""
+        <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                         TargetType="{x:Type MenuItem}">
+            <Grid>
+                <Border x:Name="Chrome" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                        CornerRadius="{DynamicResource Radius.Sm}" SnapsToDevicePixels="True">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter Grid.Column="1" Margin="8,0,22,0" ContentSource="Header"
+                                          RecognizesAccessKey="True" VerticalAlignment="Center" />
+                        <Path Grid.Column="2" Data="M0,0 L4.5,4.5 L0,9" Stroke="{TemplateBinding Foreground}"
+                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              VerticalAlignment="Center" Margin="0,0,4,0" />
+                    </Grid>
+                </Border>
+                <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="4" VerticalOffset="-6"
+                       AllowsTransparency="True" Focusable="False" PopupAnimation="None"
+                       IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                    <Border Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Border.Strong}"
+                            BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" Padding="5" MinWidth="220"
+                            SnapsToDevicePixels="True">
+                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </Border>
+                </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                </Trigger>
+                <Trigger Property="IsSubmenuOpen" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Pressed}" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.46" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+        """);
 
     private static Window CreateWindow(UIElement child, string title)
     {
