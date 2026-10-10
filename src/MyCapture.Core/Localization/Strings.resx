@@ -3535,4 +3535,41 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>텍스트 추가</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>재생 위치부터 표시할 텍스트 레이어를 추가합니다.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>프레임 이미지 편집</value></data>
+  <data name="LibraryUx_NavName" xml:space="preserve"><value>라이브러리 탐색</value></data>
+  <data name="LibraryUx_NavAll" xml:space="preserve"><value>모든 항목</value></data>
+  <data name="LibraryUx_NavAllHint" xml:space="preserve"><value>날짜와 폴더에 관계없이 모든 캡처를 표시합니다. 캡처를 여기로 끌어 놓으면 폴더에서 뺍니다.</value></data>
+  <data name="LibraryUx_NavKept" xml:space="preserve"><value>보관함</value></data>
+  <data name="LibraryUx_NavKeptHint" xml:space="preserve"><value>자동 삭제되지 않도록 보관한 캡처입니다. 캡처의 더 보기 메뉴에서 보관합니다.</value></data>
+  <data name="LibraryUx_NavItemName" xml:space="preserve"><value>{0}, {1}개</value></data>
+  <data name="LibraryUx_FoldersHint" xml:space="preserve"><value>폴더에 넣은 캡처는 자동으로 정리하지 않습니다. 캡처를 폴더로 끌어 놓아 정리합니다.</value></data>
+  <data name="LibraryUx_NewFolderHint" xml:space="preserve"><value>새 폴더 (Ctrl+Shift+N)</value></data>
+  <data name="LibraryUx_DatesHeader" xml:space="preserve"><value>날짜</value></data>
+  <data name="LibraryUx_SaveHere" xml:space="preserve"><value>새 캡처를 이 폴더에 저장</value></data>
+  <data name="LibraryUx_SaveHereOn" xml:space="preserve"><value>새 캡처를 {0} 폴더에 저장합니다. 끄면 날짜별 라이브러리에 저장합니다.</value></data>
+  <data name="LibraryUx_SaveHereOff" xml:space="preserve"><value>새 캡처를 날짜별 라이브러리에 저장합니다. 켜면 {0} 폴더에 저장합니다.</value></data>
+  <data name="LibraryUx_CommandBarName" xml:space="preserve"><value>라이브러리 명령</value></data>
+  <data name="LibraryUx_SelectionBarName" xml:space="preserve"><value>선택 항목 명령</value></data>
+  <data name="LibraryUx_ClearSelection" xml:space="preserve"><value>선택 해제</value></data>
+  <data name="LibraryUx_ClearSelectionHint" xml:space="preserve"><value>선택 해제 (Esc)</value></data>
+  <data name="LibraryUx_MoveHint" xml:space="preserve"><value>폴더로 이동 (M)</value></data>
+  <data name="LibraryUx_DeleteHint" xml:space="preserve"><value>삭제 (Delete)</value></data>
+  <data name="LibraryUx_BreadcrumbName" xml:space="preserve"><value>현재 위치</value></data>
+  <data name="LibraryUx_StatusName" xml:space="preserve"><value>라이브러리 상태</value></data>
+  <data name="LibraryUx_CardKind" xml:space="preserve"><value>폴더</value></data>
+  <data name="LibraryUx_CardEmpty" xml:space="preserve"><value>빈 폴더</value></data>
+  <data name="LibraryUx_DropMoveTo" xml:space="preserve"><value>{0} 폴더로 이동 · {1}개</value></data>
+  <data name="LibraryUx_DropRemoveFromFolder" xml:space="preserve"><value>폴더에서 빼기 · {0}개</value></data>
+  <data name="LibraryUx_DropFolderInto" xml:space="preserve"><value>{0} 폴더 안으로 이동</value></data>
+  <data name="LibraryUx_DropFolderTop" xml:space="preserve"><value>최상위로 이동</value></data>
+  <data name="LibraryUx_MovedTo" xml:space="preserve"><value>캡처 {1}개를 {0} 폴더로 옮겼습니다.</value></data>
+  <data name="LibraryUx_TileDragImage" xml:space="preserve"><value>라이브러리 폴더로 끌어 놓으면 그 폴더로 옮깁니다. 바탕 화면이나 탐색기로 끌어 놓으면 PNG 파일로 내보냅니다.</value></data>
+  <data name="LibraryUx_TileDragVideo" xml:space="preserve"><value>라이브러리 폴더로 끌어 놓으면 그 폴더로 옮깁니다. 바탕 화면이나 탐색기로 끌어 놓으면 MP4 파일로 내보냅니다.</value></data>
+  <data name="LibraryUx_Keep" xml:space="preserve"><value>보관</value></data>
+  <data name="LibraryUx_Unkeep" xml:space="preserve"><value>보관 해제</value></data>
+  <data name="LibraryUx_KeepToggleName" xml:space="preserve"><value>보관 전환</value></data>
+  <data name="LibraryUx_KeptBadge" xml:space="preserve"><value>보관됨</value></data>
+  <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, 보관됨</value></data>
+  <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>더 보기 — 보관, 내보내기, 텍스트 인식</value></data>
+  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>제목, 창 이름, 이미지 속 글자 검색</value></data>
+  <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
 </root>

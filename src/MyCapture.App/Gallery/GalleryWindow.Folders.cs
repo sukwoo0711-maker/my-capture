@@ -51,10 +51,39 @@ internal sealed partial class GalleryWindow
         await SelectFolderScopeAsync(node.Scope);
     }
 
+    private async void OnDateSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (_folderNavigationUpdating || _viewModel.IsRefreshingFolderTree
+            || e.AddedItems is not [GalleryFolderNode node]) return;
+        await SelectFolderScopeAsync(node.Scope);
+    }
+
+    private async void OnBreadcrumbClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: GalleryBreadcrumb { IsLink: true } step })
+            await SelectFolderScopeAsync(step.Scope);
+    }
+
     private async Task SelectFolderScopeAsync(CaptureFolderScope scope)
     {
         if (_viewModel.SelectedScope == scope) return;
         ShowScope(scope);
+        await FollowSavedDestinationAsync(scope);
+    }
+
+    /// <summary>A navigation pane view: shows the whole library in one step, then follows the saved destination.</summary>
+    private async Task ShowLibraryViewAsync(GalleryFilter filter)
+    {
+        bool leftLocation = !_viewModel.SelectedScope.IsAll;
+        _folderNavigationUpdating = true;
+        try { CloseInlinePlayer(); _viewModel.ShowView(filter); }
+        finally { _folderNavigationUpdating = false; }
+        if (leftLocation) await FollowSavedDestinationAsync(CaptureFolderScope.All);
+    }
+
+    /// <summary>The saved keep-after-close destination follows the location the library shows.</summary>
+    private async Task FollowSavedDestinationAsync(CaptureFolderScope scope)
+    {
         if (_queue.UseCurrentFolderForNewCaptures && _queue.DefaultCaptureFolderId != scope.FolderId)
         {
             try { await _queue.SetNewCaptureFolderAsync(scope.FolderId, true); }
@@ -64,17 +93,17 @@ internal sealed partial class GalleryWindow
         }
     }
 
-    /// <summary>Shows a scope without changing the saved keep-after-close destination.</summary>
+    /// <summary>
+    /// Shows a scope without changing the saved keep-after-close destination. A folder or date
+    /// opens with all of its items, like any other navigation pane selection.
+    /// </summary>
     private void ShowScope(CaptureFolderScope scope)
     {
-        if (_viewModel.SelectedScope == scope) return;
+        if (_viewModel.SelectedScope == scope && (scope.IsAll || _viewModel.Filter == GalleryFilter.All)) return;
         _folderNavigationUpdating = true;
-        try { CloseInlinePlayer(); _viewModel.SelectScope(scope); }
+        try { CloseInlinePlayer(); _viewModel.NavigateTo(scope); }
         finally { _folderNavigationUpdating = false; }
     }
-
-    private async void OnAllFolderDatesClick(object sender, RoutedEventArgs e) =>
-        await SelectFolderScopeAsync(CaptureFolderScope.All);
 
     private async void OnFolderCaptureTargetClick(object sender, RoutedEventArgs e)
     {
@@ -475,7 +504,7 @@ internal sealed partial class GalleryWindow
     {
         while (true)
         {
-            if (ReferenceEquals(current, FolderTree)) return true;
+            if (ReferenceEquals(current, FolderTree) || ReferenceEquals(current, DateList)) return true;
             DependencyObject? parent = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current);
             if (parent is null) return false;
             current = parent;
@@ -490,13 +519,6 @@ internal sealed partial class GalleryWindow
         _folderDragCancellation?.Cancel();
     }
 
-    private bool TryFolderDrop(DragEventArgs e, out GalleryFolderDragPayload? payload, out CaptureFolderScope target)
-    {
-        payload = e.Data.GetDataPresent(GalleryFolderDragPayload.Format, false)
-            ? e.Data.GetData(GalleryFolderDragPayload.Format, false) as GalleryFolderDragPayload : null;
-        target = NodeAt(e.OriginalSource)?.Scope ?? CaptureFolderScope.All;
-        return !_foldersBusy && payload is not null && payload.Owner == _folderDragOwner && CanDropFolderPayload(_queue, payload, target);
-    }
 
     internal static bool CanDropFolderPayload(CaptureQueue queue, GalleryFolderDragPayload payload, CaptureFolderScope target)
     {
@@ -519,21 +541,142 @@ internal sealed partial class GalleryWindow
         return true;
     }
 
-    // The OLE payload exposes rendered copies only. Internal drops move metadata
-    // explicitly, while negotiating Copy keeps external receivers from consuming staging.
-    private void OnFolderDragOver(object sender, DragEventArgs e)
+    // ---- Dropping captures on folders --------------------------------------------------
+    //
+    // One handler on the library root serves folder cards, the folder tree, dates and "모든 항목".
+    // The OLE payload exposes rendered copies only. Internal drops move metadata explicitly,
+    // while negotiating Copy keeps external receivers from consuming staging.
+
+    private object? _dropHighlight;
+
+    internal GalleryFolderDragPayload CreateCaptureDragPayload(IEnumerable<Guid> captureIds) =>
+        new(_folderDragOwner, captureIds.Distinct().ToArray(), null);
+
+    /// <summary>
+    /// The data a capture drag carries: the staged files every external target (desktop, File
+    /// Explorer) receives, plus this window's private payload that only the library reads.
+    /// </summary>
+    internal static DataObject CreateCaptureDragData(IReadOnlyList<string> stagedPaths, GalleryFolderDragPayload payload)
     {
-        e.Effects = TryFolderDrop(e, out _, out _) ? DragDropEffects.Copy : DragDropEffects.None;
+        DataObject data = GalleryDragExportService.CreateFileDropData(stagedPaths);
+        data.SetData(GalleryFolderDragPayload.Format, payload, false);
+        return data;
+    }
+
+    private static GalleryFolderDragPayload? ReadDragPayload(IDataObject data) =>
+        data.GetDataPresent(GalleryFolderDragPayload.Format, false)
+            ? data.GetData(GalleryFolderDragPayload.Format, false) as GalleryFolderDragPayload : null;
+
+    private void OnLibraryDragOver(object sender, DragEventArgs e)
+    {
+        GalleryDropPlan plan = PreviewFolderDrop(e.OriginalSource as DependencyObject, ReadDragPayload(e.Data),
+            e.GetPosition(DragHintLayer));
+        e.Effects = plan.CanDrop ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
-    private async void OnFolderDrop(object sender, DragEventArgs e)
+    // Leaving one element for another inside the library is followed by DragOver; only
+    // leaving the window clears the highlight and hint.
+    private void OnLibraryDragLeave(object sender, DragEventArgs e)
     {
-        bool allowed = TryFolderDrop(e, out var payload, out var target);
+        Point point = e.GetPosition(LibraryRoot);
+        if (point.X < 0 || point.Y < 0 || point.X >= LibraryRoot.ActualWidth || point.Y >= LibraryRoot.ActualHeight)
+            ClearDropHighlight();
+    }
+
+    private async void OnLibraryDrop(object sender, DragEventArgs e)
+    {
         e.Handled = true;
-        e.Effects = allowed ? DragDropEffects.Copy : DragDropEffects.None;
-        if (!allowed || payload is null) return;
-        await ApplyFolderDropAsync(payload, target);
+        GalleryFolderDragPayload? payload = ReadDragPayload(e.Data);
+        bool dropped = await DropAsync(e.OriginalSource as DependencyObject, payload);
+        e.Effects = dropped ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    /// <summary>
+    /// Resolves the target under the pointer, highlights it and shows the pointer-side hint.
+    /// Also the test seam for the drag-over path.
+    /// </summary>
+    internal GalleryDropPlan PreviewFolderDrop(DependencyObject? over, GalleryFolderDragPayload? payload, Point hintPosition)
+    {
+        GalleryDropPlan plan = PlanDrop(over, payload, out object? highlight);
+        SetDropHighlight(plan.CanDrop ? highlight : null);
+        if (plan.CanDrop) ShowDragHint(plan.Hint, hintPosition);
+        else DragHint.Visibility = Visibility.Collapsed;
+        return plan;
+    }
+
+    /// <summary>Moves the payload into the target under <paramref name="over"/>; false when nothing moved.</summary>
+    internal async Task<bool> DropAsync(DependencyObject? over, GalleryFolderDragPayload? payload)
+    {
+        GalleryDropPlan plan = PlanDrop(over, payload, out _);
+        ClearDropFeedback();
+        if (!plan.CanDrop || payload is null) return false;
+        await ApplyFolderDropAsync(payload, plan.Target);
+        return true;
+    }
+
+    private GalleryDropPlan PlanDrop(DependencyObject? over, GalleryFolderDragPayload? payload, out object? highlight)
+    {
+        (CaptureFolderScope? target, highlight, bool folderCard) = ResolveDropTarget(over);
+        return _foldersBusy ? default
+            : GalleryDropPlanner.Plan(_queue, _folderDragOwner, payload, target, folderCard);
+    }
+
+    private (CaptureFolderScope? Target, object? Highlight, bool FolderCard) ResolveDropTarget(DependencyObject? source)
+    {
+        for (DependencyObject? current = source; current is not null; current = GetParent(current))
+        {
+            if (current is FrameworkElement { DataContext: GalleryFolderCardViewModel card }) return (card.Scope, card, true);
+            if (current is FrameworkElement { DataContext: GalleryFolderNode node }) return (node.Scope, node, false);
+            if (ReferenceEquals(current, AllLibraryFilter)) return (CaptureFolderScope.All, AllLibraryFilter, false);
+            // Empty space in the folder list keeps its earlier meaning: the top level, out of folders.
+            if (ReferenceEquals(current, FolderTree) || ReferenceEquals(current, DateList)) return (CaptureFolderScope.All, null, false);
+            if (ReferenceEquals(current, this)) break;
+        }
+        return (null, null, false);
+    }
+
+    private void SetDropHighlight(object? target)
+    {
+        if (ReferenceEquals(_dropHighlight, target)) return;
+        switch (_dropHighlight)
+        {
+            case GalleryFolderCardViewModel card: card.IsDropTarget = false; break;
+            case GalleryFolderNode node: node.IsDropTarget = false; break;
+            case RadioButton: _viewModel.IsAllItemsDropTarget = false; break;
+        }
+        _dropHighlight = target;
+        switch (target)
+        {
+            case GalleryFolderCardViewModel card: card.IsDropTarget = true; break;
+            case GalleryFolderNode node: node.IsDropTarget = true; break;
+            case RadioButton: _viewModel.IsAllItemsDropTarget = true; break;
+        }
+    }
+
+    private void ShowDragHint(string text, Point position)
+    {
+        DragHintText.Text = text;
+        DragHint.Visibility = Visibility.Visible;
+        DragHint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        // Below and right of the pointer, kept inside the window.
+        double left = Math.Clamp(position.X + 16, 0, Math.Max(0, DragHintLayer.ActualWidth - DragHint.DesiredSize.Width));
+        double top = Math.Clamp(position.Y + 22, 0, Math.Max(0, DragHintLayer.ActualHeight - DragHint.DesiredSize.Height));
+        Canvas.SetLeft(DragHint, left);
+        Canvas.SetTop(DragHint, top);
+    }
+
+    private void ClearDropHighlight()
+    {
+        SetDropHighlight(null);
+        DragHint.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Ends all drag feedback: highlight, hint and the folders marked as drop targets.</summary>
+    private void ClearDropFeedback()
+    {
+        ClearDropHighlight();
+        _viewModel.EndCaptureDrag();
     }
 
     private async Task ApplyFolderDropAsync(GalleryFolderDragPayload payload, CaptureFolderScope target)
@@ -545,8 +688,9 @@ internal sealed partial class GalleryWindow
             else
             {
                 int moved = await _queue.MoveCapturesAsync(payload.Captures, target.FolderId);
-                LibraryActionStatus.Text = UiText.Format("Folder410.MoveDone", moved)
-                    + (target.FolderId is null ? " " + UiText.Get("Folder410.RetentionRestarted") : string.Empty);
+                LibraryActionStatus.Text = target.FolderId is { } folderId && _queue.FindFolder(folderId) is { } folder
+                    ? UiText.Format("LibraryUx_MovedTo", folder.Name, moved)
+                    : UiText.Format("Folder410.MoveDone", moved) + " " + UiText.Get("Folder410.RetentionRestarted");
             }
             RaiseCaptureChanged();
         }

@@ -281,6 +281,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         Raise(nameof(VisibleCount));
         Raise(nameof(ResultCountText));
         Raise(nameof(SummaryText));
+        RefreshNavigation();
     }
 
     /// <summary>

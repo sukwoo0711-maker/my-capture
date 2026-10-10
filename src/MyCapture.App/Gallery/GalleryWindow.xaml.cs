@@ -103,7 +103,7 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
-        Loaded += (_, _) => { CaptureShortcut.Text = ReadHotkeys().Capture.ToString(); RecordShortcut.Text = ReadHotkeys().RecordRegion.ToString(); };
+        Loaded += (_, _) => UpdateCommandShortcuts();
         MyCapture.App.Themes.WorkspaceTheme.Attach(this, MyCapture.App.Themes.WorkspaceRole.Gallery, resourcesLoaded: true);
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
@@ -113,6 +113,9 @@ internal sealed partial class GalleryWindow : Window
         PreviewMouseMove += OnTileMouseMove;
         LostMouseCapture += (_, _) => { if (Mouse.Captured != this) ResetDragGesture(); };
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) ResetDragGesture(); };
+        // Bubbling, so a tile's open caption hint or a menu consumes Escape first.
+        KeyDown += OnLibraryKeyDown;
+        InitializeActionStatus();
         IsVisibleChanged += (_, _) =>
         {
             _visibilityGeneration++;
@@ -159,8 +162,7 @@ internal sealed partial class GalleryWindow : Window
     /// </summary>
     internal void ShowGallery()
     {
-        CaptureShortcut.Text = ReadHotkeys().Capture.ToString();
-        RecordShortcut.Text = ReadHotkeys().RecordRegion.ToString();
+        UpdateCommandShortcuts();
         _viewModel.Refresh();
         RefreshOcrCoverageBanner();
 
@@ -429,9 +431,10 @@ internal sealed partial class GalleryWindow : Window
             _dragArmed = false;
             if (Mouse.Captured == this) Mouse.Capture(null);
             prepared.MarkPublished();
-            DataObject data = GalleryDragExportService.CreateFileDropData(prepared.Paths);
-            data.SetData(GalleryFolderDragPayload.Format,
-                new GalleryFolderDragPayload(_folderDragOwner, records.Select(record => record.Id).ToArray(), null), false);
+            GalleryFolderDragPayload payload = CreateCaptureDragPayload(records.Select(record => record.Id));
+            DataObject data = CreateCaptureDragData(prepared.Paths, payload);
+            // Folders that can take the captures stand out for the whole drag.
+            _viewModel.BeginCaptureDrag(payload.Captures);
             DragDrop.DoDragDrop(this, data, DragDropEffects.Copy);
         }
         catch (OperationCanceledException) { }
@@ -446,6 +449,7 @@ internal sealed partial class GalleryWindow : Window
             if (ReferenceEquals(_dragCancellation, cancellation)) _dragCancellation = null;
             cancellation.Dispose();
             ResetDragGesture();
+            ClearDropFeedback();
         }
     }
 
@@ -631,15 +635,16 @@ internal sealed partial class GalleryWindow : Window
 
     // ---- Per-card buttons ----------------------------------------------------------
 
-    private void OnLibraryFilterChanged(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// A navigation pane view (all items, images, videos, kept) shows the whole library, so it
+    /// also leaves an open folder or date, exactly like picking another item in a navigation view.
+    /// </summary>
+    private async void OnLibraryFilterChanged(object sender, RoutedEventArgs e)
     {
-        if (_viewModel is not null && sender is RadioButton { Tag: string filter })
-        {
-            GalleryFilter next = Enum.Parse<GalleryFilter>(filter);
-            if (_viewModel.Filter == next) return;
-            CloseInlinePlayer();
-            _viewModel.Filter = next;
-        }
+        if (_viewModel is null || sender is not RadioButton { Tag: string filter }) return;
+        GalleryFilter next = Enum.Parse<GalleryFilter>(filter);
+        if (_viewModel.Filter == next && _viewModel.SelectedScope.IsAll) return;
+        await ShowLibraryViewAsync(next);
     }
 
     private void OnEditClick(object sender, RoutedEventArgs e)
@@ -779,6 +784,82 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnDeleteSelectedClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
     private void OnClearLibraryClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_controller.Records.Select(r => r.Id).ToArray(), true);
+
+    /// <summary>Command bar shortcuts live in tooltips, read from the current hotkey settings.</summary>
+    private void UpdateCommandShortcuts()
+    {
+        HotkeySettings hotkeys = ReadHotkeys();
+        string capture = UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_2C20ADDA2018").Trim(), hotkeys.Capture.ToString());
+        string record = UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_4F5AF20FAA6E").Trim(), hotkeys.RecordRegion.ToString());
+        CaptureRegionButton.ToolTip = capture;
+        CaptureRegionIconButton.ToolTip = capture;
+        RecordRegionButton.ToolTip = record;
+        RecordRegionIconButton.ToolTip = record;
+    }
+
+    private void OnClearSelectionClick(object sender, RoutedEventArgs e)
+    {
+        _viewModel.ClearSelection();
+        CloseInlinePlayer();
+    }
+
+    private void OnLibraryKeyDown(object sender, KeyEventArgs e)
+    {
+        // Escape clears the selection, which returns the command bar to the library commands.
+        if (e.Handled || e.Key != Key.Escape || Keyboard.Modifiers != ModifierKeys.None
+            || !_viewModel.HasSelection || e.OriginalSource is TextBox) return;
+        _viewModel.ClearSelection();
+        CloseInlinePlayer();
+        e.Handled = true;
+    }
+
+    private void OnMoreCommandsClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { ContextMenu: { } menu } button)
+        {
+            menu.PlacementTarget = button;
+            menu.Placement = PlacementMode.Bottom;
+            menu.IsOpen = true;
+            e.Handled = true;
+        }
+    }
+
+    // ---- Action status ---------------------------------------------------------------
+
+    private static readonly System.ComponentModel.DependencyPropertyDescriptor StatusTextDescriptor =
+        System.ComponentModel.DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock));
+    private DispatcherTimer? _statusTimer;
+
+    /// <summary>How long an action result stays in the status line before it clears itself.</summary>
+    internal static readonly TimeSpan ActionStatusDuration = TimeSpan.FromSeconds(8);
+
+    private void InitializeActionStatus()
+    {
+        var timer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = ActionStatusDuration };
+        timer.Tick += (_, _) => ExpireActionStatus();
+        _statusTimer = timer;
+        StatusTextDescriptor.AddValueChanged(LibraryActionStatus, OnActionStatusChanged);
+        Closed += (_, _) =>
+        {
+            StatusTextDescriptor.RemoveValueChanged(LibraryActionStatus, OnActionStatusChanged);
+            timer.Stop();
+        };
+    }
+
+    // Every result restarts the clock, so the latest one stays readable for the full interval.
+    private void OnActionStatusChanged(object? sender, EventArgs e)
+    {
+        _statusTimer?.Stop();
+        if (!string.IsNullOrEmpty(LibraryActionStatus.Text)) _statusTimer?.Start();
+    }
+
+    /// <summary>Clears a finished action's result; a running export keeps its progress line.</summary>
+    internal void ExpireActionStatus()
+    {
+        if (_archiveCancellation is not null) return;
+        _statusTimer?.Stop();
+        LibraryActionStatus.Text = string.Empty;
+    }
 
     /// <summary>Header toolbar: start a region capture, mirroring the tray command.</summary>
     private void OnCaptureRegionClick(object sender, RoutedEventArgs e)

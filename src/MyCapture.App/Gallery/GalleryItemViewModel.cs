@@ -104,9 +104,10 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public string ActionLabel => IsVideo ? UiText.Get("Text_35383149904D") : UiText.Get("Text_87B0ACEF85A7");
 
+    /// <summary>Dragging moves the capture onto a library folder, or exports a file outside the app.</summary>
     public string ExportToolTip => IsVideo
-        ? UiText.Get("Text_E11F2F71F169")
-        : UiText.Get("Text_1A8F33AE9F00");
+        ? UiText.Get("LibraryUx_TileDragVideo")
+        : UiText.Get("LibraryUx_TileDragImage");
 
     public string PreviewUnavailableText => IsVideo
         ? UiText.Get("Text_FACB0016A977")
@@ -143,7 +144,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         get
         {
             string time = Record.CreatedAt.DateTime.ToString("yyyy-MM-dd HH:mm");
-            string pin = IsPinned ? UiText.Get("Text_E485D788C2BE") : string.Empty;
+            string pin = IsPinned ? UiText.Get("LibraryUx_KeptAccessible") : string.Empty;
             string media = IsVideo ? UiText.Format("Text_DFB3664A9A08", DurationCaption) : UiText.Get("Text_AA3D7105289A");
             return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}";
         }

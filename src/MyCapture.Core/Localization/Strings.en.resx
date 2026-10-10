@@ -3535,4 +3535,41 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>Add text</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Edit frame image</value></data>
+  <data name="LibraryUx_NavName" xml:space="preserve"><value>Library navigation</value></data>
+  <data name="LibraryUx_NavAll" xml:space="preserve"><value>All items</value></data>
+  <data name="LibraryUx_NavAllHint" xml:space="preserve"><value>Shows every capture regardless of date or folder. Drop captures here to remove them from their folder.</value></data>
+  <data name="LibraryUx_NavKept" xml:space="preserve"><value>Kept</value></data>
+  <data name="LibraryUx_NavKeptHint" xml:space="preserve"><value>Captures kept from automatic cleanup. Keep a capture from its More menu.</value></data>
+  <data name="LibraryUx_NavItemName" xml:space="preserve"><value>{0}, {1} items</value></data>
+  <data name="LibraryUx_FoldersHint" xml:space="preserve"><value>Captures in folders are excluded from automatic cleanup. Drag captures onto a folder to organize them.</value></data>
+  <data name="LibraryUx_NewFolderHint" xml:space="preserve"><value>New folder (Ctrl+Shift+N)</value></data>
+  <data name="LibraryUx_DatesHeader" xml:space="preserve"><value>Dates</value></data>
+  <data name="LibraryUx_SaveHere" xml:space="preserve"><value>Save new captures here</value></data>
+  <data name="LibraryUx_SaveHereOn" xml:space="preserve"><value>New captures are saved to {0}. Turn this off to save them by date.</value></data>
+  <data name="LibraryUx_SaveHereOff" xml:space="preserve"><value>New captures are saved by date. Turn this on to save them to {0}.</value></data>
+  <data name="LibraryUx_CommandBarName" xml:space="preserve"><value>Library commands</value></data>
+  <data name="LibraryUx_SelectionBarName" xml:space="preserve"><value>Selection commands</value></data>
+  <data name="LibraryUx_ClearSelection" xml:space="preserve"><value>Clear selection</value></data>
+  <data name="LibraryUx_ClearSelectionHint" xml:space="preserve"><value>Clear selection (Esc)</value></data>
+  <data name="LibraryUx_MoveHint" xml:space="preserve"><value>Move to folder (M)</value></data>
+  <data name="LibraryUx_DeleteHint" xml:space="preserve"><value>Delete (Delete)</value></data>
+  <data name="LibraryUx_BreadcrumbName" xml:space="preserve"><value>Current location</value></data>
+  <data name="LibraryUx_StatusName" xml:space="preserve"><value>Library status</value></data>
+  <data name="LibraryUx_CardKind" xml:space="preserve"><value>Folder</value></data>
+  <data name="LibraryUx_CardEmpty" xml:space="preserve"><value>Empty folder</value></data>
+  <data name="LibraryUx_DropMoveTo" xml:space="preserve"><value>Move {1} to {0}</value></data>
+  <data name="LibraryUx_DropRemoveFromFolder" xml:space="preserve"><value>Remove {0} from folder</value></data>
+  <data name="LibraryUx_DropFolderInto" xml:space="preserve"><value>Move into {0}</value></data>
+  <data name="LibraryUx_DropFolderTop" xml:space="preserve"><value>Move to top level</value></data>
+  <data name="LibraryUx_MovedTo" xml:space="preserve"><value>Moved {1} captures to {0}.</value></data>
+  <data name="LibraryUx_TileDragImage" xml:space="preserve"><value>Drop on a library folder to move it there. Drop on the desktop or in File Explorer to export a PNG file.</value></data>
+  <data name="LibraryUx_TileDragVideo" xml:space="preserve"><value>Drop on a library folder to move it there. Drop on the desktop or in File Explorer to export an MP4 file.</value></data>
+  <data name="LibraryUx_Keep" xml:space="preserve"><value>Keep</value></data>
+  <data name="LibraryUx_Unkeep" xml:space="preserve"><value>Stop keeping</value></data>
+  <data name="LibraryUx_KeepToggleName" xml:space="preserve"><value>Toggle keep</value></data>
+  <data name="LibraryUx_KeptBadge" xml:space="preserve"><value>Kept</value></data>
+  <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, kept</value></data>
+  <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More — keep, export and recognize text</value></data>
+  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, apps, image text</value></data>
+  <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
 </root>

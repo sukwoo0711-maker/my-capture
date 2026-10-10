@@ -55,6 +55,23 @@ public sealed class GalleryFolderCardViewModel : INotifyPropertyChanged
     public string ToolTipText => _name + Environment.NewLine + CountText + Environment.NewLine
         + UiText.Get("LibraryFolder_CardOpenHint");
 
+    private bool _isDropAvailable;
+    private bool _isDropTarget;
+
+    /// <summary>True while a capture drag is in progress and this folder could receive it.</summary>
+    public bool IsDropAvailable
+    {
+        get => _isDropAvailable;
+        internal set { if (_isDropAvailable != value) { _isDropAvailable = value; Raise(); } }
+    }
+
+    /// <summary>True while dragged captures are over this card and would move into it.</summary>
+    public bool IsDropTarget
+    {
+        get => _isDropTarget;
+        internal set { if (_isDropTarget != value) { _isDropTarget = value; Raise(); } }
+    }
+
     internal void Update(string name, int captureCount, int folderCount, GalleryItemViewModel? preview)
     {
         bool nameChanged = _name != name;
