@@ -117,7 +117,7 @@ internal sealed class QuickAccessWindow : Window
             face.Children.Add(Glyph("Icon." + action));
             face.Children.Add(new TextBlock
             {
-                Text = UiText.Get("QuickAccess." + action), FontSize = 11, Margin = new Thickness(0, 3, 0, 0),
+                Text = AutomationProperties.GetName(button), FontSize = 11, Margin = new Thickness(0, 3, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
             });
             button.Content = face;
