@@ -53,7 +53,7 @@ public sealed class VideoDurationAccuracyTests : KoreanCaptionTest
 
             Assert.Equal(containerMs, VideoDurationResolver.Resolve(containerMs, playerMs, encodedMs + 150));
         }
-        finally { OwnedTestDirectory.Delete(root); }
+        finally { DeleteAfterMediaRelease(root); }
     });
 
     [Theory]
@@ -102,7 +102,7 @@ public sealed class VideoDurationAccuracyTests : KoreanCaptionTest
         finally
         {
             editor?.Close();
-            OwnedTestDirectory.Delete(root);
+            DeleteAfterMediaRelease(root);
         }
     });
 
@@ -242,6 +242,29 @@ public sealed class VideoDurationAccuracyTests : KoreanCaptionTest
 
     private static object? Invoke(object instance, string name, params object[] arguments) =>
         instance.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(instance, arguments);
+
+    /// <summary>
+    /// MediaPlayer and MediaElement release the clip asynchronously after Close, so recycling the
+    /// fixture straight away can fail with a sharing violation. Pump until no file is held.
+    /// </summary>
+    private static void DeleteAfterMediaRelease(string root)
+    {
+        PumpUntil(() => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).All(IsUnlocked), TimeSpan.FromSeconds(10));
+        OwnedTestDirectory.Delete(root);
+
+        static bool IsUnlocked(string path)
+        {
+            try
+            {
+                using var _ = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return true;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+        }
+    }
 
     private static bool PumpUntil(Func<bool> condition, TimeSpan timeout)
     {
