@@ -65,11 +65,19 @@ internal sealed class VideoEditorWindow : Window
     private bool _syncingTrim;
     private TextBox _trimInInput = null!;
     private TextBox _trimOutInput = null!;
+    private TextBlock _keptLengthLabel = null!;
+    private TextBlock _removedLengthLabel = null!;
+    private Button _resetTrimButton = null!;
+    private System.Windows.Controls.Primitives.ToggleButton _detailToggle = null!;
+    private readonly Border _trimPreviewBadge;
+    private readonly TextBlock _trimPreviewBadgeText;
     private readonly MediaElementPreviewEngine _previewEngine;
     private readonly PreviewSeekCoordinator _previewSeeks;
     private readonly TwoLineTimeline _timeline;
     private readonly VideoLayerTimeline _layerTimeline;
     private readonly TextBlock _positionLabel;
+    private readonly TextBlock _positionFrameLabel = new();
+    private Border _positionChip = null!;
     private readonly TextBlock _statusLabel;
     private readonly TextBlock _loadingLabel;
     private readonly Border _loadingOverlay;
@@ -78,7 +86,6 @@ internal sealed class VideoEditorWindow : Window
     private Button? _layerPropertiesEdit;
     private Button? _undoButton;
     private Button? _redoButton;
-    private Button _trimButton = null!;
     private Button _addTextButton = null!;
     private Button _editTextButton = null!;
     private Button _deleteTextButton = null!;
@@ -206,6 +213,7 @@ internal sealed class VideoEditorWindow : Window
         _previewSeeks.SeekFailed += OnPreviewSeekFailed;
 
         _timeline = new TwoLineTimeline();
+        _timeline.SetDetailVisible(false);
         _layerTimeline = new VideoLayerTimeline();
         _layerTimeline.LayerSelected += (_, _) =>
         {
@@ -220,8 +228,29 @@ internal sealed class VideoEditorWindow : Window
         _timeline.PlayheadChanged += OnTimelinePlayhead;
         _timeline.PlayheadInteractionCompleted += OnTimelinePlayheadInteractionCompleted;
         _timeline.TrimChanged += (_, _) => OnTrimChanged();
-        _timeline.TrimInteractionStarted += (_, _) => { PausePlayback(); _trimInteractionBefore = _editDocument.Clone(); };
+        _timeline.TrimInteractionStarted += (_, _) => BeginTrimInteraction();
         _timeline.TrimInteractionCompleted += (_, _) => CompleteTrimInteraction();
+        // While a trim handle is dragged the preview shows that handle's frame; the badge
+        // says which end it is, like the handle chip on the timeline.
+        _trimPreviewBadgeText = new TextBlock
+        {
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = TryBrush("Text.OnAccent", Color.FromRgb(0x0A, 0x08, 0x18)),
+        };
+        _trimPreviewBadge = new Border
+        {
+            Name = "VideoTrimPreviewBadge",
+            Background = TryBrush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(8, 3, 8, 4),
+            Margin = new Thickness(10),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+            Child = _trimPreviewBadgeText,
+        };
         _positionLabel = BuildMono("00:00.000 / 00:00.000");
         _statusLabel = new TextBlock
         {
@@ -426,6 +455,38 @@ internal sealed class VideoEditorWindow : Window
         previewStack.Children.Add(_media);
         previewStack.Children.Add(_overlayPreview);
         previewStack.Children.Add(_layerCanvas);
+        previewStack.Children.Add(_trimPreviewBadge);
+        // Current / total time sits on the preview, like a player's time readout, so it is
+        // visible at every window size without taking a row from the timeline.
+        var positionContent = new StackPanel { Orientation = Orientation.Horizontal };
+        _positionLabel.Foreground = TryBrush("Text.Badge", Colors.White);
+        _positionLabel.VerticalAlignment = VerticalAlignment.Center;
+        _positionFrameLabel.Foreground = TryBrush("Text.Badge", Colors.White);
+        _positionFrameLabel.FontSize = 12;
+        _positionFrameLabel.Margin = new Thickness(10, 0, 0, 0);
+        _positionFrameLabel.VerticalAlignment = VerticalAlignment.Center;
+        positionContent.Children.Add(_positionLabel);
+        positionContent.Children.Add(_positionFrameLabel);
+        var positionChip = new Border
+        {
+            Name = "VideoPositionChip",
+            Background = TryBrush("Surface.Badge", Color.FromArgb(0xE6, 0x08, 0x0C, 0x12)),
+            BorderBrush = TryBrush("Border.Badge", Color.FromArgb(0x66, 0xF6, 0xF8, 0xFC)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(8, 2, 8, 3),
+            Margin = new Thickness(8),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            IsHitTestVisible = false,
+            Child = positionContent,
+        };
+        _positionChip = positionChip;
+        // A small preview keeps the time and drops the frame count, which the status line
+        // still reports for frame steps.
+        previewStack.SizeChanged += (_, _) =>
+            _positionFrameLabel.Visibility = previewStack.ActualWidth >= 440 ? Visibility.Visible : Visibility.Collapsed;
+        previewStack.Children.Add(positionChip);
         previewStack.Children.Add(_loadingOverlay);
 
         var workspace = new Grid();
@@ -571,25 +632,60 @@ internal sealed class VideoEditorWindow : Window
 
     private Grid _timelineCache = null!;
 
-    private FrameworkElement BuildTrimInputs()
+    /// <summary>
+    /// The trim bar under the trim timeline: set the start or end at the playhead, read how
+    /// long the result is, type a precise time, or go back to the full length.
+    /// </summary>
+    /// <remarks>
+    /// Dragging the handles stays the primary path, so a committed value applies immediately
+    /// and there is no separate "apply" gate to forget. Enter is kept for typed values.
+    /// </remarks>
+    private FrameworkElement BuildTrimBar()
     {
-        // Inline precision entry only. Direct timeline dragging is the primary path, so a
-        // committed value applies immediately and there is no separate "apply" gate to
-        // forget. Enter is kept for people who type a value.
-        var row = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
-        row.Children.Add(new TextBlock { Text = UiText.Get("Video.Trim"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) });
+        var row = new WrapPanel { Name = "VideoTrimBar", Margin = new Thickness(0, 6, 0, 0) };
+        AutomationProperties.SetName(row, UiText.Get("VideoEditorUx_TrimBarName"));
+        row.Children.Add(MakeMarkButton(UiText.Get("VideoEditorUx_MarkInHere"), UiText.Get("VideoEditorUx_MarkInHelp"),
+            "M9.5,3.5 H5.5 V16.5 H9.5 M8,10 H16", "In"));
+        row.Children.Add(MakeMarkButton(UiText.Get("VideoEditorUx_MarkOutHere"), UiText.Get("VideoEditorUx_MarkOutHelp"),
+            "M10.5,3.5 H14.5 V16.5 H10.5 M12,10 H4", "Out"));
+
+        _keptLengthLabel = new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold };
+        _keptLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        _removedLengthLabel = new TextBlock { FontSize = 12 };
+        _removedLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        var summary = new StackPanel
+        {
+            Name = "VideoTrimSummary",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 12, 0),
+            MinWidth = 120,
+        };
+        summary.Children.Add(_keptLengthLabel);
+        summary.Children.Add(_removedLengthLabel);
+        row.Children.Add(summary);
+
+        var inputs = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 8, 2) };
         TextBox Input(string name)
         {
-            row.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 6, 0) });
-            var input = new TextBox { Width = 144, MinHeight = 36, Padding = new Thickness(8, 4, 8, 4), VerticalContentAlignment = VerticalAlignment.Center, ToolTip = UiText.Get("Video.SourceTimeHint") };
+            inputs.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 5, 0) });
+            var input = new TextBox { Width = 120, MinHeight = 36, Padding = new Thickness(8, 4, 8, 4), VerticalContentAlignment = VerticalAlignment.Center, ToolTip = UiText.Get("Video.SourceTimeHint") };
             AutomationProperties.SetName(input, name);
+            AutomationProperties.SetHelpText(input, UiText.Get("Video.SourceTimeHint"));
             input.PreviewKeyDown += (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; ApplyTrimInputs(); } };
             input.LostFocus += (_, _) => ApplyTrimInputs();
-            row.Children.Add(input); _editControls.Add(input);
+            inputs.Children.Add(input); _editControls.Add(input);
             return input;
         }
         _trimInInput = Input(UiText.Get("Video.TrimIn"));
         _trimOutInput = Input(UiText.Get("Video.TrimOut"));
+        row.Children.Add(inputs);
+
+        _resetTrimButton = MakeButton(UiText.Get("VideoEditorUx_ResetTrim"), UiText.Get("VideoEditorUx_ResetTrim"), "Button.Secondary", ResetTrim);
+        _resetTrimButton.MinHeight = 40;
+        _resetTrimButton.Margin = new Thickness(0, 2, 0, 2);
+        _resetTrimButton.ToolTip = UiText.Get("VideoEditorUx_ResetTrimHelp");
+        AutomationProperties.SetHelpText(_resetTrimButton, UiText.Get("VideoEditorUx_ResetTrimHelp"));
+        row.Children.Add(_resetTrimButton);
         RefreshTrimInputs();
         return row;
     }
@@ -602,19 +698,14 @@ internal sealed class VideoEditorWindow : Window
         }
 
         var timeline = new Grid { Margin = new Thickness(0, 6, 0, 0) };
-        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // two-line timeline
-        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // position label
+        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // trim timeline (+ detail)
+        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // trim bar
         timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // layer tracks
-        timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // layer tools
 
-        timeline.Children.Add(BuildTrimInputs());
-        Grid.SetRow(_timeline, 1);
         timeline.Children.Add(_timeline);
-
-        _positionLabel.HorizontalAlignment = HorizontalAlignment.Center;
-        _positionLabel.Margin = new Thickness(0, 6, 0, 0);
-        Grid.SetRow(_positionLabel, 2);
-        timeline.Children.Add(_positionLabel);
+        FrameworkElement trimBar = BuildTrimBar();
+        Grid.SetRow(trimBar, 1);
+        timeline.Children.Add(trimBar);
 
         var layerScroll = new ScrollViewer
         {
@@ -624,7 +715,7 @@ internal sealed class VideoEditorWindow : Window
             Focusable = false,
         };
         AutomationProperties.SetName(layerScroll, UiText.Get("Text_D9378793F9FE"));
-        Grid.SetRow(layerScroll, 3);
+        Grid.SetRow(layerScroll, 2);
         timeline.Children.Add(layerScroll);
 
 
@@ -745,33 +836,43 @@ internal sealed class VideoEditorWindow : Window
         // Cluster 1: transport position.
         transport.Children.Add(MakeTransportIcon("Icon.First", UiText.Get("Text_DC710AA11970"), "Button.Ghost", () => Seek(_timeline.InMs)));
         transport.Children.Add(MakeTransportIcon("Icon.Rewind", UiText.Get("Text_E166B75FADF4"), "Button.Ghost", () => StepCoarse(-1)));
-        // The single filled primary of this row: play/pause.
-        transport.Children.Add(MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Primary", TogglePlay));
+        // The single filled primary of this row, and its largest target: play/pause.
+        Button play = MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Primary", TogglePlay, glyphSize: 24);
+        play.MinWidth = 56;
+        play.MinHeight = 48;
+        play.Margin = new Thickness(0, 0, 3, 0);
+        transport.Children.Add(play);
         transport.Children.Add(MakeTransportIcon("Icon.FastForward", UiText.Get("Text_E5CAF7CFC916"), "Button.Ghost", () => StepCoarse(1)));
         transport.Children.Add(MakeTransportIcon("Icon.Last", UiText.Get("Text_DFCA22AB9F61"), "Button.Ghost", () => Seek(_timeline.OutMs)));
-        transport.Children.Add(Spacer(6));
+        transport.Children.Add(Spacer(4));
         // Cluster 2: frame stepping.
         transport.Children.Add(MakeTransportIcon("Icon.StepBack", UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
         transport.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
-        transport.Children.Add(Spacer(6));
+        transport.Children.Add(Spacer(4));
         // Cluster 3: timeline view and range marks.
         transport.Children.Add(MakeTransportIcon("Icon.ZoomOut", UiText.Get("Text_48D137437347"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(1.25)));
         transport.Children.Add(MakeTransportIcon("Icon.ZoomIn", UiText.Get("Text_C5176D8C3041"), "Button.Ghost", () => _timeline.ZoomAroundPlayhead(0.8)));
-        transport.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => _timeline.FitAll()));
-        transport.Children.Add(Spacer(6));
-        transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkIn"), "In", SetInHere));
-        transport.Children.Add(MakeMarkButton(UiText.Get("Video.MarkOut"), "Out", SetOutHere));
+        transport.Children.Add(MakeTransportIcon("Icon.FitAll", UiText.Get("Text_6CA53DEDFF4A"), "Button.Ghost", () => { ShowDetailTimeline(); _timeline.FitAll(); }));
+        // The frame-level detail strip is an expert view: folded by default so the trim
+        // timeline is the one timeline people see first. Zooming opens it.
+        _detailToggle = new System.Windows.Controls.Primitives.ToggleButton
+        {
+            Content = BuildIconLabel("Icon.ChevronDown", UiText.Get("VideoEditorUx_DetailTimeline")),
+            MinHeight = 42,
+            Padding = new Thickness(6, 4, 8, 4),
+            Margin = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = UiText.Get("VideoEditorUx_DetailTimelineHelp"),
+        };
+        AutomationProperties.SetName(_detailToggle, UiText.Get("VideoEditorUx_DetailTimeline"));
+        AutomationProperties.SetHelpText(_detailToggle, UiText.Get("VideoEditorUx_DetailTimelineHelp"));
+        _detailToggle.Checked += (_, _) => _timeline.SetDetailVisible(true);
+        _detailToggle.Unchecked += (_, _) => _timeline.SetDetailVisible(false);
+        _editControls.Add(_detailToggle);
+        transport.Children.Add(_detailToggle);
+        // Start/end marks moved to the trim bar under the timeline, next to what they change.
         Grid.SetRow(transport, 0);
         controls.Children.Add(transport);
-
-        // Trim is on by default in 2.0; keep the mode control off the compact bar so a
-        // 770px editor still has one visible toolbar row and the timeline stays in view.
-        _trimButton = MakeCompactButton(
-            UiText.Get("Text_7DDE1114417E"),
-            UiText.Get("Text_BBA2EFF5675C"),
-            "Button.Ghost",
-            ToggleTrimMode);
-        _trimButton.Visibility = Visibility.Collapsed;
 
         _cancelOperationButton = new Button
         {
@@ -789,7 +890,6 @@ internal sealed class VideoEditorWindow : Window
         _cancelOperationButton.HorizontalAlignment = HorizontalAlignment.Center;
 
         var hidden = new StackPanel { Orientation = Orientation.Horizontal };
-        hidden.Children.Add(_trimButton);
         hidden.Children.Add(_cancelOperationButton);
         Grid.SetRow(hidden, 1);
         controls.Children.Add(hidden);
@@ -811,6 +911,7 @@ internal sealed class VideoEditorWindow : Window
         }
 
         UpdateOverlayActionStates();
+        RefreshTrimSummary();
     }
 
     // ---- media lifecycle ----
@@ -864,7 +965,6 @@ internal sealed class VideoEditorWindow : Window
         SynchronizeTrim();
         _timeline.SetPlayhead(_editDocument.TrimInMs);
         _timeline.SetTrimMode(true);
-        _trimButton.Content = UiText.Get("Text_7DDE1114417E");
         _overlayPreview.SetOverlays(_editDocument.TextOverlays);
         _overlayPreview.SetFrameLayers(_editDocument.FrameEditLayers);
         _layerCanvas.SetDocument(_editDocument);
@@ -1106,37 +1206,89 @@ internal sealed class VideoEditorWindow : Window
 
     // ---- trim ----
 
-    private void ToggleTrimMode()
+    /// <summary>
+    /// The "Trim" command (X, as crop is X in the image editor): selects the start handle of
+    /// the kept range for keyboard adjustment and shows its frame; pressed again while the
+    /// timeline has focus, it switches to the end handle.
+    /// </summary>
+    private void SelectTrimHandle()
     {
-        bool enabled = !_timeline.TrimModeEnabled;
-        _timeline.SetTrimMode(enabled);
-        _trimButton.Content = enabled ? UiText.Get("Text_7DDE1114417E") : UiText.Get("Text_4601577BA0F6");
-        _statusLabel.Text = enabled
-            ? UiText.Get("Text_BE4215610EBC")
-            : UiText.Format("Text_C7000F39A0DF", FormatMs(_timeline.SelectedDurationMs));
+        if (!_mediaReady || _operationRunning)
+        {
+            return;
+        }
+
+        bool end = _timeline.IsKeyboardFocusWithin && !_timeline.IsEndHandleActive;
+        _timeline.ActivateTrimHandle(end);
+        Seek(end ? _timeline.OutMs : _timeline.InMs);
+        _statusLabel.Text = UiText.Get(end ? "VideoEditorUx_TrimHandleEnd" : "VideoEditorUx_TrimHandleStart");
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
     }
 
     private void SetInHere()
     {
-        if (!_timeline.TrimModeEnabled)
-        {
-            ToggleTrimMode();
-        }
-
+        _timeline.SetTrimMode(true);
         _timeline.SetIn(CurrentMs());
-        _statusLabel.Text = UiText.Format("Text_84EB14013BF5", FormatMs(_timeline.InMs));
+        _statusLabel.Text = UiText.Format("VideoEditorUx_TrimStartSet",
+            TrimPresentation.Clock(_timeline.InMs), TrimPresentation.Clock(_timeline.SelectedDurationMs));
     }
 
     private void SetOutHere()
     {
-        if (!_timeline.TrimModeEnabled)
+        _timeline.SetTrimMode(true);
+        _timeline.SetOut(CurrentMs());
+        _statusLabel.Text = UiText.Format("VideoEditorUx_TrimEndSet",
+            TrimPresentation.Clock(_timeline.OutMs), TrimPresentation.Clock(_timeline.SelectedDurationMs));
+    }
+
+    /// <summary>Removes the trim: the whole recording is kept again (one undo step).</summary>
+    private void ResetTrim()
+    {
+        if (!_mediaReady || _operationRunning || _timeline.IsFullClip)
         {
-            ToggleTrimMode();
+            return;
         }
 
-        _timeline.SetOut(CurrentMs());
-        _statusLabel.Text = UiText.Format("Text_EFA9B778C037", FormatMs(_timeline.OutMs));
+        _ = _timeline.SetTrimRange(0, _durationMs);
+        _statusLabel.Text = UiText.Get("VideoEditorUx_TrimResetDone");
+    }
+
+    private void ShowDetailTimeline()
+    {
+        if (_detailToggle is not null && _detailToggle.IsChecked != true)
+        {
+            _detailToggle.IsChecked = true;
+        }
+    }
+
+    private void BeginTrimInteraction()
+    {
+        PausePlayback();
+        _trimInteractionBefore = _editDocument.Clone();
+        UpdateTrimPreviewBadge();
+    }
+
+    private void UpdateTrimPreviewBadge()
+    {
+        if (!_timeline.IsTrimDragging)
+        {
+            _trimPreviewBadge.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _trimPreviewBadgeText.Text = _timeline.IsEndHandleActive
+            ? TrimPresentation.EndChip(_timeline.OutMs)
+            : TrimPresentation.StartChip(_timeline.InMs);
+        _trimPreviewBadge.Visibility = Visibility.Visible;
+    }
+
+    private void RefreshTrimSummary()
+    {
+        if (_keptLengthLabel is null) return;
+        _keptLengthLabel.Text = TrimPresentation.KeptLength(_timeline.InMs, _timeline.OutMs);
+        _removedLengthLabel.Text = TrimPresentation.RemovedLength(_timeline.DurationMs, _timeline.InMs, _timeline.OutMs);
+        AutomationProperties.SetName(_keptLengthLabel, _keptLengthLabel.Text + ", " + _removedLengthLabel.Text);
+        _resetTrimButton.IsEnabled = _mediaReady && !_operationRunning && !_timeline.IsFullClip;
     }
 
     // ---- timed text notes ----
@@ -1169,6 +1321,7 @@ internal sealed class VideoEditorWindow : Window
         _editDocument.TrimOutMs = _timeline.OutMs;
         RefreshTrimInputs();
         UpdateStatusForMode();
+        UpdateTrimPreviewBadge();
     }
 
     private void CompleteTrimInteraction()
@@ -1176,6 +1329,8 @@ internal sealed class VideoEditorWindow : Window
         if (_trimInteractionBefore is { } before
             && (before.TrimInMs != _editDocument.TrimInMs || before.TrimOutMs != _editDocument.TrimOutMs)) RememberEdit(before);
         _trimInteractionBefore = null;
+        UpdateTrimPreviewBadge();
+        UpdateStatusForMode();
     }
 
     private void SynchronizeTrim()
@@ -1191,6 +1346,7 @@ internal sealed class VideoEditorWindow : Window
         if (_trimInInput is null) return;
         _trimInInput.Text = SourceTimeInput.Format(_timeline.InMs);
         _trimOutInput.Text = SourceTimeInput.Format(_timeline.OutMs);
+        RefreshTrimSummary();
     }
 
     private void ApplyTrimInputs()
@@ -2040,6 +2196,7 @@ internal sealed class VideoEditorWindow : Window
     {
         _shortcutActions["Play"] = TogglePlay;
         _shortcutActions["In"] = SetInHere; _shortcutActions["Out"] = SetOutHere;
+        _shortcutActions["Trim"] = SelectTrimHandle;
         _shortcutActions["FrameEdit"] = EditCurrentFrame;
         _shortcutActions["First"] = () => Seek(_timeline.InMs);
         _shortcutActions["Last"] = () => Seek(_timeline.OutMs);
@@ -2047,8 +2204,8 @@ internal sealed class VideoEditorWindow : Window
         _shortcutActions["Next"] = () => StepCoarse(1);
         _shortcutActions["PreviousFrame"] = () => StepFrames(-1);
         _shortcutActions["NextFrame"] = () => StepFrames(1);
-        _shortcutActions["ZoomIn"] = () => _timeline.ZoomAroundPlayhead(0.8);
-        _shortcutActions["ZoomOut"] = () => _timeline.ZoomAroundPlayhead(1.25);
+        _shortcutActions["ZoomIn"] = () => { ShowDetailTimeline(); _timeline.ZoomAroundPlayhead(0.8); };
+        _shortcutActions["ZoomOut"] = () => { ShowDetailTimeline(); _timeline.ZoomAroundPlayhead(1.25); };
         _shortcutActions["Undo"] = () => RestoreEdit(false);
         _shortcutActions["Redo"] = () => RestoreEdit(true);
         _shortcutActions["Gif"] = ExportGif;
@@ -2081,25 +2238,35 @@ internal sealed class VideoEditorWindow : Window
         // History buttons mirror the stack so they disable when there is nothing to undo.
         if (_undoButton is not null) _undoButton.IsEnabled = _undo.Count > 0;
         if (_redoButton is not null) _redoButton.IsEnabled = _redo.Count > 0;
-        string trim = _timeline.IsFullClip
-            ? UiText.Get("Text_424D8C634E79")
-            : UiText.Format("Text_9E5B73EAD5B5", FormatMs(_timeline.SelectedDurationMs));
+        _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
+        string kept = TrimPresentation.Clock(_timeline.SelectedDurationMs);
+        if (_timeline.IsTrimDragging)
+        {
+            // While a handle moves, the status names the end being adjusted and the result.
+            _statusLabel.Text = _timeline.IsEndHandleActive
+                ? UiText.Format("VideoEditorUx_TrimDraggingEnd", TrimPresentation.Clock(_timeline.OutMs), kept)
+                : UiText.Format("VideoEditorUx_TrimDraggingStart", TrimPresentation.Clock(_timeline.InMs), kept);
+            return;
+        }
+
+        string trim = TrimPresentation.KeptLength(_timeline.InMs, _timeline.OutMs) + " · "
+            + TrimPresentation.RemovedLength(_timeline.DurationMs, _timeline.InMs, _timeline.OutMs);
         string recordingHealth = _recording.DroppedFrames == 0
             ? UiText.Get("Text_C1BE53C8ADAF")
             : UiText.Format("Text_271908EF0BBE", _recording.DroppedFrames, _recording.DropRate);
         string layers = UiText.Format("Text_A610CF019CF2", _editDocument.TextOverlays.Count, _editDocument.FrameEditLayers.Count);
-        string trimMode = _timeline.TrimModeEnabled ? UiText.Get("Text_C0C699C12863") : UiText.Get("Text_6152EFC59724");
         _statusLabel.Text = string.Create(
             CultureInfo.CurrentCulture,
-            $"{trimMode} · {trim} · {layers} · {recordingHealth}");
-        _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
+            $"{trim} · {layers} · {recordingHealth}");
     }
 
     private void UpdatePositionLabel(double positionMs)
     {
         int total = TotalFrameCount();
         int frame = Math.Min(total, FrameStepCalculator.FrameIndexAt(positionMs, _recording.Fps, _durationMs) + 1);
-        _positionLabel.Text = UiText.Format("Text_D8A09D5BCDCB", FormatMs(positionMs), FormatMs(_durationMs), frame, total);
+        _positionLabel.Text = UiText.Format("VideoEditorUx_PositionTime", FormatMs(positionMs), FormatMs(_durationMs));
+        _positionFrameLabel.Text = UiText.Format("VideoEditorUx_PositionFrame", frame, total);
+        AutomationProperties.SetName(_positionChip, UiText.Format("Text_D8A09D5BCDCB", FormatMs(positionMs), FormatMs(_durationMs), frame, total));
     }
 
     private int TotalFrameCount()
@@ -2209,21 +2376,36 @@ internal sealed class VideoEditorWindow : Window
         return button;
     }
 
-    private Button MakeCompactButton(string content, string automationName, string styleKey, Action onClick)
+    /// <summary>
+    /// A large "start here" / "end here" button. Its bracket glyph matches the trim handle
+    /// it moves, and its shortcut (I or O) is printed under the label.
+    /// </summary>
+    private Button MakeMarkButton(string label, string help, string bracketFigures, string command)
     {
-        Button button = MakeButton(content, automationName, styleKey, onClick);
-        button.Margin = new Thickness(0, 0, 4, 0);
-        button.MinWidth = 52;
-        return button;
-    }
-
-    private Button MakeMarkButton(string content, string command, Action onClick)
-    {
-        Button button = MakeCompactButton(content, content, "Button.Ghost", _shortcutActions[command]);
+        var glyph = new System.Windows.Shapes.Path
+        {
+            Data = Geometry.Parse(bracketFigures),
+            Width = 18,
+            Height = 18,
+            Stretch = Stretch.Uniform,
+            StrokeThickness = 2,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        glyph.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Accent.Default");
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        content.Children.Add(glyph);
+        content.Children.Add(new TextBlock { Text = label, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        Button button = MakeButton(content, label, "Button.Secondary", _shortcutActions[command]);
+        button.ToolTip = help;
+        AutomationProperties.SetHelpText(button, help);
         ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
-        button.MinWidth = 36;
-        button.Padding = new Thickness(6, 4, 6, 4);
-        button.Margin = new Thickness(0, 0, 4, 0);
+        button.MinWidth = 96;
+        button.MinHeight = 44;
+        button.Padding = new Thickness(10, 3, 12, 3);
+        button.Margin = new Thickness(0, 2, 6, 2);
         return button;
     }
 
@@ -2248,7 +2430,7 @@ internal sealed class VideoEditorWindow : Window
         return button;
     }
 
-    private Button MakeTransportIcon(string iconKey, string automationName, string styleKey, Action onClick)
+    private Button MakeTransportIcon(string iconKey, string automationName, string styleKey, Action onClick, double glyphSize = 18)
     {
         string? command = iconKey switch
         {
@@ -2257,7 +2439,7 @@ internal sealed class VideoEditorWindow : Window
             "Icon.Last" => "Last", "Icon.StepBack" => "PreviousFrame", "Icon.StepForward" => "NextFrame",
             "Icon.ZoomIn" => "ZoomIn", "Icon.ZoomOut" => "ZoomOut", _ => null,
         };
-        Button button = MakeButton(BuildIconLabel(iconKey, string.Empty), automationName, styleKey,
+        Button button = MakeButton(BuildIconLabel(iconKey, string.Empty, glyphSize), automationName, styleKey,
             command is null ? onClick : _shortcutActions[command]);
         button.MinWidth = 36; button.MinHeight = 42;
         button.Padding = new Thickness(4); button.Margin = new Thickness(0, 0, 3, 0);
@@ -2265,13 +2447,13 @@ internal sealed class VideoEditorWindow : Window
         return button;
     }
 
-    private static StackPanel BuildIconLabel(string iconKey, string label)
+    private static StackPanel BuildIconLabel(string iconKey, string label, double glyphSize = 18)
     {
         var glyph = new System.Windows.Shapes.Path
         {
             Data = TryGeometry(iconKey),
-            Width = 18,
-            Height = 18,
+            Width = glyphSize,
+            Height = glyphSize,
             Stretch = Stretch.Uniform,
             StrokeThickness = 1.6,
             StrokeStartLineCap = PenLineCap.Round,
@@ -2284,7 +2466,8 @@ internal sealed class VideoEditorWindow : Window
             System.Windows.Shapes.Shape.StrokeProperty,
             new Binding(nameof(Control.Foreground))
             {
-                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(Button), 1),
+                // ButtonBase so toggle buttons (the detail timeline switch) draw their glyph too.
+                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(System.Windows.Controls.Primitives.ButtonBase), 1),
             });
 
         var content = new StackPanel { Orientation = Orientation.Horizontal };

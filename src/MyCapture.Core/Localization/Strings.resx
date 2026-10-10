@@ -3465,4 +3465,33 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="LibraryFolder_CardOpenHint" xml:space="preserve"><value>폴더 열기 (Enter)</value></data>
   <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>라이브러리를 닫아도 마지막 폴더에 새 캡처 저장</value></data>
   <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>새 캡처를 이 폴더에 저장합니다. 기존 캡처는 끌어 넣을 수 있습니다.</value></data>
+  <data name="VideoEditorUx_TrimStartChip" xml:space="preserve"><value>시작 {0}</value></data>
+  <data name="VideoEditorUx_TrimEndChip" xml:space="preserve"><value>끝 {0}</value></data>
+  <data name="VideoEditorUx_KeptLength" xml:space="preserve"><value>남는 길이 {0}</value></data>
+  <data name="VideoEditorUx_RemovedLength" xml:space="preserve"><value>잘림 {0}</value></data>
+  <data name="VideoEditorUx_NotTrimmed" xml:space="preserve"><value>자르지 않음</value></data>
+  <data name="VideoEditorUx_TrimTimelineStatus" xml:space="preserve"><value>시작 {0}, 끝 {1}, 남는 길이 {2}</value></data>
+  <data name="VideoEditorUx_TrimTimelineName" xml:space="preserve"><value>자르기 타임라인</value></data>
+  <data name="VideoEditorUx_TrimTimelineHelp" xml:space="preserve"><value>두 손잡이 사이가 남는 구간이며, 바깥의 어두운 빗금 구간은 저장하거나 내보낼 때 잘립니다. 손잡이를 끌거나 I와 O로 재생 위치를 시작과 끝으로 정합니다. 손잡이를 고른 뒤 ←/→는 1프레임, Shift+←/→는 10프레임 이동하고, Tab은 시작과 끝 손잡이를 바꿉니다.</value></data>
+  <data name="VideoEditorUx_TrimOffHelp" xml:space="preserve"><value>자르기(X)를 누르면 남길 구간의 손잡이를 조정할 수 있습니다.</value></data>
+  <data name="VideoEditorUx_ZoomLaneHelp" xml:space="preserve"><value>아래쪽 띠의 상자는 세부 타임라인에 확대할 범위이며, 끌어서 옮기거나 양 끝을 끌어 크기를 바꿉니다.</value></data>
+  <data name="VideoEditorUx_TrimCut" xml:space="preserve"><value>잘림</value></data>
+  <data name="VideoEditorUx_TrimBarName" xml:space="preserve"><value>자르기 도구</value></data>
+  <data name="VideoEditorUx_MarkInHere" xml:space="preserve"><value>여기서 시작</value></data>
+  <data name="VideoEditorUx_MarkInHelp" xml:space="preserve"><value>재생 위치를 남길 구간의 시작으로 정합니다.</value></data>
+  <data name="VideoEditorUx_MarkOutHere" xml:space="preserve"><value>여기서 끝</value></data>
+  <data name="VideoEditorUx_MarkOutHelp" xml:space="preserve"><value>재생 위치를 남길 구간의 끝으로 정합니다.</value></data>
+  <data name="VideoEditorUx_ResetTrim" xml:space="preserve"><value>원래 길이</value></data>
+  <data name="VideoEditorUx_ResetTrimHelp" xml:space="preserve"><value>자르기를 없애고 녹화 전체를 남깁니다.</value></data>
+  <data name="VideoEditorUx_TrimResetDone" xml:space="preserve"><value>자르기 해제 · 전체 길이 사용</value></data>
+  <data name="VideoEditorUx_TrimHandleStart" xml:space="preserve"><value>자르기 · 시작 손잡이 선택 · ←/→ 1프레임, Shift 10프레임, X 또는 Tab 끝 손잡이</value></data>
+  <data name="VideoEditorUx_TrimHandleEnd" xml:space="preserve"><value>자르기 · 끝 손잡이 선택 · ←/→ 1프레임, Shift 10프레임, X 또는 Tab 시작 손잡이</value></data>
+  <data name="VideoEditorUx_TrimDraggingStart" xml:space="preserve"><value>시작 손잡이 조정 · {0} · 남는 길이 {1}</value></data>
+  <data name="VideoEditorUx_TrimDraggingEnd" xml:space="preserve"><value>끝 손잡이 조정 · {0} · 남는 길이 {1}</value></data>
+  <data name="VideoEditorUx_TrimStartSet" xml:space="preserve"><value>시작 지정 {0} · 남는 길이 {1}</value></data>
+  <data name="VideoEditorUx_TrimEndSet" xml:space="preserve"><value>끝 지정 {0} · 남는 길이 {1}</value></data>
+  <data name="VideoEditorUx_DetailTimeline" xml:space="preserve"><value>세부 타임라인</value></data>
+  <data name="VideoEditorUx_DetailTimelineHelp" xml:space="preserve"><value>프레임 단위 세부 타임라인과 확대 범위를 펼치거나 접습니다. 확대와 축소를 누르면 자동으로 펼쳐집니다.</value></data>
+  <data name="VideoEditorUx_PositionTime" xml:space="preserve"><value>{0} / {1}</value></data>
+  <data name="VideoEditorUx_PositionFrame" xml:space="preserve"><value>프레임 {0}/{1}</value></data>
 </root>
