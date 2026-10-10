@@ -18,8 +18,10 @@ namespace MyCapture.Core.Annotations;
 /// Mapping rule for a clockwise quarter turn on a W×H canvas: (x, y) → (H-1-y, x) in the
 /// discrete pixel grid; expressed with continuous coordinates the transform is
 /// (x, y) → (H − y, x). Text and image annotations keep their upright glyph orientation
-/// (their <c>RotationDegrees</c> is unchanged) so captions stay readable after the turn;
-/// their bounding box is rotated with the canvas.
+/// (their <c>RotationDegrees</c> is unchanged) so captions stay readable after the turn.
+/// An image's bounding box is rotated with the canvas. A text box keeps its own width and
+/// height and only its centre turns: its width is where the upright text wraps, so swapping
+/// the sides would squeeze the same caption into a narrow, tall column.
 /// </para>
 /// </remarks>
 public static class AnnotationDocumentRotator
@@ -53,7 +55,7 @@ public static class AnnotationDocumentRotator
                     shape.Rect = MapRect(shape.Rect, oldHeight);
                     break;
                 case TextAnnotation text:
-                    text.Rect = MapRect(text.Rect, oldHeight);
+                    text.Rect = MapUprightRect(text.Rect, oldHeight);
                     break;
                 case ImageAnnotation image:
                     image.Rect = MapRect(image.Rect, oldHeight);
@@ -82,5 +84,14 @@ public static class AnnotationDocumentRotator
         RectD n = rect.Normalized();
         double newLeft = oldHeight - n.Bottom;
         return new RectD(newLeft, n.Left, n.Height, n.Width).Normalized();
+    }
+
+    private static RectD MapUprightRect(RectD rect, double oldHeight)
+    {
+        // Same centre mapping as every other point; the upright box keeps its size. A square
+        // (a step badge) lands exactly where MapRect would put it.
+        RectD n = rect.Normalized();
+        PointD center = MapPoint(n.Center, oldHeight);
+        return new RectD(center.X - (n.Width / 2), center.Y - (n.Height / 2), n.Width, n.Height);
     }
 }

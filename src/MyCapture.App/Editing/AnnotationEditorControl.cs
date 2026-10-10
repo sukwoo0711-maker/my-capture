@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using System.Globalization;
 using Microsoft.Win32;
 using MyCapture.App.Ocr;
@@ -119,6 +120,8 @@ internal sealed class AnnotationEditorControl : Grid
 
     private TextBox? _activeTextBox;
     private TextAnnotation? _editingText;
+    // Distance from the live box's outer edge to its first glyph (see PlaceTextBox).
+    private Point _liveTextInset;
     private bool _completed;
     private bool _commitInProgress;
     private bool _redactionInProgress;
@@ -178,8 +181,14 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         AnnotationDocument document = initialDocument ?? AnnotationDocument.CreateFor(_canvasWidth, _canvasHeight);
+        foreach (TextAnnotation text in document.Items.OfType<TextAnnotation>())
+        {
+            // A repair, not an edit: older versions cut text that outgrew its box.
+            TextAnnotationLayout.GrowToText(text);
+        }
+
         var undo = new UndoStack();
-        _controller = new AnnotationEditorController(document, undo);
+        _controller = new AnnotationEditorController(document, undo) { TextFitter = TextAnnotationLayout.Measure };
         _controller.BaseWidthAtZeroTurns = selectedBitmap.PixelWidth;
         _controller.BaseHeightAtZeroTurns = selectedBitmap.PixelHeight;
         AnnotationDefaults defaults = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
@@ -211,9 +220,9 @@ internal sealed class AnnotationEditorControl : Grid
         SetResourceReference(BackgroundProperty, "Surface.Base");
         Focusable = true;
         FocusVisualStyle = null;
-
         BuildShortcutActions();
         BuildLayout();
+        DisableImeOutsideTextInputs(this);
 
         _controller.SelectionChanged += (_, _) => OnSelectionChanged();
         undo.Changed += (_, _) => OnHistoryChanged();
@@ -308,7 +317,10 @@ internal sealed class AnnotationEditorControl : Grid
     internal bool HandleKeyDown(KeyEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
-        return HandleShortcut(e.Key, Keyboard.Modifiers);
+        // Hangul mode reports letters as ImeProcessed. Outside a text input they are still
+        // shortcuts; inside one the IME keeps the key so a composition and its Esc stay intact.
+        bool textInput = _activeTextBox is not null || Keyboard.FocusedElement is TextBoxBase;
+        return HandleShortcut(ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, textInput), Keyboard.Modifiers);
     }
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
@@ -857,22 +869,21 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void PlaceTextBox(PointD image)
     {
-        // Start the live box at the remaining canvas width so a long Korean sentence
-        // stays on one line. Wrapping begins only when the text hits the right edge.
-        double remainingPx = Math.Max(32, _canvasWidth - image.X - 8);
-        double lineHeightPx = Math.Max(24, _controller.DefaultFontSize * 1.8);
-        TextAnnotation annotation = _controller.BeginTextAnnotation(image, remainingPx, lineHeightPx);
+        // The controller sizes the caption to its (still empty) text; the live box follows
+        // the same fit as the user types.
+        double em = _controller.DefaultFontSize;
+        TextAnnotation annotation = _controller.BeginTextAnnotation(image, em, em * 1.4);
         _editingText = annotation;
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        Rect box = _surface.ToSurfaceRect(annotation.Rect);
         var textBox = new TextBox
         {
-            Width = Math.Max(60, box.Width),
-            MinWidth = 60,
-            MinHeight = Math.Max(28, box.Height),
+            MinWidth = 0,
+            MinHeight = 0,
             FontFamily = new FontFamily(annotation.FontFamily),
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
+            FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
+            FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = annotation.Foreground.ToBrush(),
             Background = Brush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
             BorderBrush = Brush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
@@ -881,12 +892,21 @@ internal sealed class AnnotationEditorControl : Grid
             TextWrapping = TextWrapping.NoWrap,
             Padding = new Thickness(4, 2, 4, 2),
         };
+        // The committed caption is drawn with ideal glyph metrics (FormattedText). The editor
+        // window's display-mode text would space and wrap the live copy differently.
+        TextOptions.SetTextFormattingMode(textBox, TextFormattingMode.Ideal);
         AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
+        InputMethod.SetIsInputMethodEnabled(textBox, true);
 
-        Canvas.SetLeft(textBox, box.Left);
-        Canvas.SetTop(textBox, box.Top);
+        // Border, padding and the 2 DIP the text view keeps on each side; replaced by the
+        // laid-out value below.
+        _liveTextInset = new Point(
+            textBox.BorderThickness.Left + textBox.Padding.Left + 2,
+            textBox.BorderThickness.Top + textBox.Padding.Top);
         _overlayCanvas.Children.Add(textBox);
         _activeTextBox = textBox;
+        LayoutLiveTextBox(textBox);
+        MeasureLiveTextInset(textBox);
         SetStatus(UiText.Get("Text_230D26DEB9AE"));
 
         textBox.TextChanged += OnLiveTextBoxTextChanged;
@@ -895,45 +915,66 @@ internal sealed class AnnotationEditorControl : Grid
     }
 
     /// <summary>
-    /// Keeps a long single line unwrapped until the box reaches the right edge of the
-    /// visible image (in surface coordinates, including letterbox origin).
+    /// Replaces the estimated inset with the laid-out one so the first glyph sits exactly
+    /// where the committed caption draws it.
     /// </summary>
-    private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
+    private void MeasureLiveTextInset(TextBox box)
     {
-        if (sender is not TextBox box)
+        if (PresentationSource.FromVisual(box) is null)
         {
             return;
         }
 
-        Rect canvas = _surface.ToSurfaceRect(new RectD(0, 0, _canvasWidth, _canvasHeight));
-        double left = Canvas.GetLeft(box);
-        double availableDip = Math.Max(60, canvas.Right - left - 4);
-        FormattedText measured = MeasureLiveText(box);
-        double desiredDip = measured.Width + box.Padding.Left + box.Padding.Right + 8;
-        if (desiredDip <= availableDip)
+        box.UpdateLayout();
+        Rect first = box.GetRectFromCharacterIndex(0);
+        if (first.IsEmpty || !double.IsFinite(first.X) || !double.IsFinite(first.Y))
+        {
+            return;
+        }
+
+        _liveTextInset = new Point(first.X, first.Y);
+        LayoutLiveTextBox(box);
+    }
+
+    private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            LayoutLiveTextBox(box);
+        }
+    }
+
+    /// <summary>
+    /// Sizes and places the live box from the fit the commit will store: the first glyph at
+    /// the caption's top-left, each paragraph on one line while it fits, and wrapping at
+    /// exactly the committed width once the text reaches the image's right edge.
+    /// </summary>
+    private void LayoutLiveTextBox(TextBox box)
+    {
+        if (_editingText is not { } editing)
+        {
+            return;
+        }
+
+        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        TextLayout fit = _controller.FitText(editing, box.Text ?? string.Empty, editing.FontSize, editing.AutoSize, editing.Rect);
+        Rect target = _surface.ToSurfaceRect(fit.Rect);
+        double chrome = 2 * _liveTextInset.X;
+        box.MinWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
+        if (fit.AutoSize)
         {
             box.TextWrapping = TextWrapping.NoWrap;
-            box.Width = Math.Max(box.MinWidth, desiredDip);
+            // Room for the caret after the last glyph, so the line never scrolls sideways.
+            box.Width = target.Width + chrome + 2;
         }
         else
         {
             box.TextWrapping = TextWrapping.Wrap;
-            box.Width = availableDip;
+            box.Width = target.Width + chrome;
         }
-    }
 
-    private FormattedText MeasureLiveText(TextBox box)
-    {
-        FontFamily family = box.FontFamily ?? new FontFamily("Malgun Gothic");
-        var typeface = new Typeface(family, box.FontStyle, box.FontWeight, FontStretches.Normal);
-        return new FormattedText(
-            box.Text ?? string.Empty,
-            CultureInfo.CurrentUICulture,
-            box.FlowDirection,
-            typeface,
-            box.FontSize,
-            Brushes.Black,
-            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        Canvas.SetLeft(box, target.Left - _liveTextInset.X);
+        Canvas.SetTop(box, target.Top - _liveTextInset.Y);
     }
 
     internal AnnotationDocument CreateCurrentImageSnapshot()
@@ -946,24 +987,15 @@ internal sealed class AnnotationEditorControl : Grid
             && snapshot.Items.OfType<TextAnnotation>().FirstOrDefault(item => item.Id == editing.Id) is { } text)
         {
             if (string.IsNullOrEmpty(box.Text)) snapshot.Remove(text);
-            else { text.Text = box.Text; text.Rect = MeasureCommittedTextRect(box, editing); }
+            else
+            {
+                // Exactly what committing now would store.
+                text.Text = box.Text;
+                TextLayout.Apply(text, _controller.FitText(editing, box.Text, editing.FontSize, editing.AutoSize, editing.Rect));
+            }
         }
         snapshot.NormalizeZIndices();
         return snapshot;
-    }
-
-    private RectD MeasureCommittedTextRect(TextBox box, TextAnnotation annotation)
-    {
-        // Shrink-wrap to the typed text in image-pixel space so a wide live box does not
-        // leave a huge empty plate after commit.
-        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        PointD imageOrigin = _surface.ToImagePoint(new Point(Canvas.GetLeft(box), Canvas.GetTop(box)));
-        FormattedText measured = MeasureLiveText(box);
-        double width = Math.Max(annotation.FontSize, (measured.Width + box.Padding.Left + box.Padding.Right + 8) / dipPerPixel);
-        double height = Math.Max(annotation.FontSize * 1.4, (measured.Height + box.Padding.Top + box.Padding.Bottom + 4) / dipPerPixel);
-        width = Math.Min(width, Math.Max(1, _canvasWidth - imageOrigin.X));
-        height = Math.Min(height, Math.Max(1, _canvasHeight - imageOrigin.Y));
-        return new RectD(imageOrigin.X, imageOrigin.Y, width, height);
     }
 
     private void CommitActiveText()
@@ -977,20 +1009,22 @@ internal sealed class AnnotationEditorControl : Grid
         TextAnnotation annotation = _editingText;
         _activeTextBox = null;
         _editingText = null;
+        // Esc, Ctrl+Enter and a canvas click commit from inside the box; give the keyboard back
+        // to the canvas so the next letter is a shortcut. A commit caused by focus moving
+        // elsewhere (a slider, a swatch) leaves that new focus alone.
+        bool hadKeyboardFocus = box.IsKeyboardFocusWithin;
 
         box.TextChanged -= OnLiveTextBoxTextChanged;
         _overlayCanvas.Children.Remove(box);
-
-        RectD finalRect = MeasureCommittedTextRect(box, annotation);
-        if (finalRect != annotation.Rect)
-        {
-            annotation.Rect = finalRect;
-        }
 
         bool hadText = !string.IsNullOrEmpty(box.Text);
         _controller.CommitTextEdit(annotation, box.Text ?? string.Empty);
         SetStatus(hadText ? UiText.Get("Text_B09611FF35C1") : UiText.Get("Text_8BDB6F46B7FF"));
         UpdateInspector();
+        if (hadKeyboardFocus)
+        {
+            Focus();
+        }
     }
 
     /// <summary>
@@ -1447,6 +1481,7 @@ internal sealed class AnnotationEditorControl : Grid
             _crop?.SetRatio(_cropRatio.SelectedIndex switch { 1 => (double)_canvasWidth / _canvasHeight, 2 => 1, 3 => 4.0 / 3, 4 => 16.0 / 9, 5 => 9.0 / 16, _ => null });
             RefreshCrop();
         };
+        ReturnFocusAfterMousePick(_cropRatio);
         panel.Children.Add(_cropRatio);
         var dimensions = new UniformGrid { Columns = 2, Margin = new Thickness(0, 10, 0, 10) };
         _cropWidth = new TextBox { MinHeight = 30, Margin = new Thickness(0, 0, 4, 0) };
@@ -1461,6 +1496,7 @@ internal sealed class AnnotationEditorControl : Grid
             _cropInputErrors.Add(box, (border, error));
             field.Children.Add(border); field.Children.Add(error); dimensions.Children.Add(field);
             AutomationName(box, UiText.Get(key));
+            InputMethod.SetIsInputMethodEnabled(box, false); // pixel counts only
             box.TextChanged += (_, _) =>
             {
                 if (!_syncingInspector && _crop is not null) _dirtyCropInputs.Add(box);
@@ -1556,23 +1592,83 @@ internal sealed class AnnotationEditorControl : Grid
         panel.Children.Add(_swatchPanel);
         var custom = new TextBox { Text = _controller.StrokeColor.ToHex(), MinHeight = 32, Margin = new Thickness(0, 4, 0, 4) };
         AutomationName(custom, UiText.Get("Tools.CustomColor"));
+        InputMethod.SetIsInputMethodEnabled(custom, true);
+        // Enter applies and Esc restores; both hand the keyboard back to the canvas so the next
+        // letter is a tool shortcut again instead of more text in this box. A composing IME
+        // reports ImeProcessed here and keeps its own Enter/Esc.
+        custom.PreviewKeyDown += (_, e) =>
+        {
+            if (Keyboard.Modifiers != ModifierKeys.None) return;
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                if (ApplyCustomColor(custom.Text)) Focus();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                custom.Text = _controller.StrokeColor.ToHex();
+                Focus();
+            }
+        };
         panel.Children.Add(custom);
         var apply = new Button { Content = UiText.Get("Tools.CustomColor"), MinHeight = 36 };
         AutomationName(apply, UiText.Get("Tools.CustomColor"));
         PreserveEditorMouseFocus(apply);
-        apply.Click += (_, _) =>
-        {
-            if (ColorRgba.TryParse(custom.Text, out ColorRgba color))
-            {
-                _controller.ApplyStrokeColor(color);
-                RememberPreferences();
-                SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
-            }
-            else SetStatus(UiText.Get("Tools.InvalidColor"));
-        };
+        apply.Click += (_, _) => ApplyCustomColor(custom.Text);
         panel.Children.Add(apply);
         return panel;
     }
+
+    /// <summary>
+    /// Turns the IME off for <paramref name="root"/> and every non-text control under it.
+    /// </summary>
+    /// <remarks>
+    /// The canvas, tool buttons, sliders and lists never take text, so a Hangul-mode IME must
+    /// not hold a hidden composition there: a typed T would become an invisible ㅅ that later
+    /// lands in a text box. WPF reads the setting from the focused element only (it does not
+    /// inherit), so each control gets it. Text inputs keep their own setting.
+    /// </remarks>
+    private static void DisableImeOutsideTextInputs(DependencyObject root)
+    {
+        InputMethod.SetIsInputMethodEnabled(root, false);
+        foreach (object child in LogicalTreeHelper.GetChildren(root))
+        {
+            if (child is DependencyObject element and not TextBoxBase)
+            {
+                DisableImeOutsideTextInputs(element);
+            }
+        }
+    }
+
+    private bool ApplyCustomColor(string text)
+    {
+        if (!ColorRgba.TryParse(text, out ColorRgba color))
+        {
+            SetStatus(UiText.Get("Tools.InvalidColor"));
+            return false;
+        }
+
+        _controller.ApplyStrokeColor(color);
+        RememberPreferences();
+        SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
+        return true;
+    }
+
+    /// <summary>
+    /// After a mouse pick from <paramref name="combo"/>'s list, returns the keyboard to the
+    /// canvas so letter shortcuts work again. A keyboard user keeps focus on the list.
+    /// </summary>
+    private void ReturnFocusAfterMousePick(ComboBox combo) =>
+        combo.DropDownClosed += (_, _) =>
+        {
+            if (InputManager.Current.MostRecentInputDevice is not MouseDevice) return;
+            // Deferred: the combo box restores its own focus while the drop-down closes.
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+            {
+                if (combo.IsKeyboardFocusWithin) Focus();
+            });
+        };
 
     private FrameworkElement BuildThicknessSection()
     {
@@ -1636,6 +1732,7 @@ internal sealed class AnnotationEditorControl : Grid
                 UpdateInspector();
             }
         };
+        ReturnFocusAfterMousePick(_strokeStyleComboBox);
         panel.Children.Add(_strokeStyleComboBox);
         _fillTransparencyLabel = SectionLabel(UiText.Get("Text_1E0DD4F46A0C"));
         _fillTransparencyLabel.Margin = new Thickness(0, 16, 0, 4);
@@ -1700,10 +1797,10 @@ internal sealed class AnnotationEditorControl : Grid
 
             _controller.ApplyFontSize(args.NewValue);
             RememberPreferences();
-            if (_activeTextBox is not null)
+            if (_activeTextBox is not null && _editingText is not null)
             {
-                _activeTextBox.FontSize = Math.Max(1, args.NewValue * _surface.DipPerPixel);
-                OnLiveTextBoxTextChanged(_activeTextBox, null!);
+                _activeTextBox.FontSize = Math.Max(1, _editingText.FontSize * _surface.DipPerPixel);
+                LayoutLiveTextBox(_activeTextBox);
             }
 
             if (_controller.Selected is TextAnnotation)

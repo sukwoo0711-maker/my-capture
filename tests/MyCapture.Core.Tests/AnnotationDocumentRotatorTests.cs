@@ -59,4 +59,53 @@ public sealed class AnnotationDocumentRotatorTests
         Assert.Equal(80, text.Rect.Width, 3);
         Assert.Equal(20, text.Rect.Height, 3);
     }
+
+    [Fact]
+    public void QuarterTurn_KeepsUprightTextBoxSizeAndTurnsOnlyItsCentre()
+    {
+        AnnotationDocument document = AnnotationDocument.CreateFor(800, 600);
+        var text = new TextAnnotation { Rect = new RectD(40, 10, 200, 30), Text = "확인 필요", AutoSize = true };
+        document.Add(text);
+
+        AnnotationDocumentRotator.Rotate(document, 1);
+
+        // Centre (140, 25) maps to (600 - 25, 140); the caption keeps its 200 x 30 box, so
+        // the same line still fits instead of being squeezed into a 30-pixel column.
+        Assert.Equal(475, text.Rect.X, 6);
+        Assert.Equal(125, text.Rect.Y, 6);
+        Assert.Equal(200, text.Rect.Width, 6);
+        Assert.Equal(30, text.Rect.Height, 6);
+        Assert.True(text.AutoSize);
+    }
+
+    [Fact]
+    public void FourTurns_RestoreTextBoxExactly()
+    {
+        AnnotationDocument document = AnnotationDocument.CreateFor(1280, 720);
+        var text = new TextAnnotation { Rect = new RectD(1100.25, 37.5, 260.75, 48.5), Text = "오른쪽 끝" };
+        document.Add(text);
+        RectD before = text.Rect;
+
+        AnnotationDocumentRotator.Rotate(document, 4);
+
+        Assert.Equal(before.X, text.Rect.X, 6);
+        Assert.Equal(before.Y, text.Rect.Y, 6);
+        Assert.Equal(before.Width, text.Rect.Width, 6);
+        Assert.Equal(before.Height, text.Rect.Height, 6);
+    }
+
+    [Fact]
+    public void QuarterTurn_SquareStepBadgeLandsWhereTheCanvasMapsIt()
+    {
+        AnnotationDocument document = AnnotationDocument.CreateFor(800, 600);
+        var badge = new TextAnnotation { IsStepNumber = true, Text = "1", Rect = new RectD(10, 20, 40, 40) };
+        document.Add(badge);
+
+        AnnotationDocumentRotator.Rotate(document, 1);
+
+        Assert.Equal(540, badge.Rect.X, 6);
+        Assert.Equal(10, badge.Rect.Y, 6);
+        Assert.Equal(40, badge.Rect.Width, 6);
+        Assert.Equal(40, badge.Rect.Height, 6);
+    }
 }
