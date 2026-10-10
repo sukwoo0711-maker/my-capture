@@ -69,6 +69,15 @@ internal sealed class VideoEditorWindow : Window
     private TextBlock _removedLengthLabel = null!;
     private Button _resetTrimButton = null!;
     private System.Windows.Controls.Primitives.ToggleButton _detailToggle = null!;
+    private TextBlock _identityTitle = null!;
+    private TextBlock _identityDetails = null!;
+    private FrameworkElement _identityText = null!;
+    private readonly List<TextBlock> _toolLabels = [];
+    private Button _trimToolButton = null!;
+    private Button _addTextToolButton = null!;
+    private int _commandBarLevel = -1;
+    private bool _fittingCommandBar;
+    private ScrollViewer? _layerTracksScroll;
     private readonly Border _trimPreviewBadge;
     private readonly TextBlock _trimPreviewBadgeText;
     private readonly MediaElementPreviewEngine _previewEngine;
@@ -165,7 +174,8 @@ internal sealed class VideoEditorWindow : Window
         WorkspaceTheme.Attach(this, WorkspaceRole.VideoEditor);
         StandardWindowTheme.Apply(this);
 
-        Title = UiText.Get("Text_79188256BC8D");
+        // The title names the task first: this window edits a recorded video, not an image.
+        Title = UiText.Get("VideoEditorUx_WindowTitle");
         Background = TryBrush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
         Foreground = TryBrush("Text.Primary", Colors.White);
         FontFamily = TryFont("Font.Ui");
@@ -180,7 +190,7 @@ internal sealed class VideoEditorWindow : Window
         FitInitialSizeToMonitor(MonitorEnumerator.GetFromCursor());
         SourceInitialized += OnSourceInitialized;
 
-        AutomationProperties.SetName(this, UiText.Get("Text_EF83F428AA11"));
+        AutomationProperties.SetName(this, UiText.Get("VideoEditorUx_WindowName"));
 
         _media = new MediaElement
         {
@@ -490,43 +500,13 @@ internal sealed class VideoEditorWindow : Window
         previewStack.Children.Add(_loadingOverlay);
 
         var workspace = new Grid();
-        workspace.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         workspace.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 112 });
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        var exports = new StackPanel { Orientation = Orientation.Horizontal };
-        Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"));
-        saveEdits.ToolTip = UiText.Get("Workspace.VideoHint");
-        AutomationProperties.SetHelpText(saveEdits, UiText.Get("Workspace.VideoHint"));
-        saveEdits.Click += (_, _) => CommitTrim();
-        Button export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_ExportFormats"), "MediaExport_ArrowExport", true);
-        export.ToolTip = UiText.Get("Workspace.VideoHint");
-        AutomationProperties.SetHelpText(export, UiText.Get("Workspace.VideoHint"));
-        export.Click += (_, _) => OpenExport();
-        // Frame edit is a main action, not a transport icon: it takes the playhead frame
-        // into the still-image editor and returns it as a layer.
-        Button frameEdit = MakeIconButton("Icon.Image", UiText.Get("Text_BEE32B2A6B1A"),
-            UiText.Get("Text_A79A9F93D479"), "Button.Secondary", EditCurrentFrame);
-        ShortcutPresentation.Attach(frameEdit, ShortcutScope.Video, "FrameEdit");
-        frameEdit.Margin = new Thickness(0, 0, 8, 0);
-        AutomationProperties.SetHelpText(frameEdit, UiText.Get("Text_A79A9F93D479"));
-        _editControls.Add(saveEdits); _editControls.Add(export); _editControls.Add(frameEdit);
-        exports.Children.Add(frameEdit); exports.Children.Add(saveEdits); exports.Children.Add(export);
-        DockPanel.SetDock(exports, Dock.Right); header.Children.Add(exports);
-        // Undo / redo belong with the commands, not buried under keyboard only.
-        var history = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 12, 0) };
-        Button undo = MakeTransportIcon("Icon.Undo", UiText.Get("Text_CE706412FA75"), "Button.Ghost", () => RestoreEdit(false));
-        Button redo = MakeTransportIcon("Icon.Redo", UiText.Get("Text_078C44D5A66E"), "Button.Ghost", () => RestoreEdit(true));
-        _undoButton = undo; _redoButton = redo;
-        history.Children.Add(undo); history.Children.Add(redo);
-        DockPanel.SetDock(history, Dock.Right); header.Children.Add(history);
         FrameworkElement tools = BuildOverlayLane();
-        var fit = new ComboBox { Width = 130, MinHeight = 36, VerticalAlignment = VerticalAlignment.Center };
-        fit.Items.Add(UiText.Get("Video.PreviewFit")); fit.SelectedIndex = 0;
-        AutomationProperties.SetName(fit, UiText.Get("Video.PreviewFit"));
-        header.Children.Add(fit);
-        header.SizeChanged += (_, _) => fit.Visibility = header.ActualWidth < 580 ? Visibility.Collapsed : Visibility.Visible;
-        workspace.Children.Add(header);
-        Grid.SetRow(previewStack, 1); workspace.Children.Add(previewStack);
+        // The command bar spans the window above the preview and the layer panel, so the
+        // screen's name, its tools and save/export (top right) stay readable at common sizes.
+        Grid header = BuildCommandBar();
+        Grid.SetColumnSpan(header, 2);
+        workspace.Children.Add(previewStack);
         var preview = new Border
         {
             Background = TryBrush("Surface.Canvas", Colors.Black),
@@ -536,16 +516,29 @@ internal sealed class VideoEditorWindow : Window
             Padding = new Thickness(8, 6, 8, 6),
             Child = workspace,
         };
-        Grid.SetRow(preview, 0);
         var upper = new Grid();
+        upper.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // command bar
+        upper.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // preview + layers
         upper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star), MinWidth = 300 });
         upper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 220, MaxWidth = 330 });
+        upper.Children.Add(header);
+        Grid.SetRow(preview, 1);
         upper.Children.Add(preview);
         var layerPanel = new Border { Name = "VideoLayersPanel", Child = tools, Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(8, 0, 0, 0), BorderThickness = new Thickness(1) };
         layerPanel.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
         layerPanel.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        Grid.SetRow(layerPanel, 1);
         Grid.SetColumn(layerPanel, 1); upper.Children.Add(layerPanel);
         root.Children.Add(upper);
+        // Fit the command bar to the window. Only a new width can change what fits, and
+        // the grid, unlike the bar, does not grow with the bar's content.
+        upper.SizeChanged += (_, e) =>
+        {
+            if (e.WidthChanged)
+            {
+                FitCommandBar(header, upper.ActualWidth);
+            }
+        };
 
         Grid timeline = BuildTimeline();
         var timelineScroll = new ScrollViewer
@@ -593,8 +586,8 @@ internal sealed class VideoEditorWindow : Window
             // Reserve the independent minimum of its auto command rows and readable list.
             double requiredLayers = ((Grid)tools).RowDefinitions.Sum(row =>
                 row.Height.IsStar ? row.MinHeight : row.ActualHeight);
-            double requiredPreview = Math.Max(
-                previewStack.MinHeight + header.DesiredSize.Height
+            double requiredPreview = header.DesiredSize.Height + Math.Max(
+                previewStack.MinHeight
                     + preview.Padding.Top + preview.Padding.Bottom + preview.BorderThickness.Top + preview.BorderThickness.Bottom,
                 requiredLayers + layerPanel.Padding.Top + layerPanel.Padding.Bottom
                     + layerPanel.BorderThickness.Top + layerPanel.BorderThickness.Bottom);
@@ -630,6 +623,185 @@ internal sealed class VideoEditorWindow : Window
         return root;
     }
 
+    /// <summary>
+    /// The command bar across the top, grouped by purpose like the image editor's bar:
+    /// what this screen is, history, editing tools, and saving/exporting at the right edge.
+    /// </summary>
+    private Grid BuildCommandBar()
+    {
+        var bar = new Grid { Name = "VideoEditorCommandBar", Margin = new Thickness(0, 0, 0, 6) };
+        foreach (GridLength width in new[] { GridLength.Auto, GridLength.Auto, GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto })
+        {
+            bar.ColumnDefinitions.Add(new ColumnDefinition { Width = width });
+        }
+
+        AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_CommandBarName"));
+
+        // 1. Identity: this is the recording (video) editor, with the clip's facts.
+        var mark = new System.Windows.Shapes.Path
+        {
+            Data = TryGeometry("Icon.Play"),
+            Width = 14,
+            Height = 14,
+            Stretch = Stretch.Uniform,
+            StrokeThickness = 1.6,
+            StrokeLineJoin = PenLineJoin.Round,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        mark.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Accent.Default");
+        mark.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Accent.Default");
+        var tile = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Center, Child = mark };
+        tile.SetResourceReference(Border.BackgroundProperty, "Accent.Subtle");
+        tile.SetResourceReference(Border.BorderBrushProperty, "Border.Accent");
+        tile.BorderThickness = new Thickness(1);
+        _identityTitle = new TextBlock { Text = UiText.Get("VideoEditorUx_HeaderTitle"), FontSize = 14, FontWeight = FontWeights.SemiBold };
+        _identityTitle.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        _identityDetails = new TextBlock { FontSize = 11.5 };
+        _identityDetails.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        RefreshIdentityDetails(_recording.DurationMs);
+        var identityText = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        identityText.Children.Add(_identityTitle);
+        identityText.Children.Add(_identityDetails);
+        var identity = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+        identity.Children.Add(tile);
+        identity.Children.Add(identityText);
+        AutomationProperties.SetName(identity, UiText.Get("VideoEditorUx_HeaderTitle"));
+        _identityText = identityText;
+        bar.Children.Add(identity);
+
+        // 2. History: undo / redo belong with the commands, not buried under keyboard only.
+        var history = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        history.Children.Add(CommandSeparator());
+        Button undo = MakeTransportIcon("Icon.Undo", UiText.Get("Text_CE706412FA75"), "Button.Ghost", () => RestoreEdit(false));
+        Button redo = MakeTransportIcon("Icon.Redo", UiText.Get("Text_078C44D5A66E"), "Button.Ghost", () => RestoreEdit(true));
+        _undoButton = undo; _redoButton = redo;
+        history.Children.Add(undo); history.Children.Add(redo);
+        history.Children.Add(CommandSeparator());
+        Grid.SetColumn(history, 1);
+        bar.Children.Add(history);
+
+        // 3. Editing tools: trim, add text, and edit the playhead frame as an image (the
+        // still-image editor returns it as a layer).
+        var editing = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        _trimToolButton = ToolButton("Icon.Trim", UiText.Get("VideoEditorUx_Trim"), UiText.Get("VideoEditorUx_TrimHelp"), SelectTrimHandle, "Trim");
+        _addTextToolButton = ToolButton("Icon.Text", UiText.Get("VideoEditorUx_AddText"), UiText.Get("VideoEditorUx_AddTextHelp"), AddTextOverlay, "AddText");
+        Button frameEdit = ToolButton("Icon.Image", UiText.Get("VideoEditorUx_FrameImageEdit"), UiText.Get("Text_A79A9F93D479"), EditCurrentFrame, "FrameEdit");
+        editing.Children.Add(_trimToolButton);
+        editing.Children.Add(_addTextToolButton);
+        editing.Children.Add(frameEdit);
+        Grid.SetColumn(editing, 2);
+        bar.Children.Add(editing);
+
+        // 4. Output, at the right edge: save into the library, or export a new file.
+        var output = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"));
+        saveEdits.ToolTip = UiText.Get("Workspace.VideoHint");
+        AutomationProperties.SetHelpText(saveEdits, UiText.Get("Workspace.VideoHint"));
+        saveEdits.Click += (_, _) => CommitTrim();
+        Button export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_ExportFormats"), "MediaExport_ArrowExport", true);
+        export.ToolTip = UiText.Get("Workspace.VideoHint");
+        AutomationProperties.SetHelpText(export, UiText.Get("Workspace.VideoHint"));
+        export.Click += (_, _) => OpenExport();
+        _editControls.Add(saveEdits); _editControls.Add(export);
+        output.Children.Add(saveEdits); output.Children.Add(export);
+        Grid.SetColumn(output, 4);
+        bar.Children.Add(output);
+
+        return bar;
+    }
+
+    private Button ToolButton(string iconKey, string label, string help, Action onClick, string command)
+    {
+        StackPanel content = BuildIconLabel(iconKey, label);
+        // Same height with or without the caption, so compacting never moves the preview.
+        content.MinHeight = 20;
+        _toolLabels.Add(content.Children.OfType<TextBlock>().Single());
+        Button button = MakeButton(content, label, "Button.Secondary", onClick);
+        button.ToolTip = help;
+        AutomationProperties.SetHelpText(button, help);
+        ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
+        button.MinWidth = 44;
+        button.Margin = new Thickness(0, 0, 6, 0);
+        return button;
+    }
+
+    private Border CommandSeparator() => new()
+    {
+        Width = 1,
+        Margin = new Thickness(6, 6, 6, 6),
+        Background = TryBrush("Border.Subtle", Colors.Gray),
+    };
+
+    /// <summary>
+    /// Narrows the command bar step by step instead of clipping it: clip facts, then the
+    /// screen title, then tool captions (icons and shortcuts stay), and last the tools that
+    /// have another visible entry (the trim bar, the layer menu) and a shortcut (X, Ctrl+T).
+    /// </summary>
+    private void FitCommandBar(Grid bar, double available)
+    {
+        // WPF arranges an overflowing element at its own desired width, so the bar's
+        // ActualWidth cannot tell what fits; the caller passes its container's real width.
+        if (available <= 0 || _fittingCommandBar) return;
+        _fittingCommandBar = true;
+        try
+        {
+            for (int level = 0; level <= 4; level++)
+            {
+                ApplyCommandBarLevel(level);
+                double needed = 0;
+                foreach (UIElement child in bar.Children)
+                {
+                    // A nested caption's visibility does not dirty this child, so Measure would
+                    // return the previous level's size without this.
+                    InvalidateMeasureTree(child);
+                    child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    needed += child.DesiredSize.Width;
+                }
+
+                if (needed <= available + 0.5) break;
+            }
+        }
+        finally
+        {
+            _fittingCommandBar = false;
+        }
+    }
+
+    private static void InvalidateMeasureTree(DependencyObject element)
+    {
+        if (element is UIElement visual)
+        {
+            visual.InvalidateMeasure();
+        }
+
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(element); index++)
+        {
+            InvalidateMeasureTree(VisualTreeHelper.GetChild(element, index));
+        }
+    }
+
+    private void ApplyCommandBarLevel(int level)
+    {
+        if (level == _commandBarLevel) return;
+        _commandBarLevel = level;
+        _identityDetails.Visibility = level >= 1 ? Visibility.Collapsed : Visibility.Visible;
+        _identityText.Visibility = level >= 2 ? Visibility.Collapsed : Visibility.Visible;
+        foreach (TextBlock label in _toolLabels)
+        {
+            label.Visibility = level >= 3 ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        _trimToolButton.Visibility = level >= 4 ? Visibility.Collapsed : Visibility.Visible;
+        _addTextToolButton.Visibility = level >= 4 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    internal int CommandBarLevelForTest => _commandBarLevel;
+
+    private void RefreshIdentityDetails(double durationMs) =>
+        _identityDetails.Text = UiText.Format("VideoEditorUx_HeaderDetails",
+            TrimPresentation.Clock(durationMs), _recording.Width, _recording.Height, _recording.Fps);
+
     private Grid _timelineCache = null!;
 
     /// <summary>
@@ -642,7 +814,7 @@ internal sealed class VideoEditorWindow : Window
     /// </remarks>
     private FrameworkElement BuildTrimBar()
     {
-        var row = new WrapPanel { Name = "VideoTrimBar", Margin = new Thickness(0, 6, 0, 0) };
+        var row = new WrapPanel { Name = "VideoTrimBar", Margin = new Thickness(0, 4, 0, 0) };
         AutomationProperties.SetName(row, UiText.Get("VideoEditorUx_TrimBarName"));
         row.Children.Add(MakeMarkButton(UiText.Get("VideoEditorUx_MarkInHere"), UiText.Get("VideoEditorUx_MarkInHelp"),
             "M9.5,3.5 H5.5 V16.5 H9.5 M8,10 H16", "In"));
@@ -715,6 +887,7 @@ internal sealed class VideoEditorWindow : Window
             Focusable = false,
         };
         AutomationProperties.SetName(layerScroll, UiText.Get("Text_D9378793F9FE"));
+        _layerTracksScroll = layerScroll;
         Grid.SetRow(layerScroll, 2);
         timeline.Children.Add(layerScroll);
 
@@ -730,7 +903,9 @@ internal sealed class VideoEditorWindow : Window
         var lane = new Grid();
 
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        lane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 84 });
+        // The list scrolls inside this row. Its reserved minimum only binds in the smallest
+        // windows, where the command bar above and the trim tools below need the height.
+        lane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 32 });
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var label = new TextBlock
@@ -954,6 +1129,7 @@ internal sealed class VideoEditorWindow : Window
 
         _durationMs = durationMs > 0 ? durationMs : Math.Max(1, _recording.DurationMs);
         _mediaReady = true;
+        RefreshIdentityDetails(_durationMs);
 
         _timeline.Initialize(_durationMs, _recording.Fps);
         _layerTimeline.Initialize(_durationMs);
@@ -1707,6 +1883,15 @@ internal sealed class VideoEditorWindow : Window
             _layerTimeline.SetLayers(_editDocument.TextOverlays, _editDocument.FrameEditLayers);
             _layerTimeline.SelectLayer(SelectedLayerId());
             _layerCanvas.Select(SelectedLayerId());
+            // Layer tracks appear once there is a layer; empty "no layer" lanes are noise
+            // under the trim tools. Add text / Add layer remain the entry points.
+            if (_layerTracksScroll is not null)
+            {
+                _layerTracksScroll.Visibility = _editDocument.TextOverlays.Count + _editDocument.FrameEditLayers.Count > 0
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
             UpdateOverlayActionStates();
         }
         finally

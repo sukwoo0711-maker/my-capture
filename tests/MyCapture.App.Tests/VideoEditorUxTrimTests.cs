@@ -354,7 +354,7 @@ public sealed class VideoEditorUxTrimTests
         }
     });
 
-    private static VideoEditorWindow OpenReadyEditor(string root, double durationMs, bool show = false, int width = 1180, int height = 760)
+    internal static VideoEditorWindow OpenReadyEditor(string root, double durationMs, bool show = false, int width = 1180, int height = 760)
     {
         // A layout-only recording: the media never opens, so the editor is made ready with the
         // same CompleteOpen path the open-timeout fallback uses.
@@ -395,7 +395,7 @@ public sealed class VideoEditorUxTrimTests
         return right - left;
     }
 
-    private static void AssertInside(FrameworkElement element, FrameworkElement container, double containerHeight)
+    internal static void AssertInside(FrameworkElement element, FrameworkElement container, double containerHeight)
     {
         Point top = element.TranslatePoint(new Point(), container);
         Point bottom = element.TranslatePoint(new Point(element.ActualWidth, element.ActualHeight), container);
@@ -433,12 +433,12 @@ public sealed class VideoEditorUxTrimTests
         Assert.Equal(expectedOut, actualOut, precision: 3);
     }
 
-    private static T Field<T>(object target, string name) => (T)target.GetType().GetField(name, Private)!.GetValue(target)!;
+    internal static T Field<T>(object target, string name) => (T)target.GetType().GetField(name, Private)!.GetValue(target)!;
 
     private static void Invoke(object target, string name, params object[] arguments) =>
         target.GetType().GetMethod(name, Private)!.Invoke(target, arguments);
 
-    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    internal static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
     {
         for (int index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
         {

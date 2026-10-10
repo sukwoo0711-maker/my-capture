@@ -3494,4 +3494,14 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_DetailTimelineHelp" xml:space="preserve"><value>프레임 단위 세부 타임라인과 확대 범위를 펼치거나 접습니다. 확대와 축소를 누르면 자동으로 펼쳐집니다.</value></data>
   <data name="VideoEditorUx_PositionTime" xml:space="preserve"><value>{0} / {1}</value></data>
   <data name="VideoEditorUx_PositionFrame" xml:space="preserve"><value>프레임 {0}/{1}</value></data>
+  <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>녹화 동영상 편집</value></data>
+  <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>녹화 동영상 편집 창</value></data>
+  <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>녹화 동영상 편집</value></data>
+  <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>동영상 {0} · {1}×{2} · {3}fps</value></data>
+  <data name="VideoEditorUx_CommandBarName" xml:space="preserve"><value>녹화 동영상 편집 도구</value></data>
+  <data name="VideoEditorUx_Trim" xml:space="preserve"><value>자르기</value></data>
+  <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>남길 구간의 시작 손잡이를 고르고 그 프레임을 보여 줍니다. 다시 누르면 끝 손잡이로 바뀝니다.</value></data>
+  <data name="VideoEditorUx_AddText" xml:space="preserve"><value>텍스트 추가</value></data>
+  <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>재생 위치부터 표시할 텍스트 레이어를 추가합니다.</value></data>
+  <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>프레임 이미지 편집</value></data>
 </root>

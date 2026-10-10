@@ -3494,4 +3494,14 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_DetailTimelineHelp" xml:space="preserve"><value>Shows or hides the frame-level detailed timeline and its zoom range. Zooming in or out shows it automatically.</value></data>
   <data name="VideoEditorUx_PositionTime" xml:space="preserve"><value>{0} / {1}</value></data>
   <data name="VideoEditorUx_PositionFrame" xml:space="preserve"><value>Frame {0}/{1}</value></data>
+  <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>Recording video editor</value></data>
+  <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>Recording video editor window</value></data>
+  <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>Recording video editor</value></data>
+  <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>Video {0} · {1}×{2} · {3} fps</value></data>
+  <data name="VideoEditorUx_CommandBarName" xml:space="preserve"><value>Video editing commands</value></data>
+  <data name="VideoEditorUx_Trim" xml:space="preserve"><value>Trim</value></data>
+  <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>Selects the start handle of the part to keep and shows its frame. Press again for the end handle.</value></data>
+  <data name="VideoEditorUx_AddText" xml:space="preserve"><value>Add text</value></data>
+  <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
+  <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Edit frame image</value></data>
 </root>
