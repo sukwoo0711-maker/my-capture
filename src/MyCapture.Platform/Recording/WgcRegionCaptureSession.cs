@@ -43,7 +43,7 @@ public sealed record WgcCaptureDiagnostics(
     long PoolRecreations);
 
 /// <summary>
-/// Fixed-region recording capture through Windows.Graphics.Capture (spike).
+/// Fixed-region recording capture through Windows.Graphics.Capture.
 /// </summary>
 /// <remarks>
 /// <para>

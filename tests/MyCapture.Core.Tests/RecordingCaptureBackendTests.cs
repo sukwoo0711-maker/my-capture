@@ -7,25 +7,102 @@ namespace MyCapture.Core.Tests;
 public sealed class RecordingCaptureBackendTests
 {
     [Theory]
-    [InlineData(null, RecordingCaptureBackend.Gdi)]
-    [InlineData("", RecordingCaptureBackend.Gdi)]
     [InlineData("gdi", RecordingCaptureBackend.Gdi)]
+    [InlineData(" GDI ", RecordingCaptureBackend.Gdi)]
     [InlineData("wgc", RecordingCaptureBackend.WindowsGraphicsCapture)]
     [InlineData(" WGC ", RecordingCaptureBackend.WindowsGraphicsCapture)]
     [InlineData("Wgc", RecordingCaptureBackend.WindowsGraphicsCapture)]
-    [InlineData("wgc2", RecordingCaptureBackend.Gdi)]
-    [InlineData("dxgi", RecordingCaptureBackend.Gdi)]
-    [InlineData("1", RecordingCaptureBackend.Gdi)]
-    public void Parse_OnlyExactWgcOptsIn(string? value, RecordingCaptureBackend expected)
+    public void ParseOverride_AcceptsOnlyTheTwoBackendNames(string value, RecordingCaptureBackend expected)
     {
-        Assert.Equal(expected, RecordingCaptureBackendSelection.Parse(value));
+        Assert.Equal(expected, RecordingCaptureBackendSelection.ParseOverride(value));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("auto")]
+    [InlineData("wgc2")]
+    [InlineData("dxgi")]
+    [InlineData("1")]
+    public void ParseOverride_AnythingElseForcesNothing(string? value)
+    {
+        Assert.Null(RecordingCaptureBackendSelection.ParseOverride(value));
+    }
+
+    [Theory]
+    // No override: the setting decides, and the product default (Auto) asks for WGC.
+    [InlineData(RecordingCaptureMode.Auto, null, RecordingCaptureBackend.WindowsGraphicsCapture)]
+    [InlineData(RecordingCaptureMode.Gdi, null, RecordingCaptureBackend.Gdi)]
+    [InlineData(RecordingCaptureMode.Auto, "typo", RecordingCaptureBackend.WindowsGraphicsCapture)]
+    [InlineData(RecordingCaptureMode.Gdi, "typo", RecordingCaptureBackend.Gdi)]
+    // The diagnostic environment switch wins over the setting in both directions.
+    [InlineData(RecordingCaptureMode.Auto, "gdi", RecordingCaptureBackend.Gdi)]
+    [InlineData(RecordingCaptureMode.Gdi, "wgc", RecordingCaptureBackend.WindowsGraphicsCapture)]
+    [InlineData(RecordingCaptureMode.Auto, "wgc", RecordingCaptureBackend.WindowsGraphicsCapture)]
+    [InlineData(RecordingCaptureMode.Gdi, "gdi", RecordingCaptureBackend.Gdi)]
+    public void Resolve_EnvironmentOverrideWinsOverTheSetting(
+        RecordingCaptureMode mode, string? environmentValue, RecordingCaptureBackend expected)
+    {
+        Assert.Equal(expected, RecordingCaptureBackendSelection.Resolve(mode, environmentValue));
     }
 
     [Fact]
-    public void Default_IsGdi()
+    public void Resolve_UndefinedModeBehavesLikeAuto()
     {
-        Assert.Equal(RecordingCaptureBackend.Gdi, default(RecordingCaptureBackend));
+        Assert.Equal(
+            RecordingCaptureBackend.WindowsGraphicsCapture,
+            RecordingCaptureBackendSelection.Resolve((RecordingCaptureMode)42, null));
+    }
+
+    [Fact]
+    public void Defaults_AutoModeAndTheDocumentedSwitchName()
+    {
+        Assert.Equal(RecordingCaptureMode.Auto, default(RecordingCaptureMode));
+        Assert.Equal(RecordingCaptureMode.Auto, new RecordingSettings().CaptureMode);
         Assert.Equal("MYCAPTURE_RECORDING_BACKEND", RecordingCaptureBackendSelection.EnvironmentVariable);
+    }
+
+    [Fact]
+    public void FromEnvironment_UsesTheProcessSwitchOverTheGivenMode()
+    {
+        string? previous = Environment.GetEnvironmentVariable(RecordingCaptureBackendSelection.EnvironmentVariable);
+        try
+        {
+            Environment.SetEnvironmentVariable(RecordingCaptureBackendSelection.EnvironmentVariable, "gdi");
+            Assert.Equal(RecordingCaptureBackend.Gdi, RecordingCaptureBackendSelection.FromEnvironment());
+            Environment.SetEnvironmentVariable(RecordingCaptureBackendSelection.EnvironmentVariable, "wgc");
+            Assert.Equal(
+                RecordingCaptureBackend.WindowsGraphicsCapture,
+                RecordingCaptureBackendSelection.FromEnvironment(RecordingCaptureMode.Gdi));
+            Environment.SetEnvironmentVariable(RecordingCaptureBackendSelection.EnvironmentVariable, null);
+            Assert.Equal(RecordingCaptureBackend.WindowsGraphicsCapture, RecordingCaptureBackendSelection.FromEnvironment());
+            Assert.Equal(RecordingCaptureBackend.Gdi, RecordingCaptureBackendSelection.FromEnvironment(RecordingCaptureMode.Gdi));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(RecordingCaptureBackendSelection.EnvironmentVariable, previous);
+        }
+    }
+
+    [Theory]
+    [InlineData("auto", RecordingCaptureMode.Auto)]
+    [InlineData("gdi", RecordingCaptureMode.Gdi)]
+    [InlineData(" Gdi ", RecordingCaptureMode.Gdi)]
+    [InlineData("wgc", RecordingCaptureMode.Auto)]
+    [InlineData("", RecordingCaptureMode.Auto)]
+    [InlineData(null, RecordingCaptureMode.Auto)]
+    public void ModeNames_ParseUnknownAsAuto(string? value, RecordingCaptureMode expected)
+    {
+        Assert.Equal(expected, RecordingCaptureModeNames.Parse(value));
+    }
+
+    [Fact]
+    public void ModeNames_RoundTrip()
+    {
+        Assert.Equal("auto", RecordingCaptureModeNames.ToSetting(RecordingCaptureMode.Auto));
+        Assert.Equal("gdi", RecordingCaptureModeNames.ToSetting(RecordingCaptureMode.Gdi));
+        Assert.Equal("auto", RecordingCaptureModeNames.ToSetting((RecordingCaptureMode)42));
     }
 
     private static readonly RectD[] Displays =

@@ -13,19 +13,51 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Windows.Graphics.Capture recording spike: same frame contract as GDI, GDI fallback, and
-/// the managed cursor ring. Native cases need desktop access like the other capture tests.
+/// Windows.Graphics.Capture recording backend: the default request, compatibility mode, same
+/// frame contract as GDI, GDI fallback, and the managed cursor ring. Native cases need desktop
+/// access like the other capture tests.
 /// </summary>
 public sealed class RecordingWgcBackendTests
 {
     [Fact]
-    public void Grabber_WithoutExplicitBackend_FollowsTheEnvironmentSwitch()
+    public void Grabber_WithoutExplicitBackend_DefaultsToWgcUnlessTheEnvironmentSaysGdi()
     {
         var grabber = new RegionFrameGrabber(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance), false);
-        Assert.Equal(RecordingCaptureBackendSelection.FromEnvironment(), grabber.RequestedBackend);
+        RecordingCaptureBackend? forced = RecordingCaptureBackendSelection.ParseOverride(
+            RecordingCaptureBackendSelection.EnvironmentOverrideValue());
+        Assert.Equal(forced ?? RecordingCaptureBackend.WindowsGraphicsCapture, grabber.RequestedBackend);
         Assert.Null(grabber.ActiveBackend);
         grabber.Dispose();
     }
+
+    [Fact]
+    public void Grabber_ExplicitBackendIsNotOverriddenByTheEnvironment()
+    {
+        // Callers that pass a backend (the recording coordinator, benchmarks) already resolved
+        // the switch; the grabber must not re-read it and undo the user's compatibility choice.
+        using var gdi = new RegionFrameGrabber(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance), false,
+            backend: RecordingCaptureBackend.Gdi);
+        using var wgc = new RegionFrameGrabber(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance), false,
+            backend: RecordingCaptureBackend.WindowsGraphicsCapture);
+        Assert.Equal(RecordingCaptureBackend.Gdi, gdi.RequestedBackend);
+        Assert.Equal(RecordingCaptureBackend.WindowsGraphicsCapture, wgc.RequestedBackend);
+    }
+
+    [Fact]
+    public void CompatibilityModeGrabber_NeverOpensWgc() => StaTestHost.Run(() =>
+    {
+        using var fixture = new PatternFixture();
+        RecordingCaptureBackend backend = RecordingCaptureBackendSelection.Resolve(RecordingCaptureMode.Gdi, null);
+        using var grabber = new RegionFrameGrabber(fixture.Engine, false, backend: backend);
+        grabber.Open(fixture.Region);
+
+        Assert.Equal(grabber.Width * grabber.Height * 4, grabber.GrabInto().Length);
+
+        Assert.Equal(RecordingCaptureBackend.Gdi, grabber.RequestedBackend);
+        Assert.Equal(RecordingCaptureBackend.Gdi, grabber.ActiveBackend);
+        Assert.Null(grabber.FallbackReason);
+        Assert.Null(grabber.WgcDiagnostics);
+    });
 
     [Fact]
     public void WgcGrabber_CopiesTheSameRegionPixelsAsGdi() => StaTestHost.Run(() =>

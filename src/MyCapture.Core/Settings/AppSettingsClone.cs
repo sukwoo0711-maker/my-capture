@@ -105,6 +105,7 @@ public static class AppSettingsClone
         CursorHighlight = s.CursorHighlight,
         PresetWidth = s.PresetWidth,
         PresetHeight = s.PresetHeight,
+        CaptureMode = s.CaptureMode,
     };
 
     private static PinSettings Clone(PinSettings s) => new()

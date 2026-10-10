@@ -27,6 +27,7 @@ public sealed class RecordingSettingsCloneTests
                 CoarseStepSeconds = 2.5,
                 PresetWidth = 1280,
                 PresetHeight = 720,
+                CaptureMode = RecordingCaptureMode.Gdi,
             },
         };
         var defaults = new RecordingSettings();

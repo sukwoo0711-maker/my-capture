@@ -29,13 +29,14 @@ namespace MyCapture.Platform.Recording;
 /// never changes mid-clip.
 /// </para>
 /// <para>
-/// Spike: the internal <see cref="RecordingCaptureBackendSelection.EnvironmentVariable"/>
-/// switch (<c>wgc</c>) routes frames through <see cref="WgcRegionCaptureSession"/>. GDI stays
-/// the default, and a region that spans displays, an unsupported OS or any WGC failure falls
+/// Recordings ask for <see cref="WgcRegionCaptureSession"/> unless the user chose compatibility
+/// mode (<see cref="RecordingCaptureMode.Gdi"/>) or the diagnostic
+/// <see cref="RecordingCaptureBackendSelection.EnvironmentVariable"/> switch says <c>gdi</c>
+/// (ADR 0005/0006). A region that spans displays, an unsupported OS or any WGC failure falls
 /// back to GDI for the rest of the recording without changing the frame contract. The WGC
 /// session (D3D device, capture item, frame pool) opens on a worker thread from
 /// <see cref="Open"/>, so its 70-300 ms setup overlaps encoder initialisation instead of
-/// delaying the first recorded frame.
+/// delaying the first recorded frame. Still captures never come through here and stay on GDI.
 /// </para>
 /// </remarks>
 public sealed class RegionFrameGrabber : IDisposable
@@ -71,7 +72,10 @@ public sealed class RegionFrameGrabber : IDisposable
 
     public int Stride => Width * 4;
 
-    /// <summary>Backend asked for by the constructor argument or the environment switch.</summary>
+    /// <summary>
+    /// Backend asked for by the constructor argument, or else the product default (automatic,
+    /// WGC first) unless the environment switch overrides it.
+    /// </summary>
     public RecordingCaptureBackend RequestedBackend { get; }
 
     /// <summary>Backend that produced the latest frame; <see langword="null"/> before the first frame.</summary>
@@ -183,7 +187,6 @@ public sealed class RegionFrameGrabber : IDisposable
 
                 _wgc = opening.Result;
                 ActiveBackend = RecordingCaptureBackend.WindowsGraphicsCapture;
-                _log?.LogInformation("Recording capture backend: Windows.Graphics.Capture");
             }
             catch (Exception ex) when (ex is AggregateException or TimeoutException)
             {
@@ -198,6 +201,18 @@ public sealed class RegionFrameGrabber : IDisposable
         }
 
         SessionOpenMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        if (_wgc?.GetDiagnostics() is { } wgc)
+        {
+            _log?.LogInformation(
+                "Recording capture backend: requested {Requested}, active {Active}; session {CreateMs:0}ms, " +
+                "first grab waited {WaitMs:0.0}ms, D3D driver {Driver}, borderless access {Access}, border required {Border}",
+                RequestedBackend, ActiveBackend, wgc.CreateMs, SessionOpenMs, wgc.DriverType,
+                wgc.BorderlessAccess ?? "not requested", wgc.BorderRequired?.ToString() ?? wgc.BorderSetError ?? "unknown");
+        }
+        else if (FallbackReason is null)
+        {
+            _log?.LogInformation("Recording capture backend: requested {Requested}, active {Active}", RequestedBackend, ActiveBackend);
+        }
     }
 
     private static readonly TimeSpan WgcOpenTimeout = TimeSpan.FromSeconds(5);
@@ -223,7 +238,21 @@ public sealed class RegionFrameGrabber : IDisposable
     private void FallBackToGdi(string reason, Exception cause)
     {
         FallbackReason = reason;
-        _log?.LogWarning(cause, "Recording capture falls back to GDI: {Reason}", reason);
+        if (cause is NotSupportedException && _wgc is null)
+        {
+            // Expected before the first frame: the region spans displays or the OS lacks WGC.
+            _log?.LogInformation(
+                "Recording capture backend: requested {Requested}, active {Active}; fallback: {Reason}",
+                RequestedBackend, RecordingCaptureBackend.Gdi, reason);
+        }
+        else
+        {
+            _log?.LogWarning(
+                cause,
+                "Recording capture backend: requested {Requested}, active {Active}; fallback: {Reason}",
+                RequestedBackend, RecordingCaptureBackend.Gdi, reason);
+        }
+
         if (_wgc is not null)
         {
             _wgcDiagnostics = _wgc.GetDiagnostics();
@@ -301,6 +330,11 @@ public sealed class RegionFrameGrabber : IDisposable
             _wgcDiagnostics = _wgc.GetDiagnostics();
             _wgc.Dispose();
             _wgc = null;
+            _log?.LogInformation(
+                "WGC recording session closed: {Arrived} frame(s) arrived, {Copied} copied, {Reused} reused, " +
+                "{Superseded} superseded, {Recreated} pool recreation(s)",
+                _wgcDiagnostics.FramesArrived, _wgcDiagnostics.FramesCopied, _wgcDiagnostics.ReusedCalls,
+                _wgcDiagnostics.FramesSuperseded, _wgcDiagnostics.PoolRecreations);
         }
 
         _session?.Dispose();
