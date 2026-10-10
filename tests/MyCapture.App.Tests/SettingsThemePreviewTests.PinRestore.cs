@@ -49,8 +49,8 @@ public sealed partial class SettingsThemePreviewTests
             var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
             SettingsDraft draft = Assert.IsType<SettingsDraft>(window.DataContext);
 
-            // Screen pins tab: the history count is a validated number field.
-            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Text_33EFD44366A7")));
+            // Editing tab, screen pin group: the history count is a validated number field.
+            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
             Drain(window);
             TextBox limit = Descendants(window).OfType<TextBox>().Single(box =>
                 box.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.ClosedWindowRestoreLimit));
@@ -68,7 +68,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.False(Validation.GetHasError(limit));
 
             // Shortcuts tab: an optional recorder bound to the restore command, empty by default.
-            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Text_086F41200B47")));
+            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabShortcuts")));
             Drain(window);
             HotkeyRecorder recorder = Descendants(window).OfType<HotkeyRecorder>().Single(control =>
                 control.GetBindingExpression(HotkeyRecorder.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.RestoreClosedPinHotkey));

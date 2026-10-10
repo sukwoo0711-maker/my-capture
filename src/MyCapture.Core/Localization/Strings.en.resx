@@ -3535,4 +3535,59 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>Add text</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Edit frame image</value></data>
+  <data name="SettingsUx_TabGeneral" xml:space="preserve"><value>General</value></data>
+  <data name="SettingsUx_TabGeneralHelp" xml:space="preserve"><value>Display language, theme, start at sign-in</value></data>
+  <data name="SettingsUx_TabCapture" xml:space="preserve"><value>Capture</value></data>
+  <data name="SettingsUx_TabCaptureHelp" xml:space="preserve"><value>After capture, capture screen, delayed capture</value></data>
+  <data name="SettingsUx_TabRecording" xml:space="preserve"><value>Recording</value></data>
+  <data name="SettingsUx_TabRecordingHelp" xml:space="preserve"><value>Frame rate, recording size, pointer, recording method</value></data>
+  <data name="SettingsUx_TabEditing" xml:space="preserve"><value>Editing</value></data>
+  <data name="SettingsUx_TabEditingHelp" xml:space="preserve"><value>Editing tool defaults, screen pins, text recognition</value></data>
+  <data name="SettingsUx_TabShortcuts" xml:space="preserve"><value>Shortcuts</value></data>
+  <data name="SettingsUx_TabShortcutsHelp" xml:space="preserve"><value>Global shortcuts, keys under buttons</value></data>
+  <data name="SettingsUx_TabStorage" xml:space="preserve"><value>Storage</value></data>
+  <data name="SettingsUx_TabStorageHelp" xml:space="preserve"><value>Library retention, save folders, advanced</value></data>
+  <data name="SettingsUx_TabAbout" xml:space="preserve"><value>About</value></data>
+  <data name="SettingsUx_TabAboutHelp" xml:space="preserve"><value>Version, updates, settings backup</value></data>
+  <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>Other shortcuts</value></data>
+  <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>Assign only the ones you need, using combinations other apps do not use.</value></data>
+  <data name="SettingsUx_ShortcutHintsHeading" xml:space="preserve"><value>Keys on buttons</value></data>
+  <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>Shows each key under the editor buttons. Hovering over a button always shows its key.</value></data>
+  <data name="SettingsUx_RecordHotkeyTip" xml:space="preserve"><value>Select, then press the key combination.</value></data>
+  <data name="SettingsUx_MaxStorage" xml:space="preserve"><value>Maximum storage (GB)</value></data>
+  <data name="SettingsUx_MaxStorageRange" xml:space="preserve"><value>0.125–512 GB.</value></data>
+  <data name="SettingsUx_PreviewSize" xml:space="preserve"><value>Preview image size (pixels)</value></data>
+  <data name="SettingsUx_PreviewSizeRange" xml:space="preserve"><value>Longest edge, 96–1024 pixels.</value></data>
+  <data name="SettingsUx_Retention" xml:space="preserve"><value>Image retention (hours)</value></data>
+  <data name="SettingsUx_RetentionSummary" xml:space="preserve"><value>Library images are deleted automatically, oldest first, {0} after they are created. Kept images, images being edited, videos, and files you saved or exported separately are never deleted.</value></data>
+  <data name="SettingsUx_RetentionRange" xml:space="preserve"><value>Enter 1–8760 hours (365 days).</value></data>
+  <data name="SettingsUx_DurationDay" xml:space="preserve"><value>{0} day</value></data>
+  <data name="SettingsUx_DurationDays" xml:space="preserve"><value>{0} days</value></data>
+  <data name="SettingsUx_DurationHour" xml:space="preserve"><value>{0} hour</value></data>
+  <data name="SettingsUx_DurationHours" xml:space="preserve"><value>{0} hours</value></data>
+  <data name="SettingsUx_DurationDaysHours" xml:space="preserve"><value>{0} {1}</value></data>
+  <data name="SettingsUx_SaveFilesHeading" xml:space="preserve"><value>Saving files</value></data>
+  <data name="SettingsUx_AdvancedHeading" xml:space="preserve"><value>Advanced</value></data>
+  <data name="SettingsUx_AdvancedHint" xml:space="preserve"><value>Settings for the shortcut that uploads the clipboard image to a GitHub issue.</value></data>
+  <data name="SettingsUx_GitHubIssueUrlHint" xml:space="preserve"><value>The issue the GitHub upload shortcut pastes the clipboard image into. Use an issue you can comment on. Leave blank to use a safe default.</value></data>
+  <data name="SettingsUx_EditingDefaultsHeading" xml:space="preserve"><value>Editing tool defaults</value></data>
+  <data name="SettingsUx_PinCopy" xml:space="preserve"><value>Copying from a pinned window</value></data>
+  <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Click a pinned window and press Ctrl+C to copy its image. Ctrl+double-click copies the original text, or for an image without it, the text recognized on this PC.</value></data>
+  <data name="SettingsUx_OcrHeading" xml:space="preserve"><value>Text recognition</value></data>
+  <data name="SettingsUx_OcrLanguages" xml:space="preserve"><value>Recognition languages</value></data>
+  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate uses a model that handles small print such as receipts. Most accurate corrects brightness, contrast, and sharpness and enlarges the image 4x before recognition; it downloads about 67 MB the first time.</value></data>
+  <data name="SettingsUx_OcrFast" xml:space="preserve"><value>Fast</value></data>
+  <data name="SettingsUx_OcrBalanced" xml:space="preserve"><value>Normal</value></data>
+  <data name="SettingsUx_OcrAccurate" xml:space="preserve"><value>Accurate</value></data>
+  <data name="SettingsUx_OcrEnhanced" xml:space="preserve"><value>Most accurate</value></data>
+  <data name="SettingsUx_RecordingMethodAuto" xml:space="preserve"><value>Automatic (recommended)</value></data>
+  <data name="SettingsUx_RecordingMethodCompatible" xml:space="preserve"><value>Compatibility mode</value></data>
+  <data name="SettingsUx_RecordingMethodHint" xml:space="preserve"><value>Automatic records most screens most smoothly. If recordings look broken or freeze, choose compatibility mode.</value></data>
+  <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>Settings backup</value></data>
+  <data name="SettingsUx_BackupHint" xml:space="preserve"><value>Export your settings to a file or import them. Imported settings are saved when you select Apply. The GitHub token is never exported.</value></data>
+  <data name="SettingsUx_CancelTip" xml:space="preserve"><value>Discards your changes and closes.</value></data>
+  <data name="SettingsUx_CloseTitle" xml:space="preserve"><value>Unapplied changes</value></data>
+  <data name="SettingsUx_CloseMessage" xml:space="preserve"><value>Your changes have not been applied. Closing without applying discards them.</value></data>
+  <data name="SettingsUx_CloseApply" xml:space="preserve"><value>Apply and close</value></data>
+  <data name="SettingsUx_CloseDiscard" xml:space="preserve"><value>Don't apply</value></data>
 </root>

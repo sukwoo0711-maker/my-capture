@@ -47,7 +47,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.Show();
             var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Text_E6A0E3D10B47")));
+            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
             Drain(window);
 
             TextBox field = Descendants(window).OfType<TextBox>()
