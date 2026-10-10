@@ -45,7 +45,7 @@ public sealed class CaptureModeBarTests
             CaptureModeBar bar = view.ModeBarForTest!;
             Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
             Assert.True(bar.CaptureButton.IsChecked);
-            Assert.Equal("영역·창", AutomationProperties.GetName(bar.CaptureButton));
+            Assert.Equal("영역 선택", AutomationProperties.GetName(bar.CaptureButton));
 
             // Mouse or UI Automation: selecting the text button is the T key's text mode.
             ((ISelectionItemProvider)new RadioButtonAutomationPeer(bar.TextButton)).Select();
@@ -55,7 +55,7 @@ public sealed class CaptureModeBarTests
             Render(view);
             // No status chip repeats the mode under the bar; the label beside the window says it.
             Assert.Empty(view.StatusTextsForTest);
-            Assert.Equal("클릭: 창 텍스트 추출  620 × 420", view.TargetLabelForTest);
+            Assert.Equal("클릭: 창 텍스트 복사  620 × 420", view.TargetLabelForTest);
 
             // T from the keyboard goes back, and the bar shows it.
             view.RaiseEvent(Overlay.KeyArgs(Key.T));
@@ -278,9 +278,9 @@ public sealed class CaptureModeBarTests
         {
             Render(view);
             CaptureModeBar bar = view.ModeBarForTest!;
-            Assert.Equal("Region or window", AutomationProperties.GetName(bar.CaptureButton));
+            Assert.Equal("Select region", AutomationProperties.GetName(bar.CaptureButton));
             Assert.Equal("Full screen", AutomationProperties.GetName(bar.FullScreenButton));
-            Assert.Equal("Extract text", AutomationProperties.GetName(bar.TextButton));
+            Assert.Equal("Copy text", AutomationProperties.GetName(bar.TextButton));
             Assert.Equal("Copy color", AutomationProperties.GetName(bar.ColorButton));
             Assert.Equal("Click a window to capture it, or drag to capture any area.", view.StartGuideCardForTest!.BodyText);
             Assert.Equal("Capture", AutomationProperties.GetName(bar.CaptureKindButton));

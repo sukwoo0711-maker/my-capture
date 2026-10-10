@@ -407,7 +407,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
                 Assert.True(result.Saved);
                 Assert.Same(next, published);
                 Assert.Equal(321, store.Load().Queue.MaxItems);
-                Assert.Contains(result.Messages, m => m.Contains("색인", StringComparison.Ordinal));
+                Assert.Contains(result.Messages, m => m.Contains("캡처 목록", StringComparison.Ordinal));
 
                 TestRecycleBin.DeleteDirectory(paths.IndexFile, recursive: true);
             }

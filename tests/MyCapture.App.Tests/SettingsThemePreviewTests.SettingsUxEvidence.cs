@@ -162,7 +162,7 @@ public sealed partial class SettingsThemePreviewTests
         });
         Sample("보조 + 단축키 (편집기)", _ =>
         {
-            Button button = Styled("Button.Secondary", "빠른 가리기");
+            Button button = Styled("Button.Secondary", "개인정보 가리기");
             button.Style = (Style)Application.Current.FindResource("Button.Secondary");
             ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "Privacy");
             return button;
