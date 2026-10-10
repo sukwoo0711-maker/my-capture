@@ -83,7 +83,14 @@ internal sealed class GifBoundedCanvas
     internal sealed record Plan(GifFrameUpdate Update, Candidate Candidate, GifPixelRect Repainted, bool[]? Kept);
 
     /// <summary>Reads a full-canvas candidate's indices, or returns null when it cannot.</summary>
-    internal Candidate? Read(byte[] payload, AnimatedGifWriter.EncodedGifFrame parsed)
+    internal Candidate? Read(byte[] payload, AnimatedGifWriter.EncodedGifFrame parsed) =>
+        ReadCandidate(payload, parsed, _shown.Length);
+
+    /// <summary>
+    /// <see cref="Read"/> for a canvas of <paramref name="pixelCount"/> pixels. It depends on no
+    /// canvas state, so it may run on any thread ahead of <see cref="Choose"/>.
+    /// </summary>
+    internal static Candidate? ReadCandidate(byte[] payload, AnimatedGifWriter.EncodedGifFrame parsed, int pixelCount)
     {
         // Interlaced rows are stored out of order; the platform encoder does not write them.
         if ((parsed.SourceImagePacked & 0x40) != 0)
@@ -94,7 +101,7 @@ internal sealed class GifBoundedCanvas
         byte[] indices;
         try
         {
-            indices = GifLzw.Decode(payload.AsSpan(parsed.ImageDataOffset, parsed.ImageDataLength), _shown.Length);
+            indices = GifLzw.Decode(payload.AsSpan(parsed.ImageDataOffset, parsed.ImageDataLength), pixelCount);
         }
         catch (InvalidDataException)
         {
