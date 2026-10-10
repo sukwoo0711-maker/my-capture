@@ -3535,4 +3535,22 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>텍스트 추가</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>재생 위치부터 표시할 텍스트 레이어를 추가합니다.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>프레임 이미지 편집</value></data>
+  <data name="EditorFlow_SaveToFile" xml:space="preserve"><value>파일로 저장</value></data>
+  <data name="EditorFlow_SaveToFileHint" xml:space="preserve"><value>이미지를 파일로 저장</value></data>
+  <data name="EditorFlow_DoneHint" xml:space="preserve"><value>라이브러리에 저장하고 클립보드에 복사한 뒤 닫기</value></data>
+  <data name="EditorFlow_CancelHint" xml:space="preserve"><value>편집기 닫기</value></data>
+  <data name="EditorFlow_Copied" xml:space="preserve"><value>클립보드에 복사됨</value></data>
+  <data name="EditorFlow_CropHint" xml:space="preserve"><value>이미지 자르기와 회전</value></data>
+  <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>자르기 적용</value></data>
+  <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>자르기 취소</value></data>
+  <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>편집 명령</value></data>
+  <data name="EditorFlow_CropBarName" xml:space="preserve"><value>자르기 명령</value></data>
+  <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>선택 해제됨</value></data>
+  <data name="EditorFlow_Selected" xml:space="preserve"><value>선택: {0}</value></data>
+  <data name="EditorFlow_Added" xml:space="preserve"><value>{0} 추가 · Ctrl+Z로 취소</value></data>
+  <data name="EditorFlow_StepNumberAdded" xml:space="preserve"><value>{0}번 추가 · Ctrl+Z로 취소</value></data>
+  <data name="EditorFlow_CloseTitle" xml:space="preserve"><value>편집한 내용을 저장하시겠습니까?</value></data>
+  <data name="EditorFlow_CloseMessage" xml:space="preserve"><value>저장하지 않으면 이번에 편집한 내용이 사라집니다.</value></data>
+  <data name="EditorFlow_SaveAndClose" xml:space="preserve"><value>저장하고 닫기</value></data>
+  <data name="EditorFlow_DontSave" xml:space="preserve"><value>저장 안 함</value></data>
 </root>

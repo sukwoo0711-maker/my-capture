@@ -3535,4 +3535,22 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>Add text</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Edit frame image</value></data>
+  <data name="EditorFlow_SaveToFile" xml:space="preserve"><value>Save to file</value></data>
+  <data name="EditorFlow_SaveToFileHint" xml:space="preserve"><value>Save the image to a file</value></data>
+  <data name="EditorFlow_DoneHint" xml:space="preserve"><value>Save to the library, copy to the clipboard, and close</value></data>
+  <data name="EditorFlow_CancelHint" xml:space="preserve"><value>Close the editor</value></data>
+  <data name="EditorFlow_Copied" xml:space="preserve"><value>Copied to clipboard</value></data>
+  <data name="EditorFlow_CropHint" xml:space="preserve"><value>Crop and rotate the image</value></data>
+  <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>Apply the crop</value></data>
+  <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>Cancel the crop</value></data>
+  <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>Editing commands</value></data>
+  <data name="EditorFlow_CropBarName" xml:space="preserve"><value>Crop commands</value></data>
+  <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>Selection cleared</value></data>
+  <data name="EditorFlow_Selected" xml:space="preserve"><value>Selected: {0}</value></data>
+  <data name="EditorFlow_Added" xml:space="preserve"><value>Added {0} · Ctrl+Z to undo</value></data>
+  <data name="EditorFlow_StepNumberAdded" xml:space="preserve"><value>Added number {0} · Ctrl+Z to undo</value></data>
+  <data name="EditorFlow_CloseTitle" xml:space="preserve"><value>Save your edits?</value></data>
+  <data name="EditorFlow_CloseMessage" xml:space="preserve"><value>If you don't save, the edits you made will be lost.</value></data>
+  <data name="EditorFlow_SaveAndClose" xml:space="preserve"><value>Save and close</value></data>
+  <data name="EditorFlow_DontSave" xml:space="preserve"><value>Don't save</value></data>
 </root>
