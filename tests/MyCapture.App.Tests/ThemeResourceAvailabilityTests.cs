@@ -39,6 +39,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
         "State.Warning", "State.DangerHover", "Timeline.Background", "Timeline.Track",
         "Timeline.TextLayer", "Timeline.FrameLayer", "Timeline.Grid", "Timeline.Playhead",
         "Timeline.TrimDeleteFill", "Timeline.TrimDeleteHandle", "Timeline.TrimDeleteHatch",
+        "Surface.Folder", "Border.Folder", "Accent.Folder",
     ];
 
     private static readonly string[] StyleKeys =
