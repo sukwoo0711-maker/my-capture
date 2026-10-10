@@ -117,6 +117,15 @@ internal sealed class AnnotationEditorControl : Grid
     private TextBlock _statusText = null!;
     private TextBlock _dimensionsText = null!;
     private bool _inspectorCompact;
+    private FrameworkElement _stepSection = null!;
+    private Border _stepPreview = null!;
+    private Path _stepPreviewNumber = null!;
+    private readonly HangulShortcutRelay _hangulRelay;
+    private DispatcherTimer? _hangulNoticeTimer;
+    private long? _hangulNoticeShownAt;
+    private EditorPointerTarget _pointerTarget;
+    private int _cursorBaseSize = EditorCursors.DefaultBaseSize;
+    private EditorCursorStyle _cursorStyle = EditorCursorStyle.White;
 
     private TextBox? _activeTextBox;
     private TextAnnotation? _editingText;
@@ -223,6 +232,11 @@ internal sealed class AnnotationEditorControl : Grid
         BuildShortcutActions();
         BuildLayout();
         DisableImeOutsideTextInputs(this);
+        // Second route for Hangul-mode shortcuts: jamo an IME still composes outside a text input.
+        _hangulRelay = new HangulShortcutRelay(this, () => !IsTextInputFocused(), HandleShortcut, ShowHangulShortcutNotice);
+        // Tool cursors follow the user's Windows pointer size and colour.
+        _cursorBaseSize = EditorCursors.ReadBaseSize();
+        _cursorStyle = EditorCursorStyle.Read();
 
         _controller.SelectionChanged += (_, _) => OnSelectionChanged();
         undo.Changed += (_, _) => OnHistoryChanged();
@@ -231,7 +245,6 @@ internal sealed class AnnotationEditorControl : Grid
         _viewport.MouseMove += OnSurfaceMouseMove;
         _viewport.MouseLeftButtonUp += OnSurfaceMouseUp;
         _viewport.MouseRightButtonDown += OnSurfaceRightDown;
-        _viewport.MouseLeave += (_, _) => { if (!_viewport.IsMouseCaptured) Cursor = Cursors.Arrow; };
         _viewport.LostMouseCapture += (_, e) =>
         {
             if (!ReferenceEquals(e.OriginalSource, _viewport) || _viewport.IsMouseCaptured) return;
@@ -252,6 +265,7 @@ internal sealed class AnnotationEditorControl : Grid
             _redactionCts?.Cancel();
             _redactionCts?.Dispose();
             _redactionCts = null;
+            _hangulNoticeTimer?.Stop();
             _blurCache.Clear();
         };
 
@@ -319,9 +333,68 @@ internal sealed class AnnotationEditorControl : Grid
         ArgumentNullException.ThrowIfNull(e);
         // Hangul mode reports letters as ImeProcessed. Outside a text input they are still
         // shortcuts; inside one the IME keeps the key so a composition and its Esc stay intact.
-        bool textInput = _activeTextBox is not null || Keyboard.FocusedElement is TextBoxBase;
-        return HandleShortcut(ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, textInput), Keyboard.Modifiers);
+        // Handling the key here, in the preview stage, also keeps it from the IME: WPF passes an
+        // unhandled ImeProcessed key to the text services and then never raises KeyDown.
+        bool textInput = IsTextInputFocused();
+        Key key = ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, textInput);
+        bool handled = HandleShortcut(key, Keyboard.Modifiers);
+        _hangulRelay.NoteKeyDown(e.Key, key, handled);
+        if (!handled && ShortcutInput.IsUnidentifiedImeKey(e.Key, e.ImeProcessedKey, textInput))
+        {
+            // The IME did not say which key it took. If it composes jamo instead, the relay runs
+            // the shortcut; only when nothing arrives is the user told why the key did nothing.
+            int activity = _hangulRelay.Activity;
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                if (_hangulRelay.Activity == activity) ShowHangulShortcutNotice();
+            });
+        }
+
+        return handled;
     }
+
+    private bool IsTextInputFocused() => _activeTextBox is not null || Keyboard.FocusedElement is TextBoxBase;
+
+    /// <summary>
+    /// Tells the user, briefly, that a key typed in Hangul mode could not be read as a shortcut.
+    /// </summary>
+    /// <remarks>
+    /// Shown only when the IME took a key without identifying it and composed nothing either;
+    /// every letter it reports, directly or as jamo, already runs its shortcut. Repeats within
+    /// a few seconds are dropped so key presses do not re-announce the same sentence.
+    /// </remarks>
+    private void ShowHangulShortcutNotice()
+    {
+        if (_completed || _statusText is null) return;
+        long now = Environment.TickCount64;
+        if (_hangulNoticeShownAt is long last && now - last < HangulNoticeRepeatMilliseconds) return;
+        _hangulNoticeShownAt = now;
+        SetStatus(UiText.Get("EditorUx_HangulShortcutNotice"));
+        if (_hangulNoticeTimer is null)
+        {
+            _hangulNoticeTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(HangulNoticeMilliseconds),
+            };
+            _hangulNoticeTimer.Tick += (_, _) =>
+            {
+                _hangulNoticeTimer.Stop();
+                if (string.Equals(_statusText.Text, UiText.Get("EditorUx_HangulShortcutNotice"), StringComparison.Ordinal))
+                {
+                    SetStatus(ToolStatus(_controller.Tool));
+                }
+            };
+        }
+
+        _hangulNoticeTimer.Stop();
+        _hangulNoticeTimer.Start();
+    }
+
+    private const int HangulNoticeMilliseconds = 6000;
+    private const int HangulNoticeRepeatMilliseconds = 3000;
+
+    /// <summary>The status line text, for tests.</summary>
+    internal string StatusText => _statusText.Text;
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
@@ -667,16 +740,6 @@ internal sealed class AnnotationEditorControl : Grid
         if (_crop is null) _controller.PointerDown(start);
     }
 
-    private static Cursor CropCursor(CropGrip grip) => grip switch
-    {
-        CropGrip.Move => Cursors.SizeAll,
-        CropGrip.TopLeft or CropGrip.BottomRight => Cursors.SizeNWSE,
-        CropGrip.TopRight or CropGrip.BottomLeft => Cursors.SizeNESW,
-        CropGrip.Top or CropGrip.Bottom => Cursors.SizeNS,
-        CropGrip.Left or CropGrip.Right => Cursors.SizeWE,
-        _ => Cursors.Cross,
-    };
-
     internal async Task PreviewAutomaticTrimAsync()
     {
         if (_autoTrimInProgress || _completed || _commitInProgress) return;
@@ -759,7 +822,7 @@ internal sealed class AnnotationEditorControl : Grid
                 _crop.Drag(image, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
                 RefreshCrop();
             }
-            Cursor = CropCursor(_crop.HitTest(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel)));
+            ApplyCursor(new EditorPointerTarget(CropGrip: _crop.HitTest(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel))));
             return;
         }
         if (e.LeftButton == MouseButtonState.Pressed)
@@ -768,7 +831,7 @@ internal sealed class AnnotationEditorControl : Grid
         }
         else if (EdgeCropGripAt(image) is CropGrip edge)
         {
-            Cursor = CropCursor(edge);
+            ApplyCursor(new EditorPointerTarget(CropGrip: edge));
         }
         else if (_controller.Tool == EditorTool.Select)
         {
@@ -776,7 +839,7 @@ internal sealed class AnnotationEditorControl : Grid
         }
         else
         {
-            Cursor = Cursors.Cross;
+            ApplyCursor(default);
         }
     }
 
@@ -854,15 +917,38 @@ internal sealed class AnnotationEditorControl : Grid
     {
         double tolerance = 8 / Math.Max(double.Epsilon, _surface.DipPerPixel);
         ResizeHandle handle = _controller.HandleAt(image, tolerance);
-        Cursor = handle switch
-        {
-            ResizeHandle.TopLeft or ResizeHandle.BottomRight => Cursors.SizeNWSE,
-            ResizeHandle.TopRight or ResizeHandle.BottomLeft => Cursors.SizeNESW,
-            ResizeHandle.TopCenter or ResizeHandle.BottomCenter => Cursors.SizeNS,
-            ResizeHandle.MiddleLeft or ResizeHandle.MiddleRight => Cursors.SizeWE,
-            _ when _controller.HitTest(image) is not null => Cursors.SizeAll,
-            _ => Cursors.Arrow,
-        };
+        ApplyCursor(new EditorPointerTarget(handle, handle == ResizeHandle.None && _controller.HitTest(image) is not null));
+    }
+
+    /// <summary>The cursor the canvas shows for the active tool and <paramref name="target"/>.</summary>
+    /// <remarks>
+    /// Set on the image viewport only, so the tool rail, command bar and inspector keep the
+    /// normal pointer while a tool is active.
+    /// </remarks>
+    private void ApplyCursor(EditorPointerTarget target)
+    {
+        _pointerTarget = target;
+        EditorCursorKind kind = EditorCursorPolicy.Resolve(_controller.Tool, target);
+        Cursor cursor = EditorCursors.Get(
+            kind,
+            EditorCursors.PixelSize(_cursorBaseSize, VisualTreeHelper.GetDpi(this).DpiScaleX),
+            kind == EditorCursorKind.StepNumber ? _controller.NextStepNumber : 0,
+            _controller.StrokeColor,
+            SystemParameters.HighContrast || ThemeService.Current == MyCapture.Core.Themes.AppTheme.HighContrast,
+            _cursorStyle);
+        if (!ReferenceEquals(_viewport.Cursor, cursor)) _viewport.Cursor = cursor;
+    }
+
+    /// <summary>The cursor kind the canvas shows now, for tests.</summary>
+    internal EditorCursorKind CanvasCursorKind => EditorCursorPolicy.Resolve(_controller.Tool, _pointerTarget);
+
+    /// <summary>The cursor object the canvas shows now, for tests.</summary>
+    internal Cursor? CanvasCursor => _viewport.Cursor;
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        ApplyCursor(_pointerTarget);
     }
 
     // ---- Text entry ----------------------------------------------------------------
@@ -1182,8 +1268,12 @@ internal sealed class AnnotationEditorControl : Grid
         left.Children.Add(_redoButton);
         left.Children.Add(Separator());
 
-        _rotateLeftButton = IconButton(UiText.Get("Text_6B2C41A9E532"), UiText.Get("Text_6B2C41A9E533"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
-        _rotateRightButton = IconButton(UiText.Get("Text_6B2C41A9E534"), UiText.Get("Text_6B2C41A9E535"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
+        // An image-plus-arrow icon and a visible label, like the rotate commands in Photos and
+        // Paint: a bare curved arrow beside Undo and Redo read as another history command.
+        _rotateLeftButton = IconTextButton(UiText.Get("EditorUx_RotateLeft"), UiText.Get("EditorUx_RotateLeftHint"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
+        _rotateRightButton = IconTextButton(UiText.Get("EditorUx_RotateRight"), UiText.Get("EditorUx_RotateRightHint"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
+        AutomationName(_rotateLeftButton, UiText.Get("EditorUx_RotateLeftHint"));
+        AutomationName(_rotateRightButton, UiText.Get("EditorUx_RotateRightHint"));
         left.Children.Add(_rotateLeftButton);
         left.Children.Add(_rotateRightButton);
         left.Children.Add(Separator());
@@ -1368,7 +1458,8 @@ internal sealed class AnnotationEditorControl : Grid
         AddToolButton(stack, EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen);
         AddToolButton(stack, EditorTool.Highlighter, UiText.Get("Tools.Highlighter"), UiText.Get("Tools.Highlighter"), "Icon.Highlighter", () => Geometry.Parse("M4,14 L13,3 L17,7 L8,18 Z M2,18 H12"));
         AddToolButton(stack, EditorTool.Text, UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText);
-        AddToolButton(stack, EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), UiText.Get("Tools.StepNumber"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13"));
+        AddToolButton(stack, EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), UiText.Get("EditorUx_StepNumberToolTip"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13"));
+        AutomationProperties.SetHelpText(_toolButtons[EditorTool.StepNumber], UiText.Get("EditorUx_StepNumberInstruction"));
         AddToolButton(stack, EditorTool.Image, UiText.Get("Text_302BAE127938"), UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage);
         AddToolButton(stack, EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic);
         AddToolButton(stack, EditorTool.Blur, UiText.Get("EditorBlur_Name"), UiText.Get("EditorBlur_ToolTip"), "Icon.Blur", FallbackBlur);
@@ -1431,6 +1522,9 @@ internal sealed class AnnotationEditorControl : Grid
         _inspectorInstruction.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         stack.Children.Add(_inspectorInstruction);
 
+        _stepSection = BuildStepNumberSection();
+        stack.Children.Add(_stepSection);
+
         _colorSection = BuildColorSection();
         stack.Children.Add(_colorSection);
 
@@ -1466,6 +1560,79 @@ internal sealed class AnnotationEditorControl : Grid
             },
             SnapsToDevicePixels = true,
         }, "Surface.Raised");
+    }
+
+    /// <summary>Shows, while the step tool is active, the badge the next click adds.</summary>
+    private FrameworkElement BuildStepNumberSection()
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        panel.Children.Add(SectionLabel(UiText.Get("EditorUx_StepNumberNext")));
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        _stepPreviewNumber = new Path
+        {
+            Fill = Brushes.White,
+            Stroke = new SolidColorBrush(Color.FromRgb(0x0B, 0x0F, 0x17)),
+            StrokeThickness = 1,
+            StrokeLineJoin = PenLineJoin.Round,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _stepPreview = new Border
+        {
+            Width = 40,
+            Height = 40,
+            CornerRadius = new CornerRadius(4),
+            BorderThickness = new Thickness(1),
+            Child = _stepPreviewNumber,
+            SnapsToDevicePixels = true,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        _stepPreview.SetResourceReference(Border.BorderBrushProperty, "Border.Strong");
+        row.Children.Add(_stepPreview);
+        var hint = new TextBlock
+        {
+            Text = UiText.Get("EditorUx_StepNumberNextHint"),
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(10, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        Grid.SetColumn(hint, 1);
+        row.Children.Add(hint);
+        panel.Children.Add(row);
+        return panel;
+    }
+
+    /// <summary>Paints the next badge in the colour and number the step tool will use.</summary>
+    private void UpdateStepPreview()
+    {
+        if (_stepPreview is null) return;
+        int number = _controller.NextStepNumber;
+        string text = number.ToString(CultureInfo.CurrentCulture);
+        ColorRgba color = _controller.StrokeColor;
+        _stepPreview.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
+        var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+            text.Length > 2 ? 15 : 20, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        Geometry digits = formatted.BuildGeometry(new Point(0, 0));
+        // Start the glyph outline at the path origin so the badge centres the ink, not the line box.
+        Rect ink = digits.Bounds;
+        if (!ink.IsEmpty) digits.Transform = new TranslateTransform(-ink.X, -ink.Y);
+        _stepPreviewNumber.Data = digits;
+        AutomationName(_stepPreview, UiText.Format("EditorUx_StepNumberNextName", number));
+    }
+
+    /// <summary>The number the step preview shows, for tests.</summary>
+    internal string StepPreviewName => AutomationProperties.GetName(_stepPreview);
+
+    /// <summary>Keeps the step preview and the numbered cursor on the next number and colour.</summary>
+    private void RefreshStepFeedback()
+    {
+        UpdateStepPreview();
+        if (_controller.Tool == EditorTool.StepNumber) ApplyCursor(_pointerTarget);
     }
 
     private FrameworkElement BuildCropSection()
@@ -1584,6 +1751,7 @@ internal sealed class AnnotationEditorControl : Grid
             {
                 _controller.ApplyStrokeColor(swatchColor);
                 RememberPreferences();
+                RefreshStepFeedback();
                 SetStatus(UiText.Format("Text_67CAE5B118A3", swatchColor.ToHex()));
             };
             _swatchPanel.Children.Add(swatchButton);
@@ -1651,6 +1819,7 @@ internal sealed class AnnotationEditorControl : Grid
 
         _controller.ApplyStrokeColor(color);
         RememberPreferences();
+        RefreshStepFeedback();
         SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
         return true;
     }
@@ -2094,9 +2263,10 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static Geometry FallbackRedo() => Geometry.Parse("M12.75,5.25 L16.5,9 L12.75,12.75 M16.25,9 H8.75 A5,5 0 0 0 5.25,17");
 
-    private static Geometry FallbackRotateLeft() => Geometry.Parse("M6.5,5.5 L3.5,8.5 L6.5,11.5 M3.75,8.5 H11 A5.25,5.25 0 1 1 5.75,13.75");
+    // Same as the shared Icon.RotateLeft/RotateRight: a picture under a half-turn arrow.
+    private static Geometry FallbackRotateLeft() => Geometry.Parse("M7,8.75 H13 A1,1 0 0 1 14,9.75 V16 A1,1 0 0 1 13,17 H7 A1,1 0 0 1 6,16 V9.75 A1,1 0 0 1 7,8.75 Z M17,10.75 A7,7 0 0 0 3,10.75 M1,8.75 L3,10.75 L5,8.75");
 
-    private static Geometry FallbackRotateRight() => Geometry.Parse("M13.5,5.5 L16.5,8.5 L13.5,11.5 M16.25,8.5 H9 A5.25,5.25 0 1 0 14.25,13.75");
+    private static Geometry FallbackRotateRight() => Geometry.Parse("M13,8.75 H7 A1,1 0 0 0 6,9.75 V16 A1,1 0 0 0 7,17 H13 A1,1 0 0 0 14,16 V9.75 A1,1 0 0 0 13,8.75 Z M3,10.75 A7,7 0 0 1 17,10.75 M19,8.75 L17,10.75 L15,8.75");
 
     private static Geometry FallbackCopy() => Geometry.Parse("M7,3.5 H15.25 A1.25,1.25 0 0 1 16.5,4.75 V13 H7 Z M5,6.5 H4.75 A1.25,1.25 0 0 0 3.5,7.75 V15.25 A1.25,1.25 0 0 0 4.75,16.5 H12.25 A1.25,1.25 0 0 0 13.5,15.25 V15");
 
@@ -2132,7 +2302,7 @@ internal sealed class AnnotationEditorControl : Grid
         if (tool is not (EditorTool.Select or EditorTool.Crop)) _preferredTool = tool;
         RememberPreferences();
         SyncToolButtons();
-        Cursor = tool == EditorTool.Select ? Cursors.Arrow : Cursors.Cross;
+        ApplyCursor(default);
         UpdateInspector();
         SetStatus(cancelledCrop ? UiText.Get("Crop.Cancelled") : ToolStatus(tool));
     }
@@ -2175,11 +2345,19 @@ internal sealed class AnnotationEditorControl : Grid
         UpdateInspector();
         RefreshHistoryButtons();
 
-        if (_controller.Selected is { } selected)
+        if (_controller.Selected is TextAnnotation { IsStepNumber: true } badge && _controller.Tool == EditorTool.StepNumber)
         {
-            SetStatus(UiText.Format("Text_0ECA3A448221", selected.DisplayName));
+            // The step tool selects the badge it just added; say what was added and what comes next.
+            SetStatus(UiText.Format("EditorUx_StepNumberAdded", badge.Text, _controller.NextStepNumber));
+        }
+        else if (_controller.Selected is { } selected)
+        {
+            SetStatus(UiText.Format("Text_0ECA3A448221", ItemName(selected)));
         }
     }
+
+    private static string ItemName(AnnotationItem item) =>
+        item is TextAnnotation { IsStepNumber: true } badge ? UiText.Format("EditorUx_StepNumberSelected", badge.Text) : item.DisplayName;
 
     private void OnHistoryChanged()
     {
@@ -2191,6 +2369,7 @@ internal sealed class AnnotationEditorControl : Grid
         if (_crop is not null) { _crop = new CropSelection(_canvasWidth, _canvasHeight); _cropRatio.SelectedIndex = 0; RefreshCrop(); }
         RefreshHistoryButtons();
         UpdateInspector();
+        if (_controller.Tool == EditorTool.StepNumber) ApplyCursor(_pointerTarget);
     }
 
     /// <summary>
@@ -2293,12 +2472,17 @@ internal sealed class AnnotationEditorControl : Grid
         _deleteButton.IsEnabled = hasSelection;
         _deleteButton.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
 
+        bool stepTool = _controller.Tool == EditorTool.StepNumber;
         if (selected is not null)
         {
-            _inspectorTitle.Text = selected.DisplayName;
-            _inspectorInstruction.Text = selected.SupportsResize
-                ? UiText.Get("Text_4F445554C9D0")
-                : UiText.Get("Text_C2F4730D02E8");
+            _inspectorTitle.Text = ItemName(selected);
+            // The step tool keeps adding badges on click, so its purpose stays on screen even
+            // while the badge it just added is selected.
+            _inspectorInstruction.Text = stepTool
+                ? ToolInstruction(EditorTool.StepNumber)
+                : selected.SupportsResize
+                    ? UiText.Get("Text_4F445554C9D0")
+                    : UiText.Get("Text_C2F4730D02E8");
         }
         else
         {
@@ -2321,6 +2505,8 @@ internal sealed class AnnotationEditorControl : Grid
         _shapeStyleSection.Visibility = shapeApplies ? Visibility.Visible : Visibility.Collapsed;
         _fontSizeSection.Visibility = fontSizeApplies ? Visibility.Visible : Visibility.Collapsed;
         _blurSection.Visibility = blurApplies ? Visibility.Visible : Visibility.Collapsed;
+        _stepSection.Visibility = stepTool && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        if (stepTool) UpdateStepPreview();
 
         _syncingInspector = true;
         try
@@ -2418,7 +2604,7 @@ internal sealed class AnnotationEditorControl : Grid
     {
         EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
         EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
-        EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
+        EditorTool.StepNumber => UiText.Get("EditorUx_StepNumberInstruction"),
         EditorTool.Select => UiText.Get("Text_563638D54DBC"),
         EditorTool.Rectangle => UiText.Get("Text_205E8D74A1C2"),
         EditorTool.Arrow => UiText.Get("Text_2AE708D62044"),
@@ -2429,12 +2615,12 @@ internal sealed class AnnotationEditorControl : Grid
         _ => string.Empty,
     };
 
-    private static string ToolStatus(EditorTool tool) => tool switch
+    private string ToolStatus(EditorTool tool) => tool switch
     {
         EditorTool.Crop => UiText.Get("Crop.Instruction"),
         EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
         EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
-        EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
+        EditorTool.StepNumber => UiText.Format("EditorUx_StepNumberStatus", _controller.NextStepNumber),
         EditorTool.Select => UiText.Get("Text_FEFD9D67E873"),
         EditorTool.Rectangle => UiText.Get("Text_93103CC109A3"),
         EditorTool.Arrow => UiText.Get("Text_190A3BE20786"),
