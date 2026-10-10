@@ -458,7 +458,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_2A0C70A93334" xml:space="preserve">
-    <value>MyCapture — 프레임 이미지 편집</value>
+    <value>MyCapture — 이 장면에 그리기</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_2AA27E2CEB7C" xml:space="preserve">
@@ -1238,7 +1238,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_6B4EE4E6C8FF" xml:space="preserve">
-    <value>상단 선택 구간의 시작과 끝을 전체 폭으로 확대한 프레임 타임라인입니다. 클릭과 트림은 프레임에 맞춰지고 휠로 확대합니다.</value>
+    <value>상단 선택 구간의 시작과 끝을 전체 폭으로 확대한 프레임 타임라인입니다. 클릭과 자르기는 프레임에 맞춰지고 휠로 확대합니다.</value>
     <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
   </data>
   <data name="Text_6C0B9DD710AB" xml:space="preserve">
@@ -2986,11 +2986,11 @@
   <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>삭제된 {0}개 항목의 파일 정리가 아직 완료되지 않았습니다. 해당 항목의 디스크 공간 확보는 확인되지 않았습니다.</value></data>
   <data name="MediaExport_SourceProtected" xml:space="preserve"><value>원본 영상에는 덮어쓸 수 없습니다. 다른 파일 이름을 선택하십시오.</value></data>
   <data name="MediaExport_Extension" xml:space="preserve"><value>파일 확장자는 {0}이어야 합니다.</value></data>
-  <data name="MediaExport_Title" xml:space="preserve"><value>영상 내보내기</value></data>
+  <data name="MediaExport_Title" xml:space="preserve"><value>동영상 내보내기</value></data>
   <data name="MediaExport_Summary" xml:space="preserve"><value>{0} × {1} · {2} fps · 선택 구간 {3:N1}초</value></data>
   <data name="MediaExport_Format" xml:space="preserve"><value>형식</value></data>
   <data name="MediaExport_Baseline" xml:space="preserve"><value>기준 크기는 현재 편집과 선택 구간을 표준 MP4로 인코딩한 크기입니다. 원본 파일 크기와 다를 수 있습니다.</value></data>
-  <data name="MediaExport_TargetLabel" xml:space="preserve"><value>목표 파일 크기 감소율</value></data>
+  <data name="MediaExport_TargetLabel" xml:space="preserve"><value>파일 크기 감소 목표</value></data>
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>해상도와 프레임 속도는 유지합니다. 감소율은 목표이며, 실제 크기는 계산 후 확인하십시오. 화질이 낮아질 수 있습니다.</value></data>
   <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF는 프레임이 많아질수록 파일이 커집니다. 긴 변과 프레임 속도를 선택하십시오. 소리는 포함되지 않습니다.</value></data>
   <data name="Recording.FinishingBusy" xml:space="preserve"><value>녹화 저장을 마무리하는 중입니다. 잠시 후 다시 시도하십시오.</value></data>
@@ -3019,7 +3019,7 @@
   <data name="MediaExport_Cancel" xml:space="preserve"><value>취소</value></data>
   <data name="MediaExport_SaveEdits" xml:space="preserve"><value>라이브러리에 저장</value></data>
   <data name="MediaExport_ExportFormats" xml:space="preserve"><value>내보내기 · MP4 / GIF</value></data>
-  <data name="MediaExport_Workspace" xml:space="preserve"><value>영상 편집</value></data>
+  <data name="MediaExport_Workspace" xml:space="preserve"><value>동영상 편집</value></data>
   <data name="MediaExport_ResultPreview" xml:space="preserve"><value>계산된 파일의 샘플 프레임</value></data>
   <data name="MediaExport_Export" xml:space="preserve"><value>내보내기</value></data>
   <data name="MediaExport_SizeHeading" xml:space="preserve"><value>파일 크기</value></data>
@@ -3453,7 +3453,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="GifPreview_AdviceCurrentNoLimit" xml:space="preserve"><value>현재 설정이 권장 설정입니다. 크기 제한이 없으며 예상 크기는 {0}입니다.</value></data>
   <data name="GifPreview_AdviceSwitchNoLimit" xml:space="preserve"><value>권장 설정: {0}. 크기 제한이 없어 가장 선명한 설정이며 예상 크기는 {1}입니다.</value></data>
   <data name="GifPreview_AdviceMp4Frames" xml:space="preserve"><value>선택한 공유 대상은 GIF를 {0:N0}프레임 이하로 권장하지만 가장 작은 설정도 약 {1:N0}프레임입니다. 구간을 약 {2:N0}초 이하로 줄이거나 MP4로 내보내십시오.</value></data>
-  <data name="GifPreview_AdviceMp4Safety" xml:space="preserve"><value>가장 작은 설정도 약 {0:N0}프레임이라 결과 계산이 오래 걸리고 파일이 매우 커집니다. MP4로 내보내거나 구간을 약 {1:N0}초 이하로 줄이십시오.</value></data>
+  <data name="GifPreview_AdviceMp4Safety" xml:space="preserve"><value>가장 작은 설정도 약 {0:N0}프레임이라 크기 확인이 오래 걸리고 파일이 매우 커집니다. MP4로 내보내거나 구간을 약 {1:N0}초 이하로 줄이십시오.</value></data>
   <data name="GifPreview_MotionStatic" xml:space="preserve"><value>화면 변화가 적어 글자 선명도를 우선했습니다.</value></data>
   <data name="GifPreview_MotionModerate" xml:space="preserve"><value>화면 일부가 움직여 부드러운 재생을 먼저 유지했습니다.</value></data>
   <data name="GifPreview_MotionHigh" xml:space="preserve"><value>움직임이 많아 부드러운 재생을 우선했습니다.</value></data>
@@ -3530,7 +3530,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_TrimTimelineStatus" xml:space="preserve"><value>시작 {0}, 끝 {1}, 남는 길이 {2}</value></data>
   <data name="VideoEditorUx_TrimTimelineName" xml:space="preserve"><value>자르기 타임라인</value></data>
   <data name="VideoEditorUx_TrimTimelineHelp" xml:space="preserve"><value>두 손잡이 사이가 남는 구간이며, 바깥의 어두운 빗금 구간은 저장하거나 내보낼 때 잘립니다. 손잡이를 끌거나 I와 O로 재생 위치를 시작과 끝으로 정합니다. 손잡이를 누르거나 자르기(X)로 고른 뒤 ←/→는 1프레임, Shift+←/→는 10프레임 이동하고, X를 다시 누르면 시작과 끝 손잡이가 바뀝니다. 띠의 다른 곳을 누르면 재생 위치만 옮깁니다.</value></data>
-  <data name="VideoEditorUx_TrimOffHelp" xml:space="preserve"><value>자르기(X)를 누르면 남길 구간의 손잡이를 조정할 수 있습니다.</value></data>
+  <data name="VideoEditorUx_TrimOffHelp" xml:space="preserve"><value>자르기를 누르면 남길 구간의 손잡이를 조정할 수 있습니다.</value></data>
   <data name="VideoEditorUx_ZoomLaneHelp" xml:space="preserve"><value>아래쪽 띠의 상자는 세부 타임라인에 확대할 범위이며, 끌어서 옮기거나 양 끝을 끌어 크기를 바꿉니다.</value></data>
   <data name="VideoEditorUx_TrimCut" xml:space="preserve"><value>잘림</value></data>
   <data name="VideoEditorUx_TrimBarName" xml:space="preserve"><value>자르기 도구</value></data>
@@ -3551,11 +3551,11 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_DetailTimelineHelp" xml:space="preserve"><value>프레임 단위 세부 타임라인과 확대 범위를 펼치거나 접습니다. 확대와 축소를 누르면 자동으로 펼쳐집니다.</value></data>
   <data name="VideoEditorUx_PositionTime" xml:space="preserve"><value>{0} / {1}</value></data>
   <data name="VideoEditorUx_PositionFrame" xml:space="preserve"><value>프레임 {0}/{1}</value></data>
-  <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>녹화 동영상 편집</value></data>
-  <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>녹화 동영상 편집 창</value></data>
-  <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>녹화 동영상 편집</value></data>
+  <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>동영상 편집</value></data>
+  <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>동영상 편집 창</value></data>
+  <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>동영상 편집</value></data>
   <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>동영상 {0} · {1}×{2} · {3}fps</value></data>
-  <data name="VideoEditorUx_CommandBarName" xml:space="preserve"><value>녹화 동영상 편집 도구</value></data>
+  <data name="VideoEditorUx_CommandBarName" xml:space="preserve"><value>동영상 편집 도구</value></data>
   <data name="VideoEditorUx_Trim" xml:space="preserve"><value>자르기</value></data>
   <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>남길 구간의 시작 손잡이를 고르고 그 프레임을 보여 줍니다. 다시 누르면 끝 손잡이로 바뀝니다.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>텍스트 추가</value></data>

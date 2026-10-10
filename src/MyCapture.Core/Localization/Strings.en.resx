@@ -458,7 +458,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_2A0C70A93334" xml:space="preserve">
-    <value>MyCapture — Edit frame image</value>
+    <value>MyCapture — Draw on this frame</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_2AA27E2CEB7C" xml:space="preserve">
@@ -2990,7 +2990,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_Summary" xml:space="preserve"><value>{0} × {1} · {2} fps · selected interval {3:N1} s</value></data>
   <data name="MediaExport_Format" xml:space="preserve"><value>Format</value></data>
   <data name="MediaExport_Baseline" xml:space="preserve"><value>The baseline is a standard MP4 of the current edits and selected interval. It may differ from the original file size.</value></data>
-  <data name="MediaExport_TargetLabel" xml:space="preserve"><value>Target file size reduction</value></data>
+  <data name="MediaExport_TargetLabel" xml:space="preserve"><value>File size reduction target</value></data>
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>Resolution and frame rate stay unchanged. The reduction is a target; calculate to see the actual size. Quality may decrease.</value></data>
   <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF files grow with the frame count. Choose the long edge and frame rate. Sound is not included.</value></data>
   <data name="Recording.FinishingBusy" xml:space="preserve"><value>Finishing the recording save. Please try again shortly.</value></data>
@@ -3453,7 +3453,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="GifPreview_AdviceCurrentNoLimit" xml:space="preserve"><value>The current setting is recommended. There is no size limit, and the estimated size is {0}.</value></data>
   <data name="GifPreview_AdviceSwitchNoLimit" xml:space="preserve"><value>Recommended: {0}. With no size limit it is the sharpest setting, at an estimated {1}.</value></data>
   <data name="GifPreview_AdviceMp4Frames" xml:space="preserve"><value>The selected destination recommends GIFs of up to {0:N0} frames, but even the smallest setting has about {1:N0}. Trim the range to about {2:N0} s or less, or export MP4.</value></data>
-  <data name="GifPreview_AdviceMp4Safety" xml:space="preserve"><value>Even the smallest setting has about {0:N0} frames, so the calculation takes long and the file gets very large. Export MP4, or trim the range to about {1:N0} s or less.</value></data>
+  <data name="GifPreview_AdviceMp4Safety" xml:space="preserve"><value>Even the smallest setting has about {0:N0} frames, so checking the size takes long and the file gets very large. Export MP4, or trim the range to about {1:N0} s or less.</value></data>
   <data name="GifPreview_MotionStatic" xml:space="preserve"><value>Little of the screen changes, so text sharpness comes first.</value></data>
   <data name="GifPreview_MotionModerate" xml:space="preserve"><value>Parts of the screen move, so smooth playback is kept first.</value></data>
   <data name="GifPreview_MotionHigh" xml:space="preserve"><value>Much of the screen moves, so smooth playback comes first.</value></data>
@@ -3530,7 +3530,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_TrimTimelineStatus" xml:space="preserve"><value>Start {0}, end {1}, kept {2}</value></data>
   <data name="VideoEditorUx_TrimTimelineName" xml:space="preserve"><value>Trim timeline</value></data>
   <data name="VideoEditorUx_TrimTimelineHelp" xml:space="preserve"><value>The part between the two handles is kept; the dark hatched parts outside are cut when you save or export. Drag a handle, or press I and O to use the playhead as the start and end. After pressing a handle or choosing it with Trim (X), ←/→ moves it one frame, Shift+←/→ ten frames, and X again switches between the start and end handles. Pressing anywhere else on the strip only moves the playhead.</value></data>
-  <data name="VideoEditorUx_TrimOffHelp" xml:space="preserve"><value>Press Trim (X) to adjust the handles of the part to keep.</value></data>
+  <data name="VideoEditorUx_TrimOffHelp" xml:space="preserve"><value>Press Trim to adjust the handles of the part to keep.</value></data>
   <data name="VideoEditorUx_ZoomLaneHelp" xml:space="preserve"><value>The box in the bottom lane is the range shown in the detailed timeline; drag it to move it, or drag its ends to resize it.</value></data>
   <data name="VideoEditorUx_TrimCut" xml:space="preserve"><value>Cut</value></data>
   <data name="VideoEditorUx_TrimBarName" xml:space="preserve"><value>Trim tools</value></data>
@@ -3551,9 +3551,9 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_DetailTimelineHelp" xml:space="preserve"><value>Shows or hides the frame-level detailed timeline and its zoom range. Zooming in or out shows it automatically.</value></data>
   <data name="VideoEditorUx_PositionTime" xml:space="preserve"><value>{0} / {1}</value></data>
   <data name="VideoEditorUx_PositionFrame" xml:space="preserve"><value>Frame {0}/{1}</value></data>
-  <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>Recording video editor</value></data>
-  <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>Recording video editor window</value></data>
-  <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>Recording video editor</value></data>
+  <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>Video editor</value></data>
+  <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>Video editor window</value></data>
+  <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>Video editor</value></data>
   <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>Video {0} · {1}×{2} · {3} fps</value></data>
   <data name="VideoEditorUx_CommandBarName" xml:space="preserve"><value>Video editing commands</value></data>
   <data name="VideoEditorUx_Trim" xml:space="preserve"><value>Trim</value></data>

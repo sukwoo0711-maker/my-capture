@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -28,11 +28,11 @@ public sealed class VideoEditorUxLayoutTests
             editor = OpenReadyEditor(root, 10_000, show: true, 1400, 820);
             FitWide(editor);
             // WindowIdentity puts the product first, as in every MyCapture window.
-            Assert.Equal("MyCapture — 녹화 동영상 편집", editor.Title);
-            Assert.Equal("녹화 동영상 편집 창", AutomationProperties.GetName(editor));
+            Assert.Equal("MyCapture — 동영상 편집", editor.Title);
+            Assert.Equal("동영상 편집 창", AutomationProperties.GetName(editor));
             var bar = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
             TextBlock[] texts = Descendants(bar).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
-            Assert.Contains(texts, text => text.Text == "녹화 동영상 편집");
+            Assert.Contains(texts, text => text.Text == "동영상 편집");
             Assert.Contains(texts, text => text.Text == "동영상 00:10.0 · 640×360 · 30fps");
         }
         finally
