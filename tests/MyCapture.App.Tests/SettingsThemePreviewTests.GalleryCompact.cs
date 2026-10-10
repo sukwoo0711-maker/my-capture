@@ -100,39 +100,54 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.Width = window.MinWidth;
             window.Height = window.MinHeight;
-            // A single selected image shows every selection action except GIF export.
-            vm.Select(vm.Groups.SelectMany(group => group.Items).First().Id);
+            FluidMotion.SetWindowEntrance(window, false);
             window.Show();
             SettleGalleryLayout(window);
             var client = (FrameworkElement)window.Content;
             var banner = (FrameworkElement)window.FindName("OcrCoverageBanner");
             Assert.False(banner.IsVisible, language + ": the complete-coverage fixture must not show the OCR banner");
 
-            var check = (CheckBox)window.FindName("CurrentFolderCaptureCheck");
+            // Nothing selected: capture, search, new folder, sort and more share one row and fit.
+            var bar = (FrameworkElement)window.FindName("LibraryCommandBar");
             ComboBox sort = Descendants(window).OfType<ComboBox>()
                 .Single(box => AutomationProperties.GetName(box) == UiText.Get("Folder410.Sort"));
-            var destination = (TextBlock)window.FindName("NewCaptureDestinationLabel");
             var searchBox = (TextBox)window.FindName("SearchBox");
+            var searchField = (FrameworkElement)window.FindName("SearchField");
             TextBlock placeholder = Descendants(window).OfType<TextBlock>().Single(text => text.Text == vm.SearchPlaceholder);
-            foreach (FrameworkElement element in new FrameworkElement[] { check, sort, destination, searchBox, placeholder })
+            var capture = (Button)window.FindName("CaptureRegionButton");
+            var record = (Button)window.FindName("RecordRegionButton");
+            var newFolder = (Button)window.FindName("NewFolderButton");
+            var more = (Button)window.FindName("MoreCommandsButton");
+            foreach (FrameworkElement element in new FrameworkElement[] { capture, record, searchBox, placeholder, newFolder, sort, more })
                 AssertInsideClient(element, client, language);
-            Assert.Equal(vm.NewCaptureDestinationText, destination.Text);
-            AssertNotTrimmed(destination, language);
+            AssertSameRow(bar, capture, record, searchField, newFolder, sort, more);
             AssertNotTrimmed(placeholder, language);
-            TextBlock checkLabel = Descendants(check).OfType<TextBlock>().Single(text => text.Text == UiText.Get("Folder410.CurrentFolderOption"));
-            AssertNotTrimmed(checkLabel, language);
-            // Tab order follows the visual order of the search row.
-            Assert.True(searchBox.TranslatePoint(new Point(), client).X < check.TranslatePoint(new Point(), client).X);
-            Assert.True(check.TranslatePoint(new Point(), client).X < sort.TranslatePoint(new Point(), client).X);
+            foreach (TextBlock label in new[] { capture, record, newFolder }.SelectMany(button => Descendants(button).OfType<TextBlock>()))
+                AssertNotTrimmed(label, language);
+            // Tab order follows the visual order: capture, search, then the library commands.
+            AssertLeftToRight(client, record, searchField, newFolder);
+            AssertLeftToRight(client, newFolder, sort, more);
+            double barHeight = bar.ActualHeight;
+            var workspace = (FrameworkElement)window.FindName("GalleryWorkspace");
+            double workspaceTop = workspace.TranslatePoint(new Point(), client).Y;
 
-            WrapPanel actions = Descendants(window).OfType<WrapPanel>().Single(panel => panel.Children.Contains((UIElement)window.FindName("ArchiveExportButton")));
-            Button[] visibleActions = actions.Children.OfType<Button>().Where(button => button.IsVisible).ToArray();
-            Assert.Equal(4, visibleActions.Length);
-            double firstLine = visibleActions[0].TranslatePoint(new Point(), actions).Y;
-            Assert.All(visibleActions, button => Assert.Equal(firstLine, button.TranslatePoint(new Point(), actions).Y, 1));
-            Button last = visibleActions[^1];
-            Assert.True(last.TranslatePoint(new Point(last.ActualWidth, 0), client).X <= destination.TranslatePoint(new Point(), client).X,
-                language + ": selection actions must not run under the destination text");
+            // A single selected image: the selection's commands replace the library commands in place.
+            vm.Select(vm.Groups.SelectMany(group => group.Items).First().Id);
+            SettleGalleryLayout(window);
+            var selection = (Panel)window.FindName("SelectionCommands");
+            Button[] visibleActions = selection.Children.OfType<Button>().Where(button => button.IsVisible).ToArray();
+            Assert.Equal(5, visibleActions.Length); // clear, ZIP, move, delete, reduce (GIF is video only)
+            foreach (FrameworkElement element in visibleActions.Append<FrameworkElement>(placeholder))
+                AssertInsideClient(element, client, language);
+            AssertSameRow(bar, visibleActions.Cast<FrameworkElement>().Append(searchField)
+                .Append((Button)window.FindName("CaptureRegionIconButton")).ToArray());
+            AssertLeftToRight(client, (Button)window.FindName("RecordRegionIconButton"), searchField, visibleActions[0]);
+            AssertNotTrimmed(placeholder, language);
+            AssertNotTrimmed((TextBlock)window.FindName("SelectionCountLabel"), language);
+            foreach (Button button in visibleActions.Skip(1))
+                AssertNotTrimmed(Descendants(button).OfType<TextBlock>().Single(), language);
+            Assert.Equal(barHeight, bar.ActualHeight, 1);
+            Assert.Equal(workspaceTop, workspace.TranslatePoint(new Point(), client).Y, 1);
 
             ListBox rows = (ListBox)window.FindName("RowsList");
             ScrollViewer scroll = Descendants(rows).OfType<ScrollViewer>().First();
@@ -143,6 +158,19 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(scroll.ViewportHeight >= GalleryCompactFullCardHeight,
                     $"{language}/{theme}: compact library viewport {scroll.ViewportHeight:0.##} DIP must fit a full {GalleryCompactFullCardHeight}-DIP card");
             }
+            ThemeService.Apply(AppTheme.Glass);
+            SaveLibraryUxEvidence(window, AppTheme.Glass, $"after-narrow-selection-glass-{language}.png");
+
+            // Inside a folder the location header joins the content column and a full card still fits.
+            vm.ClearSelection();
+            vm.NavigateTo(CaptureFolderScope.ForFolder(queue.Folders.Single().Id));
+            SettleGalleryLayout(window);
+            var check = (CheckBox)window.FindName("CurrentFolderCaptureCheck");
+            AssertInsideClient(check, client, language);
+            AssertNotTrimmed(Descendants(check).OfType<TextBlock>().Single(text => text.Text == UiText.Get("LibraryUx_SaveHere")), language);
+            Assert.True(scroll.ViewportHeight >= GalleryCompactFullCardHeight,
+                $"{language}: compact folder viewport {scroll.ViewportHeight:0.##} DIP must fit a full {GalleryCompactFullCardHeight}-DIP card");
+            SaveLibraryUxEvidence(window, AppTheme.Glass, $"after-narrow-folder-glass-{language}.png");
         }
         finally
         {
@@ -171,6 +199,17 @@ public sealed partial class SettingsThemePreviewTests
         Assert.InRange(topLeft.Y, -0.5, client.ActualHeight + 0.5);
         Assert.InRange(bottomRight.X, 0, client.ActualWidth + 0.5);
         Assert.InRange(bottomRight.Y, 0, client.ActualHeight + 0.5);
+    }
+
+    private static void AssertLeftToRight(FrameworkElement client, params FrameworkElement[] elements)
+    {
+        for (int index = 1; index < elements.Length; index++)
+        {
+            FrameworkElement left = elements[index - 1], right = elements[index];
+            double leftEnd = left.TranslatePoint(new Point(left.ActualWidth, 0), client).X;
+            Assert.True(leftEnd <= right.TranslatePoint(new Point(), client).X + 0.5,
+                $"{left.Name} must end before {right.Name} starts");
+        }
     }
 
     private static void AssertNotTrimmed(TextBlock text, string language)

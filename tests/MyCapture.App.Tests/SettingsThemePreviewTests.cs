@@ -302,10 +302,8 @@ public sealed partial class SettingsThemePreviewTests
             AssertBrush(tab.Foreground, colors["Text.Secondary"]);
         AssertBrush(Assert.IsType<Button>(window.FindName("CancelButton")).Foreground, colors["Text.Primary"]);
 
-        if (AppThemeNames.UsesBackdrop(theme))
-            Assert.Equal(Colors.Transparent, Assert.IsType<SolidColorBrush>(window.Background).Color);
-        else
-            AssertBrush(window.Background, colors["Surface.Base"]);
+        // Glass paints its base too: the native caption is coloured to match the visible body.
+        AssertBrush(window.Background, colors["Surface.Base"]);
     }
 
     private static void AssertBrush(Brush brush, ThemeColor expected) =>

@@ -21,6 +21,7 @@
 
         <!-- Local, so hosts that supply only the shared converters still load this window. -->
         <gallery:IsFolderRowConverter x:Key="IsFolderRow" />
+        <gallery:HasValueToVisibilityConverter x:Key="LibraryUx.HasValue" />
 
         <!-- Tile action glyphs come from the shared Symbols.xaml resource dictionary
              (Icon.Copy / Icon.Pin / Icon.More / Icon.Ocr / Icon.Delete), referenced by key. -->
@@ -145,7 +146,7 @@
                                 <Border Padding="8,4" CornerRadius="6"
                                         Background="{DynamicResource Accent.Default}"
                                         Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="{loc:Text Text_1300F4BEEC76}" FontSize="{StaticResource FontSize.Caption}"
+                                    <TextBlock Text="{loc:Text LibraryUx_KeptBadge}" FontSize="{StaticResource FontSize.Caption}"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource Text.OnAccent}" />
                                 </Border>
@@ -215,8 +216,9 @@
                                   StrokeLineJoin="Round" Fill="Transparent" />
                         </Button>
 
-                        <Button Grid.Column="2" Style="{StaticResource Button.Primary}"
-                                Width="36" MinWidth="36" MinHeight="36" Padding="6" HorizontalAlignment="Center"
+                        <!-- Borderless like the other card tools: the details panel owns the one filled Edit. -->
+                        <Button Grid.Column="2" Style="{StaticResource Gallery.IconButton}"
+                                Margin="0" HorizontalAlignment="Center"
                                 ToolTip="{loc:Text Text_0400CF56D074}"
                                 AutomationProperties.Name="{loc:Text Text_1003CFC78E66}"
                                 Click="OnEditClick">
@@ -239,7 +241,7 @@
 
                         <Button Grid.Column="4"
                                 Style="{StaticResource Gallery.IconButton}"
-                                ToolTip="{loc:Text Text_3793EC0322DB}"
+                                ToolTip="{loc:Text LibraryUx_TileMoreHint}"
                                 AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
                                 Click="OnMoreClick">
                             <Path Data="{StaticResource Icon.More}" Width="20" Height="20"
@@ -258,7 +260,7 @@
                                                                    RelativeSource={RelativeSource Self}}">
                                     <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
                                               CommandParameter="{Binding}"
-                                              AutomationProperties.Name="{loc:Text Text_80A33648EAF2}"
+                                              AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
                                               InputGestureText="P"
                                               Click="OnPinMenuClick" />
                                     <MenuItem Header="{loc:Text Text_854582314EBD}"
@@ -415,16 +417,88 @@
                      MouseDoubleClick="OnTileDoubleClick" />
         </DataTemplate>
 
-        <!-- A 244-DIP card plus 8-DIP margins fills a tile's 260-DIP column (6-DIP margins and the
-             2-DIP selection outline), so folder and tile rows share columns for arrow keys. -->
-        <Style x:Key="Gallery.FolderCardButton" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+        <!-- Library icons on the shared 20x20 symbol grid, local so the shared Symbols.xaml stays untouched. -->
+        <PathGeometry x:Key="LibraryUx.Icon.AllItems"
+                      Figures="M4,3.25 L8,3.25 A0.75,0.75 0 0 1 8.75,4 L8.75,8 A0.75,0.75 0 0 1 8,8.75 L4,8.75 A0.75,0.75 0 0 1 3.25,8 L3.25,4 A0.75,0.75 0 0 1 4,3.25 Z M12,3.25 L16,3.25 A0.75,0.75 0 0 1 16.75,4 L16.75,8 A0.75,0.75 0 0 1 16,8.75 L12,8.75 A0.75,0.75 0 0 1 11.25,8 L11.25,4 A0.75,0.75 0 0 1 12,3.25 Z M4,11.25 L8,11.25 A0.75,0.75 0 0 1 8.75,12 L8.75,16 A0.75,0.75 0 0 1 8,16.75 L4,16.75 A0.75,0.75 0 0 1 3.25,16 L3.25,12 A0.75,0.75 0 0 1 4,11.25 Z M12,11.25 L16,11.25 A0.75,0.75 0 0 1 16.75,12 L16.75,16 A0.75,0.75 0 0 1 16,16.75 L12,16.75 A0.75,0.75 0 0 1 11.25,16 L11.25,12 A0.75,0.75 0 0 1 12,11.25 Z" />
+        <PathGeometry x:Key="LibraryUx.Icon.Video"
+                      Figures="M3.25,4.75 L16.75,4.75 A1.25,1.25 0 0 1 18,6 L18,14 A1.25,1.25 0 0 1 16.75,15.25 L3.25,15.25 A1.25,1.25 0 0 1 2,14 L2,6 A1.25,1.25 0 0 1 3.25,4.75 Z M8.25,7.5 L12.75,10 L8.25,12.5 Z" />
+        <PathGeometry x:Key="LibraryUx.Icon.Kept"
+                      Figures="M5.25,3.25 L14.75,3.25 L14.75,17 L10,13.5 L5.25,17 Z" />
+        <PathGeometry x:Key="LibraryUx.Icon.Folder"
+                      Figures="M2.75,5.25 A1.25,1.25 0 0 1 4,4 L7.6,4 L9.4,5.75 L16,5.75 A1.25,1.25 0 0 1 17.25,7 L17.25,14.75 A1.25,1.25 0 0 1 16,16 L4,16 A1.25,1.25 0 0 1 2.75,14.75 Z" />
+        <PathGeometry x:Key="LibraryUx.Icon.Add" Figures="M10,4.25 L10,15.75 M4.25,10 L15.75,10" />
+        <PathGeometry x:Key="LibraryUx.Icon.Calendar"
+                      Figures="M4.25,4.75 L15.75,4.75 A1,1 0 0 1 16.75,5.75 L16.75,15.75 A1,1 0 0 1 15.75,16.75 L4.25,16.75 A1,1 0 0 1 3.25,15.75 L3.25,5.75 A1,1 0 0 1 4.25,4.75 Z M3.25,8.5 L16.75,8.5 M7,3 L7,6.25 M13,3 L13,6.25" />
+        <PathGeometry x:Key="LibraryUx.Icon.Chevron" Figures="M7.75,5.25 L12.5,10 L7.75,14.75" />
+        <PathGeometry x:Key="LibraryUx.Icon.Info"
+                      Figures="M10,2.75 A7.25,7.25 0 1 1 9.99,2.75 Z M10,9 L10,13.75 M10,6.25 L10,6.3" />
+        <!-- The card silhouette: a manila-folder tab on the top left, then the 12-DIP card radius. -->
+        <PathGeometry x:Key="LibraryUx.FolderCardShape"
+                      Figures="M0,10 A10,10 0 0 1 10,0 L84,0 C90,0 92,3 95,7 L97,10 C99,13 101,14 106,14 L232,14 A12,12 0 0 1 244,26 L244,280 A12,12 0 0 1 232,292 L12,292 A12,12 0 0 1 0,280 Z" />
+
+        <!-- Folder cards use the capture card's 244x292 frame. Their 8-DIP margins match a tile's
+             6-DIP margins plus its 2-DIP selection outline, so folder and capture rows share one
+             column grid for arrow keys. The folder tab, warm Surface.Folder fill, Border.Folder
+             outline and a large folder glyph keep them apart from captures in every palette. -->
+        <Style x:Key="Gallery.FolderCardButton" TargetType="Button">
             <Setter Property="Width" Value="244" />
-            <Setter Property="Height" Value="84" />
+            <Setter Property="Height" Value="292" />
             <Setter Property="Margin" Value="8" />
-            <Setter Property="Padding" Value="8" />
-            <Setter Property="Background" Value="{DynamicResource Surface.Raised}" />
+            <Setter Property="Padding" Value="12,22,12,12" />
+            <Setter Property="Background" Value="{DynamicResource Surface.Folder}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border.Folder}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Path x:Name="Chrome" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
+                                  Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}"
+                                  StrokeThickness="1" SnapsToDevicePixels="True" />
+                            <Path x:Name="Wash" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
+                                  Fill="{DynamicResource Surface.Hover}" Opacity="0" IsHitTestVisible="False" />
+                            <Path x:Name="DropRing" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
+                                  Stroke="{DynamicResource Accent.Folder}" StrokeThickness="2" StrokeDashArray="3 2"
+                                  Opacity="0" IsHitTestVisible="False" />
+                            <Path x:Name="FocusRing" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
+                                  Stroke="{DynamicResource Border.Focus}" StrokeThickness="2" Margin="2"
+                                  Opacity="0" IsHitTestVisible="False" />
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Stroke" Value="{DynamicResource Accent.Folder}" />
+                                <Setter TargetName="Wash" Property="Opacity" Value="0.35" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Wash" Property="Opacity" Value="0.6" />
+                            </Trigger>
+                            <!-- While captures are dragged, every folder that can take them shows a dashed edge. -->
+                            <DataTrigger Binding="{Binding IsDropAvailable}" Value="True">
+                                <Setter TargetName="DropRing" Property="Opacity" Value="1" />
+                            </DataTrigger>
+                            <!-- The folder under the pointer: accent edge and wash, like Explorer's drop highlight. -->
+                            <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                                <Setter TargetName="Chrome" Property="Fill" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="DropRing" Property="Stroke" Value="{DynamicResource Border.Accent}" />
+                                <Setter TargetName="DropRing" Property="StrokeThickness" Value="3" />
+                                <Setter TargetName="DropRing" Property="StrokeDashArray" Value="{x:Null}" />
+                                <Setter TargetName="DropRing" Property="Opacity" Value="1" />
+                            </DataTrigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <DataTemplate x:Key="Gallery.FolderCardTemplate" DataType="{x:Type gallery:GalleryFolderCardViewModel}">
@@ -434,13 +508,22 @@
                     Click="OnFolderCardClick"
                     PreviewKeyDown="OnFolderCardKeyDown">
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Border Width="66" Height="66"
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <!-- Where a capture card shows its time, a folder card says it is a folder. -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="1,0,1,8">
+                        <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="16" Height="16" Stretch="Uniform"
+                              Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
+                        <TextBlock Text="{loc:Text LibraryUx_CardKind}" Margin="6,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}" />
+                    </StackPanel>
+                    <Border Grid.Row="1"
                             Background="{DynamicResource Surface.Sunken}"
-                            BorderBrush="{DynamicResource Border.Subtle}"
+                            BorderBrush="{DynamicResource Border.Folder}"
                             BorderThickness="1"
                             CornerRadius="{StaticResource Radius.Md}"
                             ClipToBounds="True">
@@ -449,41 +532,30 @@
                                    Stretch="UniformToFill"
                                    RenderOptions.BitmapScalingMode="HighQuality"
                                    Visibility="{Binding HasPreview, Converter={StaticResource BoolToVisibility}}" />
-                            <!-- An empty folder shows the same folder glyph as the tree. -->
-                            <Path Data="M2,5 L8,5 L10,7 L20,7 L20,19 L2,19 Z" Width="30" Height="30" Stretch="Uniform"
-                                  Stroke="{DynamicResource Text.Secondary}" StrokeThickness="1.5" Fill="Transparent"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Path.Style>
-                                    <Style TargetType="Path">
+                            <!-- An empty folder shows a large folder glyph instead of a preview. -->
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding HasPreview}" Value="True">
                                                 <Setter Property="Visibility" Value="Collapsed" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Path.Style>
-                            </Path>
+                                </StackPanel.Style>
+                                <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="72" Height="72" Stretch="Uniform"
+                                      Fill="{DynamicResource Accent.Folder}" HorizontalAlignment="Center" />
+                                <TextBlock Text="{loc:Text LibraryUx_CardEmpty}" Margin="0,6,0,0" HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}" />
+                            </StackPanel>
                         </Grid>
                     </Border>
-                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                        <DockPanel>
-                            <Path DockPanel.Dock="Left" Data="M2,5 L8,5 L10,7 L20,7 L20,19 L2,19 Z"
-                                  Width="14" Height="14" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"
-                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.5" Fill="Transparent" />
-                            <TextBlock Text="{Binding Name}"
-                                       FontWeight="SemiBold"
-                                       FontSize="{StaticResource FontSize.Body}"
-                                       TextTrimming="CharacterEllipsis"
-                                       VerticalAlignment="Center" />
-                        </DockPanel>
-                        <TextBlock Text="{Binding CountText}"
-                                   Margin="0,5,0,0"
-                                   FontWeight="Normal"
-                                   FontSize="{StaticResource FontSize.Caption}"
-                                   Foreground="{DynamicResource Text.Secondary}"
-                                   TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
+                    <TextBlock Grid.Row="2" Text="{Binding Name}" Margin="3,10,3,3"
+                               FontWeight="SemiBold" FontSize="{StaticResource FontSize.Body}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Row="3" Text="{Binding CountText}" Margin="3,0,3,2"
+                               Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}"
+                               TextTrimming="CharacterEllipsis" />
                 </Grid>
             </Button>
         </DataTemplate>
@@ -544,90 +616,484 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- ============================================================= -->
+        <!-- Navigation pane: views, folders and dates share one selection, -->
+        <!-- like a Windows navigation view (icon, name, count; accent pill).-->
+        <!-- ============================================================= -->
+        <Style x:Key="LibraryUx.NavItem" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="LibraryFilter" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid Background="Transparent">
+                            <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" />
+                            <Border x:Name="Indicator" Width="3" Height="16" Margin="1,0,0,0"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Background="{DynamicResource Accent.Default}" CornerRadius="{DynamicResource Radius.Pill}"
+                                    Opacity="0" IsHitTestVisible="False" />
+                            <ContentPresenter Margin="12,0,10,0" VerticalAlignment="Center" HorizontalAlignment="Stretch" />
+                            <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.Sm}" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="Indicator" Property="Opacity" Value="1" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LibraryUx.NavGlyph" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Control}}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="LibraryUx.NavCount" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="LibraryUx.SectionLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Tree rows read like navigation items: hover wash, subtle selection with the accent pill. -->
+        <Style x:Key="LibraryUx.TreeExpander" TargetType="ToggleButton">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="Transparent">
+                            <Path x:Name="Chevron" Data="{StaticResource LibraryUx.Icon.Chevron}" Width="12" Height="12"
+                                  Stretch="Uniform" Stroke="{DynamicResource Text.Secondary}" StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                <Path.RenderTransform>
+                                    <RotateTransform Angle="0" />
+                                </Path.RenderTransform>
+                            </Path>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chevron" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <RotateTransform Angle="90" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LibraryUx.TreeItem" TargetType="TreeViewItem">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Caption}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="ContextMenu" Value="{StaticResource Gallery.FolderContextMenu}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TreeViewItem">
+                        <StackPanel>
+                            <Grid x:Name="Row" MinHeight="34" Background="Transparent">
+                                <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                                        CornerRadius="{DynamicResource Radius.Md}" />
+                                <Border x:Name="Indicator" Width="3" Height="16" Margin="1,0,0,0"
+                                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                                        Background="{DynamicResource Accent.Default}" CornerRadius="{DynamicResource Radius.Pill}"
+                                        Opacity="0" IsHitTestVisible="False" />
+                                <DockPanel Margin="4,0,10,0">
+                                    <ToggleButton x:Name="Expander" DockPanel.Dock="Left" Style="{StaticResource LibraryUx.TreeExpander}"
+                                                  IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
+                                    <ContentPresenter x:Name="PART_Header" ContentSource="Header" Margin="2,0,0,0"
+                                                      VerticalAlignment="Center" HorizontalAlignment="Stretch" />
+                                </DockPanel>
+                                <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                                        CornerRadius="{DynamicResource Radius.Sm}" Opacity="0" IsHitTestVisible="False" />
+                            </Grid>
+                            <ItemsPresenter x:Name="ItemsHost" Margin="16,0,0,0" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="False">
+                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter TargetName="Expander" Property="Visibility" Value="Hidden" />
+                            </Trigger>
+                            <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="Indicator" Property="Opacity" Value="1" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                            </DataTrigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <HierarchicalDataTemplate x:Key="Gallery.FolderNodeTemplate" DataType="{x:Type gallery:GalleryFolderNode}"
                                   ItemsSource="{Binding Children}">
-            <StackPanel Orientation="Horizontal" Margin="1,4">
-                <Path Data="M2,5 L8,5 L10,7 L20,7 L20,19 L2,19 Z" Width="16" Height="16" Stretch="Uniform"
-                      Stroke="{DynamicResource Text.Secondary}" StrokeThickness="1.5" Fill="Transparent" Margin="0,0,6,0"
-                      Visibility="{Binding IsFolder, Converter={StaticResource BoolToVisibility}}" />
-                <TextBlock Text="{Binding Caption}" VerticalAlignment="Center" ToolTip="{Binding Caption}" />
-            </StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="16" Height="16" Stretch="Uniform"
+                      Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" ToolTip="{Binding Caption}" Margin="8,0,8,0"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{Binding Count}" Style="{StaticResource LibraryUx.NavCount}" />
+            </Grid>
         </HierarchicalDataTemplate>
+
+        <DataTemplate x:Key="LibraryUx.DateItemTemplate" DataType="{x:Type gallery:GalleryFolderNode}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Path Data="{StaticResource LibraryUx.Icon.Calendar}" Style="{StaticResource LibraryUx.NavGlyph}"
+                      Width="16" Height="16" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="8,0,8,0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{Binding Count}" Style="{StaticResource LibraryUx.NavCount}" />
+            </Grid>
+        </DataTemplate>
+
+        <Style x:Key="LibraryUx.DateItem" TargetType="ListBoxItem">
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Caption}" />
+            <Setter Property="ContextMenu" Value="{StaticResource Gallery.FolderContextMenu}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Grid MinHeight="34" Background="Transparent">
+                            <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.Md}" />
+                            <Border x:Name="Indicator" Width="3" Height="16" Margin="1,0,0,0"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Background="{DynamicResource Accent.Default}" CornerRadius="{DynamicResource Radius.Pill}"
+                                    Opacity="0" IsHitTestVisible="False" />
+                            <ContentPresenter Margin="12,0,10,0" VerticalAlignment="Center" />
+                            <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.Sm}" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="Indicator" Property="Opacity" Value="1" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                            </DataTrigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Collapsible pane section ("날짜"): an Expander keeps the expand/collapse automation pattern. -->
+        <Style x:Key="LibraryUx.Section" TargetType="Expander">
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <DockPanel>
+                            <ToggleButton x:Name="HeaderSite" DockPanel.Dock="Top" MinHeight="32" Cursor="Hand"
+                                          FocusVisualStyle="{x:Null}"
+                                          AutomationProperties.Name="{TemplateBinding Header}"
+                                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Grid Background="Transparent">
+                                            <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent"
+                                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" />
+                                            <DockPanel Margin="12,0,8,0">
+                                                <Path x:Name="Chevron" DockPanel.Dock="Right" Data="{StaticResource LibraryUx.Icon.Chevron}"
+                                                      Width="12" Height="12" Stretch="Uniform" Stroke="{DynamicResource Text.Secondary}"
+                                                      StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                      StrokeLineJoin="Round" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                    <Path.RenderTransform>
+                                                        <RotateTransform Angle="0" />
+                                                    </Path.RenderTransform>
+                                                </Path>
+                                                <ContentPresenter VerticalAlignment="Center" />
+                                            </DockPanel>
+                                            <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}"
+                                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Sm}" Opacity="0"
+                                                    IsHitTestVisible="False" />
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Chevron" Property="RenderTransform">
+                                                    <Setter.Value>
+                                                        <RotateTransform Angle="90" />
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <TextBlock Text="{Binding Header, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                           Style="{StaticResource LibraryUx.SectionLabel}" />
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ExpandSite" Visibility="Collapsed" />
+                        </DockPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================================================= -->
+        <!-- Command bar and location header                               -->
+        <!-- ============================================================= -->
+        <Style x:Key="LibraryUx.CommandButton" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="LibraryUx.CommandGhost" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="LibraryUx.CommandIcon" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="LibraryUx.CommandGlyph" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="LibraryUx.CommandSeparator" TargetType="Border">
+            <Setter Property="Width" Value="1" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Margin" Value="4,0,10,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource Border.Subtle}" />
+        </Style>
+
+        <!-- One toggle chip beside the folder name: checked = new captures join this folder. -->
+        <Style x:Key="LibraryUx.SaveHereChip" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Border x:Name="Chrome" Background="Transparent" BorderBrush="{DynamicResource Border.Subtle}"
+                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Pill}" Padding="10,4,12,4">
+                                <StackPanel Orientation="Horizontal">
+                                    <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                        <Path x:Name="Plus" Data="{StaticResource LibraryUx.Icon.Add}" Stretch="Uniform"
+                                              Stroke="{DynamicResource Text.Secondary}" StrokeThickness="1.6"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="12" Height="12" />
+                                        <Path x:Name="Check" Data="{StaticResource Icon.Check}" Stretch="Uniform"
+                                              Stroke="{DynamicResource Text.OnAccent}" StrokeThickness="2"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                              Width="12" Height="12" Visibility="Collapsed" />
+                                    </Grid>
+                                    <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="FocusRing" Margin="2" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.Pill}" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Default}" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
+                                <Setter TargetName="Plus" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                                <Setter Property="Foreground" Value="{DynamicResource Text.OnAccent}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.48" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="LibraryUx.BreadcrumbTemplate" DataType="{x:Type gallery:GalleryBreadcrumb}">
+            <StackPanel Orientation="Horizontal">
+                <Button Content="{Binding Name}" Style="{StaticResource Button.GhostCompact}" Click="OnBreadcrumbClick"
+                        FontSize="{StaticResource FontSize.Body}" FontWeight="Normal" Padding="6,4" MaxWidth="220"
+                        Foreground="{DynamicResource Text.Secondary}" AutomationProperties.Name="{Binding Name}"
+                        Visibility="{Binding IsLink, Converter={StaticResource BoolToVisibility}}" />
+                <Path Data="{StaticResource LibraryUx.Icon.Chevron}" Width="12" Height="12" Stretch="Uniform" Margin="2,0"
+                      Stroke="{DynamicResource Text.Muted}" StrokeThickness="1.5" StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round" VerticalAlignment="Center"
+                      Visibility="{Binding IsLink, Converter={StaticResource BoolToVisibility}}" />
+                <StackPanel Orientation="Horizontal" Margin="6,0,0,0"
+                            Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVisibility}}">
+                    <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="18" Height="18" Stretch="Uniform"
+                          Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center"
+                          Visibility="{Binding Scope.FolderId, Converter={StaticResource LibraryUx.HasValue}}" />
+                    <TextBlock Text="{Binding Name}" Margin="8,0,0,0" MaxWidth="280" TextTrimming="CharacterEllipsis"
+                               FontSize="{StaticResource FontSize.Subtitle}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
       </ResourceDictionary>
     </Window.Resources>
 
-    <Grid Margin="16,16,16,16">
+    <!-- The window title lives only in the native title bar, which ModernWindowChrome paints with
+         the same Surface.Base as this body. The first body row is the command bar on that same
+         base with no divider, so title bar, commands and the navigation pane read as one surface. -->
+    <Grid x:Name="LibraryRoot" Margin="12,4,12,6" Background="Transparent" AllowDrop="True"
+          DragEnter="OnLibraryDragOver" DragOver="OnLibraryDragOver" DragLeave="OnLibraryDragLeave" Drop="OnLibraryDrop">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Title only; the English all-caps eyebrow is removed. -->
-        <Grid Grid.Row="0" Margin="2,0,2,10">
+        <!-- One command bar of fixed height. Capture stays on the left; the right side swaps between
+             library commands and the selection's commands in place, so selecting never pushes the
+             library down. Shortcuts are in tooltips, the search sits between the two groups. -->
+        <Grid x:Name="LibraryCommandBar" Grid.Row="0" Height="48" Margin="0,0,0,6"
+              AutomationProperties.Name="{loc:Text LibraryUx_CommandBarName}">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <StackPanel Orientation="Horizontal">
-                <Image Style="{StaticResource Brand.AppIcon}" Margin="0,1,12,0"
-                       AutomationProperties.Name="MyCapture" />
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Text Text_37AD4F28D422}" Style="{DynamicResource Text.Display}" FontSize="26" />
-                    <TextBlock Text="{loc:Text Text_13036A090EBA}" ToolTip="{loc:Text Text_13036A090EBA}"
-                               Style="{DynamicResource Text.MutedBlock}" Margin="0,5,0,0" MaxWidth="500" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                               HorizontalAlignment="Left" />
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Labelled capture commands while nothing is selected: capture is the one filled button. -->
+                <StackPanel x:Name="CaptureCommands" Orientation="Horizontal">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Padding="12,6" Margin="0,0,6,0"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
+                            Click="OnCaptureRegionClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource Icon.Capture}" Width="16" Height="16" Stretch="Uniform"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.4" StrokeLineJoin="Round" Fill="Transparent" />
+                            <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="7,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="RecordRegionButton" Style="{StaticResource LibraryUx.CommandButton}"
+                            AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}"
+                            Click="OnRecordRegionClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="{StaticResource Icon.Record}" Width="16" Height="16" Stretch="Uniform"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.4" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            <TextBlock Text="{loc:Text Text_4F5AF20FAA6E}" Margin="7,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                <!-- With a selection the item's Edit is the filled button, so capture becomes two icons. -->
+                <StackPanel x:Name="CompactCaptureCommands" Orientation="Horizontal"
+                            Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                    <Button x:Name="CaptureRegionIconButton" Style="{StaticResource LibraryUx.CommandIcon}"
+                            AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}" Click="OnCaptureRegionClick">
+                        <Path Data="{StaticResource Icon.Capture}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                    </Button>
+                    <Button x:Name="RecordRegionIconButton" Style="{StaticResource LibraryUx.CommandIcon}"
+                            AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}" Click="OnRecordRegionClick">
+                        <Path Data="{StaticResource Icon.Record}" Style="{StaticResource LibraryUx.CommandGlyph}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </Button>
                 </StackPanel>
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <!-- One primary action per state: capture is the filled button here. -->
-                <Button Style="{StaticResource Button.Primary}" Padding="12,8" Margin="0,0,8,0"
-                        ToolTip="{loc:Text Text_2C20ADDA2018}"
-                        AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
-                        Click="OnCaptureRegionClick">
-                    <StackPanel Orientation="Horizontal">
-                        <Path Data="{StaticResource Icon.Capture}" Width="16" Height="16" Stretch="Uniform"
-                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                              StrokeThickness="1.4" StrokeLineJoin="Round" Fill="Transparent" />
-                        <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="7,0,0,0" VerticalAlignment="Center" />
-                        <TextBlock x:Name="CaptureShortcut" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="11" />
-                    </StackPanel>
-                </Button>
-                <Button Style="{StaticResource Button.Secondary}" Padding="12,8" Margin="0,0,8,0"
-                        ToolTip="{loc:Text Text_4F5AF20FAA6E}"
-                        AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}"
-                        Click="OnRecordRegionClick">
-                    <StackPanel Orientation="Horizontal">
-                        <Path Data="{StaticResource Icon.Record}" Width="16" Height="16" Stretch="Uniform"
-                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                              StrokeThickness="1.4" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        <TextBlock Text="{loc:Text Text_4F5AF20FAA6E}" Margin="7,0,0,0" VerticalAlignment="Center" />
-                        <TextBlock x:Name="RecordShortcut" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="11" />
-                    </StackPanel>
-                </Button>
-                <!-- Item count is metadata, not an action: demote it to a plain border. -->
-                <Button Style="{StaticResource Button.GhostCompact}" Padding="14,8" Click="OnClearLibraryClick" ToolTip="{loc:Text LibrarySelection_ClearHint}">
-                    <TextBlock x:Name="SummaryLabel"
-                               Text="{Binding SummaryText}"
-                               Foreground="{DynamicResource Text.Muted}"
-                               FontSize="{StaticResource FontSize.Body}"
-                               AutomationProperties.Name="{Binding SummaryText}" />
-                </Button>
-            </StackPanel>
-        </Grid>
 
-        <!-- Search, with the folder capture target and sort order beside it. They share the
-             search row so the folder toolbar adds no height at the 560-DIP minimum, where one
-             full 304-DIP card must still fit in the library viewport. -->
-        <Grid Grid.Row="1" Margin="0,0,0,10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Border Style="{StaticResource Card.Sunken}" Padding="4">
+            <Border x:Name="SearchField" Grid.Column="1" Style="{StaticResource Card.Sunken}" Padding="2" Margin="6,0,12,0"
+                    MaxWidth="560" VerticalAlignment="Center" HorizontalAlignment="Stretch">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -639,13 +1105,14 @@
                     <TextBox x:Name="SearchBox" Grid.Column="1"
                              Background="Transparent"
                              BorderThickness="0"
-                             Padding="10,5" MinHeight="32"
+                             Padding="8,4" MinHeight="32"
+                             ToolTip="{Binding SearchToolTip}"
                              AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
                              TextChanged="OnSearchTextChanged" />
                     <TextBlock Grid.Column="1" IsHitTestVisible="False"
                                Text="{Binding SearchPlaceholder}"
                                Foreground="{DynamicResource Text.Muted}"
-                               Margin="12,10"
+                               Margin="10,0"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center">
                         <TextBlock.Style>
@@ -661,25 +1128,80 @@
                     </TextBlock>
                 </Grid>
             </Border>
-            <!-- Declared after the search box so Tab follows the visual order. -->
-            <CheckBox x:Name="CurrentFolderCaptureCheck" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
-                      Content="{loc:Text Folder410.CurrentFolderOption}" IsEnabled="{Binding CanChangeNewCaptureFolder}"
-                      IsChecked="{Binding SavesNewCapturesToFolder, Mode=OneWay}" Click="OnFolderCaptureTargetClick" />
-            <ComboBox Grid.Column="2" Width="132" Margin="12,0,0,0" VerticalAlignment="Center"
-                      AutomationProperties.Name="{loc:Text Folder410.Sort}"
-                      SelectedIndex="{Binding SortIndex, Mode=TwoWay}">
-                <ComboBoxItem Content="{loc:Text Folder410.Newest}" />
-                <ComboBoxItem Content="{loc:Text Folder410.Oldest}" />
-                <ComboBoxItem Content="{loc:Text Folder410.ByName}" />
-            </ComboBox>
+
+            <!-- Library commands (nothing selected). -->
+            <StackPanel x:Name="LibraryCommands" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <Button x:Name="NewFolderButton" Style="{StaticResource LibraryUx.CommandGhost}"
+                        ToolTip="{loc:Text LibraryUx_NewFolderHint}" AutomationProperties.Name="{loc:Text Folder410.NewFolder}"
+                        Click="OnNewFolderClick">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource LibraryUx.Icon.Folder}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                        <TextBlock Text="{loc:Text Folder410.NewFolder}" Margin="7,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <ComboBox x:Name="SortBox" Width="132" Margin="2,0,4,0" VerticalAlignment="Center"
+                          AutomationProperties.Name="{loc:Text Folder410.Sort}" ToolTip="{loc:Text Folder410.Sort}"
+                          SelectedIndex="{Binding SortIndex, Mode=TwoWay}">
+                    <ComboBoxItem Content="{loc:Text Folder410.Newest}" />
+                    <ComboBoxItem Content="{loc:Text Folder410.Oldest}" />
+                    <ComboBoxItem Content="{loc:Text Folder410.ByName}" />
+                </ComboBox>
+                <Button x:Name="MoreCommandsButton" Style="{StaticResource LibraryUx.CommandIcon}" Margin="0"
+                        ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
+                        Click="OnMoreCommandsClick">
+                    <Path Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
+                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
+                                      Foreground="{DynamicResource State.DangerHover}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+            </StackPanel>
+
+            <!-- Selection commands, in the same place. -->
+            <StackPanel x:Name="SelectionCommands" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                        AutomationProperties.Name="{loc:Text LibraryUx_SelectionBarName}"
+                        Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                <Button x:Name="ClearSelectionButton" Style="{StaticResource LibraryUx.CommandIcon}"
+                        ToolTip="{loc:Text LibraryUx_ClearSelectionHint}" AutomationProperties.Name="{loc:Text LibraryUx_ClearSelection}"
+                        Click="OnClearSelectionClick">
+                    <Path Data="{StaticResource Icon.Close}" Style="{StaticResource LibraryUx.CommandGlyph}" Width="14" Height="14" />
+                </Button>
+                <TextBlock x:Name="SelectionCountLabel" Text="{Binding SelectionText}" VerticalAlignment="Center" Margin="2,0,10,0"
+                           FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
+                <Border Style="{StaticResource LibraryUx.CommandSeparator}" />
+                <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" />
+                <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Click="OnMoveCapturesClick" ToolTip="{loc:Text LibraryUx_MoveHint}" />
+                <Button x:Name="DeleteSelectedButton" Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Click="OnDeleteSelectedClick" ToolTip="{loc:Text LibraryUx_DeleteHint}" />
+                <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource LibraryUx.CommandButton}" Margin="0"
+                        DataContext="{Binding SingleSelectedTile}" Click="OnReducedExportClick"
+                        Visibility="{Binding DataContext.CanReduceSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+                <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource LibraryUx.CommandButton}" Margin="0"
+                        DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick"
+                        Visibility="{Binding DataContext.CanGifSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
         </Grid>
 
-        <!-- OCR full-text search coverage banner (Row 2). Shown only when part of the
+        <!-- OCR full-text search coverage banner (Row 1). Shown only when part of the
              library is not yet searchable by the text inside the images, or when no OCR
              language pack is installed. Collapsed by default; the code-behind sets its
              state when the gallery opens and after an indexing pass. -->
-        <Border x:Name="OcrCoverageBanner" Grid.Row="2"
-                Style="{StaticResource Card}" Padding="14,10" Margin="0,0,0,10"
+        <Border x:Name="OcrCoverageBanner" Grid.Row="1"
+                Style="{StaticResource Card}" Padding="14,10" Margin="0,0,0,8"
                 Visibility="Collapsed">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -698,8 +1220,9 @@
                                TextWrapping="Wrap" MaxWidth="760"
                                HorizontalAlignment="Left" />
                 </StackPanel>
+                <!-- Outlined: the command bar already carries this screen's one filled button. -->
                 <Button x:Name="OcrIndexButton" Grid.Column="1"
-                        Style="{StaticResource Button.Primary}"
+                        Style="{StaticResource Button.Secondary}"
                         Content="{loc:Text Text_C5364F392040}" MinHeight="34"
                         VerticalAlignment="Center" Margin="14,0,0,0"
                         ToolTip="{loc:Text Text_C8FFDDF126A8}"
@@ -708,108 +1231,198 @@
             </Grid>
         </Border>
 
-        <StackPanel Grid.Row="3" Margin="0,0,0,10">
-            <!-- Selection actions and the new-capture destination share one line. The
-                 destination sits under its checkbox and is capped so the actions keep room
-                 in English at the 980-DIP minimum; the full path stays in its tooltip. -->
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <WrapPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock Text="{Binding SelectionText}" VerticalAlignment="Center" Margin="8,0,14,0" />
-                    <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource Button.Primary}" Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" Margin="0,0,8,4" />
-                    <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource Button.Secondary}" Click="OnMoveCapturesClick" ToolTip="M" Margin="0,0,8,4" />
-                    <Button Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource Button.Secondary}" Click="OnDeleteSelectedClick" Margin="0,0,8,4" />
-                    <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,4" DataContext="{Binding SingleSelectedTile}" Click="OnReducedExportClick" Visibility="{Binding DataContext.CanReduceSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,4" DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick" Visibility="{Binding DataContext.CanGifSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
-                </WrapPanel>
-                <TextBlock x:Name="NewCaptureDestinationLabel" Grid.Column="1" MaxWidth="360" Margin="12,0,0,4"
-                           Text="{Binding NewCaptureDestinationText}" ToolTip="{Binding NewCaptureDestinationText}"
-                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Text.Secondary}" />
-            </Grid>
-            <DockPanel>
-                <DockPanel.Style>
-                    <Style TargetType="DockPanel">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding Text, ElementName=LibraryActionStatus}" Value="">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </DockPanel.Style>
-                <Button x:Name="ArchiveCancelButton" DockPanel.Dock="Right" Content="{loc:Text Library.Action.Cancel}" Style="{StaticResource Button.Secondary}" Click="OnCancelArchiveClick" Visibility="Collapsed" Margin="8,0,0,0" />
-                <TextBlock x:Name="LibraryActionStatus" TextWrapping="Wrap" Foreground="{DynamicResource Text.Secondary}" AutomationProperties.LiveSetting="Polite" />
-            </DockPanel>
-        </StackPanel>
-        <Grid Grid.Row="4" x:Name="GalleryWorkspace"><Grid.ColumnDefinitions><ColumnDefinition Width="224" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
-            <Border x:Name="GalleryFilterRail" Background="{DynamicResource Surface.Raised}"
-                    CornerRadius="10" Padding="10" Margin="0,0,10,0">
-                <DockPanel>
-                    <StackPanel DockPanel.Dock="Top">
-                        <TextBlock Text="{loc:Text Workspace.Library}" FontWeight="SemiBold" Margin="4,6,0,8" />
-                        <TextBlock themes:KoreanWordWrap.Text="{Binding ResultCountText}" Foreground="{DynamicResource Text.Muted}"
-                                   TextWrapping="Wrap" Margin="4,0,0,12" AutomationProperties.LiveSetting="Polite" />
-                        <UniformGrid Columns="2" Margin="0,0,0,4">
-                        <RadioButton x:Name="AllLibraryFilter" Content="{loc:Text Workspace.All}" Tag="All"
-                                     GroupName="LibraryFilter" IsChecked="True" Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
-                        <RadioButton Content="{loc:Text Text_302BAE127938}" Tag="Images" GroupName="LibraryFilter"
-                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
-                        <RadioButton Content="{loc:Text Text_C11734267E6B}" Tag="Videos" GroupName="LibraryFilter"
-                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
-                        <RadioButton Content="{loc:Text Workspace.Pinned}" Tag="Pinned" GroupName="LibraryFilter"
-                                     Checked="OnLibraryFilterChanged" Margin="0,0,0,6" FontSize="12" />
-                        </UniformGrid>
-                        <Button x:Name="NewFolderButton" Content="{loc:Text Folder410.NewFolder}" Style="{StaticResource Button.Secondary}"
-                                Click="OnNewFolderClick" ToolTip="Ctrl+Shift+N" Margin="0,0,0,8" />
-                        <Button Content="{loc:Text Folder410.TreeAll}" Style="{StaticResource Button.GhostCompact}"
-                                Click="OnAllFolderDatesClick" AllowDrop="True"
-                                DragOver="OnFolderDragOver" Drop="OnFolderDrop" Margin="0,0,0,6" />
-                    </StackPanel>
-                    <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
-                        <TextBlock Text="{Binding FolderStorageText}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Foreground="{DynamicResource Text.Secondary}" FontSize="12" />
-                        <TextBlock themes:KoreanWordWrap.Text="{loc:Text Folder410.StorageInfo}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Foreground="{DynamicResource Text.Secondary}" FontSize="12">
-                            <TextBlock.Style><Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers><DataTrigger Binding="{Binding ShowFolderStorageInfo}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger></Style.Triggers>
-                            </Style></TextBlock.Style>
-                        </TextBlock>
-                        <TextBlock themes:KoreanWordWrap.Text="{loc:Text Folder410.RetentionHint}" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource Text.Muted}" FontSize="12" ToolTip="{loc:Text Workspace.RetentionHint}" />
-                    </StackPanel>
-                    <TreeView x:Name="FolderTree" ItemsSource="{Binding FolderNodes}" Background="Transparent" BorderThickness="0"
-                              Foreground="{DynamicResource Text.Primary}"
-                              AutomationProperties.Name="{loc:Text Folder410.Title}" ItemTemplate="{StaticResource Gallery.FolderNodeTemplate}"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                              VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling"
-                              SelectedItemChanged="OnFolderSelected" PreviewKeyDown="OnFolderTreeKeyDown"
-                              PreviewMouseLeftButtonDown="OnFolderPointerDown"
-                              AllowDrop="True" DragOver="OnFolderDragOver" Drop="OnFolderDrop">
-                        <TreeView.Resources>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="{Binding Color, Source={StaticResource Accent.Default}}" />
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="{Binding Color, Source={StaticResource Text.OnAccent}}" />
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="{Binding Color, Source={StaticResource Accent.Subtle}}" />
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="{Binding Color, Source={StaticResource Text.Primary}}" />
-                        </TreeView.Resources>
-                        <TreeView.ItemContainerStyle>
-                            <Style TargetType="TreeViewItem">
-                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-                                <Setter Property="AutomationProperties.Name" Value="{Binding Caption}" />
-                                <Setter Property="MinHeight" Value="30" />
-                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                                <Setter Property="ContextMenu" Value="{StaticResource Gallery.FolderContextMenu}" />
+        <Grid Grid.Row="2" x:Name="GalleryWorkspace">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="224" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="240" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Navigation pane on the window base, like the title bar above it. -->
+            <Grid x:Name="GalleryFilterRail" Margin="0,0,10,0" AutomationProperties.Name="{loc:Text LibraryUx_NavName}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="96" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                    <RadioButton x:Name="AllLibraryFilter" Tag="All"
+                                 IsChecked="{Binding IsAllItemsView, Mode=OneWay}" Checked="OnLibraryFilterChanged"
+                                 ToolTip="{loc:Text LibraryUx_NavAllHint}" AutomationProperties.Name="{Binding AllItemsAccessibleName}">
+                        <!-- Captures dropped here leave their folder; the item lights up like a folder target. -->
+                        <RadioButton.Style>
+                            <Style TargetType="RadioButton" BasedOn="{StaticResource LibraryUx.NavItem}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsAllItemsDropTarget}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
                             </Style>
-                        </TreeView.ItemContainerStyle>
-                    </TreeView>
-                </DockPanel>
-            </Border>
-<Border x:Name="GalleryDetailsPanel" Grid.Column="2" Background="{DynamicResource Surface.Raised}" CornerRadius="10" Padding="14" Margin="8,0,0,0"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
+                        </RadioButton.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path Data="{StaticResource LibraryUx.Icon.AllItems}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                            <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavAll}" Margin="10,0,8,0" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{Binding AllItemsCount}" Style="{StaticResource LibraryUx.NavCount}" />
+                        </Grid>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource LibraryUx.NavItem}" Tag="Images"
+                                 IsChecked="{Binding IsImagesView, Mode=OneWay}" Checked="OnLibraryFilterChanged"
+                                 AutomationProperties.Name="{Binding ImagesAccessibleName}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path Data="{StaticResource Icon.Image}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                            <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavImages}" Margin="10,0,8,0" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{Binding ImageCount}" Style="{StaticResource LibraryUx.NavCount}" />
+                        </Grid>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource LibraryUx.NavItem}" Tag="Videos"
+                                 IsChecked="{Binding IsVideosView, Mode=OneWay}" Checked="OnLibraryFilterChanged"
+                                 AutomationProperties.Name="{Binding VideosAccessibleName}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path Data="{StaticResource LibraryUx.Icon.Video}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                            <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavVideos}" Margin="10,0,8,0" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{Binding VideoCount}" Style="{StaticResource LibraryUx.NavCount}" />
+                        </Grid>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource LibraryUx.NavItem}" Tag="Pinned"
+                                 IsChecked="{Binding IsKeptView, Mode=OneWay}" Checked="OnLibraryFilterChanged"
+                                 ToolTip="{loc:Text LibraryUx_NavKeptHint}" AutomationProperties.Name="{Binding KeptAccessibleName}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path Data="{StaticResource LibraryUx.Icon.Kept}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                            <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavKept}" Margin="10,0,8,0" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{Binding KeptCount}" Style="{StaticResource LibraryUx.NavCount}" />
+                        </Grid>
+                    </RadioButton>
+                </StackPanel>
+
+                <!-- "폴더" section head: the retention rule is a tooltip, [+] creates a folder here. -->
+                <Grid Grid.Row="1" Margin="0,0,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Background="Transparent"
+                                ToolTip="{Binding FolderSectionToolTip}">
+                        <TextBlock Text="{loc:Text Folder410.Title}" Style="{StaticResource LibraryUx.SectionLabel}" />
+                        <Path Data="{StaticResource LibraryUx.Icon.Info}" Style="{StaticResource Icon.Glyph.Muted}"
+                              Width="14" Height="14" Margin="6,0,0,0" StrokeThickness="1.3" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Button x:Name="NewFolderPaneButton" Grid.Column="1" Style="{StaticResource Button.Icon.Compact}"
+                            Width="30" Height="30" MinWidth="30" MinHeight="30" Padding="5"
+                            ToolTip="{loc:Text LibraryUx_NewFolderHint}" AutomationProperties.Name="{loc:Text Folder410.NewFolder}"
+                            Click="OnNewFolderClick">
+                        <Path Data="{StaticResource LibraryUx.Icon.Add}" Style="{StaticResource LibraryUx.CommandGlyph}"
+                              Width="14" Height="14" />
+                    </Button>
+                </Grid>
+
+                <TreeView x:Name="FolderTree" Grid.Row="2" ItemsSource="{Binding FolderRoots}" Background="Transparent" BorderThickness="0"
+                          Foreground="{DynamicResource Text.Primary}"
+                          AutomationProperties.Name="{loc:Text Folder410.Title}"
+                          AutomationProperties.HelpText="{loc:Text LibraryUx_FoldersHint}"
+                          ItemTemplate="{StaticResource Gallery.FolderNodeTemplate}"
+                          ItemContainerStyle="{StaticResource LibraryUx.TreeItem}"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling"
+                          SelectedItemChanged="OnFolderSelected" PreviewKeyDown="OnFolderTreeKeyDown"
+                          PreviewMouseLeftButtonDown="OnFolderPointerDown" />
+
+                <Expander x:Name="DateSection" Grid.Row="3" Style="{StaticResource LibraryUx.Section}" Margin="0,6,0,0"
+                          Header="{loc:Text LibraryUx_DatesHeader}" IsExpanded="False">
+                    <ListBox x:Name="DateList" ItemsSource="{Binding FolderNodes}" MaxHeight="220"
+                             ItemTemplate="{StaticResource LibraryUx.DateItemTemplate}"
+                             ItemContainerStyle="{StaticResource LibraryUx.DateItem}"
+                             AutomationProperties.Name="{loc:Text LibraryUx_DatesHeader}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="False"
+                             SelectionChanged="OnDateSelected" PreviewKeyDown="OnFolderTreeKeyDown" />
+                </Expander>
+            </Grid>
+
+
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Location header inside a folder or date: the way back, the name, and the
+                     folder's one "save new captures here" chip right beside the name. -->
+                <Grid x:Name="LocationHeader" Height="44" Margin="2,0,0,4" ClipToBounds="True"
+                      Visibility="{Binding ShowLocationHeader, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ItemsControl x:Name="LocationBreadcrumb" ItemsSource="{Binding Breadcrumb}" Focusable="False"
+                                      ItemTemplate="{StaticResource LibraryUx.BreadcrumbTemplate}"
+                                      AutomationProperties.Name="{loc:Text LibraryUx_BreadcrumbName}" VerticalAlignment="Center">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                        <CheckBox x:Name="CurrentFolderCaptureCheck" Style="{StaticResource LibraryUx.SaveHereChip}" Margin="14,0,0,0"
+                                  Content="{loc:Text LibraryUx_SaveHere}" ToolTip="{Binding SaveHereToolTip}"
+                                  IsEnabled="{Binding CanChangeNewCaptureFolder}"
+                                  IsChecked="{Binding SavesNewCapturesHere, Mode=OneWay}" Click="OnFolderCaptureTargetClick"
+                                  Visibility="{Binding ShowSaveHere, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+                </Grid>
+
+                <ListBox x:Name="RowsList" Grid.Row="1"
+                         Style="{StaticResource Gallery.RowsList}"
+                         ItemsSource="{Binding Rows}"
+                         SizeChanged="OnRowsListSizeChanged" />
+
+                <Border Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Style="{StaticResource Card}" Padding="42,30"
+                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel MaxWidth="380">
+                        <TextBlock Text="{Binding EmptyStateTitle}"
+                                   Style="{DynamicResource Text.Title}"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock x:Name="EmptyStateLabel"
+                                   Text="{Binding EmptyStateText}"
+                                   Style="{DynamicResource Text.MutedBlock}"
+                                   Margin="0,8,0,0"
+                                   TextAlignment="Center"
+                                   AutomationProperties.Name="{Binding EmptyStateText}" TextWrapping="Wrap" />
+                        <!-- Outlined: the command bar's capture is this screen's filled button. -->
+                        <Button Content="{loc:Text Text_2C20ADDA2018}" Style="{StaticResource Button.Secondary}" Click="OnCaptureRegionClick" Margin="0,16,0,0" Visibility="{Binding QueueIsEmpty, Converter={StaticResource BoolToVisibility}}" />
+                        <Button Content="{loc:Text Library.Search.Reset}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0"
+                                Style="{StaticResource Button.Secondary}"
+                                Visibility="{Binding CanResetEmptySearch, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- After the library content, so Tab follows the visual order: pane, content, details. -->
+            <Border x:Name="GalleryDetailsPanel" Grid.Column="2" Background="{DynamicResource Surface.Raised}" CornerRadius="10" Padding="14" Margin="8,0,0,0"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
 <TextBlock Text="{loc:Text Workspace.Details}" Style="{DynamicResource Text.Section}" Margin="0,0,0,14" />
 <TextBlock Text="{loc:Text Workspace.SelectHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding SingleSelectedTile}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
 <StackPanel DataContext="{Binding SingleSelectedTile}"><StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></StackPanel.Style>
@@ -833,32 +1446,60 @@
 <Button Content="{loc:Text Text_42A667BC71B0}" Style="{StaticResource Button.Secondary}" Margin="0,8,0,0" Click="OnCopyClick" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}" />
 <TextBlock Text="{loc:Text Workspace.EditHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,16,0,0" />
 </StackPanel></StackPanel></ScrollViewer></Border>
-
-            <ListBox x:Name="RowsList" Grid.Column="1"
-                     Style="{StaticResource Gallery.RowsList}"
-                     ItemsSource="{Binding Rows}"
-                     SizeChanged="OnRowsListSizeChanged" />
-
-            <Border Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Style="{StaticResource Card}" Padding="42,30"
-                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel MaxWidth="380">
-                    <TextBlock Text="{Binding EmptyStateTitle}"
-                               Style="{DynamicResource Text.Title}"
-                               HorizontalAlignment="Center" />
-                    <TextBlock x:Name="EmptyStateLabel"
-                               Text="{Binding EmptyStateText}"
-                               Style="{DynamicResource Text.MutedBlock}"
-                               Margin="0,8,0,0"
-                               TextAlignment="Center"
-                               AutomationProperties.Name="{Binding EmptyStateText}" TextWrapping="Wrap" />
-                    <Button Content="{loc:Text Text_2C20ADDA2018}" Style="{StaticResource Button.Primary}" Click="OnCaptureRegionClick" Margin="0,16,0,0" Visibility="{Binding QueueIsEmpty, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Content="{loc:Text Library.Search.Reset}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0"
-                            Style="{StaticResource Button.Secondary}"
-                            Visibility="{Binding CanResetEmptySearch, Converter={StaticResource BoolToVisibility}}" />
-                </StackPanel>
-            </Border>
         </Grid>
 
+        <!-- Status line: the library summary and the last action's result, which fades out on its own. -->
+        <Grid x:Name="LibraryStatusBar" Grid.Row="3" MinHeight="26" Margin="4,6,2,0"
+              AutomationProperties.Name="{loc:Text LibraryUx_StatusName}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="SummaryLabel" Text="{Binding SummaryText}" Style="{StaticResource StatusBar.Text}"
+                           Foreground="{DynamicResource Text.Muted}" AutomationProperties.Name="{Binding SummaryText}" />
+                <TextBlock Text="  ·  " Style="{StaticResource StatusBar.Text}" Foreground="{DynamicResource Text.Muted}" />
+                <TextBlock x:Name="FolderStorageLabel" Text="{Binding FolderStorageText}" Style="{StaticResource StatusBar.Text}"
+                           Foreground="{DynamicResource Text.Muted}" />
+                <StackPanel Orientation="Horizontal" Visibility="{Binding ShowResultCount, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="  ·  " Style="{StaticResource StatusBar.Text}" Foreground="{DynamicResource Text.Muted}" />
+                    <TextBlock x:Name="ResultCountLabel" Text="{Binding ResultCountText}" Style="{StaticResource StatusBar.Text}"
+                               AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Visibility="{Binding ShowNewCaptureDestination, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="  ·  " Style="{StaticResource StatusBar.Text}" Foreground="{DynamicResource Text.Muted}" />
+                    <TextBlock x:Name="NewCaptureDestinationLabel" Text="{Binding NewCaptureDestinationText}" MaxWidth="320"
+                               ToolTip="{Binding NewCaptureDestinationText}" Style="{StaticResource StatusBar.Text}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Visibility="{Binding ShowFolderStorageInfo, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="{loc:Text Folder410.StorageInfo}" Background="Transparent">
+                    <TextBlock Text="  ·  " Style="{StaticResource StatusBar.Text}" Foreground="{DynamicResource Text.Muted}" />
+                    <Path Data="{StaticResource LibraryUx.Icon.Info}" Width="14" Height="14" Stretch="Uniform"
+                          Stroke="{DynamicResource State.Warning}" StrokeThickness="1.4" VerticalAlignment="Center" />
+                    <TextBlock Text="{loc:Text Folder410.StorageInfo}" Margin="6,0,0,0" MaxWidth="360"
+                               Style="{StaticResource StatusBar.Text}" />
+                </StackPanel>
+            </StackPanel>
+            <TextBlock x:Name="LibraryActionStatus" Grid.Column="1" Margin="16,0,0,0" TextWrapping="Wrap" TextAlignment="Right"
+                       HorizontalAlignment="Right" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}"
+                       AutomationProperties.LiveSetting="Polite" />
+            <Button x:Name="ArchiveCancelButton" Grid.Column="2" Content="{loc:Text Library.Action.Cancel}"
+                    Style="{StaticResource Button.GhostCompact}" Click="OnCancelArchiveClick" Visibility="Collapsed" Margin="8,0,0,0" />
+        </Grid>
+
+        <!-- Pointer-side drop label ("제품리뷰 폴더로 이동 · 2개"), like Explorer's "Move to" hint. -->
+        <Canvas x:Name="DragHintLayer" Grid.RowSpan="4" IsHitTestVisible="False" Panel.ZIndex="10">
+            <Border x:Name="DragHint" Visibility="Collapsed" Padding="10,6" CornerRadius="6"
+                    Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Border.Accent}" BorderThickness="1">
+                <StackPanel Orientation="Horizontal">
+                    <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="16" Height="16" Stretch="Uniform"
+                          Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="DragHintText" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Text.Primary}" />
+                </StackPanel>
+            </Border>
+        </Canvas>
     </Grid>
 </Window>

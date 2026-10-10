@@ -122,7 +122,9 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(top.Y >= headingBottom, $"{label}: a folder card must sit below the day heading");
                 Assert.True(top.Y + card.ActualHeight <= tileTop, $"{label}: a folder card must sit above the first capture");
                 Assert.True(top.X + card.ActualWidth <= rowsList.ActualWidth, $"{label}: a folder card must stay inside the library");
-                foreach (TextBlock text in Descendants(card).OfType<TextBlock>()) AssertNotTrimmed(text, label);
+                // A card with a preview collapses its "빈 폴더" label; every shown label must fit.
+                foreach (TextBlock text in Descendants(card).OfType<TextBlock>().Where(text => text.IsVisible))
+                    AssertNotTrimmed(text, label);
             }
             // Cards share the tile column grid, so the first card and the first capture align.
             Assert.Equal(firstTile.TranslatePoint(new Point(), rowsList).X + 8,
@@ -142,9 +144,13 @@ public sealed partial class SettingsThemePreviewTests
                 && check.IsChecked == true, label + ": opened folder");
             Assert.Equal(empty.Id, queue.BrowsingCaptureFolderId);
             Assert.True(check.IsEnabled);
-            Assert.Equal(language == "ko-KR" ? "새 캡처 저장 위치: 제품리뷰" : "New capture destination: 제품리뷰", destination.Text);
-            AssertNotTrimmed(destination, label);
-            TextBlock checkLabel = Descendants(check).OfType<TextBlock>().Single(text => text.Text == UiText.Get("Folder410.CurrentFolderOption"));
+            // The save-here chip beside the folder name replaces the separate check box and
+            // destination line; the status line names a destination only when it is not this folder.
+            Assert.Equal(language == "ko-KR" ? "새 캡처 저장 위치: 제품리뷰" : "New capture destination: 제품리뷰",
+                vm.NewCaptureDestinationText);
+            Assert.Equal(UiText.Format("LibraryUx_SaveHereOn", "제품리뷰"), check.ToolTip);
+            Assert.False(destination.IsVisible);
+            TextBlock checkLabel = Descendants(check).OfType<TextBlock>().Single(text => text.Text == UiText.Get("LibraryUx_SaveHere"));
             AssertNotTrimmed(checkLabel, label);
             Assert.True(vm.IsEmpty);
             Assert.Equal(UiText.Get("Folder410.EmptyFolder"), vm.EmptyStateTitle);
@@ -154,8 +160,9 @@ public sealed partial class SettingsThemePreviewTests
 
             // The header capture button hides the library without closing it: the capture it
             // starts still belongs to the open folder.
+            // The labelled or, with a selection, the icon form of capture: whichever is visible.
             Button captureButton = Descendants(window).OfType<Button>()
-                .Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_2C20ADDA2018"));
+                .Single(button => button.IsVisible && AutomationProperties.GetName(button) == UiText.Get("Text_2C20ADDA2018"));
             captureButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, captureButton));
             PumpLibraryUntil(window, () => !window.IsVisible, label + ": hidden for capture");
             Assert.Equal(empty.Id, queue.BrowsingCaptureFolderId);

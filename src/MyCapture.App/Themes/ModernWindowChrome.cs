@@ -7,10 +7,19 @@ using MyCapture.Core.Themes;
 
 namespace MyCapture.App.Themes;
 
+/// <summary>Native caption colours for one window, resolved without an HWND.</summary>
+/// <param name="DarkMode">Value for DWMWA_USE_IMMERSIVE_DARK_MODE (caption buttons and glyphs).</param>
+/// <param name="CaptionColor">COLORREF for DWMWA_CAPTION_COLOR, or <see langword="null"/> to keep the system colour.</param>
+/// <param name="TextColor">COLORREF for DWMWA_TEXT_COLOR, or <see langword="null"/> to keep the system colour.</param>
+/// <param name="BorderColor">COLORREF for DWMWA_BORDER_COLOR, or <see langword="null"/> to keep the system colour.</param>
+internal readonly record struct WindowChromePlan(bool DarkMode, int? CaptionColor, int? TextColor, int? BorderColor);
+
 /// <summary>
-/// Opt-in attached behavior for native captions, Windows 11 rounded corners, and Mica
-/// backdrops on glass themes. Unsupported DWM attributes fail silently so remote or
-/// non-DWM sessions retain normal WPF chrome.
+/// Opt-in attached behavior for native captions and Windows 11 rounded corners. The caption is
+/// painted with the colour the client area actually shows, so the system title bar and the
+/// window body read as one surface while Windows keeps dragging, snapping, caption buttons
+/// and accessibility. Unsupported DWM attributes (before Windows 11 build 22000, remote or
+/// non-DWM sessions) fail silently and leave normal chrome.
 /// </summary>
 public static class ModernWindowChrome
 {
@@ -22,9 +31,13 @@ public static class ModernWindowChrome
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwaSystemBackdropType = 38;
     private const int DwmsbtNone = 1;
-    private const int DwmsbtMainWindow = 2; // Mica
     private const int DwmWcpRound = 2;
-    private const int DwmColorNone = unchecked((int)0xFFFFFFFE);
+    private const int DwmColorDefault = unchecked((int)0xFFFFFFFF);
+
+    // WPF clears every HWND to opaque black before drawing the window background (the
+    // HwndSource composition target defaults to black), so a translucent glass Surface.Base
+    // is seen over black. The caption uses that composited colour to match the body exactly.
+    private static readonly ThemeColor ClientClearColor = ThemeColor.Rgb(0, 0, 0);
 
     private static readonly List<WeakReference<Window>> Tracked = [];
 
@@ -84,6 +97,40 @@ public static class ModernWindowChrome
     };
 
     internal static int ToColorRef(ThemeColor color) => color.R | (color.G << 8) | (color.B << 16);
+
+    /// <summary>
+    /// Pure decision for a window's native caption: dark caption buttons for dark palettes, and
+    /// caption, caption text and border colours equal to what the client area paints. System
+    /// High Contrast keeps the user's caption palette.
+    /// </summary>
+    internal static WindowChromePlan ResolveChrome(AppTheme theme, WorkspaceRole role, bool systemHighContrast)
+    {
+        bool dark = UseDarkCaption(theme, role);
+        if (systemHighContrast) return new WindowChromePlan(dark, null, null, null);
+        IReadOnlyDictionary<string, ThemeColor> colors = ClientColors(theme, role);
+        ThemeColor caption = ThemeContrast.Composite(colors["Surface.Base"], ClientClearColor);
+        ThemeColor text = ThemeContrast.Composite(colors["Text.Primary"], caption);
+        ThemeColor border = ThemeContrast.Composite(colors["Border.Subtle"], caption);
+        return new WindowChromePlan(dark, ToColorRef(caption), ToColorRef(text), ToColorRef(border));
+    }
+
+    /// <summary>The palette a window's own resources resolve to, including Workspace's per-role overrides.</summary>
+    internal static IReadOnlyDictionary<string, ThemeColor> ClientColors(AppTheme theme, WorkspaceRole role)
+    {
+        if (theme != AppTheme.Workspace || role != WorkspaceRole.Gallery) return ThemeCatalog.ColorsFor(theme);
+        // The library keeps Workspace's light role palette: Daylight plus WorkspaceTheme's inline overrides.
+        var colors = new Dictionary<string, ThemeColor>(ThemeCatalog.ColorsFor(AppTheme.Daylight), StringComparer.Ordinal);
+        foreach ((string key, string value) in WorkspaceTheme.WorkspaceOverrides(role))
+            colors[key] = ParseRgb(value);
+        return colors;
+    }
+
+    private static ThemeColor ParseRgb(string hex)
+    {
+        int value = int.Parse(hex.AsSpan(1), System.Globalization.NumberStyles.HexNumber,
+            System.Globalization.CultureInfo.InvariantCulture);
+        return ThemeColor.Rgb((byte)(value >> 16), (byte)(value >> 8), (byte)value);
+    }
 
     private static void OnEnabledChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
     {
@@ -157,14 +204,11 @@ public static class ModernWindowChrome
         WindowIdentity.Attach(window);
         AppTheme theme = ThemeService.Current;
         WorkspaceRole role = GetWorkspaceRole(window);
-        bool darkCaption = UseDarkCaption(theme, role);
-        bool mica = AppThemeNames.UsesBackdrop(theme);
+        WindowChromePlan plan = ResolveChrome(theme, role, SystemParameters.HighContrast);
 
-        if (mica)
-        {
-            window.Background = Brushes.Transparent;
-        }
-        else if (window.TryFindResource("Surface.Base") is Brush surface)
+        // Every palette paints its base surface, glass included. A transparent window would
+        // show WPF's black clear colour, which no longer matched the Mica caption above it.
+        if (window.TryFindResource("Surface.Base") is Brush surface)
         {
             window.Background = surface;
         }
@@ -181,7 +225,7 @@ public static class ModernWindowChrome
             return;
         }
 
-        int dark = darkCaption ? 1 : 0;
+        int dark = plan.DarkMode ? 1 : 0;
         // Attribute 20 is the documented DWMWA_USE_IMMERSIVE_DARK_MODE value; 19 is the
         // pre-release value some DWM builds still answer, kept as a silent fallback.
         if (DwmSetWindowAttribute(handle, DwmwaUseImmersiveDarkMode, ref dark, sizeof(int)) != 0)
@@ -189,38 +233,21 @@ public static class ModernWindowChrome
             _ = DwmSetWindowAttribute(handle, DwmwaLegacyUseImmersiveDarkMode, ref dark, sizeof(int));
         }
 
-        int backdrop = mica ? DwmsbtMainWindow : DwmsbtNone;
+        // The client is opaque, so no system backdrop or extended frame can show through it.
+        // Build 22621 is the first to accept the backdrop attribute; earlier builds ignore it.
+        int backdrop = DwmsbtNone;
         _ = DwmSetWindowAttribute(handle, DwmwaSystemBackdropType, ref backdrop, sizeof(int));
-
-        Margins margins = mica
-            ? new Margins { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 }
-            : default;
+        Margins margins = default;
         _ = DwmExtendFrameIntoClientArea(handle, ref margins);
 
-        // Keep native chrome continuous with the WPF surface. High Contrast owns its
-        // caption palette, so never replace the user's accessibility colours there.
-        if (!SystemParameters.HighContrast)
-        {
-            if (mica)
-            {
-                int none = DwmColorNone;
-                _ = DwmSetWindowAttribute(handle, DwmwaCaptionColor, ref none, sizeof(int));
-                _ = DwmSetWindowAttribute(handle, DwmwaBorderColor, ref none, sizeof(int));
-            }
-            else
-            {
-                AppTheme captionTheme = theme == AppTheme.Workspace
-                    ? role == WorkspaceRole.Gallery ? AppTheme.Daylight : AppTheme.Midnight
-                    : theme;
-                IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(captionTheme);
-                int border = ToColorRef(colors["Border.Subtle"]);
-                int caption = ToColorRef(colors["Surface.Base"]);
-                int text = ToColorRef(colors["Text.Primary"]);
-                _ = DwmSetWindowAttribute(handle, DwmwaBorderColor, ref border, sizeof(int));
-                _ = DwmSetWindowAttribute(handle, DwmwaCaptionColor, ref caption, sizeof(int));
-                _ = DwmSetWindowAttribute(handle, DwmwaTextColor, ref text, sizeof(int));
-            }
-        }
+        // Caption colours exist from build 22000. High Contrast hands the caption back to the
+        // user's system palette instead of keeping a colour from an earlier theme.
+        int border = plan.BorderColor ?? DwmColorDefault;
+        int caption = plan.CaptionColor ?? DwmColorDefault;
+        int text = plan.TextColor ?? DwmColorDefault;
+        _ = DwmSetWindowAttribute(handle, DwmwaBorderColor, ref border, sizeof(int));
+        _ = DwmSetWindowAttribute(handle, DwmwaCaptionColor, ref caption, sizeof(int));
+        _ = DwmSetWindowAttribute(handle, DwmwaTextColor, ref text, sizeof(int));
 
         int rounded = DwmWcpRound;
         _ = DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref rounded, sizeof(int));

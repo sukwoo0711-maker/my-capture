@@ -78,7 +78,6 @@ internal sealed partial class GalleryWindow
     {
         SearchBox.Clear();
         _viewModel.Filter = GalleryFilter.All;
-        AllLibraryFilter.IsChecked = true;
         SearchBox.Focus();
     }
 }
