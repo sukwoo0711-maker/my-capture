@@ -54,6 +54,7 @@ internal sealed class AnnotationEditorControl : Grid
     private readonly AnnotationSourceMetadata _frame;
     private readonly BitmapSource _selectedBitmap;
     private readonly AnnotationImageStore _imageStore = new();
+    private readonly AnnotationBlurCache _blurCache;
     private readonly AnnotationEditorController _controller;
     private readonly AnnotationEditorSurface _surface;
     private readonly string? _sourceWindowTitle;
@@ -64,6 +65,7 @@ internal sealed class AnnotationEditorControl : Grid
     private readonly Dictionary<EditorTool, ToggleButton> _toolButtons = new();
     private bool _mosaicDragging;
     private PointD _mosaicStart;
+    private int _mosaicBlockSize = 12;
     private CropSelection? _crop;
     private PointD? _edgeCropStart;
     private Button _autoTrimButton = null!;
@@ -101,6 +103,8 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement _shapeStyleSection = null!;
     private Slider _fontSizeSlider = null!;
     private FrameworkElement _fontSizeSection = null!;
+    private Slider _blurSlider = null!;
+    private FrameworkElement _blurSection = null!;
     private bool _syncingInspector;
     private ColumnDefinition _inspectorColumn = null!;
     private Border _inspectorPanel = null!;
@@ -185,9 +189,12 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize) ? Math.Clamp(defaults.FontSize, 8, 200) : 18;
         _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
+        _controller.ApplyBlurRadius(defaults.BlurRadius);
+        _mosaicBlockSize = defaults.MosaicBlockSize;
         if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool == EditorTool.Crop ? EditorTool.Select : lastTool;
         _imageStore.PruneToReachable(document, undo);
-        var renderer = new AnnotationRenderer(_imageStore);
+        _blurCache = new AnnotationBlurCache(Dispatcher);
+        var renderer = new AnnotationRenderer(_imageStore, _blurCache);
 
         var visualRegion = new RectD(0, 0, _canvasWidth, _canvasHeight);
         var visualFrame = new FrozenFrame(
@@ -199,6 +206,7 @@ internal sealed class AnnotationEditorControl : Grid
         {
             SourceWindowTitle = _showSourceWindowTitle ? _sourceWindowTitle : null,
         };
+        _blurCache.FrameReady += (_, _) => _surface.InvalidateVisual();
 
         SetResourceReference(BackgroundProperty, "Surface.Base");
         Focusable = true;
@@ -235,6 +243,7 @@ internal sealed class AnnotationEditorControl : Grid
             _redactionCts?.Cancel();
             _redactionCts?.Dispose();
             _redactionCts = null;
+            _blurCache.Clear();
         };
 
         SelectTool(_preferredTool);
@@ -596,8 +605,10 @@ internal sealed class AnnotationEditorControl : Grid
         decoded.Freeze();
 
         (BitmapSource Bitmap, string AssetFileName) asset = _imageStore.RegisterInMemory(decoded);
-        double scale = Math.Max(1.0, _surface.DipPerPixel);
-        var rect = new RectD(normalized.X, normalized.Y, normalized.Width / scale, normalized.Height / scale);
+        // Annotation rects are in image pixels, so the patch sits exactly on the pixels it
+        // was sampled from. Scaling by the display zoom shrank it on enlarged small captures
+        // and left part of the selected content uncovered.
+        var rect = new RectD(x, y, width, height);
         _controller.AddImageAnnotation(asset.AssetFileName, width, height, rect);
         SelectTool(EditorTool.Select);
         SetStatus(UiText.Get("Text_3F8046019B34"));
@@ -777,7 +788,7 @@ internal sealed class AnnotationEditorControl : Grid
             PointD mosaicEnd = _surface.ToImagePoint(mosaicDip);
             ApplyMosaic(
                 new RectD(_mosaicStart.X, _mosaicStart.Y, mosaicEnd.X - _mosaicStart.X, mosaicEnd.Y - _mosaicStart.Y),
-                blockSize: 14);
+                _mosaicBlockSize);
             e.Handled = true;
             return;
         }
@@ -1326,6 +1337,7 @@ internal sealed class AnnotationEditorControl : Grid
         AddToolButton(stack, EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), UiText.Get("Tools.StepNumber"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13"));
         AddToolButton(stack, EditorTool.Image, UiText.Get("Text_302BAE127938"), UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage);
         AddToolButton(stack, EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic);
+        AddToolButton(stack, EditorTool.Blur, UiText.Get("EditorBlur_Name"), UiText.Get("EditorBlur_ToolTip"), "Icon.Blur", FallbackBlur);
 
         var panel = new Border { Name = "AnnotationToolRail", Child = stack };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
@@ -1394,6 +1406,8 @@ internal sealed class AnnotationEditorControl : Grid
         stack.Children.Add(_shapeStyleSection);
         _fontSizeSection = BuildFontSizeSection();
         stack.Children.Add(_fontSizeSection);
+        _blurSection = BuildBlurSection();
+        stack.Children.Add(_blurSection);
         _cropSection = BuildCropSection();
         stack.Children.Add(_cropSection);
 
@@ -1701,6 +1715,43 @@ internal sealed class AnnotationEditorControl : Grid
         return panel;
     }
 
+    private FrameworkElement BuildBlurSection()
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        panel.Children.Add(SectionLabel(UiText.Get("EditorBlur_Strength")));
+
+        _blurSlider = new Slider
+        {
+            Minimum = BlurAnnotation.MinimumRadius,
+            Maximum = BlurAnnotation.MaximumRadius,
+            Value = _controller.BlurRadius,
+            SmallChange = 1,
+            LargeChange = 4,
+            TickFrequency = 1,
+            IsSnapToTickEnabled = true,
+            Margin = new Thickness(0, 4, 0, 0),
+            ToolTip = UiText.Get("EditorBlur_StrengthHint"),
+        };
+        AutomationName(_blurSlider, UiText.Get("EditorBlur_Strength"));
+        AutomationProperties.SetHelpText(_blurSlider, UiText.Get("EditorBlur_StrengthHint"));
+        _blurSlider.ValueChanged += (_, args) =>
+        {
+            if (_syncingInspector)
+            {
+                return;
+            }
+
+            _controller.ApplyBlurRadius(args.NewValue);
+            RememberPreferences();
+            if (_controller.Selected is BlurAnnotation)
+            {
+                SetStatus(UiText.Format("EditorBlur_StrengthChanged", _controller.BlurRadius));
+            }
+        };
+        panel.Children.Add(_blurSlider);
+        return panel;
+    }
+
     private UIElement BuildStatusBar()
     {
         var grid = new Grid();
@@ -1938,6 +1989,8 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static Geometry FallbackMosaic() => Geometry.Parse("M3,4 H17 V16 H3 Z M3,9 H9 V4 M9,9 H15 M9,9 V16 M15,9 V14 A2,2 0 0 1 13,16");
 
+    private static Geometry FallbackBlur() => Geometry.Parse("M10,2.75 C10,2.75 4.75,8.6 4.75,12 A5.25,5.25 0 0 0 15.25,12 C15.25,8.6 10,2.75 10,2.75 Z M7.6,12.4 A2.4,2.4 0 0 0 10,14.8");
+
     private static Geometry FallbackCrop() => Geometry.Parse("M5,2 V14 A1,1 0 0 0 6,15 H18 M2,5 H14 A1,1 0 0 1 15,6 V18");
 
     private static Geometry FallbackUndo() => Geometry.Parse("M8,6 L4,10 L8,14 M4,10 H13 A4,4 0 0 1 13,18");
@@ -1998,7 +2051,7 @@ internal sealed class AnnotationEditorControl : Grid
             FillTransparency = _controller.FillTransparency, FontSize = _controller.DefaultFontSize,
             FontFamily = _controller.DefaultFontFamily, TextColor = previous.TextColor,
             MosaicBlockSize = previous.MosaicBlockSize, HighlighterAlpha = previous.HighlighterAlpha,
-            RecentColors = [.. previous.RecentColors],
+            RecentColors = [.. previous.RecentColors], BlurRadius = _controller.BlurRadius,
         });
     }
 
@@ -2160,6 +2213,7 @@ internal sealed class AnnotationEditorControl : Grid
         bool thicknessApplies = ThicknessApplies(selected, _controller.Tool);
         bool shapeApplies = selected is ShapeAnnotation || (selected is null && _controller.Tool is EditorTool.Rectangle or EditorTool.Ellipse);
         bool fontSizeApplies = selected is TextAnnotation || (selected is null && _controller.Tool == EditorTool.Text);
+        bool blurApplies = selected is BlurAnnotation || (selected is null && _controller.Tool == EditorTool.Blur);
 
         bool cropping = _crop is not null;
         _cropSection.Visibility = cropping ? Visibility.Visible : Visibility.Collapsed;
@@ -2169,6 +2223,7 @@ internal sealed class AnnotationEditorControl : Grid
         _thicknessSection.Visibility = thicknessApplies ? Visibility.Visible : Visibility.Collapsed;
         _shapeStyleSection.Visibility = shapeApplies ? Visibility.Visible : Visibility.Collapsed;
         _fontSizeSection.Visibility = fontSizeApplies ? Visibility.Visible : Visibility.Collapsed;
+        _blurSection.Visibility = blurApplies ? Visibility.Visible : Visibility.Collapsed;
 
         _syncingInspector = true;
         try
@@ -2196,6 +2251,11 @@ internal sealed class AnnotationEditorControl : Grid
                 {
                     _fontSizeSlider.Value = clamped;
                 }
+            }
+
+            if (blurApplies)
+            {
+                _blurSlider.Value = (selected as BlurAnnotation)?.Radius ?? _controller.BlurRadius;
             }
         }
         finally
@@ -2253,6 +2313,7 @@ internal sealed class AnnotationEditorControl : Grid
         EditorTool.Pen => UiText.Get("Text_CEFF481585C2"),
         EditorTool.Text => UiText.Get("Text_DAB3F35F5BD0"),
         EditorTool.Image => UiText.Get("Text_A5E52C2DDFC0"),
+        EditorTool.Blur => UiText.Get("EditorBlur_ToolTitle"),
         _ => UiText.Get("Text_36C416EAD2CE"),
     };
 
@@ -2267,6 +2328,7 @@ internal sealed class AnnotationEditorControl : Grid
         EditorTool.Pen => UiText.Get("Text_8AA2E937C447"),
         EditorTool.Text => UiText.Get("Text_E8DF95164C87"),
         EditorTool.Image => UiText.Get("Text_994DA3588A6B"),
+        EditorTool.Blur => UiText.Get("EditorBlur_Instruction"),
         _ => string.Empty,
     };
 
@@ -2282,6 +2344,7 @@ internal sealed class AnnotationEditorControl : Grid
         EditorTool.Pen => UiText.Get("Text_9CD399964425"),
         EditorTool.Text => UiText.Get("Text_632459CEB61F"),
         EditorTool.Image => UiText.Get("Text_92675EB6DE53"),
+        EditorTool.Blur => UiText.Get("EditorBlur_ToolStatus"),
         _ => string.Empty,
     };
 

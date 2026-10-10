@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Display;
 using MyCapture.Platform.Recording;
 
@@ -45,7 +46,20 @@ internal sealed class RecordingControlWindow : Window
 
     // The palette has a compact, predictable width independent from the recorded image.
     // On an unusually narrow work area the Viewbox fits its controls instead of clipping them.
-    private const double MinStripWidth = 460.0;
+    // The extra width over the pre-pause 460 DIPs keeps the status text readable once the
+    // pause button appears during recording.
+    private const double MinStripWidth = 560.0;
+
+    // Wait for the in-flight frame to finish before marking the in-region clock as paused.
+    private static readonly TimeSpan PauseParkTimeout = TimeSpan.FromSeconds(2);
+
+    // The restored clock must reach the screen before frames flow again. One dispatcher pass at
+    // Loaded priority runs after layout/render; this covers the following DWM presentation.
+    private static readonly TimeSpan ResumePresentationDelay = TimeSpan.FromMilliseconds(50);
+
+    // Diagonal stripe period (DIPs) of the paused outline, a non-colour cue that remains
+    // distinguishable in the high-contrast theme where accent and warning share one colour.
+    private const double PausedStripePeriod = 12.0;
 
     private RectD _screenRegion;
     private readonly RecordingSettings _settings;
@@ -54,6 +68,7 @@ internal sealed class RecordingControlWindow : Window
     private readonly ILogger _log;
 
     private readonly Button _primaryButton;
+    private readonly Button _pauseButton;
     private readonly TextBlock _statusText;
     private readonly TextBlock _timerText;
     private readonly CheckBox _clockCheckBox;
@@ -76,6 +91,8 @@ internal sealed class RecordingControlWindow : Window
     private bool _applyingPhysicalLayout;
     private bool _captureExclusionApplied;
     private bool _paletteOverlapsRegion;
+    private bool _paused;
+    private bool _pauseTransition;
 
     internal RecordingControlWindow(
         RectD screenRegion,
@@ -109,8 +126,9 @@ internal sealed class RecordingControlWindow : Window
         _regionFrame = BuildRegionFrame();
         _root.Children.Add(_regionFrame);
 
-        _controlStrip = BuildControlStrip(out _primaryButton, out _statusText, out _timerText, out _clockCheckBox);
+        _controlStrip = BuildControlStrip(out _primaryButton, out _pauseButton, out _statusText, out _timerText, out _clockCheckBox);
         _root.Children.Add(_controlStrip);
+        UpdatePauseButton();
 
         Content = _root;
         ApplyPhysicalLayout(positionHwnd: false);
@@ -133,7 +151,27 @@ internal sealed class RecordingControlWindow : Window
     internal bool IsRecording => _recorder is { IsRecording: true };
     internal bool CanCaptureStill => _recorder is { IsReady: true } && !_stopping && !_completionPending && !_finished;
 
+    /// <summary>True while the recording is paused (the capture loop has stopped grabbing).</summary>
+    internal bool IsPaused => _paused;
+
+    /// <summary>True while a pause or resume is still being applied.</summary>
+    internal bool IsPauseTransitionPending => _pauseTransition;
+
+    /// <summary>
+    /// The optional global pause chord shown in the pause button's guidance. Reads the live
+    /// application settings by default; tests substitute a fixed chord.
+    /// </summary>
+    internal Func<Hotkey> ReadPauseHotkey { get; set; } = static () => ShortcutHelpWindow.ReadHotkeys().PauseRecording;
+
+    /// <summary>
+    /// Set when the window closed (application exit, session end or a forced close) while
+    /// recording and the recorder still finalised a playable private MP4 without the normal
+    /// completion handshake. The owner keeps that clip for startup recovery.
+    /// </summary>
+    internal bool FinalizedOnClose { get; private set; }
+
     /// <summary>External stop request (e.g. pressing Ctrl+Shift+X again).</summary>
+    /// <remarks>Works the same while paused: the paused span is simply not part of the clip.</remarks>
     internal void RequestStop() => StopRecording();
 
     // The coordinator keeps this visible until gallery registration and editor startup finish.
@@ -197,10 +235,8 @@ internal sealed class RecordingControlWindow : Window
                 }
             }
         };
-        frame.GotKeyboardFocus += (_, _) =>
-            frame.BorderBrush = TryBrush("Border.Focus", Color.FromRgb(0x97, 0x89, 0xFF));
-        frame.LostKeyboardFocus += (_, _) =>
-            frame.BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x7C, 0x6C, 0xFF));
+        frame.GotKeyboardFocus += (_, _) => UpdateRegionFrameBrush(frame);
+        frame.LostKeyboardFocus += (_, _) => UpdateRegionFrameBrush(frame);
 
         AutomationProperties.SetName(frame, UiText.Get("Text_E7A732EAE7D5"));
         AutomationProperties.SetHelpText(
@@ -211,11 +247,13 @@ internal sealed class RecordingControlWindow : Window
 
     private Border BuildControlStrip(
         out Button primary,
+        out Button pause,
         out TextBlock status,
         out TextBlock timer,
         out CheckBox clockCheck)
     {
         var panel = new Grid { Margin = new Thickness(10, 8, 10, 8) };
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -234,6 +272,20 @@ internal sealed class RecordingControlWindow : Window
         Grid.SetColumn(primary, 0);
         panel.Children.Add(primary);
 
+        // Shown only while recording. A regular themed button keeps the theme's focus visual,
+        // high-contrast colours and Space/Enter activation after Tab.
+        pause = new Button
+        {
+            MinWidth = 84,
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Style = TryStyle("Button.Secondary"),
+            Visibility = Visibility.Collapsed,
+        };
+        pause.Click += (_, _) => _ = TogglePause();
+        Grid.SetColumn(pause, 1);
+        panel.Children.Add(pause);
+
         status = new TextBlock
         {
             Text = FormatReadyStatus(),
@@ -243,7 +295,7 @@ internal sealed class RecordingControlWindow : Window
             FontSize = 13,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        Grid.SetColumn(status, 1);
+        Grid.SetColumn(status, 2);
         panel.Children.Add(status);
 
         timer = new TextBlock
@@ -256,7 +308,7 @@ internal sealed class RecordingControlWindow : Window
             FontSize = 15,
         };
         AutomationProperties.SetName(timer, UiText.Get("Text_F11BA21FB824"));
-        Grid.SetColumn(timer, 2);
+        Grid.SetColumn(timer, 3);
         panel.Children.Add(timer);
 
         clockCheck = new CheckBox
@@ -275,7 +327,7 @@ internal sealed class RecordingControlWindow : Window
         AutomationProperties.SetHelpText(
             clockCheck,
             UiText.Get("Text_E2395EBF6C65"));
-        Grid.SetColumn(clockCheck, 3);
+        Grid.SetColumn(clockCheck, 4);
         panel.Children.Add(clockCheck);
 
         var cancel = new Button
@@ -287,9 +339,9 @@ internal sealed class RecordingControlWindow : Window
         };
         cancel.Click += (_, _) => CancelSession();
         AutomationProperties.SetName(cancel, UiText.Get("Text_E1C96EF1EA0F"));
-        Grid.SetColumn(cancel, 4);
+        Grid.SetColumn(cancel, 5);
         panel.Children.Add(cancel);
-        Grid.SetColumnSpan(_completionProgress, 5);
+        Grid.SetColumnSpan(_completionProgress, 6);
         AutomationProperties.SetName(_completionProgress, UiText.Get("Text_C1767C4F1218"));
         panel.Children.Add(_completionProgress);
 
@@ -534,8 +586,12 @@ internal sealed class RecordingControlWindow : Window
         }
 
         _readyAnnounced = false;
+        _paused = false;
         _primaryButton.Content = UiText.Get("Text_74C6AEBB2B6D");
         _primaryButton.Style = TryStyle("Button.Danger");
+        _pauseButton.Visibility = Visibility.Visible;
+        _pauseButton.IsEnabled = true;
+        UpdatePauseButton();
         _statusText.Text = UiText.Get("Text_72A13C33A79E");
         _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         AnnounceStatus();
@@ -565,11 +621,199 @@ internal sealed class RecordingControlWindow : Window
         if (!_readyAnnounced && _recorder?.IsReady == true)
         {
             _readyAnnounced = true;
-            _statusText.Text = UiText.Get("Text_38B12BA58C48");
-            AnnounceStatus();
+            if (!_paused)
+            {
+                _statusText.Text = UiText.Get("Text_38B12BA58C48");
+                AnnounceStatus();
+            }
         }
+        // Recorded time only: the timer holds still while paused, matching the clip length.
         TimeSpan elapsed = _recorder?.RecordedElapsed ?? TimeSpan.Zero;
         _timerText.Text = elapsed.ToString(elapsed.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Pauses or resumes the running recording. The pause button and the optional pause
+    /// hotkey both enter here, so they share the badge-safe ordering, status text and
+    /// accessibility state.
+    /// </summary>
+    /// <returns>
+    /// False when nothing changed: no recording is running, it is stopping, or the previous
+    /// pause or resume is still being applied.
+    /// </returns>
+    internal bool TogglePause()
+    {
+        if (_pauseTransition || _stopping || _completionPending || _finished
+            || _recorder is not { IsRecording: true } recorder)
+        {
+            return false;
+        }
+
+        _pauseTransition = true;
+        _pauseButton.IsEnabled = false;
+        ApplyPauseToggle(recorder, pause: !_paused);
+        return true;
+    }
+
+    private async void ApplyPauseToggle(RegionRecorder recorder, bool pause)
+    {
+        try
+        {
+            if (pause)
+            {
+                await PauseAsync(recorder);
+            }
+            else
+            {
+                await ResumeAsync(recorder);
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not change the recording pause state");
+            await Dispatcher.InvokeAsync(EndPauseTransition);
+        }
+    }
+
+    private async Task PauseAsync(RegionRecorder recorder)
+    {
+        if (!recorder.Pause())
+        {
+            EndPauseTransition();
+            return;
+        }
+
+        _paused = true;
+        ApplyPausePresentation();
+
+        // The wall clock is the only control drawn inside the recorded region. Mark it paused
+        // only after the capture loop has finished its in-flight frame and parked, so the
+        // paused badge itself can never be encoded.
+        bool parked = await Task.Run(() => recorder.WaitUntilCaptureParked(PauseParkTimeout)).ConfigureAwait(false);
+        await Dispatcher.InvokeAsync(() =>
+        {
+            if (parked && _paused && !_stopping && !_finished && ReferenceEquals(_recorder, recorder))
+            {
+                _wallClock?.SetPaused(true);
+            }
+
+            EndPauseTransition();
+        });
+    }
+
+    private async Task ResumeAsync(RegionRecorder recorder)
+    {
+        if (_wallClock is not null)
+        {
+            // Restore the in-region clock first and let it reach the screen before frames flow
+            // again, so the first frame after the resume never shows the paused badge.
+            _wallClock.SetPaused(false);
+            await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Loaded);
+            await Task.Delay(ResumePresentationDelay).ConfigureAwait(false);
+        }
+
+        await Dispatcher.InvokeAsync(() =>
+        {
+            if (!_stopping && !_finished && ReferenceEquals(_recorder, recorder) && recorder.Resume())
+            {
+                _paused = false;
+                ApplyPausePresentation();
+            }
+            else if (_paused && !_stopping && !_finished)
+            {
+                // Resume was refused; keep the clock consistent with the still-paused capture.
+                _wallClock?.SetPaused(true);
+            }
+
+            EndPauseTransition();
+        });
+    }
+
+    private void EndPauseTransition()
+    {
+        _pauseTransition = false;
+        _pauseButton.IsEnabled = IsRecording && !_stopping && !_completionPending && !_finished;
+    }
+
+    /// <summary>Updates every pause cue outside the recorded pixels (palette, status, outline).</summary>
+    private void ApplyPausePresentation()
+    {
+        UpdatePauseButton();
+        if (_paused)
+        {
+            // The words carry the state; primary text keeps AA contrast in the light themes,
+            // where the warning colour is too light for 13 px text on the white palette.
+            _statusText.Text = UiText.Get("RecordingPause_Status");
+            _statusText.Foreground = TryBrush("Text.Primary", Colors.White);
+        }
+        else
+        {
+            _statusText.Text = UiText.Get(_readyAnnounced ? "Text_38B12BA58C48" : "Text_72A13C33A79E");
+            _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
+        }
+
+        AnnounceStatus();
+        AutomationProperties.SetItemStatus(
+            _regionFrame,
+            _paused ? UiText.Get("RecordingPause_State") : string.Empty);
+        UpdateRegionFrameBrush(_regionFrame);
+    }
+
+    private void UpdatePauseButton()
+    {
+        _pauseButton.Content = UiText.Get(_paused ? "RecordingPause_Resume" : "RecordingPause_Pause");
+        string help = UiText.Get(_paused ? "RecordingPause_ResumeHelp" : "RecordingPause_PauseHelp");
+        // Read on every refresh so a chord changed in settings shows on the next state change;
+        // an unassigned chord adds nothing.
+        Hotkey shortcut = ReadPauseHotkey();
+        string shortcutText = shortcut.IsAssigned ? shortcut.ToString() : string.Empty;
+        if (shortcutText.Length > 0)
+        {
+            help = UiText.Format("RecordingPauseHotkey_HelpWithShortcut", help, shortcutText);
+        }
+
+        _pauseButton.ToolTip = help;
+        AutomationProperties.SetName(
+            _pauseButton,
+            UiText.Get(_paused ? "RecordingPause_ResumeName" : "RecordingPause_PauseName"));
+        AutomationProperties.SetHelpText(_pauseButton, help);
+        AutomationProperties.SetAcceleratorKey(_pauseButton, shortcutText);
+    }
+
+    private void UpdateRegionFrameBrush(Border frame)
+    {
+        frame.BorderBrush = _paused
+            ? CreatePausedFrameBrush()
+            : frame.IsKeyboardFocusWithin
+                ? TryBrush("Border.Focus", Color.FromRgb(0x97, 0x89, 0xFF))
+                : TryBrush("Border.Accent", Color.FromRgb(0x7C, 0x6C, 0xFF));
+    }
+
+    /// <summary>
+    /// Diagonal warning/surface stripes for the paused outline. The pattern, not only the
+    /// colour, tells paused from recording, including in the high-contrast theme.
+    /// </summary>
+    internal static Brush CreatePausedFrameBrush()
+    {
+        Color stripe = TryBrush("State.Warning", Color.FromRgb(0xF5, 0xB9, 0x42)) is SolidColorBrush warning
+            ? warning.Color
+            : Color.FromRgb(0xF5, 0xB9, 0x42);
+        Color gap = TryBrush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)) is SolidColorBrush surface
+            ? surface.Color
+            : Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B);
+        var brush = new LinearGradientBrush
+        {
+            MappingMode = BrushMappingMode.Absolute,
+            SpreadMethod = GradientSpreadMethod.Repeat,
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(PausedStripePeriod, PausedStripePeriod),
+        };
+        brush.GradientStops.Add(new GradientStop(stripe, 0));
+        brush.GradientStops.Add(new GradientStop(stripe, 0.5));
+        brush.GradientStops.Add(new GradientStop(gap, 0.5));
+        brush.GradientStops.Add(new GradientStop(gap, 1));
+        brush.Freeze();
+        return brush;
     }
 
     private async void StopRecording()
@@ -583,6 +827,7 @@ internal sealed class RecordingControlWindow : Window
         Opacity = 1;
         _controlStrip.Visibility = Visibility.Visible;
         _clockCheckBox.IsEnabled = false;
+        _pauseButton.IsEnabled = false;
         Stopping?.Invoke(this, EventArgs.Empty);
         _elapsedTimer?.Stop();
         _primaryButton.IsEnabled = false;
@@ -802,7 +1047,11 @@ internal sealed class RecordingControlWindow : Window
             {
                 if (_recorder.IsRecording && !_finished)
                 {
-                    _recorder.Stop();
+                    // Application exit or a forced close while recording or paused. Stop still
+                    // finalises the private MP4 (a paused span is simply not part of it); the
+                    // owner keeps that file for startup recovery instead of discarding it.
+                    _ = _recorder.Stop();
+                    FinalizedOnClose = true;
                 }
             }
             catch (Exception ex)
@@ -834,6 +1083,13 @@ internal sealed class RecordingControlWindow : Window
                     _wallClockRelativeX,
                     _wallClockRelativeY);
                 _wallClock.Closed += OnWallClockClosed;
+                // Capture is parked while paused, so the badge can be drawn immediately. During a
+                // pause/resume transition the transition itself settles the clock state.
+                if (_paused && !_pauseTransition)
+                {
+                    _wallClock.SetPaused(true);
+                }
+
                 _wallClock.Show();
             }
         }

@@ -80,6 +80,12 @@ public sealed class SettingsApplyService
     }
 
     /// <summary>
+    /// Whether Windows claims the Print Screen key for its capture tool. Off by default so a
+    /// test host never depends on the machine's accessibility settings.
+    /// </summary>
+    internal Func<bool> PrintScreenCaptureKeyEnabled { get; set; } = static () => false;
+
+    /// <summary>
     /// Applies <paramref name="next"/>. Returns a result describing the outcome the UI
     /// should surface.
     /// </summary>
@@ -98,6 +104,8 @@ public sealed class SettingsApplyService
         ArgumentNullException.ThrowIfNull(next);
 
         AppSettings previous = _current();
+        // The window never edits the Store rating state; keep what captures recorded meanwhile.
+        next.StoreRating = previous.StoreRating;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);
         var messages = new List<string>();
 
@@ -120,6 +128,10 @@ public sealed class SettingsApplyService
             {
                 messages.Add(UiText.Format("Text_2B53D424B10E", failure.Hotkey));
             }
+
+            string printScreenNotice = MyCapture.Core.Platform.PrintScreenKeyGuide.FailureNotice(
+                hotkeyResult.Failures.Select(failure => failure.Hotkey), PrintScreenCaptureKeyEnabled());
+            if (printScreenNotice.Length > 0) messages.Add(printScreenNotice);
         }
 
         // 3) Launch-at-login, transactionally. Never persist a value the system rejects.
@@ -315,5 +327,8 @@ internal static class HotkeyCloneExtensions
         CaptureFullScreen = s.CaptureFullScreen,
         RecordRegion = s.RecordRegion,
         UploadGitHubImage = s.UploadGitHubImage,
+        RestoreClosedPin = s.RestoreClosedPin,
+        CaptureText = s.CaptureText,
+        PauseRecording = s.PauseRecording,
     };
 }

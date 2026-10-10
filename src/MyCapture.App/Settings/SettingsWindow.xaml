@@ -383,6 +383,23 @@
                                   AutomationProperties.Name="{loc:Text Settings.ShowSelectionGrid}"
                                   IsChecked="{Binding ShowSelectionGrid}" />
 
+                        <CheckBox x:Name="AutoDetectWindowsCheck" Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text WindowDetect_Setting}"
+                                  AutomationProperties.Name="{loc:Text WindowDetect_Setting}"
+                                  IsChecked="{Binding AutoDetectWindows}" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text ColorPick_FormatLabel}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text ColorPick_FormatHint}" />
+                            <ComboBox x:Name="ColorFormatSelector" SelectedValue="{Binding ColorFormat}" SelectedValuePath="Tag"
+                                      MinWidth="220" HorizontalAlignment="Left"
+                                      AutomationProperties.Name="{loc:Text ColorPick_FormatLabel}">
+                                <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Hex}" Content="{loc:Text ColorPick_FormatHex}" />
+                                <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Rgb}" Content="{loc:Text ColorPick_FormatRgb}" />
+                                <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Hsl}" Content="{loc:Text ColorPick_FormatHsl}" />
+                            </ComboBox>
+                        </StackPanel>
+
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text Text_BD975387F343}"
                                   AutomationProperties.Name="{loc:Text Text_B36A1FC25CCE}"
@@ -493,9 +510,35 @@
                         <TextBlock Style="{StaticResource Settings.Description}"
                                    Text="{loc:Text Text_669D90D96A45}" />
 
+                        <!-- Shown while a shortcut uses PrintScreen and Windows claims that key. -->
+                        <Border x:Name="PrtScGuidePanel" Visibility="Collapsed" Margin="0,4,0,14" Padding="12,10"
+                                CornerRadius="6" BorderThickness="1"
+                                Background="{DynamicResource Surface.Sunken}" BorderBrush="{DynamicResource State.Warning}"
+                                AutomationProperties.Name="{loc:Text PrtScGuide_Heading}"
+                                AutomationProperties.LiveSetting="Polite">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PrtScGuide_Heading}" />
+                                <TextBlock x:Name="PrtScGuideMessage" TextWrapping="Wrap" Margin="0,2,0,8"
+                                           Foreground="{DynamicResource Text.Primary}" FontSize="{StaticResource FontSize.Caption}"
+                                           Text="{loc:Text PrtScGuide_Message}" />
+                                <Button x:Name="PrtScGuideOpenSettings" Style="{StaticResource Button.Secondary}"
+                                        HorizontalAlignment="Left" MinWidth="140"
+                                        Content="{loc:Text PrtScGuide_OpenSettings}"
+                                        AutomationProperties.Name="{loc:Text PrtScGuide_OpenSettings}"
+                                        AutomationProperties.HelpText="{loc:Text PrtScGuide_Message}"
+                                        Click="OnPrtScGuideOpenSettings" />
+                            </StackPanel>
+                        </Border>
+
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_096A13A757DB}" />
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_AF588C59EB7B}" DefaultText="Ctrl+Shift+C" Text="{Binding CaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text TextCapture_Title}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text TextCapture_HotkeyHint}" />
+                            <settings:HotkeyRecorder x:Name="CaptureTextHotkeyRecorder" HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text TextCapture_Title}" DefaultText="" Text="{Binding CaptureTextHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
@@ -539,6 +582,12 @@
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingPauseHotkey_Command}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text RecordingPauseHotkey_Description}" />
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text RecordingPauseHotkey_HotkeyName}" AutomationProperties.HelpText="{loc:Text RecordingPauseHotkey_Description}" DefaultText="" Text="{Binding PauseRecordingHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.UploadGitHubHotkey}" />
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Settings.UploadGitHubHotkey}" DefaultText="F9" Text="{Binding UploadGitHubImageHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
@@ -549,6 +598,10 @@
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Delay}" />
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Hotkey.Delay}" Text="{Binding DelayedCaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_Command}" />
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text PinRestore_HotkeyName}" DefaultText="" Text="{Binding RestoreClosedPinHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -717,6 +770,14 @@
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_LimitLabel}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text PinRestore_LimitDescription}" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="{loc:Text PinRestore_LimitLabel}"
+                                     Text="{Binding ClosedWindowRestoreLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_B6DE798A150D}" />
                             <TextBlock Style="{StaticResource Settings.Description}"
                                        Text="{loc:Text Text_A00997F45D07}" />
@@ -807,6 +868,14 @@
                                      AutomationProperties.Name="{loc:Text Text_22A29FBD57AD}"
                                      Text="{Binding HighlighterAlpha, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text EditorBlur_Strength}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text EditorBlur_StrengthRange}" />
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="{loc:Text EditorBlur_Strength}"
+                                     Text="{Binding BlurRadius, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -814,6 +883,12 @@
                 <StackPanel Margin="20">
                     <TextBlock x:Name="UpdateVersionLabel" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Text.Primary}" />
                     <TextBlock x:Name="UpdateDescription" TextWrapping="Wrap" Margin="0,12,0,20" Foreground="{DynamicResource Text.Primary}" />
+                    <Button x:Name="StoreRatingButton" Style="{StaticResource Button.Secondary}" Visibility="Collapsed"
+                            HorizontalAlignment="Left" MinWidth="140" Margin="0,0,0,20"
+                            Content="{loc:Text StoreRating_Button}"
+                            AutomationProperties.Name="{loc:Text StoreRating_Button}"
+                            AutomationProperties.HelpText="{loc:Text StoreRating_ButtonHelp}"
+                            Click="OnStoreRatingClick" />
                     <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap" Margin="0,0,0,12" Foreground="{DynamicResource Text.Primary}" AutomationProperties.LiveSetting="Polite" />
                     <ProgressBar x:Name="UpdateDownloadProgress" Height="8" Minimum="0" Maximum="100" Margin="0,0,0,20" />
                     <WrapPanel>

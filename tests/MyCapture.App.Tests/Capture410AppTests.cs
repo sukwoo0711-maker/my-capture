@@ -304,6 +304,29 @@ public sealed class Capture410AppTests
         finally { view.ReleaseResources(); }
     });
 
+    [Fact]
+    public void MosaicPatchCoversTheSelectionOnAnEnlargedCapture() => StaTestHost.Run(() =>
+    {
+        var editor = Editor();
+        Assert.True(Field<AnnotationEditorSurface>(editor, "_surface").DipPerPixel > 1);
+        editor.ApplyMosaic(new RectD(32, 24, 96, 72), blockSize: 12);
+        var controller = Field<AnnotationEditorController>(editor, "_controller");
+        ImageAnnotation patch = Assert.IsType<ImageAnnotation>(controller.Document.Items[^1]);
+        Assert.Equal(new RectD(32, 24, 96, 72), patch.Rect);
+    });
+
+    [Fact]
+    public void MosaicUsesTheConfiguredBlockSize() => StaTestHost.Run(() =>
+    {
+        var read = AnnotationEditorPreferences.Read;
+        try
+        {
+            AnnotationEditorPreferences.Read = () => new MyCapture.Core.Settings.AnnotationDefaults { MosaicBlockSize = 20 };
+            Assert.Equal(20, Field<int>(Editor(), "_mosaicBlockSize"));
+        }
+        finally { AnnotationEditorPreferences.Read = read; }
+    });
+
     private static T Field<T>(object target, string name) =>
         (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
 

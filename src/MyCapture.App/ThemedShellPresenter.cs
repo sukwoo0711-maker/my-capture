@@ -21,8 +21,11 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     private ContextMenu? _menu;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(5) };
 
-    /// <summary>A command or a submenu branch in the tray tree. A null Action marks a branch.</summary>
-    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "");
+    /// <summary>
+    /// A command or a submenu branch in the tray tree. A null Action marks a branch. A command
+    /// with <c>IsEnabled</c> false stays visible but cannot be invoked.
+    /// </summary>
+    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "", bool IsEnabled = true);
 
     internal void ShowNotification(string title, string message, TrayBalloonKind kind)
     {
@@ -119,7 +122,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
                 continue;
             }
 
-            var item = new MenuItem { Header = entry.Label, MinHeight = 36, InputGestureText = entry.Gesture };
+            var item = new MenuItem { Header = entry.Label, MinHeight = 36, InputGestureText = entry.Gesture, IsEnabled = entry.IsEnabled };
             Action action = entry.Action ?? (() => { });
             item.Click += (_, _) =>
             {
@@ -160,4 +163,48 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         if (ShortcutHelpWindow.DismissForCapture() || visible) ForegroundDismissed?.Invoke();
     }
     public void Dispose() { DismissForCapture(); _timer.Tick -= OnTimeout; }
+
+    /// <summary>
+    /// The bounded notification with one follow-up command beside Close. Pointing at it pauses
+    /// the dismissal timer so the command can be reached before the card disappears.
+    /// </summary>
+    internal void ShowActionNotification(string title, string message, string actionLabel, Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        Dismiss();
+        if (suppressNotification()) return;
+        var content = new StackPanel();
+        content.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) });
+        var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
+        var run = new Button { Content = actionLabel, MinHeight = 36, Margin = new Thickness(0, 0, 8, 0) };
+        run.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
+        System.Windows.Automation.AutomationProperties.SetName(run, actionLabel);
+        run.Click += (_, _) => { Dismiss(); action(); };
+        var close = new Button { Content = UiText.Get("Shell.Close"), MinHeight = 36 };
+        close.Click += (_, _) => Dismiss();
+        buttons.Children.Add(run);
+        buttons.Children.Add(close);
+        content.Children.Add(buttons);
+        var window = CreateWindow(content, title);
+        window.Width = 360;
+        window.ShowActivated = false;
+        window.Topmost = true;
+        window.WindowStyle = WindowStyle.None;
+        window.SizeToContent = SizeToContent.Height;
+        window.SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(window);
+        window.Loaded += (_, _) =>
+        {
+            Rect work = SystemParameters.WorkArea;
+            window.Left = Math.Max(work.Left, work.Right - window.ActualWidth - 16);
+            window.Top = Math.Max(work.Top, work.Bottom - window.ActualHeight - 16);
+        };
+        window.MouseEnter += (_, _) => { if (ReferenceEquals(_toast, window)) _timer.Stop(); };
+        window.MouseLeave += (_, _) => { if (ReferenceEquals(_toast, window)) _timer.Start(); };
+        _toast = window;
+        _timer.Tick -= OnTimeout;
+        _timer.Tick += OnTimeout;
+        window.Show();
+        _timer.Start();
+    }
 }

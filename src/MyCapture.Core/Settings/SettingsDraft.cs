@@ -75,6 +75,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _captureFullScreenHotkey = string.Empty;
     private string _recordRegionHotkey = string.Empty;
     private string _uploadGitHubImageHotkey = string.Empty;
+    private string _restoreClosedPinHotkey = string.Empty;
+    private string _captureTextHotkey = string.Empty;
+    private string _pauseRecordingHotkey = string.Empty;
 
     // ----- Storage -----
     private string _maxItems = string.Empty;
@@ -118,6 +121,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _fontFamily = string.Empty;
     private string _mosaicBlockSize = string.Empty;
     private string _highlighterAlpha = string.Empty;
+    private string _blurRadius = string.Empty;
 
     /// <summary>
     /// Builds a draft from a deep copy of <paramref name="source"/>. The source object
@@ -157,6 +161,13 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     public bool ShowSelectionGrid { get => _showSelectionGrid; set => Set(ref _showSelectionGrid, value); }
     public bool AbortOnFocusLoss { get => _abortOnFocusLoss; set => Set(ref _abortOnFocusLoss, value); }
+
+    /// <summary>Format the capture overlay's colour copy writes. Undefined values fall back to hex.</summary>
+    public ColorFormat ColorFormat
+    {
+        get => _preservedColorFormat;
+        set => Set(ref _preservedColorFormat, Enum.IsDefined(value) ? value : ColorFormat.Hex);
+    }
 
     public string DelaySeconds
     {
@@ -285,6 +296,26 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _uploadGitHubImageHotkey;
         set { if (Set(ref _uploadGitHubImageHotkey, value)) ValidateAllHotkeys(); }
+    }
+
+    public string RestoreClosedPinHotkey
+    {
+        get => _restoreClosedPinHotkey;
+        set { if (Set(ref _restoreClosedPinHotkey, value)) ValidateAllHotkeys(); }
+    }
+
+    /// <summary>Optional chord for the text-only region capture.</summary>
+    public string CaptureTextHotkey
+    {
+        get => _captureTextHotkey;
+        set { if (Set(ref _captureTextHotkey, value)) ValidateAllHotkeys(); }
+    }
+
+    /// <summary>Optional chord that pauses or resumes the active region recording.</summary>
+    public string PauseRecordingHotkey
+    {
+        get => _pauseRecordingHotkey;
+        set { if (Set(ref _pauseRecordingHotkey, value)) ValidateAllHotkeys(); }
     }
 
     // ================= Storage =================
@@ -477,6 +508,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _highlighterAlpha, value)) ValidateInt(value, SettingsRanges.HighlighterAlpha); }
     }
 
+    public string BlurRadius
+    {
+        get => _blurRadius;
+        set { if (Set(ref _blurRadius, value)) ValidateInt(value, SettingsRanges.BlurRadius); }
+    }
+
     // ================= Public operations =================
 
     /// <summary>
@@ -522,6 +559,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _scrollingCaptureHotkey = s.Hotkeys.ScrollingCapture.ToString();
         _delayedCaptureHotkey = s.Hotkeys.DelayedCapture.ToString();
         _uploadGitHubImageHotkey = s.Hotkeys.UploadGitHubImage.ToString();
+        _restoreClosedPinHotkey = s.Hotkeys.RestoreClosedPin.ToString();
+        _captureTextHotkey = s.Hotkeys.CaptureText.ToString();
+        _pauseRecordingHotkey = s.Hotkeys.PauseRecording.ToString();
 
         _maxItems = Int(s.Queue.MaxItems);
         _maxGiB = Gib(s.Queue.MaxBytes);
@@ -568,6 +608,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _fontFamily = s.Annotation.FontFamily;
         _mosaicBlockSize = Int(s.Annotation.MosaicBlockSize);
         _highlighterAlpha = Int(s.Annotation.HighlighterAlpha);
+        _blurRadius = Int(s.Annotation.BlurRadius);
 
         // Preserve members not surfaced in the UI so mapping back is lossless.
         _preservedSchemaVersion = s.SchemaVersion;
@@ -656,6 +697,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 ScrollingCapture = ParseHotkey(_scrollingCaptureHotkey),
                 DelayedCapture = ParseHotkey(_delayedCaptureHotkey),
                 UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
+                RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
+                CaptureText = ParseHotkey(_captureTextHotkey),
+                PauseRecording = ParseHotkey(_pauseRecordingHotkey),
             },
             Queue =
             {
@@ -715,6 +759,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 MosaicBlockSize = ParseInt(_mosaicBlockSize),
                 HighlighterAlpha = (byte)ParseInt(_highlighterAlpha),
                 RecentColors = [.. _preservedRecentColors],
+                BlurRadius = ParseInt(_blurRadius),
             },
         };
 
@@ -739,6 +784,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         DelayedCapture = ParseHotkey(_delayedCaptureHotkey),
         UploadGitHubImage = ParseHotkey(_uploadGitHubImageHotkey),
         OpenLibrary = ParseHotkey(_openLibraryHotkey),
+        RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
+        CaptureText = ParseHotkey(_captureTextHotkey),
+        PauseRecording = ParseHotkey(_pauseRecordingHotkey),
     };
 
     // ================= INotifyDataErrorInfo =================
@@ -791,6 +839,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ValidateNonEmpty(_fontFamily, nameof(FontFamily), UiText.Get("Text_B64CA1BE6711"));
         ValidateInt(_mosaicBlockSize, SettingsRanges.MosaicBlockSize, nameof(MosaicBlockSize));
         ValidateInt(_highlighterAlpha, SettingsRanges.HighlighterAlpha, nameof(HighlighterAlpha));
+        ValidateInt(_blurRadius, SettingsRanges.BlurRadius, nameof(BlurRadius));
         ValidateAllHotkeys();
     }
 
@@ -985,6 +1034,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             (nameof(ScrollingCaptureHotkey), _scrollingCaptureHotkey),
             (nameof(DelayedCaptureHotkey), _delayedCaptureHotkey),
             (nameof(UploadGitHubImageHotkey), _uploadGitHubImageHotkey),
+            (nameof(RestoreClosedPinHotkey), _restoreClosedPinHotkey),
+            (nameof(CaptureTextHotkey), _captureTextHotkey),
+            (nameof(PauseRecordingHotkey), _pauseRecordingHotkey),
         ];
 
         var parsed = new Dictionary<string, Hotkey>(fields.Length);

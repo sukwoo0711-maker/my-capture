@@ -144,12 +144,13 @@ internal static class Ux402SelfTest
                             }
                             ToggleButton[] tools = Descendants(annotation.Editor).OfType<ToggleButton>()
                                 .Where(tool => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(tool))).ToArray();
-                            bool fits = tools.Length == 11 && tools.All(tool =>
+                            int toolCount = Enum.GetValues<EditorTool>().Length;
+                            bool fits = tools.Length == toolCount && tools.All(tool =>
                             {
                                 Rect bounds = tool.TransformToAncestor(window).TransformBounds(new Rect(tool.RenderSize));
                                 return tool.IsVisible && bounds.Width >= 30 && bounds.Height >= 30 && bounds.Top >= 0 && bounds.Bottom <= window.ActualHeight;
                             });
-                            report.AppendLine($"{label}: all 11 tools visible={fits}");
+                            report.AppendLine($"{label}: all {toolCount} tools visible={fits}");
                             if (!fits) failures++;
                         }
                         if (!before && window is QuickAccessWindow card)

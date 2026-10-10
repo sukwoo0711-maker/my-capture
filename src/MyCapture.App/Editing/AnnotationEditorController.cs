@@ -86,6 +86,9 @@ internal sealed class AnnotationEditorController
     internal double DefaultFontSize { get; set; } = 18;
     internal string DefaultFontFamily { get; set; } = "Malgun Gothic";
 
+    /// <summary>Blur strength applied to new blur layers, in image pixels.</summary>
+    internal int BlurRadius { get; private set; } = BlurAnnotation.DefaultRadius;
+
     internal bool CanUndo => _undo.CanUndo;
 
     internal bool CanRedo => _undo.CanRedo;
@@ -343,6 +346,7 @@ internal sealed class AnnotationEditorController
             case EditorTool.Highlighter:
             case EditorTool.Arrow:
             case EditorTool.Pen:
+            case EditorTool.Blur:
                 BeginDraftGesture(point);
                 break;
             case EditorTool.Text:
@@ -712,6 +716,21 @@ internal sealed class AnnotationEditorController
     }
 
     /// <summary>
+    /// Applies a blur strength to the selected blur layer as one undoable change, or records
+    /// it as the strength of the next blur when no blur is selected.
+    /// </summary>
+    internal void ApplyBlurRadius(double radius)
+    {
+        BlurRadius = BlurAnnotation.ClampRadius(radius);
+        if (_selected is BlurAnnotation blur)
+        {
+            PushProperty(blur, UiText.Get("EditorBlur_Strength"), static (b, v) => b.Radius = v, blur.Radius, BlurRadius);
+        }
+
+        RaiseVisual();
+    }
+
+    /// <summary>
     /// Hit-tests handles first, then the item itself. Exposed so the view can pick a cursor.
     /// </summary>
     internal ResizeHandle HandleAt(PointD point, double handlePixels)
@@ -794,6 +813,7 @@ internal sealed class AnnotationEditorController
                 FillMatchesStroke = true,
             },
             EditorTool.Arrow => PolylineAnnotation.CreateArrow(point, point, StrokeColor, StrokeThickness),
+            EditorTool.Blur => new BlurAnnotation { Rect = new RectD(point.X, point.Y, 0, 0), Radius = BlurRadius },
             _ => throw new InvalidOperationException($"Tool {_tool} has no draft shape."),
         };
 
@@ -808,6 +828,9 @@ internal sealed class AnnotationEditorController
         {
             case ShapeAnnotation rect:
                 rect.Rect = RectD.FromCorners(_gestureStart, point);
+                break;
+            case BlurAnnotation blur:
+                blur.Rect = RectD.FromCorners(_gestureStart, point);
                 break;
             case PolylineAnnotation line:
                 line.Points = [_gestureStart, point];

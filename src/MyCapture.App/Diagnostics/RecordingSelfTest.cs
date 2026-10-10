@@ -18,7 +18,8 @@ namespace MyCapture.App.Diagnostics;
 /// Drives the real recording pipeline end-to-end without the UI: record a region, stop,
 /// then record a SECOND clip and stop again — verifying that stop truly stops and that a
 /// fresh recording is independent (both clips valid, each starting at time 0, neither
-/// continuing the other).
+/// continuing the other). Two further sessions pause the real encoder: one resumes and
+/// stops, one stops while still paused; both clips must exclude the paused time.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -78,10 +79,10 @@ internal static class RecordingSelfTest
             }
 
             // Re-decode both to prove they are valid, independent clips.
-            (bool ok1, int w1, int h1, double d1) = Probe(clip1);
-            (bool ok2, int w2, int h2, double d2) = Probe(clip2);
-            Line($"Session 1 decode: opened={ok1} {w1}x{h1} {d1:0}ms");
-            Line($"Session 2 decode: opened={ok2} {w2}x{h2} {d2:0}ms");
+            (bool ok1, int w1, int h1, double d1, double? p1) = Probe(clip1);
+            (bool ok2, int w2, int h2, double d2, double? p2) = Probe(clip2);
+            Line(string.Create(CultureInfo.InvariantCulture, $"Session 1 decode: opened={ok1} {w1}x{h1} container {d1:0.###}ms, WPF {FormatPlayer(p1)}"));
+            Line(string.Create(CultureInfo.InvariantCulture, $"Session 2 decode: opened={ok2} {w2}x{h2} container {d2:0.###}ms, WPF {FormatPlayer(p2)}"));
 
             if (!ok1) { failures.Add("session1: produced MP4 could not be re-opened"); }
             if (!ok2) { failures.Add("session2: produced MP4 could not be re-opened"); }
@@ -95,6 +96,18 @@ internal static class RecordingSelfTest
                 Line($"NOTE: session2 ({d2:0}ms) not shorter than session1 ({d1:0}ms) — timing variance, not necessarily a fault");
             }
         }
+
+        // WPF MediaPlayer reports these clips in whole seconds (Windows Media Player truncates
+        // 1538ms to 1000ms), so decoded durations come from the container (MF_PD_DURATION); the
+        // WPF value is reported only as evidence.
+
+        // ---- Session 3: record, pause, resume, record, stop — the pause must vanish from the clip ----
+        string clip3 = Path.Combine(outputDirectory, "session3-pause-resume.mp4");
+        RecordWithPause(engine, region, clip3, settings, 2000, 1500, 2000, stopWhilePaused: false, report, failures, "Session 3");
+
+        // ---- Session 4: record, pause, stop while still paused ----
+        string clip4 = Path.Combine(outputDirectory, "session4-stop-paused.mp4");
+        RecordWithPause(engine, region, clip4, settings, 2500, 600, 0, stopWhilePaused: true, report, failures, "Session 4");
 
         Line(string.Empty);
         Line(failures.Count == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures.Count} problem(s))");
@@ -123,9 +136,10 @@ internal static class RecordingSelfTest
     {
         using var firstWrittenFrame = new ManualResetEventSlim();
         var grabber = new RegionFrameGrabber(engine, settings.IncludeCursor);
+        FirstFrameObserver? observer = null;
         var recorder = new RegionRecorder(
             grabber,
-            options => new FirstFrameObserver(
+            options => observer = new FirstFrameObserver(
                 new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance),
                 firstWrittenFrame),
             NullLogger.Instance);
@@ -171,6 +185,7 @@ internal static class RecordingSelfTest
             report.AppendLine(string.Create(
                 CultureInfo.InvariantCulture,
                 $"{label}: {result.EmittedFrames} frame(s), {result.DurationMs:0}ms, {result.Width}x{result.Height} -> {Path.GetFileName(outputPath)}"));
+            CheckContainerEndsAtLastFrame(outputPath, observer?.LastTimestampMs, result.Fps, report, failures, label);
 
             return result;
         }
@@ -195,20 +210,303 @@ internal static class RecordingSelfTest
         }
     }
 
+    /// <summary>
+    /// Real pipeline with a pause: no frame may be encoded while paused, timestamps must stay
+    /// continuous across the resume, and the decoded clip must be as long as the recorded
+    /// spans only (not the wall-clock time including the pause).
+    /// </summary>
+    private static void RecordWithPause(
+        ScreenCaptureEngine engine,
+        RectD region,
+        string outputPath,
+        RecordingSettings settings,
+        int beforePauseMs,
+        int pausedMs,
+        int afterResumeMs,
+        bool stopWhilePaused,
+        StringBuilder report,
+        List<string> failures,
+        string label)
+    {
+        var frames = new TimestampObserver();
+        var recorder = new RegionRecorder(
+            new RegionFrameGrabber(engine, settings.IncludeCursor),
+            options => frames.Wrap(new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance)),
+            NullLogger.Instance);
+        try
+        {
+            recorder.Start(region, outputPath, settings);
+            var startup = Stopwatch.StartNew();
+            while (frames.Count == 0 && recorder.IsRecording && startup.Elapsed < TimeSpan.FromSeconds(15))
+            {
+                Thread.Sleep(50);
+            }
+
+            if (frames.Count == 0)
+            {
+                failures.Add($"{label}: no successfully encoded frame within startup deadline");
+                _ = recorder.Stop();
+                return;
+            }
+
+            // Recorded time already includes the first frame's encoder warm-up.
+            double recordedBeforeSample = recorder.RecordedElapsed.TotalMilliseconds;
+            var wall = Stopwatch.StartNew();
+            Thread.Sleep(beforePauseMs);
+            if (!recorder.Pause())
+            {
+                failures.Add($"{label}: Pause() was rejected while recording");
+            }
+
+            if (!recorder.WaitUntilCaptureParked(TimeSpan.FromSeconds(5)))
+            {
+                failures.Add($"{label}: capture loop did not park after Pause()");
+            }
+
+            int framesAtPause = frames.Count;
+            TimeSpan recordedAtPause = recorder.RecordedElapsed;
+            Thread.Sleep(pausedMs);
+            if (frames.Count != framesAtPause)
+            {
+                failures.Add($"{label}: {frames.Count - framesAtPause} frame(s) encoded while paused");
+            }
+
+            if (Math.Abs((recorder.RecordedElapsed - recordedAtPause).TotalMilliseconds) > 1)
+            {
+                failures.Add($"{label}: recorded time advanced while paused");
+            }
+
+            if (!stopWhilePaused)
+            {
+                if (!recorder.Resume())
+                {
+                    failures.Add($"{label}: Resume() was rejected while paused");
+                }
+
+                Thread.Sleep(afterResumeMs);
+            }
+
+            RecordingResult result = recorder.Stop();
+            double wallMs = recordedBeforeSample + wall.Elapsed.TotalMilliseconds;
+            double expectedMs = recordedBeforeSample + beforePauseMs + (stopWhilePaused ? 0 : afterResumeMs);
+            IReadOnlyList<double> timestamps = frames.Timestamps;
+            double maxGap = 0;
+            for (int i = 1; i < timestamps.Count; i++)
+            {
+                if (timestamps[i] <= timestamps[i - 1])
+                {
+                    failures.Add($"{label}: timestamps not strictly increasing at frame {i}");
+                    break;
+                }
+
+                maxGap = Math.Max(maxGap, timestamps[i] - timestamps[i - 1]);
+            }
+
+            (bool opened, int w, int h, double decodedMs, double? playerMs) = Probe(outputPath);
+            report.AppendLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}: {result.EmittedFrames} frame(s), recorded {result.DurationMs:0}ms (expected ~{expectedMs:0}), " +
+                $"paused {result.PausedMs:0}ms x{result.PauseCount}, wall {wallMs:0}ms, max gap {maxGap:0}ms, " +
+                $"dropped {result.DroppedFrames}, effective {result.EffectiveFps:0.0}fps; " +
+                $"decode opened={opened} {w}x{h} container {decodedMs:0.###}ms, WPF {FormatPlayer(playerMs)} -> {Path.GetFileName(outputPath)}"));
+            CheckContainerEndsAtLastFrame(
+                outputPath,
+                timestamps.Count > 0 ? timestamps[^1] : null,
+                result.Fps,
+                report,
+                failures,
+                label);
+
+            if (result.PauseCount != 1)
+            {
+                failures.Add($"{label}: expected one pause, result reports {result.PauseCount}");
+            }
+
+            if (result.PausedMs < pausedMs * 0.9)
+            {
+                failures.Add($"{label}: paused time {result.PausedMs:0}ms is shorter than the {pausedMs}ms pause");
+            }
+
+            if (Math.Abs(result.DurationMs - expectedMs) > 400)
+            {
+                failures.Add($"{label}: recorded duration {result.DurationMs:0}ms is not ~{expectedMs:0}ms");
+            }
+
+            // The pause must not leave a hole in the timeline.
+            if (maxGap > 500)
+            {
+                failures.Add($"{label}: {maxGap:0}ms timestamp gap — the paused span leaked into the timeline");
+            }
+
+            if (!opened)
+            {
+                failures.Add($"{label}: produced MP4 could not be re-opened");
+            }
+            else
+            {
+                if (w != (int)region.Width || h != (int)region.Height)
+                {
+                    failures.Add($"{label}: unexpected size {w}x{h}");
+                }
+
+                // The playable clip must exclude the pause: never longer than the recorded
+                // duration plus one frame of tolerance, and clearly shorter than wall time.
+                if (decodedMs > result.DurationMs + 250 || decodedMs > wallMs - (pausedMs * 0.5))
+                {
+                    failures.Add($"{label}: decoded {decodedMs:0}ms includes the paused span (recorded {result.DurationMs:0}ms, wall {wallMs:0}ms)");
+                }
+
+                if (decodedMs < expectedMs * 0.6)
+                {
+                    failures.Add($"{label}: decoded {decodedMs:0}ms is too short for ~{expectedMs:0}ms of recording");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            failures.Add($"{label}: {ex.Message}" + (ex.InnerException is not null ? $" | inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}" : string.Empty));
+        }
+        finally
+        {
+            recorder.Dispose();
+        }
+    }
+
+    private sealed class TimestampObserver
+    {
+        private readonly List<double> _timestamps = [];
+
+        internal int Count
+        {
+            get
+            {
+                lock (_timestamps)
+                {
+                    return _timestamps.Count;
+                }
+            }
+        }
+
+        internal IReadOnlyList<double> Timestamps
+        {
+            get
+            {
+                lock (_timestamps)
+                {
+                    return _timestamps.ToArray();
+                }
+            }
+        }
+
+        internal IVideoEncoder Wrap(IVideoEncoder inner) => new Observed(inner, this);
+
+        private void Add(double timestampMs)
+        {
+            lock (_timestamps)
+            {
+                _timestamps.Add(timestampMs);
+            }
+        }
+
+        private sealed class Observed(IVideoEncoder inner, TimestampObserver owner) : IVideoEncoder
+        {
+            public int Width => inner.Width;
+            public int Height => inner.Height;
+            public void WriteFrame(in EncoderFrame frame)
+            {
+                inner.WriteFrame(frame);
+                owner.Add(frame.TimestampMs);
+            }
+            public void Complete() => inner.Complete();
+            public void Dispose() => inner.Dispose();
+        }
+    }
+
     private sealed class FirstFrameObserver(IVideoEncoder inner, ManualResetEventSlim firstWrittenFrame) : IVideoEncoder
     {
+        private double _lastTimestampMs = double.NaN;
+
+        /// <summary>Timestamp of the last frame the encoder accepted, or <c>null</c> before any.</summary>
+        internal double? LastTimestampMs
+        {
+            get
+            {
+                double value = Volatile.Read(ref _lastTimestampMs);
+                return double.IsNaN(value) ? null : value;
+            }
+        }
+
         public int Width => inner.Width;
         public int Height => inner.Height;
         public void WriteFrame(in EncoderFrame frame)
         {
             inner.WriteFrame(frame);
+            Volatile.Write(ref _lastTimestampMs, frame.TimestampMs);
             firstWrittenFrame.Set();
         }
         public void Complete() => inner.Complete();
         public void Dispose() => inner.Dispose();
     }
 
-    private static (bool Opened, int Width, int Height, double DurationMs) Probe(string path)
+    /// <summary>
+    /// The container duration is the timeline the editor trims and exports, so it must end where
+    /// the final decoded sample ends. The Sink Writer lays samples out at the constant frame rate
+    /// of the media type (every MP4 sample lasts exactly one frame), so it may differ from the
+    /// jittered capture timestamps, but never by more than one frame.
+    /// </summary>
+    private static void CheckContainerEndsAtLastFrame(
+        string path,
+        double? lastTimestampMs,
+        int fps,
+        StringBuilder report,
+        List<string> failures,
+        string label)
+    {
+        if (lastTimestampMs is not double last || !File.Exists(path))
+        {
+            failures.Add($"{label}: no encoded frame timestamp to compare with the container duration");
+            return;
+        }
+
+        double frameMs = 1000.0 / Math.Max(1, fps);
+        double encodedEndMs = last + frameMs;
+        double containerMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(path);
+        DecodedVideoFrame finalSample;
+        using (var reader = new MediaFoundationVideoFrameReader(path))
+        {
+            finalSample = reader.ReadFrameAt(Math.Max(0, containerMs - 1));
+        }
+
+        report.AppendLine(string.Create(
+            CultureInfo.InvariantCulture,
+            $"{label}: container duration {containerMs:0.###}ms, final decoded sample " +
+            $"{finalSample.TimestampMs:0.###}-{finalSample.EndTimestampMs:0.###}ms, " +
+            $"last encoded frame ends at {encodedEndMs:0.###}ms"));
+        // One millisecond covers the 100ns sample clock and the 1/(fps*1000)s MP4 timescale.
+        if (Math.Abs(finalSample.EndTimestampMs - containerMs) > 1.0)
+        {
+            failures.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}: container duration {containerMs:0.###}ms is not where the final decoded sample ends ({finalSample.EndTimestampMs:0.###}ms)"));
+        }
+
+        if (Math.Abs(containerMs - encodedEndMs) > frameMs + 1.0)
+        {
+            failures.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}: container duration {containerMs:0.###}ms is more than one frame from the recorded span ({encodedEndMs:0.###}ms)"));
+        }
+    }
+
+    private static string FormatPlayer(double? playerMs) => playerMs is double value
+        ? value.ToString("0.###", CultureInfo.InvariantCulture) + "ms"
+        : "none";
+
+    /// <summary>
+    /// Opens the clip in WPF (the gallery/editor playback engine) to prove it plays, and reads the
+    /// duration from the container. WPF's own NaturalDuration is returned only for the report.
+    /// </summary>
+    private static (bool Opened, int Width, int Height, double DurationMs, double? PlayerDurationMs) Probe(string path)
     {
         var player = new MediaPlayer { Volume = 0, ScrubbingEnabled = true };
         bool opened = false, failed = false;
@@ -224,9 +522,19 @@ internal static class RecordingSelfTest
 
         int w = player.NaturalVideoWidth;
         int h = player.NaturalVideoHeight;
-        double d = player.NaturalDuration.HasTimeSpan ? player.NaturalDuration.TimeSpan.TotalMilliseconds : 0;
+        double? playerMs = player.NaturalDuration.HasTimeSpan ? player.NaturalDuration.TimeSpan.TotalMilliseconds : null;
         player.Close();
-        return (opened && !failed, w, h, d);
+        double containerMs = 0;
+        try
+        {
+            containerMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(path);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        {
+            // A zero duration fails the callers' duration gates with the file named.
+        }
+
+        return (opened && !failed, w, h, containerMs, playerMs);
     }
 
     private static void PumpFor(TimeSpan duration)

@@ -48,6 +48,9 @@ public sealed class AppSettings
     public GitHubSettings GitHub { get; set; } = new();
 
     public GeneralSettings General { get; set; } = new();
+
+    /// <summary>Local state for the one-time Microsoft Store rating request. An explicit null reads as new.</summary>
+    public StoreRatingState StoreRating { get; set => field = value ?? new(); } = new();
 }
 
 public sealed class HotkeySettings
@@ -108,6 +111,28 @@ public sealed class HotkeySettings
     /// resulting user-attachments URL.
     /// </summary>
     public Hotkey UploadGitHubImage { get; set; } = new(HotkeyModifiers.None, Hotkey.VkF9);
+
+    /// <summary>Reopens the most recently closed pinned window.</summary>
+    /// <remarks>
+    /// Unassigned by default, like the other optional commands: a missing property in an
+    /// older settings file keeps this value, so upgrading never claims a chord silently.
+    /// </remarks>
+    public Hotkey RestoreClosedPin { get; set; } = Hotkey.None;
+
+    /// <summary>
+    /// Selects a region, recognises its text locally and copies only the text.
+    /// </summary>
+    /// <remarks>Unassigned by default, like the other optional capture commands.</remarks>
+    public Hotkey CaptureText { get; set; } = Hotkey.None;
+
+    /// <summary>
+    /// Pauses or resumes the active region recording without clicking its control window.
+    /// </summary>
+    /// <remarks>
+    /// Unassigned by default so a default chord never takes a shortcut from another app;
+    /// pressing it while nothing is recording does nothing.
+    /// </remarks>
+    public Hotkey PauseRecording { get; set; } = Hotkey.None;
 }
 
 public sealed class QueueSettings
@@ -228,11 +253,13 @@ public sealed class PinSettings
     public double InitialOpacity { get; set; } = 1.0;
 
     /// <summary>
-    /// How many closed pinned windows can be restored by pressing the paste hotkey.
+    /// How many closed pinned windows can be reopened, most recent first. 0 turns it off.
     /// </summary>
     /// <remarks>
-    /// Snipaste defaults this to 1. 20 is kept here because the restore stack costs
-    /// only metadata: the images are already in the capture queue on disk.
+    /// Snipaste defaults this to 1. 20 is kept here because the restore history is also
+    /// bounded by a retained-byte budget (<c>ClosedPinMemory.DefaultMaxRetainedBytes</c>),
+    /// so the count never decides memory use on its own. The history is memory-only and is
+    /// discarded when the app exits.
     /// </remarks>
     public int ClosedWindowRestoreLimit { get; set; } = 20;
 
@@ -265,6 +292,9 @@ public sealed class AnnotationDefaults
     /// Recently used colours, most recent first. Surfaced in the toolbar swatches.
     /// </summary>
     public List<ColorRgba> RecentColors { get; set; } = [];
+
+    /// <summary>Strength used by the blur tool: a Gaussian radius in image pixels.</summary>
+    public int BlurRadius { get; set; } = MyCapture.Core.Annotations.BlurAnnotation.DefaultRadius;
 }
 
 public sealed class OcrSettings

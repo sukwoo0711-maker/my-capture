@@ -21,6 +21,9 @@ public enum GlobalHotkeyCommand
     UploadGitHubImage,
     ScrollingCapture,
     DelayedCapture,
+    RestoreClosedPin,
+    CaptureText,
+    PauseRecording,
 }
 
 /// <summary>
@@ -292,6 +295,9 @@ public sealed class GlobalHotkeyService : IDisposable
         yield return (GlobalHotkeyCommand.UploadGitHubImage, settings.UploadGitHubImage);
         yield return (GlobalHotkeyCommand.ScrollingCapture, settings.ScrollingCapture);
         yield return (GlobalHotkeyCommand.DelayedCapture, settings.DelayedCapture);
+        yield return (GlobalHotkeyCommand.RestoreClosedPin, settings.RestoreClosedPin);
+        yield return (GlobalHotkeyCommand.CaptureText, settings.CaptureText);
+        yield return (GlobalHotkeyCommand.PauseRecording, settings.PauseRecording);
     }
 
     private static int IdFor(GlobalHotkeyCommand command) => FirstHotkeyId + (int)command;

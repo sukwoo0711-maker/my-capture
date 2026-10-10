@@ -145,6 +145,31 @@ internal sealed class RegionRecordingCoordinator
         StartRegionSelection();
     }
 
+    /// <summary>
+    /// Entry point for the optional pause hotkey. A running recording is paused or resumed
+    /// through the control window's own pause path; otherwise the chord does nothing and
+    /// only leaves a log line, because there is nothing to pause.
+    /// </summary>
+    /// <returns>True when a pause or resume was started.</returns>
+    internal bool TogglePause()
+    {
+        _dispatcher.VerifyAccess();
+
+        if (_finishing || _controls is not { IsRecording: true } running)
+        {
+            _log.LogInformation("Pause hotkey ignored: no recording is running");
+            return false;
+        }
+
+        if (!running.TogglePause())
+        {
+            _log.LogInformation("Pause hotkey ignored: the recording is stopping or a pause change is still applying");
+            return false;
+        }
+
+        return true;
+    }
+
     private void ActivateExisting()
     {
         Window? active = _editor ?? (Window?)_controls ?? _selectionOverlay;
@@ -355,6 +380,7 @@ internal sealed class RegionRecordingCoordinator
 
     private void OnControlsClosed(object? sender, EventArgs e)
     {
+        bool finalizedOnClose = false;
         if (sender is RecordingControlWindow controls)
         {
             controls.RecordingFinished -= OnRecordingFinished;
@@ -362,6 +388,7 @@ internal sealed class RegionRecordingCoordinator
             controls.Failed -= OnControlsFailed;
             controls.Stopping -= OnControlsStopping;
             controls.Closed -= OnControlsClosed;
+            finalizedOnClose = controls.FinalizedOnClose;
             if (ReferenceEquals(_controls, controls))
             {
                 _controls = null;
@@ -370,7 +397,21 @@ internal sealed class RegionRecordingCoordinator
 
         if (_writeSession is not null && !_completionInProgress)
         {
-            _writeSession.Dispose();
+            if (finalizedOnClose)
+            {
+                // The controls closed (application exit, session end or a forced close) while
+                // recording or paused, and the recorder still finalised the private MP4.
+                // Disposing the session would abort and delete that clip. Leave the pending
+                // sidecar and the finalised file in place: startup recovery validates and
+                // publishes them to the gallery. The session owns no native resources.
+                _log.LogWarning(
+                    "Recording controls closed before completion; keeping the finalized clip for startup recovery");
+            }
+            else
+            {
+                _writeSession.Dispose();
+            }
+
             _writeSession = null;
         }
 

@@ -47,6 +47,9 @@ public sealed class SettingsStore
     /// <summary>True only on the launch that repairs and persists unsafe legacy hotkeys.</summary>
     public bool LastLoadMigratedUnsafeHotkeys { get; private set; }
 
+    /// <summary>Clock for the Store rating first-seen stamp; replaced by tests.</summary>
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
+
     public AppSettings Load()
     {
         string settingsFile;
@@ -99,6 +102,12 @@ public sealed class SettingsStore
 
         LastLoadMigratedUnsafeHotkeys = Sanitize(settings, warnings);
         LastLoadWarnings = warnings;
+
+        // The Store rating wait starts at the first load that knows about it. The stamp stays
+        // in memory and reaches disk with the next ordinary save (a counted capture, applied
+        // settings or the welcome card). Loading never writes just to record it, so a linked
+        // or corrupt settings file is left exactly as it was.
+        StoreRatingPolicy.EnsureFirstSeen(settings.StoreRating, Clock.GetUtcNow());
 
         // A token written by 2.4.0 sits in plaintext on disk. Re-save it once so the
         // DPAPI converter rewrites it encrypted; a marker in the text means it already is.
@@ -315,6 +324,10 @@ public sealed class SettingsStore
         s.Annotation.MosaicBlockSize = ClampWithWarning(
             s.Annotation.MosaicBlockSize, 2, 128, nameof(AnnotationDefaults.MosaicBlockSize), warnings);
 
+        s.Annotation.BlurRadius = ClampWithWarning(
+            s.Annotation.BlurRadius, SettingsRanges.BlurRadius.Min, SettingsRanges.BlurRadius.Max,
+            nameof(AnnotationDefaults.BlurRadius), warnings);
+
         if (string.IsNullOrWhiteSpace(s.Annotation.FontFamily))
         {
             s.Annotation.FontFamily = "Malgun Gothic";
@@ -361,6 +374,9 @@ public sealed class SettingsStore
         s.Hotkeys.UploadGitHubImage = Safe(s.Hotkeys.UploadGitHubImage);
         s.Hotkeys.ScrollingCapture = Safe(s.Hotkeys.ScrollingCapture);
         s.Hotkeys.DelayedCapture = Safe(s.Hotkeys.DelayedCapture);
+        s.Hotkeys.RestoreClosedPin = Safe(s.Hotkeys.RestoreClosedPin);
+        s.Hotkeys.CaptureText = Safe(s.Hotkeys.CaptureText);
+        s.Hotkeys.PauseRecording = Safe(s.Hotkeys.PauseRecording);
         // --- Hotkeys ---
         // A capture hotkey that cannot be pressed makes the app inert, so an
         // unassigned value is restored rather than respected.
@@ -385,6 +401,9 @@ public sealed class SettingsStore
             s.Hotkeys.UploadGitHubImage = WithoutCaptureConflict(s.Hotkeys.UploadGitHubImage);
             s.Hotkeys.ScrollingCapture = WithoutCaptureConflict(s.Hotkeys.ScrollingCapture);
             s.Hotkeys.DelayedCapture = WithoutCaptureConflict(s.Hotkeys.DelayedCapture);
+            s.Hotkeys.RestoreClosedPin = WithoutCaptureConflict(s.Hotkeys.RestoreClosedPin);
+            s.Hotkeys.CaptureText = WithoutCaptureConflict(s.Hotkeys.CaptureText);
+            s.Hotkeys.PauseRecording = WithoutCaptureConflict(s.Hotkeys.PauseRecording);
         }
         if (migratedUnsafeHotkeys) warnings.Add(UiText.Get("Hotkey.Migrated"));
 
@@ -401,6 +420,7 @@ public sealed class SettingsStore
         }
 
         if (!Enum.IsDefined(s.General.AfterCapture)) s.General.AfterCapture = AfterCaptureAction.Editor;
+        if (!Enum.IsDefined(s.Capture.ColorFormat)) s.Capture.ColorFormat = ColorFormat.Hex;
         if (s.General.ThemeRevision < 1)
         {
             if (MyCapture.Core.Themes.AppThemeNames.Parse(s.General.Theme) == MyCapture.Core.Themes.AppTheme.Midnight)

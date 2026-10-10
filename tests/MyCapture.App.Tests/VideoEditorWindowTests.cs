@@ -46,15 +46,47 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
     {
         var engine = new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance);
         var grabber = new RegionFrameGrabber(engine, includeCursor: false);
+        using var spanEncoded = new ManualResetEventSlim();
         var recorder = new RegionRecorder(
             grabber,
-            options => new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance),
+            options => new ClipSpanObserver(
+                new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance),
+                ms,
+                spanEncoded),
             NullLogger.Instance);
         recorder.Start(new RectD(0, 0, 320, 240), path, new RecordingSettings { FrameRate = RecordingFrameRate.Fps15 });
-        Thread.Sleep(ms);
+        // Start() returns before the H.264 encoder exists, and the clip clock starts only after
+        // that warm-up (about 1s on a developer PC, several seconds on a loaded 2-vCPU runner).
+        // A fixed wall-clock sleep could end inside the warm-up and leave a one-frame clip whose
+        // timeline cannot zoom. Stop only after a frame at the requested clip time was encoded;
+        // the bound only guards against an encoder that never starts.
+        bool spanned = spanEncoded.Wait(TimeSpan.FromSeconds(30));
         RecordingResult r = recorder.Stop();
         recorder.Dispose();
+        Assert.True(spanned,
+            $"recorder did not encode {ms}ms of video within 30s: initialization={r.Performance?.InitializationMs:0}ms, frames={r.EmittedFrames}, recorded={r.DurationMs:0}ms");
         return r;
+    }
+
+    /// <summary>Signals once a frame at or after the requested clip time has been written.</summary>
+    private sealed class ClipSpanObserver(IVideoEncoder inner, double clipMs, ManualResetEventSlim spanEncoded) : IVideoEncoder
+    {
+        public int Width => inner.Width;
+
+        public int Height => inner.Height;
+
+        public void WriteFrame(in EncoderFrame frame)
+        {
+            inner.WriteFrame(frame);
+            if (frame.TimestampMs >= clipMs)
+            {
+                spanEncoded.Set();
+            }
+        }
+
+        public void Complete() => inner.Complete();
+
+        public void Dispose() => inner.Dispose();
     }
 
     private static void PumpFor(TimeSpan d)

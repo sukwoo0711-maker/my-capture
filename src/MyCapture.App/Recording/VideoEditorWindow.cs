@@ -89,6 +89,7 @@ internal sealed class VideoEditorWindow : Window
     private DispatcherTimer? _openTimeoutTimer;
     private readonly DispatcherTimer _playbackTimer;
     private CancellationTokenSource? _operationCts;
+    private Task<double>? _containerDuration;
 
     private double _durationMs;
     private bool _mediaReady;
@@ -142,11 +143,17 @@ internal sealed class VideoEditorWindow : Window
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _log = loggerFactory.CreateLogger<VideoEditorWindow>();
         VideoLayerResourceBudget.Validate(editDocument?.FrameEditLayers);
+        // Until the media opens, keep the document on its own measured source length so trim
+        // and layer times are not clipped to a different recorded value; CompleteOpen then
+        // normalizes once more against the container duration.
+        double documentDurationMs = editDocument is { SourceDurationMs: > 0 and < double.PositiveInfinity }
+            ? editDocument.SourceDurationMs
+            : recording.DurationMs;
         _editDocument = (editDocument ?? VideoEditDocument.CreateFor(
                 recording.Width,
                 recording.Height,
                 recording.DurationMs))
-            .NormalizeFor(recording.Width, recording.Height, recording.DurationMs);
+            .NormalizeFor(recording.Width, recording.Height, documentDurationMs);
 
         WorkspaceTheme.Attach(this, WorkspaceRole.VideoEditor);
         StandardWindowTheme.Apply(this);
@@ -326,6 +333,9 @@ internal sealed class VideoEditorWindow : Window
         // Set the source only after the window (and the MediaElement's visual tree) is loaded.
         // A MediaElement asked to open before it is connected to a rendered tree can silently
         // never raise MediaOpened for a short clip — the reported "2s video won't load" case.
+        // The exact container duration is read in parallel: MediaElement's NaturalDuration
+        // comes from Windows Media Player and is truncated to whole seconds.
+        _containerDuration = VideoDurationProbe.ReadContainerDurationAsync(_recording.OutputPath, _log);
         try
         {
             _media.Source = new Uri(_recording.OutputPath, UriKind.Absolute);
@@ -376,8 +386,9 @@ internal sealed class VideoEditorWindow : Window
             _openTimeoutTimer?.Stop();
             if (!_mediaReady && !_mediaFailed)
             {
-                _log.LogWarning("MediaOpened did not fire within 5s; opening with the recorded duration fallback");
-                CompleteOpen(_recording.DurationMs, fromFallback: true);
+                _log.LogWarning("MediaOpened did not fire within 5s; opening with the container or recorded duration");
+                double containerMs = _containerDuration is { IsCompletedSuccessfully: true } probe ? probe.Result : 0;
+                CompleteOpen(VideoDurationResolver.Resolve(containerMs, null, _recording.DurationMs), fromFallback: true);
             }
         };
         _openTimeoutTimer.Start();
@@ -804,12 +815,26 @@ internal sealed class VideoEditorWindow : Window
 
     // ---- media lifecycle ----
 
-    private void OnMediaOpened(object? sender, RoutedEventArgs e)
+    private async void OnMediaOpened(object? sender, RoutedEventArgs e)
     {
-        double dur = _media.NaturalDuration.HasTimeSpan
+        double? playerMs = _media.NaturalDuration.HasTimeSpan
             ? _media.NaturalDuration.TimeSpan.TotalMilliseconds
-            : _recording.DurationMs;
-        CompleteOpen(dur, fromFallback: false);
+            : null;
+        // The probe never faults and normally finishes before MediaOpened.
+        double containerMs = _containerDuration is null ? 0 : await _containerDuration;
+        if (_closing)
+        {
+            return;
+        }
+
+        double durationMs = VideoDurationResolver.Resolve(containerMs, playerMs, _recording.DurationMs);
+        _log.LogDebug(
+            "Editor duration {Duration:0.###}ms (container {Container:0.###}ms, player {Player}ms, recorded {Recorded:0.###}ms)",
+            durationMs,
+            containerMs,
+            playerMs,
+            _recording.DurationMs);
+        CompleteOpen(durationMs, fromFallback: false);
     }
 
     /// <summary>
@@ -900,6 +925,15 @@ internal sealed class VideoEditorWindow : Window
         _media.Pause();
         _isPlaying = false;
         _playbackTimer.Stop();
+        if (_mediaReady)
+        {
+            // Windows Media Player reports the end position at its whole-second length (2000ms
+            // for a 2133ms clip), so MediaElement.Position cannot place the playhead here. The
+            // stream ended, so playback reached the selection end: settle there exactly, as the
+            // Last button does, and the next Play restarts at In.
+            Seek(_timeline.OutMs);
+            UpdateStatusForMode();
+        }
     }
 
     // ---- transport ----
@@ -1677,7 +1711,7 @@ internal sealed class VideoEditorWindow : Window
                     dc.PushTransform(new TranslateTransform((width - drawWidth) / 2, (height - drawHeight) / 2));
                     dc.PushTransform(new ScaleTransform(scale, scale));
                     dc.DrawImage(result.SelectedBitmap, new Rect(0, 0, canvasWidth, canvasHeight));
-                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0);
+                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0, blurSource: result.SelectedBitmap);
                     dc.Pop();
                     dc.Pop();
                 }
@@ -1687,7 +1721,9 @@ internal sealed class VideoEditorWindow : Window
                 using (DrawingContext dc = visual.RenderOpen())
                 {
                     dc.PushTransform(new TranslateTransform(result.CropOrigin.X, result.CropOrigin.Y));
-                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0);
+                    // Blur layers bake the edited frame's pixels into this overlay, like the
+                    // mosaic patches already do.
+                    renderer.Render(dc, result.Document, pixelsPerDip: 1.0, blurSource: result.SelectedBitmap);
                     dc.Pop();
                 }
             }

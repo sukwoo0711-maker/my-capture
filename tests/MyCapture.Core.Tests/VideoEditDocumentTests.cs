@@ -24,6 +24,37 @@ public sealed class VideoEditDocumentTests
     }
 
     [Fact]
+    public void UntrimmedEnd_FollowsARemeasuredSourceDuration()
+    {
+        // Saved while the editor showed WPF's whole-second length (2000 ms) for a 2133 ms clip.
+        var document = VideoEditDocument.CreateFor(320, 240, 2000);
+        document.TrimInMs = 500;
+        document.TextOverlays.Add(new TimedTextOverlay { Text = "caption", StartMs = 1000, EndMs = 2000 });
+
+        VideoEditDocument normalized = document.NormalizeFor(320, 240, 2133.267);
+
+        Assert.Equal(2133.267, normalized.SourceDurationMs);
+        Assert.Equal(500, normalized.TrimInMs);
+        Assert.Equal(2133.267, normalized.TrimOutMs);
+        // Explicit layer times are the user's choice and are not stretched.
+        Assert.Equal(2000, normalized.TextOverlays[0].EndMs);
+    }
+
+    [Fact]
+    public void ExplicitTrimEnd_IsKeptWhenTheSourceIsRemeasured()
+    {
+        var document = VideoEditDocument.CreateFor(320, 240, 2000);
+        document.TrimOutMs = 1800;
+
+        VideoEditDocument longer = document.NormalizeFor(320, 240, 2133.267);
+        VideoEditDocument shorter = document.NormalizeFor(320, 240, 1500);
+
+        Assert.Equal(1800, longer.TrimOutMs);
+        Assert.True(longer.HasEdits);
+        Assert.Equal(1500, shorter.TrimOutMs);
+    }
+
+    [Fact]
     public void LegacyCaptureRecordJson_DefaultsMediaKindToImage()
     {
         const string legacyJson = """

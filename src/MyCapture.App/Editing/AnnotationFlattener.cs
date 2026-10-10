@@ -57,8 +57,9 @@ internal static class AnnotationFlattener
             dc.DrawImage(baseBitmap, new Rect(0, 0, width, height));
 
             // pixelsPerDip = 1.0: at 96 DPI a DIP is a device pixel, and text is measured in
-            // the image's own pixels, matching what the editor showed.
-            renderer.Render(dc, document, pixelsPerDip: 1.0);
+            // the image's own pixels, matching what the editor showed. Blur layers sample the
+            // same unannotated base the editor previewed.
+            renderer.Render(dc, document, pixelsPerDip: 1.0, blurSource: baseBitmap);
             SourceWindowTitleRenderer.Draw(dc, sourceWindowTitle, width, height);
         }
 

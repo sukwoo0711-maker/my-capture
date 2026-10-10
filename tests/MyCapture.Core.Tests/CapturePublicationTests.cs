@@ -90,6 +90,26 @@ public sealed class CapturePublicationTests
         finally { foreach (CaptureWriteReservation slot in slots) slot.Dispose(); }
     }
 
+    [Fact]
+    public async Task PublicationWriter_RunsOnItsOwnThread_NotAThreadPoolWorker()
+    {
+        // Save() blocks its caller until the writer finishes. A pool-scheduled writer waited for
+        // thread injection whenever the few initial pool workers were blocked (2-vCPU runner).
+        using var workspace = new TempWorkspace();
+        var queue = NewQueue(workspace);
+        CaptureRecord record = AddRecord(queue);
+        var writerOnPool = new List<bool>();
+        queue.BeforePublicationWriteForTest = (_, _) =>
+        {
+            lock (writerOnPool) writerOnPool.Add(Thread.CurrentThread.IsThreadPoolThread);
+        };
+        queue.Save();
+        using CaptureWriteReservation reservation = await queue.ReservePublicationAsync();
+        await queue.PublishRecordAsync(record, reservation);
+        Assert.NotEmpty(writerOnPool);
+        Assert.DoesNotContain(true, writerOnPool);
+    }
+
     private static CaptureQueue NewQueue(TempWorkspace workspace) =>
         new(workspace.Paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
 

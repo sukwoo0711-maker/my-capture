@@ -85,7 +85,7 @@ public sealed class Ux402InteractionTests
         {
             window.Show(); window.UpdateLayout();
             var tools = Descendants(window).OfType<ToggleButton>().Where(button => AutomationProperties.GetAcceleratorKey(button).Length > 0).ToArray();
-            Assert.Equal(11, tools.Length);
+            Assert.Equal(12, tools.Length);
             foreach (var button in tools)
             {
                 Rect bounds = button.TransformToAncestor(window).TransformBounds(new Rect(button.RenderSize));

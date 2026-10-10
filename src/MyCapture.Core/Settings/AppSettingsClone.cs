@@ -36,6 +36,7 @@ public static class AppSettingsClone
             Ocr = Clone(source.Ocr),
             GitHub = Clone(source.GitHub),
             General = Clone(source.General),
+            StoreRating = Clone(source.StoreRating),
         };
     }
 
@@ -55,6 +56,9 @@ public static class AppSettingsClone
         CaptureFullScreen = s.CaptureFullScreen,
         RecordRegion = s.RecordRegion,
         UploadGitHubImage = s.UploadGitHubImage,
+        RestoreClosedPin = s.RestoreClosedPin,
+        CaptureText = s.CaptureText,
+        PauseRecording = s.PauseRecording,
     };
 
     private static QueueSettings Clone(QueueSettings s) => new()
@@ -122,6 +126,7 @@ public static class AppSettingsClone
         MosaicBlockSize = s.MosaicBlockSize,
         HighlighterAlpha = s.HighlighterAlpha,
         RecentColors = [.. s.RecentColors],
+        BlurRadius = s.BlurRadius,
     };
 
     private static OcrSettings Clone(OcrSettings s) => new()
@@ -149,5 +154,13 @@ public static class AppSettingsClone
     private static GitHubSettings Clone(GitHubSettings s) => new()
     {
         IssueUrl = s.IssueUrl,
+    };
+
+    private static StoreRatingState Clone(StoreRatingState s) => new()
+    {
+        FirstSeenUtc = s.FirstSeenUtc,
+        SuccessfulCaptureCount = s.SuccessfulCaptureCount,
+        LastCaptureFailed = s.LastCaptureFailed,
+        RequestAttemptedUtc = s.RequestAttemptedUtc,
     };
 }

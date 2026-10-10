@@ -259,6 +259,7 @@ public partial class App : Application
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_50EE4EA7C243"), null,
             [
                 new(UiText.Get("Text_2C20ADDA2018"), HandleCaptureRequested, Gesture: _settings!.Hotkeys.Capture.ToString()),
+                new(UiText.Get("TextCapture_Title"), HandleCaptureTextRequested, Gesture: _settings!.Hotkeys.CaptureText.ToString()),
                 new(UiText.Get("Text_EA1FBABE64F3"), HandleCaptureWindow, Gesture: _settings!.Hotkeys.CaptureWindow.ToString()),
                 new(UiText.Get("Text_65BB6610ACA0"), HandleCaptureFullScreen, Gesture: _settings!.Hotkeys.CaptureFullScreen.ToString()),
                 new(_scrollCancellation is not null ? UiText.Get("Text_E8B876F98CD8") : UiText.Get("Text_4DBA30197C0A"), HandleScrollingCapture, Gesture: _settings!.Hotkeys.ScrollingCapture.ToString()),
@@ -266,6 +267,9 @@ public partial class App : Application
                 new(UiText.Get("Text_38FF9B0AA541"), HandleDelayedCapture, Gesture: _settings!.Hotkeys.DelayedCapture.ToString()),
                 new(UiText.Get("Text_4F5AF20FAA6E"), HandleRecordRegion, Gesture: _settings!.Hotkeys.RecordRegion.ToString()),
             ]),
+            // Rebuilt on every open, so it is disabled exactly while nothing can be reopened.
+            new ThemedShellPresenter.MenuEntry(UiText.Get("PinRestore_Command"), HandleRestoreClosedPin,
+                Gesture: _settings!.Hotkeys.RestoreClosedPin.ToString(), IsEnabled: _pins?.CanRestoreClosed == true),
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_8739F6684453"), HandleGalleryRequested, Gesture: _settings!.Hotkeys.OpenLibrary.ToString()),
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_00480581AAB5"), HandleSettingsRequested),
             new ThemedShellPresenter.MenuEntry(UiText.Get("Text_72B6DBA8AAC5"), () => Shutdown(0)),
@@ -287,6 +291,7 @@ public partial class App : Application
         _tray.GalleryRequested += (_, _) => HandleGalleryRequested();
         _tray.SettingsRequested += (_, _) => HandleSettingsRequested();
         _tray.ExitRequested += (_, _) => Shutdown(0);
+        InitializeTextCapture();
         ShortcutHelpWindow.ReadHotkeys = () => _settings!.Hotkeys;
         ShortcutHelpWindow.OpenSettings = HandleSettingsRequested;
         ShortcutHelpWindow.CanShowHelp = () => !_preparingAdvancedCapture && _overlay?.IsSelecting != true;
@@ -314,6 +319,7 @@ public partial class App : Application
             _currentEditSession = null;
             _pendingRecord = null;
             RestoreTrayAfterCapture();
+            _storeRating?.NotifyFlowEnded();
         };
         _overlay.CommitRequested = HandleCommitAsync;
         _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
@@ -368,11 +374,12 @@ public partial class App : Application
         _settingsApply = new SettingsApplyService(
             _services.GetRequiredService<SettingsStore>(),
             () => _settings!,
-            updated => { _settings = updated; ShortcutPresentation.Refresh(); },
+            updated => { _settings = updated; ShortcutPresentation.Refresh(); _pins?.TrimClosedHistory(); },
             _queue,
             _hotkeys,
             _startupService,
             _services.GetRequiredService<ILogger<SettingsApplyService>>());
+        InitializeStoreRating();
 
         if (_hotkeys.Failures.Count > 0)
         {
@@ -386,6 +393,7 @@ public partial class App : Application
             _tray.ShowBalloon(
                 UiText.Get("Text_5564316AA7EB"),
                 UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix)
+                    + PrintScreenFailureLine(_hotkeys.Failures)
                     + (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys ? "\n" + UiText.Get("Hotkey.Migrated") : string.Empty),
                 TrayBalloonKind.Warning);
         }
@@ -461,6 +469,77 @@ public partial class App : Application
                 _log?.LogInformation("GitHub image URL hotkey requested");
                 HandleGitHubImageUpload();
                 break;
+            case GlobalHotkeyCommand.RestoreClosedPin:
+                _log?.LogInformation("Restore-closed-pin hotkey requested");
+                HandleRestoreClosedPin();
+                break;
+            case GlobalHotkeyCommand.CaptureText:
+                _log?.LogInformation("Text capture hotkey requested");
+                HandleCaptureTextRequested();
+                break;
+            case GlobalHotkeyCommand.PauseRecording:
+                _log?.LogInformation("Pause-recording hotkey requested");
+                HandlePauseRecording();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Pauses or resumes the running recording exactly like the control window's pause
+    /// button. Without a recording the chord is inert: a log line, no notification.
+    /// </summary>
+    private void HandlePauseRecording()
+    {
+        if (_recorder is null)
+        {
+            _log?.LogInformation("Pause-recording hotkey ignored: recording is unavailable");
+            return;
+        }
+
+        try
+        {
+            // The coordinator logs why a press was ignored.
+            _ = _recorder.TogglePause();
+        }
+        catch (Exception ex)
+        {
+            // Fail soft: a pause failure must not end the tray process.
+            _log?.LogError(ex, "Could not change the recording pause state from the hotkey");
+        }
+    }
+
+    /// <summary>
+    /// Reopens the most recently closed pin. With nothing to reopen, a quiet notice explains
+    /// why instead of the command silently doing nothing.
+    /// </summary>
+    private void HandleRestoreClosedPin()
+    {
+        if (_pins is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_pins.RestoreLastClosed() is null)
+            {
+                _tray?.ShowBalloon(
+                    UiText.Get("PinRestore_NothingTitle"),
+                    _settings?.Pin.ClosedWindowRestoreLimit == 0
+                        ? UiText.Get("PinRestore_DisabledMessage")
+                        : UiText.Get("PinRestore_NothingMessage"),
+                    TrayBalloonKind.Information,
+                    playSound: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Fail soft like paste-to-screen: a window failure must not end the tray process.
+            _log?.LogError(ex, "Restoring a closed pin failed");
+            _tray?.ShowBalloon(
+                UiText.Get("PinRestore_FailedTitle"),
+                MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
+                TrayBalloonKind.Error);
         }
     }
 
@@ -957,6 +1036,7 @@ public partial class App : Application
                 break;
 
             case CaptureOutcomeKind.Failed:
+                _storeRating?.RecordCapture(succeeded: false);
                 _tray?.SetState(TrayIconState.Error);
                 _tray?.ShowBalloon(
                     UiText.Format("Text_60E0184FCBE5", mode),
@@ -1129,6 +1209,9 @@ public partial class App : Application
             // create a persistent floating window. F3 remains the explicit paste-to-screen
             // action when the user actually wants a pin.
         }
+        // Region, window, full-screen and scrolling captures all complete here. Only a durable,
+        // copied result counts toward the Store rating request; a save or copy failure resets it.
+        _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);
         if (_settings?.General.PlayCaptureSound == true)
             System.Media.SystemSounds.Asterisk.Play();
         if (_services is not null && _currentRecord is { } receipt)
@@ -1196,7 +1279,7 @@ public partial class App : Application
                 actions.SaveAsync,
                 () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
                 actions.ExportAsync, capturedRegion: region, targetMonitor: monitor);
-            card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; };
+            card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
             _quickAccess = card;
             card.Show();
         }
@@ -1248,6 +1331,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             _log?.LogError(ex, "Could not finalise the annotated capture");
+            _storeRating?.RecordCapture(succeeded: false);
             _tray?.ShowBalloon(
                 UiText.Get("Text_C1A40373A077"),
                 MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
@@ -1692,6 +1776,7 @@ public partial class App : Application
             !_pasteToScreenInFlight && _currentEditSession is null &&
             !Windows.OfType<Window>().Any(w => w is MyCapture.App.Recording.VideoEditorWindow or AnnotationEditorWindow);
         window.ExitForUpdate = () => Shutdown(0);
+        window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();
@@ -2112,10 +2197,11 @@ public partial class App : Application
             // Window already torn down; nothing to do.
         }
 
-        // Close every pinned window so no top-most orphan survives the process.
+        // Close every pinned window so no top-most orphan survives the process, and drop the
+        // closed-pin restore history so no screen content outlives it.
         try
         {
-            _pins?.CloseAll();
+            _pins?.CloseAllForExit();
         }
         catch (InvalidOperationException)
         {

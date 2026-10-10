@@ -157,7 +157,16 @@ public sealed class VideoEditDocument
         var normalized = CreateFor(width, height, duration);
 
         double trimIn = double.IsFinite(TrimInMs) ? Math.Clamp(TrimInMs, 0, duration) : 0;
-        double trimOut = double.IsFinite(TrimOutMs) ? Math.Clamp(TrimOutMs, 0, duration) : duration;
+        // An out point at this document's own source end means "not trimmed". Keep that meaning
+        // when the source is re-measured, for example when the editor replaces a whole-second
+        // player duration with the exact container duration, instead of leaving a phantom trim
+        // just before the real end.
+        bool outAtSourceEnd = double.IsFinite(SourceDurationMs)
+            && SourceDurationMs > 0
+            && TrimOutMs >= SourceDurationMs - 0.5;
+        double trimOut = double.IsFinite(TrimOutMs) && !outAtSourceEnd
+            ? Math.Clamp(TrimOutMs, 0, duration)
+            : duration;
         if (trimOut > trimIn)
         {
             normalized.TrimInMs = trimIn;

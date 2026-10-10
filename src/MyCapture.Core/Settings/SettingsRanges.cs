@@ -40,6 +40,8 @@ public static class SettingsRanges
     public static readonly Range<double> FontSize = new(6, 400);
     public static readonly Range<int> MosaicBlockSize = new(2, 128);
     public static readonly Range<int> HighlighterAlpha = new(0, 255);
+    public static readonly Range<int> BlurRadius = new(
+        MyCapture.Core.Annotations.BlurAnnotation.MinimumRadius, MyCapture.Core.Annotations.BlurAnnotation.MaximumRadius);
 
     public static readonly Range<double> UpscaleFactor = new(1.0, 4.0);
 

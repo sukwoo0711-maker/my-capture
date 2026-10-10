@@ -14,8 +14,11 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | OCR 모델 | `%LOCALAPPDATA%\MyCapture\ocr-models` | 같은 패키지 폴더의 `LocalCache\ocr-models` |
 | 드래그 내보내기 임시 파일 | `%TEMP%\MyCapture\DragExports` | 같은 패키지 폴더의 `TempState\MyCapture\DragExports` |
 | 빠른 저장 | `사진\Captures` | 같음 |
+| 평가 요청 | 없음 | 성공한 캡처 10회와 최초 실행 후 3일이 지나면 Microsoft Store 평가 창을 한 번만 표시. 설정 > 업데이트 탭에 "Microsoft Store에서 평가" 버튼 |
 
 - **업데이트**: Store 빌드에서 GitHub 설치 파일을 받으면 패키지 옆에 비패키지 사본이 하나 더 설치됩니다. 그래서 Store 빌드에서는 업데이트 동작을 막았습니다.
+- **평가 요청**: 요청 시점을 정하려고 성공한 캡처 수(최대 10), 최초 실행 시각, 직전 캡처 실패 여부, 요청 시각을 `settings.json`의 `storeRating`에만 저장하며 어디에도 전송하지 않습니다. 요청은 오버레이·편집기·녹화·빠른 작업 카드가 모두 닫힌 뒤 비차단으로 한 번만 시도하고, 결과와 관계없이 다시 묻지 않습니다. 평가 창과 평가 내용은 Microsoft Store가 처리합니다.
+- **PrintScreen 안내**: 단축키에 PrintScreen을 지정하면 `HKCU\Control Panel\Keyboard`의 `PrintScreenKeyForSnippingEnabled` 값을 읽기만 해서, Windows가 PrtSc로 캡처 도구를 여는 상태인지 판단합니다. 값이 없으면 빌드 22621 이상에서 켜짐으로 봅니다. 값을 바꾸지 않고 Windows 설정 바로 가기만 제공합니다.
 - **자동 시작**: 패키지 앱이 `Run` 키에 쓴 값은 가상화되어 로그인할 때 실행되지 않습니다. Store 정책 10.2.8은 Windows 시작 동작을 바꾸기 전에 사용자 동의를 요구합니다. 그래서 시작 작업은 꺼진 상태로 배포됩니다. 사용자가 MyCapture 설정이나 Windows 설정 > 앱 > 시작 프로그램에서 직접 켭니다. 앱 설정의 체크 상태는 Windows의 실제 상태를 따릅니다.
 - **저장 위치**: 패키지 앱이 AppData에 새로 만든 파일은 패키지 전용 위치로 리디렉션됩니다. 이 위치는 탐색기, 사진 앱, 드롭 대상이 원래 경로로 찾을 수 없습니다. 가상화를 끄는 `unvirtualizedResources` 기능은 게임용이어서 Store 승인을 기대하기 어렵습니다. 그래서 Store 빌드는 실제 경로인 패키지 폴더를 사용합니다.
 - **제거하면 데이터도 삭제됨**: Store 앱을 제거하면 패키지 폴더의 설정과 라이브러리도 함께 삭제됩니다. 라이브러리를 유지하려면 설정에서 캡처 폴더를 다른 위치로 지정하십시오. `사진\Captures`의 빠른 저장 파일은 남습니다.

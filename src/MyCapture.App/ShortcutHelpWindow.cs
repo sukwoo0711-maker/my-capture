@@ -72,17 +72,20 @@ internal sealed class ShortcutHelpWindow : Window
             (string Tab, (string Action, string Keys)[] Entries)[] sections =
             [
                 ("Help.Capture", [("Text_096A13A757DB", Display(keys.Capture)), ("Text_75306DAE2E60", Display(keys.RecordRegion)),
+                    ("RecordingPauseHotkey_Command", Display(keys.PauseRecording)),
                     ("Text_66BA5DCDA810", Display(keys.OpenLibrary)), ("Text_36458FABBDBB", Display(keys.CaptureWindow)),
                     ("Text_254C836B9ED2", Display(keys.CaptureFullScreen)), ("Hotkey.Scroll", Display(keys.ScrollingCapture)), ("Hotkey.Delay", Display(keys.DelayedCapture)),
-                    ("QuickAccess.Title", "Alt+Q")]),
+                    ("QuickAccess.Title", "Alt+Q"), ("TextCapture_Title", Display(keys.CaptureText)),
+                    ("ColorPick_HelpLabel", "C"), ("TextCapture_HelpToggle", "T")]),
                 ("Help.Annotation", [("Text_DC0760235344", "R"), ("Tools.Ellipse", "E"), ("Text_2785CE58DF74", "A"),
                     ("Text_37DB9D0B1C8E", "P"), ("Tools.Highlighter", "H"), ("Text_258AD4B095A1", "T"), ("Tools.StepNumber", "N"),
-                    ("Text_3F8046019B32", "M"), ("Tools_Crop", "X"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
+                    ("Text_3F8046019B32", "M"), ("EditorBlur_Name", "B"), ("Tools_Crop", "X"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
                 ("Folder410.Title", [("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2"),
                     ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del")]),
                 ("Help.Video", [("Help.Play", "Space"), ("Help.Frame", "Ctrl+← / Ctrl+→"), ("Video.TrimIn", "I"), ("Video.TrimOut", "O"), ("Help.Gif", "G")]),
                 ("QuickAccess.Pin", [("QuickAccess.Pin", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
-                    ("Text_67FE4AF7D334", Display(keys.ToggleClickThrough)), ("QuickAccess.Copy", "Ctrl+C"), ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
+                    ("Text_67FE4AF7D334", Display(keys.ToggleClickThrough)), ("PinRestore_Command", Display(keys.RestoreClosedPin)),
+                    ("QuickAccess.Copy", "Ctrl+C"), ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
             ];
             var rows = new List<(string Search, FrameworkElement Row)>();
             foreach (var section in sections)

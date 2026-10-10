@@ -58,6 +58,9 @@ public static class AnnotationDocumentRotator
                 case ImageAnnotation image:
                     image.Rect = MapRect(image.Rect, oldHeight);
                     break;
+                case BlurAnnotation blur:
+                    blur.Rect = MapRect(blur.Rect, oldHeight);
+                    break;
                 case PolylineAnnotation polyline:
                     polyline.Points = [.. polyline.Points.Select(p => MapPoint(p, oldHeight))];
                     break;

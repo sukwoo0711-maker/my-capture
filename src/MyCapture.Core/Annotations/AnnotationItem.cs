@@ -33,6 +33,7 @@ namespace MyCapture.Core.Annotations;
 [JsonDerivedType(typeof(PenAnnotation), "pen")]
 [JsonDerivedType(typeof(TextAnnotation), "text")]
 [JsonDerivedType(typeof(ImageAnnotation), "image")]
+[JsonDerivedType(typeof(BlurAnnotation), "blur")]
 public abstract class AnnotationItem : ObservableObject
 {
     private double _opacity = 1.0;
