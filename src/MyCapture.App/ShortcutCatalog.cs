@@ -48,6 +48,8 @@ internal static class ShortcutCatalog
             ("Previous", Key.Left, "←"), ("Next", Key.Right, "→"), ("PreviousFrame", Key.OemComma, ","), ("NextFrame", Key.OemPeriod, "."),
             ("Gif", Key.G, "G"), ("EditLayer", Key.F2, "F2"), ("DeleteLayer", Key.Delete, "Del"), ("Cancel", Key.Escape, "Esc") })
             Add(ShortcutScope.Video, command, key, hint);
+        // X is "crop" in the image editor; in the recording editor the same key trims.
+        Add(ShortcutScope.Video, "Trim", Key.X, "X");
         Add(ShortcutScope.Video, "PreviousFrame", Key.Left, "Shift+←", ModifierKeys.Shift);
         Add(ShortcutScope.Video, "NextFrame", Key.Right, "Shift+→", ModifierKeys.Shift);
         Add(ShortcutScope.Video, "PreviousFrame", Key.Left, "Ctrl+←", ModifierKeys.Control);

@@ -9,9 +9,11 @@ using MyCapture.Core.Recording;
 namespace MyCapture.App.Recording;
 
 /// <summary>
-/// A two-line "overview + detail" timeline. The top strip always shows the complete clip
-/// with coarse, visually heavy index marks and a draggable viewport. The bottom strip expands
-/// exactly that viewport to its full width and exposes the frames between those coarse marks.
+/// The recording editor's trim timeline, with an optional "overview + detail" pair. The top
+/// strip always shows the complete clip: the part that stays is bracketed between two large
+/// handles that carry their start/end times, and the parts that will be cut are dark and
+/// hatched. When the detail strip is shown, a thin zoom lane under the top strip selects the
+/// range that the bottom strip expands to its full width, exposing individual frames.
 /// </summary>
 /// <remarks>
 /// All time/pixel maths is delegated to <see cref="TimelineViewport"/>,
@@ -21,19 +23,34 @@ namespace MyCapture.App.Recording;
 /// </remarks>
 internal sealed class TwoLineTimeline : ContentControl, IDisposable
 {
-    private const double OverviewHeight = 34.0;
+    /// <summary>Top strip height while the detail strip is also shown.</summary>
+    private const double OverviewHeight = 44.0;
+
+    /// <summary>Top strip height when it is the only (trim) timeline.</summary>
+    private const double OverviewTrimHeight = 58.0;
     private const double DetailHeight = 42.0;
     // The connector also draws a 10.5pt explanatory line; reserve its complete glyph height.
     private const double ConnectorHeight = 18.0;
+    /// <summary>Top lane of the trim strip: time ruler labels, overlaid by the handle chips.</summary>
+    private const double LabelLaneHeight = 18.0;
+    /// <summary>Bottom lane of the trim strip that holds the detail zoom range.</summary>
+    private const double ZoomLaneHeight = 9.0;
     private const double EdgeGrab = 14.0;
-    private const double BrushGripWidth = 12.0;
-    private const double TrimHandleWidth = 18.0;
+    private const double BrushGripWidth = 10.0;
+    private const double TrimHandleWidth = 14.0;
+
+    /// <summary>
+    /// Half the pointer target around a trim handle. The 44 DIP target follows the Windows
+    /// touch-optimized size (the visible handle can be narrower than its target).
+    /// </summary>
+    internal const double TrimHandleGrab = 22.0;
 
     private readonly TimelineRenderSurface _overview;
     private readonly TimelineRenderSurface _connector;
     private readonly TimelineRenderSurface _detail;
     private readonly TextBlock _overviewCaption;
     private readonly TextBlock _detailCaption;
+    private readonly FrameworkElement _detailPanel;
     private readonly CompositionFrameScheduler _renderScheduler;
 
     private readonly Brush _surfaceSunken;
@@ -46,9 +63,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private readonly Brush _accent;
     private readonly Brush _accentSubtle;
     private readonly Brush _playhead;
-    private readonly Brush _outside;
-    private readonly Brush _deleteFill;
-    private readonly Brush _deleteHandle;
+    private readonly Brush _handleFill;
+    private readonly Brush _handleText;
+    private readonly Brush _cutFill;
     private readonly Pen _majorTickPen;
     private readonly Pen _minorTickPen;
     private readonly Pen _detailGroupPen;
@@ -56,8 +73,10 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private readonly Pen _connectorPen;
     private readonly Pen _playheadPen;
     private readonly Pen _gripMarkPen;
-    private readonly Pen _deleteOutlinePen;
-    private readonly Pen _deleteHatchPen;
+    private readonly Pen _cutHatchPen;
+    private readonly Pen _cutEdgePen;
+    private readonly Pen _focusPen;
+    private readonly Pen _laneSeparatorPen;
     private readonly Typeface _regularTypeface;
     private readonly Typeface _semiBoldTypeface;
     private readonly StreamGeometry _playheadMarker;
@@ -68,6 +87,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private TimelineViewport _viewport = new(1, 15);
     private TrimSelection _trim = new(1);
     private bool _trimModeEnabled;
+    private bool _detailVisible = true;
     private TrimHandle _activeTrimHandle = TrimHandle.In;
 
     private DragMode _drag = DragMode.None;
@@ -95,21 +115,23 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _accent = ResolveBrush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF));
         _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromRgb(0x15, 0x2F, 0x3E));
         _playhead = ResolveBrush("Timeline.Playhead", Color.FromRgb(0x97, 0x89, 0xFF));
-        _outside = ResolveBrush("Surface.Scrim", Color.FromArgb(0x86, 0x08, 0x0C, 0x12));
-        _deleteFill = ResolveBrush("Timeline.TrimDeleteFill", Color.FromArgb(0x55, 0xFF, 0x6B, 0x74));
-        _deleteHandle = ResolveBrush("Timeline.TrimDeleteHandle", Color.FromRgb(0xFF, 0x8A, 0x91));
+        // The kept range and its handles use the theme's accent pair (accent fill with its
+        // on-accent text), so every palette, high contrast included, keeps a tested contrast.
+        _handleFill = _accent;
+        _handleText = ResolveBrush("Text.OnAccent", Color.FromRgb(0x0A, 0x08, 0x18));
+        _cutFill = ResolveBrush("Surface.Scrim", Color.FromArgb(0xE6, 0x08, 0x0C, 0x12));
 
-        _majorTickPen = CreatePen(_textSecondary, 3.0);
+        _majorTickPen = CreatePen(_textSecondary, 2.0);
         _minorTickPen = CreatePen(_borderSubtle, 1.0);
         _detailGroupPen = CreatePen(_textMuted, 1.6);
-        _accentOutlinePen = CreatePen(_accent, 3.0);
+        _accentOutlinePen = CreatePen(_accent, 2.0);
         _connectorPen = CreatePen(_accent, 2.0);
         _playheadPen = CreatePen(_playhead, 2.6);
-        _gripMarkPen = CreatePen(_surfaceSunken, 2.0);
-        _deleteOutlinePen = CreatePen(_deleteHandle, 2.0);
-        _deleteHatchPen = CreatePen(
-            ResolveBrush("Timeline.TrimDeleteHatch", Color.FromArgb(0xCC, 0xFF, 0xB0, 0xB6)),
-            1.2);
+        _gripMarkPen = CreatePen(_handleText, 1.6);
+        _cutHatchPen = CreatePen(WithOpacity(_textSecondary, 0.38), 1.2);
+        _cutEdgePen = CreatePen(WithOpacity(_textSecondary, 0.55), 1.0);
+        _focusPen = CreatePen(ResolveBrush("Border.Focus", Color.FromRgb(0x97, 0x89, 0xFF)), 2.0);
+        _laneSeparatorPen = CreatePen(_borderSubtle, 1.0);
 
         FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");
@@ -129,14 +151,13 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _detailCaption = BuildCaption();
 
         var panel = new StackPanel();
-        panel.Children.Add(Labelled(_overviewCaption, _overview, UiText.Get("Text_B30298E33872")));
+        panel.Children.Add(Labelled(_overviewCaption, _overview, UiText.Get("VideoEditorUx_TrimTimelineName")));
         panel.Children.Add(_connector);
-        panel.Children.Add(Labelled(_detailCaption, _detail, UiText.Get("Text_AB71749112CF")));
+        _detailPanel = Labelled(_detailCaption, _detail, UiText.Get("Text_AB71749112CF"));
+        panel.Children.Add(_detailPanel);
         Content = panel;
 
-        AutomationProperties.SetHelpText(
-            _overview,
-            UiText.Get("Text_0E7B9C44075A"));
+        UpdateOverviewHelp();
         AutomationProperties.SetHelpText(
             _detail,
             UiText.Get("Text_6B4EE4E6C8FF"));
@@ -155,6 +176,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _detail.LostMouseCapture += OnLostMouseCapture;
         _detail.MouseWheel += OnDetailWheel;
         PreviewKeyDown += OnPreviewKeyDown;
+        // The keyboard-selected handle shows a focus ring only while the timeline has focus.
+        IsKeyboardFocusWithinChanged += (_, _) => InvalidateRange();
         IsEnabledChanged += (_, _) => Opacity = IsEnabled ? 1.0 : 0.5;
         Loaded += (_, _) => RequestRenderIfDirty();
         Unloaded += (_, _) => _renderScheduler.CancelPending();
@@ -199,6 +222,19 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     internal string DetailRangeText => _detailCaption.Text;
 
+    /// <summary>True while the frame-level detail strip (and its zoom lane) is shown.</summary>
+    internal bool DetailVisible => _detailVisible;
+
+    /// <summary>True while a trim handle is being dragged.</summary>
+    internal bool IsTrimDragging => _drag is DragMode.TrimIn or DragMode.TrimOut;
+
+    /// <summary>True when the end handle is the one the keyboard (and X) adjusts.</summary>
+    internal bool IsEndHandleActive => _activeTrimHandle == TrimHandle.Out;
+
+    internal double TrimStripHeight => _overview.Height;
+
+    internal FrameworkElement TrimStripForTest => _overview;
+
     internal int FixedVisualCountForTest =>
         _overview.FixedVisualCount + _connector.FixedVisualCount + _detail.FixedVisualCount;
 
@@ -232,6 +268,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         }
 
         UpdateRangeCaptions();
+        UpdateTrimStatus();
+        UpdateOverviewHelp();
         InvalidateAll();
     }
 
@@ -260,16 +298,14 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     {
         _activeTrimHandle = TrimHandle.In;
         _trim.SetIn(ms);
-        InvalidateRange();
-        TrimChanged?.Invoke(this, EventArgs.Empty);
+        OnTrimRangeChanged();
     }
 
     internal void SetOut(double ms)
     {
         _activeTrimHandle = TrimHandle.Out;
         _trim.SetOut(ms);
-        InvalidateRange();
-        TrimChanged?.Invoke(this, EventArgs.Empty);
+        OnTrimRangeChanged();
     }
 
     internal bool SetTrimRange(double inMs, double outMs)
@@ -281,8 +317,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _trim.Reset();
         _trim.SetOut(outMs);
         _trim.SetIn(inMs);
-        InvalidateRange();
-        TrimChanged?.Invoke(this, EventArgs.Empty);
+        OnTrimRangeChanged();
         return true;
     }
 
@@ -300,11 +335,43 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             _ = Focus();
         }
 
-        AutomationProperties.SetHelpText(
-            this,
-            enabled
-                ? UiText.Get("Text_17543FEC3EBF")
-                : UiText.Get("Text_F2315240D532"));
+        UpdateOverviewHelp();
+        InvalidateRange();
+    }
+
+    /// <summary>
+    /// Shows or hides the frame-level detail strip. Without it the top strip is the single,
+    /// taller trim timeline and its zoom lane is not drawn.
+    /// </summary>
+    internal void SetDetailVisible(bool visible)
+    {
+        if (_detailVisible == visible)
+        {
+            return;
+        }
+
+        _detailVisible = visible;
+        Visibility detail = visible ? Visibility.Visible : Visibility.Collapsed;
+        _overviewCaption.Visibility = detail;
+        _connector.Visibility = detail;
+        _detailPanel.Visibility = detail;
+        _overview.Height = visible ? OverviewHeight : OverviewTrimHeight;
+        UpdateOverviewHelp();
+        InvalidateAll();
+    }
+
+    /// <summary>
+    /// Selects the start or end handle for keyboard adjustment and moves focus to the timeline.
+    /// </summary>
+    internal void ActivateTrimHandle(bool end)
+    {
+        if (!_trimModeEnabled)
+        {
+            SetTrimMode(true);
+        }
+
+        _activeTrimHandle = end ? TrimHandle.Out : TrimHandle.In;
+        _ = Focus();
         InvalidateRange();
     }
 
@@ -323,6 +390,17 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     internal void SeekFromOverview(double ms) =>
         SeekTo(ms, snap: false, followDetail: true);
 
+    // ---- test hooks: the same paths a pointer drag uses, without native mouse input ----
+
+    internal void BeginTrimDragForTest(bool end) => BeginTrimDrag(end ? TrimHandle.Out : TrimHandle.In);
+
+    internal void MoveTrimDragForTest(double ms) => MoveTrimDrag(ms);
+
+    internal void EndTrimDragForTest() => EndTrimDrag();
+
+    /// <summary>Names the action a press at (<paramref name="x"/>, <paramref name="y"/>) on the trim strip starts.</summary>
+    internal string OverviewHitForTest(double x, double y, double width) => HitTestOverview(x, y, width).ToString();
+
     // ---- interaction ----
 
     private void OnDetailWheel(object sender, MouseWheelEventArgs e)
@@ -333,9 +411,65 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         e.Handled = true;
     }
 
+    private DragMode HitTestOverview(double x, double y, double width)
+    {
+        if (_trimModeEnabled)
+        {
+            double inPx = OverviewMsToPx(_trim.InMs, width);
+            double outPx = OverviewMsToPx(_trim.OutMs, width);
+            ChipLayout chips = LayoutChips(width);
+            bool inChip = chips.In.Contains(x, y);
+            bool outChip = !inChip && chips.Out.Contains(x, y);
+            bool onIn = inChip || (!outChip && Math.Abs(x - inPx) <= TrimHandleGrab);
+            bool onOut = outChip || (!inChip && Math.Abs(x - outPx) <= TrimHandleGrab);
+            if (onIn && onOut)
+            {
+                // Close handles share their targets: the nearer handle wins, and a press
+                // between two coincident handles goes to the side it is on.
+                double toIn = Math.Abs(x - inPx);
+                double toOut = Math.Abs(x - outPx);
+                onIn = toIn < toOut || (toIn == toOut && x <= inPx);
+                onOut = !onIn;
+            }
+
+            if (onIn)
+            {
+                return DragMode.TrimIn;
+            }
+
+            if (onOut)
+            {
+                return DragMode.TrimOut;
+            }
+        }
+
+        if (_detailVisible && y >= OverviewTrackBottom(_overview.Height) - 3)
+        {
+            double leftPx = OverviewMsToPx(_viewport.ViewStartMs, width);
+            double rightPx = OverviewMsToPx(_viewport.ViewEndMs, width);
+            if (Math.Abs(x - leftPx) <= EdgeGrab)
+            {
+                return DragMode.BrushLeft;
+            }
+
+            if (Math.Abs(x - rightPx) <= EdgeGrab)
+            {
+                return DragMode.BrushRight;
+            }
+
+            if (x > leftPx && x < rightPx)
+            {
+                return DragMode.BrushBody;
+            }
+        }
+
+        return DragMode.Playhead;
+    }
+
     private void OnStripDown(TimelineRenderSurface strip, MouseButtonEventArgs e, bool isOverview)
     {
-        double x = e.GetPosition(strip).X;
+        Point position = e.GetPosition(strip);
+        double x = position.X;
         double width = strip.ActualWidth;
         if (width <= 0)
         {
@@ -349,69 +483,51 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             _ = Focus();
         }
 
+        DragMode mode;
         if (isOverview)
         {
-            double trimInPx = OverviewMsToPx(_trim.InMs, width);
-            double trimOutPx = OverviewMsToPx(_trim.OutMs, width);
-            double leftPx = OverviewMsToPx(_viewport.ViewStartMs, width);
-            double rightPx = OverviewMsToPx(_viewport.ViewEndMs, width);
-            if (Math.Abs(x - trimInPx) <= EdgeGrab + TrimHandleWidth / 2)
+            mode = HitTestOverview(x, position.Y, width);
+            if (mode == DragMode.BrushBody)
             {
-                _activeTrimHandle = TrimHandle.In;
-                _drag = DragMode.TrimIn;
-            }
-            else if (Math.Abs(x - trimOutPx) <= EdgeGrab + TrimHandleWidth / 2)
-            {
-                _activeTrimHandle = TrimHandle.Out;
-                _drag = DragMode.TrimOut;
-            }
-            else if (Math.Abs(x - leftPx) <= EdgeGrab)
-            {
-                _drag = DragMode.BrushLeft;
-            }
-            else if (Math.Abs(x - rightPx) <= EdgeGrab)
-            {
-                _drag = DragMode.BrushRight;
-            }
-            else if (x > leftPx && x < rightPx)
-            {
-                _drag = DragMode.BrushBody;
                 _dragAnchorMs = OverviewPxToMs(x, width) - _viewport.ViewStartMs;
             }
-            else
+            else if (mode == DragMode.Playhead)
             {
-                // Seeking outside the selected upper range also moves the lower detail range
-                // to that location. Otherwise the shared playhead disappears from the detail.
+                // Seeking outside the zoom range also moves the lower detail range to that
+                // location. Otherwise the shared playhead disappears from the detail.
                 SeekFromOverview(OverviewPxToMs(x, width));
-                _drag = DragMode.Playhead;
             }
         }
         else
         {
-            bool inVisible = IsVisibleInDetail(_trim.InMs);
-            bool outVisible = IsVisibleInDetail(_trim.OutMs);
             double inPx = _viewport.MsToPx(_trim.InMs, width);
             double outPx = _viewport.MsToPx(_trim.OutMs, width);
-            if (inVisible && Math.Abs(x - inPx) <= EdgeGrab + TrimHandleWidth / 2)
+            bool onIn = _trimModeEnabled && IsVisibleInDetail(_trim.InMs) && Math.Abs(x - inPx) <= TrimHandleGrab;
+            bool onOut = _trimModeEnabled && IsVisibleInDetail(_trim.OutMs) && Math.Abs(x - outPx) <= TrimHandleGrab;
+            if (onIn && onOut)
             {
-                _activeTrimHandle = TrimHandle.In;
-                _drag = DragMode.TrimIn;
+                onIn = Math.Abs(x - inPx) <= Math.Abs(x - outPx);
+                onOut = !onIn;
             }
-            else if (outVisible && Math.Abs(x - outPx) <= EdgeGrab + TrimHandleWidth / 2)
-            {
-                _activeTrimHandle = TrimHandle.Out;
-                _drag = DragMode.TrimOut;
-            }
-            else
+
+            mode = onIn ? DragMode.TrimIn : onOut ? DragMode.TrimOut : DragMode.Playhead;
+            if (mode == DragMode.Playhead)
             {
                 SeekTo(_viewport.PxToMs(x, width), snap: true, followDetail: false);
-                _drag = DragMode.Playhead;
             }
         }
 
-        if (_drag is DragMode.TrimIn or DragMode.TrimOut) TrimInteractionStarted?.Invoke(this, EventArgs.Empty);
+        if (mode is DragMode.TrimIn or DragMode.TrimOut)
+        {
+            BeginTrimDrag(mode == DragMode.TrimIn ? TrimHandle.In : TrimHandle.Out);
+        }
+        else
+        {
+            _drag = mode;
+        }
+
         strip.CaptureMouse();
-        UpdateCursor(strip, x);
+        UpdateCursor(strip, position);
         e.Handled = true;
     }
 
@@ -419,7 +535,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     {
         if (_drag == DragMode.None)
         {
-            UpdateCursor(eventStrip, e.GetPosition(eventStrip).X);
+            UpdateCursor(eventStrip, e.GetPosition(eventStrip));
             return;
         }
 
@@ -477,22 +593,10 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 InvalidateViewport();
                 break;
             case DragMode.TrimIn:
-                SetIn(FrameStepCalculator.SnapToFrame(
-                    ReferenceEquals(strip, _overview)
-                        ? OverviewPxToMs(x, width)
-                        : _viewport.PxToMs(x, width),
-                    _fps,
-                    _durationMs));
-                SeekTo(InMs, snap: false, followDetail: false);
-                break;
             case DragMode.TrimOut:
-                SetOut(FrameStepCalculator.SnapToFrame(
-                    ReferenceEquals(strip, _overview)
-                        ? OverviewPxToMs(x, width)
-                        : _viewport.PxToMs(x, width),
-                    _fps,
-                    _durationMs));
-                SeekTo(OutMs, snap: false, followDetail: false);
+                MoveTrimDrag(ReferenceEquals(strip, _overview)
+                    ? OverviewPxToMs(x, width)
+                    : _viewport.PxToMs(x, width));
                 break;
         }
     }
@@ -501,43 +605,96 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     {
         DragMode completed = _drag;
         bool coarseClick = completed == DragMode.BrushBody && !_dragMoved && ReferenceEquals(strip, _overview);
-        double x = e.GetPosition(strip).X;
+        Point position = e.GetPosition(strip);
         double width = strip.ActualWidth;
 
-        _drag = DragMode.None;
+        // Finish the drag before releasing capture, so LostMouseCapture does not report it twice.
+        bool trim = completed is DragMode.TrimIn or DragMode.TrimOut;
+        if (trim)
+        {
+            EndTrimDrag();
+        }
+        else
+        {
+            _drag = DragMode.None;
+        }
+
         if (strip.IsMouseCaptured)
         {
             strip.ReleaseMouseCapture();
         }
 
-        if (coarseClick && width > 0)
+        if (!trim)
         {
-            SeekFromOverview(OverviewPxToMs(x, width));
+            if (coarseClick && width > 0)
+            {
+                SeekFromOverview(OverviewPxToMs(position.X, width));
+            }
+
+            if (completed == DragMode.Playhead || coarseClick)
+            {
+                PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
+            }
         }
 
-        if (completed is DragMode.Playhead or DragMode.TrimIn or DragMode.TrimOut || coarseClick)
-        {
-            PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
-        }
-
-        if (completed is DragMode.TrimIn or DragMode.TrimOut) TrimInteractionCompleted?.Invoke(this, EventArgs.Empty);
-        UpdateCursor(strip, x);
+        UpdateCursor(strip, position);
         e.Handled = true;
     }
 
     private void OnLostMouseCapture(object sender, MouseEventArgs e)
     {
-        bool trim = _drag is DragMode.TrimIn or DragMode.TrimOut;
-        bool reconcile = _drag is DragMode.Playhead or DragMode.TrimIn or DragMode.TrimOut;
+        if (_drag is DragMode.TrimIn or DragMode.TrimOut)
+        {
+            EndTrimDrag();
+            return;
+        }
+
+        bool reconcile = _drag == DragMode.Playhead;
         _drag = DragMode.None;
-        if (trim) TrimInteractionCompleted?.Invoke(this, EventArgs.Empty);
         if (reconcile)
         {
             PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
         }
     }
 
-    private void UpdateCursor(TimelineRenderSurface strip, double x)
+    private void BeginTrimDrag(TrimHandle handle)
+    {
+        _activeTrimHandle = handle;
+        _drag = handle == TrimHandle.In ? DragMode.TrimIn : DragMode.TrimOut;
+        InvalidateRange();
+        TrimInteractionStarted?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Moves the dragged handle and shows that frame: the playhead follows the handle.</summary>
+    private void MoveTrimDrag(double ms)
+    {
+        double snapped = FrameStepCalculator.SnapToFrame(ms, _fps, _durationMs);
+        if (_drag == DragMode.TrimOut)
+        {
+            SetOut(snapped);
+            SeekTo(OutMs, snap: false, followDetail: false);
+        }
+        else
+        {
+            SetIn(snapped);
+            SeekTo(InMs, snap: false, followDetail: false);
+        }
+    }
+
+    private void EndTrimDrag()
+    {
+        if (_drag is not (DragMode.TrimIn or DragMode.TrimOut))
+        {
+            return;
+        }
+
+        _drag = DragMode.None;
+        InvalidateRange();
+        PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
+        TrimInteractionCompleted?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void UpdateCursor(TimelineRenderSurface strip, Point position)
     {
         double width = strip.ActualWidth;
         if (width <= 0)
@@ -545,31 +702,23 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             return;
         }
 
+        double x = position.X;
         if (ReferenceEquals(strip, _overview))
         {
-            double trimIn = OverviewMsToPx(_trim.InMs, width);
-            double trimOut = OverviewMsToPx(_trim.OutMs, width);
-            if (Math.Abs(x - trimIn) <= EdgeGrab + TrimHandleWidth / 2
-                || Math.Abs(x - trimOut) <= EdgeGrab + TrimHandleWidth / 2)
+            strip.Cursor = HitTestOverview(x, position.Y, width) switch
             {
-                strip.Cursor = Cursors.SizeWE;
-                return;
-            }
-
-            double left = OverviewMsToPx(_viewport.ViewStartMs, width);
-            double right = OverviewMsToPx(_viewport.ViewEndMs, width);
-            strip.Cursor = Math.Abs(x - left) <= EdgeGrab || Math.Abs(x - right) <= EdgeGrab
-                ? Cursors.SizeWE
-                : x > left && x < right
-                    ? Cursors.SizeAll
-                    : Cursors.Cross;
+                DragMode.TrimIn or DragMode.TrimOut or DragMode.BrushLeft or DragMode.BrushRight => Cursors.SizeWE,
+                DragMode.BrushBody => Cursors.SizeAll,
+                _ => Cursors.Hand,
+            };
             return;
         }
 
-        bool onTrim = (IsVisibleInDetail(_trim.InMs)
-                 && Math.Abs(x - _viewport.MsToPx(_trim.InMs, width)) <= EdgeGrab + TrimHandleWidth / 2)
+        bool onTrim = _trimModeEnabled
+            && ((IsVisibleInDetail(_trim.InMs)
+                    && Math.Abs(x - _viewport.MsToPx(_trim.InMs, width)) <= TrimHandleGrab)
                 || (IsVisibleInDetail(_trim.OutMs)
-                    && Math.Abs(x - _viewport.MsToPx(_trim.OutMs, width)) <= EdgeGrab + TrimHandleWidth / 2);
+                    && Math.Abs(x - _viewport.MsToPx(_trim.OutMs, width)) <= TrimHandleGrab));
         strip.Cursor = onTrim ? Cursors.SizeWE : Cursors.Cross;
     }
 
@@ -581,6 +730,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     private bool IsVisibleInDetail(double ms) =>
         ms >= _viewport.ViewStartMs - 0.001 && ms <= _viewport.ViewEndMs + 0.001;
+
+    private double OverviewTrackBottom(double height) =>
+        _detailVisible ? Math.Max(LabelLaneHeight + 8, height - ZoomLaneHeight) : height;
 
     private void SeekTo(double ms, bool snap, bool followDetail)
     {
@@ -664,6 +816,13 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _viewport.Pan(targetStart - _viewport.ViewStartMs);
     }
 
+    private void OnTrimRangeChanged()
+    {
+        UpdateTrimStatus();
+        InvalidateRange();
+        TrimChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     // ---- dirty-layer scheduling ----
 
     private void InvalidateAll()
@@ -740,75 +899,103 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         AutomationProperties.SetName(_detail, _detailCaption.Text);
     }
 
+    private void UpdateTrimStatus() =>
+        AutomationProperties.SetItemStatus(_overview, TrimPresentation.TimelineStatus(_trim.InMs, _trim.OutMs));
+
+    private void UpdateOverviewHelp()
+    {
+        string help = _trimModeEnabled
+            ? UiText.Get("VideoEditorUx_TrimTimelineHelp")
+            : UiText.Get("VideoEditorUx_TrimOffHelp");
+        if (_detailVisible)
+        {
+            help += " " + UiText.Get("VideoEditorUx_ZoomLaneHelp");
+        }
+
+        AutomationProperties.SetHelpText(_overview, help);
+        AutomationProperties.SetHelpText(this, help);
+    }
+
     // ---- DrawingVisual layers ----
 
     private void DrawOverviewLayer(DrawingContext dc, TimelineRenderLayer layer, Size size)
     {
         double width = size.Width;
         double height = size.Height;
+        double trackTop = LabelLaneHeight;
+        double trackBottom = OverviewTrackBottom(height);
         switch (layer)
         {
             case TimelineRenderLayer.Static:
                 dc.DrawRectangle(_surfaceSunken, null, new Rect(size));
+                DrawLine(dc, _laneSeparatorPen, 0, trackTop - 0.5, width, trackTop - 0.5);
                 double majorMs = CoarseIntervalMs;
                 double minorMs = majorMs / 4.0;
+                double trackHeight = trackBottom - trackTop;
                 int minorCount = Math.Max(1, (int)Math.Ceiling(_durationMs / minorMs));
+                double labelRight = double.NegativeInfinity;
                 for (int index = 0; index <= minorCount; index++)
                 {
                     double time = Math.Min(_durationMs, index * minorMs);
                     double x = OverviewMsToPx(time, width);
                     bool major = index % 4 == 0;
                     DrawLine(dc, major ? _majorTickPen : _minorTickPen, x,
-                        major ? height * 0.34 : height * 0.70, x, height);
+                        trackBottom - (trackHeight * (major ? 0.42 : 0.22)), x, trackBottom);
                     if (major)
                     {
-                        DrawText(dc, FormatTickLabel(time),
-                            Math.Clamp(x + 4, 3, Math.Max(3, width - 54)), 2,
-                            _textSecondary, 11, semiBold: true, background: null, centered: false);
+                        // A ruler along the top lane; the handle chips draw over it. A label
+                        // that would run into the previous one (the clip end) is left out.
+                        FormattedText label = Format(FormatTickLabel(time), 10, semiBold: false, _textSecondary);
+                        double left = Math.Clamp(x + 3, 3, Math.Max(3, width - label.Width - 3));
+                        if (left >= labelRight + 6)
+                        {
+                            dc.DrawText(label, new Point(left, 2));
+                            labelRight = left + label.Width;
+                        }
                     }
                 }
-
-                DrawLine(dc, _majorTickPen, width - 1.5, height * 0.20, width - 1.5, height);
                 break;
 
             case TimelineRenderLayer.Range:
-                double trimInX = OverviewMsToPx(_trim.InMs, width);
-                double trimOutX = OverviewMsToPx(_trim.OutMs, width);
-                DrawRect(dc, trimInX, height - 7, trimOutX - trimInX, 7, _accentSubtle, null);
-
-                double brushLeft = OverviewMsToPx(_viewport.ViewStartMs, width);
-                double brushRight = OverviewMsToPx(_viewport.ViewEndMs, width);
-                double brushWidth = Math.Max(3, brushRight - brushLeft);
-                DrawRect(dc, 0, 0, brushLeft, height, _outside, null);
-                DrawRect(dc, brushRight, 0, width - brushRight, height, _outside, null);
-                DrawRect(dc, brushLeft, 0, brushWidth, height, _accentSubtle, _accentOutlinePen);
-
-                double gripWidth = Math.Min(BrushGripWidth, Math.Max(4, brushWidth / 2.0));
-                DrawRect(dc, brushLeft, 0, gripWidth, height, _accent, null);
-                DrawRect(dc, brushRight - gripWidth, 0, gripWidth, height, _accent, null);
-                DrawLine(dc, _gripMarkPen, brushLeft + gripWidth / 2.0, height * 0.32,
-                    brushLeft + gripWidth / 2.0, height * 0.68);
-                DrawLine(dc, _gripMarkPen, brushRight - gripWidth / 2.0, height * 0.32,
-                    brushRight - gripWidth / 2.0, height * 0.68);
-
-                if (brushWidth >= 145)
+                if (_detailVisible)
                 {
-                    DrawText(dc,
-                        $"{FormatMs(_viewport.ViewStartMs)} – {FormatMs(_viewport.ViewEndMs)}",
-                        (brushLeft + brushRight) / 2.0, height * 0.43,
-                        _textPrimary, 12, semiBold: true, _surfaceScrim, centered: true);
+                    DrawZoomLane(dc, width, trackBottom, height);
                 }
 
-                DrawDeletionRange(dc, 0, trimInX, height);
-                DrawDeletionRange(dc, trimOutX, width, height);
-                DrawTrimHandle(dc, trimInX, height, TrimHandle.In);
-                DrawTrimHandle(dc, trimOutX, height, TrimHandle.Out);
+                double trimInX = OverviewMsToPx(_trim.InMs, width);
+                double trimOutX = OverviewMsToPx(_trim.OutMs, width);
+                DrawCutRange(dc, 0, trimInX, trackTop, trackBottom);
+                DrawCutRange(dc, trimOutX, width, trackTop, trackBottom);
+
+                // The kept range reads as one bracket: accent bars along its top and bottom.
+                DrawRect(dc, trimInX, trackTop, trimOutX - trimInX, 3, _handleFill, null);
+                DrawRect(dc, trimInX, trackBottom - 3, trimOutX - trimInX, 3, _handleFill, null);
+                if (_trimModeEnabled)
+                {
+                    ChipLayout chips = LayoutChips(width);
+                    DrawTrimHandle(dc, trimInX, chips.In.Top, trackBottom, TrimHandle.In);
+                    DrawTrimHandle(dc, trimOutX, chips.Out.Top, trackBottom, TrimHandle.Out);
+                    DrawChip(dc, chips.In, chips.InText, TrimHandle.In);
+                    DrawChip(dc, chips.Out, chips.OutText, TrimHandle.Out);
+                }
                 break;
 
             case TimelineRenderLayer.Transient:
-                DrawPlayhead(dc, OverviewMsToPx(_playheadMs, width), height);
+                DrawPlayhead(dc, OverviewMsToPx(_playheadMs, width), trackTop, height);
                 break;
         }
+    }
+
+    private void DrawZoomLane(DrawingContext dc, double width, double top, double bottom)
+    {
+        double left = OverviewMsToPx(_viewport.ViewStartMs, width);
+        double right = OverviewMsToPx(_viewport.ViewEndMs, width);
+        double brushWidth = Math.Max(3, right - left);
+        double laneHeight = bottom - top;
+        DrawRect(dc, left, top + 1, brushWidth, laneHeight - 1, _accentSubtle, _accentOutlinePen);
+        double gripWidth = Math.Min(BrushGripWidth, Math.Max(3, brushWidth / 2.0));
+        DrawRect(dc, left, top + 1, gripWidth, laneHeight - 1, _accent, null);
+        DrawRect(dc, left + brushWidth - gripWidth, top + 1, gripWidth, laneHeight - 1, _accent, null);
     }
 
     private void DrawConnectorLayer(DrawingContext dc, TimelineRenderLayer layer, Size size)
@@ -886,114 +1073,160 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 double visibleOut = Math.Min(_trim.OutMs, _viewport.ViewEndMs);
                 if (visibleOut > visibleIn)
                 {
-                    double shadeX = _viewport.MsToPx(visibleIn, width);
-                    double shadeRight = _viewport.MsToPx(visibleOut, width);
-                    DrawRect(dc, shadeX, height - 7, shadeRight - shadeX, 7, _accentSubtle, null);
+                    double keptX = _viewport.MsToPx(visibleIn, width);
+                    double keptRight = _viewport.MsToPx(visibleOut, width);
+                    DrawRect(dc, keptX, 0, keptRight - keptX, 3, _handleFill, null);
+                    DrawRect(dc, keptX, height - 3, keptRight - keptX, 3, _handleFill, null);
                 }
 
                 if (_trim.InMs > _viewport.ViewStartMs)
                 {
-                    double deleteRight = _viewport.MsToPx(
+                    double cutRight = _viewport.MsToPx(
                         Math.Min(_trim.InMs, _viewport.ViewEndMs),
                         width);
-                    DrawDeletionRange(dc, 0, deleteRight, height);
+                    DrawCutRange(dc, 0, cutRight, 0, height);
                 }
 
                 if (_trim.OutMs < _viewport.ViewEndMs)
                 {
-                    double deleteLeft = _viewport.MsToPx(
+                    double cutLeft = _viewport.MsToPx(
                         Math.Max(_trim.OutMs, _viewport.ViewStartMs),
                         width);
-                    DrawDeletionRange(dc, deleteLeft, width, height);
+                    DrawCutRange(dc, cutLeft, width, 0, height);
                 }
 
-                if (IsVisibleInDetail(_trim.InMs))
+                if (_trimModeEnabled && IsVisibleInDetail(_trim.InMs))
                 {
-                    DrawTrimHandle(
-                        dc,
-                        _viewport.MsToPx(_trim.InMs, width),
-                        height,
-                        TrimHandle.In);
+                    DrawTrimHandle(dc, _viewport.MsToPx(_trim.InMs, width), 0, height, TrimHandle.In);
                 }
 
-                if (IsVisibleInDetail(_trim.OutMs))
+                if (_trimModeEnabled && IsVisibleInDetail(_trim.OutMs))
                 {
-                    DrawTrimHandle(
-                        dc,
-                        _viewport.MsToPx(_trim.OutMs, width),
-                        height,
-                        TrimHandle.Out);
+                    DrawTrimHandle(dc, _viewport.MsToPx(_trim.OutMs, width), 0, height, TrimHandle.Out);
                 }
                 break;
 
             case TimelineRenderLayer.Transient:
                 if (IsVisibleInDetail(_playheadMs))
                 {
-                    DrawPlayhead(dc, _viewport.MsToPx(_playheadMs, width), height);
+                    DrawPlayhead(dc, _viewport.MsToPx(_playheadMs, width), 0, height);
                 }
                 break;
         }
     }
 
-    private void DrawPlayhead(DrawingContext dc, double x, double height)
+    private void DrawPlayhead(DrawingContext dc, double x, double top, double height)
     {
-        DrawLine(dc, _playheadPen, x, 0, x, height);
-        dc.PushTransform(new TranslateTransform(x, 0));
+        DrawLine(dc, _playheadPen, x, top, x, height);
+        dc.PushTransform(new TranslateTransform(x, top));
         dc.DrawGeometry(_playhead, null, _playheadMarker);
         dc.Pop();
     }
 
-    private void DrawDeletionRange(DrawingContext dc, double left, double right, double height)
+    /// <summary>A part that saving or exporting removes: dark, hatched and labelled.</summary>
+    private void DrawCutRange(DrawingContext dc, double left, double right, double top, double bottom)
     {
         double width = right - left;
-        if (width <= 0.5)
+        double height = bottom - top;
+        if (width <= 0.5 || height <= 0)
         {
             return;
         }
 
-        DrawRect(dc, left, 0, width, height, _deleteFill, _deleteOutlinePen);
-        const double hatchStep = 12;
+        var bounds = new Rect(left, top, width, height);
+        dc.DrawRectangle(_cutFill, null, bounds);
+        dc.PushClip(new RectangleGeometry(bounds));
+        const double hatchStep = 9;
         for (double x = left - height; x < right; x += hatchStep)
         {
-            double startX = Math.Max(left, x);
-            double startY = Math.Max(0, left - x);
-            double endX = Math.Min(right, x + height);
-            double endY = Math.Min(height, right - x);
-            if (endX > startX)
-            {
-                DrawLine(dc, _deleteHatchPen, startX, startY, endX, endY);
-            }
+            dc.DrawLine(_cutHatchPen, new Point(x, bottom), new Point(x + height, top));
         }
 
-        if (width >= 48)
+        dc.Pop();
+        DrawLine(dc, _cutEdgePen, left, top + 0.5, right, top + 0.5);
+        DrawLine(dc, _cutEdgePen, left, bottom - 0.5, right, bottom - 0.5);
+
+        string label = UiText.Get("VideoEditorUx_TrimCut");
+        FormattedText text = Format(label, 11, semiBold: true, _textPrimary);
+        if (width >= text.Width + 16 && height >= text.Height)
         {
-            DrawText(
-                dc,
-                UiText.Get("Text_6139B6C3ED73"),
-                left + (width / 2),
-                Math.Max(2, (height - 20) / 2),
-                _textPrimary,
-                11,
-                semiBold: true,
-                _surfaceScrim,
-                centered: true);
+            DrawText(dc, label, left + (width / 2), top + Math.Max(0, (height - text.Height - 2) / 2),
+                _textPrimary, 11, semiBold: true, _surfaceBase, centered: true);
         }
     }
 
-    private void DrawTrimHandle(DrawingContext dc, double x, double height, TrimHandle handle)
+    private void DrawTrimHandle(DrawingContext dc, double x, double top, double bottom, TrimHandle handle)
     {
-        DrawRect(
-            dc,
-            x - (TrimHandleWidth / 2),
-            0,
-            TrimHandleWidth,
-            height,
-            _deleteHandle,
-            _deleteOutlinePen);
-        if (_activeTrimHandle == handle)
+        var bounds = new Rect(x - (TrimHandleWidth / 2), top, TrimHandleWidth, Math.Max(1, bottom - top));
+        dc.DrawRoundedRectangle(_handleFill, null, bounds, 3, 3);
+        double middle = top + ((bottom - top) / 2);
+        DrawLine(dc, _gripMarkPen, x - 2.5, middle - 6, x - 2.5, middle + 6);
+        DrawLine(dc, _gripMarkPen, x + 2.5, middle - 6, x + 2.5, middle + 6);
+        if (ShowsFocusOn(handle))
         {
-            DrawRect(dc, x - 4, 3, 8, Math.Max(1, height - 6), _textPrimary, null);
+            Rect ring = bounds;
+            ring.Inflate(3, 0);
+            dc.DrawRoundedRectangle(null, _focusPen, ring, 4, 4);
         }
+    }
+
+    private void DrawChip(DrawingContext dc, Rect bounds, FormattedText text, TrimHandle handle)
+    {
+        dc.DrawRoundedRectangle(_handleFill, null, bounds, 3, 3);
+        dc.DrawText(text, new Point(bounds.Left + ((bounds.Width - text.Width) / 2), bounds.Top + ((bounds.Height - text.Height) / 2)));
+        if (ShowsFocusOn(handle))
+        {
+            Rect ring = bounds;
+            ring.Inflate(2, 1);
+            dc.DrawRoundedRectangle(null, _focusPen, ring, 4, 4);
+        }
+    }
+
+    private bool ShowsFocusOn(TrimHandle handle) =>
+        _activeTrimHandle == handle && (IsKeyboardFocusWithin || IsTrimDragging);
+
+    private readonly record struct ChipLayout(Rect In, Rect Out, FormattedText InText, FormattedText OutText);
+
+    /// <summary>
+    /// Places the "start"/"end" time chips on the outer edge of their handles, pushing them
+    /// apart when a short kept range would make them overlap.
+    /// </summary>
+    private ChipLayout LayoutChips(double width)
+    {
+        FormattedText inText = Format(TrimPresentation.StartChip(_trim.InMs), 11.5, semiBold: true, _handleText);
+        FormattedText outText = Format(TrimPresentation.EndChip(_trim.OutMs), 11.5, semiBold: true, _handleText);
+        const double gap = 4;
+        double height = LabelLaneHeight - 1;
+        double inWidth = inText.Width + 12;
+        double outWidth = outText.Width + 12;
+        double inLeft = OverviewMsToPx(_trim.InMs, width) - (TrimHandleWidth / 2);
+        double outLeft = OverviewMsToPx(_trim.OutMs, width) + (TrimHandleWidth / 2) - outWidth;
+        double overlap = inLeft + inWidth + gap - outLeft;
+        if (overlap > 0)
+        {
+            inLeft -= overlap / 2;
+            outLeft += overlap / 2;
+        }
+
+        inLeft = Math.Clamp(inLeft, 0, Math.Max(0, width - inWidth));
+        outLeft = Math.Clamp(outLeft, 0, Math.Max(0, width - outWidth));
+        if (inLeft + inWidth + gap > outLeft)
+        {
+            if (inLeft <= 0)
+            {
+                outLeft = Math.Min(Math.Max(0, width - outWidth), inWidth + gap);
+            }
+            else
+            {
+                inLeft = Math.Max(0, outLeft - gap - inWidth);
+            }
+        }
+
+        return new ChipLayout(
+            new Rect(inLeft, 0.5, inWidth, height),
+            new Rect(outLeft, 0.5, outWidth, height),
+            inText,
+            outText);
     }
 
     private static void DrawLine(
@@ -1022,6 +1255,16 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         dc.DrawRectangle(fill, pen, new Rect(x, y, width, height));
     }
 
+    private FormattedText Format(string text, double fontSize, bool semiBold, Brush foreground) =>
+        new(
+            text,
+            CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight,
+            semiBold ? _semiBoldTypeface : _regularTypeface,
+            fontSize,
+            foreground,
+            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
     private void DrawText(
         DrawingContext dc,
         string text,
@@ -1033,16 +1276,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         Brush? background,
         bool centered)
     {
-        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var formatted = new FormattedText(
-            text,
-            CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight,
-            semiBold ? _semiBoldTypeface : _regularTypeface,
-            fontSize,
-            foreground,
-            pixelsPerDip);
-
+        FormattedText formatted = Format(text, fontSize, semiBold, foreground);
         double paddingX = background is null ? 0 : 5;
         double paddingY = background is null ? 0 : 1;
         double left = centered
@@ -1119,6 +1353,18 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     private static Brush ResolveBrush(string key, Color fallback) =>
         Application.Current?.TryFindResource(key) as Brush ?? FrozenBrush(fallback);
+
+    private static Brush WithOpacity(Brush brush, double opacity)
+    {
+        Brush copy = brush.CloneCurrentValue();
+        copy.Opacity = opacity;
+        if (copy.CanFreeze)
+        {
+            copy.Freeze();
+        }
+
+        return copy;
+    }
 
     private static SolidColorBrush FrozenBrush(Color color)
     {

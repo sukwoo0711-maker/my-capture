@@ -3496,4 +3496,43 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="EditorUx_StepNumberSelected" xml:space="preserve"><value>Step number {0}</value></data>
   <data name="EditorUx_StepNumberAdded" xml:space="preserve"><value>Added step number {0} · Next {1} · Ctrl+Z to undo</value></data>
   <data name="EditorUx_HangulShortcutNotice" xml:space="preserve"><value>The shortcut did not run because the Korean input method did not report which key was pressed. Switch to English input with the Han/Eng key and press it again.</value></data>
+  <data name="VideoEditorUx_TrimStartChip" xml:space="preserve"><value>Start {0}</value></data>
+  <data name="VideoEditorUx_TrimEndChip" xml:space="preserve"><value>End {0}</value></data>
+  <data name="VideoEditorUx_KeptLength" xml:space="preserve"><value>Kept {0}</value></data>
+  <data name="VideoEditorUx_RemovedLength" xml:space="preserve"><value>Cut {0}</value></data>
+  <data name="VideoEditorUx_NotTrimmed" xml:space="preserve"><value>Not trimmed</value></data>
+  <data name="VideoEditorUx_TrimTimelineStatus" xml:space="preserve"><value>Start {0}, end {1}, kept {2}</value></data>
+  <data name="VideoEditorUx_TrimTimelineName" xml:space="preserve"><value>Trim timeline</value></data>
+  <data name="VideoEditorUx_TrimTimelineHelp" xml:space="preserve"><value>The part between the two handles is kept; the dark hatched parts outside are cut when you save or export. Drag a handle, or press I and O to use the playhead as the start and end. With a handle selected, ←/→ moves one frame, Shift+←/→ moves ten frames, and Tab switches between the start and end handles.</value></data>
+  <data name="VideoEditorUx_TrimOffHelp" xml:space="preserve"><value>Press Trim (X) to adjust the handles of the part to keep.</value></data>
+  <data name="VideoEditorUx_ZoomLaneHelp" xml:space="preserve"><value>The box in the bottom lane is the range shown in the detailed timeline; drag it to move it, or drag its ends to resize it.</value></data>
+  <data name="VideoEditorUx_TrimCut" xml:space="preserve"><value>Cut</value></data>
+  <data name="VideoEditorUx_TrimBarName" xml:space="preserve"><value>Trim tools</value></data>
+  <data name="VideoEditorUx_MarkInHere" xml:space="preserve"><value>Start here</value></data>
+  <data name="VideoEditorUx_MarkInHelp" xml:space="preserve"><value>Uses the playhead as the start of the part to keep.</value></data>
+  <data name="VideoEditorUx_MarkOutHere" xml:space="preserve"><value>End here</value></data>
+  <data name="VideoEditorUx_MarkOutHelp" xml:space="preserve"><value>Uses the playhead as the end of the part to keep.</value></data>
+  <data name="VideoEditorUx_ResetTrim" xml:space="preserve"><value>Full length</value></data>
+  <data name="VideoEditorUx_ResetTrimHelp" xml:space="preserve"><value>Removes the trim and keeps the whole recording.</value></data>
+  <data name="VideoEditorUx_TrimResetDone" xml:space="preserve"><value>Trim removed · full length kept</value></data>
+  <data name="VideoEditorUx_TrimHandleStart" xml:space="preserve"><value>Trim · start handle selected · ←/→ one frame, Shift ten frames, X or Tab for the end handle</value></data>
+  <data name="VideoEditorUx_TrimHandleEnd" xml:space="preserve"><value>Trim · end handle selected · ←/→ one frame, Shift ten frames, X or Tab for the start handle</value></data>
+  <data name="VideoEditorUx_TrimDraggingStart" xml:space="preserve"><value>Adjusting start · {0} · kept {1}</value></data>
+  <data name="VideoEditorUx_TrimDraggingEnd" xml:space="preserve"><value>Adjusting end · {0} · kept {1}</value></data>
+  <data name="VideoEditorUx_TrimStartSet" xml:space="preserve"><value>Start set to {0} · kept {1}</value></data>
+  <data name="VideoEditorUx_TrimEndSet" xml:space="preserve"><value>End set to {0} · kept {1}</value></data>
+  <data name="VideoEditorUx_DetailTimeline" xml:space="preserve"><value>Detailed timeline</value></data>
+  <data name="VideoEditorUx_DetailTimelineHelp" xml:space="preserve"><value>Shows or hides the frame-level detailed timeline and its zoom range. Zooming in or out shows it automatically.</value></data>
+  <data name="VideoEditorUx_PositionTime" xml:space="preserve"><value>{0} / {1}</value></data>
+  <data name="VideoEditorUx_PositionFrame" xml:space="preserve"><value>Frame {0}/{1}</value></data>
+  <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>Recording video editor</value></data>
+  <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>Recording video editor window</value></data>
+  <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>Recording video editor</value></data>
+  <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>Video {0} · {1}×{2} · {3} fps</value></data>
+  <data name="VideoEditorUx_CommandBarName" xml:space="preserve"><value>Video editing commands</value></data>
+  <data name="VideoEditorUx_Trim" xml:space="preserve"><value>Trim</value></data>
+  <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>Selects the start handle of the part to keep and shows its frame. Press again for the end handle.</value></data>
+  <data name="VideoEditorUx_AddText" xml:space="preserve"><value>Add text</value></data>
+  <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
+  <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Edit frame image</value></data>
 </root>
