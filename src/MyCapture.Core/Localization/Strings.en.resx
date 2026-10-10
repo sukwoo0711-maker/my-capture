@@ -3453,4 +3453,10 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="StoreUpdate_OpenStore" xml:space="preserve"><value>Open in Microsoft Store</value></data>
   <data name="StoreUpdate_OpenStoreHelp" xml:space="preserve"><value>Opens the MyCapture page in the Microsoft Store app, or in a browser when the Store app cannot open.</value></data>
   <data name="StoreUpdate_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Open {0} in a browser.</value></data>
+  <data name="CaptureCue_ClickWindow" xml:space="preserve"><value>Click to capture this window</value></data>
+  <data name="CaptureCue_ClickMonitor" xml:space="preserve"><value>Click to capture this entire monitor</value></data>
+  <data name="CaptureCue_Drag" xml:space="preserve"><value>Drag: Select a region</value></data>
+  <data name="CaptureCue_Click" xml:space="preserve"><value>Click: Capture window</value></data>
+  <data name="CaptureCue_Shift" xml:space="preserve"><value>Shift: Pixel precision</value></data>
+  <data name="CaptureCue_Esc" xml:space="preserve"><value>Esc: Cancel</value></data>
 </root>

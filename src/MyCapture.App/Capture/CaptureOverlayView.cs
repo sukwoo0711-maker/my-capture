@@ -21,9 +21,12 @@ namespace MyCapture.App.Capture;
 /// A valid drag is committed as soon as the mouse button is released. Keyboard users retain
 /// Ctrl+A + Enter as a full-monitor alternative and Esc always cancels. When the owner enables
 /// <see cref="DetectWindows"/>, hovering highlights the frontmost top-level window and a click
-/// (no drag) selects it; over empty desktop that is the whole monitor under the pointer. There
-/// is still no snapping or Tab target selection. The owner can also
-/// enable C to copy the frozen pixel's colour and T to switch to text capture.
+/// (no drag) selects it; over empty desktop that is the whole monitor under the pointer. The
+/// highlight carries an accent tab naming what a click captures, and the top instruction lists
+/// drag and click side by side with the one that applies right now filled in. There is still no
+/// snapping or Tab target selection. The owner can also enable C to copy the frozen pixel's
+/// colour and T to switch to text capture. Every cue lives only in this overlay: the capture is
+/// cropped from the frozen frame, never from what the overlay draws.
 /// </remarks>
 internal sealed class CaptureOverlayView : FrameworkElement
 {
@@ -48,6 +51,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private Brush _chromeBrush = null!;
     private Brush _primaryTextBrush = null!;
     private Brush _mutedTextBrush = null!;
+    private Brush _accentBrush = null!;
+    private Brush _accentTextBrush = null!;
     private IReadOnlyDictionary<string, Brush> _guidePalette;
     internal IReadOnlyDictionary<string, Brush> GuidePalette => _guidePalette;
     internal int GuidePenBuildCount { get; private set; }
@@ -103,7 +108,15 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private string? _drawnToast;
     private PointD? _drawnToastPointer;
     private DispatcherTimer? _toastTimer;
-    private Pen _windowBorderPen = null!;
+    private Pen _accentChipPen = null!;
+    private Pen _detectedBorderPen = null!;
+    private Pen _keylinePen = null!;
+    private List<Rect> _chromeBounds = [];
+    private CaptureCueState _drawnCueState;
+    private Rect? _targetTab;
+    private CaptureCueTabPlacement _targetTabPlacement;
+    private string? _targetLabel;
+    private Rect? _activeCueSegment;
     private bool _staticDirty = true;
     private bool _released;
     private RectD? _drawnSelection;
@@ -137,6 +150,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
     internal RectD? HoverRegionForTest => _hoverRegion;
     internal bool HoverWholeMonitorForTest => _hoverWholeMonitor;
     internal string? ToastMessageForTest => _toastMessage;
+    internal IReadOnlyList<Rect> ChromeBoundsForTest => _chromeBounds;
+    internal Rect? TargetTabForTest => _targetTab;
+    internal CaptureCueTabPlacement TargetTabPlacementForTest => _targetTabPlacement;
+    internal string? TargetLabelForTest => _targetLabel;
+    internal Rect? ActiveCueSegmentForTest => _activeCueSegment;
 
     /// <summary>How long the in-overlay copy confirmation stays visible.</summary>
     internal static readonly TimeSpan ToastDuration = TimeSpan.FromMilliseconds(1600);
@@ -175,6 +193,26 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     /// <summary>Lets T switch between image capture and text capture.</summary>
     internal bool TextCaptureAvailable { get; set; }
+
+    /// <summary>
+    /// General.ShowShortcutHints: shows the optional C/T key-hint chip. The top instruction and the
+    /// detected-target tab describe the current state, so they show regardless.
+    /// </summary>
+    internal bool ShowShortcutHints { get; set; } = true;
+
+    /// <summary>
+    /// The instruction part that applies now: a click while a window or monitor is highlighted
+    /// (including a press still inside the click threshold), a drag once a free region is being drawn.
+    /// </summary>
+    internal CaptureCueState CueState
+    {
+        get
+        {
+            if (!DetectWindows || _ended) return CaptureCueState.None;
+            if (_interaction == InteractionMode.Create && _selection.HasValue) return CaptureCueState.Drag;
+            return _hoverRegion.HasValue && !_selection.HasValue ? CaptureCueState.Click : CaptureCueState.None;
+        }
+    }
 
     /// <summary>When true, the confirmed region is recognised as text instead of opening the editor.</summary>
     internal bool TextCaptureMode
@@ -434,28 +472,38 @@ internal sealed class CaptureOverlayView : FrameworkElement
             using (DrawingContext dc = _revealVisual.RenderOpen())
                 if (_frame?.Bitmap is { } revealBitmap) dc.DrawImage(revealBitmap, new Rect(RenderSize));
         }
+        // Instructions first: the detected-target tab is placed clear of the chips they occupy.
+        CaptureCueState cue = CueState;
+        bool chromeMoved = false;
+        if (rebuild || _drawnPrecision != _precisionPointer.IsPrecision || _drawnTextMode != _textCaptureMode
+            || _drawnCueState != cue)
+        {
+            if (_drawnTextMode != _textCaptureMode) _hintText = null;
+            _drawnPrecision = _precisionPointer.IsPrecision;
+            _drawnTextMode = _textCaptureMode;
+            _drawnCueState = cue;
+            var chrome = new List<Rect>(4);
+            using (DrawingContext dc = _instructionVisual.RenderOpen())
+                DrawInstructions(dc, cue, chrome);
+            chromeMoved = !chrome.SequenceEqual(_chromeBounds);
+            _chromeBounds = chrome;
+        }
         RectD? hover = _selection.HasValue ? null : _hoverRegion;
         bool hoverWholeMonitor = hover.HasValue && _hoverWholeMonitor;
-        if (rebuild || _drawnSelection != _selection || _drawnHover != hover
+        if (rebuild || chromeMoved || _drawnSelection != _selection || _drawnHover != hover
             || _drawnHoverWholeMonitor != hoverWholeMonitor)
         {
             _drawnSelection = _selection;
             _drawnHover = hover;
             _drawnHoverWholeMonitor = hoverWholeMonitor;
+            _targetTab = null;
+            _targetLabel = null;
             RectD? revealed = _selection ?? hover;
             _revealVisual.Clip = new RectangleGeometry(revealed is { } selected
                 ? ToDipRect(selected.ClampTo(FrameBounds)) : new Rect(0, 0, 0, 0));
             using DrawingContext dc = _selectionVisual.RenderOpen();
             if (_selection is { } selection) DrawSelection(dc, selection);
             else if (hover is { } window) DrawDetectedWindow(dc, window, hoverWholeMonitor);
-        }
-        if (rebuild || _drawnPrecision != _precisionPointer.IsPrecision || _drawnTextMode != _textCaptureMode)
-        {
-            if (_drawnTextMode != _textCaptureMode) _hintText = null;
-            _drawnPrecision = _precisionPointer.IsPrecision;
-            _drawnTextMode = _textCaptureMode;
-            using DrawingContext dc = _instructionVisual.RenderOpen();
-            DrawInstructions(dc);
         }
         PointD? anchor = _interaction == InteractionMode.Create && _pointerInitialized && !_ended ? _dragAnchor : null;
         if (rebuild || _drawnAnchor != anchor)
@@ -506,7 +554,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         double y = cursor.Y - height - 14;
         if (y < 8) y = Math.Min(Math.Max(8, ActualHeight - height - 8), cursor.Y + 18);
         var background = new Rect(x, y, width, height);
-        dc.DrawRoundedRectangle(_chromeBrush, _windowBorderPen, background, 7, 7);
+        dc.DrawRoundedRectangle(_chromeBrush, _accentChipPen, background, 7, 7);
         dc.DrawText(text, new Point(x + paddingX, y + paddingY));
     }
 
@@ -536,23 +584,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
         Target(anchor ? _dragAnchor : _cursorPixel);
     }
 
-    private void DrawSelection(DrawingContext dc, RectD pixelRect) => DrawRegion(dc, pixelRect, borderPen: null);
-
-    /// <summary>
-    /// The auto-detected window uses the same token colour with a 2px border. A whole monitor
-    /// (the desktop under the pointer) keeps its size label inside that monitor.
-    /// </summary>
-    private void DrawDetectedWindow(DrawingContext dc, RectD pixelRect, bool wholeMonitor) =>
-        DrawRegion(dc, pixelRect, _windowBorderPen, labelInside: wholeMonitor);
-
-    private void DrawRegion(DrawingContext dc, RectD pixelRect, Pen? borderPen, bool labelInside = false)
+    private void DrawSelection(DrawingContext dc, RectD pixelRect)
     {
-        Rect mapped = ToDipRect(pixelRect.ToPixelBounds());
-        double px = GuidePixelSizeX, py = GuidePixelSizeY;
-        double left = Math.Round(mapped.Left / px) * px, top = Math.Round(mapped.Top / py) * py;
-        double right = Math.Round(mapped.Right / px) * px, bottom = Math.Round(mapped.Bottom / py) * py;
-        var rect = new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+        Rect rect = SnapToPhysicalPixels(pixelRect);
         if (rect.Width <= 0 || rect.Height <= 0) return;
+        double px = GuidePixelSizeX, py = GuidePixelSizeY;
         // Clip the low-opacity accent to the inside; the crisp border occupies one
         // physical pixel inside the selected pixel bounds at every display scale.
         dc.PushClip(new RectangleGeometry(rect));
@@ -560,15 +596,85 @@ internal sealed class CaptureOverlayView : FrameworkElement
         dc.Pop();
         var border = new Rect(rect.X + px / 2, rect.Y + py / 2,
             Math.Max(0, rect.Width - px), Math.Max(0, rect.Height - py));
-        if (borderPen is not null)
+        dc.DrawRectangle(null, _selectionBorderPen, border);
+        DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect);
+    }
+
+    /// <summary>
+    /// The window (or whole monitor) a click captures: a three-physical-pixel accent band with a
+    /// one-pixel contrast keyline inside it, both within the captured bounds, and an accent tab on
+    /// the border saying what a click does and the size it captures. A monitor keeps its tab inside
+    /// that monitor.
+    /// </summary>
+    private void DrawDetectedWindow(DrawingContext dc, RectD pixelRect, bool wholeMonitor)
+    {
+        Rect rect = SnapToPhysicalPixels(pixelRect);
+        if (rect.Width <= 0 || rect.Height <= 0) return;
+        double band = _detectedBorderPen.Thickness;
+        double keyline = _keylinePen.Thickness;
+        dc.DrawRectangle(null, _detectedBorderPen, Deflate(rect, band / 2));
+        // The keyline separates the band from window pixels that happen to match the accent.
+        dc.DrawRectangle(null, _keylinePen, Deflate(rect, band + keyline / 2));
+
+        RectD pixels = pixelRect.ToPixelBounds();
+        string label = UiText.Get(wholeMonitor ? "CaptureCue_ClickMonitor" : "CaptureCue_ClickWindow");
+        string size = $"{(int)pixels.Width} × {(int)pixels.Height}";
+        FormattedText labelText = CreateText(label, _uiTypeface, 12, _accentTextBrush);
+        FormattedText sizeText = CreateText(size, _monoTypeface, 12, _accentTextBrush);
+        const double paddingX = 9;
+        const double paddingY = 4;
+        const double gap = 10;
+        var tabSize = new Size(labelText.Width + gap + sizeText.Width + (paddingX * 2),
+            Math.Max(labelText.Height, sizeText.Height) + (paddingY * 2));
+        (Rect tab, CaptureCueTabPlacement placement) = CaptureCueLayout.PlaceTab(rect, tabSize,
+            new Size(ActualWidth, ActualHeight), _chromeBounds, insideOnly: wholeMonitor, GuidePixelSizeX, GuidePixelSizeY);
+        // Square on the edge it is attached to, rounded on the free edge.
+        bool roundTop = placement is CaptureCueTabPlacement.Above or CaptureCueTabPlacement.Floating;
+        bool roundBottom = placement is not CaptureCueTabPlacement.Above;
+        dc.DrawGeometry(_accentBrush, null, TabGeometry(tab, 6, roundTop, roundBottom));
+        // Only a display narrower than the tab shortens it; the text is then clipped to the tab.
+        dc.PushClip(new RectangleGeometry(tab));
+        dc.DrawText(labelText, new Point(tab.Left + paddingX, tab.Top + ((tab.Height - labelText.Height) / 2)));
+        if (tab.Width + 0.5 >= tabSize.Width)
+            dc.DrawText(sizeText, new Point(tab.Right - paddingX - sizeText.Width, tab.Top + ((tab.Height - sizeText.Height) / 2)));
+        dc.Pop();
+        _targetTab = tab;
+        _targetTabPlacement = placement;
+        _targetLabel = label + "  " + size;
+    }
+
+    private Rect SnapToPhysicalPixels(RectD pixelRect)
+    {
+        Rect mapped = ToDipRect(pixelRect.ToPixelBounds());
+        double px = GuidePixelSizeX, py = GuidePixelSizeY;
+        double left = Math.Round(mapped.Left / px) * px, top = Math.Round(mapped.Top / py) * py;
+        double right = Math.Round(mapped.Right / px) * px, bottom = Math.Round(mapped.Bottom / py) * py;
+        return new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+    }
+
+    private static Rect Deflate(Rect rect, double inset) => new(rect.X + inset, rect.Y + inset,
+        Math.Max(0, rect.Width - (inset * 2)), Math.Max(0, rect.Height - (inset * 2)));
+
+    private static StreamGeometry TabGeometry(Rect r, double radius, bool roundTop, bool roundBottom)
+    {
+        double limit = Math.Min(r.Width, r.Height) / 2;
+        double top = roundTop ? Math.Min(radius, limit) : 0;
+        double bottom = roundBottom ? Math.Min(radius, limit) : 0;
+        var geometry = new StreamGeometry();
+        using (StreamGeometryContext g = geometry.Open())
         {
-            // The thicker detected-window border stays inside the window bounds like the 1px one.
-            double inset = borderPen.Thickness / 2;
-            border = new Rect(rect.X + inset, rect.Y + inset,
-                Math.Max(0, rect.Width - borderPen.Thickness), Math.Max(0, rect.Height - borderPen.Thickness));
+            g.BeginFigure(new Point(r.Left + top, r.Top), isFilled: true, isClosed: true);
+            g.LineTo(new Point(r.Right - top, r.Top), false, false);
+            if (top > 0) g.ArcTo(new Point(r.Right, r.Top + top), new Size(top, top), 0, false, SweepDirection.Clockwise, false, false);
+            g.LineTo(new Point(r.Right, r.Bottom - bottom), false, false);
+            if (bottom > 0) g.ArcTo(new Point(r.Right - bottom, r.Bottom), new Size(bottom, bottom), 0, false, SweepDirection.Clockwise, false, false);
+            g.LineTo(new Point(r.Left + bottom, r.Bottom), false, false);
+            if (bottom > 0) g.ArcTo(new Point(r.Left, r.Bottom - bottom), new Size(bottom, bottom), 0, false, SweepDirection.Clockwise, false, false);
+            g.LineTo(new Point(r.Left, r.Top + top), false, false);
+            if (top > 0) g.ArcTo(new Point(r.Left + top, r.Top), new Size(top, top), 0, false, SweepDirection.Clockwise, false, false);
         }
-        dc.DrawRectangle(null, borderPen ?? _selectionBorderPen, border);
-        DrawDimensionLabel(dc, pixelRect.ToPixelBounds(), rect, labelInside);
+        geometry.Freeze();
+        return geometry;
     }
 
     private void UpdateStartingGuides(bool rebuild)
@@ -621,7 +727,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
     }
 
-    private void DrawDimensionLabel(DrawingContext dc, RectD pixels, Rect selectionDip, bool inside = false)
+    private void DrawDimensionLabel(DrawingContext dc, RectD pixels, Rect selectionDip)
     {
         string text = $"{(int)pixels.Width} × {(int)pixels.Height}";
         FormattedText formatted = CreateText(text, _monoTypeface, 12, _primaryTextBrush);
@@ -630,23 +736,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
         double width = formatted.Width + (paddingX * 2);
         double height = formatted.Height + (paddingY * 2);
 
-        double x;
-        double y;
-        if (inside)
+        double x = Math.Clamp(selectionDip.Left, 8, Math.Max(8, ActualWidth - width - 8));
+        double y = selectionDip.Top - height - 8;
+        if (y < 8)
         {
-            // Outside a whole monitor is another display or, below a shorter display, space no
-            // monitor shows. Use its bottom-left corner, where Ctrl+A's full-frame label sits.
-            x = Math.Clamp(selectionDip.Left + 8, 8, Math.Max(8, ActualWidth - width - 8));
-            y = Math.Clamp(selectionDip.Bottom - height - 8, 8, Math.Max(8, ActualHeight - height - 8));
-        }
-        else
-        {
-            x = Math.Clamp(selectionDip.Left, 8, Math.Max(8, ActualWidth - width - 8));
-            y = selectionDip.Top - height - 8;
-            if (y < 8)
-            {
-                y = Math.Min(ActualHeight - height - 8, selectionDip.Bottom + 8);
-            }
+            y = Math.Min(ActualHeight - height - 8, selectionDip.Bottom + 8);
         }
 
         var background = new Rect(x, y, width, height);
@@ -654,8 +748,38 @@ internal sealed class CaptureOverlayView : FrameworkElement
         dc.DrawText(formatted, new Point(x + paddingX, y + paddingY));
     }
 
-    private void DrawInstructions(DrawingContext dc)
+    /// <summary>Draws the top chips and records their bounds in <paramref name="chrome"/>.</summary>
+    private void DrawInstructions(DrawingContext dc, CaptureCueState cue, List<Rect> chrome)
     {
+        Rect primary = DetectWindows ? DrawCueInstruction(dc, cue) : DrawPlainInstruction(dc);
+        chrome.Add(primary);
+        double nextTop = primary.Bottom + 6;
+        if (OverlayHintText is { } hint)
+        {
+            FormattedText hintText = _hintText ??= CreateText(hint, _uiTypeface, 12, _primaryTextBrush);
+            Rect chip = DrawCenteredChip(dc, hintText, nextTop, _chipBorderPen);
+            chrome.Add(chip);
+            nextTop = chip.Bottom + 6;
+        }
+        if (_textCaptureMode)
+        {
+            FormattedText modeText = _textModeText ??= CreateText(UiText.Get("TextCapture_ModeActive"), _uiTypeface, 12, _primaryTextBrush);
+            chrome.Add(DrawCenteredChip(dc, modeText, nextTop, _accentChipPen));
+        }
+        if (_precisionPointer.IsPrecision)
+        {
+            FormattedText precision = _precisionText ??= CreateText(UiText.Get("CapturePrecisionActive"), _uiTypeface, 12, _primaryTextBrush);
+            var chip = new Rect(16, 64, precision.Width + 20, precision.Height + 12);
+            dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, chip, 6, 6);
+            dc.DrawText(precision, new Point(26, 70));
+            chrome.Add(chip);
+        }
+    }
+
+    /// <summary>The drag-only sentence used when window detection is off.</summary>
+    private Rect DrawPlainInstruction(DrawingContext dc)
+    {
+        _activeCueSegment = null;
         FormattedText text = _instructionText ??= CreateText(InstructionText, _uiTypeface, 13, _primaryTextBrush);
         const double paddingX = 14;
         const double paddingY = 9;
@@ -664,33 +788,67 @@ internal sealed class CaptureOverlayView : FrameworkElement
         var background = new Rect(left, 18, width, text.Height + (paddingY * 2));
         dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, background, 10, 10);
         dc.DrawText(text, new Point(background.Left + paddingX, background.Top + paddingY));
-        double nextTop = background.Bottom + 6;
-        if (OverlayHintText is { } hint)
-        {
-            FormattedText hintText = _hintText ??= CreateText(hint, _uiTypeface, 12, _primaryTextBrush);
-            nextTop = DrawCenteredChip(dc, hintText, nextTop, _chipBorderPen) + 6;
-        }
-        if (_textCaptureMode)
-        {
-            FormattedText modeText = _textModeText ??= CreateText(UiText.Get("TextCapture_ModeActive"), _uiTypeface, 12, _primaryTextBrush);
-            DrawCenteredChip(dc, modeText, nextTop, _windowBorderPen);
-        }
-        if (_precisionPointer.IsPrecision)
-        {
-            FormattedText precision = _precisionText ??= CreateText(UiText.Get("CapturePrecisionActive"), _uiTypeface, 12, _primaryTextBrush);
-            dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen,
-                new Rect(16, 64, precision.Width + 20, precision.Height + 12), 6, 6);
-            dc.DrawText(precision, new Point(26, 70));
-        }
+        return background;
     }
 
-    /// <summary>Optional key hints for the features the owner enabled; null when none are.</summary>
+    /// <summary>
+    /// Drag and click side by side, then Shift and Esc. The part that applies now is filled with
+    /// the accent; every part keeps its size, so the chip never shifts while the state changes.
+    /// </summary>
+    private Rect DrawCueInstruction(DrawingContext dc, CaptureCueState cue)
+    {
+        const double inset = 5;
+        const double paddingX = 10;
+        const double paddingY = 5;
+        const double separator = 16;
+        string[] keys = ["CaptureCue_Drag", "CaptureCue_Click", "CaptureCue_Shift", "CaptureCue_Esc"];
+        int active = cue switch { CaptureCueState.Drag => 0, CaptureCueState.Click => 1, _ => -1 };
+        var texts = new FormattedText[keys.Length];
+        double width = inset * 2;
+        double textHeight = 0;
+        for (int i = 0; i < keys.Length; i++)
+        {
+            texts[i] = CreateText(UiText.Get(keys[i]), _uiTypeface, 13, i == active ? _accentTextBrush : _primaryTextBrush);
+            width += texts[i].Width + (paddingX * 2) + (i > 0 ? separator : 0);
+            textHeight = Math.Max(textHeight, texts[i].Height);
+        }
+
+        double segmentHeight = textHeight + (paddingY * 2);
+        double left = Math.Max(16, (ActualWidth - width) / 2);
+        var background = new Rect(left, 18, width, segmentHeight + (inset * 2));
+        dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, background, 10, 10);
+        FormattedText dot = CreateText("·", _uiTypeface, 13, _mutedTextBrush);
+        double x = background.Left + inset;
+        _activeCueSegment = null;
+        for (int i = 0; i < texts.Length; i++)
+        {
+            if (i > 0)
+            {
+                dc.DrawText(dot, new Point(x + ((separator - dot.Width) / 2), background.Top + inset + paddingY));
+                x += separator;
+            }
+            var segment = new Rect(x, background.Top + inset, texts[i].Width + (paddingX * 2), segmentHeight);
+            if (i == active)
+            {
+                dc.DrawRoundedRectangle(_accentBrush, null, segment, 7, 7);
+                _activeCueSegment = segment;
+            }
+            dc.DrawText(texts[i], new Point(segment.Left + paddingX, segment.Top + paddingY));
+            x = segment.Right;
+        }
+        return background;
+    }
+
+    /// <summary>
+    /// Optional key hints for the features the owner enabled; null when none are or when
+    /// <see cref="ShowShortcutHints"/> is off. Window detection is described by the top instruction.
+    /// </summary>
     internal string? OverlayHintText
     {
         get
         {
-            var parts = new List<string>(3);
-            if (DetectWindows) parts.Add(UiText.Get("WindowDetect_OverlayHint"));
+            if (!ShowShortcutHints) return null;
+            var parts = new List<string>(2);
             if (CopyColorText is not null) parts.Add(UiText.Get("ColorPick_OverlayHint"));
             if (TextCaptureAvailable)
                 parts.Add(UiText.Get(_textCaptureMode ? "TextCapture_OverlayHintImage" : "TextCapture_OverlayHint"));
@@ -698,7 +856,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
     }
 
-    private double DrawCenteredChip(DrawingContext dc, FormattedText text, double top, Pen border)
+    private Rect DrawCenteredChip(DrawingContext dc, FormattedText text, double top, Pen border)
     {
         const double paddingX = 12;
         const double paddingY = 6;
@@ -707,7 +865,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         var background = new Rect(left, top, width, text.Height + (paddingY * 2));
         dc.DrawRoundedRectangle(_chromeBrush, border, background, 8, 8);
         dc.DrawText(text, new Point(background.Left + paddingX, background.Top + paddingY));
-        return background.Bottom;
+        return background;
     }
 
     private void DrawMagnifier(DrawingContext dc)
@@ -1169,6 +1327,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _chromeBrush = _guidePalette["CaptureGuide.ChipSurface"];
         _primaryTextBrush = _guidePalette["CaptureGuide.Text"];
         _mutedTextBrush = _guidePalette["CaptureGuide.MutedText"];
+        _accentBrush = _guidePalette["CaptureGuide.SelectionBorder"];
+        _accentTextBrush = _guidePalette["CaptureGuide.AccentText"];
     }
 
     private void OnGuidePaletteChanged()
@@ -1197,7 +1357,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _guideShadowPen = Create("CaptureGuide.LineShadow", 2, new DashStyle([1.5, 1.5], 0));
         _guideLinePen = Create("CaptureGuide.Line", 1, new DashStyle([3, 3], 0));
         _selectionBorderPen = Create("CaptureGuide.SelectionBorder", 1);
-        _windowBorderPen = Create("CaptureGuide.SelectionBorder", 2);
+        _accentChipPen = Create("CaptureGuide.SelectionBorder", 2);
+        _detectedBorderPen = Create("CaptureGuide.SelectionBorder", 3);
+        _keylinePen = Create("CaptureGuide.CrosshairShadow", 1);
         _innerGlowPen = Create("CaptureGuide.InnerGlow", 3);
         _chipBorderPen = Create("CaptureGuide.ChipBorder", 1);
         _magnifierBorderPen = Create("CaptureGuide.MagnifierBorder", 1);

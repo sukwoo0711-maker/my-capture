@@ -218,19 +218,27 @@ public sealed class Capture410AppTests
             foreach (bool systemHighContrast in new[] { false, true })
             {
                 var brushes = CaptureGuidePalette.Create(theme, "#FF1234", systemHighContrast);
-                Assert.Equal(14, brushes.Count);
+                Assert.Equal(15, brushes.Count);
                 Assert.All(brushes.Values, brush => Assert.True(brush.IsFrozen));
                 bool highContrast = systemHighContrast || theme == AppTheme.HighContrast;
                 foreach (string role in new[] { "SelectionBorder", "Crosshair", "StartPoint", "ChipBorder", "MagnifierBorder" })
                     Assert.Equal(highContrast ? SystemColors.WindowTextColor : Color.FromRgb(255, 18, 52),
                         ((SolidColorBrush)brushes["CaptureGuide." + role]).Color);
+                Color accent = ((SolidColorBrush)brushes["CaptureGuide.SelectionBorder"]).Color;
+                Color accentText = ((SolidColorBrush)brushes["CaptureGuide.AccentText"]).Color;
+                // Accent-filled labels stay at AA contrast, including the system's own pair.
+                Assert.True(ThemeContrast.Ratio(ThemeColor.Rgb(accentText.R, accentText.G, accentText.B),
+                    ThemeColor.Rgb(accent.R, accent.G, accent.B)) >= 4.5);
                 if (highContrast)
                 {
                     Assert.Equal(SystemColors.WindowColor, ((SolidColorBrush)brushes["CaptureGuide.ChipSurface"]).Color);
                     Assert.Equal(SystemColors.WindowTextColor, ((SolidColorBrush)brushes["CaptureGuide.Text"]).Color);
+                    Assert.Equal(SystemColors.WindowColor, accentText);
                 }
                 else
                 {
+                    // #FF1234 is a mid-luminance red: black reads better than white on it.
+                    Assert.Equal(Colors.Black, accentText);
                     ThemeColor surface = ThemeCatalog.ColorsFor(theme)["Surface.Floating"];
                     Assert.Equal(Color.FromArgb(surface.A, surface.R, surface.G, surface.B),
                         ((SolidColorBrush)brushes["CaptureGuide.ChipSurface"]).Color);

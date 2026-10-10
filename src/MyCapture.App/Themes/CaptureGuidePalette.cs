@@ -18,8 +18,10 @@ internal static class CaptureGuidePalette
             {
                 color = key switch
                 {
+                    // Accent fills use WindowText, so the text on them is the system window colour.
                     "CaptureGuide.ChipSurface" or "CaptureGuide.InnerGlow"
-                        or "CaptureGuide.CrosshairShadow" or "CaptureGuide.LineShadow" => SystemColors.WindowColor,
+                        or "CaptureGuide.CrosshairShadow" or "CaptureGuide.LineShadow"
+                        or "CaptureGuide.AccentText" => SystemColors.WindowColor,
                     "CaptureGuide.Dimmer" => Color.FromArgb(140, SystemColors.WindowColor.R,
                         SystemColors.WindowColor.G, SystemColors.WindowColor.B),
                     _ => SystemColors.WindowTextColor,

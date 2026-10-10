@@ -188,7 +188,7 @@ public sealed class Capture410CoreTests
         {
             var normal = CaptureGuideTokens.ColorsFor(theme);
             var custom = CaptureGuideTokens.ColorsFor(theme, "#123456");
-            Assert.Equal(14, normal.Count);
+            Assert.Equal(15, normal.Count);
             Assert.Equal(ThemeCatalog.ColorsFor(theme)["Overlay.SelectionBorder"], normal["CaptureGuide.SelectionBorder"]);
             foreach (string role in new[] { "SelectionBorder", "Crosshair", "StartPoint", "ChipBorder", "MagnifierBorder" })
                 Assert.Equal(ThemeColor.Rgb(0x12, 0x34, 0x56), custom["CaptureGuide." + role]);
@@ -198,6 +198,42 @@ public sealed class Capture410CoreTests
             Assert.Equal(normal["CaptureGuide.Text"], custom["CaptureGuide.Text"]);
             Assert.Equal(normal, CaptureGuideTokens.ColorsFor(theme, "invalid"));
         }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("#123456")]
+    [InlineData("#FF1234")]
+    [InlineData("#FFD000")]
+    [InlineData("#767676")] // Mid grey: black and white are nearly tied here.
+    [InlineData("#777777")]
+    [InlineData("#000000")]
+    [InlineData("#FFFFFF")]
+    public void AccentTextIsBlackOrWhiteWithAtLeastAaContrastOnTheAccent(string? custom)
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            var colors = CaptureGuideTokens.ColorsFor(theme, custom);
+            ThemeColor accent = colors["CaptureGuide.SelectionBorder"];
+            ThemeColor text = colors["CaptureGuide.AccentText"];
+            Assert.True(text == ThemeColor.Rgb(0, 0, 0) || text == ThemeColor.Rgb(255, 255, 255), text.ToString());
+            Assert.True(ThemeContrast.Ratio(text, accent) >= 4.5, $"{theme} {custom}: {ThemeContrast.Ratio(text, accent):0.00}");
+            ThemeColor other = text.R == 0 ? ThemeColor.Rgb(255, 255, 255) : ThemeColor.Rgb(0, 0, 0);
+            Assert.True(ThemeContrast.Ratio(text, accent) >= ThemeContrast.Ratio(other, accent));
+        }
+    }
+
+    [Fact]
+    public void AccentTextChoiceCoversEveryOpaqueAccent()
+    {
+        // Exhaustive over a 6-bit cube: the better of black and white never drops below 4.5:1.
+        for (int r = 0; r < 256; r += 4)
+            for (int g = 0; g < 256; g += 4)
+                for (int b = 0; b < 256; b += 4)
+                {
+                    ThemeColor accent = ThemeColor.Rgb((byte)r, (byte)g, (byte)b);
+                    Assert.True(ThemeContrast.Ratio(CaptureGuideTokens.ReadableTextOn(accent), accent) >= 4.5);
+                }
     }
 
     private static byte[] Pattern(int width, int height, int period, RectD? content)
