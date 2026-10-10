@@ -69,6 +69,11 @@ public sealed class RecordingWgcBackendTests
         {
             gdi.Open(fixture.Region);
             wgc.Open(fixture.Region);
+            // A GPU-less desktop (CI runners) can present the fixture window well after Show;
+            // compare only once GDI sees it, so both backends read the same composed frame.
+            bool markerShown = PatternFixture.PumpUntil(
+                () => CountColour(gdi.GrabInto(), PatternFixture.Marker) > 1000,
+                TimeSpan.FromSeconds(5));
             byte[] expected = (byte[])gdi.GrabInto().Clone();
             byte[] actual = wgc.GrabInto();
             Assert.Equal(RecordingCaptureBackend.Gdi, gdi.ActiveBackend);
@@ -86,7 +91,13 @@ public sealed class RecordingWgcBackendTests
             Assert.Equal(expected.Length, actual.Length);
             // The markers make a wrong crop offset or row pitch visible, not just a wrong colour.
             Assert.Equal(0, CountColourMismatches(expected, actual));
-            Assert.True(CountColour(actual, PatternFixture.Marker) > 1000);
+            if (markerShown)
+            {
+                // Otherwise the desktop never showed the window to GDI either (no interactive
+                // composition); the equality above still holds, but the markers cannot be checked.
+                Assert.True(CountColour(actual, PatternFixture.Marker) > 1000, "WGC lost the fixture markers");
+            }
+
             WgcCaptureDiagnostics diagnostics = wgc.WgcDiagnostics!;
             Assert.Equal(1, diagnostics.FramesCopied);
             Assert.False(diagnostics.CursorCaptureEnabled);
@@ -248,6 +259,22 @@ public sealed class RecordingWgcBackendTests
         internal RectD Region { get; }
 
         internal static void Pump(int milliseconds) => SyntheticCaptureFixture.Pump(milliseconds);
+
+        internal static bool PumpUntil(Func<bool> condition, TimeSpan timeout)
+        {
+            DateTime deadline = DateTime.UtcNow + timeout;
+            while (!condition())
+            {
+                if (DateTime.UtcNow >= deadline)
+                {
+                    return false;
+                }
+
+                Pump(50);
+            }
+
+            return true;
+        }
 
         private static void AddRectangle(Canvas canvas, double left, double top, double width, double height, Color colour)
         {
