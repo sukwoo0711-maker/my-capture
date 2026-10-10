@@ -227,6 +227,74 @@ public sealed class VideoEditorUxInteractionTests
         }
     });
 
+    [Fact]
+    public void ClosingFromTheTitleBarWithEditsAsksFirstButProgrammaticCloseDoesNot() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        string root = OwnedTestDirectory.Create("mc-video-ux-close-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true);
+            Assert.False(editor.HasUnsavedEditsForTest);
+            Assert.True(editor.TimelineForTest.SetTrimRange(2_000, 8_000));
+            Assert.True(editor.HasUnsavedEditsForTest);
+
+            int prompts = 0;
+            MessageBoxResult answer = MessageBoxResult.Cancel;
+            editor.UnsavedEditsPromptForTest = () => { prompts++; return answer; };
+
+            // The close box asks; "취소" keeps the editor open with its edits.
+            editor.MarkUserCloseRequestedForTest();
+            editor.Close();
+            Assert.Equal(1, prompts);
+            Assert.True(editor.IsVisible);
+            Assert.True(editor.HasUnsavedEditsForTest);
+
+            // A programmatic close (tests, the library closing its editors) never asks.
+            editor.Close();
+            Assert.Equal(1, prompts);
+            Assert.False(editor.IsVisible);
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void ClosingFromTheTitleBarCanDropTheEdits() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        string root = OwnedTestDirectory.Create("mc-video-ux-close-no-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true);
+            Assert.True(editor.TimelineForTest.SetTrimRange(2_000, 8_000));
+            int prompts = 0;
+            editor.UnsavedEditsPromptForTest = () => { prompts++; return MessageBoxResult.No; };
+            editor.MarkUserCloseRequestedForTest();
+            editor.Close();
+            Assert.Equal(1, prompts);
+            Assert.False(editor.IsVisible);
+
+            // Without edits the close box never asks.
+            editor = OpenReadyEditor(root, 10_000, show: true);
+            editor.UnsavedEditsPromptForTest = () => { prompts++; return MessageBoxResult.Cancel; };
+            editor.MarkUserCloseRequestedForTest();
+            editor.Close();
+            Assert.Equal(1, prompts);
+            Assert.False(editor.IsVisible);
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
     private static KeyEventArgs KeyPress(Window window, Key key) =>
         new(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, key)
         {

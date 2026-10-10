@@ -272,7 +272,7 @@ public sealed class VideoEditorUxLayoutTests
             Assert.DoesNotContain("녹화 드롭", status.Text);
             Assert.True(editor.TimelineForTest.SetTrimRange(2_000, 8_000));
             typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
-            Assert.Equal("남는 길이 00:06.0 · 잘림 00:04.0 · 편집 저장 또는 내보내기로 적용합니다", status.Text);
+            Assert.Equal("남는 길이 00:06.0 · 잘림 00:04.0 · 라이브러리에 저장 또는 내보내기로 적용합니다", status.Text);
             typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
             typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
             Assert.EndsWith("· 레이어 1", status.Text);

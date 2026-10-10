@@ -434,7 +434,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_271908EF0BBE" xml:space="preserve">
-    <value>녹화 드롭 {0} ({1:P1})</value>
+    <value>끊긴 프레임 {0} ({1:P1})</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_2785CE58DF74" xml:space="preserve">
@@ -1878,7 +1878,7 @@
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
   </data>
   <data name="Text_A79A9F93D479" xml:space="preserve">
-    <value>현재 프레임을 이미지로 편집 (E)</value>
+    <value>이 장면을 이미지 편집기에서 그려 레이어로 넣습니다 (E)</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_A7C9AFB5B1AF" xml:space="preserve">
@@ -2214,7 +2214,7 @@
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_C1BE53C8ADAF" xml:space="preserve">
-    <value>녹화 드롭 없음</value>
+    <value>끊긴 프레임 없음</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_C2A254402263" xml:space="preserve">
@@ -3017,7 +3017,7 @@
   <data name="VideoEdit_Finalizing" xml:space="preserve"><value>저장 마무리 중…</value></data>
   <data name="VideoEdit_ImageLayerPreparing" xml:space="preserve"><value>이미지 레이어를 준비하는 중…</value></data>
   <data name="MediaExport_Cancel" xml:space="preserve"><value>작업 취소</value></data>
-  <data name="MediaExport_SaveEdits" xml:space="preserve"><value>편집 저장</value></data>
+  <data name="MediaExport_SaveEdits" xml:space="preserve"><value>라이브러리에 저장</value></data>
   <data name="MediaExport_ExportFormats" xml:space="preserve"><value>내보내기 · MP4 / GIF</value></data>
   <data name="MediaExport_Workspace" xml:space="preserve"><value>영상 편집</value></data>
   <data name="MediaExport_ResultPreview" xml:space="preserve"><value>계산된 파일의 샘플 프레임</value></data>
@@ -3534,14 +3534,17 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>남길 구간의 시작 손잡이를 고르고 그 프레임을 보여 줍니다. 다시 누르면 끝 손잡이로 바뀝니다.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>텍스트 추가</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>재생 위치부터 표시할 텍스트 레이어를 추가합니다.</value></data>
-  <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>프레임 이미지 편집</value></data>
+  <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>이 장면에 그리기</value></data>
   <data name="VideoEditorUx_LayerPanel" xml:space="preserve"><value>레이어</value></data>
   <data name="VideoEditorUx_LayerPanelHelp" xml:space="preserve"><value>텍스트·도형·이미지 레이어 목록과 속성 패널을 표시하거나 숨깁니다. 레이어를 추가하면 자동으로 열립니다.</value></data>
   <data name="VideoEditorUx_StatusUntrimmed" xml:space="preserve"><value>전체 길이 {0} · 손잡이를 끌거나 I·O로 남길 구간을 정합니다</value></data>
-  <data name="VideoEditorUx_StatusTrimmed" xml:space="preserve"><value>{0} · {1} · 편집 저장 또는 내보내기로 적용합니다</value></data>
+  <data name="VideoEditorUx_StatusTrimmed" xml:space="preserve"><value>{0} · {1} · 라이브러리에 저장 또는 내보내기로 적용합니다</value></data>
   <data name="VideoEditorUx_StatusLayers" xml:space="preserve"><value>레이어 {0}</value></data>
   <data name="VideoEditorUx_Play" xml:space="preserve"><value>재생</value></data>
   <data name="VideoEditorUx_Pause" xml:space="preserve"><value>일시정지</value></data>
   <data name="VideoEditorUx_SaveEditsHelp" xml:space="preserve"><value>자르기와 레이어를 라이브러리의 이 녹화에 적용합니다. 원본은 보존되며 나중에 다시 편집할 수 있습니다.</value></data>
   <data name="VideoEditorUx_ExportHelp" xml:space="preserve"><value>자르기와 레이어를 적용한 새 MP4 또는 GIF 파일을 만듭니다. 라이브러리의 녹화는 바뀌지 않습니다.</value></data>
+  <data name="VideoEditorUx_UnsavedTitle" xml:space="preserve"><value>저장하지 않은 편집</value></data>
+  <data name="VideoEditorUx_UnsavedPrompt" xml:space="preserve"><value>편집한 내용을 라이브러리에 저장하시겠습니까?
+예: 저장하고 닫기 · 아니요: 저장하지 않고 닫기 · 취소: 계속 편집</value></data>
 </root>

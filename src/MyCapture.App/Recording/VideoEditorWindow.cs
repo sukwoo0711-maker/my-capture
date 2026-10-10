@@ -341,6 +341,11 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
+        // The close box, Alt+F4 and the system menu arrive as SC_CLOSE before WM_CLOSE; a
+        // programmatic Close() does not. Only the user's own close asks about unsaved edits.
+        _hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        _hwndSource?.AddHook(OnWindowMessage);
+
         // CenterScreen uses the owner's monitor, or the pointer's monitor without an
         // owner. The primary work area can be much larger (e.g. an ultrawide beside a
         // portrait display), and an already oversized HWND may straddle both monitors.
@@ -363,6 +368,33 @@ internal sealed class VideoEditorWindow : Window
             width, height, 0x0004 | 0x0010)) // SWP_NOZORDER | SWP_NOACTIVATE
             _log.LogWarning("Could not fit the video editor to its target monitor (Win32 {Error})", Marshal.GetLastWin32Error());
     }
+
+    private HwndSource? _hwndSource;
+    private bool _userRequestedClose;
+    private const int WmSysCommand = 0x0112;
+    private const int ScClose = 0xF060;
+
+    private IntPtr OnWindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == WmSysCommand && (wParam.ToInt64() & 0xFFF0) == ScClose)
+        {
+            _userRequestedClose = true;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    /// <summary>Marks the next Close() as the user's own, as the close box would.</summary>
+    internal void MarkUserCloseRequestedForTest() => _userRequestedClose = true;
+
+    /// <summary>Replaces the unsaved-edits dialog in tests; null shows the themed dialog.</summary>
+    internal Func<MessageBoxResult>? UnsavedEditsPromptForTest { get; set; }
+
+    internal bool HasUnsavedEditsForTest => HasUnsavedEdits();
+
+    private bool HasUnsavedEdits() =>
+        _mediaReady && !_committed && _initialDocument is not null
+        && !DocumentsEquivalent(_initialDocument, BuildCurrentDocument());
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -2730,6 +2762,30 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnClosingInternal(object? sender, CancelEventArgs e)
     {
+        bool userClose = _userRequestedClose;
+        _userRequestedClose = false;
+        if (userClose && !_operationRunning && HasUnsavedEdits())
+        {
+            // Closing from the title bar with edits: save to the library, drop them, or stay.
+            MessageBoxResult choice = UnsavedEditsPromptForTest?.Invoke()
+                ?? MyCapture.App.Themes.ThemedDialog.Show(this,
+                    UiText.Get("VideoEditorUx_UnsavedPrompt"), UiText.Get("VideoEditorUx_UnsavedTitle"),
+                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Yes);
+            if (choice == MessageBoxResult.Cancel)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            if (choice == MessageBoxResult.Yes)
+            {
+                // CommitTrim closes the window itself once the edit is saved.
+                e.Cancel = true;
+                CommitTrim();
+                return;
+            }
+        }
+
         if (!_operationRunning || _committed)
         {
             return;
@@ -2787,6 +2843,8 @@ internal sealed class VideoEditorWindow : Window
         KeyDown -= OnKeyDown;
         PreviewKeyDown -= OnPreviewImeKeyDown;
         PreviewKeyDown -= OnPreviewSpaceKeyDown;
+        _hwndSource?.RemoveHook(OnWindowMessage);
+        _hwndSource = null;
         Closing -= OnClosingInternal;
         Loaded -= OnLoadedInternal;
         SourceInitialized -= OnSourceInitialized;
