@@ -284,6 +284,9 @@ public sealed class SettingsStore
         s.Capture.RegionHistoryLimit = ClampWithWarning(
             s.Capture.RegionHistoryLimit, 1, 200, nameof(CaptureSettings.RegionHistoryLimit), warnings);
 
+        // A bookkeeping counter, not a preference: repaired silently.
+        s.Capture.StartGuideShownCount = CaptureStartGuidePolicy.Normalize(s.Capture.StartGuideShownCount);
+
         // --- Recording ---
         int recordingFps = (int)s.Recording.FrameRate;
         if (!SettingsRanges.RecordingFrameRates.Contains(recordingFps))

@@ -232,6 +232,13 @@ public sealed class CaptureSettings
 
     /// <summary>Number of previous selection regions kept for replay.</summary>
     public int RegionHistoryLimit { get; set; } = 20;
+
+    /// <summary>
+    /// How many times the capture selector has opened with its short start guide. The guide shows
+    /// while this is below <see cref="CaptureStartGuidePolicy.ShowCount"/>; the selector's help
+    /// button shows it again at any time. Bookkeeping only: the settings window never edits it.
+    /// </summary>
+    public int StartGuideShownCount { get; set; }
 }
 
 public sealed class PinSettings
