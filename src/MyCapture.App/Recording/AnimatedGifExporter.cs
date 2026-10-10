@@ -1,4 +1,6 @@
 using System.IO;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Recording;
 
@@ -19,9 +21,14 @@ internal sealed record GifFrameSchedule(
 
 /// <summary>
 /// Streams a trimmed, text-composited recording to animated GIF using only Windows/WPF codecs.
-/// There is no hard duration cap: a long GIF is the user's call, and its cost grows linearly
-/// with frame count, so the export dialog warns beyond 20 s while the quality presets keep
-/// CPU, file size and palette-quantization work predictable on modest PCs.
+/// There is no hard duration cap: a long GIF is the user's call. Processing cost grows linearly
+/// with frame count, while file size follows how much of the picture changes, because
+/// <see cref="AnimatedGifWriter"/> merges identical frames and repaints only what changed;
+/// the quality presets keep CPU, file size and palette-quantization work predictable on modest PCs. Decoding prefers
+/// D3D11 hardware decode and runs on its own thread, colour conversion and scaling run on a few
+/// worker threads, and composition and encoding stay on the calling STA thread (see
+/// <see cref="GifExportEngine"/>); <see cref="GifExportSession"/> reuses frames across option
+/// changes in one dialog.
 /// </summary>
 internal static class AnimatedGifExporter
 {
@@ -35,11 +42,43 @@ internal static class AnimatedGifExporter
         IProgress<VideoFrameRenderProgress>? progress = null,
         CancellationToken cancellationToken = default,
         double playbackSpeed = 1.0,
-        GifExportQuality? quality = null)
+        GifExportQuality? quality = null) =>
+        ExportCore(
+            recording,
+            editDocument,
+            destinationPath,
+            progress,
+            cancellationToken,
+            playbackSpeed,
+            quality,
+            cache: null,
+            GifEngineOptions.Default,
+            NullLogger.Instance,
+            out _);
+
+    /// <summary>
+    /// Shared implementation of one-shot and <see cref="GifExportSession"/> exports. With a
+    /// cache it also decodes the densest (10 fps) schedule so later preset and speed changes
+    /// can reuse the frames. A hardware decode failure after open is retried once in software.
+    /// </summary>
+    internal static int ExportCore(
+        RecordingResult recording,
+        VideoEditDocument editDocument,
+        string destinationPath,
+        IProgress<VideoFrameRenderProgress>? progress,
+        CancellationToken cancellationToken,
+        double playbackSpeed,
+        GifExportQuality? quality,
+        GifFrameCache? cache,
+        GifEngineOptions engineOptions,
+        ILogger log,
+        out GifRenderStatistics statistics)
     {
         ArgumentNullException.ThrowIfNull(recording);
         ArgumentNullException.ThrowIfNull(editDocument);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        ArgumentNullException.ThrowIfNull(engineOptions);
+        ArgumentNullException.ThrowIfNull(log);
         VideoLayerResourceBudget.Validate(editDocument.FrameEditLayers);
         quality ??= GifExportQuality.Standard;
         quality.Validate();
@@ -56,8 +95,29 @@ internal static class AnimatedGifExporter
             sourceDurationMs);
 
         GifFrameSchedule schedule = BuildFrameSchedule(document, playbackSpeed, quality.FramesPerSecond);
+        IReadOnlyList<double>? decodeSuperset = cache is null
+            ? null
+            : BuildFrameSchedule(document, 1.0, FramesPerSecond).SourceTimesMs;
 
         (int width, int height) = FitWithin(recording.Width, recording.Height, quality.LongEdge);
+        (int baseWidth, int baseHeight) = FitWithin(recording.Width, recording.Height, MaximumLongEdge);
+        var plan = new GifRenderPlan(
+            new VideoFrameRenderRequest(
+                recording.OutputPath,
+                document.TrimInMs,
+                document.TrimOutMs,
+                quality.FramesPerSecond,
+                width,
+                height,
+                recording.Width,
+                recording.Height,
+                schedule.QuantizedTextOverlays,
+                schedule.QuantizedFrameEditLayers),
+            baseWidth,
+            baseHeight,
+            schedule.SourceTimesMs,
+            schedule.FrameDelaysCentiseconds);
+
         string destination = Path.GetFullPath(destinationPath);
         string? destinationDirectory = Path.GetDirectoryName(destination);
         if (string.IsNullOrEmpty(destinationDirectory))
@@ -69,102 +129,123 @@ internal static class AnimatedGifExporter
         // that exact unprivileged path is the purpose of the export operation.
         // codeql[cs/path-injection]
         Directory.CreateDirectory(destinationDirectory);
-        string temporary = Path.Combine(
-            destinationDirectory,
-            $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.tmp");
-
-        try
+        GifEngineOptions attemptOptions = engineOptions;
+        while (true)
         {
-            int emitted;
-            using (var output = new FileStream(
-                       // The temporary name is a new GUID plus Path.GetFileName(destination), and
-                       // therefore remains beside the explicitly selected output file.
-                       // codeql[cs/path-injection]
-                       temporary,
-                       FileMode.CreateNew,
-                       FileAccess.Write,
-                       FileShare.None,
-                       64 * 1024,
-                       FileOptions.WriteThrough))
-            using (var writer = new AnimatedGifWriter(
-                       output,
-                       width,
-                       height,
-                       frameDelayCentiseconds: 10,
-                       loopCount: 0,
-                       leaveOpen: true))
-            {
-                try
-                {
-                    emitted = VideoFrameRenderPipeline.RenderScheduled(
-                        new VideoFrameRenderRequest(
-                            recording.OutputPath,
-                            document.TrimInMs,
-                            document.TrimOutMs,
-                            quality.FramesPerSecond,
-                            width,
-                            height,
-                            recording.Width,
-                            recording.Height,
-                            schedule.QuantizedTextOverlays,
-                            schedule.QuantizedFrameEditLayers),
-                        schedule.SourceTimesMs,
-                        (frame, index) => writer.AddFrame(
-                            frame,
-                            schedule.FrameDelaysCentiseconds[index]),
-                        progress,
-                        cancellationToken);
-                    writer.Complete();
-                    output.Flush(flushToDisk: true);
-                }
-                catch
-                {
-                    // Preserve cancellation/render failures as the primary exception; disposal
-                    // must not try to complete a deliberately abandoned partial animation.
-                    writer.Abort();
-                    throw;
-                }
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            // The destination is the exact path confirmed by the local SaveFileDialog.
-            // codeql[cs/path-injection]
-            if (File.Exists(destination))
-            {
-                try
-                {
-                    File.Replace(temporary, destination, destinationBackupFileName: null, ignoreMetadataErrors: true);
-                }
-                catch (PlatformNotSupportedException)
-                {
-                    File.Move(temporary, destination, overwrite: true);
-                }
-            }
-            else
-            {
-                File.Move(temporary, destination);
-            }
-
-            return emitted;
-        }
-        finally
-        {
+            string temporary = Path.Combine(
+                destinationDirectory,
+                $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.tmp");
             try
             {
-                // Only the exporter-created GUID temporary sibling can reach this cleanup path.
+                statistics = WriteAnimation(
+                    temporary,
+                    plan,
+                    cache,
+                    attemptOptions,
+                    log,
+                    progress,
+                    cancellationToken,
+                    decodeSuperset);
+
+                cancellationToken.ThrowIfCancellationRequested();
+                // The destination is the exact path confirmed by the local SaveFileDialog.
                 // codeql[cs/path-injection]
-                if (File.Exists(temporary))
+                if (File.Exists(destination))
                 {
+                    try
+                    {
+                        File.Replace(temporary, destination, destinationBackupFileName: null, ignoreMetadataErrors: true);
+                    }
+                    catch (PlatformNotSupportedException)
+                    {
+                        File.Move(temporary, destination, overwrite: true);
+                    }
+                }
+                else
+                {
+                    File.Move(temporary, destination);
+                }
+
+                return statistics.Frames;
+            }
+            catch (GifHardwareDecodeException failure) when (!cancellationToken.IsCancellationRequested)
+            {
+                log.LogWarning(
+                    failure.InnerException,
+                    "Hardware video decode failed during GIF export; retrying with the software decoder.");
+                attemptOptions = attemptOptions with { PreferHardwareDecode = false };
+            }
+            finally
+            {
+                try
+                {
+                    // Only the exporter-created GUID temporary sibling can reach this cleanup path.
                     // codeql[cs/path-injection]
-                    File.Delete(temporary);
+                    if (File.Exists(temporary))
+                    {
+                        // codeql[cs/path-injection]
+                        File.Delete(temporary);
+                    }
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
                 }
             }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
+        }
+    }
+
+    private static GifRenderStatistics WriteAnimation(
+        string temporary,
+        GifRenderPlan plan,
+        GifFrameCache? cache,
+        GifEngineOptions engineOptions,
+        ILogger log,
+        IProgress<VideoFrameRenderProgress>? progress,
+        CancellationToken cancellationToken,
+        IReadOnlyList<double>? decodeSuperset)
+    {
+        using var output = new FileStream(
+            // The temporary name is a new GUID plus Path.GetFileName(destination), and
+            // therefore remains beside the explicitly selected output file.
+            // codeql[cs/path-injection]
+            temporary,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            64 * 1024,
+            FileOptions.WriteThrough);
+        using var writer = new AnimatedGifWriter(
+            output,
+            plan.Request.Width,
+            plan.Request.Height,
+            frameDelayCentiseconds: 10,
+            loopCount: 0,
+            leaveOpen: true,
+            engineOptions.Differencing);
+        try
+        {
+            GifRenderStatistics statistics = GifExportEngine.Render(
+                plan,
+                writer,
+                cache,
+                engineOptions,
+                log,
+                progress,
+                cancellationToken,
+                decodeSuperset);
+            writer.Complete();
+            output.Flush(flushToDisk: true);
+            return statistics;
+        }
+        catch
+        {
+            // Preserve cancellation/render failures as the primary exception; disposal
+            // must not try to complete a deliberately abandoned partial animation.
+            writer.Abort();
+            throw;
         }
     }
 

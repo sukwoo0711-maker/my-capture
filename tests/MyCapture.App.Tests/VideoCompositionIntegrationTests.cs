@@ -26,14 +26,20 @@ public sealed class VideoCompositionIntegrationTests
             const int width = 16, height = 12, stride = width * 4;
             byte[] blue = Enumerable.Range(0, width * height).SelectMany(_ => new byte[] { 255, 0, 0, 255 }).ToArray();
             byte[] red = Enumerable.Range(0, width * height).SelectMany(_ => new byte[] { 0, 0, 255, 255 }).ToArray();
+            byte[] green = Enumerable.Range(0, width * height).SelectMany(_ => new byte[] { 0, 255, 0, 255 }).ToArray();
             BitmapSource first = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, blue, stride);
-            BitmapSource later = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, red, stride);
+            BitmapSource[] later =
+            [
+                BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, red, stride),
+                BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, green, stride),
+            ];
             string path = Path.Combine(root, "many-frames.gif");
             using (var output = File.Create(path))
             using (var writer = new AnimatedGifWriter(output, width, height, 10))
             {
+                // Alternating colours: identical consecutive frames would merge into one image.
                 writer.AddFrame(first);
-                for (int i = 1; i < frameCount; i++) writer.AddFrame(later);
+                for (int i = 1; i < frameCount; i++) writer.AddFrame(later[i % 2]);
                 writer.Complete();
             }
             using (var input = File.OpenRead(path))
@@ -139,9 +145,7 @@ public sealed class VideoCompositionIntegrationTests
             Assert.Equal(calculation.ResultBytes, new FileInfo(calculation.ResultPath).Length);
             calculation.SaveCopy(Path.Combine(root, "smaller.mp4"), source, CancellationToken.None);
             using var gif = VideoExportCalculation.CalculateGif(path => AnimatedGifExporter.Export(recording, document, path), CancellationToken.None);
-            using var stream = File.OpenRead(gif.ResultPath);
-            var decoded = new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-            Assert.Contains(decoded.Frames, frame => CountBrightPixels(frame) > 40 && CountRedPixels(frame) > 80);
+            Assert.Contains(CompositedGifFrames(gif.ResultPath), frame => CountBrightPixels(frame) > 40 && CountRedPixels(frame) > 80);
             Assert.Equal(originalHash, SHA256.HashData(File.ReadAllBytes(source)));
         }
         finally { DeleteRoot(root); }
@@ -172,10 +176,9 @@ public sealed class VideoCompositionIntegrationTests
                 "MP4 graphic did not retain its saved position");
             Assert.Equal(0, CountRedPixels(VideoFrameRenderPipeline.RenderSingleFrame(mp4, 900, 160, 90)));
             _ = AnimatedGifExporter.Export(recording, document, gif);
-            using var stream = File.OpenRead(gif);
-            var decoded = new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-            Assert.Contains(decoded.Frames, frame => CountBrightPixels(frame) > 40 && CountRedPixels(frame) > 80);
-            Assert.Contains(decoded.Frames, frame => CountRedPixels(new CroppedBitmap(frame, new System.Windows.Int32Rect(80, 9, 40, 24))) > 80);
+            IReadOnlyList<BitmapSource> frames = CompositedGifFrames(gif);
+            Assert.Contains(frames, frame => CountBrightPixels(frame) > 40 && CountRedPixels(frame) > 80);
+            Assert.Contains(frames, frame => CountRedPixels(new CroppedBitmap(frame, new System.Windows.Int32Rect(80, 9, 40, 24))) > 80);
             Assert.Equal(originalHash, SHA256.HashData(File.ReadAllBytes(source)));
         }
         finally { DeleteRoot(root); }
@@ -394,19 +397,19 @@ public sealed class VideoCompositionIntegrationTests
 
             Assert.Equal(frames, emitted);
             Assert.True(new FileInfo(gif).Length > 1_024);
-            var decoder = new GifBitmapDecoder(
-                new Uri(gif, UriKind.Absolute),
-                BitmapCreateOptions.PreservePixelFormat,
-                BitmapCacheOption.OnLoad);
-            Assert.Equal(frames, decoder.Frames.Count);
-            Assert.All(decoder.Frames, frame =>
+
+            // Text that stays put is kept on the canvas rather than drawn again, so the frames
+            // are checked as a browser composites them.
+            IReadOnlyList<BitmapSource> composited = CompositedGifFrames(gif);
+            Assert.Equal(frames, composited.Count);
+            Assert.All(composited, frame =>
             {
                 Assert.Equal(width, frame.PixelWidth);
                 Assert.Equal(height, frame.PixelHeight);
             });
-            for (int index = 0; index < decoder.Frames.Count; index++)
+            for (int index = 0; index < composited.Count; index++)
             {
-                BitmapFrame frame = decoder.Frames[index];
+                BitmapSource frame = composited[index];
                 Assert.Equal(index, NearestIndexedColor(frame, width / 2, 8));
                 int whitePixels = CountWhitePixels(frame);
                 if (index is >= 2 and < 5)
@@ -447,17 +450,25 @@ public sealed class VideoCompositionIntegrationTests
 
             int emitted = AnimatedGifExporter.Export(recording, document, gif);
             GifFrameSchedule schedule = AnimatedGifExporter.BuildFrameSchedule(document);
-            var decoder = new GifBitmapDecoder(
-                new Uri(gif, UriKind.Absolute),
-                BitmapCreateOptions.PreservePixelFormat,
-                BitmapCacheOption.OnLoad);
+            GifSampleFrames frames = GifSampleDecoder.Decode(gif);
 
             Assert.Equal(schedule.SourceTimesMs.Count, emitted);
             Assert.Equal([5, 3, 2, 10, 10, 10, 10, 10, 10, 10, 10, 10], schedule.FrameDelaysCentiseconds);
-            Assert.Equal(emitted, decoder.Frames.Count);
-            Assert.True(
-                decoder.Frames.Max(CountWhitePixels) > 40,
-                "the 28ms timed text interval was omitted from the variable-delay GIF");
+
+            // The timeline and the 28 ms text interval hold on every encoder.
+            Assert.Equal(100, frames.DelaysCentiseconds.Sum());
+            Assert.Equal([5, 3], frames.DelaysCentiseconds.Take(2));
+            Assert.True(CountWhitePixels(frames.Frames[1]) > 40, "the 28ms timed text interval was omitted from the variable-delay GIF");
+            Assert.All(frames.Frames.Skip(2), frame => Assert.True(CountWhitePixels(frame) < 10, "the timed text outlived its interval"));
+
+            // Merging needs bit-identical decoded frames. A hardware encoder keeps a static black clip
+            // identical; Media Foundation's software encoder (CI) can drift by a level between static
+            // frames, and then those frames correctly stay separate images.
+            if (DecodedFramesIdentical(source, schedule.SourceTimesMs.Skip(2).ToArray()))
+            {
+                // The black frames around the text merge: black 50 ms, text 30 ms, black 920 ms.
+                Assert.Equal([5, 3, 92], frames.DelaysCentiseconds);
+            }
         }
         finally
         {
@@ -512,12 +523,22 @@ public sealed class VideoCompositionIntegrationTests
                 $"Smallest GIF should reduce file size: smallest={smallBytes} bytes, standard={standardBytes} bytes.");
             var decoder = new GifBitmapDecoder(new Uri(gif), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
             Assert.Equal(5, frames);
-            Assert.Equal(5, decoder.Frames.Count);
-            Assert.All(decoder.Frames, frame =>
+
+            // Every encoder: a 480x270 canvas shown for the whole second.
+            GifSampleFrames decoded = GifSampleDecoder.Decode(gif);
+            Assert.Equal(100, decoded.DelaysCentiseconds.Sum());
+            Assert.Equal((480, 270), (decoder.Frames[0].PixelWidth, decoder.Frames[0].PixelHeight));
+            Assert.InRange(decoder.Frames.Count, 1, frames);
+
+            // Five bit-identical black frames become one image. Only a software encoder that drifts
+            // between static frames (CI) leaves later partial images, as the delay test explains.
+            double[] smallestTimes = AnimatedGifExporter.BuildFrameSchedule(document, 1.0, GifExportQuality.Smallest.FramesPerSecond).SourceTimesMs.ToArray();
+            if (DecodedFramesIdentical(source, smallestTimes))
             {
-                Assert.Equal(480, frame.PixelWidth);
-                Assert.Equal(270, frame.PixelHeight);
-            });
+                BitmapFrame only = Assert.Single(decoder.Frames);
+                Assert.Equal((480, 270), (only.PixelWidth, only.PixelHeight));
+                Assert.Equal([100], decoded.DelaysCentiseconds);
+            }
         }
         finally
         {
@@ -634,6 +655,9 @@ public sealed class VideoCompositionIntegrationTests
         return new RecordingResult(path, colors.Count * 1000.0 / fps, fps, colors.Count, width, height);
     }
 
+    /// <summary>GIF frames as a browser shows them: changed rectangles drawn over the kept canvas.</summary>
+    private static IReadOnlyList<BitmapSource> CompositedGifFrames(string path) => GifSampleDecoder.Decode(path).Frames;
+
     private static int CountBrightPixels(BitmapSource source)
     {
         BitmapSource bgra = source.Format == PixelFormats.Bgra32
@@ -652,6 +676,27 @@ public sealed class VideoCompositionIntegrationTests
         }
 
         return count;
+    }
+
+    /// <summary>True when the source decodes to byte-identical pixels at every requested time.</summary>
+    private static bool DecodedFramesIdentical(string path, IReadOnlyList<double> timesMs)
+    {
+        using var reader = new MediaFoundationVideoFrameReader(path);
+        byte[]? first = null;
+        foreach (double time in timesMs)
+        {
+            byte[] pixels = reader.ReadFrameAt(time).Pixels;
+            if (first is null)
+            {
+                first = pixels;
+            }
+            else if (!pixels.AsSpan().SequenceEqual(first))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static int CountWhitePixels(BitmapSource source)

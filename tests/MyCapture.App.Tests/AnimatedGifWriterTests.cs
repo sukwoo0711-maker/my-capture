@@ -33,10 +33,13 @@ public sealed class AnimatedGifWriterTests
             writer.AddFrame(Solid(width, height, 0x20, 0xD0, 0x30));
             long afterSecondFrame = output.Length;
             writer.AddFrame(Solid(width, height, 0x20, 0x40, 0xE0));
+            long afterThirdFrame = output.Length;
             writer.Complete();
 
-            Assert.True(afterFirstFrame > 32, "the first frame was not streamed to the destination");
-            Assert.True(afterSecondFrame > afterFirstFrame, "the second frame was retained instead of streamed");
+            // Each image is held only until the next different frame fixes its delay.
+            Assert.Equal(32, afterFirstFrame);
+            Assert.True(afterSecondFrame > afterFirstFrame, "the first frame was not streamed once the second arrived");
+            Assert.True(afterThirdFrame > afterSecondFrame, "the second frame was retained instead of streamed");
         }
 
         byte[] bytes = output.ToArray();
@@ -162,6 +165,414 @@ public sealed class AnimatedGifWriterTests
         Assert.Empty(output.ToArray());
     }
 
+    [Fact]
+    public void IdenticalFrames_MergeIntoOneImageWithTheSummedDelay() => RunSta(() =>
+    {
+        BitmapSource red = Solid(10, 8, 0xE0, 0x20, 0x20);
+        BitmapSource blue = Solid(10, 8, 0x20, 0x40, 0xE0);
+        using var output = new MemoryStream();
+        var updates = new List<GifFrameUpdate>();
+        using (var writer = new AnimatedGifWriter(output, 10, 8, 10, leaveOpen: true))
+        {
+            foreach ((BitmapSource frame, int delay) in new[] { (red, 7), (red, 3), (blue, 10), (blue, 10), (blue, 4), (red, 1) })
+            {
+                updates.Add(writer.AddFrame(frame, delay));
+            }
+
+            Assert.Equal(3, writer.ImageCount);
+            writer.Complete();
+        }
+
+        Assert.Equal([false, true, false, true, true, false], updates.Select(update => update.IsUnchanged));
+        ParsedAnimation parsed = ParseAnimation(output.ToArray());
+        Assert.Equal([10, 24, 1], parsed.FrameDelays);
+        Assert.Equal(35, parsed.FrameDelays.Sum());
+        Assert.All(parsed.Disposals, disposal => Assert.Equal(1, disposal));
+    });
+
+    [Fact]
+    public void ChangedFrame_WritesOnlyItsChangedRectangleAtItsOffset() => RunSta(() =>
+    {
+        const int width = 24;
+        const int height = 16;
+        byte[] first = SolidPixels(width, height, 0x30, 0x60, 0x90);
+        byte[] second = (byte[])first.Clone();
+        Paint(second, width, 5, 3, 4, 2, 0xF0, 0x10, 0x10);
+        Paint(second, width, 11, 9, 1, 1, 0x10, 0xF0, 0x10);
+        byte[] third = (byte[])second.Clone();
+        Paint(third, width, 23, 15, 1, 1, 0x10, 0x10, 0xF0);
+
+        string root = OwnedTestDirectory.Create("mc-gif-writer-rect-");
+        try
+        {
+            string path = Path.Combine(root, "rect.gif");
+            using (FileStream output = File.Create(path))
+            using (var writer = new AnimatedGifWriter(output, width, height, 10))
+            {
+                Assert.Equal(new GifPixelRect(0, 0, width, height), writer.AddFrame(first, width * 4, 10).Bounds);
+                Assert.Equal(new GifPixelRect(5, 3, 7, 7), writer.AddFrame(second, width * 4, 10).Bounds);
+                Assert.Equal(new GifPixelRect(23, 15, 1, 1), writer.AddFrame(third, width * 4, 10).Bounds);
+                writer.Complete();
+            }
+
+            ParsedAnimation parsed = ParseAnimation(File.ReadAllBytes(path));
+            Assert.Equal([(0, 0), (5, 3), (23, 15)], parsed.FrameOffsets);
+            Assert.Equal([(width, height), (7, 7), (1, 1)], parsed.FrameDimensions);
+
+            // Composited like a browser, every frame shows exactly its source: four colours
+            // quantise without loss.
+            GifSampleFrames frames = GifSampleDecoder.Decode(path);
+            Assert.Equal(first, CopyPixels(frames.Frames[0]));
+            Assert.Equal(second, CopyPixels(frames.Frames[1]));
+            Assert.Equal(third, CopyPixels(frames.Frames[2]));
+        }
+        finally
+        {
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void DifferencingModes_KeepFullFramesOnlyWhenAsked() => RunSta(() =>
+    {
+        byte[] grey = SolidPixels(6, 4, 100, 100, 100);
+        byte[] patched = (byte[])grey.Clone();
+        Paint(patched, 6, 2, 1, 1, 1, 0, 0, 0);
+
+        ParsedAnimation none = Write(GifFrameDifferencing.None, grey, grey, patched);
+        Assert.Equal([10, 10, 10], none.FrameDelays);
+        Assert.All(none.FrameDimensions, dimensions => Assert.Equal((6, 4), dimensions));
+
+        ParsedAnimation merged = Write(GifFrameDifferencing.MergeIdentical, grey, grey, patched);
+        Assert.Equal([20, 10], merged.FrameDelays);
+        Assert.All(merged.FrameDimensions, dimensions => Assert.Equal((6, 4), dimensions));
+
+        foreach (GifFrameDifferencing partial in new[] { GifFrameDifferencing.ChangedRectangle, GifFrameDifferencing.ErrorBounded })
+        {
+            ParsedAnimation written = Write(partial, grey, grey, patched);
+            Assert.Equal([20, 10], written.FrameDelays);
+            Assert.Equal([(6, 4), (1, 1)], written.FrameDimensions);
+            Assert.Equal([(0, 0), (2, 1)], written.FrameOffsets);
+        }
+
+        static ParsedAnimation Write(GifFrameDifferencing mode, params byte[][] frames)
+        {
+            using var output = new MemoryStream();
+            using (var writer = new AnimatedGifWriter(output, 6, 4, 10, leaveOpen: true, differencing: mode))
+            {
+                foreach (byte[] frame in frames)
+                {
+                    _ = writer.AddFrame(frame, 24, 10);
+                }
+
+                writer.Complete();
+            }
+
+            return ParseAnimation(output.ToArray());
+        }
+    });
+
+    /// <summary>
+    /// Regression for kept pixels that were quantised under a busier palette: noisy opening
+    /// frames, then clean ones over the same still background. Exact source differencing keeps
+    /// the noisy quantisation; the error bound repaints wherever the full frame does better.
+    /// </summary>
+    [Fact]
+    public void ErrorBoundedFrames_AreNeverFurtherFromTheSourceThanFullFrames() => RunSta(() =>
+    {
+        const int width = 96;
+        const int height = 64;
+        var random = new Random(17);
+        byte[] background = new byte[width * height * 4];
+        for (int pixel = 0; pixel < width * height; pixel++)
+        {
+            int x = pixel % width, y = pixel / width;
+            background[(pixel * 4) + 0] = (byte)(40 + (x * 2));
+            background[(pixel * 4) + 1] = (byte)(30 + (y * 3));
+            background[(pixel * 4) + 2] = (byte)((x * y) % 200);
+            background[(pixel * 4) + 3] = 255;
+        }
+
+        var frames = new List<byte[]>();
+        for (int index = 0; index < 12; index++)
+        {
+            byte[] frame = (byte[])background.Clone();
+            if (index < 3)
+            {
+                // A busy opening (noise over a band) that later clears.
+                for (int pixel = 0; pixel < width * 20; pixel++)
+                {
+                    frame[pixel * 4] = (byte)random.Next(256);
+                    frame[(pixel * 4) + 1] = (byte)random.Next(256);
+                }
+            }
+
+            Paint(frame, width, 4 + (index * 6), 30, 10, 10, 250, 250, 20);
+            frames.Add(frame);
+        }
+
+        string root = OwnedTestDirectory.Create("mc-gif-writer-bounded-");
+        try
+        {
+            var errors = new Dictionary<GifFrameDifferencing, long[]>();
+            var sizes = new Dictionary<GifFrameDifferencing, long>();
+            foreach (GifFrameDifferencing mode in new[] { GifFrameDifferencing.None, GifFrameDifferencing.ErrorBounded })
+            {
+                string path = Path.Combine(root, $"{mode}.gif");
+                using (FileStream output = File.Create(path))
+                using (var writer = new AnimatedGifWriter(output, width, height, 10, differencing: mode))
+                {
+                    foreach (byte[] frame in frames)
+                    {
+                        _ = writer.AddFrame(frame, width * 4, 10);
+                    }
+
+                    writer.Complete();
+                }
+
+                sizes[mode] = new FileInfo(path).Length;
+                GifSampleFrames decoded = GifSampleDecoder.Decode(path);
+                Assert.Equal(frames.Count * 10, decoded.DelaysCentiseconds.Sum());
+                var perFrame = new long[frames.Count];
+                int image = 0;
+                int imageEnd = decoded.DelaysCentiseconds[0];
+                for (int index = 0; index < frames.Count; index++)
+                {
+                    while (index * 10 >= imageEnd)
+                    {
+                        imageEnd += decoded.DelaysCentiseconds[++image];
+                    }
+
+                    perFrame[index] = SquaredError(frames[index], CopyPixels(decoded.Frames[image]));
+                }
+
+                errors[mode] = perFrame;
+            }
+
+            for (int index = 0; index < frames.Count; index++)
+            {
+                Assert.True(
+                    errors[GifFrameDifferencing.ErrorBounded][index] <= errors[GifFrameDifferencing.None][index],
+                    $"Frame {index}: bounded error {errors[GifFrameDifferencing.ErrorBounded][index]} exceeds full-frame error {errors[GifFrameDifferencing.None][index]}.");
+            }
+
+            Assert.True(sizes[GifFrameDifferencing.ErrorBounded] < sizes[GifFrameDifferencing.None] / 2,
+                $"Bounded {sizes[GifFrameDifferencing.ErrorBounded]} B is not well below full-frame {sizes[GifFrameDifferencing.None]} B.");
+        }
+        finally
+        {
+            OwnedTestDirectory.Delete(root);
+        }
+
+        static long SquaredError(byte[] expected, byte[] actual)
+        {
+            long sum = 0;
+            for (int offset = 0; offset < expected.Length; offset += 4)
+            {
+                for (int channel = 0; channel < 3; channel++)
+                {
+                    int difference = expected[offset + channel] - actual[offset + channel];
+                    sum += difference * difference;
+                }
+            }
+
+            return sum;
+        }
+    });
+
+    [Fact]
+    public void Lzw_RoundTripsAndAgreesWithThePlatformDecoder() => RunSta(() =>
+    {
+        var random = new Random(3);
+        foreach ((int bits, int width, int height, bool runs) in new[] { (2, 7, 5, false), (4, 64, 48, true), (8, 300, 200, false), (8, 320, 240, true), (5, 1, 1, false) })
+        {
+            int colours = 1 << bits;
+            byte[] indices = new byte[width * height];
+            for (int pixel = 0; pixel < indices.Length; pixel++)
+            {
+                indices[pixel] = runs ? (byte)((pixel / 97) % colours) : (byte)random.Next(colours);
+            }
+
+            byte[] data = GifLzw.Encode(indices, bits);
+            Assert.Equal(bits, data[0]);
+            Assert.Equal(0, data[^1]);
+            Assert.Equal(indices, GifLzw.Decode(data, indices.Length));
+
+            // The platform decoder reads the same indices from a GIF built around the data.
+            using var gif = new MemoryStream();
+            gif.Write("GIF89a"u8);
+            gif.Write([(byte)width, (byte)(width >> 8), (byte)height, (byte)(height >> 8), 0, 0, 0]);
+            int code = Math.Max(1, bits) - 1;
+            gif.Write([0x2C, 0, 0, 0, 0, (byte)width, (byte)(width >> 8), (byte)height, (byte)(height >> 8), (byte)(0x80 | code)]);
+            for (int entry = 0; entry < 1 << (code + 1); entry++)
+            {
+                gif.Write([(byte)entry, (byte)(255 - entry), (byte)(entry * 7)]);
+            }
+
+            gif.Write(data);
+            gif.WriteByte(0x3B);
+            gif.Position = 0;
+            BitmapFrame frame = new GifBitmapDecoder(gif, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+            Assert.Equal(PixelFormats.Indexed8, frame.Format);
+            byte[] platform = new byte[width * height];
+            frame.CopyPixels(platform, width, 0);
+            Assert.Equal(indices, platform);
+        }
+
+        // And it decodes what the platform encoder writes.
+        byte[] payload = AnimatedGifWriter.EncodeFrame(Solid(40, 30, 0x12, 0x80, 0xF0)).ToArray();
+        AnimatedGifWriter.EncodedGifFrame parsed = AnimatedGifWriter.ParseSingleFrame(payload, 40, 30);
+        byte[] decoded = GifLzw.Decode(payload.AsSpan(parsed.ImageDataOffset, parsed.ImageDataLength), 40 * 30);
+        BitmapFrame reference = new GifBitmapDecoder(new MemoryStream(payload), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+        byte[] expected = new byte[40 * 30];
+        reference.CopyPixels(expected, 40, 0);
+        Assert.Equal(expected, decoded);
+        Assert.Throws<InvalidDataException>(() => GifLzw.Decode(payload.AsSpan(parsed.ImageDataOffset, parsed.ImageDataLength), (40 * 30) - 1));
+    });
+
+    [Fact]
+    public void LongHold_SplitsAtTheSixteenBitDelayLimitWithoutLosingTime() => RunSta(() =>
+    {
+        byte[] frame = SolidPixels(4, 3, 10, 20, 30);
+        byte[] other = SolidPixels(4, 3, 200, 20, 30);
+        using var output = new MemoryStream();
+        using (var writer = new AnimatedGifWriter(output, 4, 3, 10, leaveOpen: true))
+        {
+            _ = writer.AddFrame(frame, 16, 65_000);
+            _ = writer.AddFrame(frame, 16, 600);
+            _ = writer.AddFrame(frame, 16, 65_535);
+            _ = writer.AddFrame(other, 16, 5);
+            writer.Complete();
+        }
+
+        // 131,135 cs = 65,535 + 65,535 + 65: the same image is drawn again for the remainder.
+        ParsedAnimation parsed = ParseAnimation(output.ToArray());
+        Assert.Equal([65_535, 65_535, 65, 5], parsed.FrameDelays);
+        Assert.Equal([(4, 3), (4, 3), (4, 3), (4, 3)], parsed.FrameDimensions);
+    });
+
+    [Fact]
+    public void ReplayedUpdates_WithOtherDelays_EqualAFreshRender() => RunSta(() =>
+    {
+        byte[][] frames =
+        [
+            SolidPixels(8, 8, 10, 10, 10),
+            SolidPixels(8, 8, 10, 10, 10),
+            PatchedPixels(8, 8, 3, 3),
+            PatchedPixels(8, 8, 3, 3),
+            PatchedPixels(8, 8, 6, 1),
+        ];
+        int[] slow = [10, 10, 10, 10, 10];
+        int[] fast = [3, 2, 3, 2, 3];
+        (byte[] fresh, GifFrameUpdate[] updates) = Render(fast);
+        (_, GifFrameUpdate[] slowUpdates) = Render(slow);
+        Assert.Equal(updates.Select(update => update.Bounds), slowUpdates.Select(update => update.Bounds));
+
+        using var replayed = new MemoryStream();
+        using (var writer = new AnimatedGifWriter(replayed, 8, 8, 10, leaveOpen: true))
+        {
+            for (int index = 0; index < slowUpdates.Length; index++)
+            {
+                writer.AddEncodedFrame(slowUpdates[index], fast[index]);
+            }
+
+            writer.Complete();
+        }
+
+        Assert.Equal(fresh, replayed.ToArray());
+        Assert.Equal([5, 5, 3], ParseAnimation(fresh).FrameDelays);
+
+        using var invalid = new MemoryStream();
+        using var first = new AnimatedGifWriter(invalid, 8, 8, 10, leaveOpen: true);
+        Assert.Throws<InvalidOperationException>(() => first.AddEncodedFrame(GifFrameUpdate.Unchanged, 10));
+        Assert.Throws<ArgumentException>(() => first.AddEncodedFrame(updates[2], 10));
+
+        (byte[] Bytes, GifFrameUpdate[] Updates) Render(int[] delays)
+        {
+            using var output = new MemoryStream();
+            var produced = new GifFrameUpdate[frames.Length];
+            using (var writer = new AnimatedGifWriter(output, 8, 8, 10, leaveOpen: true))
+            {
+                for (int index = 0; index < frames.Length; index++)
+                {
+                    produced[index] = writer.AddFrame(frames[index], 32, delays[index]);
+                }
+
+                writer.Complete();
+            }
+
+            return (output.ToArray(), produced);
+        }
+
+        static byte[] PatchedPixels(int width, int height, int x, int y)
+        {
+            byte[] pixels = SolidPixels(width, height, 10, 10, 10);
+            Paint(pixels, width, x, y, 1, 1, 250, 250, 250);
+            return pixels;
+        }
+    });
+
+    [Fact]
+    public void ChangedBounds_FindsTheExactRectangleAcrossStrides()
+    {
+        const int width = 7;
+        const int height = 5;
+        const int stride = 32; // padded rows
+        byte[] before = new byte[stride * height];
+        byte[] after = (byte[])before.Clone();
+        Assert.True(GifFrameDifference.ChangedBounds(before, stride, after, stride, width, height).IsEmpty);
+
+        // Padding beyond the row is ignored.
+        after[(2 * stride) + 30] = 9;
+        Assert.True(GifFrameDifference.ChangedBounds(before, stride, after, stride, width, height).IsEmpty);
+
+        after[(1 * stride) + (6 * 4) + 2] = 1;   // pixel (6, 1)
+        after[(3 * stride) + (2 * 4)] = 1;       // pixel (2, 3)
+        Assert.Equal(new GifPixelRect(2, 1, 5, 3), GifFrameDifference.ChangedBounds(before, stride, after, stride, width, height));
+        after[(4 * stride) + 3] = 200;           // alpha of pixel (0, 4)
+        Assert.Equal(new GifPixelRect(0, 1, 7, 4), GifFrameDifference.ChangedBounds(before, stride, after, stride, width, height));
+
+        // A tightly packed and a padded buffer of the same pixels compare equal.
+        byte[] packed = new byte[width * 4 * height];
+        for (int row = 0; row < height; row++)
+        {
+            Buffer.BlockCopy(after, row * stride, packed, row * width * 4, width * 4);
+        }
+
+        Assert.True(GifFrameDifference.ChangedBounds(after, stride, packed, width * 4, width, height).IsEmpty);
+        Assert.Throws<ArgumentException>(() => GifFrameDifference.ChangedBounds(before, stride, packed[..^1], width * 4, width, height));
+    }
+
+    private static byte[] SolidPixels(int width, int height, byte red, byte green, byte blue)
+    {
+        byte[] pixels = new byte[width * height * 4];
+        Paint(pixels, width, 0, 0, width, height, red, green, blue);
+        return pixels;
+    }
+
+    private static void Paint(byte[] pixels, int width, int x, int y, int w, int h, byte red, byte green, byte blue)
+    {
+        for (int row = y; row < y + h; row++)
+        {
+            for (int column = x; column < x + w; column++)
+            {
+                int offset = ((row * width) + column) * 4;
+                pixels[offset] = blue;
+                pixels[offset + 1] = green;
+                pixels[offset + 2] = red;
+                pixels[offset + 3] = 0xFF;
+            }
+        }
+    }
+
+    private static byte[] CopyPixels(BitmapSource frame)
+    {
+        BitmapSource bgra = frame.Format == PixelFormats.Bgra32 ? frame : new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
+        byte[] pixels = new byte[bgra.PixelWidth * bgra.PixelHeight * 4];
+        bgra.CopyPixels(pixels, bgra.PixelWidth * 4, 0);
+        return pixels;
+    }
+
     private static BitmapSource Solid(int width, int height, byte red, byte green, byte blue)
     {
         int stride = checked(width * 4);
@@ -218,6 +629,8 @@ public sealed class AnimatedGifWriterTests
 
         var delays = new List<int>();
         var dimensions = new List<(int Width, int Height)>();
+        var offsets = new List<(int Left, int Top)>();
+        var disposals = new List<int>();
         int? pendingDelay = null;
         int? loopCount = null;
         bool trailer = false;
@@ -233,7 +646,7 @@ public sealed class AnimatedGifWriterTests
                         if (label == 0xF9)
                         {
                             Assert.Equal(4, ReadByte(bytes, ref index));
-                            _ = ReadByte(bytes, ref index);
+                            disposals.Add((ReadByte(bytes, ref index) >> 2) & 0x07);
                             pendingDelay = ReadUInt16(bytes, ref index);
                             _ = ReadByte(bytes, ref index);
                             Assert.Equal(0, ReadByte(bytes, ref index));
@@ -260,8 +673,8 @@ public sealed class AnimatedGifWriterTests
 
                 case 0x2C:
                     {
-                        _ = ReadUInt16(bytes, ref index); // left
-                        _ = ReadUInt16(bytes, ref index); // top
+                        int left = ReadUInt16(bytes, ref index);
+                        int top = ReadUInt16(bytes, ref index);
                         int frameWidth = ReadUInt16(bytes, ref index);
                         int frameHeight = ReadUInt16(bytes, ref index);
                         byte imagePacked = ReadByte(bytes, ref index);
@@ -276,7 +689,9 @@ public sealed class AnimatedGifWriterTests
                         Assert.NotEmpty(imageData);
 
                         dimensions.Add((frameWidth, frameHeight));
+                        offsets.Add((left, top));
                         delays.Add(Assert.IsType<int>(pendingDelay));
+                        Assert.True(left + frameWidth <= width && top + frameHeight <= height, "image outside the canvas");
                         pendingDelay = null;
                         break;
                     }
@@ -298,7 +713,7 @@ public sealed class AnimatedGifWriterTests
 
         Assert.True(trailer, "GIF trailer was not found");
         Assert.Null(pendingDelay);
-        return new ParsedAnimation(width, height, loopCount, delays, dimensions, trailer);
+        return new ParsedAnimation(width, height, loopCount, delays, dimensions, offsets, disposals, trailer);
     }
 
     private static byte ReadByte(ReadOnlySpan<byte> bytes, ref int index)
@@ -371,5 +786,7 @@ public sealed class AnimatedGifWriterTests
         int? LoopCount,
         IReadOnlyList<int> FrameDelays,
         IReadOnlyList<(int Width, int Height)> FrameDimensions,
+        IReadOnlyList<(int Left, int Top)> FrameOffsets,
+        IReadOnlyList<int> Disposals,
         bool HasTrailer);
 }

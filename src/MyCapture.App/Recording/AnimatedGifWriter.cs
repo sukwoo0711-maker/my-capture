@@ -1,8 +1,26 @@
 using System.Buffers.Binary;
 using System.IO;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace MyCapture.App.Recording;
+
+/// <summary>
+/// What one input frame changed on the GIF canvas, as <see cref="AnimatedGifWriter"/> decided:
+/// nothing (<see cref="IsUnchanged"/>: its delay extends the image already on screen), or a
+/// rectangle and a complete single-frame GIF of exactly that rectangle.
+/// </summary>
+/// <remarks>
+/// An update depends only on pixels, never on delays, so a cached sequence replayed through
+/// <see cref="AnimatedGifWriter.AddEncodedFrame"/> with other delays writes the same bytes as a
+/// fresh render with those delays. It is only valid after the same predecessor frames.
+/// </remarks>
+internal sealed record GifFrameUpdate(GifPixelRect Bounds, byte[] Payload)
+{
+    internal static GifFrameUpdate Unchanged { get; } = new(default, []);
+
+    internal bool IsUnchanged => Payload.Length == 0;
+}
 
 /// <summary>
 /// Writes a fixed-size animated GIF without retaining previously added frames.
@@ -10,15 +28,28 @@ namespace MyCapture.App.Recording;
 /// <remarks>
 /// <para>
 /// WPF's <see cref="GifBitmapEncoder"/> provides the platform palette quantizer and LZW
-/// encoder, but it cannot attach dependable per-frame timing metadata. Each source frame is
-/// therefore encoded as one temporary, single-frame GIF. This writer validates that payload,
-/// promotes its colour table to a local table, and immediately appends the image data behind
-/// an explicit Graphic Control Extension.
+/// encoder, but it cannot attach dependable per-frame timing metadata or image offsets. Each
+/// image is therefore encoded as one temporary, single-frame GIF. This writer validates that
+/// payload, promotes its colour table to a local table, and appends the image data behind an
+/// explicit Graphic Control Extension and Image Descriptor.
 /// </para>
 /// <para>
-/// The temporary encoded payload is released before <see cref="AddFrame"/> returns, so memory
-/// use is bounded by one encoded frame. Instances are not thread-safe; callers must also obey
-/// the usual dispatcher-affinity rules of the supplied <see cref="BitmapSource"/>.
+/// With <see cref="GifFrameDifferencing.ErrorBounded"/> (the default) only the first image
+/// covers the canvas. A frame whose source pixels equal the previous frame's adds its delay to
+/// the image on screen. Any other frame is quantised whole as before, and then only the pixels
+/// that keep the composited frame within that full-frame image's error are repainted, as one
+/// rectangle at its offset with disposal 1 (do not dispose) and the kept pixels transparent; see
+/// <see cref="GifBoundedCanvas"/>. Still areas therefore keep their colours instead of
+/// shimmering with each frame's new palette, the file grows with motion rather than with
+/// length alone, and no frame ends up further from the source than the full-frame output.
+/// </para>
+/// <para>
+/// The newest image is held back until the next different frame (or <see cref="Complete"/>)
+/// fixes its delay, so memory is bounded by one encoded image plus one canvas of source pixels.
+/// Instances are not thread-safe. WPF encoding runs on the calling thread, which must also obey
+/// the dispatcher-affinity rules of a supplied <see cref="BitmapSource"/>. Keep WPF encoding on
+/// one thread: concurrent WPF imaging work on several threads was measured to corrupt the
+/// native heap (see <see cref="GifExportEngine"/>).
 /// </para>
 /// </remarks>
 internal sealed class AnimatedGifWriter : IDisposable
@@ -35,8 +66,19 @@ internal sealed class AnimatedGifWriter : IDisposable
     private readonly ushort _frameDelayCentiseconds;
     private readonly ushort _loopCount;
     private readonly bool _leaveOpen;
+    private readonly GifFrameDifferencing _differencing;
 
+    /// <summary>
+    /// Source pixels of the latest frame (tightly packed BGRA), or null before the first frame
+    /// and after a replayed update, when the next pixel frame is written in full.
+    /// </summary>
+    private byte[]? _canvas;
+    private GifBoundedCanvas? _bounded;
+    private bool _boundedShown;
+    private bool _boundedUnavailable;
+    private PendingImage? _pending;
     private int _frameCount;
+    private int _imageCount;
     private bool _completed;
     private bool _faulted;
     private bool _disposed;
@@ -54,13 +96,15 @@ internal sealed class AnimatedGifWriter : IDisposable
     /// NETSCAPE2.0 repeat count, from 0 through 65,535; zero means repeat indefinitely.
     /// </param>
     /// <param name="leaveOpen">Whether disposing this writer leaves <paramref name="output"/> open.</param>
+    /// <param name="differencing">How consecutive frames become GIF images.</param>
     internal AnimatedGifWriter(
         Stream output,
         int width,
         int height,
         int frameDelayCentiseconds,
         int loopCount = 0,
-        bool leaveOpen = false)
+        bool leaveOpen = false,
+        GifFrameDifferencing differencing = GifFrameDifferencing.ErrorBounded)
     {
         ArgumentNullException.ThrowIfNull(output);
         if (!output.CanWrite)
@@ -75,6 +119,12 @@ internal sealed class AnimatedGifWriter : IDisposable
             nameof(frameDelayCentiseconds),
             minimum: 0);
         _loopCount = ToGifUnsignedShort(loopCount, nameof(loopCount), minimum: 0);
+        if (!Enum.IsDefined(differencing))
+        {
+            throw new ArgumentOutOfRangeException(nameof(differencing));
+        }
+
+        _differencing = differencing;
         _output = output;
         _leaveOpen = leaveOpen;
 
@@ -82,11 +132,19 @@ internal sealed class AnimatedGifWriter : IDisposable
         WriteLoopExtension();
     }
 
-    /// <summary>Adds one full-canvas frame and writes it to the destination immediately.</summary>
+    /// <summary>
+    /// GIF images written or held so far. Fewer than the frames when identical frames were
+    /// merged; a hold longer than 655.35 s adds a repeat of the same image.
+    /// </summary>
+    internal int ImageCount => _imageCount;
+
+    private GifPixelRect FullCanvas => new(0, 0, _width, _height);
+
+    /// <summary>Adds one full-canvas frame with the default delay.</summary>
     internal void AddFrame(BitmapSource frame) => AddFrame(frame, _frameDelayCentiseconds);
 
     /// <summary>Adds one full-canvas frame with an explicit per-frame delay.</summary>
-    internal void AddFrame(BitmapSource frame, int frameDelayCentiseconds)
+    internal GifFrameUpdate AddFrame(BitmapSource frame, int frameDelayCentiseconds)
     {
         ArgumentNullException.ThrowIfNull(frame);
         ThrowIfCannotWrite();
@@ -103,8 +161,44 @@ internal sealed class AnimatedGifWriter : IDisposable
                 nameof(frame));
         }
 
-        // The platform encoder owns quantisation and LZW compression. Only this one-frame
-        // payload is buffered; all earlier frames have already been written to _output.
+        BitmapSource bgra = frame.Format == PixelFormats.Bgra32
+            ? frame
+            : new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
+        int stride = _width * 4;
+        byte[] pixels = new byte[checked(stride * _height)];
+        bgra.CopyPixels(pixels, stride, 0);
+        return AddFrameCore(pixels, stride, delay);
+    }
+
+    /// <summary>
+    /// Adds one full-canvas frame given as 32-bit BGRA rows (normally opaque) and returns what
+    /// it changed. The buffer is only read; the writer keeps its own copy of changed pixels.
+    /// </summary>
+    internal GifFrameUpdate AddFrame(byte[] pixels, int stride, int frameDelayCentiseconds)
+    {
+        ArgumentNullException.ThrowIfNull(pixels);
+        ThrowIfCannotWrite();
+        ushort delay = ToGifUnsignedShort(
+            frameDelayCentiseconds,
+            nameof(frameDelayCentiseconds),
+            minimum: 0);
+        if (stride < _width * 4 || pixels.Length < checked((stride * (_height - 1)) + (_width * 4)))
+        {
+            throw new ArgumentException(
+                $"GIF frames must be exactly {_width}x{_height} pixels; the buffer is too small for that stride.",
+                nameof(pixels));
+        }
+
+        return AddFrameCore(pixels, stride, delay);
+    }
+
+    /// <summary>
+    /// Encodes one image as a complete single-frame GIF with the platform encoder. This touches
+    /// no writer state.
+    /// </summary>
+    internal static ReadOnlyMemory<byte> EncodeFrame(BitmapSource frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
         using var encodedStream = new MemoryStream();
         var encoder = new GifBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(frame));
@@ -115,27 +209,53 @@ internal sealed class AnimatedGifWriter : IDisposable
             throw new InvalidDataException("The platform GIF encoder did not expose its output buffer.");
         }
 
-        ReadOnlySpan<byte> encoded = segment.Array.AsSpan(segment.Offset, checked((int)encodedStream.Length));
-        EncodedGifFrame parsed = ParseSingleFrame(encoded, _width, _height);
-
-        // Parsing must finish before the first destination byte for this frame is written. An
-        // invalid or truncated platform payload therefore cannot leave a half-added GIF frame.
-        try
-        {
-            WriteGraphicControlExtension(parsed.HasTransparency, parsed.TransparentColorIndex, delay);
-            WriteImageBlock(encoded, parsed);
-            _frameCount++;
-        }
-        catch
-        {
-            // Once an output stream rejects a write, its position and persisted prefix are not
-            // generally recoverable. Prevent a later Complete call from presenting it as valid.
-            _faulted = true;
-            throw;
-        }
+        return segment.Array.AsMemory(segment.Offset, checked((int)encodedStream.Length));
     }
 
-    /// <summary>Writes the GIF trailer and flushes the destination.</summary>
+    /// <summary>
+    /// Replays an update returned by an earlier <c>AddFrame</c> of the same frame sequence, with
+    /// an explicit delay. A pixel frame added after a replay is written in full.
+    /// </summary>
+    internal void AddEncodedFrame(GifFrameUpdate update, int frameDelayCentiseconds)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        ThrowIfCannotWrite();
+        ushort delay = ToGifUnsignedShort(
+            frameDelayCentiseconds,
+            nameof(frameDelayCentiseconds),
+            minimum: 0);
+        if (update.IsUnchanged)
+        {
+            if (_pending is null)
+            {
+                throw new InvalidOperationException("The first GIF frame cannot be an unchanged update.");
+            }
+
+            ExtendPending(delay);
+            _frameCount++;
+            return;
+        }
+
+        GifPixelRect bounds = update.Bounds;
+        if (bounds.IsEmpty || bounds.Left < 0 || bounds.Top < 0
+            || bounds.Left + bounds.Width > _width || bounds.Top + bounds.Height > _height)
+        {
+            throw new ArgumentException("The update rectangle lies outside the GIF canvas.", nameof(update));
+        }
+
+        if (_pending is null && bounds != FullCanvas)
+        {
+            throw new ArgumentException("The first GIF frame must cover the whole canvas.", nameof(update));
+        }
+
+        EncodedGifFrame parsed = ParseSingleFrame(update.Payload, bounds.Width, bounds.Height);
+        Append(update, parsed, delay);
+        _canvas = null;
+        _boundedShown = false;
+        _frameCount++;
+    }
+
+    /// <summary>Writes the held image and the GIF trailer, then flushes the destination.</summary>
     /// <remarks>Calling this method more than once is harmless.</remarks>
     internal void Complete()
     {
@@ -157,6 +277,12 @@ internal sealed class AnimatedGifWriter : IDisposable
 
         try
         {
+            if (_pending is { } last)
+            {
+                WriteImage(last, last.Delay);
+                _pending = null;
+            }
+
             _output.WriteByte(Trailer);
             _output.Flush();
             _completed = true;
@@ -196,11 +322,204 @@ internal sealed class AnimatedGifWriter : IDisposable
         finally
         {
             _disposed = true;
+            _pending = null;
+            _canvas = null;
+            _bounded = null;
             if (!_leaveOpen)
             {
                 _output.Dispose();
             }
         }
+    }
+
+    private GifFrameUpdate AddFrameCore(byte[] pixels, int stride, ushort delay)
+    {
+        // Without a readable candidate the bounded mode degrades to whole frames, which still
+        // merges identical frames and never loses quality.
+        GifFrameDifferencing mode = _differencing == GifFrameDifferencing.ErrorBounded && _boundedUnavailable
+            ? GifFrameDifferencing.MergeIdentical
+            : _differencing;
+        GifPixelRect bounds = FullCanvas;
+        if (_canvas is not null && mode != GifFrameDifferencing.None)
+        {
+            GifPixelRect changed = GifFrameDifference.ChangedBounds(_canvas, _width * 4, pixels, stride, _width, _height);
+            if (changed.IsEmpty)
+            {
+                ExtendPending(delay);
+                _frameCount++;
+                return GifFrameUpdate.Unchanged;
+            }
+
+            if (mode == GifFrameDifferencing.ChangedRectangle)
+            {
+                bounds = changed;
+            }
+        }
+
+        // The platform encoder owns quantisation and LZW compression. Parsing finishes before
+        // the first destination byte of this frame is written, so an invalid or truncated
+        // platform payload cannot leave a half-added GIF frame.
+        byte[] payload = EncodeRegion(pixels, stride, bounds);
+        EncodedGifFrame parsed = ParseSingleFrame(payload, bounds.Width, bounds.Height);
+        if (mode == GifFrameDifferencing.ErrorBounded)
+        {
+            return AddBoundedFrame(pixels, stride, delay, payload, parsed);
+        }
+
+        var update = new GifFrameUpdate(bounds, payload);
+        Append(update, parsed, delay);
+        RememberCanvas(pixels, stride, bounds);
+        _frameCount++;
+        return update;
+    }
+
+    /// <summary>Writes the part of a whole-frame candidate that the error bound requires.</summary>
+    private GifFrameUpdate AddBoundedFrame(byte[] pixels, int stride, ushort delay, byte[] candidatePayload, EncodedGifFrame parsed)
+    {
+        _bounded ??= new GifBoundedCanvas(_width, _height);
+        GifBoundedCanvas.Candidate? candidate = _bounded.Read(candidatePayload, parsed);
+        GifBoundedCanvas.Plan? plan = candidate is not null && _boundedShown
+            ? _bounded.Choose(candidate, pixels, stride)
+            : null;
+        GifFrameUpdate update;
+        if (plan is null)
+        {
+            // The first frame, or a candidate that cannot be masked: write it whole.
+            update = new GifFrameUpdate(FullCanvas, candidatePayload);
+            Append(update, parsed, delay);
+            if (candidate is null)
+            {
+                _boundedUnavailable = true;
+                _boundedShown = false;
+            }
+            else
+            {
+                _bounded.Reset(candidate);
+                _boundedShown = true;
+            }
+        }
+        else if (plan.Update.IsUnchanged)
+        {
+            update = plan.Update;
+            ExtendPending(delay);
+        }
+        else
+        {
+            update = plan.Update;
+            Append(update, ParseSingleFrame(update.Payload, update.Bounds.Width, update.Bounds.Height), delay);
+            _bounded.Commit(plan);
+        }
+
+        RememberCanvas(pixels, stride, FullCanvas);
+        _frameCount++;
+        return update;
+    }
+
+    /// <summary>
+    /// Encodes the <paramref name="bounds"/> part of a frame. Every image is encoded from
+    /// BGRA32: the WIC GIF encoder quantises BGR32 and BGRA32 input differently even for equal
+    /// colours, so a single input format keeps equal pixels at equal bytes on every path.
+    /// </summary>
+    private byte[] EncodeRegion(byte[] pixels, int stride, GifPixelRect bounds)
+    {
+        int rowBytes = bounds.Width * 4;
+        byte[] region = pixels;
+        int regionStride = stride;
+        if (bounds != FullCanvas)
+        {
+            region = GC.AllocateUninitializedArray<byte>(checked(rowBytes * bounds.Height));
+            regionStride = rowBytes;
+            for (int row = 0; row < bounds.Height; row++)
+            {
+                Buffer.BlockCopy(
+                    pixels,
+                    ((bounds.Top + row) * stride) + (bounds.Left * 4),
+                    region,
+                    row * rowBytes,
+                    rowBytes);
+            }
+        }
+
+        BitmapSource bitmap = BitmapSource.Create(
+            bounds.Width,
+            bounds.Height,
+            96,
+            96,
+            PixelFormats.Bgra32,
+            null,
+            region,
+            regionStride);
+        return EncodeFrame(bitmap).ToArray();
+    }
+
+    private void RememberCanvas(byte[] pixels, int stride, GifPixelRect bounds)
+    {
+        if (_differencing == GifFrameDifferencing.None)
+        {
+            return;
+        }
+
+        int canvasStride = _width * 4;
+        _canvas ??= GC.AllocateUninitializedArray<byte>(canvasStride * _height);
+        int rowBytes = bounds.Width * 4;
+        for (int row = bounds.Top; row < bounds.Top + bounds.Height; row++)
+        {
+            Buffer.BlockCopy(
+                pixels,
+                (row * stride) + (bounds.Left * 4),
+                _canvas,
+                (row * canvasStride) + (bounds.Left * 4),
+                rowBytes);
+        }
+    }
+
+    /// <summary>Writes the held image with its final delay and holds the new one.</summary>
+    private void Append(GifFrameUpdate update, EncodedGifFrame parsed, ushort delay)
+    {
+        try
+        {
+            if (_pending is { } previous)
+            {
+                WriteImage(previous, previous.Delay);
+            }
+
+            _pending = new PendingImage(update, parsed, delay);
+            _imageCount++;
+        }
+        catch
+        {
+            // Once an output stream rejects a write, its position and persisted prefix are not
+            // generally recoverable. Prevent a later Complete call from presenting it as valid.
+            _faulted = true;
+            throw;
+        }
+    }
+
+    /// <summary>Adds an unchanged frame's delay to the image on screen.</summary>
+    private void ExtendPending(ushort delay)
+    {
+        PendingImage pending = _pending
+            ?? throw new InvalidOperationException("An unchanged frame needs an earlier image.");
+        int total = pending.Delay + delay;
+        if (total > ushort.MaxValue)
+        {
+            // GIF delays are 16-bit. Drawing the same image again changes no pixel, so a longer
+            // hold is written as the image followed by a repeat of it.
+            try
+            {
+                WriteImage(pending, ushort.MaxValue);
+                _imageCount++;
+            }
+            catch
+            {
+                _faulted = true;
+                throw;
+            }
+
+            total -= ushort.MaxValue;
+        }
+
+        pending.Delay = total;
     }
 
     /// <summary>
@@ -439,6 +758,12 @@ internal sealed class AnimatedGifWriter : IDisposable
         _output.Write(extension);
     }
 
+    private void WriteImage(PendingImage image, int delay)
+    {
+        WriteGraphicControlExtension(image.Parsed.HasTransparency, image.Parsed.TransparentColorIndex, (ushort)delay);
+        WriteImageBlock(image.Update.Payload, image.Parsed, image.Update.Bounds);
+    }
+
     private void WriteGraphicControlExtension(
         bool hasTransparency,
         byte transparentColourIndex,
@@ -449,7 +774,7 @@ internal sealed class AnimatedGifWriter : IDisposable
             ExtensionIntroducer,
             GraphicControlLabel,
             0x04,
-            (byte)(0x04 | (hasTransparency ? 0x01 : 0x00)), // disposal=keep, optional transparency
+            (byte)(0x04 | (hasTransparency ? 0x01 : 0x00)), // disposal 1 (keep), optional transparency
             0,
             0,
             hasTransparency ? transparentColourIndex : (byte)0,
@@ -459,7 +784,7 @@ internal sealed class AnimatedGifWriter : IDisposable
         _output.Write(extension);
     }
 
-    private void WriteImageBlock(ReadOnlySpan<byte> encoded, EncodedGifFrame frame)
+    private void WriteImageBlock(ReadOnlySpan<byte> encoded, EncodedGifFrame frame, GifPixelRect bounds)
     {
         Span<byte> descriptor = stackalloc byte[10]
         {
@@ -470,8 +795,10 @@ internal sealed class AnimatedGifWriter : IDisposable
             0, 0, // height
             0,
         };
-        BinaryPrimitives.WriteUInt16LittleEndian(descriptor[5..7], _width);
-        BinaryPrimitives.WriteUInt16LittleEndian(descriptor[7..9], _height);
+        BinaryPrimitives.WriteUInt16LittleEndian(descriptor[1..3], (ushort)bounds.Left);
+        BinaryPrimitives.WriteUInt16LittleEndian(descriptor[3..5], (ushort)bounds.Top);
+        BinaryPrimitives.WriteUInt16LittleEndian(descriptor[5..7], (ushort)bounds.Width);
+        BinaryPrimitives.WriteUInt16LittleEndian(descriptor[7..9], (ushort)bounds.Height);
         descriptor[9] = (byte)(
             0x80 |                         // promote the selected palette to a local table
             (frame.SourceImagePacked & 0x60) | // preserve interlace and sort flags
@@ -558,6 +885,16 @@ internal sealed class AnimatedGifWriter : IDisposable
     }
 
     private static InvalidDataException Malformed(string message) => new(message);
+
+    /// <summary>The newest image, held until the next different frame fixes its delay.</summary>
+    private sealed class PendingImage(GifFrameUpdate update, EncodedGifFrame parsed, int delay)
+    {
+        internal GifFrameUpdate Update { get; } = update;
+
+        internal EncodedGifFrame Parsed { get; } = parsed;
+
+        internal int Delay { get; set; } = delay;
+    }
 
     internal readonly record struct EncodedGifFrame(
         int PaletteOffset,

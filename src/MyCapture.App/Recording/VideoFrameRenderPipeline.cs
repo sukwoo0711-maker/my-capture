@@ -1,10 +1,12 @@
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Recording;
 
@@ -27,12 +29,54 @@ internal sealed record VideoFrameRenderProgress(int CompletedFrames, int TotalFr
 
 internal sealed record VideoMediaInfo(int Width, int Height, double DurationMs);
 
+/// <summary>MP4 render tunables. <see cref="Default"/> is what every production export uses.</summary>
+internal sealed record Mp4RenderOptions
+{
+    internal static Mp4RenderOptions Default { get; } = new();
+
+    /// <summary>
+    /// Decode to NV12 and give every frame with nothing drawn over it to an NV12 encoder input
+    /// unchanged; only frames with an active layer get those layers drawn onto their samples.
+    /// When false, or when the source cannot take that path, every frame is decoded to RGB and
+    /// the encoder converts it back, as before. Kept for comparison.
+    /// </summary>
+    internal bool PassThroughNv12 { get; init; } = true;
+
+    /// <summary>
+    /// Decode NV12 through D3D11/DXVA when available. Software decode is the automatic fallback,
+    /// both when the device cannot be opened and when it fails during the export.
+    /// </summary>
+    internal bool PreferHardwareDecode { get; init; } = true;
+
+    /// <summary>
+    /// On the NV12 path, render the active layers once per distinct set and blend them onto the
+    /// decoded samples with <see cref="Nv12LayerCompositor"/> (default). When false, every layered
+    /// frame is composed in full by the WPF compositor, about 30 ms at 1080p. Kept for comparison.
+    /// </summary>
+    internal bool BlendCachedLayers { get; init; } = true;
+}
+
+/// <summary>Where one MP4 render's frames came from and how many needed composition.</summary>
+internal sealed record Mp4RenderStatistics(string FrameSource, int Frames, int ComposedFrames);
+
+/// <summary>A hardware-decoded MP4 render failed after the decoder opened; software can retry it.</summary>
+internal sealed class Mp4HardwareDecodeException : InvalidOperationException
+{
+    internal Mp4HardwareDecodeException(Exception inner)
+        : base("Hardware video decode failed during MP4 export.", inner)
+    {
+    }
+}
+
 /// <summary>
 /// Decodes timestamped Media Foundation samples and composites the same timed text used by
 /// preview. Call this on an STA thread for WPF bitmap composition; no frame collection is retained.
 /// </summary>
 internal static class VideoFrameRenderPipeline
 {
+    /// <summary>Decoded NV12 frames the MP4 decode thread may hold ahead of the encoder.</summary>
+    private const int DecodeAheadFrames = 4;
+
     internal static int Render(
         VideoFrameRenderRequest request,
         Action<BitmapSource, double> acceptFrame,
@@ -50,6 +94,19 @@ internal static class VideoFrameRenderPipeline
         }
 
         double frameMs = 1000.0 / request.FramesPerSecond;
+        return RenderScheduled(
+            request,
+            BuildSchedule(request),
+            (frame, index) => acceptFrame(frame, index * frameMs),
+            progress,
+            cancellationToken,
+            acceptRawFrame);
+    }
+
+    /// <summary>Output frame <c>i</c> shows source time <c>StartMs + i / fps</c>; the interval end is exclusive.</summary>
+    private static double[] BuildSchedule(VideoFrameRenderRequest request)
+    {
+        double frameMs = 1000.0 / request.FramesPerSecond;
         double span = request.EndMs - request.StartMs;
         int totalFrames = Math.Max(1, checked((int)Math.Ceiling((span / frameMs) - 1e-9)));
         var sourceTimes = new double[totalFrames];
@@ -58,13 +115,248 @@ internal static class VideoFrameRenderPipeline
             sourceTimes[index] = request.StartMs + (index * frameMs);
         }
 
-        return RenderScheduled(
-            request,
-            sourceTimes,
-            (frame, index) => acceptFrame(frame, index * frameMs),
-            progress,
-            cancellationToken,
-            acceptRawFrame);
+        return sourceTimes;
+    }
+
+    /// <summary>
+    /// Renders the request's interval into an encoder that <paramref name="openEncoder"/> opens
+    /// once the decoder has shown which input layout it can feed. Frame <c>i</c> is written at
+    /// <c>i / fps</c>, exactly like <see cref="Render"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default path reads the decoder's own NV12 and hands every frame with nothing drawn over
+    /// it to an NV12 encoder input untouched, so a plain trim is decode plus encode with no colour
+    /// conversion at all (the RGB path converted every frame to RGB and the Sink Writer converted
+    /// it straight back). A frame with an active text or frame layer gets those layers, rendered
+    /// by the shared WPF layer code on this STA thread once per distinct active set, blended onto
+    /// the 2x2 blocks they cover by <see cref="Nv12LayerCompositor"/>; the rest of the frame keeps
+    /// the decoder's samples. Decoding runs on <see cref="Mp4FrameDecoder"/>'s thread a few
+    /// frames ahead, so it overlaps encoder submission; WPF and the encoder stay on this thread.
+    /// </para>
+    /// <para>
+    /// The original RGB path remains for sources that cannot pass through unchanged: no NV12
+    /// decoder output, an odd or rescaled frame size, a colour description the encoder would
+    /// not reproduce, or an encoder that rejects NV12 input. The caller owns the encoder it
+    /// opens: completion, disposal and, for <see cref="Mp4HardwareDecodeException"/>, a software
+    /// retry into a fresh encoder.
+    /// </para>
+    /// </remarks>
+    internal static Mp4RenderStatistics RenderToEncoder(
+        VideoFrameRenderRequest request,
+        Func<VideoEncoderInputFormat, IVideoEncoder> openEncoder,
+        Mp4RenderOptions options,
+        ILogger log,
+        IProgress<VideoFrameRenderProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(openEncoder);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(log);
+        Validate(request);
+        if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
+        {
+            throw new InvalidOperationException("Video frame composition requires an STA thread.");
+        }
+
+        double[] sourceTimes = BuildSchedule(request);
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps =
+            FrameEditLayerRenderer.Decode(request.FrameEditLayers);
+        if (options.PassThroughNv12 && (request.Width & 1) == 0 && (request.Height & 1) == 0)
+        {
+            using Mp4FrameDecoder decoder = Mp4FrameDecoder.Start(
+                request.SourcePath,
+                new MediaFoundationVideoFrameReaderOptions
+                {
+                    PreferHardwareDecode = options.PreferHardwareDecode,
+                    OutputFormat = DecodedVideoPixelFormat.Nv12,
+                    Log = log,
+                },
+                sourceTimes,
+                DecodeAheadFrames,
+                cancellationToken);
+            Mp4ReaderInfo info = decoder.WaitForOpen(cancellationToken);
+            if (CanPassThroughNv12(request, info)
+                && TryOpenEncoder(openEncoder, VideoEncoderInputFormat.Nv12, log) is { } nv12Encoder)
+            {
+                return RenderNv12(
+                    request,
+                    sourceTimes,
+                    decoder,
+                    info,
+                    nv12Encoder,
+                    frameLayerBitmaps,
+                    options,
+                    progress,
+                    cancellationToken);
+            }
+        }
+
+        MediaFoundationVideoFrameReader? reader = null;
+        try
+        {
+            reader = new MediaFoundationVideoFrameReader(request.SourcePath);
+            if (reader.Width <= 0 || reader.Height <= 0)
+            {
+                throw new InvalidDataException("The source video reported invalid dimensions.");
+            }
+
+            IVideoEncoder encoder = openEncoder(VideoEncoderInputFormat.Bgra32);
+            double frameMs = 1000.0 / request.FramesPerSecond;
+            byte[]? pixelBuffer = null;
+            int composed = 0;
+            int emitted = RenderFrames(
+                request,
+                sourceTimes,
+                reader,
+                frameLayerBitmaps,
+                (frame, index) =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    pixelBuffer = ToBgra32(frame, request.Width, request.Height, out int stride, pixelBuffer);
+                    encoder.WriteFrame(new EncoderFrame(pixelBuffer, request.Width, request.Height, stride, index * frameMs));
+                    composed++;
+                },
+                progress,
+                cancellationToken,
+                (decoded, index) =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    // Nothing is drawn over this frame and it has the output size: decoded
+                    // BGRA pixels go straight to the encoder, skipping WPF composition.
+                    encoder.WriteFrame(new EncoderFrame(
+                        decoded.Pixels,
+                        decoded.Width,
+                        decoded.Height,
+                        decoded.Stride,
+                        index * frameMs));
+                });
+            return new Mp4RenderStatistics("rgb-software", emitted, composed);
+        }
+        finally
+        {
+            reader?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// True when decoded NV12 can be encoded unchanged: the decoder kept NV12 at the output size,
+    /// and its colour encoding is the one an undeclared stream of that size is decoded with, which
+    /// is all the encoder signals. A source that declares anything else takes the RGB path, whose
+    /// converters translate it.
+    /// </summary>
+    internal static bool CanPassThroughNv12(VideoFrameRenderRequest request, Mp4ReaderInfo info)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return info.Format == DecodedVideoPixelFormat.Nv12
+            && info.Width == request.Width
+            && info.Height == request.Height
+            && (request.Width & 1) == 0
+            && (request.Height & 1) == 0
+            && info.Yuv == DefaultYuvEncoding(request.Height);
+    }
+
+    /// <summary>
+    /// The Media Foundation convention for a stream without a colour description: studio range,
+    /// BT.709 from 720 coded lines (H.264 codes whole 16-line macroblock rows) and BT.601 below.
+    /// The Sink Writer's RGB to Y'CbCr converter follows it too: 1080p RGB input encodes as
+    /// BT.709 and 320x240 as BT.601.
+    /// </summary>
+    internal static VideoYuvEncoding DefaultYuvEncoding(int height) =>
+        new(Bt709: checked((height + 15) & ~15) >= 720, FullRange: false);
+
+    private static IVideoEncoder? TryOpenEncoder(
+        Func<VideoEncoderInputFormat, IVideoEncoder> openEncoder,
+        VideoEncoderInputFormat format,
+        ILogger log)
+    {
+        try
+        {
+            return openEncoder(format);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or COMException)
+        {
+            log.LogWarning(ex, "The video encoder rejected {Format} input; using RGB input instead.", format);
+            return null;
+        }
+    }
+
+    private static Mp4RenderStatistics RenderNv12(
+        VideoFrameRenderRequest request,
+        double[] sourceTimes,
+        Mp4FrameDecoder decoder,
+        Mp4ReaderInfo info,
+        IVideoEncoder encoder,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        Mp4RenderOptions options,
+        IProgress<VideoFrameRenderProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        int width = request.Width;
+        int height = request.Height;
+        double frameMs = 1000.0 / request.FramesPerSecond;
+        VideoYuvEncoding encoding = info.Yuv;
+        Nv12LayerCompositor? layerCompositor = null;
+        VideoFrameCompositor? compositor = null;
+        byte[]? composedBgra = null;
+        byte[]? composedNv12 = null;
+        int composed = 0;
+        for (int index = 0; index < sourceTimes.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            double sourceTime = sourceTimes[index];
+            DecodedVideoFrame decoded = decoder.Take(cancellationToken);
+            if (decoded.Format != DecodedVideoPixelFormat.Nv12 || decoded.Width != width || decoded.Height != height)
+            {
+                // A mid-stream media-type change resized the decoder output; feeding mismatched
+                // buffers to the encoder would corrupt the output silently.
+                throw new InvalidDataException(
+                    "The source video changed resolution mid-stream; an MP4 export needs a constant frame size.");
+            }
+
+            EncoderFrame frame;
+            if (CanBypassComposition(request, frameLayerBitmaps, width, height, sourceTime))
+            {
+                frame = new EncoderFrame(decoded.Pixels, width, height, decoded.Stride, index * frameMs)
+                {
+                    Format = VideoEncoderInputFormat.Nv12,
+                };
+            }
+            else
+            {
+                composedNv12 ??= new byte[BgraToNv12Converter.RequiredLength(width, height)];
+                if (options.BlendCachedLayers)
+                {
+                    layerCompositor ??= new Nv12LayerCompositor(width, height);
+                    layerCompositor.Compose(request, frameLayerBitmaps, decoded.Pixels, encoding, sourceTime, composedNv12);
+                }
+                else
+                {
+                    byte[] bgra = Nv12FrameConverter.ToBgra(decoded.Pixels, width, height, encoding, width, height);
+                    compositor ??= new VideoFrameCompositor(width, height);
+                    BitmapSource composedFrame = compositor.Compose(
+                        request, frameLayerBitmaps, bgra, width, height, width * 4, sourceTime);
+                    composedBgra = ToBgra32(composedFrame, width, height, out int stride, composedBgra);
+                    BgraToNv12Converter.Convert(composedBgra, stride, width, height, encoding, composedNv12);
+                }
+
+                frame = new EncoderFrame(composedNv12, width, height, width, index * frameMs)
+                {
+                    Format = VideoEncoderInputFormat.Nv12,
+                };
+                composed++;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            encoder.WriteFrame(frame);
+            progress?.Report(new VideoFrameRenderProgress(index + 1, sourceTimes.Length, sourceTime));
+        }
+
+        return new Mp4RenderStatistics(
+            info.IsHardwareAccelerated ? "nv12-hardware" : "nv12-software",
+            sourceTimes.Length,
+            composed);
     }
 
     /// <summary>Renders a monotonic, caller-defined source schedule in one decoder session.</summary>
@@ -92,34 +384,13 @@ internal static class VideoFrameRenderPipeline
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(sourceTimes);
         ArgumentNullException.ThrowIfNull(acceptFrame);
-        Validate(request);
 
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
         {
             throw new InvalidOperationException("Video frame composition requires an STA thread.");
         }
 
-        if (sourceTimes.Count == 0)
-        {
-            throw new ArgumentException("At least one source frame time is required.", nameof(sourceTimes));
-        }
-
-        double previous = double.NegativeInfinity;
-        for (int index = 0; index < sourceTimes.Count; index++)
-        {
-            double sourceTime = sourceTimes[index];
-            if (!double.IsFinite(sourceTime)
-                || sourceTime < request.StartMs
-                || sourceTime >= request.EndMs
-                || sourceTime + 1e-9 < previous)
-            {
-                throw new ArgumentException(
-                    "Source frame times must be finite, monotonic, and inside the render interval.",
-                    nameof(sourceTimes));
-            }
-
-            previous = sourceTime;
-        }
+        ValidateSchedule(request, sourceTimes);
 
         using var reader = new MediaFoundationVideoFrameReader(request.SourcePath);
         if (reader.Width <= 0 || reader.Height <= 0)
@@ -127,9 +398,28 @@ internal static class VideoFrameRenderPipeline
             throw new InvalidDataException("The source video reported invalid dimensions.");
         }
 
-        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps =
-            FrameEditLayerRenderer.Decode(request.FrameEditLayers);
+        return RenderFrames(
+            request,
+            sourceTimes,
+            reader,
+            FrameEditLayerRenderer.Decode(request.FrameEditLayers),
+            acceptFrame,
+            progress,
+            cancellationToken,
+            acceptRawFrame);
+    }
 
+    /// <summary>The <see cref="RenderScheduled"/> loop over an open BGR32 reader.</summary>
+    private static int RenderFrames(
+        VideoFrameRenderRequest request,
+        IReadOnlyList<double> sourceTimes,
+        MediaFoundationVideoFrameReader reader,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        Action<BitmapSource, int> acceptFrame,
+        IProgress<VideoFrameRenderProgress>? progress,
+        CancellationToken cancellationToken,
+        Action<DecodedVideoFrame, int>? acceptRawFrame)
+    {
         if (acceptRawFrame is not null
             && CanBypassComposition(request, reader.Width, reader.Height))
         {
@@ -154,42 +444,25 @@ internal static class VideoFrameRenderPipeline
             return sourceTimes.Count;
         }
 
-        var source = new WriteableBitmap(reader.Width, reader.Height, 96, 96, PixelFormats.Bgr32, null);
-        var visual = new DrawingVisual();
-        var target = new RenderTargetBitmap(request.Width, request.Height, 96, 96, PixelFormats.Pbgra32);
+        var compositor = new VideoFrameCompositor(request.Width, request.Height);
         for (int index = 0; index < sourceTimes.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             double sourceTime = sourceTimes[index];
 
             DecodedVideoFrame decoded = reader.ReadFrameAt(sourceTime, cancellationToken);
-            if (decoded.Width != source.PixelWidth || decoded.Height != source.PixelHeight)
+            if (acceptRawFrame is not null
+                && CanBypassComposition(request, frameLayerBitmaps, decoded.Width, decoded.Height, sourceTime))
             {
-                // A mid-stream media-type change resized the decoder output; rebuild the
-                // reusable source bitmap for the new dimensions.
-                source = new WriteableBitmap(decoded.Width, decoded.Height, 96, 96, PixelFormats.Bgr32, null);
+                // Nothing is drawn over this frame and it already has the output size, so
+                // composition would be an exact copy (see the per-frame overload).
+                acceptRawFrame(decoded, index);
+            }
+            else
+            {
+                acceptFrame(compositor.Compose(request, frameLayerBitmaps, decoded, sourceTime), index);
             }
 
-            source.WritePixels(new Int32Rect(0, 0, decoded.Width, decoded.Height), decoded.Pixels, decoded.Stride, 0);
-            using (DrawingContext dc = visual.RenderOpen())
-            {
-                DrawComposedFrame(
-                    dc,
-                    source,
-                    request.Width,
-                    request.Height,
-                    request.CanvasWidth,
-                    request.CanvasHeight,
-                    request.TextOverlays,
-                    request.FrameEditLayers,
-                    frameLayerBitmaps,
-                    sourceTime);
-            }
-
-            target.Clear();
-            target.Render(visual);
-            BitmapSource frame = new FormatConvertedBitmap(target, PixelFormats.Bgra32, null, 0);
-            acceptFrame(frame, index);
             progress?.Report(new VideoFrameRenderProgress(index + 1, sourceTimes.Count, sourceTime));
         }
 
@@ -206,6 +479,79 @@ internal static class VideoFrameRenderPipeline
         && request.FrameEditLayers.Count == 0
         && request.Width == sourceWidth
         && request.Height == sourceHeight;
+
+    /// <summary>
+    /// Per-frame form: true when the frame at <paramref name="sourceTimeMs"/> already has the
+    /// output size and nothing would be drawn over it — no active overlay with visible text and
+    /// no active frame layer whose bitmap decoded. Composing such a frame only copies it (black
+    /// fill, 1:1 image), so skipping composition cannot change its pixels. Text-free segments of
+    /// an edited clip therefore avoid <see cref="RenderTargetBitmap"/> entirely.
+    /// </summary>
+    internal static bool CanBypassComposition(
+        VideoFrameRenderRequest request,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        int frameWidth,
+        int frameHeight,
+        double sourceTimeMs)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(frameLayerBitmaps);
+        if (request.Width != frameWidth || request.Height != frameHeight)
+        {
+            return false;
+        }
+
+        foreach (TimedTextOverlay overlay in request.TextOverlays)
+        {
+            if (overlay is not null
+                && overlay.IsActiveAt(sourceTimeMs)
+                && !string.IsNullOrWhiteSpace(overlay.Text))
+            {
+                return false;
+            }
+        }
+
+        foreach (FrameEditLayer layer in request.FrameEditLayers)
+        {
+            if (layer is not null
+                && layer.IsActiveAt(sourceTimeMs)
+                && frameLayerBitmaps.ContainsKey(layer.Id))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Validates a request plus a caller-defined monotonic schedule inside its interval.</summary>
+    internal static void ValidateSchedule(VideoFrameRenderRequest request, IReadOnlyList<double> sourceTimes)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(sourceTimes);
+        Validate(request);
+        if (sourceTimes.Count == 0)
+        {
+            throw new ArgumentException("At least one source frame time is required.", nameof(sourceTimes));
+        }
+
+        double previous = double.NegativeInfinity;
+        for (int index = 0; index < sourceTimes.Count; index++)
+        {
+            double sourceTime = sourceTimes[index];
+            if (!double.IsFinite(sourceTime)
+                || sourceTime < request.StartMs
+                || sourceTime >= request.EndMs
+                || sourceTime + 1e-9 < previous)
+            {
+                throw new ArgumentException(
+                    "Source frame times must be finite, monotonic, and inside the render interval.",
+                    nameof(sourceTimes));
+            }
+
+            previous = sourceTime;
+        }
+    }
 
     internal static BitmapSource RenderSingleFrame(
         string sourcePath,
@@ -285,7 +631,9 @@ internal static class VideoFrameRenderPipeline
         }
 
         // Decode both ends, not only container metadata. This rejects truncated MP4 files whose
-        // header still advertises plausible dimensions and duration.
+        // header still advertises plausible dimensions and duration. The final request seeks to
+        // the key frame before the end, so validation decodes about one key-frame interval
+        // instead of the whole clip; a missing tail still surfaces as an early final sample.
         _ = reader.ReadFrameAt(0, cancellationToken);
         DecodedVideoFrame finalFrame = reader.ReadFrameAt(Math.Max(0, duration - 1), cancellationToken);
         ValidateDecodedTail(duration, finalFrame);
@@ -374,7 +722,7 @@ internal static class VideoFrameRenderPipeline
         return target;
     }
 
-    private static void DrawComposedFrame(
+    internal static void DrawComposedFrame(
         DrawingContext dc,
         ImageSource source,
         int width,
@@ -388,6 +736,34 @@ internal static class VideoFrameRenderPipeline
     {
         dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
         dc.DrawImage(source, new Rect(0, 0, width, height));
+        DrawLayers(
+            dc,
+            width,
+            height,
+            canvasWidth,
+            canvasHeight,
+            overlays,
+            frameEditLayers,
+            frameLayerBitmaps,
+            sourceTimeMs);
+    }
+
+    /// <summary>
+    /// The frame layers and timed text active at <paramref name="sourceTimeMs"/>, scaled from the
+    /// editor canvas to the output size: everything <see cref="DrawComposedFrame"/> draws over
+    /// the video.
+    /// </summary>
+    internal static void DrawLayers(
+        DrawingContext dc,
+        int width,
+        int height,
+        int canvasWidth,
+        int canvasHeight,
+        IReadOnlyList<TimedTextOverlay> overlays,
+        IReadOnlyList<FrameEditLayer> frameEditLayers,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        double sourceTimeMs)
+    {
         double scaleX = (double)width / canvasWidth;
         double scaleY = (double)height / canvasHeight;
         dc.PushTransform(new ScaleTransform(scaleX, scaleY));
@@ -484,6 +860,74 @@ internal static class VideoFrameRenderPipeline
         }
     }
 
+}
+
+/// <summary>
+/// Reusable composition buffers for one thread: the decoded-frame bitmap, the drawing visual and
+/// the render target shared by MP4 rendering and GIF export. The returned bitmap
+/// aliases the render target, so it must be consumed (encoded or copied) before the next
+/// <see cref="Compose(VideoFrameRenderRequest, IReadOnlyDictionary{Guid, BitmapSource}, byte[], int, int, int, double)"/>
+/// call on the same instance. Instances are bound to the thread that created them.
+/// </summary>
+internal sealed class VideoFrameCompositor
+{
+    private readonly DrawingVisual _visual = new();
+    private readonly RenderTargetBitmap _target;
+    private WriteableBitmap? _source;
+
+    internal VideoFrameCompositor(int width, int height)
+    {
+        _target = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+    }
+
+    internal BitmapSource Compose(
+        VideoFrameRenderRequest request,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        DecodedVideoFrame decoded,
+        double sourceTimeMs) =>
+        Compose(request, frameLayerBitmaps, decoded.Pixels, decoded.Width, decoded.Height, decoded.Stride, sourceTimeMs);
+
+    /// <summary>
+    /// Draws a BGR32 frame (stretched to the request size) plus the active frame layers and
+    /// timed text, and returns the opaque BGRA32 result.
+    /// </summary>
+    internal BitmapSource Compose(
+        VideoFrameRenderRequest request,
+        IReadOnlyDictionary<Guid, BitmapSource> frameLayerBitmaps,
+        byte[] pixels,
+        int width,
+        int height,
+        int stride,
+        double sourceTimeMs)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (_source is null || _source.PixelWidth != width || _source.PixelHeight != height)
+        {
+            // A mid-stream media-type change resized the decoder output; rebuild the
+            // reusable source bitmap for the new dimensions.
+            _source = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, null);
+        }
+
+        _source.WritePixels(new Int32Rect(0, 0, width, height), pixels, stride, 0);
+        using (DrawingContext dc = _visual.RenderOpen())
+        {
+            VideoFrameRenderPipeline.DrawComposedFrame(
+                dc,
+                _source,
+                request.Width,
+                request.Height,
+                request.CanvasWidth,
+                request.CanvasHeight,
+                request.TextOverlays,
+                request.FrameEditLayers,
+                frameLayerBitmaps,
+                sourceTimeMs);
+        }
+
+        _target.Clear();
+        _target.Render(_visual);
+        return new FormatConvertedBitmap(_target, PixelFormats.Bgra32, null, 0);
+    }
 }
 
 /// <summary>Shared transparent frame-layer compositor used by preview, MP4 and GIF export.</summary>

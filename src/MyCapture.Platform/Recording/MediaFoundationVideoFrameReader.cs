@@ -1,5 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using MyCapture.Core.Recording;
+using Microsoft.Extensions.Logging;
 
 namespace MyCapture.Platform.Recording;
 
@@ -14,6 +16,9 @@ public sealed record DecodedVideoFrame(
 {
     /// <summary>The source-timeline position covered by the end of this decoded sample.</summary>
     public double EndTimestampMs => TimestampMs + SampleDurationMs;
+
+    /// <summary>Layout of <see cref="Pixels"/>; BGR32 unless NV12 output was requested.</summary>
+    public DecodedVideoPixelFormat Format { get; init; }
 }
 
 /// <summary>
@@ -76,10 +81,11 @@ internal sealed class DecodedVideoFrameSelector
 
 /// <summary>
 /// Synchronously decodes Windows-supported video files through Media Foundation's Source Reader.
-/// Requests may move forward without seeking; a backwards request performs one key-frame seek and
-/// then advances decoded samples to the requested presentation position.
+/// Nearby forward requests advance decoded samples without seeking. A backwards request, or a
+/// forward request beyond <see cref="ForwardSeekPolicy"/>'s threshold, performs one key-frame
+/// seek and then advances decoded samples to the exact requested presentation position.
 /// </summary>
-public sealed class MediaFoundationVideoFrameReader : IDisposable
+public sealed partial class MediaFoundationVideoFrameReader : IDisposable
 {
     private const uint MfVersion = 0x0002_0070;
     private const uint MfStartupFull = 0;
@@ -121,8 +127,21 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
     private DecodedVideoFrame? _unresolvedDurationFrame;
     private DecodedVideoFrame? _rawLookaheadFrame;
     private double _lastResolvedSampleDurationMs;
+    private double? _newestDecodedMs;
+    private bool _awaitingSeekLanding;
+    private double? _forwardSeekOriginMs;
+    private double _forwardSeekTargetMs;
 
     public MediaFoundationVideoFrameReader(string sourcePath)
+        : this(sourcePath, options: null)
+    {
+    }
+
+    /// <summary>
+    /// Opens <paramref name="sourcePath"/>, optionally preferring D3D11 hardware decode and a
+    /// GPU resize. Without options this is exactly the original software reader.
+    /// </summary>
+    public MediaFoundationVideoFrameReader(string sourcePath, MediaFoundationVideoFrameReaderOptions? options)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         string fullPath = Path.GetFullPath(sourcePath);
@@ -138,7 +157,7 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
         _startedMediaFoundation = true;
         try
         {
-            Initialize(fullPath);
+            Initialize(fullPath, options ?? MediaFoundationVideoFrameReaderOptions.Default);
         }
         catch
         {
@@ -152,6 +171,21 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
     public int Height { get; private set; }
 
     public double DurationMs { get; private set; }
+
+    /// <summary>Seeks performed so far (initial, backward and forward). Diagnostics and tests only.</summary>
+    internal int SeekCount { get; private set; }
+
+    /// <summary>Decoded samples delivered so far. Diagnostics and tests only.</summary>
+    internal int DecodedFrameCount { get; private set; }
+
+    /// <summary>Presentation time of the first sample decoded after the latest seek.</summary>
+    internal double? LastSeekLandingMs { get; private set; }
+
+    /// <summary>Newest decoded sample, from which a forward request's gap is measured.</summary>
+    internal double? NewestDecodedMs => _newestDecodedMs;
+
+    /// <summary>Forward-seek decision for this reader; tests replace it to compare against sequential decoding.</summary>
+    internal ForwardSeekPolicy ForwardSeekPolicy { get; set; } = new();
 
     /// <summary>
     /// Reads only the container presentation duration (<c>MF_PD_DURATION</c>) without configuring
@@ -206,16 +240,99 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
         {
             Seek(sourceTimeMs);
         }
+        else if (DurationMs > 0 && ForwardSeekPolicy.ShouldSeek(_newestDecodedMs, sourceTimeMs, _endOfStream))
+        {
+            SeekForward(sourceTimeMs, _newestDecodedMs!.Value);
+        }
 
         _lastRequestedMs = sourceTimeMs;
         return _frameSelector.Select(
             sourceTimeMs,
-            () => ReadNextFrame(cancellationToken),
+            () => ReadTrackedFrame(cancellationToken),
             cancellationToken);
     }
 
-    private void Initialize(string fullPath)
+    /// <summary>
+    /// Skips to the key frame before a distant forward target, so the decoder walks at most one
+    /// key-frame interval instead of every intermediate sample (e.g. validating a clip's final
+    /// frame right after its first). The outcome must equal sequential decoding, so a source that
+    /// rejects the seek restarts from the beginning and continues sequentially.
+    /// </summary>
+    private void SeekForward(double sourceTimeMs, double originMs)
     {
+        try
+        {
+            // Media Foundation rejects positions after the container duration
+            // (MF_E_OUT_OF_RANGE); the key frame before the end still serves a later request.
+            Seek(Math.Min(sourceTimeMs, DurationMs));
+        }
+        catch (InvalidOperationException)
+        {
+            ForwardSeekPolicy.Disable();
+            Seek(0);
+            return;
+        }
+
+        _forwardSeekOriginMs = originMs;
+        _forwardSeekTargetMs = sourceTimeMs;
+    }
+
+    /// <summary>
+    /// Records the decode position for the forward-seek decision. When a forward seek resumes
+    /// after the target, the frames it needs were skipped: restart from the beginning and decode
+    /// sequentially so frame selection stays exact.
+    /// </summary>
+    private DecodedVideoFrame? ReadTrackedFrame(CancellationToken cancellationToken)
+    {
+        DecodedVideoFrame? frame = ReadNextFrame(cancellationToken);
+        if (_awaitingSeekLanding)
+        {
+            _awaitingSeekLanding = false;
+            LastSeekLandingMs = frame?.TimestampMs;
+            if (_forwardSeekOriginMs is double origin)
+            {
+                _forwardSeekOriginMs = null;
+                ForwardSeekLanding landing = ForwardSeekPolicy.Evaluate(
+                    origin,
+                    _forwardSeekTargetMs,
+                    frame?.TimestampMs ?? double.NaN);
+                if (landing == ForwardSeekLanding.Overshot)
+                {
+                    // The selector has consumed nothing since the forward seek reset it, so a
+                    // restart cannot desynchronise its held or look-ahead frame.
+                    Seek(0);
+                    _awaitingSeekLanding = false;
+                    frame = ReadNextFrame(cancellationToken);
+                    LastSeekLandingMs = frame?.TimestampMs;
+                }
+            }
+        }
+
+        if (frame is not null)
+        {
+            DecodedFrameCount++;
+            _newestDecodedMs = frame.TimestampMs;
+        }
+
+        return frame;
+    }
+
+    private void Initialize(string fullPath, MediaFoundationVideoFrameReaderOptions options)
+    {
+        if (options.PreferHardwareDecode)
+        {
+            string? failure = TryInitializeHardware(fullPath, options);
+            if (failure is null)
+            {
+                return;
+            }
+
+            HardwareFallbackReason = failure;
+            options.Log?.LogWarning(
+                "Hardware video decode is unavailable; using the software decoder. {Reason}",
+                failure);
+        }
+
         Check(MFCreateAttributes(out IMFAttributes attributes, 2), nameof(MFCreateAttributes));
         try
         {
@@ -234,6 +351,16 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
 
         Check(_reader!.SetStreamSelection(AllStreams, false), "IMFSourceReader.SetStreamSelection(all)");
         Check(_reader.SetStreamSelection(FirstVideoStream, true), "IMFSourceReader.SetStreamSelection(video)");
+
+        // NV12 is the H.264/HEVC decoders' own output, so no software colour converter runs.
+        if (options.OutputFormat == DecodedVideoPixelFormat.Nv12
+            && TrySetOutputSubtype(_reader, VideoFormatNv12) >= 0)
+        {
+            _format = DecodedVideoPixelFormat.Nv12;
+            RefreshOutputFormat();
+            DurationMs = ReadDurationMs(_reader!);
+            return;
+        }
 
         Check(MFCreateMediaType(out IMFMediaType requestedType), nameof(MFCreateMediaType));
         try
@@ -273,7 +400,19 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
                 throw new InvalidDataException("The source video reported invalid dimensions.");
             }
 
-            (_cropX, _cropY, Width, Height) = ReadDisplayArea(currentType, _codedWidth, _codedHeight);
+            (_cropX, _cropY, Width, Height) = _hardwareResize
+                ? ReadResizedDisplayArea(currentType, _codedWidth, _codedHeight)
+                : ReadDisplayArea(currentType, _codedWidth, _codedHeight);
+
+            int bytesPerPixel = 4;
+            if (_format == DecodedVideoPixelFormat.Nv12)
+            {
+                // Chroma pairs cover two luma columns and rows; keep the crop on that grid.
+                bytesPerPixel = 1;
+                _cropX &= ~1;
+                _cropY &= ~1;
+                YuvEncoding = ReadYuvEncoding(currentType, _codedHeight);
+            }
 
             Guid strideKey = MediaTypeDefaultStride;
             int strideResult = currentType.GetUINT32(ref strideKey, out uint rawStride);
@@ -282,13 +421,13 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
                 Check(strideResult, "IMFMediaType.GetUINT32(default stride)");
             }
 
-            _sourceStride = strideResult >= 0 ? unchecked((int)rawStride) : checked(_codedWidth * 4);
+            _sourceStride = strideResult >= 0 ? unchecked((int)rawStride) : checked(_codedWidth * bytesPerPixel);
             if (_sourceStride == 0)
             {
-                _sourceStride = checked(_codedWidth * 4);
+                _sourceStride = checked(_codedWidth * bytesPerPixel);
             }
 
-            if (Math.Abs((long)_sourceStride) < checked((long)_codedWidth * 4))
+            if (Math.Abs((long)_sourceStride) < checked((long)_codedWidth * bytesPerPixel))
             {
                 throw new InvalidDataException("The decoded video stride is smaller than one pixel row.");
             }
@@ -398,6 +537,10 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
         _unresolvedDurationFrame = null;
         _rawLookaheadFrame = null;
         _lastResolvedSampleDurationMs = 0;
+        SeekCount++;
+        _newestDecodedMs = null;
+        _awaitingSeekLanding = true;
+        _forwardSeekOriginMs = null;
     }
 
     private DecodedVideoFrame? ReadNextFrame(CancellationToken cancellationToken)
@@ -551,6 +694,21 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
         Check(sample.ConvertToContiguousBuffer(out IMFMediaBuffer buffer), "IMFSample.ConvertToContiguousBuffer");
         try
         {
+            if (_d3d is not null && TryCopyGpuSurface(buffer, timestampMs, sampleDurationMs) is { } gpuFrame)
+            {
+                return gpuFrame;
+            }
+
+            if (_format == DecodedVideoPixelFormat.Nv12)
+            {
+                return CopyNv12(buffer, timestampMs, sampleDurationMs);
+            }
+
+            if (_d3d is not null && buffer is IMF2DBuffer2 surface)
+            {
+                return CopySurface(surface, timestampMs, sampleDurationMs);
+            }
+
             Check(buffer.Lock(out IntPtr data, out _, out uint currentLength), "IMFMediaBuffer.Lock");
             try
             {
@@ -564,7 +722,8 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
                 }
 
                 int outputStride = rowBytes;
-                byte[] pixels = new byte[checked(outputStride * Height)];
+                // Every byte is overwritten by the row copies below.
+                byte[] pixels = GC.AllocateUninitializedArray<byte>(checked(outputStride * Height));
                 IntPtr topRow = _sourceStride < 0
                     ? data + checked(absoluteStride * (_codedHeight - 1))
                     : data;
@@ -611,6 +770,10 @@ public sealed class MediaFoundationVideoFrameReader : IDisposable
             Marshal.ReleaseComObject(_reader);
             _reader = null;
         }
+
+        // The device manager must outlive the reader and its decoder/processor transforms.
+        _d3d?.Dispose();
+        _d3d = null;
 
         if (_startedMediaFoundation)
         {
