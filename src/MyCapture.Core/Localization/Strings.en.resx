@@ -2988,7 +2988,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_Extension" xml:space="preserve"><value>Use the {0} file extension.</value></data>
   <data name="MediaExport_Title" xml:space="preserve"><value>Export video</value></data>
   <data name="MediaExport_Summary" xml:space="preserve"><value>{0} × {1} · {2} fps · selected interval {3:N1} s</value></data>
-  <data name="MediaExport_Format" xml:space="preserve"><value>File format</value></data>
+  <data name="MediaExport_Format" xml:space="preserve"><value>Format</value></data>
   <data name="MediaExport_Baseline" xml:space="preserve"><value>The baseline is a standard MP4 of the current edits and selected interval. It may differ from the original file size.</value></data>
   <data name="MediaExport_TargetLabel" xml:space="preserve"><value>Target file size reduction</value></data>
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>Resolution and frame rate stay unchanged. The reduction is a target; calculate to see the actual size. Quality may decrease.</value></data>
@@ -3010,17 +3010,43 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_Result" xml:space="preserve"><value>Standard MP4: {0:N0} bytes → result: {1:N0} bytes ({2:N1}% actual reduction)</value></data>
   <data name="MediaExport_Ready" xml:space="preserve"><value>The result is ready to save as a new file.</value></data>
   <data name="MediaExport_Unmet" xml:space="preserve"><value>The target was not reached. Save the measured result or change the target.</value></data>
-  <data name="MediaExport_Cancelled" xml:space="preserve"><value>Cancelled. You can calculate again.</value></data>
+  <data name="MediaExport_Cancelled" xml:space="preserve"><value>Export cancelled. Change the settings or export again.</value></data>
   <data name="MediaExport_Error" xml:space="preserve"><value>Could not export: {0}</value></data>
-  <data name="MediaExport_Saved" xml:space="preserve"><value>Saved: {0}</value></data>
+  <data name="MediaExport_Saved" xml:space="preserve"><value>Saved · {0}</value></data>
   <data name="MediaExport_SavingCopy" xml:space="preserve"><value>Saving… {0}%</value></data>
   <data name="VideoEdit_Finalizing" xml:space="preserve"><value>Finalising the saved video…</value></data>
   <data name="VideoEdit_ImageLayerPreparing" xml:space="preserve"><value>Preparing the image layer…</value></data>
-  <data name="MediaExport_Cancel" xml:space="preserve"><value>Cancel operation</value></data>
+  <data name="MediaExport_Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="MediaExport_SaveEdits" xml:space="preserve"><value>Save edits</value></data>
   <data name="MediaExport_ExportFormats" xml:space="preserve"><value>Export · MP4 / GIF</value></data>
   <data name="MediaExport_Workspace" xml:space="preserve"><value>Video editor</value></data>
   <data name="MediaExport_ResultPreview" xml:space="preserve"><value>Sample frame from the calculated file</value></data>
+  <data name="MediaExport_Export" xml:space="preserve"><value>Export</value></data>
+  <data name="MediaExport_SizeHeading" xml:space="preserve"><value>File size</value></data>
+  <data name="MediaExport_SizeOriginal" xml:space="preserve"><value>Original quality</value></data>
+  <data name="MediaExport_SizeSmaller" xml:space="preserve"><value>Smaller</value></data>
+  <data name="MediaExport_SizeSmallest" xml:space="preserve"><value>Smallest</value></data>
+  <data name="MediaExport_SizeOriginalHelp" xml:space="preserve"><value>Encodes at the standard bitrate. Resolution and frame rate stay unchanged.</value></data>
+  <data name="MediaExport_SizePresetHelp" xml:space="preserve"><value>Lowers the bitrate by about {0}%. Resolution and frame rate stay unchanged; quality may decrease.</value></data>
+  <data name="MediaExport_Advanced" xml:space="preserve"><value>Advanced</value></data>
+  <data name="MediaExport_Mp4Summary" xml:space="preserve"><value>Estimated size about {0} · {1} · {2}×{3}</value></data>
+  <data name="MediaExport_GifSummary" xml:space="preserve"><value>Estimated size {0} · {1:N0} frames · playback {2:N1} s</value></data>
+  <data name="MediaExport_SizeMb" xml:space="preserve"><value>{0:0.0} MB</value></data>
+  <data name="MediaExport_SizeKb" xml:space="preserve"><value>{0:N0} KB</value></data>
+  <data name="MediaExport_Exporting" xml:space="preserve"><value>Exporting</value></data>
+  <data name="MediaExport_Percent" xml:space="preserve"><value>{0}%</value></data>
+  <data name="MediaExport_Remaining" xml:space="preserve"><value>About {0:N0} s left</value></data>
+  <data name="MediaExport_OpenFolder" xml:space="preserve"><value>Open folder</value></data>
+  <data name="MediaExport_EditedSuffix" xml:space="preserve"><value>_edited</value></data>
+  <data name="MediaExport_Hint" xml:space="preserve"><value>The original video stays unchanged.</value></data>
+  <data name="MediaExport_AdviceCurrentShort" xml:space="preserve"><value>Recommended · within the {0} limit</value></data>
+  <data name="MediaExport_AdviceCurrentNoLimitShort" xml:space="preserve"><value>Recommended · no size limit</value></data>
+  <data name="MediaExport_AdviceSwitchShort" xml:space="preserve"><value>Recommended: {0} · about {1}</value></data>
+  <data name="MediaExport_AdviceMp4Short" xml:space="preserve"><value>Over the {0} GIF limit · MP4 recommended</value></data>
+  <data name="MediaExport_AdviceMp4FramesShort" xml:space="preserve"><value>Too many GIF frames · MP4 recommended</value></data>
+  <data name="MediaExport_AdviceSpeedShort" xml:space="preserve"><value>{0:0.#}× suggested</value></data>
+  <data name="MediaExport_SourcePreview" xml:space="preserve"><value>Sample frame from the selected interval</value></data>
+  <data name="MediaExport_GifSummaryPending" xml:space="preserve"><value>Estimating size · {0:N0} frames · playback {1:N1} s</value></data>
 <data name="Shell.Close" xml:space="preserve"><value>Close</value></data>
 <data name="Shell.Help" xml:space="preserve"><value>How to use MyCapture</value></data>
 <data name="Shell.HelpText" xml:space="preserve"><value>Capture a region / retake: use your configured capture shortcut
