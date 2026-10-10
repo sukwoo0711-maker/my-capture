@@ -188,6 +188,42 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
     internal ForwardSeekPolicy ForwardSeekPolicy { get; set; } = new();
 
     /// <summary>
+    /// Reads only the container presentation duration (<c>MF_PD_DURATION</c>) without configuring
+    /// a decoder. This is the timeline every export decodes against. WPF's MediaElement and
+    /// MediaPlayer take <c>NaturalDuration</c> from Windows Media Player's
+    /// <c>IWMPMedia::get_duration</c>, which truncates the same MP4s to whole seconds.
+    /// </summary>
+    /// <returns>The duration in milliseconds, or 0 when the source advertises none.</returns>
+    public static double ReadContainerDurationMs(string sourcePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        string fullPath = Path.GetFullPath(sourcePath);
+        // Same contract as the constructor: the caller selected this exact local file.
+        // codeql[cs/path-injection]
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("The source video is unavailable.", fullPath);
+        }
+
+        Check(MFStartup(MfVersion, MfStartupFull), nameof(MFStartup));
+        IMFSourceReader? reader = null;
+        try
+        {
+            Check(MFCreateSourceReaderFromURL(fullPath, null, out reader), nameof(MFCreateSourceReaderFromURL));
+            return ReadDurationMs(reader);
+        }
+        finally
+        {
+            if (reader is not null)
+            {
+                Marshal.ReleaseComObject(reader);
+            }
+
+            _ = MFShutdown();
+        }
+    }
+
+    /// <summary>
     /// Returns the frame presented at <paramref name="sourceTimeMs"/>. The reader retains at most
     /// one previous frame and one decoded look-ahead frame, so long exports stay memory bounded.
     /// </summary>
@@ -345,7 +381,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         }
 
         RefreshOutputFormat();
-        DurationMs = ReadDurationMs();
+        DurationMs = ReadDurationMs(_reader!);
     }
 
     private void RefreshOutputFormat()
@@ -459,10 +495,10 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         }
     }
 
-    private double ReadDurationMs()
+    private static double ReadDurationMs(IMFSourceReader reader)
     {
         Guid durationKey = PresentationDuration;
-        int result = _reader!.GetPresentationAttribute(MediaSource, ref durationKey, out PropVariant value);
+        int result = reader.GetPresentationAttribute(MediaSource, ref durationKey, out PropVariant value);
         if (result == MediaFoundationAttributeNotFound)
         {
             return 0;
@@ -817,7 +853,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
     [DllImport("mfreadwrite.dll", CharSet = CharSet.Unicode)]
     private static extern int MFCreateSourceReaderFromURL(
         string url,
-        IMFAttributes attributes,
+        IMFAttributes? attributes,
         out IMFSourceReader sourceReader);
 
     [DllImport("ole32.dll")]

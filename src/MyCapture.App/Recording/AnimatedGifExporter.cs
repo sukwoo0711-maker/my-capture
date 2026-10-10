@@ -82,10 +82,16 @@ internal static class AnimatedGifExporter
         quality ??= GifExportQuality.Standard;
         quality.Validate();
 
+        // The editor stamps the document with the container duration it measured; the recording
+        // metadata can differ (wall-clock recording time), and clamping to it would drop the
+        // tail that the MP4 export of the same document keeps.
+        double sourceDurationMs = editDocument.SourceDurationMs is > 0 and < double.PositiveInfinity
+            ? editDocument.SourceDurationMs
+            : recording.DurationMs;
         VideoEditDocument document = editDocument.NormalizeFor(
             recording.Width,
             recording.Height,
-            recording.DurationMs);
+            sourceDurationMs);
 
         GifFrameSchedule schedule = BuildFrameSchedule(document, playbackSpeed, quality.FramesPerSecond);
         IReadOnlyList<double>? decodeSuperset = cache is null

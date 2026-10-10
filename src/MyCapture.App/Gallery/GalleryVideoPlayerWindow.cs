@@ -4,7 +4,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using MyCapture.App.Capture;
+using MyCapture.App.Recording;
 using MyCapture.App.Themes;
+using MyCapture.Core.Recording;
 
 namespace MyCapture.App.Gallery;
 
@@ -39,6 +41,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
     private bool _mediaReady;
     private bool _autoPlayPending;
     private Guid _videoId;
+    private Task<double>? _durationProbe;
 
     internal event EventHandler? PlayerClosed;
 
@@ -99,7 +102,8 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _seek.ValueChanged += OnSeekChanged;
         _timer.Tick += (_, _) => UpdatePosition();
         SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(this);
-        Closed += (_, _) => { _timer.Stop(); _video.Close(); PlayerClosed?.Invoke(this, EventArgs.Empty); };
+        // Clearing the probe also tells a MediaOpened still awaiting it that the window is gone.
+        Closed += (_, _) => { _durationProbe = null; _timer.Stop(); _video.Close(); PlayerClosed?.Invoke(this, EventArgs.Empty); };
     }
 
     internal Guid VideoId => _videoId;
@@ -125,6 +129,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _mediaReady = false;
         _playing = false;
         _video.Stop();
+        _durationProbe = VideoDurationProbe.ReadContainerDurationAsync(path);
         _video.Source = new Uri(path);
         _video.Play();
         SetStatusPlaying(false);
@@ -139,10 +144,26 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _timer.Start();
     }
 
-    private void OnMediaOpened(object sender, RoutedEventArgs e)
+    private async void OnMediaOpened(object sender, RoutedEventArgs e)
     {
+        // NaturalDuration is Windows Media Player's whole-second value (a sub-second clip has
+        // none), so the seek range comes from the container duration read in Open.
+        double? playerMs = _video.NaturalDuration.HasTimeSpan ? _video.NaturalDuration.TimeSpan.TotalMilliseconds : null;
+        Task<double>? probe = _durationProbe;
+        if (probe is null)
+        {
+            return; // The window closed; Open always starts a probe before setting the source.
+        }
+
+        double containerMs = await probe;
+        if (!ReferenceEquals(probe, _durationProbe))
+        {
+            return; // Another video was opened, or the window closed, while the probe ran.
+        }
+
         _mediaReady = true;
-        _seek.Maximum = Math.Max(1, _video.NaturalDuration.HasTimeSpan ? _video.NaturalDuration.TimeSpan.TotalMilliseconds : 1);
+        _seek.Maximum = Math.Max(1, VideoDurationResolver.Resolve(containerMs, playerMs, 0));
+        UpdateTime();
         if (_autoPlayPending) SetPlayback(true);
         else SetStatusPlaying(false);
     }
