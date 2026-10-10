@@ -455,10 +455,20 @@ public sealed class VideoCompositionIntegrationTests
             Assert.Equal(schedule.SourceTimesMs.Count, emitted);
             Assert.Equal([5, 3, 2, 10, 10, 10, 10, 10, 10, 10, 10, 10], schedule.FrameDelaysCentiseconds);
 
-            // The black frames around the text merge: black 50 ms, text 30 ms, black 920 ms.
-            Assert.Equal([5, 3, 92], frames.DelaysCentiseconds);
+            // The timeline and the 28 ms text interval hold on every encoder.
+            Assert.Equal(100, frames.DelaysCentiseconds.Sum());
+            Assert.Equal([5, 3], frames.DelaysCentiseconds.Take(2));
             Assert.True(CountWhitePixels(frames.Frames[1]) > 40, "the 28ms timed text interval was omitted from the variable-delay GIF");
-            Assert.True(CountWhitePixels(frames.Frames[2]) < 10, "the timed text outlived its interval");
+            Assert.All(frames.Frames.Skip(2), frame => Assert.True(CountWhitePixels(frame) < 10, "the timed text outlived its interval"));
+
+            // Merging needs bit-identical decoded frames. A hardware encoder keeps a static black clip
+            // identical; Media Foundation's software encoder (CI) can drift by a level between static
+            // frames, and then those frames correctly stay separate images.
+            if (DecodedFramesIdentical(source, schedule.SourceTimesMs.Skip(2).ToArray()))
+            {
+                // The black frames around the text merge: black 50 ms, text 30 ms, black 920 ms.
+                Assert.Equal([5, 3, 92], frames.DelaysCentiseconds);
+            }
         }
         finally
         {
@@ -514,10 +524,21 @@ public sealed class VideoCompositionIntegrationTests
             var decoder = new GifBitmapDecoder(new Uri(gif), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
             Assert.Equal(5, frames);
 
-            // Five identical black frames become one 480x270 image shown for the whole second.
-            BitmapFrame only = Assert.Single(decoder.Frames);
-            Assert.Equal((480, 270), (only.PixelWidth, only.PixelHeight));
-            Assert.Equal([100], GifSampleDecoder.Decode(gif).DelaysCentiseconds);
+            // Every encoder: a 480x270 canvas shown for the whole second.
+            GifSampleFrames decoded = GifSampleDecoder.Decode(gif);
+            Assert.Equal(100, decoded.DelaysCentiseconds.Sum());
+            Assert.Equal((480, 270), (decoder.Frames[0].PixelWidth, decoder.Frames[0].PixelHeight));
+            Assert.InRange(decoder.Frames.Count, 1, frames);
+
+            // Five bit-identical black frames become one image. Only a software encoder that drifts
+            // between static frames (CI) leaves later partial images, as the delay test explains.
+            double[] smallestTimes = AnimatedGifExporter.BuildFrameSchedule(document, 1.0, GifExportQuality.Smallest.FramesPerSecond).SourceTimesMs.ToArray();
+            if (DecodedFramesIdentical(source, smallestTimes))
+            {
+                BitmapFrame only = Assert.Single(decoder.Frames);
+                Assert.Equal((480, 270), (only.PixelWidth, only.PixelHeight));
+                Assert.Equal([100], decoded.DelaysCentiseconds);
+            }
         }
         finally
         {
@@ -655,6 +676,27 @@ public sealed class VideoCompositionIntegrationTests
         }
 
         return count;
+    }
+
+    /// <summary>True when the source decodes to byte-identical pixels at every requested time.</summary>
+    private static bool DecodedFramesIdentical(string path, IReadOnlyList<double> timesMs)
+    {
+        using var reader = new MediaFoundationVideoFrameReader(path);
+        byte[]? first = null;
+        foreach (double time in timesMs)
+        {
+            byte[] pixels = reader.ReadFrameAt(time).Pixels;
+            if (first is null)
+            {
+                first = pixels;
+            }
+            else if (!pixels.AsSpan().SequenceEqual(first))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static int CountWhitePixels(BitmapSource source)
