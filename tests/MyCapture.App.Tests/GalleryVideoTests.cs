@@ -25,7 +25,7 @@ public sealed class GalleryVideoTests : KoreanCaptionTest
 
         Assert.True(tile.IsVideo);
         Assert.False(tile.IsImage);
-        Assert.Equal("영상 편집", tile.ActionLabel);
+        Assert.Equal("동영상 편집", tile.ActionLabel);
         Assert.Equal("1:05", tile.DurationCaption);
         Assert.Contains("MP4", tile.ExportToolTip, StringComparison.Ordinal);
         Assert.Contains("동영상", tile.AccessibleName, StringComparison.Ordinal);

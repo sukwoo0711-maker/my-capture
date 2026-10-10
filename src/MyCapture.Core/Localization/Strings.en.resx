@@ -117,7 +117,7 @@
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_0B201CC58BDD" xml:space="preserve">
-    <value>Finish editing (Ctrl+Enter)</value>
+    <value>Finish editing</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_0BDF6B210A31" xml:space="preserve">
@@ -145,7 +145,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_0DED92FCE6B0" xml:space="preserve">
-    <value>Delete annotation</value>
+    <value>Delete selected item</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_0DFC300AD94D" xml:space="preserve">
@@ -157,7 +157,7 @@
     <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
   </data>
   <data name="Text_0ECA3A448221" xml:space="preserve">
-    <value>Selected {0}</value>
+    <value>Selected: {0}</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_0FA1A9D03BE3" xml:space="preserve">
@@ -193,11 +193,11 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_1218314DD9C8" xml:space="preserve">
-    <value>Thumbnail longest edge (pixels)</value>
+    <value>Preview image size (pixels)</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_1300F4BEEC76" xml:space="preserve">
-    <value>Pinned</value>
+    <value>Kept</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_13036A090EBA" xml:space="preserve">
@@ -245,7 +245,7 @@
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_182650FB6543" xml:space="preserve">
-    <value>More transparent (Ctrl+scroll)</value>
+    <value>More transparent</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_1882C23FDDB1" xml:space="preserve">
@@ -271,7 +271,7 @@
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_199EB510DA51" xml:space="preserve">
-    <value>MyCapture — Edit capture</value>
+    <value>MyCapture — Edit image</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
   </data>
   <data name="Text_19FE9B81012C" xml:space="preserve">
@@ -303,7 +303,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_1DC093CD4D48" xml:space="preserve">
-    <value>OCR is unavailable on this system. A language pack may need to be installed.</value>
+    <value>Text recognition is unavailable on this PC. A Windows language pack may need to be installed.</value>
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_1DCD20923815" xml:space="preserve">
@@ -327,7 +327,7 @@
     <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
   </data>
   <data name="Text_1FBCF51E2FF5" xml:space="preserve">
-    <value>Paste to screen</value>
+    <value>Pin clipboard to screen</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_1FBF8C644D76" xml:space="preserve">
@@ -359,7 +359,7 @@
     <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
   </data>
   <data name="Text_21AAACA9783A" xml:space="preserve">
-    <value>New captures are indexed automatically on this PC. {1} of {0} items are searchable. You can reindex them now if needed.</value>
+    <value>New captures are prepared for search automatically on this PC. {1} of {0} items are searchable.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_21C405702C2B" xml:space="preserve">
@@ -375,7 +375,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_22B802C1B7FF" xml:space="preserve">
-    <value>Cancel editing (Esc)</value>
+    <value>Cancel editing</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_230D26DEB9AE" xml:space="preserve">
@@ -446,11 +446,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_284A54C660EC" xml:space="preserve">
-    <value>Maximum storage (GiB)</value>
+    <value>Maximum storage (GB)</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_295F3F963B4A" xml:space="preserve">
-    <value>Library images are stored in a dedicated capture folder and automatically deleted oldest first after 7 days. Pinned images and images being edited are retained. The 7-day cleanup does not apply to videos or separately saved/exported files.</value>
+    <value>Library images are deleted automatically, oldest first, 7 days after they are created. Kept images, images being edited, videos, and files you saved or exported separately are never deleted.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_29C79CAFC1D7" xml:space="preserve">
@@ -522,7 +522,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_2F12FF262AAC" xml:space="preserve">
-    <value>30 fps is recommended. Choose 10/15 fps on slower systems or 60 fps for fast motion. If encoding falls behind, frames are adjusted to preserve playback speed.</value>
+    <value>30 fps is recommended. Choose 10/15 fps on slower PCs or 60 fps for fast motion. If encoding falls behind, frames are adjusted to keep playback speed.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_3024E9CAD0E5" xml:space="preserve">
@@ -534,7 +534,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_3063398CDECD" xml:space="preserve">
-    <value>Zoom in (+)</value>
+    <value>Zoom in</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_3084C5AA0845" xml:space="preserve">
@@ -570,7 +570,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_338C1B26A06A" xml:space="preserve">
-    <value>Right-click: save/copy original · Ctrl+double-click: copy original text · Ctrl+C: copy visible image · Drag: move · Wheel: zoom</value>
+    <value>Right-click: save/copy original · Ctrl+double-click: copy original text · Ctrl+C: copy image · Drag: move · Wheel: zoom</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_339D1C10FD24" xml:space="preserve">
@@ -590,7 +590,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_35151C153089" xml:space="preserve">
-    <value>Current recording time (yyyy-MM-dd HH:mm:ss.fff). Drag with the left mouse button to move and scroll to resize.</value>
+    <value>Current recording time (yyyy-MM-dd HH:mm:ss.fff). Drag to move and scroll to resize.</value>
     <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
   </data>
   <data name="Text_35383149904D" xml:space="preserve">
@@ -614,7 +614,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_3793EC0322DB" xml:space="preserve">
-    <value>More — pin, export, and recognize text</value>
+    <value>More — keep, export and recognize text</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_37AD4F28D422" xml:space="preserve">
@@ -642,7 +642,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_3862727D2DCB" xml:space="preserve">
-    <value>The allowed range is {0:0.###}–{1:0.###} GiB.</value>
+    <value>The allowed range is {0:0.###}–{1:0.###} GB.</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_388CC5AD1AE8" xml:space="preserve">
@@ -670,7 +670,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_3B5DD12EE3D1" xml:space="preserve">
-    <value>Searching for sensitive information… Your image stays on this device</value>
+    <value>Searching for personal information… Your image stays on this PC</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_3BC6235E1D18" xml:space="preserve">
@@ -694,7 +694,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_3E409AB1A37C" xml:space="preserve">
-    <value>Annotation editor</value>
+    <value>Image editor</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_4004AC930045" xml:space="preserve">
@@ -714,7 +714,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_41216A109463" xml:space="preserve">
-    <value>Click-through on · Restore: {0}</value>
+    <value>Click-through on · Turn off: {0}</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_41F81C272691" xml:space="preserve">
@@ -842,7 +842,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_4D5F7094119C" xml:space="preserve">
-    <value>Start full-text capture indexing</value>
+    <value>Start preparing search</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_4D6051F71010" xml:space="preserve">
@@ -890,7 +890,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoLibraryService.cs</comment>
   </data>
   <data name="Text_4FC883F8F1CA" xml:space="preserve">
-    <value>{0} value {1} was outside the allowed range and was adjusted to {2}.</value>
+    <value>{0} was outside the allowed range and was adjusted: {1} → {2}</value>
     <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
   </data>
   <data name="Text_4FED89116C1F" xml:space="preserve">
@@ -930,7 +930,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_53DCBAF22F42" xml:space="preserve">
-    <value>Capture editor window</value>
+    <value>Image editor window</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
   </data>
   <data name="Text_541F62E38579" xml:space="preserve">
@@ -954,7 +954,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_55694B0252DB" xml:space="preserve">
-    <value>A pinned window displaying rendered text. Ctrl+C copies the visible image. Ctrl+double-click copies the original text retained when the pin was created. You can also copy the original text from the context menu.</value>
+    <value>A pinned window that shows text as an image. Ctrl+C copies the image; Ctrl+double-click copies the original text. You can also copy the original text from the right-click menu.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_55D025693B34" xml:space="preserve">
@@ -966,7 +966,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_563638D54DBC" xml:space="preserve">
-    <value>Click an annotation to select it, then move or resize it.</value>
+    <value>Click an item to select it, then move or resize it.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_571C8E331C15" xml:space="preserve">
@@ -986,7 +986,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_579BAB6C0833" xml:space="preserve">
-    <value>Unpin</value>
+    <value>Stop keeping</value>
     <comment>src\MyCapture.App\Gallery\GalleryConverters.cs</comment>
   </data>
   <data name="Text_5825293860A7" xml:space="preserve">
@@ -1018,7 +1018,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_59D43391538F" xml:space="preserve">
-    <value>Copy rendered image (Ctrl+C)</value>
+    <value>Copy edited image (Ctrl+C)</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_5A932820414F" xml:space="preserve">
@@ -1046,7 +1046,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_5D27F0D47A0B" xml:space="preserve">
-    <value>Annotation deleted · Ctrl+Z to undo</value>
+    <value>Item deleted · Ctrl+Z to undo</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5D92A3982F2F" xml:space="preserve">
@@ -1054,7 +1054,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5DBC2621FC1E" xml:space="preserve">
-    <value>No high-confidence matches found</value>
+    <value>No personal information found to redact</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5DD4908475B6" xml:space="preserve">
@@ -1062,7 +1062,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5E3720825B85" xml:space="preserve">
-    <value>OCR settings</value>
+    <value>Text recognition settings</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_5E8959D18390" xml:space="preserve">
@@ -1098,7 +1098,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_613230F07E18" xml:space="preserve">
-    <value>Run OCR again</value>
+    <value>Recognize the text again</value>
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_6139B6C3ED73" xml:space="preserve">
@@ -1234,7 +1234,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
   </data>
   <data name="Text_6AE98E57E121" xml:space="preserve">
-    <value>Sensitive information search cancelled</value>
+    <value>Personal information search cancelled</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_6B4EE4E6C8FF" xml:space="preserve">
@@ -1246,7 +1246,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
   </data>
   <data name="Text_6C10CBA5050D" xml:space="preserve">
-    <value>FrameRate {0} is unsupported and was adjusted to 30 fps.</value>
+    <value>Unsupported frame rate ({0}) was adjusted to 30 fps.</value>
     <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
   </data>
   <data name="Text_6C7D2ADB7EB3" xml:space="preserve">
@@ -1258,7 +1258,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_6D63E8966A24" xml:space="preserve">
-    <value>Sensitive information search failed · Your image remains in the editor</value>
+    <value>Personal information search failed · Your image remains in the editor</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_6D74F9324ACB" xml:space="preserve">
@@ -1270,7 +1270,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
   </data>
   <data name="Text_6DDE7DF5BF97" xml:space="preserve">
-    <value>Settings were saved, but the capture index could not be saved. The new retention limits apply to this session; the index will be written on the next save.</value>
+    <value>Settings were saved, but the capture list could not be saved. The new retention limits apply to this session; the list will be written on the next save.</value>
     <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
   </data>
   <data name="Text_6E86D1A85620" xml:space="preserve">
@@ -1378,11 +1378,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_756622E6954E" xml:space="preserve">
-    <value>{0} captures the dragged region. With window highlighting on, click without dragging to select the window under the pointer, or click the empty desktop to select the whole monitor.</value>
+    <value>{0}: captures the dragged region. With window highlighting on, click to select the window under the pointer, or click the empty desktop to select the whole monitor.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_764879D98E25" xml:space="preserve">
-    <value>Enter a number for the storage limit (GiB).</value>
+    <value>Enter a number for the maximum storage (GB).</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_773C24F0A693" xml:space="preserve">
@@ -1462,7 +1462,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_7DFFA4D81765" xml:space="preserve">
-    <value>Delete selected annotation (Delete)</value>
+    <value>Delete selected item (Delete)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_7E6DD424D331" xml:space="preserve">
@@ -1474,11 +1474,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_7F7A6F648B25" xml:space="preserve">
-    <value>Cancel (Esc)</value>
+    <value>Cancel</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_80A33648EAF2" xml:space="preserve">
-    <value>Toggle pin</value>
+    <value>Toggle keep</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_80FD8A8BF5F2" xml:space="preserve">
@@ -1518,7 +1518,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_854582314EBD" xml:space="preserve">
-    <value>Recognize text (OCR)</value>
+    <value>Recognize text</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_85C1E3734392" xml:space="preserve">
@@ -1578,11 +1578,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_8A3ADCEB89EF" xml:space="preserve">
-    <value>Select (V) — select, move, and resize annotations</value>
+    <value>Select (V) — select, move, and resize items</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_8A98DFB08E97" xml:space="preserve">
-    <value>Pin</value>
+    <value>Keep</value>
     <comment>src\MyCapture.App\Gallery\GalleryConverters.cs</comment>
   </data>
   <data name="Text_8AA2E937C447" xml:space="preserve">
@@ -1654,7 +1654,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_92EBA2788912" xml:space="preserve">
-    <value>Thumbnail longest edge in pixels</value>
+    <value>Preview image size in pixels</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_93103CC109A3" xml:space="preserve">
@@ -1662,7 +1662,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_931CB240652A" xml:space="preserve">
-    <value>Annotation default settings</value>
+    <value>Editing tool default settings</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_932DB1A4ED7F" xml:space="preserve">
@@ -1746,7 +1746,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_99CBBE7CFB4C" xml:space="preserve">
-    <value>Apply (Ctrl+S)</value>
+    <value>Apply</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_9A07C688760E" xml:space="preserve">
@@ -1766,7 +1766,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_9C208B575A0D" xml:space="preserve">
-    <value>Preferred languages (BCP-47)</value>
+    <value>Recognition languages</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_9C4458907087" xml:space="preserve">
@@ -1774,7 +1774,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoLayerAssets.cs</comment>
   </data>
   <data name="Text_9C49B0923292" xml:space="preserve">
-    <value>Frames per second (FPS)</value>
+    <value>Frame rate (fps)</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_9CD399964425" xml:space="preserve">
@@ -1798,7 +1798,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_9E0860CEAEC2" xml:space="preserve">
-    <value>The capture was saved to history, but could not be copied to the clipboard. Press Ctrl+C in the editor to try again.</value>
+    <value>The capture was saved to the library, but could not be copied to the clipboard. Press Ctrl+C in the editor to try again.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_9E479FEB720B" xml:space="preserve">
@@ -1810,7 +1810,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_9E5A499FF162" xml:space="preserve">
-    <value>Text recognition (OCR)</value>
+    <value>Text recognition</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_9E5B73EAD5B5" xml:space="preserve">
@@ -1826,11 +1826,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_A00997F45D07" xml:space="preserve">
-    <value>Click a floating window and press Ctrl+C to copy its image. Ctrl+double-click copies the original text, or text recognized locally by OCR for images.</value>
+    <value>Ctrl+C copies a pinned window's image; Ctrl+double-click copies its original text, or for an image, the text recognized on this PC.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_A31A72A338DD" xml:space="preserve">
-    <value>Use OCR to redact emails, Korean phone and resident registration numbers, payment card numbers, IP addresses, and secret keys (Ctrl+Shift+R)</value>
+    <value>Find and redact emails, Korean phone and resident registration numbers, payment card numbers, IP addresses, and secret keys (Ctrl+Shift+R)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_A35D0E14E844" xml:space="preserve">
@@ -1870,7 +1870,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
   </data>
   <data name="Text_A658DC1B9407" xml:space="preserve">
-    <value>Clock</value>
+    <value>Show time</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_A7937F29AF18" xml:space="preserve">
@@ -1904,7 +1904,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_A925E80E33B3" xml:space="preserve">
-    <value>Close (Esc)</value>
+    <value>Close</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_A97A3B71F038" xml:space="preserve">
@@ -1920,11 +1920,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
   </data>
   <data name="Text_AA763F299972" xml:space="preserve">
-    <value>Enter at least one OCR language (for example ko-KR, en-US).</value>
+    <value>Enter at least one recognition language (for example ko-KR, en-US).</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_AAED78A6EA00" xml:space="preserve">
-    <value>Updated the search index for {0} images.</value>
+    <value>Prepared {0} images for search.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_AB71749112CF" xml:space="preserve">
@@ -1932,11 +1932,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\TwoLineTimeline.cs</comment>
   </data>
   <data name="Text_ABAB2010D671" xml:space="preserve">
-    <value>Settings could not be saved. Check whether the folder is read-only, the disk is full, or another item conflicts with the settings file path, then try again. No changes were applied; your previous settings are retained.</value>
+    <value>Settings could not be saved. Check that the folder is writable and the disk has free space, then try again. Your previous settings are kept.</value>
     <comment>src\MyCapture.App\Settings\SettingsApplyService.cs</comment>
   </data>
   <data name="Text_ACE79917CCBE" xml:space="preserve">
-    <value>Quick Redact sensitive information</value>
+    <value>Auto-redact personal info</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
   </data>
   <data name="Text_AD101D75FFAE" xml:space="preserve">
@@ -2028,7 +2028,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_B53D43740F41" xml:space="preserve">
-    <value>Paste to screen shortcut</value>
+    <value>Pin clipboard to screen shortcut</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_B62C5C65821E" xml:space="preserve">
@@ -2060,7 +2060,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
   </data>
   <data name="Text_B6DE798A150D" xml:space="preserve">
-    <value>Copy from a floating window</value>
+    <value>Copying from a pinned window</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_B753165F6585" xml:space="preserve">
@@ -2126,7 +2126,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
   </data>
   <data name="Text_BB7798D87E07" xml:space="preserve">
-    <value>Copy the original text retained when this floating image was created.</value>
+    <value>Copy the original text kept when this pinned window was created.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_BBA2EFF5675C" xml:space="preserve">
@@ -2134,7 +2134,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_BC1D92BC8EFA" xml:space="preserve">
-    <value>Recording frames per second</value>
+    <value>Recording frame rate</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_BCA2A41F7456" xml:space="preserve">
@@ -2170,7 +2170,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_BE3D621D8A32" xml:space="preserve">
-    <value>Pass mouse input to the window below. Restore: {0}</value>
+    <value>Sends mouse input to the window behind. Turn off: {0}</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_BE4215610EBC" xml:space="preserve">
@@ -2186,7 +2186,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_BF0FF22A113E" xml:space="preserve">
-    <value>OCR available</value>
+    <value>Text recognition available</value>
     <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
   </data>
   <data name="Text_BFA39DD9B85B" xml:space="preserve">
@@ -2250,11 +2250,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_C51C3FDBF019" xml:space="preserve">
-    <value>Indexing… {0}/{1}</value>
+    <value>Preparing search… {0}/{1}</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_C5364F392040" xml:space="preserve">
-    <value>Index now</value>
+    <value>Prepare search now</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_C536D125279E" xml:space="preserve">
@@ -2300,7 +2300,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_C8FFDDF126A8" xml:space="preserve">
-    <value>Recognize text in unindexed captures to include them in full-text search</value>
+    <value>Recognize text in captures that are not yet searchable so they appear in search</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_CA6DE730BB6E" xml:space="preserve">
@@ -2358,11 +2358,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_D0113E3B1184" xml:space="preserve">
-    <value>More opaque (Ctrl+scroll)</value>
+    <value>More opaque</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_D0FD12A01E4A" xml:space="preserve">
-    <value>Wait for the sensitive information search to finish before saving · Esc to cancel</value>
+    <value>Wait for the personal information search to finish before saving · Esc to cancel</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_D116685C040E" xml:space="preserve">
@@ -2442,11 +2442,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
   </data>
   <data name="Text_D6580A6EEFB2" xml:space="preserve">
-    <value>OCR language packs are unavailable on this system.</value>
+    <value>OCR language packs are unavailable on this PC.</value>
     <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
   </data>
   <data name="Text_D65A9E5A4C1A" xml:space="preserve">
-    <value>Zoom out (-)</value>
+    <value>Zoom out</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_D6E142D9293C" xml:space="preserve">
@@ -2466,7 +2466,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
   </data>
   <data name="Text_D7FF669E0B69" xml:space="preserve">
-    <value>Preferred OCR languages</value>
+    <value>Recognition languages</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_D8538A946A6C" xml:space="preserve">
@@ -2506,7 +2506,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
   </data>
   <data name="Text_D9FC5F981274" xml:space="preserve">
-    <value>MyCapture — Edit again</value>
+    <value>MyCapture — Edit image</value>
     <comment>src\MyCapture.App\Gallery\GalleryEditorWindow.cs</comment>
   </data>
   <data name="Text_DA09CBABFC1E" xml:space="preserve">
@@ -2614,7 +2614,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_E22E2C953A8B" xml:space="preserve">
-    <value>A pinned screen image. Ctrl+C copies the image; Ctrl+double-click copies text. Use the context menu or Ctrl+S to save the original PNG, or Ctrl+Shift+S to choose a destination. Drag to move, scroll to zoom, Ctrl+scroll to adjust opacity, and Esc or Delete to close. Restore click-through: {0}</value>
+    <value>A pinned window. Ctrl+C copies the image; Ctrl+double-click copies text. Ctrl+S saves the original PNG; Ctrl+Shift+S lets you choose where. Drag to move, scroll to zoom, Ctrl+scroll to change opacity, and Esc or Delete to close. Turn off click-through: {0}</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_E2395EBF6C65" xml:space="preserve">
@@ -2638,7 +2638,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
   </data>
   <data name="Text_E395E2567985" xml:space="preserve">
-    <value>Quick Redact</value>
+    <value>Auto-redact</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_E3B50B06C736" xml:space="preserve">
@@ -2654,7 +2654,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.Core\Annotations\PenAnnotation.cs</comment>
   </data>
   <data name="Text_E485D788C2BE" xml:space="preserve">
-    <value>, pinned</value>
+    <value>, kept</value>
     <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
   </data>
   <data name="Text_E5CAF7CFC916" xml:space="preserve">
@@ -2674,11 +2674,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_E68817537C75" xml:space="preserve">
-    <value>Redacted {0} potential matches · Review them; Ctrl+Z undoes the batch</value>
+    <value>Redacted {0} items of personal information · Review them; Ctrl+Z undoes the batch</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_E6A0E3D10B47" xml:space="preserve">
-    <value>Annotations</value>
+    <value>Editing tool defaults</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_E75BE1B916FD" xml:space="preserve">
@@ -2726,7 +2726,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_EB9AB8D7D13C" xml:space="preserve">
-    <value>Find sensitive information with local OCR and add editable black rectangles over it.</value>
+    <value>Finds personal information in text recognized on this PC and covers it with editable black rectangles.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_EB9E222E4C18" xml:space="preserve">
@@ -2754,7 +2754,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_EE36971D5C4B" xml:space="preserve">
-    <value>Quick Redact is unavailable because no Windows OCR language pack is available</value>
+    <value>Auto-redact is unavailable because no Windows OCR language pack is available</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_EEA09781BBD7" xml:space="preserve">
@@ -2806,7 +2806,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_F1A864DCBEC4" xml:space="preserve">
-    <value> · Storage limit temporarily exceeded to protect pinned items</value>
+    <value> · Storage limit temporarily exceeded to protect kept items</value>
     <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
   </data>
   <data name="Text_F1C1BB1D5771" xml:space="preserve">
@@ -2826,7 +2826,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\AnimatedGifExporter.cs</comment>
   </data>
   <data name="Text_F371688B8EE8" xml:space="preserve">
-    <value>Windows OCR language packs are missing, so text recognition and full-text capture search are unavailable. In Settings → Time &amp; language → Language &amp; region, add Optical character recognition (OCR) under your language's features, then try again. Capture, annotation, recording, and other features still work offline.</value>
+    <value>Windows OCR language packs are missing, so text recognition and capture search are unavailable. In Settings → Time &amp; language → Language &amp; region, add Optical character recognition (OCR) under your language's features, then try again. Capture, editing, recording, and other features still work.</value>
     <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
   </data>
   <data name="Text_F3C7FE27A258" xml:space="preserve">
@@ -2906,7 +2906,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoLayerCanvas.cs</comment>
   </data>
   <data name="Text_FAC754F72C25" xml:space="preserve">
-    <value>Annotation text input</value>
+    <value>Text input</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_FACB0016A977" xml:space="preserve">
@@ -2926,11 +2926,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_FB68C3A34978" xml:space="preserve">
-    <value>Cannot create the OCR engine.</value>
+    <value>Text recognition could not start.</value>
     <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
   </data>
   <data name="Text_FC05BD860043" xml:space="preserve">
-    <value>Maximum storage in gibibytes</value>
+    <value>Maximum storage in gigabytes</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_FD6443988325" xml:space="preserve">
@@ -2946,26 +2946,26 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_FEFD9D67E873" xml:space="preserve">
-    <value>Selection tool · Click an annotation to select it</value>
+    <value>Selection tool · Click an item to select it</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="GalleryImageChanged" xml:space="preserve"><value>The image changed while loading. Please open it again.</value></data>
   <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · Pixel precision</value></data>
   <data name="CaptureSelectionStart" xml:space="preserve"><value>Start</value></data>
-  <data name="ExportReduction_Title" xml:space="preserve"><value>Export a smaller image…</value></data>
-  <data name="ExportReduction_Preview" xml:space="preserve"><value>Calculate result</value></data>
+  <data name="ExportReduction_Title" xml:space="preserve"><value>Export a smaller file…</value></data>
+  <data name="ExportReduction_Preview" xml:space="preserve"><value>Check size</value></data>
   <data name="ExportReduction_Save" xml:space="preserve"><value>Save As…</value></data>
   <data name="ExportReduction_Drag" xml:space="preserve"><value>Drag to a folder</value></data>
   <data name="ExportReduction_Cancel" xml:space="preserve"><value>Close</value></data>
-  <data name="ExportReduction_Description" xml:space="preserve"><value>The baseline is the current edited image encoded as PNG, which may differ from the imported file size. Choose a reduction target and calculate the result. Opaque images may use JPEG; pixel dimensions stay unchanged.</value></data>
-  <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>Target file-size reduction</value></data>
-  <data name="ExportReduction_UpdateRequired" xml:space="preserve"><value>Calculate the result to check the actual file size.</value></data>
-  <data name="ExportReduction_Original" xml:space="preserve"><value>Original quality · 0% reduction target</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>The baseline is the current edited image saved as PNG, which may differ from the original file size. Choose a target, then select Check size. Opaque images may use JPEG; pixel dimensions stay the same.</value></data>
+  <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>File size reduction target</value></data>
+  <data name="ExportReduction_UpdateRequired" xml:space="preserve"><value>Select Check size to see the actual file size.</value></data>
+  <data name="ExportReduction_Original" xml:space="preserve"><value>Original quality · No reduction</value></data>
   <data name="ExportReduction_Target" xml:space="preserve"><value>Target: {0}% smaller than the original PNG</value></data>
-  <data name="ExportReduction_Working" xml:space="preserve"><value>Calculating image size…</value></data>
-  <data name="ExportReduction_Result" xml:space="preserve"><value>Original {0} bytes → result {1} bytes
+  <data name="ExportReduction_Working" xml:space="preserve"><value>Checking file size…</value></data>
+  <data name="ExportReduction_Result" xml:space="preserve"><value>Original {0} → result {1}
 Actual reduction {2}% · {3}</value></data>
-  <data name="ExportReduction_Transparent" xml:space="preserve"><value>Kept the original PNG to preserve transparency. JPEG reduction was not applied.</value></data>
+  <data name="ExportReduction_Transparent" xml:space="preserve"><value>Kept the original PNG to preserve transparency. JPEG conversion was not applied.</value></data>
   <data name="ExportReduction_Unmet" xml:space="preserve"><value>The target could not be reached while preserving pixel dimensions. Export uses the actual result shown.</value></data>
   <data name="ExportReduction_Ready" xml:space="preserve"><value>Ready. Save the image or drag the button into a folder.</value></data>
   <data name="ExportReduction_Error" xml:space="preserve"><value>Export failed: {0}</value></data>
@@ -2975,11 +2975,11 @@ Actual reduction {2}% · {3}</value></data>
   <data name="ShellRetake_ReadyWithoutShortcut" xml:space="preserve"><value>Start a capture from the tray icon, or assign a capture shortcut in settings.</value></data>
   <data name="LibrarySelection_Count" xml:space="preserve"><value>{0} selected</value></data>
   <data name="LibrarySelection_Delete" xml:space="preserve"><value>Delete</value></data>
-  <data name="LibrarySelection_Reduce" xml:space="preserve"><value>Reduce image size</value></data>
+  <data name="LibrarySelection_Reduce" xml:space="preserve"><value>Reduce file size</value></data>
   <data name="LibrarySelection_Gif" xml:space="preserve"><value>Export GIF</value></data>
   <data name="LibrarySelection_SelectDay" xml:space="preserve"><value>Select displayed items from this day</value></data>
   <data name="LibrarySelection_ClearHint" xml:space="preserve"><value>Clear entire library</value></data>
-  <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>Delete all {0} items from the entire library, including pinned items and videos, regardless of search? Items added after this confirmation will remain.</value></data>
+  <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>Delete all {0} items from the entire library, including kept items and videos, regardless of search? Items added after this confirmation will remain.</value></data>
   <data name="LibrarySelection_DeleteConfirm" xml:space="preserve"><value>Delete the {0} selected items?</value></data>
   <data name="LibrarySelection_Removed" xml:space="preserve"><value>Removed {0} items from the library; {1} unavailable or in-use items retained</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>Could not save the deletion. Check the library and try again.</value></data>
@@ -3051,9 +3051,9 @@ Actual reduction {2}% · {3}</value></data>
 <data name="Shell.Help" xml:space="preserve"><value>How to use MyCapture</value></data>
 <data name="Shell.HelpText" xml:space="preserve"><value>Capture a region / retake: use your configured capture shortcut
 Drag to select a region, then edit shapes and text.
-Confirm or save to add the capture to the gallery. Cancelled or replaced drafts are not saved.
+Select Done or Save to add the capture to the library. Cancelled or replaced drafts are not saved.
 Hold Shift for precise pixel selection.
-Open Gallery, Settings, or Language from the tray menu.</value></data>
+Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.Theme" xml:space="preserve"><value>Theme</value></data>
   <data name="Settings.ThemeHint" xml:space="preserve"><value>Select a theme to preview it. Apply to save your choice.</value></data>
   <data name="Settings.ShowSourceWindowTitle" xml:space="preserve"><value>Show document/window title at the top right of images</value></data>
@@ -3065,10 +3065,10 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F9 pastes the clipboard image into this issue’s Write box. Use an issue you can comment on. Empty values use a safe default.</value></data>
   <data name="Settings.GitHubIssueUrlInvalid" xml:space="preserve"><value>Use https://host/owner/repo/issues/number or /issues/new.</value></data>
   <data name="Settings.RetentionHours" xml:space="preserve"><value>Library image retention (hours)</value></data>
-  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>Unpinned images are deleted after this many hours. The default is 168 hours (7 days). Videos and pinned items are kept.</value></data>
+  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>Images that are not kept are deleted after this many hours. The default is 168 hours (7 days). Videos and kept items are excluded.</value></data>
   <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>Clipboard image to GitHub URL</value></data>
-  <data name="Gallery.Float" xml:space="preserve"><value>Float</value></data>
-  <data name="Gallery.FloatHint" xml:space="preserve"><value>Pin this capture to the screen as a floating window.</value></data>
+  <data name="Gallery.Float" xml:space="preserve"><value>Pin to screen</value></data>
+  <data name="Gallery.FloatHint" xml:space="preserve"><value>Pin this capture on top of other windows.</value></data>
   <data name="Gallery.RetentionDays" xml:space="preserve"><value>Auto-delete in {0} days</value></data>
   <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>Auto-delete in {0} days {1} hours</value></data>
   <data name="Gallery.RetentionHours" xml:space="preserve"><value>Auto-delete in {0} hours</value></data>
@@ -3077,7 +3077,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Gallery.RetentionKept" xml:space="preserve"><value>Kept</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>No expiry</value></data>
   <data name="Gallery.RetentionExpired" xml:space="preserve"><value>Awaiting auto-delete</value></data>
-  <data name="Gallery.FloatFailed" xml:space="preserve"><value>Could not float this image.</value></data>
+  <data name="Gallery.FloatFailed" xml:space="preserve"><value>Could not pin this image to the screen.</value></data>
   <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F9.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>Opening the GitHub issue and pasting the image…</value></data>
   <data name="GitHub.Done" xml:space="preserve"><value>Copied the attachment URL to the clipboard.</value></data>
@@ -3100,11 +3100,11 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Settings.ThemeGlass" xml:space="preserve"><value>Glass · Windows default</value></data>
   <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>Glass light · bright translucent</value></data>
   <data name="Settings.OcrQuality" xml:space="preserve"><value>Recognition quality</value></data>
-  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use Windows OCR. Slow uses PP-OCRv5 for receipts. Careful corrects lighting, contrast, and sharpness, then runs Real-ESRGAN 4x (67 MB download on first use) and PP-OCRv5.</value></data>
-  <data name="Settings.OcrQualityFast" xml:space="preserve"><value>Fast (weaker OCR)</value></data>
-  <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>Normal (balanced speed and accuracy)</value></data>
-  <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>Slow (PP-OCR for receipts)</value></data>
-  <data name="Settings.OcrQualityEnhanced" xml:space="preserve"><value>Careful (correct, AI upscale, then OCR)</value></data>
+  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts. Most accurate corrects and enlarges the image 4x before recognition and downloads about 67 MB the first time.</value></data>
+  <data name="Settings.OcrQualityFast" xml:space="preserve"><value>Fast</value></data>
+  <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>Normal</value></data>
+  <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>Accurate</value></data>
+  <data name="Settings.OcrQualityEnhanced" xml:space="preserve"><value>Most accurate</value></data>
   <data name="Workspace.Library" xml:space="preserve"><value>Library</value></data>
   <data name="Workspace.All" xml:space="preserve"><value>All captures</value></data>
   <data name="Workspace.Pinned" xml:space="preserve"><value>Kept captures</value></data>
@@ -3135,7 +3135,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="GitHub_TokenMode" xml:space="preserve"><value>Upload with token (experimental)</value></data>
   <data name="GitHub_TokenLabel" xml:space="preserve"><value>Personal access token (repo scope)</value></data>
   <data name="GitHub_TokenHint" xml:space="preserve"><value>With a token the image uploads without opening a browser. The token stays on this PC.</value></data>
-  <data name="Recording_SizePreset" xml:space="preserve"><value>Size preset</value></data>
+  <data name="Recording_SizePreset" xml:space="preserve"><value>Recording size</value></data>
   <data name="Recording_LastRegion" xml:space="preserve"><value>Last region</value></data>
   <data name="Recording_Free" xml:space="preserve"><value>Free</value></data>
   <data name="Recording_Fixed720" xml:space="preserve"><value>1280×720</value></data>
@@ -3149,7 +3149,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Recording_CursorHighlight" xml:space="preserve"><value>Highlight the cursor on recordings (red while clicking)</value></data>
   <data name="Library.Organize.Title" xml:space="preserve"><value>Organize capture</value></data>
   <data name="Library.Organize.Action" xml:space="preserve"><value>Title &amp; tags</value></data>
-  <data name="Library.Organize.Hint" xml:space="preserve"><value>Find this capture again by your own words. Stored on this PC; pixels and OCR are unchanged.</value></data>
+  <data name="Library.Organize.Hint" xml:space="preserve"><value>Find this capture again by your own words. Stored on this PC; the image and recognized text are unchanged.</value></data>
   <data name="Library.Organize.Name" xml:space="preserve"><value>Title</value></data>
   <data name="Library.Organize.Tags" xml:space="preserve"><value>Tags</value></data>
   <data name="Library.Organize.TagsHint" xml:space="preserve"><value>Separate tags with commas. Up to 12 tags, 32 characters each. A title or tag does not prevent automatic cleanup; use Keep to retain important captures.</value></data>
@@ -3161,7 +3161,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Library.Action.Save" xml:space="preserve"><value>Save</value></data>
   <data name="Library.Archive.Title" xml:space="preserve"><value>Export selected captures to a new ZIP</value></data>
   <data name="Library.Archive.Action" xml:space="preserve"><value>Export ZIP</value></data>
-  <data name="Library.Archive.Hint" xml:space="preserve"><value>Rendered PNG and current MP4 only. No original images, OCR index, titles, tags or settings. Choose a new filename.</value></data>
+  <data name="Library.Archive.Hint" xml:space="preserve"><value>Edited PNG and current MP4 only. No original images, recognized text, titles, tags or settings. Choose a new filename.</value></data>
   <data name="Library.Archive.Preparing" xml:space="preserve"><value>Preparing protected copies of the selected captures…</value></data>
   <data name="Library.Archive.Progress" xml:space="preserve"><value>Exporting {0} of {1} files…</value></data>
   <data name="Library.Archive.Done" xml:space="preserve"><value>Exported {0} files. Original captures remain in your library.</value></data>
@@ -3186,7 +3186,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="QuickAccess.Edit" xml:space="preserve"><value>Edit</value></data>
   <data name="QuickAccess.Enabled" xml:space="preserve"><value>Show quick access after capture</value></data>
   <data name="QuickAccess.Failed" xml:space="preserve"><value>The action could not be completed. Try again.</value></data>
-  <data name="QuickAccess.Keep" xml:space="preserve"><value>Keep card</value></data>
+  <data name="QuickAccess.Keep" xml:space="preserve"><value>Keep open</value></data>
   <data name="QuickAccess.Library" xml:space="preserve"><value>Open in library</value></data>
   <data name="QuickAccess.Pin" xml:space="preserve"><value>Pin</value></data>
   <data name="QuickAccess.Pinned" xml:space="preserve"><value>Pinned</value></data>
@@ -3221,7 +3221,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Dialog.Unsupported" xml:space="preserve"><value>This format is not supported. Choose another file or format.</value></data>
   <data name="Dialog.Yes" xml:space="preserve"><value>Yes</value></data>
   <data name="Dialog.ChooseLocation" xml:space="preserve"><value>Choose another location</value></data>
-  <data name="Help.Annotation" xml:space="preserve"><value>Annotation editor</value></data>
+  <data name="Help.Annotation" xml:space="preserve"><value>Image editor</value></data>
   <data name="Help.Capture" xml:space="preserve"><value>Capture</value></data>
   <data name="Help.Frame" xml:space="preserve"><value>Previous / next frame</value></data>
   <data name="Help.Next" xml:space="preserve"><value>Next</value></data>
@@ -3237,7 +3237,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Hotkey.Twice" xml:space="preserve"><value>{0} twice</value></data>
   <data name="Hotkey.TrayRestore" xml:space="preserve"><value>Hide all pins from the tray, then show them again</value></data>
   <data name="Hotkey.ModifierRequired" xml:space="preserve"><value>Use Ctrl, Alt, or Win with typing and navigation keys. F1–F24 and PrintScreen also support no modifier or Shift alone.</value></data>
-  <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>Click the card background or press Alt+Q, then use C/E/P/S/Esc. Click the background to enter a kept card.</value></data>
+  <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>Click the card background or press Alt+Q, then use C/E/P/S/Esc. For a card kept open, click the background.</value></data>
   <data name="Video.InvalidImage" xml:space="preserve"><value>The image could not be read. Select a valid PNG, JPEG or BMP file.</value></data>
   <data name="Hotkey.MigratedTitle" xml:space="preserve"><value>Shortcuts updated</value></data>
   <data name="Hotkey.Migrated" xml:space="preserve"><value>Unsafe shortcuts and restored-capture conflicts were cleared. Capture was reset to Ctrl+Shift+C if needed.</value></data>
@@ -3262,7 +3262,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Crop.InvalidSizeLabel" xml:space="preserve"><value>Whole number</value></data>
   <data name="Crop.InvalidSize" xml:space="preserve"><value>Enter a whole number of at least 2 for width and height.</value></data>
   <data name="Capture.LibrarySaveFailedNoEditor" xml:space="preserve"><value>Could not save to the library. Check the library and capture again if needed. {0}</value></data>
-  <data name="Capture410.Crop" xml:space="preserve"><value>Crop (X)</value></data>
+  <data name="Capture410.Crop" xml:space="preserve"><value>Crop</value></data>
   <data name="Capture410.CropHint" xml:space="preserve"><value>Drag an image edge to adjust the crop.</value></data>
   <data name="Capture410.AutoTrim" xml:space="preserve"><value>Auto trim margins</value></data>
   <data name="Capture410.AutoTrimHint" xml:space="preserve"><value>Find edge margins and preview a crop.</value></data>
@@ -3276,7 +3276,7 @@ Open Gallery, Settings, or Language from the tray menu.</value></data>
   <data name="Capture410.GuideColorHex" xml:space="preserve"><value>HEX</value></data>
   <data name="Capture410.GuideColorSwatch" xml:space="preserve"><value>Capture guide color swatch</value></data>
   <data name="Capture410.GuideColorInvalid" xml:space="preserve"><value>Enter a HEX color in #RRGGBB format.</value></data>
-  <data name="OCR410_ExtractionMode" xml:space="preserve"><value>Extraction format</value></data>
+  <data name="OCR410_ExtractionMode" xml:space="preserve"><value>Result format</value></data>
   <data name="OCR410_Table" xml:space="preserve"><value>Table</value></data>
   <data name="OCR410_Code" xml:space="preserve"><value>Code</value></data>
   <data name="OCR410_Text" xml:space="preserve"><value>Text</value></data>
@@ -3347,7 +3347,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>An organization policy manages this startup setting.</value></data>
   <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>Captures removed from a folder start a new retention period today.</value></data>
   <data name="Folder410.DeleteChanged" xml:space="preserve"><value>The folder contents changed after confirmation. Review them and try again.</value></data>
-  <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>Includes folders, unassigned captures, and pinned captures for this date.</value></data>
+  <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>Includes folders, unassigned captures, and kept captures for this date.</value></data>
   <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>Deleted folders and captures cannot be restored.</value></data>
   <data name="Folder410.Storage" xml:space="preserve"><value>{0} folders · {1}</value></data>
   <data name="Folder410.StorageInfo" xml:space="preserve"><value>Folder storage exceeds the ordinary capture limit. Folder contents are kept until you delete them.</value></data>
@@ -3369,7 +3369,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="PinRestore_CommandHelp" xml:space="preserve"><value>Reopens the most recently closed pin at its last position, zoom, and opacity.</value></data>
   <data name="PinRestore_HotkeyName" xml:space="preserve"><value>Reopen closed pin shortcut</value></data>
   <data name="PinRestore_LimitLabel" xml:space="preserve"><value>Closed pin history</value></data>
-  <data name="PinRestore_LimitDescription" xml:space="preserve"><value>Number of closed pins kept in memory so they can be reopened. 0–100 (0 turns it off). The history is cleared when the app exits and is never saved to disk.</value></data>
+  <data name="PinRestore_LimitDescription" xml:space="preserve"><value>Number of closed pins remembered so they can be reopened. 0–100 (0 turns it off). Cleared when the app exits; never saved to disk.</value></data>
   <data name="PinRestore_NothingTitle" xml:space="preserve"><value>No closed pin</value></data>
   <data name="PinRestore_NothingMessage" xml:space="preserve"><value>There is no closed pin to reopen.</value></data>
   <data name="PinRestore_DisabledMessage" xml:space="preserve"><value>Closed pin history is off. Set the history count to 1 or more under Screen pins in Settings.</value></data>
@@ -3378,7 +3378,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="StoreRating_ButtonHelp" xml:space="preserve"><value>Opens the MyCapture review page in the Microsoft Store app.</value></data>
   <data name="StoreRating_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Check that the Microsoft Store app is installed.</value></data>
   <data name="PrtScGuide_Heading" xml:space="preserve"><value>PrintScreen key conflict</value></data>
-  <data name="PrtScGuide_Message" xml:space="preserve"><value>Windows is set to open screen capture with the Print Screen key. While it is on, pressing PrintScreen can open the Windows capture tool instead of running the MyCapture shortcut. Turn the option off in Windows Settings &gt; Accessibility &gt; Keyboard.</value></data>
+  <data name="PrtScGuide_Message" xml:space="preserve"><value>Windows is set to open its capture tool with the Print Screen key, so the MyCapture shortcut may not work. Turn the option off in Windows Settings &gt; Accessibility &gt; Keyboard.</value></data>
   <data name="PrtScGuide_OpenSettings" xml:space="preserve"><value>Open Windows Settings</value></data>
   <data name="PrtScGuide_OpenSettingsFailed" xml:space="preserve"><value>Could not open Windows Settings. Open Settings &gt; Accessibility &gt; Keyboard manually.</value></data>
   <data name="PrtScGuide_FailureNotice" xml:space="preserve"><value>Windows is set to open screen capture with the Print Screen key. Turn the option off in Windows Settings &gt; Accessibility &gt; Keyboard.</value></data>
@@ -3391,15 +3391,15 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="EditorBlur_StrengthHint" xml:space="preserve"><value>Higher values blur more strongly.</value></data>
   <data name="EditorBlur_StrengthChanged" xml:space="preserve"><value>Blur strength changed to {0:0} px</value></data>
   <data name="EditorBlur_StrengthRange" xml:space="preserve"><value>2–64 image pixels.</value></data>
-  <data name="TextCapture_Title" xml:space="preserve"><value>Text capture</value></data>
+  <data name="TextCapture_Title" xml:space="preserve"><value>Copy text</value></data>
   <data name="TextCapture_Copied" xml:space="preserve"><value>Text copied</value></data>
   <data name="TextCapture_CopiedDetail" xml:space="preserve"><value>Characters copied to the clipboard: {0}</value></data>
   <data name="TextCapture_NoText" xml:space="preserve"><value>No text was found.</value></data>
-  <data name="TextCapture_ClipboardFailed" xml:space="preserve"><value>The text was recognized but could not be copied to the clipboard. Copy it from advanced extraction.</value></data>
+  <data name="TextCapture_ClipboardFailed" xml:space="preserve"><value>The text was recognized but could not be copied to the clipboard. Copy it from the text recognition window.</value></data>
   <data name="TextCapture_Failed" xml:space="preserve"><value>Text recognition failed. Try again.</value></data>
   <data name="TextCapture_Unavailable" xml:space="preserve"><value>Text recognition is not available on this PC.</value></data>
-  <data name="TextCapture_OpenAdvanced" xml:space="preserve"><value>Open advanced extraction</value></data>
-  <data name="TextCapture_HelpToggle" xml:space="preserve"><value>Switch to text capture while selecting</value></data>
+  <data name="TextCapture_OpenAdvanced" xml:space="preserve"><value>Open text recognition</value></data>
+  <data name="TextCapture_HelpToggle" xml:space="preserve"><value>Copy text while selecting</value></data>
   <data name="TextCapture_HotkeyHint" xml:space="preserve"><value>Select a region to recognize and copy only its text. The image is not saved to the library.</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>Could not copy the color.</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>Color copy format</value></data>
@@ -3463,15 +3463,15 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="GifPreview_SizeRange" xml:space="preserve"><value>{0}–{1}</value></data>
   <data name="GifPreview_CompareHelp" xml:space="preserve"><value>Shows the original frame of the same moment beside the GIF.</value></data>
   <data name="GifPreview_ActualSizeHelp" xml:space="preserve"><value>Shows GIF pixels 1:1 with screen pixels.</value></data>
-  <data name="RecordingBackend_Label" xml:space="preserve"><value>Recording capture method</value></data>
-  <data name="RecordingBackend_Hint" xml:space="preserve"><value>Automatic records with Windows Graphics Capture when the region lies within one monitor, and with GDI when it spans monitors or Windows Graphics Capture is unavailable. Choose compatibility mode if recordings look broken or freeze.</value></data>
-  <data name="RecordingBackend_Auto" xml:space="preserve"><value>Automatic (Windows Graphics Capture first)</value></data>
-  <data name="RecordingBackend_Gdi" xml:space="preserve"><value>Compatibility mode (GDI)</value></data>
-  <data name="StoreUpdate_StoreDescription" xml:space="preserve"><value>Microsoft Store keeps this copy of MyCapture up to date. Check for updates opens the MyCapture page in the Microsoft Store app.</value></data>
+  <data name="RecordingBackend_Label" xml:space="preserve"><value>Recording method</value></data>
+  <data name="RecordingBackend_Hint" xml:space="preserve"><value>Automatic records most screens most smoothly. If recordings look broken or freeze, choose compatibility mode.</value></data>
+  <data name="RecordingBackend_Auto" xml:space="preserve"><value>Automatic (recommended)</value></data>
+  <data name="RecordingBackend_Gdi" xml:space="preserve"><value>Compatibility mode</value></data>
+  <data name="StoreUpdate_StoreDescription" xml:space="preserve"><value>Microsoft Store keeps this copy of MyCapture up to date. Check for updates opens its page in the Store app.</value></data>
   <data name="StoreUpdate_CheckInStore" xml:space="preserve"><value>Check for updates in Microsoft Store</value></data>
   <data name="StoreUpdate_CheckInStoreHelp" xml:space="preserve"><value>Opens the MyCapture page in the Microsoft Store app, where a new version can be installed.</value></data>
   <data name="StoreUpdate_UnpackagedDescription" xml:space="preserve"><value>MyCapture is distributed through the Microsoft Store. This copy does not check for or download updates. Install the Microsoft Store version to receive updates.</value></data>
-  <data name="StoreUpdate_UnpackagedNote" xml:space="preserve"><value>The Microsoft Store version does not share settings or the library with this copy. Move your settings with Export settings and Import settings below. The two versions cannot run at the same time, so exit this copy from the tray menu before starting the Microsoft Store version.</value></data>
+  <data name="StoreUpdate_UnpackagedNote" xml:space="preserve"><value>The Microsoft Store version does not share settings or the library with this copy. Move settings with Export settings and Import settings below. The two cannot run together, so exit this copy from the tray menu before starting the Store version.</value></data>
   <data name="StoreUpdate_OpenStore" xml:space="preserve"><value>Open in Microsoft Store</value></data>
   <data name="StoreUpdate_OpenStoreHelp" xml:space="preserve"><value>Opens the MyCapture page in the Microsoft Store app, or in a browser when the Store app cannot open.</value></data>
   <data name="StoreUpdate_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Open {0} in a browser.</value></data>
@@ -3482,13 +3482,13 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>Keep saving new captures to the last folder after closing the library</value></data>
   <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>New captures are saved to this folder. You can also drag captures here.</value></data>
   <data name="CaptureGuide2_BarName" xml:space="preserve"><value>Capture options</value></data>
-  <data name="CaptureGuide2_Region" xml:space="preserve"><value>Region or window</value></data>
-  <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>Region</value></data>
-  <data name="CaptureGuide2_RegionHelp" xml:space="preserve"><value>Click a window to capture it, or drag to capture the region you want. Click the desktop to capture that whole monitor. Hold Shift to move one pixel at a time.</value></data>
+  <data name="CaptureGuide2_Region" xml:space="preserve"><value>Select region</value></data>
+  <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>Select region</value></data>
+  <data name="CaptureGuide2_RegionHelp" xml:space="preserve"><value>Click a window to capture it, drag to capture a region, or click the desktop to capture the whole monitor. Hold Shift to move one pixel at a time.</value></data>
   <data name="CaptureGuide2_RegionOnlyHelp" xml:space="preserve"><value>Drag to capture the region you want. Hold Shift to move one pixel at a time.</value></data>
   <data name="CaptureGuide2_FullScreen" xml:space="preserve"><value>Full screen</value></data>
   <data name="CaptureGuide2_FullScreenHelp" xml:space="preserve"><value>Captures this entire monitor right away.</value></data>
-  <data name="CaptureGuide2_Text" xml:space="preserve"><value>Extract text</value></data>
+  <data name="CaptureGuide2_Text" xml:space="preserve"><value>Copy text</value></data>
   <data name="CaptureGuide2_TextHelp" xml:space="preserve"><value>Recognizes the text in the window you click or the region you drag and copies it to the clipboard. The image is not saved.</value></data>
   <data name="CaptureGuide2_Color" xml:space="preserve"><value>Copy color</value></data>
   <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Copies the color code of the spot you click to the clipboard.</value></data>
@@ -3499,15 +3499,15 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="CaptureGuide2_DragCapture" xml:space="preserve"><value>Drag: Capture region</value></data>
   <data name="CaptureGuide2_ClickWindow" xml:space="preserve"><value>Click: Capture window</value></data>
   <data name="CaptureGuide2_ClickMonitor" xml:space="preserve"><value>Click: Capture monitor</value></data>
-  <data name="CaptureGuide2_DragText" xml:space="preserve"><value>Drag: Extract text from region</value></data>
-  <data name="CaptureGuide2_ClickWindowText" xml:space="preserve"><value>Click: Extract text from window</value></data>
-  <data name="CaptureGuide2_ClickMonitorText" xml:space="preserve"><value>Click: Extract text from monitor</value></data>
+  <data name="CaptureGuide2_DragText" xml:space="preserve"><value>Drag: Copy text from region</value></data>
+  <data name="CaptureGuide2_ClickWindowText" xml:space="preserve"><value>Click: Copy text from window</value></data>
+  <data name="CaptureGuide2_ClickMonitorText" xml:space="preserve"><value>Click: Copy text from monitor</value></data>
   <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click: Copy color</value></data>
   <data name="CaptureGuide2_Esc" xml:space="preserve"><value>Esc: Cancel</value></data>
   <data name="CaptureGuide2_IntroTitle" xml:space="preserve"><value>How to capture</value></data>
   <data name="CaptureGuide2_IntroBody" xml:space="preserve"><value>Click a window to capture it, or drag to capture the region you want. Press Esc to cancel.</value></data>
   <data name="CaptureGuide2_IntroBodyRegionOnly" xml:space="preserve"><value>Drag to capture the region you want. Press Esc to cancel.</value></data>
-  <data name="CaptureGuide2_IntroBar" xml:space="preserve"><value>Use the bar at the top for full screen, text extraction and color copy.</value></data>
+  <data name="CaptureGuide2_IntroBar" xml:space="preserve"><value>Choose Full screen, Copy text or Copy color from the bar at the top.</value></data>
   <data name="CaptureGuide2_IntroAgain" xml:space="preserve"><value>Select Help (?) to see this guide again.</value></data>
   <data name="EditorUx_RotateLeft" xml:space="preserve"><value>Rotate left</value></data>
   <data name="EditorUx_RotateRight" xml:space="preserve"><value>Rotate right</value></data>
@@ -3610,10 +3610,10 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="SettingsUx_GitHubIssueUrlHint" xml:space="preserve"><value>The issue the GitHub upload shortcut pastes the clipboard image into. Use an issue you can comment on. Leave blank to use a safe default.</value></data>
   <data name="SettingsUx_EditingDefaultsHeading" xml:space="preserve"><value>Editing tool defaults</value></data>
   <data name="SettingsUx_PinCopy" xml:space="preserve"><value>Copying from a pinned window</value></data>
-  <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Click a pinned window and press Ctrl+C to copy its image. Ctrl+double-click copies the original text, or for an image without it, the text recognized on this PC.</value></data>
+  <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Ctrl+C copies a pinned window's image; Ctrl+double-click copies its original text, or for an image, the text recognized on this PC.</value></data>
   <data name="SettingsUx_OcrHeading" xml:space="preserve"><value>Text recognition</value></data>
   <data name="SettingsUx_OcrLanguages" xml:space="preserve"><value>Recognition languages</value></data>
-  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate uses a model that handles small print such as receipts. Most accurate corrects brightness, contrast, and sharpness and enlarges the image 4x before recognition; it downloads about 67 MB the first time.</value></data>
+  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts. Most accurate corrects and enlarges the image 4x before recognition and downloads about 67 MB the first time.</value></data>
   <data name="SettingsUx_OcrFast" xml:space="preserve"><value>Fast</value></data>
   <data name="SettingsUx_OcrBalanced" xml:space="preserve"><value>Normal</value></data>
   <data name="SettingsUx_OcrAccurate" xml:space="preserve"><value>Accurate</value></data>
@@ -3737,4 +3737,6 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, copy the text under Details and include it when you report the problem.</value></data>
   <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture could not start</value></data>
   <data name="Onboard_StartFailureBody" xml:space="preserve"><value>Start MyCapture again. If it still fails, restart the computer and try once more. If it still does not start, copy the text under Details and include it when you report the problem.</value></data>
+  <data name="CopyTerms_SizeMb" xml:space="preserve"><value>{0:0.#} MB</value></data>
+  <data name="CopyTerms_SizeKb" xml:space="preserve"><value>{0:N0} KB</value></data>
 </root>
