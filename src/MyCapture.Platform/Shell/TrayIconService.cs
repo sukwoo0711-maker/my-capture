@@ -88,6 +88,9 @@ public sealed class TrayIconService : IDisposable
 
     public int CaptureCount => _captureCount;
 
+    /// <summary>True once <see cref="Initialize"/> has added the icon; updates before that throw.</summary>
+    public bool IsInitialized => _initialized;
+
     public Action<string, string, TrayBalloonKind>? NotificationPresenter { get; set; }
     public Action? MenuPresenter { get; set; }
 

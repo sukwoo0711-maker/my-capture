@@ -57,6 +57,22 @@ public sealed class NativeShellLifecycleTests
         Assert.True(activated);
     });
 
+    [Fact]
+    public void TrayBeforeInitialize_ReportsItSoStartupWorkCanSkipIconUpdates() => StaTestHost.Run(() =>
+    {
+        // Startup expires history before the icon is added; App.MaintainHistory checks this
+        // instead of calling SetCaptureCount, which throws until Initialize.
+        using var window = new NativeMessageWindow();
+        string root = Path.Combine(AppContext.BaseDirectory, "Assets");
+        using var tray = new TrayIconService(window,
+            new TrayIconAssets(Path.Combine(root, "tray-idle.ico"), Path.Combine(root, "tray-capturing.ico"),
+                Path.Combine(root, "tray-busy.ico"), Path.Combine(root, "tray-error.ico")),
+            NullLogger<TrayIconService>.Instance);
+
+        Assert.False(tray.IsInitialized);
+        Assert.Throws<InvalidOperationException>(() => tray.SetCaptureCount(1));
+    });
+
     private static void Pump()
     {
         var frame = new DispatcherFrame();

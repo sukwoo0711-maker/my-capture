@@ -1567,7 +1567,12 @@ public partial class App : Application
             if (_queue?.ExpireHistory(DateTimeOffset.UtcNow) > 0)
             {
                 _galleryWindow?.RefreshFromQueue();
-                _tray?.SetCaptureCount(_queue.Count);
+                // Startup expires history before the tray icon exists; InitializeShell sets the
+                // count right after adding the icon.
+                if (_tray?.IsInitialized == true)
+                {
+                    _tray.SetCaptureCount(_queue.Count);
+                }
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
