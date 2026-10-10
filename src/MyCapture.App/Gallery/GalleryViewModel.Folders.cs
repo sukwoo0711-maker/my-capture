@@ -39,12 +39,131 @@ public sealed partial class GalleryViewModel
     public CaptureFolderScope SelectedScope => _scope;
     public bool HasFolderScope => _scope.FolderId is not null;
     public bool CanSetNewCaptureFolder => _scope.FolderId is { } id && _controller.Queue.FindFolder(id) is not null;
-    public bool CanChangeNewCaptureFolder => CanSetNewCaptureFolder || UseCurrentFolderForNewCaptures;
+    public bool CanChangeNewCaptureFolder => CanSetNewCaptureFolder || SavesNewCapturesToFolder;
+
+    /// <summary>The saved "keep after closing the library" option.</summary>
     public bool UseCurrentFolderForNewCaptures => _controller.Queue.UseCurrentFolderForNewCaptures;
+
+    /// <summary>The folder the next capture joins, or <see langword="null"/> for the date library.</summary>
+    public Guid? NewCaptureFolderId => _controller.Queue.ResolveNewCaptureFolderId();
+    public bool SavesNewCapturesToFolder => NewCaptureFolderId is not null;
     public string NewCaptureDestinationText => UiText.Format("Folder410.DestinationHeader",
-        _controller.Queue.UseCurrentFolderForNewCaptures && _controller.Queue.DefaultCaptureFolderId is { } id
-            && _controller.Queue.FindFolder(id) is not null
-            ? _controller.Queue.GetFolderDisplayPath(id) : UiText.Get("Folder410.DefaultDestination"));
+        NewCaptureFolderId is { } id ? _controller.Queue.GetFolderDisplayPath(id) : UiText.Get("Folder410.DefaultDestination"));
+
+    private bool _libraryOpen;
+    private bool _folderCaptureOptOut;
+    private Guid? _publishedBrowsing;
+    private readonly Dictionary<Guid, GalleryFolderCardViewModel> _folderCards = [];
+
+    /// <summary>
+    /// The library is open while its window is visible or hidden only for a capture it started.
+    /// While open, new captures join the folder it shows. Closing it ends that session, including
+    /// a session-only opt-out from the destination check box.
+    /// </summary>
+    internal void SetLibraryOpen(bool open)
+    {
+        if (_libraryOpen == open) return;
+        _libraryOpen = open;
+        if (!open) _folderCaptureOptOut = false;
+        SyncBrowsingCaptureFolder();
+        RaiseNewCaptureDestination();
+    }
+
+    /// <summary>
+    /// Applies the destination check box. Clearing it saves to the date library for the rest of
+    /// this library session and also turns off the saved keep-after-close folder. Checking it
+    /// again uses the shown folder for this session only.
+    /// </summary>
+    internal async Task SetFolderCaptureEnabledAsync(bool enabled)
+    {
+        _folderCaptureOptOut = !enabled;
+        SyncBrowsingCaptureFolder();
+        try
+        {
+            if (!enabled && _controller.Queue.UseCurrentFolderForNewCaptures)
+                await _controller.Queue.SetNewCaptureFolderAsync(null, false);
+        }
+        finally { Refresh(); }
+    }
+
+    internal GalleryFolderCardViewModel? FindFolderCard(Guid id) =>
+        _folderCards.TryGetValue(id, out GalleryFolderCardViewModel? card) ? card : null;
+
+    private void SyncBrowsingCaptureFolder()
+    {
+        CaptureQueue queue = _controller.Queue;
+        Guid? browsing = _libraryOpen && !_folderCaptureOptOut && _scope.FolderId is { } id
+            && queue.FindFolder(id) is not null ? id : null;
+        if (browsing == _publishedBrowsing) return;
+        _publishedBrowsing = browsing;
+        queue.SetBrowsingCaptureFolder(browsing);
+    }
+
+    private void RaiseNewCaptureDestination()
+    {
+        Raise(nameof(UseCurrentFolderForNewCaptures)); Raise(nameof(SavesNewCapturesToFolder));
+        Raise(nameof(CanChangeNewCaptureFolder)); Raise(nameof(NewCaptureDestinationText));
+        Raise(nameof(EmptyStateText));
+    }
+
+    private GalleryFolderCardViewModel GetOrUpdateFolderCard(CaptureFolder folder, FolderCardIndex index,
+        HashSet<Guid> seen)
+    {
+        if (!_folderCards.TryGetValue(folder.Id, out GalleryFolderCardViewModel? card))
+            _folderCards[folder.Id] = card = new GalleryFolderCardViewModel(folder.Id);
+        seen.Add(folder.Id);
+        (int captures, CaptureRecord? newest) = index.Subtree(folder.Id);
+        card.Update(folder.Name, captures, index.ChildCount(folder.Id), newest is null ? null : GetOrCreateTile(newest));
+        return card;
+    }
+
+    /// <summary>One pass over the queue for every folder card in a refresh.</summary>
+    private sealed class FolderCardIndex
+    {
+        private readonly ILookup<Guid?, CaptureFolder> _children;
+        private readonly Dictionary<Guid, (int Count, CaptureRecord Newest)> _direct = [];
+        private readonly Dictionary<Guid, (int Count, CaptureRecord? Newest)> _subtrees = [];
+
+        internal FolderCardIndex(CaptureQueue queue)
+        {
+            _children = queue.Folders.ToLookup(folder => folder.ParentId);
+            foreach (CaptureRecord record in queue.Records)
+            {
+                if (record.FolderId is not { } id) continue;
+                _direct[id] = _direct.TryGetValue(id, out var current)
+                    ? (current.Count + 1, Newer(record, current.Newest)!) : (1, record);
+            }
+        }
+
+        internal int ChildCount(Guid id) => _children[id].Count();
+
+        internal (int Count, CaptureRecord? Newest) Subtree(Guid id) => Subtree(id, 1);
+
+        private (int Count, CaptureRecord? Newest) Subtree(Guid id, int depth)
+        {
+            if (_subtrees.TryGetValue(id, out var cached)) return cached;
+            int count = 0;
+            CaptureRecord? newest = null;
+            if (_direct.TryGetValue(id, out var direct)) (count, newest) = (direct.Count, direct.Newest);
+            // Persisted trees are validated, but never let a damaged parent chain recurse forever.
+            if (depth < CaptureFolderNaming.MaximumDepth)
+            {
+                foreach (CaptureFolder child in _children[id])
+                {
+                    (int childCount, CaptureRecord? childNewest) = Subtree(child.Id, depth + 1);
+                    count += childCount;
+                    newest = Newer(childNewest, newest);
+                }
+            }
+            return _subtrees[id] = (count, newest);
+        }
+
+        // Same order as the newest-first grid: later first, then the smaller id.
+        private static CaptureRecord? Newer(CaptureRecord? first, CaptureRecord? second) =>
+            first is null ? second : second is null ? first
+            : first.CreatedAt > second.CreatedAt || (first.CreatedAt == second.CreatedAt && first.Id.CompareTo(second.Id) < 0)
+                ? first : second;
+    }
     public string SearchPlaceholder => _scope.FolderId is { } id
         ? UiText.Format("Folder410.SearchInFolder", _controller.Queue.GetFolderDisplayPath(id))
         : UiText.Get("Text_59208AC2B48E");
@@ -107,9 +226,10 @@ public sealed partial class GalleryViewModel
             nodes.Add(node);
         }
         Replace(FolderNodes, nodes);
+        SyncBrowsingCaptureFolder();
         Raise(nameof(FolderStorageText)); Raise(nameof(ShowFolderStorageInfo));
         Raise(nameof(SelectedScope)); Raise(nameof(HasFolderScope)); Raise(nameof(CanSetNewCaptureFolder));
-        Raise(nameof(UseCurrentFolderForNewCaptures)); Raise(nameof(CanChangeNewCaptureFolder)); Raise(nameof(NewCaptureDestinationText)); Raise(nameof(SearchPlaceholder));
+        RaiseNewCaptureDestination(); Raise(nameof(SearchPlaceholder));
     }
 
     private static IEnumerable<GalleryFolderNode> Flatten(IEnumerable<GalleryFolderNode> nodes)

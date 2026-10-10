@@ -3459,4 +3459,10 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="CaptureCue_Click" xml:space="preserve"><value>Click: Capture window</value></data>
   <data name="CaptureCue_Shift" xml:space="preserve"><value>Shift: Pixel precision</value></data>
   <data name="CaptureCue_Esc" xml:space="preserve"><value>Esc: Cancel</value></data>
+  <data name="LibraryFolder_CardCount" xml:space="preserve"><value>Captures: {0}</value></data>
+  <data name="LibraryFolder_CardCountWithFolders" xml:space="preserve"><value>Folders: {1} · Captures: {0}</value></data>
+  <data name="LibraryFolder_CardAccessibleName" xml:space="preserve"><value>Folder {0}, {1}</value></data>
+  <data name="LibraryFolder_CardOpenHint" xml:space="preserve"><value>Open folder (Enter)</value></data>
+  <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>Keep saving new captures to the last folder after closing the library</value></data>
+  <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>New captures are saved to this folder. You can also drag captures here.</value></data>
 </root>

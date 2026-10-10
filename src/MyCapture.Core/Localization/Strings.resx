@@ -3459,4 +3459,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="CaptureCue_Click" xml:space="preserve"><value>클릭: 창 캡처</value></data>
   <data name="CaptureCue_Shift" xml:space="preserve"><value>Shift: 정밀 이동</value></data>
   <data name="CaptureCue_Esc" xml:space="preserve"><value>Esc: 취소</value></data>
+  <data name="LibraryFolder_CardCount" xml:space="preserve"><value>캡처 {0}개</value></data>
+  <data name="LibraryFolder_CardCountWithFolders" xml:space="preserve"><value>폴더 {1}개 · 캡처 {0}개</value></data>
+  <data name="LibraryFolder_CardAccessibleName" xml:space="preserve"><value>폴더 {0}, {1}</value></data>
+  <data name="LibraryFolder_CardOpenHint" xml:space="preserve"><value>폴더 열기 (Enter)</value></data>
+  <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>라이브러리를 닫아도 마지막 폴더에 새 캡처 저장</value></data>
+  <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>새 캡처를 이 폴더에 저장합니다. 기존 캡처는 끌어 넣을 수 있습니다.</value></data>
 </root>

@@ -430,6 +430,84 @@ public sealed class CaptureFolderTests
     }
 
     [Fact]
+    public async Task BrowsingFolder_ReceivesNewCapturesBeforeTheSavedFolder_AndIsNeverPersisted()
+    {
+        var f = new Fixture();
+        var shown = await f.Queue.CreateFolderAsync("shown");
+        var saved = await f.Queue.CreateFolderAsync("saved");
+        f.Queue.SetBrowsingCaptureFolder(shown.Id);
+        Assert.Equal(shown.Id, f.Queue.BrowsingCaptureFolderId);
+        Assert.Equal(shown.Id, f.Queue.ResolveNewCaptureFolderId());
+        var first = f.Add(DateTimeOffset.Now);
+        Assert.Equal(shown.Id, first.FolderId);
+        Assert.True(first.IsPinned);
+        Assert.False(first.IsManuallyPinned);
+
+        await f.Queue.SetNewCaptureFolderAsync(saved.Id, true);
+        Assert.Equal(shown.Id, f.Add(DateTimeOffset.Now).FolderId);
+        f.Queue.SetBrowsingCaptureFolder(null);
+        Assert.Equal(saved.Id, f.Add(DateTimeOffset.Now).FolderId);
+        await f.Queue.SetNewCaptureFolderAsync(null, false);
+        Assert.Null(f.Add(DateTimeOffset.Now).FolderId);
+
+        // The destination is fixed when the capture starts, like the saved folder.
+        f.Queue.SetBrowsingCaptureFolder(shown.Id);
+        var pending = f.Record(DateTimeOffset.Now);
+        f.Queue.PrepareNewCaptureFolder(pending);
+        f.Queue.SetBrowsingCaptureFolder(null);
+        f.Add(pending);
+        Assert.Equal(shown.Id, pending.FolderId);
+
+        f.Queue.SetBrowsingCaptureFolder(shown.Id);
+        f.Queue.Save();
+        JsonObject recovery = JsonNode.Parse(File.ReadAllText(Path.Combine(f.Paths.DataRoot, "library-folders.json")))!.AsObject();
+        Assert.Null(recovery["defaultCaptureFolderId"]);
+        Assert.False(recovery["useCurrentFolderForNewCaptures"]!.GetValue<bool>());
+        JsonObject state = JsonNode.Parse(File.ReadAllText(f.IndexFile))!["folderState"]!.AsObject();
+        Assert.Null(state["defaultCaptureFolderId"]);
+        Assert.False(state["useCurrentFolderForNewCaptures"]!.GetValue<bool>());
+        CaptureQueue restored = f.Reload();
+        Assert.Null(restored.BrowsingCaptureFolderId);
+        Assert.Null(restored.ResolveNewCaptureFolderId());
+        Assert.Equal(3, restored.Records.Count(record => record.FolderId == shown.Id));
+        Assert.Equal(1, restored.Records.Count(record => record.FolderId == saved.Id));
+    }
+
+    [Fact]
+    public async Task BrowsingFolder_FallsBackToTheDateLibraryWhileBeingDeletedAndAfterDeletion()
+    {
+        var f = new Fixture();
+        var shown = await f.Queue.CreateFolderAsync("shown");
+        f.Queue.SetBrowsingCaptureFolder(shown.Id);
+        var inside = f.Add(DateTimeOffset.Now);
+        Assert.Equal(shown.Id, inside.FolderId);
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        int writes = 0;
+        f.Queue.BeforePublicationWriteForTest = (path, _) =>
+        {
+            if (path != f.IndexFile || Interlocked.Increment(ref writes) != 1) return;
+            entered.Set();
+            if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
+        };
+        Task<CaptureFolderDeletionResult> deletion = f.Queue.DeleteFolderScopeAsync(CaptureFolderScope.ForFolder(shown.Id));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        // The capture removal is in flight and the folder still exists, but it is being deleted.
+        Assert.NotNull(f.Queue.FindFolder(shown.Id));
+        Assert.Null(f.Queue.ResolveNewCaptureFolderId());
+        var during = f.Record(DateTimeOffset.Now);
+        f.Queue.PrepareNewCaptureFolder(during);
+        release.Set();
+        CaptureFolderDeletionResult result = await deletion;
+        Assert.Equal(1, result.RemovedFolders);
+        Assert.Equal(1, result.RemovedCaptures);
+        Assert.Null(during.FolderId);
+        Assert.Equal(shown.Id, f.Queue.BrowsingCaptureFolderId);
+        Assert.Null(f.Queue.ResolveNewCaptureFolderId());
+        Assert.Null(f.Add(DateTimeOffset.Now).FolderId);
+    }
+
+    [Fact]
     public async Task FailedFolderRemovalRestoresRetentionTimestampAlongWithAssignment()
     {
         var f = new Fixture();

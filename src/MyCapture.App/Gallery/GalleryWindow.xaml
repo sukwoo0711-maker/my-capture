@@ -19,6 +19,9 @@
           <themes:GalleryWorkspaceResources />
         </ResourceDictionary.MergedDictionaries>
 
+        <!-- Local, so hosts that supply only the shared converters still load this window. -->
+        <gallery:IsFolderRowConverter x:Key="IsFolderRow" />
+
         <!-- Tile action glyphs come from the shared Symbols.xaml resource dictionary
              (Icon.Copy / Icon.Pin / Icon.More / Icon.Ocr / Icon.Delete), referenced by key. -->
 
@@ -412,6 +415,91 @@
                      MouseDoubleClick="OnTileDoubleClick" />
         </DataTemplate>
 
+        <!-- A 244-DIP card plus 8-DIP margins fills a tile's 260-DIP column (6-DIP margins and the
+             2-DIP selection outline), so folder and tile rows share columns for arrow keys. -->
+        <Style x:Key="Gallery.FolderCardButton" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+            <Setter Property="Width" Value="244" />
+            <Setter Property="Height" Value="84" />
+            <Setter Property="Margin" Value="8" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="Background" Value="{DynamicResource Surface.Raised}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        </Style>
+
+        <DataTemplate x:Key="Gallery.FolderCardTemplate" DataType="{x:Type gallery:GalleryFolderCardViewModel}">
+            <Button Style="{StaticResource Gallery.FolderCardButton}"
+                    AutomationProperties.Name="{Binding AccessibleName}"
+                    ToolTip="{Binding ToolTipText}"
+                    Click="OnFolderCardClick"
+                    PreviewKeyDown="OnFolderCardKeyDown">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="66" Height="66"
+                            Background="{DynamicResource Surface.Sunken}"
+                            BorderBrush="{DynamicResource Border.Subtle}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource Radius.Md}"
+                            ClipToBounds="True">
+                        <Grid>
+                            <Image Source="{Binding Preview.Thumbnail}"
+                                   Stretch="UniformToFill"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   Visibility="{Binding HasPreview, Converter={StaticResource BoolToVisibility}}" />
+                            <!-- An empty folder shows the same folder glyph as the tree. -->
+                            <Path Data="M2,5 L8,5 L10,7 L20,7 L20,19 L2,19 Z" Width="30" Height="30" Stretch="Uniform"
+                                  Stroke="{DynamicResource Text.Secondary}" StrokeThickness="1.5" Fill="Transparent"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Path.Style>
+                                    <Style TargetType="Path">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasPreview}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Path.Style>
+                            </Path>
+                        </Grid>
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <DockPanel>
+                            <Path DockPanel.Dock="Left" Data="M2,5 L8,5 L10,7 L20,7 L20,19 L2,19 Z"
+                                  Width="14" Height="14" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.5" Fill="Transparent" />
+                            <TextBlock Text="{Binding Name}"
+                                       FontWeight="SemiBold"
+                                       FontSize="{StaticResource FontSize.Body}"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TextBlock Text="{Binding CountText}"
+                                   Margin="0,5,0,0"
+                                   FontWeight="Normal"
+                                   FontSize="{StaticResource FontSize.Caption}"
+                                   Foreground="{DynamicResource Text.Secondary}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="Gallery.FolderRowTemplate" DataType="{x:Type gallery:GalleryFolderRow}">
+            <ItemsControl ItemsSource="{Binding Folders}"
+                          ItemTemplate="{StaticResource Gallery.FolderCardTemplate}"
+                          Focusable="False">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </DataTemplate>
+
         <Style x:Key="Gallery.RowContainer" TargetType="ListBoxItem">
             <Setter Property="Margin" Value="0" />
             <Setter Property="Padding" Value="0" />
@@ -430,6 +518,9 @@
                     <Setter Property="ContentTemplate" Value="{StaticResource Gallery.HeaderRowTemplate}" />
 
                     <Setter Property="KeyboardNavigation.IsTabStop" Value="False" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Converter={StaticResource IsFolderRow}}" Value="True">
+                    <Setter Property="ContentTemplate" Value="{StaticResource Gallery.FolderRowTemplate}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -573,7 +664,7 @@
             <!-- Declared after the search box so Tab follows the visual order. -->
             <CheckBox x:Name="CurrentFolderCaptureCheck" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
                       Content="{loc:Text Folder410.CurrentFolderOption}" IsEnabled="{Binding CanChangeNewCaptureFolder}"
-                      IsChecked="{Binding UseCurrentFolderForNewCaptures, Mode=OneWay}" Click="OnFolderCaptureTargetClick" />
+                      IsChecked="{Binding SavesNewCapturesToFolder, Mode=OneWay}" Click="OnFolderCaptureTargetClick" />
             <ComboBox Grid.Column="2" Width="132" Margin="12,0,0,0" VerticalAlignment="Center"
                       AutomationProperties.Name="{loc:Text Folder410.Sort}"
                       SelectedIndex="{Binding SortIndex, Mode=TwoWay}">
