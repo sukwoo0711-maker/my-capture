@@ -34,9 +34,13 @@ internal sealed class AnnotationEditorController
     private PointD _gestureLast;
     private RectD _transformBefore;
     private ResizeHandle _resizeHandle = ResizeHandle.None;
-    private double _fontSizeBefore;
+    private TextLayout _textLayoutBefore;
     private AnnotationItem? _draftItem;
     private List<PointD>? _draftPoints;
+
+    // The text being typed into a live box. Until it is committed its add command is the
+    // whole history of the item, so style changes apply to it directly (see PushProperty).
+    private TextAnnotation? _creatingText;
 
     internal AnnotationEditorController(AnnotationDocument document, UndoStack undo)
     {
@@ -94,6 +98,13 @@ internal sealed class AnnotationEditorController
     internal bool CanRedo => _undo.CanRedo;
 
     internal bool IsCreatingText { get; private set; }
+
+    /// <summary>
+    /// Measures the box a caption needs for its text, size and wrapping mode, keeping its
+    /// top-left corner (see <see cref="TextAnnotationLayout.Measure"/>). Without one, boxes keep
+    /// the size they were given, which is enough for tests that do not lay out text.
+    /// </summary>
+    internal Func<TextAnnotation, RectD>? TextFitter { get; set; }
 
     /// <summary>
     /// Pixels within which a click counts as hitting an annotation. Scaled by the caller
@@ -378,23 +389,14 @@ internal sealed class AnnotationEditorController
 
                 break;
             case Gesture.Resize:
-                if (_selected is not null)
+                if (_selected is TextAnnotation text)
                 {
-                    RectD resized = ApplyResize(_transformBefore, _resizeHandle, point);
-                    // Corner handles on text scale the font with the box so the glyphs grow
-                    // proportionally, PowerPoint-style; edge handles only reshape the box.
-                    if (_selected is TextAnnotation text
-                        && IsCornerHandle(_resizeHandle)
-                        && _transformBefore.Height > double.Epsilon)
-                    {
-                        double ratio = resized.Height / _transformBefore.Height;
-                        if (double.IsFinite(ratio) && ratio > 0)
-                        {
-                            text.FontSize = Math.Clamp(_fontSizeBefore * ratio, 8, 200);
-                        }
-                    }
-
-                    _selected.SetBounds(resized);
+                    ResizeText(text, point);
+                    RaiseVisual();
+                }
+                else if (_selected is not null)
+                {
+                    _selected.SetBounds(ApplyResize(_transformBefore, _resizeHandle, point));
                     RaiseVisual();
                 }
 
@@ -421,6 +423,17 @@ internal sealed class AnnotationEditorController
             case Gesture.PenDraw:
                 CommitPen();
                 break;
+            case Gesture.Resize when _selected is TextAnnotation text:
+                // Box, size and wrapping mode change together; one state command restores all
+                // three exactly. Replaying a transform instead would rescale the font again.
+                TextLayout resized = TextLayout.Of(text);
+                if (resized != _textLayoutBefore)
+                {
+                    _undo.Push(new PropertyChangeCommand<TextAnnotation, TextLayout>(
+                        text, UiText.Get("Text_258AD4B095A1"), TextLayout.Apply, _textLayoutBefore, resized));
+                }
+
+                break;
             case Gesture.Move:
             case Gesture.Resize:
                 if (_selected is not null)
@@ -429,21 +442,8 @@ internal sealed class AnnotationEditorController
                     if (after != _transformBefore)
                     {
                         // The item already followed the pointer; record the net transform so
-                        // one drag is one undo step. A proportional text resize changes the
-                        // font too, so both go into the same batch.
-                        if (_selected is TextAnnotation text && text.FontSize != _fontSizeBefore)
-                        {
-                            using (_undo.BeginBatch(UiText.Get("Text_258AD4B095A1")))
-                            {
-                                PushProperty(text, UiText.Get("Text_258AD4B095A1"),
-                                    static (t, v) => t.FontSize = v, _fontSizeBefore, text.FontSize);
-                                _undo.Push(new TransformAnnotationCommand(_selected, _transformBefore, after));
-                            }
-                        }
-                        else
-                        {
-                            _undo.Push(new TransformAnnotationCommand(_selected, _transformBefore, after));
-                        }
+                        // one drag is one undo step.
+                        _undo.Push(new TransformAnnotationCommand(_selected, _transformBefore, after));
                     }
                 }
 
@@ -473,10 +473,14 @@ internal sealed class AnnotationEditorController
             FontSize = DefaultFontSize,
             FontFamily = DefaultFontFamily,
             Text = string.Empty,
+            // A new caption follows its text until the user sets a width.
+            AutoSize = true,
         };
+        TextLayout.Apply(text, FitText(text, text.Text, text.FontSize, autoSize: true, text.Rect));
 
         _undo.Execute(new AddAnnotationCommand(_document, text));
         IsCreatingText = true;
+        _creatingText = text;
         Tool = EditorTool.Select;
         SetSelected(text);
         return text;
@@ -484,16 +488,19 @@ internal sealed class AnnotationEditorController
 
     /// <summary>
     /// Finishes a live text edit. An empty box is removed (its add is undone) so a stray
-    /// click that types nothing does not litter the document.
+    /// click that types nothing does not litter the document. Otherwise the box is fitted to
+    /// the final text and the text and box change as one undo step.
     /// </summary>
     internal void CommitTextEdit(TextAnnotation text, string finalText)
     {
         ArgumentNullException.ThrowIfNull(text);
         IsCreatingText = false;
+        _creatingText = null;
 
         if (string.IsNullOrEmpty(finalText))
         {
-            // Undo the add so the empty box leaves no trace and no undo entry.
+            // Undo the add so the empty box leaves no trace and no undo entry. Changes made
+            // while typing applied without undo entries, so the add is the top entry.
             if (_undo.CanUndo && ReferenceEquals(_document.Items.LastOrDefault(), text))
             {
                 _undo.Undo();
@@ -507,13 +514,48 @@ internal sealed class AnnotationEditorController
         }
         else if (!string.Equals(text.Text, finalText, StringComparison.Ordinal))
         {
-            string before = text.Text;
-            _undo.Push(new PropertyChangeCommand<TextAnnotation, string>(
-                text, UiText.Get("Text_258AD4B095A1"), static (t, v) => t.Text = v, before, finalText));
-            text.Text = finalText;
+            string label = UiText.Get("Text_258AD4B095A1");
+            TextLayout fitted = FitText(text, finalText, text.FontSize, text.AutoSize, text.Rect);
+            using (_undo.BeginBatch(label))
+            {
+                PushProperty(text, label, static (t, v) => t.Text = v, text.Text, finalText);
+                PushProperty(text, label, TextLayout.Apply, TextLayout.Of(text), fitted);
+            }
         }
 
         RaiseVisual();
+    }
+
+    /// <summary>
+    /// The layout a caption takes with <paramref name="content"/>, <paramref name="fontSize"/>
+    /// and the box <paramref name="rect"/> (its top-left, and its width when not auto-size).
+    /// </summary>
+    /// <remarks>
+    /// An auto-size box that would run past the image's right edge becomes a fixed-width box
+    /// ending at that edge (at least one em wide), so the caption wraps and grows downward
+    /// instead of leaving the image. Typing, committing and changing the size all follow this
+    /// rule; moving does not refit, so a caption renders the same wherever it is dragged.
+    /// </remarks>
+    internal TextLayout FitText(
+        TextAnnotation text, string content, double fontSize, bool autoSize, RectD rect, bool keepInsideImage = true)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var probe = (TextAnnotation)text.Clone();
+        probe.Text = content;
+        probe.FontSize = fontSize;
+        probe.AutoSize = autoSize && !text.IsStepNumber;
+        probe.Rect = rect;
+        RectD measured = TextFitter?.Invoke(probe) ?? rect;
+
+        if (probe.AutoSize && keepInsideImage && _document.CanvasWidth > 0
+            && measured.Right > _document.CanvasWidth + 0.01)
+        {
+            probe.AutoSize = false;
+            probe.Rect = new RectD(rect.X, rect.Y, Math.Max(_document.CanvasWidth - rect.X, probe.FontSize), rect.Height);
+            measured = TextFitter?.Invoke(probe) ?? probe.Rect;
+        }
+
+        return new TextLayout(measured, probe.FontSize, probe.AutoSize);
     }
 
     internal ImageAnnotation AddImageAnnotation(string assetFileName, int sourceWidth, int sourceHeight, RectD rect)
@@ -682,8 +724,8 @@ internal sealed class AnnotationEditorController
 
     /// <summary>
     /// Applies a font size to the selected text annotation, or records it as the default
-    /// for the next text annotation when nothing is selected. The box height follows the
-    /// size so a larger font is never clipped by its own rect.
+    /// for the next text annotation when nothing is selected. The box is refitted to the
+    /// text at the new size, so a larger font is never trimmed by its own rect.
     /// </summary>
     internal void ApplyFontSize(double fontSize)
     {
@@ -699,19 +741,20 @@ internal sealed class AnnotationEditorController
             return;
         }
 
-        double oldSize = text.FontSize;
-        RectD oldRect = text.Rect;
-        double scaledHeight = oldRect.Height * (size / Math.Max(double.Epsilon, oldSize));
-        RectD scaledRect = new(oldRect.X, oldRect.Y, oldRect.Width, scaledHeight);
-        using (_undo.BeginBatch(UiText.Get("Text_258AD4B095A1")))
+        TextLayout after;
+        if (text.IsStepNumber)
         {
-            PushProperty(text, UiText.Get("Text_258AD4B095A1"), static (t, v) => t.FontSize = v, oldSize, size);
-            if (scaledRect != oldRect)
-            {
-                PushProperty(text, UiText.Get("Text_258AD4B095A1"), static (t, v) => t.Rect = v, oldRect, scaledRect);
-            }
+            // A badge's number is centred in its own square; scale the square with it.
+            double ratio = size / Math.Max(double.Epsilon, text.FontSize);
+            RectD box = text.Rect;
+            after = new TextLayout(new RectD(box.X, box.Y, box.Width * ratio, box.Height * ratio), size, text.AutoSize);
+        }
+        else
+        {
+            after = FitText(text, text.Text, size, text.AutoSize, text.Rect);
         }
 
+        PushProperty(text, UiText.Get("Text_258AD4B095A1"), TextLayout.Apply, TextLayout.Of(text), after);
         RaiseVisual();
     }
 
@@ -740,8 +783,18 @@ internal sealed class AnnotationEditorController
             return ResizeHandle.None;
         }
 
-        return HitTestHandle(_selected.Bounds, point, handlePixels);
+        return UsableHandle(_selected, HitTestHandle(_selected.Bounds, point, handlePixels));
     }
+
+    /// <summary>
+    /// <paramref name="handle"/>, or <see cref="ResizeHandle.None"/> when it does nothing for
+    /// <paramref name="item"/>: a caption's height always follows its text, so its top and
+    /// bottom handles are not offered.
+    /// </summary>
+    internal static ResizeHandle UsableHandle(AnnotationItem item, ResizeHandle handle) =>
+        item is TextAnnotation { IsStepNumber: false } && handle is ResizeHandle.TopCenter or ResizeHandle.BottomCenter
+            ? ResizeHandle.None
+            : handle;
 
     internal AnnotationItem? HitTest(PointD point) => _document.HitTest(point, HitTolerance);
 
@@ -749,13 +802,13 @@ internal sealed class AnnotationEditorController
     {
         if (_selected is not null && _selected.SupportsResize)
         {
-            ResizeHandle handle = HitTestHandle(_selected.Bounds, point, HitTolerance * 1.5);
+            ResizeHandle handle = UsableHandle(_selected, HitTestHandle(_selected.Bounds, point, HitTolerance * 1.5));
             if (handle != ResizeHandle.None)
             {
                 _gesture = Gesture.Resize;
                 _resizeHandle = handle;
                 _transformBefore = _selected.Bounds;
-                _fontSizeBefore = _selected is TextAnnotation text ? text.FontSize : 0;
+                _textLayoutBefore = _selected is TextAnnotation text ? TextLayout.Of(text) : default;
                 return;
             }
         }
@@ -920,7 +973,79 @@ internal sealed class AnnotationEditorController
         }
 
         setter(item, after);
+        if (ReferenceEquals(item, _creatingText))
+        {
+            // Still being typed: its add command restores the item with whatever style it has
+            // when committed. A separate entry would sit above the add, so committing an
+            // empty box would undo this change instead of removing the box.
+            return;
+        }
+
         _undo.Push(new PropertyChangeCommand<TItem, TValue>(item, label, setter, before, after));
+    }
+
+    /// <summary>
+    /// Follows a resize handle on a caption from the state captured when the drag began, so
+    /// the font scales once per gesture rather than compounding on every pointer move.
+    /// </summary>
+    /// <remarks>
+    /// Corner: scales the font by the box-height ratio; an auto-size caption stays auto-size, a
+    /// fixed-width caption scales its wrapping width by the same ratio. Left/right edge: sets a
+    /// fixed wrapping width (at least one em) and the height follows the text. The opposite
+    /// corner or edge stays put. A step badge simply takes the dragged box.
+    /// </remarks>
+    private void ResizeText(TextAnnotation text, PointD point)
+    {
+        TextLayout before = _textLayoutBefore;
+        RectD box = before.Rect;
+        if (text.IsStepNumber)
+        {
+            double badgeSize = before.FontSize;
+            RectD dragged = ApplyResize(box, _resizeHandle, point);
+            double badgeRatio = box.Height > double.Epsilon ? dragged.Height / box.Height : 1;
+            if (IsCornerHandle(_resizeHandle) && double.IsFinite(badgeRatio) && badgeRatio > 0)
+            {
+                badgeSize = Math.Clamp(before.FontSize * badgeRatio, 8, 200);
+            }
+
+            TextLayout.Apply(text, new TextLayout(dragged, badgeSize, before.AutoSize));
+            return;
+        }
+
+        TextLayout fitted;
+        if (IsCornerHandle(_resizeHandle))
+        {
+            RectD dragged = ApplyResize(box, _resizeHandle, point);
+            double ratio = box.Height > double.Epsilon ? dragged.Height / box.Height : 1;
+            if (!double.IsFinite(ratio) || ratio <= 0)
+            {
+                return;
+            }
+
+            double size = Math.Clamp(before.FontSize * ratio, 8, 200);
+            double applied = size / Math.Max(double.Epsilon, before.FontSize);
+            RectD wrap = before.AutoSize ? box : new RectD(box.X, box.Y, box.Width * applied, box.Height);
+            fitted = FitText(text, text.Text, size, before.AutoSize, wrap, keepInsideImage: false);
+        }
+        else if (_resizeHandle is ResizeHandle.MiddleLeft or ResizeHandle.MiddleRight)
+        {
+            double em = Math.Max(1, before.FontSize);
+            double left = _resizeHandle == ResizeHandle.MiddleLeft ? Math.Min(point.X, box.Right - em) : box.Left;
+            double right = _resizeHandle == ResizeHandle.MiddleRight ? Math.Max(point.X, box.Left + em) : box.Right;
+            fitted = FitText(text, text.Text, before.FontSize, autoSize: false,
+                new RectD(left, box.Y, right - left, box.Height), keepInsideImage: false);
+        }
+        else
+        {
+            return;
+        }
+
+        RectD measured = fitted.Rect;
+        bool anchorRight = _resizeHandle is ResizeHandle.TopLeft or ResizeHandle.BottomLeft or ResizeHandle.MiddleLeft;
+        bool anchorBottom = _resizeHandle is ResizeHandle.TopLeft or ResizeHandle.TopRight;
+        double x = anchorRight ? box.Right - measured.Width : box.Left;
+        double y = anchorBottom ? box.Bottom - measured.Height : box.Top;
+        TextLayout.Apply(text, fitted with { Rect = new RectD(x, y, measured.Width, measured.Height) });
     }
 
     private void EnsureSelectionValid()
@@ -1023,6 +1148,21 @@ internal enum ResizeHandle
     BottomCenter,
     BottomLeft,
     MiddleLeft,
+}
+
+/// <summary>
+/// A caption's box, size and wrapping mode, which always change together.
+/// </summary>
+internal readonly record struct TextLayout(RectD Rect, double FontSize, bool AutoSize)
+{
+    internal static TextLayout Of(TextAnnotation text) => new(text.Rect, text.FontSize, text.AutoSize);
+
+    internal static void Apply(TextAnnotation text, TextLayout layout)
+    {
+        text.FontSize = layout.FontSize;
+        text.AutoSize = layout.AutoSize;
+        text.Rect = layout.Rect;
+    }
 }
 
 /// <summary>

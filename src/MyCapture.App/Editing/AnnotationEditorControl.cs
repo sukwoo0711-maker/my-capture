@@ -120,6 +120,8 @@ internal sealed class AnnotationEditorControl : Grid
 
     private TextBox? _activeTextBox;
     private TextAnnotation? _editingText;
+    // Distance from the live box's outer edge to its first glyph (see PlaceTextBox).
+    private Point _liveTextInset;
     private bool _completed;
     private bool _commitInProgress;
     private bool _redactionInProgress;
@@ -179,8 +181,14 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         AnnotationDocument document = initialDocument ?? AnnotationDocument.CreateFor(_canvasWidth, _canvasHeight);
+        foreach (TextAnnotation text in document.Items.OfType<TextAnnotation>())
+        {
+            // A repair, not an edit: older versions cut text that outgrew its box.
+            TextAnnotationLayout.GrowToText(text);
+        }
+
         var undo = new UndoStack();
-        _controller = new AnnotationEditorController(document, undo);
+        _controller = new AnnotationEditorController(document, undo) { TextFitter = TextAnnotationLayout.Measure };
         _controller.BaseWidthAtZeroTurns = selectedBitmap.PixelWidth;
         _controller.BaseHeightAtZeroTurns = selectedBitmap.PixelHeight;
         AnnotationDefaults defaults = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
@@ -861,22 +869,21 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void PlaceTextBox(PointD image)
     {
-        // Start the live box at the remaining canvas width so a long Korean sentence
-        // stays on one line. Wrapping begins only when the text hits the right edge.
-        double remainingPx = Math.Max(32, _canvasWidth - image.X - 8);
-        double lineHeightPx = Math.Max(24, _controller.DefaultFontSize * 1.8);
-        TextAnnotation annotation = _controller.BeginTextAnnotation(image, remainingPx, lineHeightPx);
+        // The controller sizes the caption to its (still empty) text; the live box follows
+        // the same fit as the user types.
+        double em = _controller.DefaultFontSize;
+        TextAnnotation annotation = _controller.BeginTextAnnotation(image, em, em * 1.4);
         _editingText = annotation;
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        Rect box = _surface.ToSurfaceRect(annotation.Rect);
         var textBox = new TextBox
         {
-            Width = Math.Max(60, box.Width),
-            MinWidth = 60,
-            MinHeight = Math.Max(28, box.Height),
+            MinWidth = 0,
+            MinHeight = 0,
             FontFamily = new FontFamily(annotation.FontFamily),
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
+            FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
+            FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = annotation.Foreground.ToBrush(),
             Background = Brush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
             BorderBrush = Brush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
@@ -885,13 +892,21 @@ internal sealed class AnnotationEditorControl : Grid
             TextWrapping = TextWrapping.NoWrap,
             Padding = new Thickness(4, 2, 4, 2),
         };
+        // The committed caption is drawn with ideal glyph metrics (FormattedText). The editor
+        // window's display-mode text would space and wrap the live copy differently.
+        TextOptions.SetTextFormattingMode(textBox, TextFormattingMode.Ideal);
         AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
         InputMethod.SetIsInputMethodEnabled(textBox, true);
 
-        Canvas.SetLeft(textBox, box.Left);
-        Canvas.SetTop(textBox, box.Top);
+        // Border, padding and the 2 DIP the text view keeps on each side; replaced by the
+        // laid-out value below.
+        _liveTextInset = new Point(
+            textBox.BorderThickness.Left + textBox.Padding.Left + 2,
+            textBox.BorderThickness.Top + textBox.Padding.Top);
         _overlayCanvas.Children.Add(textBox);
         _activeTextBox = textBox;
+        LayoutLiveTextBox(textBox);
+        MeasureLiveTextInset(textBox);
         SetStatus(UiText.Get("Text_230D26DEB9AE"));
 
         textBox.TextChanged += OnLiveTextBoxTextChanged;
@@ -900,45 +915,66 @@ internal sealed class AnnotationEditorControl : Grid
     }
 
     /// <summary>
-    /// Keeps a long single line unwrapped until the box reaches the right edge of the
-    /// visible image (in surface coordinates, including letterbox origin).
+    /// Replaces the estimated inset with the laid-out one so the first glyph sits exactly
+    /// where the committed caption draws it.
     /// </summary>
-    private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
+    private void MeasureLiveTextInset(TextBox box)
     {
-        if (sender is not TextBox box)
+        if (PresentationSource.FromVisual(box) is null)
         {
             return;
         }
 
-        Rect canvas = _surface.ToSurfaceRect(new RectD(0, 0, _canvasWidth, _canvasHeight));
-        double left = Canvas.GetLeft(box);
-        double availableDip = Math.Max(60, canvas.Right - left - 4);
-        FormattedText measured = MeasureLiveText(box);
-        double desiredDip = measured.Width + box.Padding.Left + box.Padding.Right + 8;
-        if (desiredDip <= availableDip)
+        box.UpdateLayout();
+        Rect first = box.GetRectFromCharacterIndex(0);
+        if (first.IsEmpty || !double.IsFinite(first.X) || !double.IsFinite(first.Y))
+        {
+            return;
+        }
+
+        _liveTextInset = new Point(first.X, first.Y);
+        LayoutLiveTextBox(box);
+    }
+
+    private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            LayoutLiveTextBox(box);
+        }
+    }
+
+    /// <summary>
+    /// Sizes and places the live box from the fit the commit will store: the first glyph at
+    /// the caption's top-left, each paragraph on one line while it fits, and wrapping at
+    /// exactly the committed width once the text reaches the image's right edge.
+    /// </summary>
+    private void LayoutLiveTextBox(TextBox box)
+    {
+        if (_editingText is not { } editing)
+        {
+            return;
+        }
+
+        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        TextLayout fit = _controller.FitText(editing, box.Text ?? string.Empty, editing.FontSize, editing.AutoSize, editing.Rect);
+        Rect target = _surface.ToSurfaceRect(fit.Rect);
+        double chrome = 2 * _liveTextInset.X;
+        box.MinWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
+        if (fit.AutoSize)
         {
             box.TextWrapping = TextWrapping.NoWrap;
-            box.Width = Math.Max(box.MinWidth, desiredDip);
+            // Room for the caret after the last glyph, so the line never scrolls sideways.
+            box.Width = target.Width + chrome + 2;
         }
         else
         {
             box.TextWrapping = TextWrapping.Wrap;
-            box.Width = availableDip;
+            box.Width = target.Width + chrome;
         }
-    }
 
-    private FormattedText MeasureLiveText(TextBox box)
-    {
-        FontFamily family = box.FontFamily ?? new FontFamily("Malgun Gothic");
-        var typeface = new Typeface(family, box.FontStyle, box.FontWeight, FontStretches.Normal);
-        return new FormattedText(
-            box.Text ?? string.Empty,
-            CultureInfo.CurrentUICulture,
-            box.FlowDirection,
-            typeface,
-            box.FontSize,
-            Brushes.Black,
-            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        Canvas.SetLeft(box, target.Left - _liveTextInset.X);
+        Canvas.SetTop(box, target.Top - _liveTextInset.Y);
     }
 
     internal AnnotationDocument CreateCurrentImageSnapshot()
@@ -951,24 +987,15 @@ internal sealed class AnnotationEditorControl : Grid
             && snapshot.Items.OfType<TextAnnotation>().FirstOrDefault(item => item.Id == editing.Id) is { } text)
         {
             if (string.IsNullOrEmpty(box.Text)) snapshot.Remove(text);
-            else { text.Text = box.Text; text.Rect = MeasureCommittedTextRect(box, editing); }
+            else
+            {
+                // Exactly what committing now would store.
+                text.Text = box.Text;
+                TextLayout.Apply(text, _controller.FitText(editing, box.Text, editing.FontSize, editing.AutoSize, editing.Rect));
+            }
         }
         snapshot.NormalizeZIndices();
         return snapshot;
-    }
-
-    private RectD MeasureCommittedTextRect(TextBox box, TextAnnotation annotation)
-    {
-        // Shrink-wrap to the typed text in image-pixel space so a wide live box does not
-        // leave a huge empty plate after commit.
-        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        PointD imageOrigin = _surface.ToImagePoint(new Point(Canvas.GetLeft(box), Canvas.GetTop(box)));
-        FormattedText measured = MeasureLiveText(box);
-        double width = Math.Max(annotation.FontSize, (measured.Width + box.Padding.Left + box.Padding.Right + 8) / dipPerPixel);
-        double height = Math.Max(annotation.FontSize * 1.4, (measured.Height + box.Padding.Top + box.Padding.Bottom + 4) / dipPerPixel);
-        width = Math.Min(width, Math.Max(1, _canvasWidth - imageOrigin.X));
-        height = Math.Min(height, Math.Max(1, _canvasHeight - imageOrigin.Y));
-        return new RectD(imageOrigin.X, imageOrigin.Y, width, height);
     }
 
     private void CommitActiveText()
@@ -989,12 +1016,6 @@ internal sealed class AnnotationEditorControl : Grid
 
         box.TextChanged -= OnLiveTextBoxTextChanged;
         _overlayCanvas.Children.Remove(box);
-
-        RectD finalRect = MeasureCommittedTextRect(box, annotation);
-        if (finalRect != annotation.Rect)
-        {
-            annotation.Rect = finalRect;
-        }
 
         bool hadText = !string.IsNullOrEmpty(box.Text);
         _controller.CommitTextEdit(annotation, box.Text ?? string.Empty);
@@ -1776,10 +1797,10 @@ internal sealed class AnnotationEditorControl : Grid
 
             _controller.ApplyFontSize(args.NewValue);
             RememberPreferences();
-            if (_activeTextBox is not null)
+            if (_activeTextBox is not null && _editingText is not null)
             {
-                _activeTextBox.FontSize = Math.Max(1, args.NewValue * _surface.DipPerPixel);
-                OnLiveTextBoxTextChanged(_activeTextBox, null!);
+                _activeTextBox.FontSize = Math.Max(1, _editingText.FontSize * _surface.DipPerPixel);
+                LayoutLiveTextBox(_activeTextBox);
             }
 
             if (_controller.Selected is TextAnnotation)

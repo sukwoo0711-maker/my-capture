@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -289,30 +288,15 @@ internal sealed class AnnotationRenderer
                 box.Top + (box.Height / 2)));
         }
 
+        // Never trimmed or cut at the box: see TextAnnotationLayout. Text that fits its box lays
+        // out exactly as before, so existing captions keep their pixels.
+        FormattedText formatted = TextAnnotationLayout.Format(text, pixelsPerDip);
+
         Brush? plate = text.Background.ToBrushOrNull();
         if (plate is not null)
         {
-            dc.DrawRectangle(plate, null, box);
+            dc.DrawRectangle(plate, null, text.IsStepNumber ? box : TextAnnotationLayout.PlateBounds(box, formatted));
         }
-
-        var typeface = new Typeface(
-            new FontFamily(text.FontFamily),
-            text.Italic ? FontStyles.Italic : FontStyles.Normal,
-            text.Bold ? FontWeights.Bold : FontWeights.Normal,
-            FontStretches.Normal);
-
-        var formatted = new FormattedText(
-            text.Text ?? string.Empty,
-            CultureInfo.CurrentUICulture,
-            FlowDirection.LeftToRight,
-            typeface,
-            Math.Max(1, text.FontSize),
-            text.Foreground.ToBrush(),
-            pixelsPerDip)
-        {
-            MaxTextWidth = Math.Max(1, box.Width),
-            MaxTextHeight = Math.Max(1, box.Height),
-        };
 
         var origin = text.IsStepNumber
             ? new Point(box.Left + Math.Max(0, (box.Width - formatted.Width) / 2), box.Top + Math.Max(0, (box.Height - formatted.Height) / 2))
