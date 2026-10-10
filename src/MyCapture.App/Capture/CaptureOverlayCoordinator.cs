@@ -124,13 +124,18 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal bool CanRetake => !_disposed && _activeEditor is not null && !_activeEditor.Editor.IsCommitInProgress &&
         _preparation is null && !_isOpeningEditor;
 
-    /// <summary>Closes only the capture-owned draft editor before replacing the selection.</summary>
+    /// <summary>
+    /// Closes only the capture-owned draft editor before replacing the selection, the way the
+    /// user's own close does: unsaved annotations are confirmed first. When the user keeps the
+    /// editor (Cancel) or saves first, the editor is still open afterwards and the caller's
+    /// guard abandons the retake instead of discarding the drawing.
+    /// </summary>
     internal void CloseEditorForRetake()
     {
         VerifyDispatcherAccess();
         if (!CanRetake) return;
         _openingEditorCts?.Cancel();
-        _activeEditor?.Close();
+        _activeEditor?.RequestClose();
     }
 
     /// <summary>Used only by the explicit advanced “capture window” command.</summary>
