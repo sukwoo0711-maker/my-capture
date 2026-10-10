@@ -3581,4 +3581,10 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click-through on · Turn off: {0}</value></data>
   <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>Click-through off</value></data>
   <data name="Onboard_CaptureFromTray" xml:space="preserve"><value>No shortcut is assigned. Choose Region capture from the tray icon menu.</value></data>
+  <data name="Onboard_QuickKeep" xml:space="preserve"><value>Keep open</value></data>
+  <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q or click the card: use the keys</value></data>
+  <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>Click the card: use the keys</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, copy the text under Details and include it when you report the problem.</value></data>
+  <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture could not start</value></data>
+  <data name="Onboard_StartFailureBody" xml:space="preserve"><value>Start MyCapture again. If it still fails, restart the computer and try once more. If it still does not start, copy the text under Details and include it when you report the problem.</value></data>
 </root>

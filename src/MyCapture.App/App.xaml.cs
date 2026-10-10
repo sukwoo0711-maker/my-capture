@@ -148,7 +148,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             _log?.LogCritical(ex, "Could not initialize the resident shell");
-            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Dialog.AppFailure"), ex);
+            MyCapture.App.Themes.ThemedDialog.StartupFailure(ex);
             Shutdown(2);
             return;
         }

@@ -65,7 +65,7 @@ internal sealed class ShortcutHelpWindow : Window
                     ("EditorUx_RotateLeftHint", "Q"), ("EditorUx_RotateRightHint", "W"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
                 ("Folder410.Title", [("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2"),
                     ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del")]),
-                ("Help.Video", [("Help.Play", "Space"), ("Help.Frame", "Ctrl+← / Ctrl+→"), ("Video.TrimIn", "I"), ("Video.TrimOut", "O"), ("Help.Gif", "G")]),
+                ("Help.Video", [("Help.Play", "Space"), ("Help.Frame", FrameStepKeys), ("Video.TrimIn", "I"), ("Video.TrimOut", "O"), ("Help.Gif", "G")]),
                 ("QuickAccess.Pin", [("QuickAccess.Pin", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
                     ("Onboard_PinAllowClickThrough", Display(keys.ToggleClickThrough)), ("Onboard_TrayReopenPin", Display(keys.RestoreClosedPin)),
                     ("QuickAccess.Copy", "Ctrl+C"), ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
@@ -92,6 +92,13 @@ internal sealed class ShortcutHelpWindow : Window
         Content = root;
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
     }
+
+    /// <summary>
+    /// The previous and next frame keys as the recording editor's step buttons show them (",", ".")
+    /// and as its shortcut table routes them, so the help and the editor never disagree.
+    /// </summary>
+    internal static string FrameStepKeys =>
+        $"{ShortcutCatalog.Get(ShortcutScope.Video, "PreviousFrame").Hint} / {ShortcutCatalog.Get(ShortcutScope.Video, "NextFrame").Hint}";
 
     internal static void ShowHelp()
     {
