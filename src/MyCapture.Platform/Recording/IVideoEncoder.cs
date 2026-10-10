@@ -1,21 +1,43 @@
 namespace MyCapture.Platform.Recording;
 
+/// <summary>Pixel layout of the frames an encoder accepts.</summary>
+public enum VideoEncoderInputFormat
+{
+    /// <summary>Top-down BGRA32 rows of <see cref="EncoderFrame.Stride"/> bytes; alpha is ignored.</summary>
+    Bgra32 = 0,
+
+    /// <summary>
+    /// Y'CbCr 4:2:0 (NV12): <c>Height</c> luma rows, then <c>Height / 2</c> rows of interleaved
+    /// U, V pairs, every row <see cref="EncoderFrame.Stride"/> bytes apart. Width and height must
+    /// be even. The samples reach the H.264 encoder unchanged and the stream declares no colour
+    /// description, so they must follow the Media Foundation default that the RGB input's own
+    /// conversion uses: studio range, BT.709 from 720 coded lines and BT.601 below.
+    /// </summary>
+    Nv12 = 1,
+}
+
 /// <summary>
-/// A single BGRA32 frame handed to an encoder, top-down, tightly packed.
+/// A single frame handed to an encoder, top-down, tightly packed: BGRA32 by default, or NV12
+/// for an encoder opened with <see cref="VideoEncoderOptions.InputFormat"/> set to it.
 /// </summary>
 /// <param name="Pixels">
-/// Raw BGRA32 pixels, <c>Stride * Height</c> bytes, top-down row order.
+/// Raw BGRA32 pixels, <c>Stride * Height</c> bytes, top-down row order; for NV12 the luma plane
+/// followed by the interleaved chroma plane.
 /// </param>
 /// <param name="Width">Frame width in pixels.</param>
 /// <param name="Height">Frame height in pixels.</param>
-/// <param name="Stride">Bytes per row (<c>Width * 4</c>).</param>
+/// <param name="Stride">Bytes per row (<c>Width * 4</c>; <c>Width</c> for packed NV12).</param>
 /// <param name="TimestampMs">Presentation time from clip start, in milliseconds.</param>
 public readonly record struct EncoderFrame(
     byte[] Pixels,
     int Width,
     int Height,
     int Stride,
-    double TimestampMs);
+    double TimestampMs)
+{
+    /// <summary>Layout of <see cref="Pixels"/>; must match the encoder's input format.</summary>
+    public VideoEncoderInputFormat Format { get; init; }
+}
 
 /// <summary>
 /// Sink for recorded frames. Kept as an interface — like <c>IHotkeyRegistrar</c> — so
@@ -51,6 +73,13 @@ public sealed record VideoEncoderOptions(
     int Fps,
     int BitrateBitsPerSecond)
 {
+    /// <summary>
+    /// Layout every <see cref="IVideoEncoder.WriteFrame"/> call supplies. BGRA32 (the default)
+    /// lets Media Foundation convert to Y'CbCr; NV12 skips that conversion, for frames that are
+    /// already Y'CbCr such as decoded H.264.
+    /// </summary>
+    public VideoEncoderInputFormat InputFormat { get; init; }
+
     /// <summary>
     /// A frame-size- and rate-aware default bitrate when none is specified.
     /// </summary>
