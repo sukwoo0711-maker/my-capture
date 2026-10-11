@@ -109,6 +109,12 @@ public static class FluidMotion
             typeof(ScaleTransform),
             typeof(FluidMotion));
 
+    private static readonly DependencyProperty RotationTransformProperty =
+        DependencyProperty.RegisterAttached(
+            "RotationTransform",
+            typeof(RotateTransform),
+            typeof(FluidMotion));
+
     private static readonly DependencyProperty WindowEntranceTransformProperty =
         DependencyProperty.RegisterAttached(
             "WindowEntranceTransform",
@@ -597,6 +603,11 @@ public static class FluidMotion
     {
         if (dependencyObject is UIElement element)
         {
+            if (element is FrameworkElement layer)
+            {
+                layer.Unloaded -= OnStateLayerUnloaded;
+                layer.Unloaded += OnStateLayerUnloaded;
+            }
             Animate(element, UIElement.OpacityProperty, (double)e.NewValue, IsShown(element),
                 TransitionDuration(element));
         }
@@ -631,15 +642,38 @@ public static class FluidMotion
             return;
         }
 
-        // Template transforms may be frozen or shared; the element owns one it can animate.
-        if (element.RenderTransform is not RotateTransform rotate || rotate.IsFrozen)
+        // Even a mutable transform can be shared by two template consumers. Only reuse
+        // the transform created for this element; clone an existing rotation otherwise.
+        var rotate = (RotateTransform?)element.GetValue(RotationTransformProperty);
+        if (rotate is null || !ReferenceEquals(element.RenderTransform, rotate))
         {
-            rotate = new RotateTransform();
+            rotate = element.RenderTransform is RotateTransform existing
+                ? existing.CloneCurrentValue()
+                : new RotateTransform();
             element.RenderTransformOrigin = new Point(0.5, 0.5);
             element.RenderTransform = rotate;
+            element.SetValue(RotationTransformProperty, rotate);
         }
 
+        if (element is FrameworkElement part)
+        {
+            part.Unloaded -= OnRotationUnloaded;
+            part.Unloaded += OnRotationUnloaded;
+        }
         Animate(rotate, RotateTransform.AngleProperty, (double)e.NewValue, IsShown(element), TransitionDuration(element));
+    }
+
+    private static void OnStateLayerUnloaded(object sender, RoutedEventArgs e)
+    {
+        var layer = (FrameworkElement)sender;
+        Animate(layer, UIElement.OpacityProperty, GetFadeTo(layer), animate: false);
+    }
+
+    private static void OnRotationUnloaded(object sender, RoutedEventArgs e)
+    {
+        var part = (FrameworkElement)sender;
+        if (part.GetValue(RotationTransformProperty) is RotateTransform rotate)
+            Animate(rotate, RotateTransform.AngleProperty, GetRotateTo(part), animate: false);
     }
 
     // A layer that is still being templated takes its first state at once.

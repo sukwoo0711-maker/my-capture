@@ -26,18 +26,105 @@ public sealed partial class SettingsThemePreviewTests
     private const string MotionEvidenceVariable = "MYCAPTURE_LIBRARY_MOTION_EVIDENCE";
 
     [Fact]
+    public Task LibraryMotion_RealTemplatesCommitSelectionExpansionAndKeepSharedBrushes() =>
+        RunIsolated(nameof(LibraryMotion_RealTemplatesCommitSelectionExpansionAndKeepSharedBrushes), () =>
+        {
+            var application = CreateLibraryMotionApplication();
+            bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
+            try
+            {
+                using var language = UiText.UseLanguage("ko-KR");
+                ThemeService.Apply(AppTheme.Glass);
+                foreach (bool motion in new[] { false, true })
+                {
+                    FluidMotion.AnimationsEnabledOverrideForTest = motion;
+                    LibraryUxFixture fixture = CreateLibraryUxFixture("mc-library-motion-regression-");
+                    GalleryWindow window = fixture.Window;
+                    try
+                    {
+                        var brushes = new[] { "Accent.Subtle", "Border.Accent", "Surface.Hover", "Text.Secondary" }
+                            .Select(key => (Brush: (SolidColorBrush)application.FindResource(key), Key: key))
+                            .Select(entry => (entry.Brush, entry.Key, Color: entry.Brush.Color)).ToArray();
+                        window.Show();
+                        var list = (ListBox)window.FindName("RowsList");
+                        PumpLibraryUntil(window, () => Descendants(list).OfType<ListBoxItem>()
+                            .Any(item => item.DataContext is GalleryItemViewModel), "motion: capture cards");
+                        ListBoxItem tile = Descendants(list).OfType<ListBoxItem>()
+                            .First(item => item.DataContext is GalleryItemViewModel record && record.Id == fixture.Records[0].Id);
+                        fixture.ViewModel.Select(fixture.Records[0].Id);
+                        Assert.True(((GalleryItemViewModel)tile.DataContext).IsSelected);
+                        var selected = (Border)tile.Template.FindName("SelectedLayer", tile);
+                        Assert.Equal(1, (double)selected.GetAnimationBaseValue(UIElement.OpacityProperty));
+                        Assert.Equal(motion, selected.HasAnimatedProperties);
+                        Assert.Equal(MotionSpeed.Normal, FluidMotion.GetTransition(selected));
+                        // Hovering a selected card leaves the selected final fill intact.
+                        SimulateTemplateTrigger(tile, "IsMouseOver");
+                        Assert.Equal(0, FluidMotion.GetFadeTo((Border)tile.Template.FindName("HoverLayer", tile)));
+
+                        var dates = (Expander)window.FindName("DateSection");
+                        dates.IsExpanded = true;
+                        Assert.True(dates.IsExpanded);
+                        var header = (Control)dates.Template.FindName("HeaderSite", dates);
+                        var chevron = (FrameworkElement)header.Template.FindName("Chevron", header);
+                        var rotation = Assert.IsType<RotateTransform>(chevron.RenderTransform);
+                        Assert.Equal(90, (double)rotation.GetAnimationBaseValue(RotateTransform.AngleProperty));
+                        Assert.Equal(motion, rotation.HasAnimatedProperties);
+                        dates.IsExpanded = false;
+                        Assert.False(dates.IsExpanded);
+                        Assert.Equal(0, (double)rotation.GetAnimationBaseValue(RotateTransform.AngleProperty));
+                        var tree = (TreeView)window.FindName("FolderTree");
+                        TreeViewItem folder = Descendants(tree).OfType<TreeViewItem>()
+                            .First(item => item.DataContext is GalleryFolderNode node && node.FolderId == fixture.Empty.Id);
+                        var folderNode = (GalleryFolderNode)folder.DataContext;
+                        SimulateTemplateTrigger(folder, "IsMouseOver");
+                        folderNode.IsDropTarget = true;
+                        Assert.Equal(Visibility.Collapsed, ((Border)folder.Template.FindName("HoverLayer", folder)).Visibility);
+                        Assert.Equal(Visibility.Collapsed, ((Border)folder.Template.FindName("SelectedLayer", folder)).Visibility);
+                        var dropBrush = Assert.IsType<SolidColorBrush>(
+                            ((Border)folder.Template.FindName("Chrome", folder)).Background);
+                        Assert.Equal(((SolidColorBrush)application.FindResource("Accent.Subtle")).Color, dropBrush.Color);
+                        Assert.False(dropBrush.HasAnimatedProperties);
+                        folderNode.IsDropTarget = false;
+                        Assert.Equal(Visibility.Visible, ((Border)folder.Template.FindName("HoverLayer", folder)).Visibility);
+                        fixture.ViewModel.ClearSelection();
+                        Assert.False(((GalleryItemViewModel)tile.DataContext).IsSelected);
+                        Assert.Equal(0, (double)selected.GetAnimationBaseValue(UIElement.OpacityProperty));
+                        foreach (var entry in brushes)
+                        {
+                            Assert.Same(entry.Brush, application.FindResource(entry.Key));
+                            Assert.Equal(entry.Color, entry.Brush.Color);
+                            Assert.False(entry.Brush.HasAnimatedProperties);
+                        }
+                    }
+                    finally { window.CloseForExit(); }
+                }
+            }
+            finally
+            {
+                FluidMotion.AnimationsEnabledOverrideForTest = previous;
+                application.Shutdown();
+            }
+        });
+
+    private static Application CreateLibraryMotionApplication()
+    {
+        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+            application.Resources.MergedDictionaries.Add(new ResourceDictionary
+            { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+        application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+        application.Resources["PinLabel"] = new PinLabelConverter();
+        application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+        return application;
+    }
+
+    [Fact]
     public Task LibraryMotionEvidence_RendersFinalHoverAndSelectionStates() =>
         string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(MotionEvidenceVariable))
             ? Task.CompletedTask
             : RunIsolated(nameof(LibraryMotionEvidence_RendersFinalHoverAndSelectionStates), () =>
             {
-                var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-                foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-                    application.Resources.MergedDictionaries.Add(new ResourceDictionary
-                    { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
-                application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
-                application.Resources["PinLabel"] = new PinLabelConverter();
-                application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+                var application = CreateLibraryMotionApplication();
                 bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
                 FluidMotion.AnimationsEnabledOverrideForTest = false;
                 try
@@ -225,7 +312,8 @@ public sealed partial class SettingsThemePreviewTests
         using (FileStream stream = File.Create(path)) encoder.Save(stream);
 
         string? baseline = Environment.GetEnvironmentVariable("MYCAPTURE_LIBRARY_MOTION_BASELINE");
-        if (string.IsNullOrWhiteSpace(baseline) || !File.Exists(Path.Combine(baseline, name))) return;
+        if (string.IsNullOrWhiteSpace(baseline)) return;
+        Assert.True(File.Exists(Path.Combine(baseline, name)), "Missing matched baseline: " + name);
         WriteMotionDiff(Path.Combine(baseline, name), bitmap, directory, name);
     }
 
@@ -241,6 +329,7 @@ public sealed partial class SettingsThemePreviewTests
         if (before.PixelWidth != width || before.PixelHeight != height)
         {
             File.WriteAllText(report, $"size differs: before {before.PixelWidth}x{before.PixelHeight}, after {width}x{height}");
+            Assert.Fail("Library motion changed the matched render size: " + name);
             return;
         }
 
@@ -275,5 +364,6 @@ public sealed partial class SettingsThemePreviewTests
         File.WriteAllText(report, changed == 0
             ? "identical"
             : $"{changed} pixels differ (max channel delta {maxDelta}); bounds x {left}-{right}, y {top}-{bottom}");
+        Assert.True(changed == 0, $"Library motion changed {changed} final-state pixels: {name}. See {report}.");
     }
 }

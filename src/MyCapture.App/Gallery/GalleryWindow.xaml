@@ -35,8 +35,11 @@
              selection are layers over the rest chrome whose opacity triggers move through
              FluidMotion.FadeTo (hover and press over Motion.Fast, selection over Motion.Normal),
              snapping when Windows animation effects are off. Brushes are never animated. -->
-        <!-- A selected navigation row's wash: StateLayer.Selected's fill and timing without its
-             accent outline, so the row keeps its look (the wash and the accent pill). -->
+        <!-- Local washes retain the library's existing transparent edges in contrast themes. -->
+        <Style x:Key="LibraryUx.HoverWash" TargetType="Border" BasedOn="{StaticResource StateLayer.Hover}">
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <!-- A selected navigation row keeps its wash and accent pill without a card outline. -->
         <Style x:Key="LibraryUx.SelectedWash" TargetType="Border" BasedOn="{StaticResource StateLayer}">
             <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
             <Setter Property="BorderBrush" Value="Transparent" />
@@ -435,7 +438,7 @@
                                                 BorderThickness="2"
                                                 CornerRadius="{StaticResource Radius.Lg}" />
                                         <Border x:Name="HoverLayer"
-                                                Style="{StaticResource StateLayer.Hover}"
+                                                Style="{StaticResource LibraryUx.HoverWash}"
                                                 BorderThickness="2"
                                                 CornerRadius="{StaticResource Radius.Lg}" />
                                         <Border x:Name="SelectedLayer"
@@ -452,6 +455,7 @@
                                         </Trigger>
                                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                             <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="0" />
                                         </DataTrigger>
                                         <!-- Focus recolours the fixed edge at once, on the layers too. -->
                                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
@@ -668,12 +672,9 @@
                             <Path x:Name="Edge" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Style="{StaticResource LibraryUx.RestEdge}"
                                   Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" SnapsToDevicePixels="True" />
-                            <!-- A contrast theme's Border.Hover edge rides on top, so hover shows there too. -->
                             <Grid x:Name="HoverEdge" Opacity="0" IsHitTestVisible="False">
                                 <Path Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                       Stroke="{DynamicResource Accent.Folder}" StrokeThickness="1" SnapsToDevicePixels="True" />
-                                <Path Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
-                                      Stroke="{DynamicResource Border.Hover}" StrokeThickness="1" SnapsToDevicePixels="True" />
                             </Grid>
                             <Path x:Name="Wash" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Fill="{DynamicResource Surface.Hover}" Opacity="0" IsHitTestVisible="False" />
@@ -944,7 +945,7 @@
                         <Grid Background="Transparent">
                             <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" />
-                            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
+                            <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
                             <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
                             <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
@@ -960,6 +961,7 @@
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="0" />
                                 <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
@@ -1034,7 +1036,7 @@
                             <Grid x:Name="Row" MinHeight="34" Background="Transparent">
                                 <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
                                         CornerRadius="{DynamicResource Radius.Md}" />
-                                <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
+                                <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
                                 <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
                                 <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                         HorizontalAlignment="Left" VerticalAlignment="Center"
@@ -1063,6 +1065,7 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="0" />
                                 <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
@@ -1071,6 +1074,8 @@
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                                <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="SelectedLayer" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
@@ -1129,7 +1134,7 @@
                         <Grid MinHeight="34" Background="Transparent">
                             <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
                                     CornerRadius="{DynamicResource Radius.Md}" />
-                            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
+                            <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
                             <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
                             <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
@@ -1145,12 +1150,15 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="0" />
                                 <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                                <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="SelectedLayer" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
@@ -1180,7 +1188,7 @@
                                         <Grid Background="Transparent">
                                             <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent"
                                                     BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" />
-                                            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
+                                            <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
                                             <DockPanel Margin="12,0,8,0">
                                                 <Path x:Name="Chevron" Style="{StaticResource StatePart.Normal}" DockPanel.Dock="Right"
                                                       Data="{StaticResource LibraryUx.Icon.Chevron}"
@@ -1418,12 +1426,13 @@
                  the focus colour at once while the search box inside has keyboard focus. -->
             <Grid x:Name="SearchField" Grid.Column="1" Margin="6,0,12,0"
                   MaxWidth="560" VerticalAlignment="Center" HorizontalAlignment="Stretch">
-                <!-- The sunken well; its outline is drawn by the two edges above it. -->
-                <Border x:Name="SearchWell" Style="{StaticResource Card.Sunken}" BorderBrush="Transparent" />
+                <!-- Transparent hit surface; each fading chrome copy draws its fill and edge together. -->
+                <Border x:Name="SearchWell" Style="{StaticResource Card.Sunken}" BorderBrush="Transparent" Background="Transparent" />
                 <Border x:Name="SearchEdge" BorderThickness="1" CornerRadius="{DynamicResource Radius.Lg}" SnapsToDevicePixels="True">
                     <Border.Style>
                         <Style TargetType="Border" BasedOn="{StaticResource LibraryUx.RestEdge}">
                             <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
+                            <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
                                     <Setter Property="themes:FluidMotion.FadeTo" Value="0" />
@@ -1441,12 +1450,14 @@
                     <Border.Style>
                         <Style TargetType="Border" BasedOn="{StaticResource StateLayer}">
                             <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
+                            <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
                                     <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchField}" Value="True">
                                     <Setter Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                    <Setter Property="themes:FluidMotion.FadeTo" Value="0" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -1928,14 +1939,11 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="ToggleButton">
-                                                        <!-- Hover and press washes fade over the whole chip; the contrast-theme
-                                                             hover outline (Border.Hover, transparent otherwise) fades with them. -->
+                                                        <!-- Hover and press washes fade over the whole chip. -->
                                                         <Grid>
                                                             <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius.Sm}" />
-                                                            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" CornerRadius="{DynamicResource Radius.Sm}" />
+                                                            <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" CornerRadius="{DynamicResource Radius.Sm}" />
                                                             <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}" CornerRadius="{DynamicResource Radius.Sm}" />
-                                                            <Border x:Name="HoverOutline" Style="{StaticResource StateLayer}" BorderThickness="1"
-                                                                    CornerRadius="{DynamicResource Radius.Sm}" />
                                                             <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                             <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
                                                                     CornerRadius="{DynamicResource Radius.Sm}" IsHitTestVisible="False" Opacity="0" />
@@ -1943,7 +1951,6 @@
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsMouseOver" Value="True">
                                                                 <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
-                                                                <Setter TargetName="HoverOutline" Property="themes:FluidMotion.FadeTo" Value="1" />
                                                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                                                             </Trigger>
                                                             <Trigger Property="IsPressed" Value="True">
