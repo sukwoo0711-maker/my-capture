@@ -521,8 +521,7 @@ internal sealed class RecordingWallClockWindow : Window
         base.OnClosed(e);
     }
 
-    private static Brush TryBrush(string key, Color fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
+    private static Brush TryBrush(string key, Color fallback) => ThemeBrushes.Follow(key, fallback);
 
     private static FontFamily TryFont(string key) =>
         Application.Current?.TryFindResource(key) as FontFamily ?? new FontFamily("Cascadia Mono, Consolas, Malgun Gothic, monospace");

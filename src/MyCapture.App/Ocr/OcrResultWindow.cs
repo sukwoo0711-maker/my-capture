@@ -383,8 +383,7 @@ internal sealed partial class OcrResultWindow : Window
         }
     }
 
-    private static Brush ResourceBrush(string key, Brush fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? fallback;
+    private static Brush ResourceBrush(string key, Brush fallback) => ThemeBrushes.Follow(key, fallback);
 
     private static Button MakeButton(string text, string automationName)
     {

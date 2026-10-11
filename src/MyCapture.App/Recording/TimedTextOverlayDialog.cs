@@ -247,8 +247,7 @@ internal sealed class TimedTextOverlayDialog : Window
         grid.Children.Add(child);
     }
 
-    private static Brush ResourceBrush(string key, Color fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
+    private static Brush ResourceBrush(string key, Color fallback) => ThemeBrushes.Follow(key, fallback);
 
     private sealed record PlacementChoice(string Label, VideoTextPlacement Value);
 }

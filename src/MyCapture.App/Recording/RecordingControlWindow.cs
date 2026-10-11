@@ -1337,8 +1337,7 @@ internal sealed class RecordingControlWindow : Window
         protected override bool IsContentElementCore() => true;
     }
 
-    private static Brush TryBrush(string key, Color fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
+    private static Brush TryBrush(string key, Color fallback) => ThemeBrushes.Follow(key, fallback);
 
     private static FontFamily TryFont(string key) =>
         Application.Current?.TryFindResource(key) as FontFamily ?? new FontFamily("Segoe UI");

@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Data;
 using MyCapture.Core.Themes;
 
 namespace MyCapture.App.Themes;
@@ -31,15 +30,7 @@ internal static class WorkspaceTheme
         var resources = new ResourceDictionary();
         resources.MergedDictionaries.Add(new ResourceDictionary
         { Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Tokens.xaml", UriKind.Absolute) });
-        foreach (string key in ThemeCatalog.ColorsFor(AppTheme.Midnight).Keys)
-        {
-            if (resources[key] is not SolidColorBrush original) continue;
-            var brush = original.CloneCurrentValue();
-            // An expression keeps the brush live when a consuming style is sealed.
-            BindingOperations.SetBinding(brush, SolidColorBrush.ColorProperty,
-                new Binding(nameof(SolidColorBrush.Color)) { Source = original, Mode = BindingMode.OneWay });
-            resources[key] = brush;
-        }
+        // The window's palette is a set of frozen brushes swapped on every theme change.
         Apply(resources, role, ThemeService.Current);
         var symbols = new ResourceDictionary { Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Symbols.xaml", UriKind.Absolute) };
         resources.MergedDictionaries.Add(symbols);
@@ -105,8 +96,9 @@ internal static class WorkspaceTheme
         foreach ((string key, string value) in values)
         {
             if (resources[key] is SolidColorBrush brush)
-                brush.SetCurrentValue(SolidColorBrush.ColorProperty, (Color)ColorConverter.ConvertFromString(value));
+                resources[key] = ThemeBrushes.Recolored(brush, (Color)ColorConverter.ConvertFromString(value));
         }
+        ThemeBrushes.Refresh(resources);
     }
 }
 

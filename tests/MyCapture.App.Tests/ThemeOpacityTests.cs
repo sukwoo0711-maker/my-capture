@@ -64,12 +64,14 @@ public sealed class ThemeOpacityTests
         double opacity = original.Opacity;
         if (frozen) original.Freeze();
         resources["Overlay.Dimmer"] = original;
+        Color before = original.Color;
         ThemeService.ApplyResources(AppTheme.Midnight, resources);
         var updated = (SolidColorBrush)resources["Overlay.Dimmer"];
         Assert.Equal(opacity, updated.Opacity);
-        Assert.False(updated.IsFrozen);
-        if (frozen) Assert.NotSame(original, updated);
-        else Assert.Same(original, updated);
+        // Token brushes are swapped for frozen brushes, never recoloured in place (ThemeBrushes).
+        Assert.True(updated.IsFrozen);
+        Assert.NotSame(original, updated);
+        Assert.Equal(before, original.Color);
         ThemeService.ApplyResources(AppTheme.Daylight, resources);
         Assert.Equal(opacity, ((SolidColorBrush)resources["Overlay.Dimmer"]).Opacity);
         ThemeService.ApplyResources(AppTheme.Glass, resources);

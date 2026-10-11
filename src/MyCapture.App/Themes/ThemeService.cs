@@ -7,8 +7,9 @@ using MyCapture.Core.Settings;
 namespace MyCapture.App.Themes;
 
 /// <summary>
-/// Recolours the live token brushes so open windows pick up a new palette without
-/// swapping every StaticResource reference.
+/// Swaps the token brushes for frozen brushes in the new palette; DynamicResource consumers
+/// pick them up and code that keeps a brush uses <see cref="ThemeBrushes.Follow(string, Color)"/>.
+/// Shared brushes are never recoloured in place (see <see cref="ThemeBrushes"/>).
 /// </summary>
 internal static class ThemeService
 {
@@ -62,18 +63,9 @@ internal static class ThemeService
         {
             if (resources[key] is SolidColorBrush brush)
             {
-                if (brush.IsFrozen)
-                {
-                    // Keep opacity and transforms: Overlay.Dimmer intentionally uses a
-                    // translucent brush even though its palette color has an opaque alpha.
-                    var live = brush.CloneCurrentValue();
-                    live.Color = Color.FromArgb(color.A, color.R, color.G, color.B);
-                    resources[key] = live;
-                }
-                else
-                {
-                    brush.SetCurrentValue(SolidColorBrush.ColorProperty, Color.FromArgb(color.A, color.R, color.G, color.B));
-                }
+                // Keep opacity and transforms: Overlay.Dimmer intentionally uses a
+                // translucent brush even though its palette color has an opaque alpha.
+                resources[key] = ThemeBrushes.Recolored(brush, Color.FromArgb(color.A, color.R, color.G, color.B));
             }
         }
         // Crop masks always darken discarded pixels, including in light themes.
@@ -82,6 +74,7 @@ internal static class ThemeService
             ? Color.FromRgb(0x74, 0x7C, 0x89) : Color.FromRgb(0x7A, 0x82, 0x90));
         ApplyCropResources(resources, SystemParameters.HighContrast);
         CaptureGuidePalette.Apply(resources, theme, captureGuideColor, SystemParameters.HighContrast);
+        ThemeBrushes.Refresh(resources);
     }
 
     internal static void ApplyCropResources(ResourceDictionary resources, bool highContrast)

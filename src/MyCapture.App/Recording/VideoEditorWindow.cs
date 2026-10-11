@@ -3015,8 +3015,7 @@ internal sealed class VideoEditorWindow : Window
         FontSize = 13,
     };
 
-    private Brush TryBrush(string key, Color fallback) =>
-        TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
+    private Brush TryBrush(string key, Color fallback) => ThemeBrushes.Follow(this, key, fallback);
 
     private static FontFamily TryFont(string key) =>
         Application.Current?.TryFindResource(key) as FontFamily ?? new FontFamily("Segoe UI");

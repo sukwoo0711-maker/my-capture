@@ -58,9 +58,10 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
             bannerText.FontFamily = mono;
         }
 
-        if (TryFindResource("Text.Secondary") is Brush foreground)
+        // Resource references follow theme changes; token brushes are swapped, not recoloured.
+        if (TryFindResource("Text.Secondary") is Brush)
         {
-            bannerText.Foreground = foreground;
+            bannerText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         }
 
         var banner = new Border
@@ -68,9 +69,9 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
             Padding = new Thickness(16, 8, 16, 8),
             Child = bannerText,
         };
-        if (TryFindResource("Surface.Overlay") is Brush overlay)
+        if (TryFindResource("Surface.Overlay") is Brush)
         {
-            banner.Background = overlay;
+            banner.SetResourceReference(Border.BackgroundProperty, "Surface.Overlay");
         }
         var root = new DockPanel();
         DockPanel.SetDock(banner, Dock.Top);

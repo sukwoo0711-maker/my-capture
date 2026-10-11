@@ -129,9 +129,8 @@ internal sealed class PinWindow : Window
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 0, 8),
             Padding = new Thickness(10, 5, 10, 5),
-            Foreground = Application.Current?.TryFindResource("Text.Primary") as Brush ?? Brushes.White,
-            Background = Application.Current?.TryFindResource("Surface.Floating") as Brush
-                ?? new SolidColorBrush(Color.FromArgb(0xE8, 0x15, 0x1E, 0x2B)),
+            Foreground = ThemeBrushes.Follow("Text.Primary", Brushes.White),
+            Background = ThemeBrushes.Follow("Surface.Floating", Color.FromArgb(0xE8, 0x15, 0x1E, 0x2B)),
             FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             Visibility = Visibility.Collapsed,
