@@ -37,10 +37,12 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
     internal static TextBlock Hint(ShortcutScope scope, string command)
     {
         // 9–11 px captions were too small to read; every always-visible key uses the caption size.
+        // Regular weight keeps the key below the command's own name, which buttons set semibold.
         var hint = new TextBlock
         {
             Text = ShortcutCatalog.Get(scope, command).Hint,
             FontSize = CaptionFontSize,
+            FontWeight = FontWeights.Normal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");

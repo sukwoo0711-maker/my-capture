@@ -60,6 +60,7 @@ public sealed class ShortcutCaptionTests
             TextBlock hint = Assert.IsType<StackPanel>(button.Content).Children.OfType<TextBlock>().Last();
             Assert.Equal(definition.Hint, hint.Text);
             Assert.Equal(12, hint.FontSize);
+            Assert.Equal(FontWeights.Normal, hint.FontWeight);
         }
         else
         {

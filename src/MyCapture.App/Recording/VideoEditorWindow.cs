@@ -2980,6 +2980,7 @@ internal sealed class VideoEditorWindow : Window
             {
                 Text = UiText.Get(command == "PreviousFrame" ? "VideoEditorUx_PreviousFrameShort" : "VideoEditorUx_NextFrameShort"),
                 FontSize = ShortcutPresentation.CaptionFontSize,
+                FontWeight = FontWeights.Normal,
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
             name.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
