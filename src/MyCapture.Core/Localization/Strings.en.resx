@@ -45,7 +45,7 @@
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_03151E566E1D" xml:space="preserve">
-    <value>MyCapture screen pin</value>
+    <value>MyCapture pin</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_03A1596F1681" xml:space="preserve">
@@ -558,7 +558,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
   </data>
   <data name="Text_328D9EF717EC" xml:space="preserve">
-    <value>Screen pin settings</value>
+    <value>Pin settings</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_33406FC582BE" xml:space="preserve">
@@ -578,7 +578,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_33EFD44366A7" xml:space="preserve">
-    <value>Screen pins</value>
+    <value>Pins</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_33F7635FDE36" xml:space="preserve">
@@ -954,7 +954,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_55694B0252DB" xml:space="preserve">
-    <value>A pinned window that shows text as an image. Ctrl+C copies the image; Ctrl+double-click copies the original text. You can also copy the original text from the right-click menu.</value>
+    <value>A pin that shows text as an image. Ctrl+C copies the image; Ctrl+double-click copies the original text. You can also copy the original text from the right-click menu.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_55D025693B34" xml:space="preserve">
@@ -1526,7 +1526,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_85E926C7F694" xml:space="preserve">
-    <value>MyCapture pinned window</value>
+    <value>MyCapture pin</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_8739F6684453" xml:space="preserve">
@@ -1826,7 +1826,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_A00997F45D07" xml:space="preserve">
-    <value>Ctrl+C copies a pinned window's image; Ctrl+double-click copies its original text, or for an image, the text recognized on this PC.</value>
+    <value>Ctrl+C copies a pin's image; Ctrl+double-click copies its original text, or for an image, the text recognized on this PC.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_A31A72A338DD" xml:space="preserve">
@@ -1890,7 +1890,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_A862C01DBF76" xml:space="preserve">
-    <value>Could not save the pinned image.
+    <value>Could not save the pin image.
 
 {0}</value>
     <comment>src\MyCapture.App\Pinning\PinManager.cs</comment>
@@ -1908,7 +1908,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_A97A3B71F038" xml:space="preserve">
-    <value>Save pinned image</value>
+    <value>Save pin image</value>
     <comment>src\MyCapture.App\Pinning\PinImageSaveService.cs</comment>
   </data>
   <data name="Text_AA254F35F02E" xml:space="preserve">
@@ -2060,7 +2060,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
   </data>
   <data name="Text_B6DE798A150D" xml:space="preserve">
-    <value>Copying from a pinned window</value>
+    <value>Copying from a pin</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_B753165F6585" xml:space="preserve">
@@ -2126,7 +2126,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RegionRecordingCoordinator.cs</comment>
   </data>
   <data name="Text_BB7798D87E07" xml:space="preserve">
-    <value>Copy the original text kept when this pinned window was created.</value>
+    <value>Copy the original text kept when this pin was created.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_BBA2EFF5675C" xml:space="preserve">
@@ -2614,7 +2614,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_E22E2C953A8B" xml:space="preserve">
-    <value>A pinned window. Ctrl+C copies the image; Ctrl+double-click copies text. Ctrl+S saves the original PNG; Ctrl+Shift+S lets you choose where. Drag to move, scroll to zoom, Ctrl+scroll to change opacity, and Esc or Delete to close. Turn off click-through: {0}</value>
+    <value>A pin. Ctrl+C copies the image; Ctrl+double-click copies text. Ctrl+S saves the original PNG; Ctrl+Shift+S lets you choose where. Drag to move, scroll to zoom, Ctrl+scroll to change opacity, and Esc or Delete to close. Turn off click-through: {0}</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_E2395EBF6C65" xml:space="preserve">
@@ -3372,7 +3372,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="PinRestore_LimitDescription" xml:space="preserve"><value>Number of closed pins remembered so they can be reopened. 0–100 (0 turns it off). Cleared when the app exits; never saved to disk.</value></data>
   <data name="PinRestore_NothingTitle" xml:space="preserve"><value>No closed pin</value></data>
   <data name="PinRestore_NothingMessage" xml:space="preserve"><value>There is no closed pin to reopen.</value></data>
-  <data name="PinRestore_DisabledMessage" xml:space="preserve"><value>Closed pin history is off. Set the history count to 1 or more under Screen pins in Settings.</value></data>
+  <data name="PinRestore_DisabledMessage" xml:space="preserve"><value>Closed pin history is off. Set the history count to 1 or more under Pins in Settings.</value></data>
   <data name="PinRestore_FailedTitle" xml:space="preserve"><value>Could not reopen the closed pin</value></data>
   <data name="StoreRating_Button" xml:space="preserve"><value>Rate in Microsoft Store</value></data>
   <data name="StoreRating_ButtonHelp" xml:space="preserve"><value>Opens the MyCapture review page in the Microsoft Store app.</value></data>
@@ -3580,7 +3580,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="SettingsUx_TabRecording" xml:space="preserve"><value>Recording</value></data>
   <data name="SettingsUx_TabRecordingHelp" xml:space="preserve"><value>Frame rate, recording size, pointer, recording method</value></data>
   <data name="SettingsUx_TabEditing" xml:space="preserve"><value>Editing</value></data>
-  <data name="SettingsUx_TabEditingHelp" xml:space="preserve"><value>Editing tool defaults, screen pins, text recognition</value></data>
+  <data name="SettingsUx_TabEditingHelp" xml:space="preserve"><value>Editing tool defaults, pins, text recognition</value></data>
   <data name="SettingsUx_TabShortcuts" xml:space="preserve"><value>Shortcuts</value></data>
   <data name="SettingsUx_TabShortcutsHelp" xml:space="preserve"><value>Global shortcuts, keys under buttons</value></data>
   <data name="SettingsUx_TabStorage" xml:space="preserve"><value>Storage</value></data>
@@ -3609,8 +3609,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="SettingsUx_AdvancedHint" xml:space="preserve"><value>Settings for the shortcut that uploads the clipboard image to a GitHub issue.</value></data>
   <data name="SettingsUx_GitHubIssueUrlHint" xml:space="preserve"><value>The issue the GitHub upload shortcut pastes the clipboard image into. Use an issue you can comment on. Leave blank to use a safe default.</value></data>
   <data name="SettingsUx_EditingDefaultsHeading" xml:space="preserve"><value>Editing tool defaults</value></data>
-  <data name="SettingsUx_PinCopy" xml:space="preserve"><value>Copying from a pinned window</value></data>
-  <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Ctrl+C copies a pinned window's image; Ctrl+double-click copies its original text, or for an image, the text recognized on this PC.</value></data>
+  <data name="SettingsUx_PinCopy" xml:space="preserve"><value>Copying from a pin</value></data>
+  <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Ctrl+C copies a pin's image; Ctrl+double-click copies its original text, or for an image, the text recognized on this PC.</value></data>
   <data name="SettingsUx_OcrHeading" xml:space="preserve"><value>Text recognition</value></data>
   <data name="SettingsUx_OcrLanguages" xml:space="preserve"><value>Recognition languages</value></data>
   <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts. Most accurate corrects and enlarges the image 4x before recognition and downloads about 67 MB the first time.</value></data>

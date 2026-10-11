@@ -261,7 +261,7 @@ public sealed class LibraryUxTests
             Assert.Equal("보관 해제", converter.Convert(true, typeof(string), null, System.Globalization.CultureInfo.CurrentCulture));
             Assert.Equal("보관됨", UiText.Get("LibraryUx_KeptBadge"));
             Assert.Equal("보관함", UiText.Get("LibraryUx_NavKept"));
-            Assert.Equal("화면 고정", UiText.Get("Gallery.Float"));
+            Assert.Equal("핀으로 띄우기", UiText.Get("Gallery.Float"));
             var tile = new GalleryItemViewModel(new CaptureRecord { Width = 2, Height = 2, CreatedAt = Now, IsPinned = true },
                 _ => "missing.png", 96);
             Assert.EndsWith(", 보관됨", tile.AccessibleName, StringComparison.Ordinal);

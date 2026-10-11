@@ -19,7 +19,7 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 
 ### 설명
 
-MyCapture는 화면 캡처, 주석 편집, 화면 고정, OCR, 라이브러리, 영역 녹화를 한곳에 모은 Windows용 캡처 도구입니다. 캡처와 텍스트 인식은 PC 안에서 처리하며, 전역 단축키와 트레이 메뉴로 반복 작업을 빠르게 이어 갑니다.
+MyCapture는 화면 캡처, 주석 편집, 핀으로 띄우기, OCR, 라이브러리, 영역 녹화를 한곳에 모은 Windows용 캡처 도구입니다. 캡처와 텍스트 인식은 PC 안에서 처리하며, 전역 단축키와 트레이 메뉴로 반복 작업을 빠르게 이어 갑니다.
 
 영역을 선택해 캡처하면 라이브러리에 먼저 저장하고 클립보드에 복사한 뒤 편집기를 엽니다. 사각형, 화살표, 연필, 텍스트, 이미지 레이어로 주석을 달고, 로컬 OCR이 찾은 이메일·전화번호·카드번호 같은 민감정보를 빠른 가리기로 한 번에 가릴 수 있습니다. 화면 영역은 MP4로 녹화하고, 영상 편집기에서 구간을 자르고 텍스트를 얹은 뒤 MP4나 GIF로 내보냅니다.
 
@@ -30,7 +30,7 @@ MyCapture는 화면 캡처, 주석 편집, 화면 고정, OCR, 라이브러리, 
 - 모니터 경계를 넘나드는 영역 캡처와 창, 전체 화면, 지연, 스크롤 캡처
 - 포인터 아래 창을 강조하고 클릭으로 선택하는 창 감지와 색상 값 복사
 - 타원·형광펜·단계 번호·모자이크·블러를 포함한 비파괴 주석 편집과 실행 취소·다시 실행
-- 클립보드 이미지·텍스트·표를 항상 위에 보이는 창으로 고정하고, 닫은 창을 다시 열기
+- 클립보드 이미지·텍스트·표를 다른 창 위에 항상 보이는 핀으로 띄우고, 닫은 핀을 다시 열기
 - 한국어·영어 혼합 텍스트를 PC 안에서 인식하는 로컬 OCR
 - 영역을 선택하면 텍스트만 클립보드에 복사하는 텍스트 캡처
 - OCR로 찾은 민감정보를 한 번에 가리는 빠른 가리기
@@ -51,7 +51,7 @@ MyCapture는 화면 캡처, 주석 편집, 화면 고정, OCR, 라이브러리, 
 
 ### 검색어
 
-캡처, 스크린샷, OCR, 화면 녹화, GIF, 주석, 화면 고정
+캡처, 스크린샷, OCR, 화면 녹화, GIF, 주석, 핀
 
 ## English (en-US)
 
@@ -68,7 +68,7 @@ Recordings have no audio. Launch at sign-in starts turned off and can be turned 
 - Region capture across monitors, plus window, full screen, delayed and scrolling capture
 - Window highlighting with click-to-select and color value copying while selecting
 - Non-destructive annotation with ellipse, highlighter, step numbers, mosaic, blur, undo and redo
-- Pin clipboard images, text and tables in always-on-top windows, and reopen closed pins
+- Pin clipboard images, text and tables on top of other windows, and reopen closed pins
 - On-device OCR for mixed Korean and English text
 - Text capture that copies only the recognized text of a selected region
 - Quick Redact for sensitive details found by OCR

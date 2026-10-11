@@ -17,7 +17,7 @@ namespace MyCapture.App.Tests;
 public sealed class QuickAccessCardLabelTests
 {
     [Theory]
-    [InlineData("ko", new[] { "복사", "편집", "화면 고정", "저장" }, "자동으로 닫지 않기")]
+    [InlineData("ko", new[] { "복사", "편집", "핀", "저장" }, "자동으로 닫지 않기")]
     [InlineData("en", new[] { "Copy", "Edit", "Pin", "Save" }, "Keep open")]
     public void ActionsShowAShortNameUnderTheIconAndTheLockSaysKeepOpen(string language, string[] names, string keep) =>
         StaTestHost.Run(() =>
@@ -42,17 +42,52 @@ public sealed class QuickAccessCardLabelTests
             finally { card.Close(); }
         });
 
+    [Theory]
+    [InlineData("ko")]
+    [InlineData("en")]
+    public void ActionNamesFitUnderTheirIconsWithoutTrimming(string language) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        var image = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
+        var card = new QuickAccessWindow(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
+            () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"));
+        try
+        {
+            Ocr410Fixture.LoadTheme(card);
+            card.Show();
+            card.UpdateLayout();
+            var row = ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().First();
+            foreach (Button button in row.Children.OfType<UniformGrid>().Single().Children.OfType<Button>())
+            {
+                TextBlock name = FaceName(button)!;
+                var probe = new TextBlock
+                {
+                    Text = name.Text, FontFamily = name.FontFamily, FontSize = name.FontSize,
+                    FontWeight = name.FontWeight, FontStyle = name.FontStyle, FontStretch = name.FontStretch,
+                    UseLayoutRounding = name.UseLayoutRounding,
+                };
+                TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(name));
+                probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                Assert.True(name.ActualWidth + 0.5 >= probe.DesiredSize.Width,
+                    $"{language}: '{name.Text}' needs {probe.DesiredSize.Width:0.#} DIP but has {name.ActualWidth:0.#} DIP");
+            }
+        }
+        finally { card.Close(); }
+    });
+
     /// <summary>The visible name on a button face (the icon is a shape; a key hint, when shown, is not a name).</summary>
-    private static string LogicalText(DependencyObject root)
+    private static string LogicalText(DependencyObject root) => FaceName(root)?.Text ?? string.Empty;
+
+    private static TextBlock? FaceName(DependencyObject root)
     {
         foreach (object child in LogicalTreeHelper.GetChildren(root))
         {
             if (child is StackPanel { Children.Count: 2 } face && face.Children[0] is System.Windows.Shapes.Path
-                && face.Children[1] is TextBlock name) return name.Text;
-            if (child is DependencyObject node && LogicalText(node) is { Length: > 0 } text) return text;
+                && face.Children[1] is TextBlock name) return name;
+            if (child is DependencyObject node && FaceName(node) is { } found) return found;
         }
 
-        return string.Empty;
+        return null;
     }
 }
 
@@ -81,6 +116,25 @@ public sealed class ShortcutHelpFrameKeysTests
         }
         finally { help.Close(); }
     });
+
+    /// <summary>The pin tab is named like the settings group, and F3 says what it pins.</summary>
+    [Theory]
+    [InlineData("ko-KR", "핀", "클립보드를 핀으로 띄우기")]
+    [InlineData("en-US", "Pins", "Pin clipboard to screen")]
+    public void PinTabNamesThePinsAndF3SaysItPinsTheClipboard(string language, string tab, string pasteToScreen) =>
+        StaTestHost.Run(() =>
+        {
+            using var scope = UiText.UseLanguage(language);
+            var help = new ShortcutHelpWindow();
+            try
+            {
+                var tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
+                TabItem pins = tabs.Items.OfType<TabItem>().Single(item => Equals(item.Header, tab));
+                var rows = ((StackPanel)((ScrollViewer)pins.Content).Content).Children.OfType<UniformGrid>();
+                Assert.Equal(pasteToScreen, rows.First().Children.OfType<TextBlock>().First().Text);
+            }
+            finally { help.Close(); }
+        });
 }
 
 /// <summary>Failure dialogs say what to do next, and a failed start does not say "return to your work".</summary>
