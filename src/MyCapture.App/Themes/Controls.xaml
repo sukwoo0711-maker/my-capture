@@ -430,7 +430,8 @@
         <Setter Property="SelectionBrush" Value="{DynamicResource Accent.Default}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="11,8" />
+        <!-- 7 + a 14px line (18.6) + 7 + border stays inside the 36 hit target. -->
+        <Setter Property="Padding" Value="11,7" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget}" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Template">
@@ -447,8 +448,12 @@
                                 Style="{StaticResource StateLayer}"
                                 BorderBrush="{DynamicResource Border.Strong}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
+                        <!-- TextBoxBase already applies Padding inside PART_ContentHost; a Margin here
+                             inset the text twice and made every themed box about 53 DIP tall. The
+                             host fills the box (multi-line boxes scroll in it) unless the box asks
+                             for centred content, as single-line time boxes do. -->
                         <Border BorderThickness="{TemplateBinding BorderThickness}">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                            <ScrollViewer x:Name="PART_ContentHost" />
                         </Border>
                         <Border x:Name="FocusRing"
                                 Margin="1"
@@ -472,6 +477,12 @@
                         </Trigger>
                         <Trigger Property="IsReadOnly" Value="True">
                             <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Raised}" />
+                        </Trigger>
+                        <Trigger Property="VerticalContentAlignment" Value="Center">
+                            <Setter TargetName="PART_ContentHost" Property="VerticalAlignment" Value="Center" />
+                        </Trigger>
+                        <Trigger Property="VerticalContentAlignment" Value="Bottom">
+                            <Setter TargetName="PART_ContentHost" Property="VerticalAlignment" Value="Bottom" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
