@@ -3507,8 +3507,6 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="CaptureGuide2_IntroTitle" xml:space="preserve"><value>How to capture</value></data>
   <data name="CaptureGuide2_IntroBody" xml:space="preserve"><value>Click a window to capture it, or drag to capture the region you want. Press Esc to cancel.</value></data>
   <data name="CaptureGuide2_IntroBodyRegionOnly" xml:space="preserve"><value>Drag to capture the region you want. Press Esc to cancel.</value></data>
-  <data name="CaptureGuide2_IntroBar" xml:space="preserve"><value>Choose Full screen, Copy text or Copy color from the bar at the top.</value></data>
-  <data name="CaptureGuide2_IntroAgain" xml:space="preserve"><value>Select Help (?) to see this guide again.</value></data>
   <data name="EditorUx_RotateLeft" xml:space="preserve"><value>Rotate left</value></data>
   <data name="EditorUx_RotateRight" xml:space="preserve"><value>Rotate right</value></data>
   <data name="EditorUx_RotateLeftHint" xml:space="preserve"><value>Rotate the image 90° left</value></data>
@@ -3708,8 +3706,6 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Onboard_BarMore" xml:space="preserve"><value>More captures</value></data>
   <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>Delayed capture, scrolling capture or the previous region.</value></data>
   <data name="Onboard_DelayCapture" xml:space="preserve"><value>Capture in {0} seconds</value></data>
-  <data name="Onboard_GuideSentence" xml:space="preserve"><value>Click a window to capture it, or drag to capture any area.</value></data>
-  <data name="Onboard_GuideSentenceRegionOnly" xml:space="preserve"><value>Drag to capture any area.</value></data>
   <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>Drag over the area to record</value></data>
   <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — Select an area to record</value></data>
   <data name="Onboard_RecordStop" xml:space="preserve"><value>Stop</value></data>

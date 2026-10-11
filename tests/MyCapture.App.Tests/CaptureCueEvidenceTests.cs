@@ -127,7 +127,7 @@ public sealed class CaptureCueEvidenceTests
         return image;
     }
 
-    private static void SaveEvidence(BitmapSource image, string name)
+    internal static void SaveEvidence(BitmapSource image, string name)
     {
         string? directory = Environment.GetEnvironmentVariable("MYCAPTURE_CAPTURE_CUE_EVIDENCE");
         if (string.IsNullOrWhiteSpace(directory)) return;

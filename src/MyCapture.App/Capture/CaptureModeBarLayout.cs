@@ -95,11 +95,20 @@ internal static class CaptureModeBarLayout
         return Snap(new Rect(x, y, bar.Width, bar.Height), viewport, pixelX, pixelY);
     }
 
-    /// <summary>Centres the start guide in <paramref name="area"/>, kept inside the overlay.</summary>
-    internal static Rect PlaceCard(Rect area, Size card, Size viewport, double pixelX = 1, double pixelY = 1)
+    /// <summary>
+    /// Centres the start guide in <paramref name="area"/>, kept inside the overlay. On a monitor too
+    /// short for that to clear the mode bar, the card moves down to sit
+    /// <see cref="EdgeMargin"/> below <paramref name="bar"/> instead of covering it.
+    /// </summary>
+    /// <param name="bar">The mode bar's arranged bounds, when there is one.</param>
+    /// <param name="scale">The <see cref="ContentScale"/> applied to the card and the bar.</param>
+    internal static Rect PlaceCard(Rect area, Size card, Size viewport, double pixelX = 1, double pixelY = 1,
+        Rect? bar = null, double scale = 1)
     {
         double x = area.Left + ((area.Width - card.Width) / 2);
         double y = area.Top + ((area.Height - card.Height) / 2);
+        if (bar is { IsEmpty: false } placed && x < placed.Right && x + card.Width > placed.Left)
+            y = Math.Max(y, placed.Bottom + (EdgeMargin * scale));
         return Snap(new Rect(x, y, card.Width, card.Height), viewport, pixelX, pixelY);
     }
 

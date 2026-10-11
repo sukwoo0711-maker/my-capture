@@ -754,7 +754,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
 
         _startGuide?.Arrange(CaptureModeBarLayout.PlaceCard(work, _startGuide.DesiredSize, finalSize,
-            GuidePixelSizeX, GuidePixelSizeY));
+            GuidePixelSizeX, GuidePixelSizeY, bar, _guideScale));
         if (_modeBarBounds != bar)
         {
             _modeBarBounds = bar;

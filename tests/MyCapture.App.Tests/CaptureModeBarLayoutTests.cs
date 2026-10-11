@@ -98,5 +98,19 @@ public sealed class CaptureModeBarLayoutTests
         Assert.Equal(new Rect(420, 256, 440, 160), card);
         Rect clamped = CaptureModeBarLayout.PlaceCard(new Rect(-200, -50, 300, 100), new Size(440, 160), new Size(1280, 720));
         Assert.Equal(new Point(0, 0), clamped.TopLeft);
+
+        // A monitor this short would centre the card over the bar: it sits just below the bar instead,
+        // with the margin scaled like the bar.
+        var bar = new Rect(340, 12, 600, 46);
+        Rect below = CaptureModeBarLayout.PlaceCard(new Rect(0, 0, 1280, 300), new Size(366, 240), new Size(1280, 720), bar: bar);
+        Assert.Equal(new Rect(457, bar.Bottom + CaptureModeBarLayout.EdgeMargin, 366, 240), below);
+        Rect scaled = CaptureModeBarLayout.PlaceCard(new Rect(0, 0, 1280, 300), new Size(366, 240), new Size(1280, 720),
+            bar: bar, scale: 1.5);
+        Assert.Equal(bar.Bottom + (CaptureModeBarLayout.EdgeMargin * 1.5), scaled.Top);
+
+        // With room to spare, or beside the bar rather than under it, the card keeps the centre.
+        Assert.Equal(card, CaptureModeBarLayout.PlaceCard(new Rect(0, 0, 1280, 672), new Size(440, 160), new Size(1280, 720), bar: bar));
+        Rect beside = CaptureModeBarLayout.PlaceCard(new Rect(1000, 0, 280, 300), new Size(200, 240), new Size(1280, 720), bar: bar);
+        Assert.Equal(30, beside.Top);
     }
 }

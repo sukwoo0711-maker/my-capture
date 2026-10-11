@@ -3507,8 +3507,6 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="CaptureGuide2_IntroTitle" xml:space="preserve"><value>캡처 방법</value></data>
   <data name="CaptureGuide2_IntroBody" xml:space="preserve"><value>창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다. Esc로 취소합니다.</value></data>
   <data name="CaptureGuide2_IntroBodyRegionOnly" xml:space="preserve"><value>드래그하면 원하는 영역을 캡처합니다. Esc로 취소합니다.</value></data>
-  <data name="CaptureGuide2_IntroBar" xml:space="preserve"><value>위쪽 막대에서 전체 화면, 텍스트 복사, 색상 복사를 고를 수 있습니다.</value></data>
-  <data name="CaptureGuide2_IntroAgain" xml:space="preserve"><value>도움말(?) 버튼을 누르면 이 안내를 다시 볼 수 있습니다.</value></data>
   <data name="EditorUx_RotateLeft" xml:space="preserve"><value>왼쪽 회전</value></data>
   <data name="EditorUx_RotateRight" xml:space="preserve"><value>오른쪽 회전</value></data>
   <data name="EditorUx_RotateLeftHint" xml:space="preserve"><value>이미지를 왼쪽으로 90도 회전</value></data>
@@ -3708,8 +3706,6 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_BarMore" xml:space="preserve"><value>다른 캡처</value></data>
   <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>지연 캡처, 스크롤 캡처, 이전 영역 반복을 고릅니다.</value></data>
   <data name="Onboard_DelayCapture" xml:space="preserve"><value>{0}초 후 캡처</value></data>
-  <data name="Onboard_GuideSentence" xml:space="preserve"><value>창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다.</value></data>
-  <data name="Onboard_GuideSentenceRegionOnly" xml:space="preserve"><value>드래그하면 원하는 영역을 캡처합니다.</value></data>
   <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>녹화할 영역을 드래그하십시오</value></data>
   <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — 녹화 영역 선택</value></data>
   <data name="Onboard_RecordStop" xml:space="preserve"><value>정지</value></data>
