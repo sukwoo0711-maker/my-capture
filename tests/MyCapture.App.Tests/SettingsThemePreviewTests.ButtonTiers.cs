@@ -147,7 +147,9 @@ public sealed partial class SettingsThemePreviewTests
                                 Assert.Equal(Wpf(Token("Accent.Default")), fill);
                                 break;
                             case ButtonTier.Bordered:
-                                Assert.Equal(Wpf(Token("Border.Subtle")), border);
+                                // Control outlines have their own token: Border.Subtle is decorative
+                                // and too faint on glass to mark a button.
+                                Assert.Equal(Wpf(Token("Border.Control")), border);
                                 Assert.Equal(Wpf(Token("Surface.Overlay")), fill);
                                 break;
                             default:
@@ -166,6 +168,8 @@ public sealed partial class SettingsThemePreviewTests
                         double borderRatio = tier == ButtonTier.Bordered ? ThemeContrast.Ratio(Over(Theme(border), page), page) : double.NaN;
                         if (style != "Button.Danger")
                             Assert.True(enabledRatio >= 4.5, $"{label}: label contrast {enabledRatio:0.00}");
+                        if (tier == ButtonTier.Bordered)
+                            Assert.True(borderRatio >= 3.0, $"{label}: outline contrast {borderRatio:0.00}");
                         Assert.True(disabledRatio < enabledRatio, $"{label}: disabled label is not dimmer");
                         table.AppendLine(string.Create(CultureInfo.InvariantCulture,
                             $"{AppThemeNames.ToSetting(theme)},{style}{(enabled.Content is Panel ? "+key" : string.Empty)},{tier},{enabledRatio:0.00},{disabledRatio:0.00},{borderRatio:0.00}"));

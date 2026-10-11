@@ -7,6 +7,19 @@ using System.Windows.Threading;
 
 namespace MyCapture.App.Themes;
 
+/// <summary>Which motion token a state transition uses (Tokens.xaml Motion.*).</summary>
+public enum MotionSpeed
+{
+    /// <summary>83ms: hover and press.</summary>
+    Fast,
+
+    /// <summary>167ms: selection, check and toggle indicators.</summary>
+    Normal,
+
+    /// <summary>250ms: panel changes.</summary>
+    Deliberate,
+}
+
 /// <summary>
 /// Small, cancellable motion primitives shared by the desktop chrome.
 /// </summary>
@@ -44,6 +57,41 @@ public static class FluidMotion
             typeof(FluidMotion),
             new PropertyMetadata(false, OnSwitchMotionChanged));
 
+    /// <summary>
+    /// The opacity a template layer settles at. Triggers set this instead of Opacity and the
+    /// layer fades there over its <see cref="TransitionProperty"/> token; it snaps while the
+    /// layer is not loaded yet or Windows animation effects are off. The state itself (the
+    /// trigger, focus, IsChecked) never waits for the fade.
+    /// </summary>
+    public static readonly DependencyProperty FadeToProperty =
+        DependencyProperty.RegisterAttached(
+            "FadeTo",
+            typeof(double),
+            typeof(FluidMotion),
+            new PropertyMetadata(0d, OnFadeToChanged));
+
+    /// <summary>The uniform scale an element settles at, animated like <see cref="FadeToProperty"/>.</summary>
+    public static readonly DependencyProperty ScaleToProperty =
+        DependencyProperty.RegisterAttached(
+            "ScaleTo",
+            typeof(double),
+            typeof(FluidMotion),
+            new PropertyMetadata(1d, OnScaleToChanged));
+
+    /// <summary>The motion token <see cref="FadeToProperty"/> and <see cref="ScaleToProperty"/> use.</summary>
+    public static readonly DependencyProperty TransitionProperty =
+        DependencyProperty.RegisterAttached(
+            "Transition",
+            typeof(MotionSpeed),
+            typeof(FluidMotion),
+            new PropertyMetadata(MotionSpeed.Fast));
+
+    /// <summary>
+    /// A button template part that takes the press feedback instead of the whole control, so a
+    /// check box or radio button scales its glyph and leaves the label still.
+    /// </summary>
+    internal const string PressTargetName = "PART_PressTarget";
+
     private static readonly DependencyProperty PressTransformProperty =
         DependencyProperty.RegisterAttached(
             "PressTransform",
@@ -67,6 +115,9 @@ public static class FluidMotion
 
     private const double PressedScale = 0.985;
 
+    // An 18px glyph needs a deeper press than a whole button to read as pressed at all.
+    private const double PressedGlyphScale = 0.9;
+
     public static void SetWindowEntrance(DependencyObject element, bool value) =>
         element.SetValue(WindowEntranceProperty, value);
 
@@ -84,6 +135,24 @@ public static class FluidMotion
 
     public static bool GetSwitchMotion(DependencyObject element) =>
         (bool)element.GetValue(SwitchMotionProperty);
+
+    public static void SetFadeTo(DependencyObject element, double value) =>
+        element.SetValue(FadeToProperty, value);
+
+    public static double GetFadeTo(DependencyObject element) =>
+        (double)element.GetValue(FadeToProperty);
+
+    public static void SetScaleTo(DependencyObject element, double value) =>
+        element.SetValue(ScaleToProperty, value);
+
+    public static double GetScaleTo(DependencyObject element) =>
+        (double)element.GetValue(ScaleToProperty);
+
+    public static void SetTransition(DependencyObject element, MotionSpeed value) =>
+        element.SetValue(TransitionProperty, value);
+
+    public static MotionSpeed GetTransition(DependencyObject element) =>
+        (MotionSpeed)element.GetValue(TransitionProperty);
 
     /// <summary>Whether motion should run for the current Windows session.</summary>
     internal static bool AnimationsEnabled =>
@@ -332,7 +401,8 @@ public static class FluidMotion
 
     private static void AnimatePress(ButtonBase button, bool pressed)
     {
-        ScaleTransform? scale = (ScaleTransform?)button.GetValue(PressTransformProperty);
+        UIElement element = button.Template?.FindName(PressTargetName, button) as UIElement ?? button;
+        ScaleTransform? scale = (ScaleTransform?)element.GetValue(PressTransformProperty);
 
         if (!AnimationsEnabled)
         {
@@ -340,10 +410,10 @@ public static class FluidMotion
             {
                 scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                button.ClearValue(PressTransformProperty);
-                if (ReferenceEquals(button.RenderTransform, scale))
+                element.ClearValue(PressTransformProperty);
+                if (ReferenceEquals(element.RenderTransform, scale))
                 {
-                    button.ClearValue(UIElement.RenderTransformProperty);
+                    element.ClearValue(UIElement.RenderTransformProperty);
                 }
             }
 
@@ -354,18 +424,19 @@ public static class FluidMotion
         {
             // A control that deliberately owns a transform keeps it; motion must never trample
             // component-specific rendering or replace a transform used for hit testing.
-            if (button.ReadLocalValue(UIElement.RenderTransformProperty) != DependencyProperty.UnsetValue)
+            if (element.ReadLocalValue(UIElement.RenderTransformProperty) != DependencyProperty.UnsetValue)
             {
                 return;
             }
 
             scale = new ScaleTransform(1, 1);
-            button.RenderTransformOrigin = new Point(0.5, 0.5);
-            button.RenderTransform = scale;
-            button.SetValue(PressTransformProperty, scale);
+            element.RenderTransformOrigin = new Point(0.5, 0.5);
+            element.RenderTransform = scale;
+            element.SetValue(PressTransformProperty, scale);
         }
 
-        double target = pressed ? PressedScale : 1.0;
+        double pressedScale = ReferenceEquals(element, button) ? PressedScale : PressedGlyphScale;
+        double target = pressed ? pressedScale : 1.0;
         Duration duration = pressed ? FastDuration : NormalDuration;
         IEasingFunction easing = pressed ? StandardEasing : SoftLandingEasing;
         var x = new DoubleAnimation(scale.ScaleX, target, duration)
@@ -386,13 +457,13 @@ public static class FluidMotion
             y.Completed += (_, _) =>
             {
                 if (!button.IsPressed
-                    && ReferenceEquals(button.GetValue(PressTransformProperty), scale)
-                    && ReferenceEquals(button.RenderTransform, scale))
+                    && ReferenceEquals(element.GetValue(PressTransformProperty), scale)
+                    && ReferenceEquals(element.RenderTransform, scale))
                 {
                     scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                     scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                    button.ClearValue(PressTransformProperty);
-                    button.ClearValue(UIElement.RenderTransformProperty);
+                    element.ClearValue(PressTransformProperty);
+                    element.ClearValue(UIElement.RenderTransformProperty);
                 }
             };
         }
@@ -482,7 +553,11 @@ public static class FluidMotion
         }
     }
 
-    private static void Animate(IAnimatable target, DependencyProperty property, double to, bool animate)
+    private static void Animate(IAnimatable target, DependencyProperty property, double to, bool animate) =>
+        Animate(target, property, to, animate, NormalDuration);
+
+    private static void Animate(IAnimatable target, DependencyProperty property, double to, bool animate,
+        Duration duration)
     {
         var owner = (DependencyObject)target;
         double from = (double)owner.GetValue(property);
@@ -493,13 +568,54 @@ public static class FluidMotion
             return;
         }
 
-        var slide = new DoubleAnimation(from, to, NormalDuration)
+        var slide = new DoubleAnimation(from, to, duration)
         {
             EasingFunction = StandardEasing,
             FillBehavior = FillBehavior.Stop,
         };
         target.BeginAnimation(property, slide, HandoffBehavior.SnapshotAndReplace);
     }
+
+    private static void OnFadeToChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
+    {
+        if (dependencyObject is UIElement element)
+        {
+            Animate(element, UIElement.OpacityProperty, (double)e.NewValue, IsShown(element),
+                TransitionDuration(element));
+        }
+    }
+
+    private static void OnScaleToChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
+    {
+        if (dependencyObject is not UIElement element)
+        {
+            return;
+        }
+
+        // Template transforms may be frozen or shared; the element owns one it can animate.
+        if (element.RenderTransform is not ScaleTransform scale || scale.IsFrozen)
+        {
+            scale = new ScaleTransform(1, 1);
+            element.RenderTransformOrigin = new Point(0.5, 0.5);
+            element.RenderTransform = scale;
+        }
+
+        double to = (double)e.NewValue;
+        bool animate = IsShown(element);
+        Duration duration = TransitionDuration(element);
+        Animate(scale, ScaleTransform.ScaleXProperty, to, animate, duration);
+        Animate(scale, ScaleTransform.ScaleYProperty, to, animate, duration);
+    }
+
+    // A layer that is still being templated takes its first state at once.
+    private static bool IsShown(UIElement element) => element is FrameworkElement { IsLoaded: true };
+
+    private static Duration TransitionDuration(DependencyObject element) => GetTransition(element) switch
+    {
+        MotionSpeed.Normal => NormalDuration,
+        MotionSpeed.Deliberate => DeliberateDuration,
+        _ => FastDuration,
+    };
 
     private static Duration ResourceDuration(string key, TimeSpan fallback) =>
         Application.Current?.TryFindResource(key) is Duration duration

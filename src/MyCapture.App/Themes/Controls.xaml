@@ -8,6 +8,11 @@
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
       shown by recolouring the fixed chrome border and revealing an inset ring with no layout
       footprint, so keyboard navigation never shifts neighbouring content.
+    * Interaction states are overlay layers over the rest chrome. Triggers set
+      FluidMotion.FadeTo on a layer: hover and press fade over Motion.Fast, selection and
+      check indicators over Motion.Normal, and everything snaps when Windows animation
+      effects are off. Shared brushes are never animated; only layer opacity moves.
+    * Border.Subtle draws decorative lines; control outlines use Border.Control.
     * Every existing style/key is preserved for restored windows and external references.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -107,10 +112,42 @@
     <!-- ============================================================= -->
     <sys:Double x:Key="Button.DisabledOpacity">0.46</sys:Double>
 
+    <!-- Interaction state layers. A template stacks them over its rest chrome, with the same
+         corner radius and BorderThickness so the fill sits inside the chrome border. Triggers
+         set FluidMotion.FadeTo; the layer's border is transparent unless a Windows contrast
+         theme is on (Border.Hover), where the outline is what shows hover. -->
+    <Style x:Key="StateLayer" TargetType="Border">
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Md}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Hover}" />
+    </Style>
+    <Style x:Key="StateLayer.Hover" TargetType="Border" BasedOn="{StaticResource StateLayer}">
+        <Setter Property="Background" Value="{DynamicResource Surface.Hover}" />
+    </Style>
+    <Style x:Key="StateLayer.Pressed" TargetType="Border" BasedOn="{StaticResource StateLayer}">
+        <Setter Property="Background" Value="{DynamicResource Surface.Pressed}" />
+    </Style>
+    <Style x:Key="StateLayer.Selected" TargetType="Border" BasedOn="{StaticResource StateLayer}">
+        <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+        <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
+    </Style>
+    <!-- Template parts set motion through these styles rather than attached-property attributes,
+         so the dictionary also loads as loose XAML (diagnostic and test fixtures). -->
+    <Style x:Key="StatePart.Normal" TargetType="FrameworkElement">
+        <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
+    </Style>
+    <!-- A check mark or radio dot that settles from half size as its indicator fades in. -->
+    <Style x:Key="StatePart.SettlingGlyph" TargetType="FrameworkElement" BasedOn="{StaticResource StatePart.Normal}">
+        <Setter Property="themes:FluidMotion.ScaleTo" Value="0.5" />
+    </Style>
+
     <Style TargetType="{x:Type Button}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="{DynamicResource Surface.Overlay}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="{DynamicResource Padding.Control}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget}" />
@@ -130,7 +167,18 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{DynamicResource Radius.Md}"
-                                SnapsToDevicePixels="True">
+                                SnapsToDevicePixels="True" />
+                        <!-- Hover strengthens the outline as well as the fill: the layer's own border
+                             covers the chrome border while it shows. -->
+                        <Border x:Name="HoverLayer"
+                                Style="{StaticResource StateLayer.Hover}"
+                                BorderBrush="{DynamicResource Border.Strong}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <Border x:Name="PressedLayer"
+                                Style="{StaticResource StateLayer.Pressed}"
+                                BorderBrush="{DynamicResource Border.Strong}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <Border BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
@@ -140,25 +188,28 @@
                         <Border x:Name="FocusRing"
                                 Margin="1"
                                 BorderBrush="{DynamicResource Border.Focus}"
-                                BorderThickness="1"
+                                BorderThickness="{DynamicResource Focus.RingThickness}"
                                 CornerRadius="{DynamicResource Radius.Sm}"
                                 IsHitTestVisible="False"
                                 Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
-                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Pressed}" />
+                            <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="PressedLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                         </Trigger>
                         <Trigger Property="IsDefaulted" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                            <Setter TargetName="PressedLayer" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="{StaticResource Button.DisabledOpacity}" />
@@ -183,7 +234,16 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{DynamicResource Radius.Md}"
-                                SnapsToDevicePixels="True">
+                                SnapsToDevicePixels="True" />
+                        <!-- The accent fill and its border change together, so these layers cover
+                             the whole chrome. -->
+                        <Border x:Name="HoverLayer"
+                                Style="{StaticResource StateLayer}"
+                                Background="{DynamicResource Accent.Hover}" />
+                        <Border x:Name="PressedLayer"
+                                Style="{StaticResource StateLayer}"
+                                Background="{DynamicResource Accent.Pressed}" />
+                        <Border BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
@@ -192,19 +252,17 @@
                         <Border x:Name="FocusRing"
                                 Margin="2"
                                 BorderBrush="{DynamicResource Text.OnAccent}"
-                                BorderThickness="1"
+                                BorderThickness="{DynamicResource Focus.RingThickness}"
                                 CornerRadius="{DynamicResource Radius.Sm}"
                                 IsHitTestVisible="False"
                                 Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Hover}" />
-                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Accent.Hover}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Pressed}" />
-                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Accent.Pressed}" />
+                            <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
@@ -215,6 +273,8 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Overlay}" />
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Surface.Overlay}" />
+                            <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="PressedLayer" Property="Visibility" Value="Collapsed" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Disabled}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
@@ -236,7 +296,14 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{DynamicResource Radius.Md}"
-                                SnapsToDevicePixels="True">
+                                SnapsToDevicePixels="True" />
+                        <Border x:Name="HoverLayer"
+                                Style="{StaticResource StateLayer.Hover}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <Border x:Name="PressedLayer"
+                                Style="{StaticResource StateLayer.Pressed}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <Border BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
@@ -245,7 +312,7 @@
                         <Border x:Name="FocusRing"
                                 Margin="1"
                                 BorderBrush="{DynamicResource Border.Focus}"
-                                BorderThickness="1"
+                                BorderThickness="{DynamicResource Focus.RingThickness}"
                                 CornerRadius="{DynamicResource Radius.Sm}"
                                 IsHitTestVisible="False"
                                 Opacity="0" />
@@ -253,10 +320,10 @@
                     <ControlTemplate.Triggers>
                         <!-- Hover and press wash the background only; the tool tier stays borderless. -->
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Pressed}" />
+                            <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <!-- Keyboard focus still recolours the fixed border so focus stays visible. -->
                         <Trigger Property="IsKeyboardFocused" Value="True">
@@ -309,7 +376,15 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Md}">
+                                CornerRadius="{DynamicResource Radius.Md}" />
+                        <Border x:Name="HoverLayer"
+                                Style="{StaticResource StateLayer.Hover}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <!-- Above the hover wash, so a checked tool keeps its selected fill on hover. -->
+                        <Border x:Name="CheckedLayer"
+                                Style="{StaticResource StateLayer.Selected}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <Border BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
@@ -317,19 +392,18 @@
                         <Border x:Name="FocusRing"
                                 Margin="1"
                                 BorderBrush="{DynamicResource Border.Focus}"
-                                BorderThickness="1"
+                                BorderThickness="{DynamicResource Focus.RingThickness}"
                                 CornerRadius="{DynamicResource Radius.Sm}"
                                 IsHitTestVisible="False"
                                 Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                            <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
@@ -354,7 +428,7 @@
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="CaretBrush" Value="{DynamicResource Text.Primary}" />
         <Setter Property="SelectionBrush" Value="{DynamicResource Accent.Default}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="11,8" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget}" />
@@ -367,23 +441,30 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Md}">
+                                CornerRadius="{DynamicResource Radius.Md}" />
+                        <!-- Hover strengthens the outline only; an input keeps its well colour. -->
+                        <Border x:Name="HoverLayer"
+                                Style="{StaticResource StateLayer}"
+                                BorderBrush="{DynamicResource Border.Strong}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <Border BorderThickness="{TemplateBinding BorderThickness}">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
                         </Border>
                         <Border x:Name="FocusRing"
                                 Margin="1"
                                 BorderBrush="{DynamicResource Border.Focus}"
-                                BorderThickness="1"
+                                BorderThickness="{DynamicResource Focus.RingThickness}"
                                 CornerRadius="{DynamicResource Radius.Sm}"
                                 IsHitTestVisible="False"
                                 Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
@@ -415,13 +496,27 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Grid Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
+                        <!-- PART_PressTarget takes the press feedback, so the label never scales. -->
+                        <Grid x:Name="PART_PressTarget" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
                             <Border x:Name="Box"
                                     Background="{DynamicResource Surface.Sunken}"
-                                    BorderBrush="{DynamicResource Border.Strong}"
+                                    BorderBrush="{DynamicResource Border.Control}"
+                                    BorderThickness="1"
+                                    CornerRadius="5" />
+                            <Border x:Name="HoverLayer"
+                                    Style="{StaticResource StateLayer}"
+                                    BorderBrush="{DynamicResource Border.Focus}"
+                                    BorderThickness="1"
+                                    CornerRadius="5" />
+                            <!-- The accent box fades in while the check mark settles from a smaller size. -->
+                            <Border x:Name="CheckedLayer"
+                                    Style="{StaticResource StateLayer.Selected}"
+                                    Background="{DynamicResource Accent.Default}"
+                                    BorderBrush="{DynamicResource Accent.Default}"
                                     BorderThickness="1"
                                     CornerRadius="5">
-                                <Path x:Name="Check" Visibility="Collapsed"
+                                <Path x:Name="Check"
+                                      Style="{StaticResource StatePart.SettlingGlyph}"
                                       Data="M 3,8 L 7,12 L 15,4"
                                       Stroke="{DynamicResource Text.OnAccent}"
                                       StrokeThickness="2"
@@ -433,7 +528,7 @@
                             <Border x:Name="FocusRing"
                                     Margin="-2"
                                     BorderBrush="{DynamicResource Border.Focus}"
-                                    BorderThickness="1"
+                                    BorderThickness="{DynamicResource Focus.RingThickness}"
                                     CornerRadius="7"
                                     IsHitTestVisible="False"
                                     Opacity="0" />
@@ -442,12 +537,11 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource Accent.Default}" />
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
-                            <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter TargetName="Check" Property="themes:FluidMotion.ScaleTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
@@ -479,19 +573,32 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Grid Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
+                        <!-- PART_PressTarget takes the press feedback, so the label never scales. -->
+                        <Grid x:Name="PART_PressTarget" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
                             <Ellipse x:Name="Dot"
                                      Fill="{DynamicResource Surface.Sunken}"
-                                     Stroke="{DynamicResource Border.Strong}"
+                                     Stroke="{DynamicResource Border.Control}"
                                      StrokeThickness="1" />
-                            <Ellipse x:Name="Check" Width="8" Height="8"
-                                     Fill="{DynamicResource Text.OnAccent}"
-                                     Visibility="Collapsed" />
+                            <Ellipse x:Name="HoverRing"
+                                     Stroke="{DynamicResource Border.Focus}"
+                                     StrokeThickness="1"
+                                     IsHitTestVisible="False"
+                                     Opacity="0" />
+                            <!-- The accent disc fades in while the centre dot settles from a smaller size. -->
+                            <Grid x:Name="CheckedLayer"
+                                  Style="{StaticResource StatePart.Normal}"
+                                  IsHitTestVisible="False"
+                                  Opacity="0">
+                                <Ellipse Fill="{DynamicResource Accent.Default}" />
+                                <Ellipse x:Name="Check" Width="8" Height="8"
+                                         Style="{StaticResource StatePart.SettlingGlyph}"
+                                         Fill="{DynamicResource Text.OnAccent}" />
+                            </Grid>
                             <!-- Inset focus ring, opacity-toggled (stable thickness). -->
                             <Ellipse x:Name="FocusRing"
                                      Margin="-2"
                                      Stroke="{DynamicResource Border.Focus}"
-                                     StrokeThickness="1"
+                                     StrokeThickness="{DynamicResource Focus.RingWidth}"
                                      IsHitTestVisible="False"
                                      Opacity="0" />
                         </Grid>
@@ -499,12 +606,11 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="HoverRing" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource Accent.Default}" />
-                            <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource Accent.Default}" />
-                            <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter TargetName="Check" Property="themes:FluidMotion.ScaleTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource Border.Focus}" />
@@ -538,15 +644,24 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TabItem}">
-                    <Border x:Name="TabBorder" Background="{DynamicResource Surface.Raised}"
-                            BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
-                            CornerRadius="8" Padding="{TemplateBinding Padding}">
-                        <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
-                    </Border>
+                    <Grid>
+                        <Border x:Name="TabBorder" Background="{DynamicResource Surface.Raised}"
+                                BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
+                                CornerRadius="8" />
+                        <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
+                                BorderThickness="1" CornerRadius="8" />
+                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
+                                BorderBrush="{DynamicResource Accent.Default}" BorderThickness="1" CornerRadius="8" />
+                        <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
+                        </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                        </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
+                            <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
@@ -612,12 +727,16 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type MenuItem}">
-                    <Border x:Name="Chrome"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="{DynamicResource Radius.Sm}"
-                            Padding="{TemplateBinding Padding}"
-                            SnapsToDevicePixels="True">
-                        <Grid>
+                    <Grid>
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{DynamicResource Radius.Sm}"
+                                SnapsToDevicePixels="True" />
+                        <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
+                                BorderThickness="1" CornerRadius="{DynamicResource Radius.Sm}" />
+                        <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}"
+                                BorderThickness="1" CornerRadius="{DynamicResource Radius.Sm}" />
+                        <Grid Margin="{TemplateBinding Padding}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="20" />
                                 <ColumnDefinition Width="*" />
@@ -640,13 +759,13 @@
                                        FontSize="{DynamicResource FontSize.Caption}"
                                        VerticalAlignment="Center" />
                         </Grid>
-                    </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsSubmenuOpen" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Pressed}" />
+                            <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.46" />
@@ -678,40 +797,43 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">
-                    <Border x:Name="ItemChrome" Background="{TemplateBinding Background}"
-                            BorderBrush="Transparent" BorderThickness="1" CornerRadius="4"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter VerticalAlignment="Center"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
-                    </Border>
+                    <Grid>
+                        <Border x:Name="ItemChrome" Background="{TemplateBinding Background}"
+                                BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" />
+                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
+                                BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" />
+                        <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
+                                BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1" CornerRadius="4" />
+                        <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
+                            <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
-                            <Setter TargetName="ItemChrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
-                        <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
-                            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
-                            <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                        </DataTrigger>
+                        <!-- A contrast theme keeps ordinary washes on Window; the selected and highlighted
+                             rows use the system selection pair instead. Bound to the live setting. -->
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True" />
+                                <Condition Binding="{Binding Path=(SystemParameters.HighContrast)}" Value="True" />
                                 <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
                             </MultiDataTrigger.Conditions>
                             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                            <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                            <Setter TargetName="SelectedLayer" Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
                         </MultiDataTrigger>
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True" />
+                                <Condition Binding="{Binding Path=(SystemParameters.HighContrast)}" Value="True" />
                                 <Condition Binding="{Binding IsHighlighted, RelativeSource={RelativeSource Self}}" Value="True" />
                             </MultiDataTrigger.Conditions>
                             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                            <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                            <Setter TargetName="ItemChrome" Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
+                            <Setter TargetName="HoverLayer" Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
                         </MultiDataTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.46" />
@@ -724,7 +846,7 @@
     <Style TargetType="ComboBox">
         <Setter Property="Background" Value="{DynamicResource Surface.Overlay}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="10,5,32,5" />
         <Setter Property="MinHeight" Value="32" />
@@ -737,6 +859,9 @@
                     <Grid>
                         <Border x:Name="ComboChrome" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" />
+                        <Border x:Name="HoverLayer" Style="{StaticResource StateLayer}"
+                                BorderBrush="{DynamicResource Border.Strong}" BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="6" />
                         <ToggleButton x:Name="DropDownToggle" Style="{x:Null}" Focusable="False" ClickMode="Press"
                                       IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
@@ -772,30 +897,20 @@
                             </Border>
                         </Popup>
                     </Grid>
+                    <!-- Contrast themes need no extra triggers here: every token the chrome uses
+                         already resolves to the system palette (ThemeService). -->
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource Text.Muted}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                         </Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
                             <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                         </Trigger>
-                        <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
-                            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
-                            <Setter TargetName="ComboChrome" Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
-                            <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
-                            <Setter TargetName="PopupChrome" Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                            <Setter TargetName="PopupChrome" Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
-                        </DataTrigger>
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True" />
-                                <Condition Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource Self}}" Value="True" />
-                            </MultiDataTrigger.Conditions>
-                            <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                        </MultiDataTrigger>
                         <Trigger Property="IsEditable" Value="True">
                             <Setter TargetName="Selection" Property="Visibility" Value="Collapsed" />
                             <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible" />
@@ -910,7 +1025,13 @@
                                 Background="Transparent"
                                 BorderBrush="Transparent"
                                 BorderThickness="1"
-                                CornerRadius="{DynamicResource Radius.Md}">
+                                CornerRadius="{DynamicResource Radius.Md}" />
+                        <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
+                        <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}" BorderThickness="1" />
+                        <!-- The selected tool shows its wash, accent glyph and edge indicator. -->
+                        <Border x:Name="CheckedLayer" Style="{StaticResource StateLayer.Selected}"
+                                BorderBrush="Transparent" BorderThickness="1" />
+                        <Border BorderThickness="1">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
                         </Border>
@@ -919,28 +1040,29 @@
                                 HorizontalAlignment="Left" VerticalAlignment="Center"
                                 Background="{DynamicResource Accent.Cool}"
                                 CornerRadius="{DynamicResource Radius.Pill}"
+                                Style="{StaticResource StatePart.Normal}"
                                 IsHitTestVisible="False"
                                 Opacity="0" />
                         <Border x:Name="FocusRing"
                                 Margin="1"
                                 BorderBrush="{DynamicResource Border.Focus}"
-                                BorderThickness="1"
+                                BorderThickness="{DynamicResource Focus.RingThickness}"
                                 CornerRadius="{DynamicResource Radius.Sm}"
                                 IsHitTestVisible="False"
                                 Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Pressed}" />
+                            <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
+                            <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter Property="Foreground" Value="{DynamicResource Accent.Cool}" />
-                            <Setter TargetName="Indicator" Property="Opacity" Value="1" />
+                            <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
@@ -1045,9 +1167,6 @@
                         <Trigger Property="IsDragging" Value="True">
                             <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent.Default}" />
                         </Trigger>
-                        <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
-                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
-                        </DataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -1091,9 +1210,6 @@
                 <Setter Property="Width" Value="Auto" />
                 <Setter Property="Height" Value="16" />
             </Trigger>
-            <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
-                <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-            </DataTrigger>
         </Style.Triggers>
     </Style>
 </ResourceDictionary>
