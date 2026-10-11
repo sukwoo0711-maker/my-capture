@@ -4,6 +4,7 @@
         xmlns:coreSettings="clr-namespace:MyCapture.Core.Settings;assembly=MyCapture.Core"
         xmlns:loc="clr-namespace:MyCapture.App.Localization"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+        xmlns:themes="clr-namespace:MyCapture.App.Themes"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:ClassModifier="internal"
         Style="{StaticResource Window.Standard}"
@@ -210,7 +211,7 @@
             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="CaretBrush" Value="{DynamicResource Text.Primary}" />
             <Setter Property="SelectionBrush" Value="{DynamicResource Accent.Default}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
@@ -355,20 +356,31 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="Bd"
-                                Background="Transparent"
-                                BorderBrush="Transparent"
-                                BorderThickness="1"
-                                CornerRadius="{StaticResource Radius.Md}"
-                                Padding="{TemplateBinding Padding}"
-                                SnapsToDevicePixels="True">
-                            <Grid>
+                        <!-- Selection and hover are layers that fade (FluidMotion.FadeTo), like the
+                             shared control templates, instead of swapping the background at once. -->
+                        <Grid SnapsToDevicePixels="True">
+                            <Border x:Name="Bd"
+                                    Background="Transparent"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource Radius.Md}" />
+                            <Border x:Name="SelectedLayer"
+                                    Style="{StaticResource StateLayer.Selected}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource Radius.Md}" />
+                            <Border x:Name="HoverLayer"
+                                    Style="{StaticResource StateLayer.Hover}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource Radius.Md}" />
+                            <Grid Margin="{TemplateBinding Padding}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="3" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Border x:Name="AccentBar" Visibility="Hidden"
+                                <Border x:Name="AccentBar"
+                                        Style="{StaticResource StatePart.Normal}"
+                                        Opacity="0"
                                         Width="3"
                                         Background="{DynamicResource Accent.Default}"
                                         CornerRadius="2" />
@@ -391,24 +403,24 @@
                                                   HorizontalAlignment="Left"
                                                   VerticalAlignment="Center" />
                             </Grid>
-                        </Border>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
-                                <Setter TargetName="AccentBar" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="AccentBar" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Accent.Cool}" />
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Text.Primary}" />
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                             </Trigger>
                             <!-- Focus changes only the border colour, never the thickness. -->
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                <Setter TargetName="SelectedLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

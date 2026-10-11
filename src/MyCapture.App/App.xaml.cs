@@ -630,15 +630,19 @@ public partial class App : Application
             _tray?.ShowBalloon(
                 "MyCapture",
                 message,
-                result.Status == GitHubIssueImageUploadStatus.CopiedUrl
-                    ? TrayBalloonKind.Information
-                    : TrayBalloonKind.Warning,
+                result.Status switch
+                {
+                    GitHubIssueImageUploadStatus.CopiedUrl => TrayBalloonKind.Information,
+                    // An upload failure needs the user to act, so it stays until closed.
+                    GitHubIssueImageUploadStatus.Failed => TrayBalloonKind.Error,
+                    _ => TrayBalloonKind.Warning,
+                },
                 playSound: false);
         }
         catch (Exception ex)
         {
             _log?.LogWarning(ex, "F9 GitHub image upload failed");
-            _tray?.ShowBalloon("MyCapture", UiText.Get("GitHub.Failed"), TrayBalloonKind.Warning, playSound: false);
+            _tray?.ShowBalloon("MyCapture", UiText.Get("GitHub.Failed"), TrayBalloonKind.Error, playSound: false);
         }
         finally
         {
