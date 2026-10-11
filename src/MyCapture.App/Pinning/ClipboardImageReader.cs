@@ -1,6 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Threading;
 using MyCapture.Core.Pin;
@@ -148,9 +149,9 @@ internal static class ClipboardImageReader
     }
 
     /// <summary>
-    /// Reads the richest clipboard representation supported by screen pins. Spreadsheet-like
-    /// text wins over an advertised bitmap so Excel ranges keep their editable cell payload;
-    /// ordinary text is used when there is no decodable image.
+    /// Reads the richest clipboard representation supported by screen pins. A spreadsheet
+    /// range is shown with the picture the source application published for the same copy and
+    /// keeps its cell text; ordinary text is used when there is no decodable image.
     /// </summary>
     internal static async Task<PinReadAttempt> ReadPinAsync()
     {
@@ -189,19 +190,23 @@ internal static class ClipboardImageReader
             return PinReadAttempt.Success(PinContent.FromText(captured.CodePreview, captured.OriginalText, false));
         }
 
-        if (captured.IsTabularText && HasSourceText(captured))
-        {
-            PinContent? table = await TryRenderTextAsync(captured, renderText).ConfigureAwait(false);
-            if (table is not null)
-            {
-                return PinReadAttempt.Success(table);
-            }
-        }
-
         ReadAttempt image = await CompleteCapturedAttemptWithFallbackAsync(
             captured,
             decodePng,
             captureSameGenerationFallback).ConfigureAwait(false);
+
+        if (image.Image is not null && captured.IsTabularText && HasSourceText(captured))
+        {
+            // Excel publishes a picture of the copied cells (PNG or Bitmap) next to the cell
+            // text. The picture shows the real fonts, fills, borders and column widths, so it
+            // becomes the visual; the cell text stays attached for exact copying instead of
+            // OCR. Tables without a decodable picture (browser or Word HTML, ranges too large
+            // for a picture) fall through to the rendered grid. An EnhancedMetafile alone also
+            // falls through: Windows does not synthesise a Bitmap from it, and playing a
+            // metafile at the right scale is not reliable enough to replace the grid.
+            return PinReadAttempt.Success(
+                PinContent.FromTablePicture(FlattenOntoWhite(image.Image), captured.OriginalText!));
+        }
 
         if (image.Image is not null)
         {
@@ -233,48 +238,9 @@ internal static class ClipboardImageReader
         {
             uint clipboardSequence = GetClipboardSequenceNumber();
             IDataObject? data = Clipboard.GetDataObject();
-            if (data is null)
-            {
-                return CapturedAttempt.NoImage();
-            }
-
-            (string? originalText, bool isTabularText) = CaptureText(data);
-
-            byte[]? pngBytes = null;
-            if (data.GetDataPresent("PNG", autoConvert: false))
-            {
-                try
-                {
-                    // IDataObject and its stream remain dispatcher-bound. Copy all bytes now so
-                    // WPF decoding can safely happen on a worker after this method returns.
-                    pngBytes = TryMaterializePngPayload(
-                        data.GetData("PNG", autoConvert: false));
-                }
-                catch (Exception ex) when (IsRecoverablePngException(ex))
-                {
-                    // A malformed custom representation must not hide a valid Bitmap from the
-                    // same IDataObject. Continue collecting the compatibility representation.
-                }
-            }
-
-            CapturedAttempt result = pngBytes is not null
-                ? CapturedAttempt.Content(
-                    pngBytes,
-                    fallbackImage: null,
-                    clipboardSequence: clipboardSequence,
-                    originalText: originalText,
-                    isTabularText: isTabularText)
-                : CaptureFallback(
-                    data,
-                    originalText,
-                    isTabularText,
-                    clipboardSequence);
-            return result with
-            {
-                CodePreview = originalText is not null && !isTabularText
-                    ? ClipboardCodeRenderer.TryRender(originalText, TryGetClipboardString(data, DataFormats.Html, false))
-                    : null,
-            };
+            return data is null
+                ? CapturedAttempt.NoImage()
+                : CaptureFrom(data, clipboardSequence, ReadSystemClipboardImage);
         }
         catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen)
         {
@@ -290,6 +256,66 @@ internal static class ClipboardImageReader
         }
     }
 
+    /// <summary>
+    /// Detaches every representation a pin can use from one clipboard data object: the Unicode
+    /// text, PNG bytes or a frozen Bitmap, and a code preview. Must run on an STA thread.
+    /// </summary>
+    /// <param name="data">The clipboard data object, or an in-memory one in tests.</param>
+    /// <param name="clipboardSequence">The generation the data object was read from.</param>
+    /// <param name="systemImageFallback">
+    /// Last-resort image reader for producers whose delayed Bitmap the data object does not
+    /// convert. Production reads the system clipboard; tests pass a fixture.
+    /// </param>
+    internal static CapturedAttempt CaptureFrom(
+        IDataObject data,
+        uint clipboardSequence,
+        Func<BitmapSource?> systemImageFallback)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        ArgumentNullException.ThrowIfNull(systemImageFallback);
+        (string? originalText, bool isTabularText) = CaptureText(data);
+
+        byte[]? pngBytes = null;
+        if (data.GetDataPresent("PNG", autoConvert: false))
+        {
+            try
+            {
+                // IDataObject and its stream remain dispatcher-bound. Copy all bytes now so
+                // WPF decoding can safely happen on a worker after this method returns.
+                pngBytes = TryMaterializePngPayload(
+                    data.GetData("PNG", autoConvert: false));
+            }
+            catch (Exception ex) when (IsRecoverablePngException(ex))
+            {
+                // A malformed custom representation must not hide a valid Bitmap from the
+                // same IDataObject. Continue collecting the compatibility representation.
+            }
+        }
+
+        CapturedAttempt result = pngBytes is not null
+            ? CapturedAttempt.Content(
+                pngBytes,
+                fallbackImage: null,
+                clipboardSequence: clipboardSequence,
+                originalText: originalText,
+                isTabularText: isTabularText)
+            : CaptureFallback(
+                data,
+                originalText,
+                isTabularText,
+                clipboardSequence,
+                systemImageFallback);
+        return result with
+        {
+            CodePreview = originalText is not null && !isTabularText
+                ? ClipboardCodeRenderer.TryRender(originalText, TryGetClipboardString(data, DataFormats.Html, false))
+                : null,
+        };
+    }
+
+    private static BitmapSource? ReadSystemClipboardImage() =>
+        Clipboard.ContainsImage() ? Clipboard.GetImage() : null;
+
     private static CapturedAttempt CaptureFallbackOnce(uint expectedClipboardSequence)
     {
         try
@@ -304,7 +330,8 @@ internal static class ClipboardImageReader
                 Clipboard.GetDataObject(),
                 originalText: null,
                 isTabularText: false,
-                clipboardSequence: expectedClipboardSequence);
+                clipboardSequence: expectedClipboardSequence,
+                ReadSystemClipboardImage);
             return GetClipboardSequenceNumber() == expectedClipboardSequence
                 ? captured with { ClipboardSequence = expectedClipboardSequence }
                 : CapturedAttempt.NoImage();
@@ -327,7 +354,8 @@ internal static class ClipboardImageReader
         IDataObject? data,
         string? originalText,
         bool isTabularText,
-        uint clipboardSequence)
+        uint clipboardSequence,
+        Func<BitmapSource?> systemImageFallback)
     {
         if (data is null)
         {
@@ -345,8 +373,7 @@ internal static class ClipboardImageReader
         // IDataObject conversion above does not materialise. Keep WPF's standard helper as
         // a final compatibility path.
         if (fallbackImage is null
-            && Clipboard.ContainsImage()
-            && Clipboard.GetImage() is BitmapSource fallback)
+            && systemImageFallback() is BitmapSource fallback)
         {
             fallbackImage = Freeze(fallback);
         }
@@ -592,6 +619,75 @@ internal static class ClipboardImageReader
 
         return Freeze(decoder.Frames[0]);
     }
+
+    /// <summary>
+    /// A table picture stands in for cells the user saw on an opaque sheet. A producer that
+    /// leaves unfilled cells transparent would otherwise put bare text over the desktop, so
+    /// transparent areas are composited onto white, the default sheet colour. A picture that is
+    /// transparent everywhere is a 32-bit GDI bitmap whose alpha byte is unused; its colours are
+    /// kept as opaque instead. Opaque pictures are returned unchanged.
+    /// </summary>
+    internal static BitmapSource FlattenOntoWhite(BitmapSource picture)
+    {
+        ArgumentNullException.ThrowIfNull(picture);
+        if (!CanCarryAlpha(picture.Format))
+        {
+            return picture;
+        }
+
+        BitmapSource straight = picture.Format == PixelFormats.Bgra32
+            ? picture
+            : new FormatConvertedBitmap(picture, PixelFormats.Bgra32, null, 0);
+        int stride = straight.PixelWidth * 4;
+        byte[] pixels = new byte[stride * straight.PixelHeight];
+        straight.CopyPixels(pixels, stride, 0);
+        bool translucent = false;
+        bool visible = false;
+        for (int index = 3; index < pixels.Length; index += 4)
+        {
+            translucent |= pixels[index] != 0xFF;
+            visible |= pixels[index] != 0;
+        }
+
+        if (!translucent)
+        {
+            return picture;
+        }
+
+        for (int index = 3; index < pixels.Length; index += 4)
+        {
+            int alpha = visible ? pixels[index] : 0xFF;
+            int white = (0xFF - alpha) * 0xFF;
+            pixels[index - 3] = (byte)(((pixels[index - 3] * alpha) + white + 0x7F) / 0xFF);
+            pixels[index - 2] = (byte)(((pixels[index - 2] * alpha) + white + 0x7F) / 0xFF);
+            pixels[index - 1] = (byte)(((pixels[index - 1] * alpha) + white + 0x7F) / 0xFF);
+            pixels[index] = 0xFF;
+        }
+
+        BitmapSource flattened = BitmapSource.Create(
+            straight.PixelWidth,
+            straight.PixelHeight,
+            picture.DpiX,
+            picture.DpiY,
+            PixelFormats.Bgra32,
+            palette: null,
+            pixels,
+            stride);
+        flattened.Freeze();
+        return flattened;
+    }
+
+    private static bool CanCarryAlpha(PixelFormat format) =>
+        format == PixelFormats.Bgra32
+        || format == PixelFormats.Pbgra32
+        || format == PixelFormats.Rgba64
+        || format == PixelFormats.Prgba64
+        || format == PixelFormats.Rgba128Float
+        || format == PixelFormats.Prgba128Float
+        || format == PixelFormats.Indexed1
+        || format == PixelFormats.Indexed2
+        || format == PixelFormats.Indexed4
+        || format == PixelFormats.Indexed8;
 
     private static BitmapSource Freeze(BitmapSource source)
     {

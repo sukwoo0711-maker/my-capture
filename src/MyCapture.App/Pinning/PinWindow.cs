@@ -42,6 +42,18 @@ internal sealed class PinWindow : Window
     private const double ArrowNudgeDip = 1.0;
     private const double ArrowNudgeShiftDip = 10.0;
 
+    /// <summary>Outer corner radius of the pin frame; Windows 11 rounds top-level windows by 8.</summary>
+    internal const double FrameCornerRadiusDip = 8.0;
+
+    private const double FrameThicknessDip = 1.0;
+
+    /// <summary>
+    /// The image clip edge sits half a DIP inside the outline's outer edge, under the stroke at
+    /// every display scale, so neither the desktop nor an anti-aliased image edge shows between
+    /// the outline and the image.
+    /// </summary>
+    private const double FrameClipInsetDip = 0.5;
+
     /// <summary>How long the bottom feedback overlay stays visible before auto-hiding.</summary>
     private static readonly TimeSpan FeedbackDuration = TimeSpan.FromMilliseconds(1000);
 
@@ -53,7 +65,8 @@ internal sealed class PinWindow : Window
     private readonly Func<PinSettings> _settings;
     private readonly IPinDragInput _dragInput;
     private readonly Image _imageElement;
-    private readonly Border _chrome;
+    private readonly RectangleGeometry _imageClip;
+    private readonly Grid _chrome;
     private readonly SolidColorBrush _chromeBrush;
     private readonly ScaleTransform _pinScale;
     private readonly TextBlock _feedback;
@@ -137,18 +150,31 @@ internal sealed class PinWindow : Window
             IsHitTestVisible = false,
         };
 
-        // Image-first chrome: a neutral one-pixel boundary rests quietly and warms to a
-        // restrained warm yellow on hover, while rounded clipping keeps scaled pins consistent
-        // with the rest of the desktop surfaces.
+        // Image-first chrome: one continuous one-DIP outline with Windows 11 rounded corners
+        // rests quietly and takes the accent colour on hover. The image fills the whole pin
+        // and is clipped to the rounded rectangle the outline follows, and the outline is drawn
+        // over the image's outermost edge. A Border's CornerRadius does not clip its child and
+        // a child draws over its parent's stroke, so an image inset inside a Border covered the
+        // corner arcs and left resampled edge rows beside the straight outline segments.
         _chromeBrush = new SolidColorBrush(ResolveChromeColor("Border.Subtle", hovering: false));
         _pinScale = new ScaleTransform(1, 1);
-        _chrome = new Border
+        _imageClip = new RectangleGeometry(
+            ImageClipBounds(new Size(_state.WidthDip, _state.HeightDip)),
+            FrameCornerRadiusDip - FrameClipInsetDip,
+            FrameCornerRadiusDip - FrameClipInsetDip);
+        _imageElement.Clip = _imageClip;
+        _imageElement.SizeChanged += (_, args) => _imageClip.Rect = ImageClipBounds(args.NewSize);
+        var outline = new Border
         {
-            BorderThickness = new Thickness(1),
+            BorderThickness = new Thickness(FrameThicknessDip),
             BorderBrush = _chromeBrush,
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(FrameCornerRadiusDip),
+            IsHitTestVisible = false,
+        };
+        _chrome = new Grid
+        {
             ClipToBounds = true,
-            Child = new Grid { Children = { _imageElement, _feedback } },
+            Children = { _imageElement, outline, _feedback },
             RenderTransform = _pinScale,
             RenderTransformOrigin = new Point(0.5, 0.5),
         };
@@ -607,6 +633,13 @@ internal sealed class PinWindow : Window
             animation,
             HandoffBehavior.SnapshotAndReplace);
     }
+
+    /// <summary>The rounded image clip for an image laid out at <paramref name="size"/>.</summary>
+    internal static Rect ImageClipBounds(Size size) => new(
+        FrameClipInsetDip,
+        FrameClipInsetDip,
+        Math.Max(0, size.Width - (2 * FrameClipInsetDip)),
+        Math.Max(0, size.Height - (2 * FrameClipInsetDip)));
 
     private static Color ResolveChromeColor(string key, bool hovering)
     {

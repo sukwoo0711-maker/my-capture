@@ -209,9 +209,10 @@ internal sealed class PinManager
         double scale = monitor.ScaleFactor <= 0 ? 1.0 : monitor.ScaleFactor;
         double sourcePixelsPerDip = content.UsesDeviceIndependentPixels ? 1.0 : scale;
 
-        // Captured images contain physical screen pixels. Text/table previews are deliberately
-        // rendered at 96 DPI, so keeping them at one pixel per DIP prevents tiny cards on a
-        // 150% or 200% monitor.
+        // Captured images and pictures published by other applications (including a
+        // spreadsheet's picture of its cells) contain display pixels. Text/table previews that
+        // MyCapture renders itself are deliberately rendered at 96 DPI, so keeping them at one
+        // pixel per DIP prevents tiny cards on a 150% or 200% monitor.
         double imageWidthDip = image.PixelWidth / sourcePixelsPerDip;
         double imageHeightDip = image.PixelHeight / sourcePixelsPerDip;
 
