@@ -351,6 +351,5 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         yield return new Point(rect.Left, cy);
     }
 
-    private static Brush Resource(string key, Brush fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? fallback;
+    private static Brush Resource(string key, Brush fallback) => Themes.ThemeBrushes.Follow(key, fallback);
 }

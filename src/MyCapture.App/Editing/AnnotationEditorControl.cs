@@ -3019,8 +3019,7 @@ internal sealed class AnnotationEditorControl : Grid
         return border;
     }
 
-    private static Brush Brush(string key, Color fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
+    private static Brush Brush(string key, Color fallback) => ThemeBrushes.Follow(key, fallback);
 
     private static FontFamily FontFamilyResource(string key, string fallback) =>
         Application.Current?.TryFindResource(key) as FontFamily ?? new FontFamily(fallback);
