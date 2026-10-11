@@ -3110,6 +3110,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Workspace.Pinned" xml:space="preserve"><value>보관한 항목</value></data>
   <data name="Workspace.Details" xml:space="preserve"><value>선택한 항목</value></data>
   <data name="Workspace.SelectHint" xml:space="preserve"><value>항목을 선택하면 미리보기와 정보를 확인할 수 있습니다.</value></data>
+  <data name="LibraryUx_DetailsHide" xml:space="preserve"><value>상세 정보 숨기기</value></data>
+  <data name="LibraryUx_DetailsShow" xml:space="preserve"><value>상세 정보 보기</value></data>
   <data name="Workspace.RetentionHint" xml:space="preserve"><value>이미지는 보관 기간이 지나면 자동 정리됩니다. 필요한 항목은 더 보기에서 보관하십시오.</value></data>
   <data name="Workspace.EditHint" xml:space="preserve"><value>편집 내용을 저장하면 라이브러리에서 이어서 편집할 수 있습니다.</value></data>
   <data name="Workspace.VideoHint" xml:space="preserve"><value>편집 저장은 라이브러리에, 내보내기는 새 파일로 저장합니다.</value></data>

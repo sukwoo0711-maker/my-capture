@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using MyCapture.App.Gallery;
@@ -79,27 +80,74 @@ public sealed partial class SettingsThemePreviewTests
                 ("folder", () => vm.NavigateTo(CaptureFolderScope.ForFolder(f.Design.Id))),
                 ("search", () => { vm.NavigateTo(CaptureFolderScope.All); vm.SearchQuery = "sample"; }),
             };
-            foreach ((string name, Action show) in views)
+            var client = (FrameworkElement)window.Content;
+            var details = (FrameworkElement)window.FindName("GalleryDetailsPanel");
+            var rail = (FrameworkElement)window.FindName("GalleryDetailsRail");
+            var hide = (Button)window.FindName("HideDetailsButton");
+            var showDetails = (Button)window.FindName("ShowDetailsButton");
+            foreach (bool detailsOpen in new[] { true, false })
             {
-                window.Width = window.MinWidth;
-                show();
-                SettleGalleryLayout(window);
-                Assert.Equal(name == "folder", vm.IsCompactLayout);
-                AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at the minimum width");
-                if (name is "folder" or "search")
-                    SaveLibraryUxEvidence(window, AppTheme.Glass, $"columns-minimum-{name}-glass-ko-KR.png");
-                var columnsSeen = new HashSet<int>();
-                foreach (double width in LibrarySweepWidths(window, scroll, vm.IsCompactLayout))
+                string pane = detailsOpen ? "details open" : "details hidden";
+                if (!detailsOpen)
                 {
-                    window.Width = width;
+                    // Hiding the pane from the keyboard leaves focus on the rail's button.
+                    window.Width = window.MinWidth;
+                    vm.NavigateTo(CaptureFolderScope.All);
+                    // Keyboard focus needs the window to be foreground, which a test desktop may refuse.
+                    window.Activate();
+                    bool keyboard = hide.Focus() && hide.IsKeyboardFocused;
+                    hide.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, hide));
                     SettleGalleryLayout(window);
-                    AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at {width:0.#} DIP");
-                    columnsSeen.Add(vm.ColumnCount);
+                    Assert.False(window.IsDetailsPaneOpen);
+                    Assert.False(details.IsVisible);
+                    Assert.True(rail.IsVisible);
+                    if (keyboard) Assert.True(showDetails.IsKeyboardFocused, "focus must move to the rail's show button");
+                    AssertInsideClient(showDetails, client, pane);
+                    Assert.Equal(UiText.Get("LibraryUx_DetailsShow"), AutomationProperties.GetName(showDetails));
+                    // Two full cards fit the minimum window once the pane is hidden.
+                    Assert.Equal(2, vm.ColumnCount);
+                    AssertCardsInsideLibrary(rowsList, scroll, vm, $"minimum root, {pane}");
+                    SaveLibraryUxEvidence(window, AppTheme.Glass, "columns-minimum-root-details-hidden-glass-ko-KR.png");
                 }
-                // Every desktop this runs on is wide enough to cross the first column boundaries.
-                Assert.True(columnsSeen.Count >= 3, $"{name}: only {string.Join(", ", columnsSeen)} columns were reached");
-                vm.SearchQuery = string.Empty;
+
+                foreach ((string name, Action show) in views)
+                {
+                    window.Width = window.MinWidth;
+                    show();
+                    SettleGalleryLayout(window);
+                    Assert.Equal(name == "folder", vm.IsCompactLayout);
+                    AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at the minimum width, {pane}");
+                    if (detailsOpen && name is "folder" or "search")
+                        SaveLibraryUxEvidence(window, AppTheme.Glass, $"columns-minimum-{name}-glass-ko-KR.png");
+                    var columnsSeen = new HashSet<int>();
+                    foreach (double width in LibrarySweepWidths(window, scroll, vm.IsCompactLayout))
+                    {
+                        window.Width = width;
+                        SettleGalleryLayout(window);
+                        AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at {width:0.#} DIP, {pane}");
+                        columnsSeen.Add(vm.ColumnCount);
+                    }
+                    // Every desktop this runs on is wide enough to cross the first column boundaries.
+                    Assert.True(columnsSeen.Count >= 3, $"{name}, {pane}: only {string.Join(", ", columnsSeen)} columns were reached");
+                    vm.SearchQuery = string.Empty;
+                }
             }
+
+            // The rail brings the pane back, with focus on its hide button, and the columns follow.
+            window.Width = window.MinWidth;
+            vm.NavigateTo(CaptureFolderScope.All);
+            bool keyboardBack = showDetails.Focus() && showDetails.IsKeyboardFocused;
+            showDetails.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, showDetails));
+            SettleGalleryLayout(window);
+            Assert.True(window.IsDetailsPaneOpen);
+            Assert.True(details.IsVisible);
+            Assert.False(rail.IsVisible);
+            if (keyboardBack) Assert.True(hide.IsKeyboardFocused, "focus must move to the pane's hide button");
+            // The pane is usable at once; its fade-in only softens the arrival and settles at full opacity.
+            Assert.True(details.IsHitTestVisible && details.IsEnabled);
+            PumpLibraryUntil(window, () => details.Opacity, opacity => opacity == 1.0, "details fade-in");
+            Assert.Equal(1, vm.ColumnCount);
+            AssertCardsInsideLibrary(rowsList, scroll, vm, "minimum root, details shown again");
         }
         finally
         {

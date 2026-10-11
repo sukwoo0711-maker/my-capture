@@ -579,6 +579,9 @@
         <PathGeometry x:Key="LibraryUx.Icon.Chevron" Figures="M7.75,5.25 L12.5,10 L7.75,14.75" />
         <PathGeometry x:Key="LibraryUx.Icon.Info"
                       Figures="M10,2.75 A7.25,7.25 0 1 1 9.99,2.75 Z M10,9 L10,13.75 M10,6.25 L10,6.3" />
+        <!-- A window with a pane on its right: the details pane, as File Explorer draws it. -->
+        <PathGeometry x:Key="LibraryUx.Icon.DetailsPane"
+                      Figures="M3.75,4.25 L16.25,4.25 A1.5,1.5 0 0 1 17.75,5.75 L17.75,14.25 A1.5,1.5 0 0 1 16.25,15.75 L3.75,15.75 A1.5,1.5 0 0 1 2.25,14.25 L2.25,5.75 A1.5,1.5 0 0 1 3.75,4.25 Z M12.25,4.25 L12.25,15.75" />
         <!-- The card silhouette: a manila-folder tab on the top left, then the 12-DIP card radius. -->
         <PathGeometry x:Key="LibraryUx.FolderCardShape"
                       Figures="M0,10 A10,10 0 0 1 10,0 L84,0 C90,0 92,3 95,7 L97,10 C99,13 101,14 106,14 L232,14 A12,12 0 0 1 244,26 L244,280 A12,12 0 0 1 232,292 L12,292 A12,12 0 0 1 0,280 Z" />
@@ -1472,7 +1475,8 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="224" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="240" />
+                <!-- The details pane (240 with its gap) or, while it is hidden, its 56-DIP rail. -->
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- Navigation pane on the window base, like the title bar above it. -->
@@ -1665,7 +1669,16 @@
             <!-- After the library content, so Tab follows the visual order: pane, content, details.
                  The selected capture's preview, title and main commands stay at the top; only the
                  information below them scrolls, and nothing inside it scrolls on its own. -->
-            <Border x:Name="GalleryDetailsPanel" Grid.Column="2" Margin="8,0,0,0" Padding="16"
+            <Border x:Name="GalleryDetailsRail" Grid.Column="2" Width="48" Margin="8,0,0,0" Padding="7" Visibility="Collapsed"
+                    Background="{DynamicResource Surface.Raised}" CornerRadius="{StaticResource Radius.Lg}"
+                    AutomationProperties.Name="{loc:Text Workspace.Details}">
+                <Button x:Name="ShowDetailsButton" Style="{StaticResource Button.Icon.Compact}" VerticalAlignment="Top"
+                        ToolTip="{loc:Text LibraryUx_DetailsShow}" AutomationProperties.Name="{loc:Text LibraryUx_DetailsShow}"
+                        Click="OnShowDetailsClick">
+                    <Path Data="{StaticResource LibraryUx.Icon.DetailsPane}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                </Button>
+            </Border>
+            <Border x:Name="GalleryDetailsPanel" Grid.Column="2" Width="232" Margin="8,0,0,0" Padding="16"
                     Background="{DynamicResource Surface.Raised}" CornerRadius="{StaticResource Radius.Lg}"
                     AutomationProperties.Name="{loc:Text Workspace.Details}">
                 <Grid>
@@ -1673,8 +1686,20 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock x:Name="GalleryDetailsHeading" Text="{loc:Text Workspace.Details}" Style="{DynamicResource Text.Section}"
-                               Margin="0,0,0,16" VerticalAlignment="Center" />
+                    <!-- Hiding the pane gives the library its width; the rail left behind brings it back. -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="GalleryDetailsHeading" Text="{loc:Text Workspace.Details}" Style="{DynamicResource Text.Section}"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <Button x:Name="HideDetailsButton" Grid.Column="1" Style="{StaticResource Button.Icon.Compact}" Margin="8,-6,-6,-6"
+                                ToolTip="{loc:Text LibraryUx_DetailsHide}" AutomationProperties.Name="{loc:Text LibraryUx_DetailsHide}"
+                                Click="OnHideDetailsClick">
+                            <Path Data="{StaticResource LibraryUx.Icon.DetailsPane}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                        </Button>
+                    </Grid>
                     <TextBlock Grid.Row="1" Text="{loc:Text Workspace.SelectHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">

@@ -3110,6 +3110,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Workspace.Pinned" xml:space="preserve"><value>Kept captures</value></data>
   <data name="Workspace.Details" xml:space="preserve"><value>Selected capture</value></data>
   <data name="Workspace.SelectHint" xml:space="preserve"><value>Select one capture to see its preview and details.</value></data>
+  <data name="LibraryUx_DetailsHide" xml:space="preserve"><value>Hide details</value></data>
+  <data name="LibraryUx_DetailsShow" xml:space="preserve"><value>Show details</value></data>
   <data name="Workspace.RetentionHint" xml:space="preserve"><value>Images are cleaned up after their retention period. Use More to keep a capture.</value></data>
   <data name="Workspace.EditHint" xml:space="preserve"><value>Save your edits to continue editing from the library later.</value></data>
   <data name="Workspace.VideoHint" xml:space="preserve"><value>Save edits updates the library; Export creates a new file.</value></data>
