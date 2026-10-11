@@ -21,7 +21,14 @@ public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
     public Task LibraryColumns_NoCardIsClippedFromTheMinimumWidthUp() =>
-        RunIsolated(nameof(LibraryColumns_NoCardIsClippedFromTheMinimumWidthUp), () =>
+        RunLibraryColumnTest(nameof(LibraryColumns_NoCardIsClippedFromTheMinimumWidthUp), constrainWindow: false);
+
+    [Fact]
+    public Task LibraryColumns_WideLayoutIsCoveredWhenTheDesktopCapsTheWindow() =>
+        RunLibraryColumnTest(nameof(LibraryColumns_WideLayoutIsCoveredWhenTheDesktopCapsTheWindow), constrainWindow: true);
+
+    private Task RunLibraryColumnTest(string testName, bool constrainWindow) =>
+        RunIsolated(testName, () =>
         {
             var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
@@ -33,7 +40,7 @@ public sealed partial class SettingsThemePreviewTests
             try
             {
                 using var scope = UiText.UseLanguage("ko-KR");
-                VerifyLibraryColumns();
+                VerifyLibraryColumns(constrainWindow);
             }
             finally
             {
@@ -42,7 +49,7 @@ public sealed partial class SettingsThemePreviewTests
             }
         });
 
-    private static void VerifyLibraryColumns()
+    private static void VerifyLibraryColumns(bool constrainWindow)
     {
         ThemeService.Apply(AppTheme.Glass);
         LibraryUxFixture f = CreateLibraryUxFixture("mc-library-columns-");
@@ -62,6 +69,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.Width = window.MinWidth;
             window.Height = window.MinHeight;
+            if (constrainWindow) window.MaxWidth = window.MinWidth;
             window.Show();
             var rowsList = (ListBox)window.FindName("RowsList");
             vm.Refresh();
@@ -120,14 +128,41 @@ public sealed partial class SettingsThemePreviewTests
                     if (detailsOpen && name is "folder" or "search")
                         SaveLibraryUxEvidence(window, AppTheme.Glass, $"columns-minimum-{name}-glass-ko-KR.png");
                     var columnsSeen = new HashSet<int>();
-                    foreach (double width in LibrarySweepWidths(window, scroll, vm.IsCompactLayout))
+                    double windowChrome = window.ActualWidth - client.ActualWidth;
+                    double originalClientWidth = client.Width;
+                    try
                     {
-                        window.Width = width;
-                        SettleGalleryLayout(window);
-                        AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at {width:0.#} DIP, {pane}");
-                        columnsSeen.Add(vm.ColumnCount);
+                        bool virtualLayout = false;
+                        foreach (double width in LibrarySweepWidths(window, scroll, vm.IsCompactLayout).ToArray())
+                        {
+                            if (!virtualLayout)
+                            {
+                                window.Width = width;
+                                SettleGalleryLayout(window);
+                                virtualLayout = Math.Abs(window.ActualWidth - width) > 0.5;
+                            }
+                            string layout = "window";
+                            if (virtualLayout)
+                            {
+                                // Hosted desktops can cap the HWND before the next column boundary.
+                                // Exercise the same loaded content, SizeChanged handler and row panel
+                                // at the remaining logical widths without changing the desktop.
+                                double expectedClientWidth = width - windowChrome;
+                                client.Width = expectedClientWidth;
+                                SettleGalleryLayout(window);
+                                Assert.InRange(client.ActualWidth, expectedClientWidth - 0.5, expectedClientWidth + 0.5);
+                                layout = "virtual client";
+                            }
+                            AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at {width:0.#} DIP ({layout}), {pane}");
+                            columnsSeen.Add(vm.ColumnCount);
+                        }
                     }
-                    // Every desktop this runs on is wide enough to cross the first column boundaries.
+                    finally
+                    {
+                        client.Width = originalClientWidth;
+                        SettleGalleryLayout(window);
+                    }
+                    // Keep all column-boundary coverage even on desktops narrower than the sweep.
                     Assert.True(columnsSeen.Count >= 3, $"{name}, {pane}: only {string.Join(", ", columnsSeen)} columns were reached");
                     vm.SearchQuery = string.Empty;
                 }
@@ -253,7 +288,7 @@ public sealed partial class SettingsThemePreviewTests
 
     /// <summary>
     /// Window widths from the minimum up: each column boundary, one DIP either side of it, and a
-    /// coarse sweep in between. Widths the desktop cannot show are skipped.
+    /// coarse sweep in between. The caller covers desktop-capped widths in the loaded content.
     /// </summary>
     private static IEnumerable<double> LibrarySweepWidths(Window window, ScrollViewer scroll, bool compact)
     {
@@ -270,12 +305,7 @@ public sealed partial class SettingsThemePreviewTests
         for (double width = window.MinWidth; width <= max * track + reserve + chrome + track; width += 37)
             widths.Add(width);
         foreach (double width in widths.Where(width => width >= window.MinWidth))
-        {
-            window.Width = width;
-            window.UpdateLayout();
-            if (Math.Abs(window.ActualWidth - width) > 0.5) yield break;
             yield return width;
-        }
     }
 
     /// <summary>
