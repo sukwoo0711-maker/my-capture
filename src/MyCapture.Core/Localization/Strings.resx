@@ -3610,6 +3610,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_StatusLayers" xml:space="preserve"><value>레이어 {0}</value></data>
   <data name="VideoEditorUx_Play" xml:space="preserve"><value>재생</value></data>
   <data name="VideoEditorUx_Pause" xml:space="preserve"><value>일시정지</value></data>
+  <data name="VideoEditorUx_PreviousFrameShort" xml:space="preserve">
+    <value>이전 프레임</value>
+  </data>
+  <data name="VideoEditorUx_NextFrameShort" xml:space="preserve">
+    <value>다음 프레임</value>
+  </data>
   <data name="VideoEditorUx_SaveEditsHelp" xml:space="preserve"><value>자르기와 레이어를 라이브러리의 이 녹화에 적용합니다. 원본은 보존되며 나중에 다시 편집할 수 있습니다.</value></data>
   <data name="VideoEditorUx_ExportHelp" xml:space="preserve"><value>자르기와 레이어를 적용한 새 MP4 또는 GIF 파일을 만듭니다. 라이브러리의 녹화는 바뀌지 않습니다.</value></data>
   <data name="VideoEditorUx_UnsavedTitle" xml:space="preserve"><value>편집한 내용을 라이브러리에 저장하시겠습니까?</value></data>

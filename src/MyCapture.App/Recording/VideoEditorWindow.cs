@@ -1292,15 +1292,25 @@ internal sealed class VideoEditorWindow : Window
         }
 
         bool playing = _isPlaying || _playRequested;
-        if (_playButton.Content is StackPanel content
-            && content.Children.OfType<System.Windows.Shapes.Path>().FirstOrDefault() is { } glyph)
+        // The key caption wraps the glyph in a second panel, so look for it at any depth.
+        if (FindGlyph(_playButton.Content) is { } glyph)
         {
             glyph.Data = TryGeometry(playing ? "Icon.Pause" : "Icon.Play");
         }
 
-        _playButton.ToolTip = UiText.Get(playing ? "VideoEditorUx_Pause" : "VideoEditorUx_Play");
+        // The tooltip keeps the key, like every other command with a shortcut.
+        _playButton.ToolTip = $"{UiText.Get(playing ? "VideoEditorUx_Pause" : "VideoEditorUx_Play")} ({ShortcutCatalog.Get(ShortcutScope.Video, "Play").Hint})";
         _playButtonShowsPause = playing;
     }
+
+    private static System.Windows.Shapes.Path? FindGlyph(object? content) => content switch
+    {
+        System.Windows.Shapes.Path path => path,
+        Panel panel => panel.Children.Cast<object>().Select(FindGlyph).FirstOrDefault(found => found is not null),
+        _ => null,
+    };
+
+    internal Geometry? PlayGlyphDataForTest => FindGlyph(_playButton?.Content)?.Data;
 
     private bool _playButtonShowsPause;
 
@@ -2970,7 +2980,30 @@ internal sealed class VideoEditorWindow : Window
             command is null ? onClick : _shortcutActions[command]);
         button.MinWidth = 36; button.MinHeight = 42;
         button.Padding = new Thickness(4); button.Margin = new Thickness(0, 0, 3, 0);
-        if (command is not null) ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
+        if (command is "PreviousFrame" or "NextFrame")
+        {
+            // The frame-step glyphs look like go-to-start/end, and their keys (, and .) were
+            // unreadable dots; a short name says what they do. The keys stay in the tooltip.
+            var face = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            var glyph = (UIElement)button.Content;
+            button.Content = null;
+            face.Children.Add(glyph);
+            var name = new TextBlock
+            {
+                Text = UiText.Get(command == "PreviousFrame" ? "VideoEditorUx_PreviousFrameShort" : "VideoEditorUx_NextFrameShort"),
+                FontSize = ShortcutPresentation.CaptionFontSize,
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            name.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
+            face.Children.Add(name);
+            button.Content = face;
+            ShortcutPresentation.Describe(button, ShortcutScope.Video, command);
+        }
+        else if (command is not null)
+        {
+            ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
+        }
+
         return button;
     }
 

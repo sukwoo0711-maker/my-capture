@@ -4,20 +4,46 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Input;
 
 namespace MyCapture.App;
 
 internal sealed class ShortcutPresentation : INotifyPropertyChanged
 {
+    /// <summary>
+    /// The type size of every always-visible key caption: the FontSize.Caption token. A
+    /// constant, so a caption built before the window's resources load still reads at 12.
+    /// </summary>
+    internal const double CaptionFontSize = 12;
+
     internal static ShortcutPresentation Current { get; } = new();
     internal static Func<bool>? ReadEnabled { get; set; }
     public Visibility HintVisibility => ReadEnabled?.Invoke() == false ? Visibility.Collapsed : Visibility.Visible;
     public event PropertyChangedEventHandler? PropertyChanged;
     internal static void Refresh() => Current.PropertyChanged?.Invoke(Current, new(nameof(HintVisibility)));
 
+    /// <summary>
+    /// Whether a key is short enough to print under its command at all times: one key, or one
+    /// modifier with a letter or digit (Ctrl+Z). Longer combinations such as Ctrl+Enter or
+    /// Ctrl+Shift+R stay in the tooltip and the accelerator key, where they can be read.
+    /// </summary>
+    internal static bool ShowsCaption(ShortcutDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        int modifiers = System.Numerics.BitOperations.PopCount((uint)definition.Modifiers);
+        return modifiers == 0
+            || (modifiers == 1 && definition.Key is >= Key.A and <= Key.Z or >= Key.D0 and <= Key.D9);
+    }
+
     internal static TextBlock Hint(ShortcutScope scope, string command)
     {
-        var hint = new TextBlock { Text = ShortcutCatalog.Get(scope, command).Hint, FontSize = 10, HorizontalAlignment = HorizontalAlignment.Center };
+        // 9–11 px captions were too small to read; every always-visible key uses the caption size.
+        var hint = new TextBlock
+        {
+            Text = ShortcutCatalog.Get(scope, command).Hint,
+            FontSize = CaptionFontSize,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
         hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         hint.SetBinding(UIElement.VisibilityProperty, new Binding(nameof(HintVisibility)) { Source = Current });
         return hint;
@@ -25,11 +51,17 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
 
     internal static void Attach(ButtonBase button, ShortcutScope scope, string command, bool corner = false)
     {
+        ShortcutDefinition definition = ShortcutCatalog.Get(scope, command);
+        if (!ShowsCaption(definition))
+        {
+            Describe(button, scope, command);
+            return;
+        }
+
         object? previous = button.Content;
         button.Content = null;
         UIElement content = previous as UIElement ?? new TextBlock { Text = previous?.ToString() ?? string.Empty, HorizontalAlignment = HorizontalAlignment.Center };
         var hint = Hint(scope, command);
-        hint.FontSize = corner ? 10 : scope is ShortcutScope.Annotation or ShortcutScope.Crop ? 11 : 9;
         hint.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
         // A disabled button keeps its tier's shape: the shared template only fades it by
         // Button.DisabledOpacity. Adding a sunken fill and a border here used to turn a
@@ -39,7 +71,10 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             var grid = new Grid { Width = 32, Height = 32 };
             if (content is FrameworkElement glyph) { glyph.HorizontalAlignment = HorizontalAlignment.Center; glyph.VerticalAlignment = VerticalAlignment.Top; }
             grid.Children.Add(content);
+            // The letter sits in the corner; its line box hangs below the glyph, not over it.
             hint.HorizontalAlignment = HorizontalAlignment.Right; hint.VerticalAlignment = VerticalAlignment.Bottom;
+            hint.LineHeight = 12;
+            hint.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
             grid.Children.Add(hint); button.Content = grid;
         }
         else
@@ -48,11 +83,31 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             stack.Children.Add(content);
             stack.Children.Add(hint); button.Content = stack;
         }
-        string label = button.ToolTip as string ?? AutomationProperties.GetName(button);
-        if (string.IsNullOrEmpty(label)) label = previous as string ?? command;
-        string suffix = $"({ShortcutCatalog.Get(scope, command).Hint})";
-        button.ToolTip = label.EndsWith(suffix, StringComparison.Ordinal) ? label : $"{label} {suffix}";
-        AutomationProperties.SetAcceleratorKey(button, ShortcutCatalog.Get(scope, command).Hint);
+
+        Describe(button, scope, command, previous as string);
     }
 
+    /// <summary>
+    /// Gives a command its key without a caption: the tooltip names the key after the
+    /// command, and UI Automation reads it as the accelerator key.
+    /// </summary>
+    internal static void Describe(ButtonBase button, ShortcutScope scope, string command, string? fallbackLabel = null)
+    {
+        string hint = ShortcutCatalog.Get(scope, command).Hint;
+        string label = button.ToolTip as string ?? AutomationProperties.GetName(button);
+        if (string.IsNullOrEmpty(label)) label = fallbackLabel ?? button.Content as string ?? command;
+        button.ToolTip = NamesKey(label, hint) ? label : $"{label} ({hint})";
+        AutomationProperties.SetAcceleratorKey(button, hint);
+    }
+
+    /// <summary>A label that already ends with its key in parentheses (Undo (Ctrl+Z)) is kept.</summary>
+    private static bool NamesKey(string label, string hint)
+    {
+        if (!label.EndsWith(')')) return false;
+        int open = label.LastIndexOf('(');
+        if (open < 0) return false;
+        // Older labels spell the minus key with a hyphen and Delete in full.
+        string named = label[open..].Replace('−', '-');
+        return named.Contains(hint.Replace('−', '-'), StringComparison.Ordinal);
+    }
 }

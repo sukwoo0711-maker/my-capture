@@ -187,7 +187,9 @@ public sealed class VideoEditorUxInteractionTests
 
             Button play = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<Button>(),
                 b => System.Windows.Automation.AutomationProperties.GetName(b) == UiText.Get("Text_9A9C87658130"));
-            Assert.Equal(UiText.Get("VideoEditorUx_Play"), play.ToolTip);
+            // The tooltip keeps the key after the first toggle, like every other shortcut.
+            Assert.Equal(UiText.Get("VideoEditorUx_Play") + " (Space)", play.ToolTip);
+            Assert.Equal("Space", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(play));
         }
         finally
         {

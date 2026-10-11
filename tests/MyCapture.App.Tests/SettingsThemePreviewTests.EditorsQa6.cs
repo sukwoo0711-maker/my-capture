@@ -108,6 +108,8 @@ public sealed partial class SettingsThemePreviewTests
 
                 BitmapSource full = RenderEditorWindow(window);
                 SaveQa6Evidence(Crop(full, window, inspector, 0), $"inspector-{tool}-{theme}-{language}-{width}-{Qa6Phase}.png");
+                // The whole window once per size: the command bar and tool rail carry the key captions.
+                if (tool == EditorTool.Rectangle) SaveQa6Evidence(full, $"annotation-{theme}-{language}-{width}-{Qa6Phase}.png");
             }
         }
         finally

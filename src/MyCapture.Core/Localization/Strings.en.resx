@@ -3610,6 +3610,12 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="VideoEditorUx_StatusLayers" xml:space="preserve"><value>Layers {0}</value></data>
   <data name="VideoEditorUx_Play" xml:space="preserve"><value>Play</value></data>
   <data name="VideoEditorUx_Pause" xml:space="preserve"><value>Pause</value></data>
+  <data name="VideoEditorUx_PreviousFrameShort" xml:space="preserve">
+    <value>Prev frame</value>
+  </data>
+  <data name="VideoEditorUx_NextFrameShort" xml:space="preserve">
+    <value>Next frame</value>
+  </data>
   <data name="VideoEditorUx_SaveEditsHelp" xml:space="preserve"><value>Applies the trim and layers to this recording in the library. The original is kept and can be edited again later.</value></data>
   <data name="VideoEditorUx_ExportHelp" xml:space="preserve"><value>Creates a new MP4 or GIF file with the trim and layers applied. The recording in the library is unchanged.</value></data>
   <data name="VideoEditorUx_UnsavedTitle" xml:space="preserve"><value>Save your edits to the library?</value></data>
