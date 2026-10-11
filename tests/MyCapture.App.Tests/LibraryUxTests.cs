@@ -93,7 +93,7 @@ public sealed class LibraryUxTests
         vm.NavigateTo(CaptureFolderScope.ForFolder(child.Id));
         Assert.True(vm.ShowLocationHeader);
         Assert.True(vm.ShowSaveHere);
-        Assert.Equal(["모든 항목", "Projects", "Review"], vm.Breadcrumb.Select(step => step.Name));
+        Assert.Equal(["라이브러리", "Projects", "Review"], vm.Breadcrumb.Select(step => step.Name));
         Assert.Equal([true, true, false], vm.Breadcrumb.Select(step => step.IsLink));
         Assert.Equal(CaptureFolderScope.ForFolder(parent.Id), vm.Breadcrumb[1].Scope);
         Assert.True(vm.SavesNewCapturesHere);
@@ -111,7 +111,7 @@ public sealed class LibraryUxTests
         vm.NavigateTo(CaptureFolderScope.ForDate(DateOnly.FromDateTime(Now.DateTime)));
         Assert.True(vm.ShowLocationHeader);
         Assert.False(vm.ShowSaveHere);
-        Assert.Equal(["모든 항목", Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)],
+        Assert.Equal(["라이브러리", Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)],
             vm.Breadcrumb.Select(step => step.Name));
 
         // A saved keep-after-close folder is named in the status line while another view is open.
@@ -185,6 +185,149 @@ public sealed class LibraryUxTests
         Assert.Equal(GalleryDropAction.MoveCaptures, GalleryDropPlanner.Plan(f.Queue, owner,
             new(owner, [loose.Id], null), CaptureFolderScope.ForFolder(design.Id), true).Action);
     }
+
+    [Fact]
+    public async Task DroppingCapturesOnAFolderTakesThemOutOfTheRootAndDateViews()
+    {
+        var f = new Fixture();
+        CaptureFolder review = await f.Queue.CreateFolderAsync("Review", createdAt: Now);
+        CaptureRecord first = f.Add(Now);
+        CaptureRecord second = f.Add(Now.AddMinutes(-1));
+        CaptureRecord stays = f.Add(Now.AddMinutes(-2));
+        GalleryViewModel vm = f.ViewModel();
+        Guid owner = Guid.NewGuid();
+        Assert.Equal([first.Id, second.Id, stays.Id], Listed(vm));
+
+        // The window's drop: plan, move the metadata, refresh. The captures leave the view they
+        // were dragged from at once and the card counts them instead.
+        GalleryDropPlan plan = GalleryDropPlanner.Plan(f.Queue, owner, new(owner, [first.Id, second.Id], null),
+            CaptureFolderScope.ForFolder(review.Id), folderCard: true);
+        await f.Queue.MoveCapturesAsync([first.Id, second.Id], plan.Target.FolderId);
+        vm.Refresh();
+        Assert.Equal([stays.Id], Listed(vm));
+        GalleryFolderCardViewModel card = vm.FindFolderCard(review.Id)!;
+        Assert.Equal(2, card.CaptureCount);
+        Assert.Same(vm.FindTile(first.Id), card.Preview);
+        // The root still reaches every capture, so it reports no partial result.
+        Assert.Equal(3, vm.AllItemsCount);
+        Assert.False(vm.ShowResultCount);
+
+        // A date is a location too: only its unfiled captures and its folder cards.
+        vm.NavigateTo(CaptureFolderScope.ForDate(DateOnly.FromDateTime(Now.DateTime)));
+        Assert.Equal([stays.Id], Listed(vm));
+        Assert.Same(card, Assert.Single(vm.Groups.SelectMany(group => group.Folders)));
+
+        // Inside the folder: its own captures, without a folder badge.
+        vm.NavigateTo(CaptureFolderScope.ForFolder(review.Id));
+        Assert.Equal([first.Id, second.Id], Listed(vm));
+        Assert.All(vm.Groups.SelectMany(group => group.Items), tile => Assert.False(tile.HasFolderBadge));
+        using (UiText.UseLanguage("ko-KR")) Assert.Equal("전체 3개 중 2개", vm.ResultCountText);
+
+        // Dropping on the library root brings them back as before.
+        vm.NavigateTo(CaptureFolderScope.All);
+        GalleryDropPlan back = GalleryDropPlanner.Plan(f.Queue, owner, new(owner, [first.Id], null), CaptureFolderScope.All, false);
+        Assert.Equal(GalleryDropAction.RemoveFromFolder, back.Action);
+        await f.Queue.MoveCapturesAsync([first.Id], back.Target.FolderId);
+        vm.Refresh();
+        Assert.Equal([first.Id, stays.Id], Listed(vm));
+        Assert.Equal(1, vm.FindFolderCard(review.Id)!.CaptureCount);
+    }
+
+    [Fact]
+    public async Task SearchAndMediaViewsStillFindFiledCapturesAndNameTheirFolder()
+    {
+        var f = new Fixture();
+        CaptureFolder projects = await f.Queue.CreateFolderAsync("Projects", createdAt: Now);
+        CaptureFolder review = await f.Queue.CreateFolderAsync("Review", projects.Id, Now);
+        CaptureRecord loose = f.Add(Now, title: "invoice loose");
+        CaptureRecord filed = f.Add(Now.AddMinutes(-1), title: "invoice filed");
+        CaptureRecord nested = f.Add(Now.AddMinutes(-2), title: "invoice nested");
+        CaptureRecord video = f.Add(Now.AddMinutes(-3), video: true);
+        await f.Queue.MoveCapturesAsync([filed.Id], projects.Id);
+        await f.Queue.MoveCapturesAsync([nested.Id, video.Id], review.Id);
+        f.Queue.TogglePin(nested.Id);
+        GalleryViewModel vm = f.ViewModel();
+        using var language = UiText.UseLanguage("ko-KR");
+        Assert.Equal([loose.Id], Listed(vm));
+
+        // A search from the root covers every folder and names where each filed capture lives.
+        vm.SearchQuery = "invoice";
+        Assert.Equal([loose.Id, filed.Id, nested.Id], Listed(vm));
+        Assert.Empty(vm.Groups.SelectMany(group => group.Folders));
+        GalleryItemViewModel filedTile = vm.FindTile(filed.Id)!;
+        GalleryItemViewModel nestedTile = vm.FindTile(nested.Id)!;
+        Assert.False(vm.FindTile(loose.Id)!.HasFolderBadge);
+        Assert.Equal("Projects", filedTile.FolderBadge);
+        Assert.Equal("Review", nestedTile.FolderBadge);
+        Assert.EndsWith(", Projects / Review 폴더", nestedTile.AccessibleName, StringComparison.Ordinal);
+
+        // Inside a folder a search covers its subfolders; only captures from those carry a badge.
+        vm.NavigateTo(CaptureFolderScope.ForFolder(projects.Id));
+        Assert.Equal([filed.Id, nested.Id], Listed(vm));
+        Assert.False(filedTile.HasFolderBadge);
+        Assert.Equal("Review", nestedTile.FolderBadge);
+        vm.SearchQuery = string.Empty;
+        Assert.Equal([filed.Id], Listed(vm));
+        Assert.False(filedTile.HasFolderBadge);
+
+        // The image, video and kept views cover the whole library, with the same badges.
+        vm.ShowView(GalleryFilter.Videos);
+        Assert.Equal([video.Id], Listed(vm));
+        Assert.Equal("Review", vm.FindTile(video.Id)!.FolderBadge);
+        vm.ShowView(GalleryFilter.Images);
+        Assert.Equal([loose.Id, filed.Id, nested.Id], Listed(vm));
+        Assert.Equal((4, 3, 1), (vm.AllItemsCount, vm.ImageCount, vm.VideoCount));
+        vm.ShowView(GalleryFilter.Pinned);
+        Assert.Equal([nested.Id], Listed(vm));
+        Assert.True(nestedTile.HasFolderBadge);
+
+        // "Show in library" opens the folder that lists a filed capture while browsing.
+        vm.ShowView(GalleryFilter.All);
+        Assert.True(vm.ListsLocation(loose));
+        Assert.False(vm.ListsLocation(nested));
+        vm.ShowView(GalleryFilter.Images);
+        Assert.True(vm.ListsLocation(nested));
+    }
+
+    [Fact]
+    public async Task AnOpenedFolderUsesCompactCardsInMoreColumns()
+    {
+        var f = new Fixture();
+        CaptureFolder parent = await f.Queue.CreateFolderAsync("Projects", createdAt: Now);
+        await f.Queue.CreateFolderAsync("Review", parent.Id, Now);
+        CaptureRecord[] filed = Enumerable.Range(0, 5).Select(index => f.Add(Now.AddMinutes(-index))).ToArray();
+        f.Add(Now.AddHours(-1));
+        await f.Queue.MoveCapturesAsync(filed.Select(record => record.Id), parent.Id);
+        GalleryViewModel vm = f.ViewModel();
+        // Two full cards per row; four compact cards fit the same width.
+        vm.SetColumnCountForWidth(640);
+        Assert.False(vm.IsCompactLayout);
+        Assert.Equal(2, vm.ColumnCount);
+        Assert.DoesNotContain(vm.Rows, row => row.IsCompact);
+
+        vm.NavigateTo(CaptureFolderScope.ForFolder(parent.Id));
+        Assert.True(vm.IsCompactLayout);
+        Assert.Equal(4, vm.ColumnCount);
+        Assert.IsType<GalleryHeaderRow>(vm.Rows[0]);
+        Assert.True(Assert.IsType<GalleryFolderRow>(vm.Rows[1]).IsCompact);
+        GalleryTileRow[] tiles = vm.Rows.OfType<GalleryTileRow>().ToArray();
+        Assert.Equal([4, 1], tiles.Select(row => row.Tiles.Count));
+        Assert.All(tiles, row => Assert.True(row.IsCompact));
+        // Selection and arrow keys use the same rows.
+        vm.Select(filed[0].Id);
+        Assert.Same(vm.FindTile(filed[4].Id), GallerySelectionNavigation.FindNeighbor(vm.Rows, vm.FindTile(filed[0].Id)!, true, 1));
+
+        // A resize inside the folder keeps the compact grid; returning to the root restores it.
+        Assert.True(vm.SetColumnCountForWidth(1000));
+        Assert.Equal(6, vm.ColumnCount);
+        vm.NavigateTo(CaptureFolderScope.All);
+        Assert.False(vm.IsCompactLayout);
+        Assert.Equal(4, vm.ColumnCount);
+        Assert.DoesNotContain(vm.Rows, row => row.IsCompact);
+    }
+
+    private static Guid[] Listed(GalleryViewModel vm) =>
+        vm.Groups.SelectMany(group => group.Items).Select(tile => tile.Id).ToArray();
 
     [Fact]
     public async Task DropsFromOutsideTheLibraryOrOfFoldersOnCardsAreRefused()
@@ -261,7 +404,7 @@ public sealed class LibraryUxTests
             Assert.Equal("보관 해제", converter.Convert(true, typeof(string), null, System.Globalization.CultureInfo.CurrentCulture));
             Assert.Equal("보관됨", UiText.Get("LibraryUx_KeptBadge"));
             Assert.Equal("보관함", UiText.Get("LibraryUx_NavKept"));
-            Assert.Equal("화면 고정", UiText.Get("Gallery.Float"));
+            Assert.Equal("핀으로 띄우기", UiText.Get("Gallery.Float"));
             var tile = new GalleryItemViewModel(new CaptureRecord { Width = 2, Height = 2, CreatedAt = Now, IsPinned = true },
                 _ => "missing.png", 96);
             Assert.EndsWith(", 보관됨", tile.AccessibleName, StringComparison.Ordinal);
@@ -292,11 +435,11 @@ public sealed class LibraryUxTests
             new GalleryController(Queue, NullLogger<GalleryController>.Instance),
             record => Queue.GetFilePath(record, CaptureFileNames.Thumbnail), 96, clock: () => Now);
 
-        internal CaptureRecord Add(DateTimeOffset created, bool video = false)
+        internal CaptureRecord Add(DateTimeOffset created, bool video = false, string title = "")
         {
             var record = new CaptureRecord
             {
-                CreatedAt = created, UpdatedAt = created, Width = 2, Height = 2, TotalBytes = 4,
+                CreatedAt = created, UpdatedAt = created, Width = 2, Height = 2, TotalBytes = 4, Title = title,
                 MediaKind = video ? CaptureMediaKind.Video : CaptureMediaKind.Image,
             };
             Queue.Add(record);

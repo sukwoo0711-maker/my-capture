@@ -228,30 +228,27 @@ public sealed class EditorFlowTests
     // ---- Copy and Done -----------------------------------------------------------------
 
     [Fact]
-    public void CopyLeavesTheEditorOpenAndReportsTheResult() => StaTestHost.Run(() =>
+    public void CopyFinishesTheEditLikeDone() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         using EditorWindowHost host = EditorWindowHost.Create();
         AddRectangle(Controller(host.Editor));
-        var results = new Queue<bool>([true, false]);
+        var results = new Queue<bool>([false, true]);
         var actions = new List<EditorCommitAction>();
         host.Window.CommitRequested = result => { actions.Add(result.Action); return Task.FromResult(results.Dequeue()); };
         int completed = 0;
         host.Window.Committed += (_, _) => completed++;
+        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C)", Command(host.Editor, "EditorFlowCopy").ToolTip);
 
+        // A failed save keeps the editor open for a retry, as Done does.
         ClickCommand(host.Editor, "EditorFlowCopy");
-        Assert.Equal("클립보드에 복사됨", host.Editor.StatusText);
+        Assert.Equal(UiText.Get("Text_06F58809C083"), host.Editor.StatusText);
         Assert.True(host.Window.IsVisible);
         Assert.True(host.Editor.IsHitTestVisible);
 
         Assert.True(host.Editor.HandleShortcut(Key.C, ModifierKeys.Control));
-        Assert.Equal(UiText.Get("Text_3D1E714B56CA"), host.Editor.StatusText);
-        Assert.True(host.Window.IsVisible);
-
-        Assert.Equal(new[] { EditorCommitAction.CopyToClipboard, EditorCommitAction.CopyToClipboard }, actions);
-        Assert.Equal(0, completed);
-        // Copying is not saving: closing still asks.
-        Assert.True(host.Editor.HasUnsavedChanges);
+        Assert.Equal(new[] { EditorCommitAction.Done, EditorCommitAction.Done }, actions);
+        Assert.Equal(1, completed);
     });
 
     [Fact]
@@ -278,7 +275,7 @@ public sealed class EditorFlowTests
     // ---- Crop mode --------------------------------------------------------------------
 
     [Fact]
-    public void CropModeSwapsTheCommandBarAndKeepsRotationInsideIt() => StaTestHost.Run(() =>
+    public void CropModeSwapsTheCommandBarAndKeepsTheSharedRotationCommands() => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();
         AnnotationEditorControl editor = host.Editor;
@@ -286,7 +283,7 @@ public sealed class EditorFlowTests
         Button rotateLeft = Field<Button>(editor, "_rotateLeftButton");
         Button crop = Command(editor, "Capture410Crop");
         Assert.True(crop.IsVisible);
-        Assert.False(rotateLeft.IsVisible);
+        Assert.True(rotateLeft.IsVisible);
         Assert.False(editor.IsCropCommandBarVisible);
 
         // Q and W rotate from anywhere, crop mode or not.
@@ -322,6 +319,72 @@ public sealed class EditorFlowTests
         Assert.False(editor.IsCropCommandBarVisible);
         Assert.Equal(editor.DisplayedBitmap.PixelWidth, editor.DisplayedBitmap.PixelHeight);
         Assert.Equal(EditorTool.Select, controller.Tool);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void VisibleRotationRunsWithoutCropAndUndoKeepsTheSelectedTool(bool pen) => StaTestHost.Run(() =>
+    {
+        using EditorWindowHost host = EditorWindowHost.Create();
+        AnnotationEditorControl editor = host.Editor;
+        AnnotationEditorController controller = Controller(editor);
+        EditorTool tool = pen ? EditorTool.Pen : EditorTool.Select;
+        Invoke(editor, "SelectTool", tool);
+        host.Window.UpdateLayout();
+        int width = editor.DisplayedBitmap.PixelWidth, height = editor.DisplayedBitmap.PixelHeight;
+        Button left = Field<Button>(editor, "_rotateLeftButton");
+        Button right = Field<Button>(editor, "_rotateRightButton");
+        Assert.True(left.IsVisible && right.IsVisible);
+        Assert.False(editor.IsCropCommandBarVisible);
+        left.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Assert.Equal(3, controller.RotationTurns);
+        Assert.Equal(tool, controller.Tool);
+        Assert.Null(editor.PendingCrop);
+        Assert.Equal(height, editor.DisplayedBitmap.PixelWidth);
+        Assert.Equal(width, editor.DisplayedBitmap.PixelHeight);
+
+        Field<Button>(editor, "_undoButton").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Assert.Equal(0, controller.RotationTurns);
+        Assert.Equal(tool, controller.Tool);
+        Assert.Equal(width, editor.DisplayedBitmap.PixelWidth);
+        Assert.Equal(height, editor.DisplayedBitmap.PixelHeight);
+        Field<Button>(editor, "_redoButton").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Assert.Equal(3, controller.RotationTurns);
+        Assert.Equal(tool, controller.Tool);
+        right.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Assert.Equal(0, controller.RotationTurns);
+        Assert.Equal(tool, controller.Tool);
+        Assert.Null(editor.PendingCrop);
+    });
+
+    [Fact]
+    public void MovingTheRotationPairBetweenModesRestoresFocusAndKeepsOneTabOrder() => StaTestHost.Run(() =>
+    {
+        using EditorWindowHost host = EditorWindowHost.Create();
+        AnnotationEditorControl editor = host.Editor;
+        Button left = Field<Button>(editor, "_rotateLeftButton");
+        Button right = Field<Button>(editor, "_rotateRightButton");
+        Assert.True(left.Focus());
+        Assert.True(left.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next)));
+        Assert.Same(right, Keyboard.FocusedElement);
+        Assert.True(editor.HandleShortcut(Key.X, ModifierKeys.None));
+        host.Window.UpdateLayout();
+        Assert.True(editor.IsCropCommandBarVisible);
+        Assert.Same(editor, Keyboard.FocusedElement);
+        Assert.True(left.IsVisible && right.IsVisible);
+        Assert.Single(Descendants(editor).OfType<Button>(), button => ReferenceEquals(button, left));
+        Assert.Single(Descendants(editor).OfType<Button>(), button => ReferenceEquals(button, right));
+        Assert.True(left.Focus());
+        Assert.True(left.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next)));
+        Assert.Same(right, Keyboard.FocusedElement);
+        editor.CancelPendingCrop();
+        host.Window.UpdateLayout();
+        Assert.False(editor.IsCropCommandBarVisible);
+        Assert.Same(editor, Keyboard.FocusedElement);
+        Assert.True(left.IsVisible && right.IsVisible);
+        Assert.Single(Descendants(editor).OfType<Button>(), button => ReferenceEquals(button, left));
+        Assert.Single(Descendants(editor).OfType<Button>(), button => ReferenceEquals(button, right));
     });
 
     // ---- Tool rail ----------------------------------------------------------------------

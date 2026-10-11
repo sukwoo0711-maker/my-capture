@@ -97,6 +97,25 @@ public sealed partial class SettingsThemePreviewTests
             BitmapSource cropping = RenderEditorWindow(window);
             var bar = (FrameworkElement)rotateLeft.Parent;
             SaveEditorUxEvidence(Crop(cropping, window, bar, 6), $"editor-rotate-commands-{theme}-{phase}.png");
+
+            // Keep discovery comparisons on the same real fixture, tool, crop and window sizes.
+            foreach (int width in new[] { 1180, 680 })
+            {
+                window.Width = width;
+                window.Height = width == 680 ? 460 : 560;
+                editor.CancelPendingCrop();
+                selectTool.Invoke(editor, [EditorTool.StepNumber]);
+                Drain(window);
+                BitmapSource editing = RenderEditorWindow(window);
+                SaveEditorUxEvidence(editing, $"editor-rotation-edit-{width}-{theme}-{phase}.png");
+                var commands = (FrameworkElement)editor.Children[0];
+                SaveEditorUxEvidence(Crop(editing, window, commands, 0), $"editor-rotation-edit-bar-{width}-{theme}-{phase}.png");
+                selectTool.Invoke(editor, [EditorTool.Crop]);
+                Drain(window);
+                BitmapSource cropMode = RenderEditorWindow(window);
+                SaveEditorUxEvidence(cropMode, $"editor-rotation-crop-{width}-{theme}-{phase}.png");
+                SaveEditorUxEvidence(Crop(cropMode, window, commands, 0), $"editor-rotation-crop-bar-{width}-{theme}-{phase}.png");
+            }
         }
         finally
         {

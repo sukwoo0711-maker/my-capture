@@ -95,6 +95,33 @@ public sealed class LocalizationTests
             .Select(m => m.Value).Order(StringComparer.Ordinal).ToArray();
     }
 
+    /// <summary>
+    /// Windows says "고정" for taskbar and Start pins, so the floating image is a "핀" in Korean and a
+    /// "pin" in English. "고정" stays for other meanings such as fixed-size capture.
+    /// </summary>
+    [Fact]
+    public void FloatingImageIsCalledAPinInBothLanguages()
+    {
+        var manager = new ResourceManager("MyCapture.Core.Localization.Strings", typeof(UiText).Assembly);
+        foreach (string value in Values("ko-KR"))
+            Assert.DoesNotMatch("화면 고정|화면에 고정|고정 창|고정 이미지|고정한 이미지", value);
+        foreach (string value in Values("en"))
+            Assert.DoesNotMatch("(?i)screen pin|pinned (window|image)", value);
+        using (UiText.UseLanguage("ko-KR"))
+        {
+            Assert.Equal("핀", UiText.Get("Text_33EFD44366A7"));
+            Assert.Equal("핀으로 띄우기", UiText.Get("Gallery.Float"));
+            Assert.Equal("닫은 핀 다시 열기", UiText.Get("Onboard_TrayReopenPin"));
+        }
+        using (UiText.UseLanguage("en-US"))
+        {
+            Assert.Equal("Pins", UiText.Get("Text_33EFD44366A7"));
+            Assert.Equal("Pin to screen", UiText.Get("Gallery.Float"));
+        }
+        IEnumerable<string> Values(string language) => manager.GetResourceSet(CultureInfo.GetCultureInfo(language), true, false)!
+            .Cast<DictionaryEntry>().Select(entry => (string)entry.Value!);
+    }
+
     private sealed class FormatProbe : IFormattable
     {
         public string ToString(string? format, IFormatProvider? formatProvider) => "value";

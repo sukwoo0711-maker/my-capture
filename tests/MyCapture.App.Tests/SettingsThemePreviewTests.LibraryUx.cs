@@ -127,6 +127,7 @@ public sealed partial class SettingsThemePreviewTests
                 && FolderCardButtons(rowsList).All(card => !((GalleryFolderCardViewModel)card.DataContext).HasPreview
                     || Descendants(card).OfType<Image>().Single().Source is not null), label + ": folder cards");
             var client = (FrameworkElement)window.Content;
+            int rootColumns = vm.ColumnCount;
 
             // The title is the native caption only: no second title or description in the body.
             Assert.DoesNotContain(Descendants(window).OfType<TextBlock>(), text => text.IsVisible
@@ -169,7 +170,8 @@ public sealed partial class SettingsThemePreviewTests
             Button emptyCard = cards.Single(card => ((GalleryFolderCardViewModel)card.DataContext).FolderId == f.Empty.Id);
             ListBoxItem firstTile = Descendants(rowsList).OfType<ListBoxItem>()
                 .First(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[0].Id);
-            Border tileCard = Descendants(firstTile).OfType<Border>().First(border => border.Width == 244);
+            Border tileCard = Descendants(firstTile).OfType<Border>().Single(border => border.Name == "TileCard");
+            double fullCardWidth = tileCard.ActualWidth;
             Assert.Equal(tileCard.ActualWidth, designCard.ActualWidth, 1);
             Assert.Equal(tileCard.ActualHeight, designCard.ActualHeight, 1);
             Assert.Same(window.FindResource("Surface.Folder"), designCard.Background);
@@ -245,11 +247,20 @@ public sealed partial class SettingsThemePreviewTests
             Assert.False(((GalleryFolderCardViewModel)emptyCard.DataContext).IsDropTarget);
             Assert.False(hint.IsVisible);
             Assert.True(PumpUiTask(window, () => window.DropAsync(emptyName, payload)));
-            PumpLibraryUntil(window, () => ((GalleryFolderCardViewModel)emptyCard.DataContext).CaptureCount == 2,
-                label + ": moved into folder");
+            // The rows are rebuilt because the dropped captures leave this view; the cards' view
+            // models are kept, so read them rather than the recycled buttons.
+            PumpLibraryUntil(window, () => vm.FindFolderCard(f.Empty.Id)!.CaptureCount == 2, label + ": moved into folder");
             Assert.All(f.Records.Take(2), record => Assert.Equal(f.Empty.Id, record.FolderId));
             Assert.Equal(UiText.Format("LibraryUx_MovedTo", "제품리뷰", 2), ((TextBlock)window.FindName("LibraryActionStatus")).Text);
-            Assert.All(cards, card => Assert.False(((GalleryFolderCardViewModel)card.DataContext).IsDropAvailable));
+            Assert.All(new[] { f.Empty.Id, f.Design.Id }, id => Assert.False(vm.FindFolderCard(id)!.IsDropAvailable));
+            // Like File Explorer, the dropped captures leave the library root at once; the root
+            // still reaches them through the card, so it reports no partial result.
+            Guid[] dropped = [f.Records[0].Id, f.Records[1].Id];
+            Assert.DoesNotContain(vm.Groups.SelectMany(group => group.Items), tile => dropped.Contains(tile.Id));
+            Assert.DoesNotContain(Descendants(rowsList).OfType<ListBoxItem>(),
+                item => item.DataContext is GalleryItemViewModel tile && dropped.Contains(tile.Id));
+            Assert.False(vm.ShowResultCount);
+            SaveLibraryUxEvidence(window, theme, $"after-drop-{file}.png");
             // The result clears itself; it never lingers in the command area.
             window.ExpireActionStatus();
             Assert.Equal(string.Empty, ((TextBlock)window.FindName("LibraryActionStatus")).Text);
@@ -263,6 +274,12 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(PumpUiTask(window, () => window.DropAsync(all, payload)));
             PumpLibraryUntil(window, () => f.Records[0].FolderId is null, label + ": out of folder");
             Assert.False(vm.IsAllItemsDropTarget);
+            Assert.Contains(vm.Groups.SelectMany(group => group.Items), tile => tile.Id == f.Records[0].Id);
+
+            // A subfolder in the folder about to open, shown there as a compact folder card.
+            CaptureFolder final = PumpUiTask(window, () => f.Queue.CreateFolderAsync("최종안", f.Design.Id));
+            vm.Refresh();
+            SettleGalleryLayout(window);
 
             // Opening a folder: location header with the way back and the save-here chip.
             cards = FolderCardButtons(rowsList);
@@ -280,6 +297,34 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(UiText.Format("LibraryUx_SaveHereOn", "디자인 시안"), chip.ToolTip);
             Assert.All(views, view => Assert.False(view.IsChecked));
             Assert.Contains(FlattenFolderNodes(vm.FolderNodes), node => node.FolderId == f.Design.Id && node.IsSelected);
+            // Inside a folder the captures use the compact card, in more columns than the root.
+            ListBoxItem compactTile = PumpLibraryUntil(window, () => Descendants(rowsList).OfType<ListBoxItem>()
+                    .FirstOrDefault(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[4].Id),
+                item => item is not null, label + ": compact tile");
+            Border compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "CompactTileCard");
+            // Smaller than the full card, at the compact card's own proportion.
+            Assert.True(compactCard.ActualWidth < fullCardWidth, $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP");
+            Assert.Equal(GalleryCardRowPanel.CardHeightFor(compactCard.ActualWidth, 148, 180, 1), compactCard.ActualHeight, 1);
+            Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");
+            Assert.All(vm.Rows.Skip(1), row => Assert.True(row.IsCompact));
+            AssertInsideClient(compactTile, client, label);
+            Assert.Equal(((GalleryItemViewModel)compactTile.DataContext).AccessibleName, AutomationProperties.GetName(compactTile));
+            Button compactMore = Descendants(compactTile).OfType<Button>()
+                .Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
+            Assert.NotNull(compactMore.ContextMenu);
+            AssertInsideClient(compactMore, client, label);
+            Assert.False(Descendants(compactTile).OfType<Border>().Single(border => border.Name == "FolderBadge").IsVisible);
+            // The subfolder card takes the same compact frame and column grid as the captures.
+            Button subfolder = PumpLibraryUntil(window, () => FolderCardButtons(rowsList)
+                    .SingleOrDefault(card => ((GalleryFolderCardViewModel)card.DataContext).FolderId == final.Id),
+                card => card is not null, label + ": compact subfolder card");
+            Assert.Equal(compactCard.ActualWidth, subfolder.ActualWidth, 1);
+            Assert.Equal(compactCard.ActualHeight, subfolder.ActualHeight, 1);
+            Assert.Equal(compactTile.TranslatePoint(new Point(), rowsList).X + 8, subfolder.TranslatePoint(new Point(), rowsList).X, 1);
+            foreach (TextBlock text in Descendants(subfolder).OfType<TextBlock>().Where(text => text.IsVisible))
+                AssertNotTrimmed(text, label);
+            Assert.Equal(UiText.Format("LibraryFolder_CardAccessibleName", "최종안", UiText.Format("LibraryFolder_CardCount", 0)),
+                AutomationProperties.GetName(subfolder));
             SaveLibraryUxEvidence(window, theme, $"after-folder-{file}.png");
             // The breadcrumb's first step returns to all items.
             Button home = Descendants((DependencyObject)window.FindName("LocationBreadcrumb")).OfType<Button>()
@@ -288,6 +333,24 @@ public sealed partial class SettingsThemePreviewTests
             PumpLibraryUntil(window, () => vm.SelectedScope.IsAll, label + ": back to all");
             Assert.False(((FrameworkElement)window.FindName("LocationHeader")).IsVisible);
             Assert.True(views[0].IsChecked);
+            Assert.Equal(rootColumns, vm.ColumnCount);
+
+            // A search from the root still finds captures filed in folders and names their folder.
+            search.Text = "Library sample 5";
+            ListBoxItem found = PumpLibraryUntil(window, () => Descendants(rowsList).OfType<ListBoxItem>()
+                    .FirstOrDefault(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[4].Id),
+                item => item is not null, label + ": search result");
+            Assert.Contains(Descendants(found).OfType<Border>(), border => border.Name == "TileCard");
+            var badge = Descendants(found).OfType<Border>().Single(border => border.Name == "FolderBadge");
+            Assert.True(badge.IsVisible);
+            TextBlock badgeText = Descendants(badge).OfType<TextBlock>().Single();
+            Assert.Equal("디자인 시안", badgeText.Text);
+            AssertNotTrimmed(badgeText, label);
+            Assert.EndsWith(UiText.Format("LibraryUx_InFolderAccessible", "디자인 시안"), AutomationProperties.GetName(found),
+                StringComparison.Ordinal);
+            SaveLibraryUxEvidence(window, theme, $"after-search-{file}.png");
+            search.Text = string.Empty;
+            PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2, label + ": search cleared");
 
             // The collapsed "날짜" section opens on demand and selects a date like any other location.
             dates.IsExpanded = true;

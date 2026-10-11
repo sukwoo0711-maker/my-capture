@@ -221,8 +221,8 @@ internal sealed class VideoExportDialog : Window
         root.Children.Add(statusRow);
 
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
-        _export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_Export"), "MediaExport_ArrowExport", true);
-        _close = MediaExportVisuals.Button(this, UiText.Get("MediaExport_Close"));
+        _export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_Export"), "MediaExport_ArrowExport", true).AsDialogAction();
+        _close = MediaExportVisuals.Button(this, UiText.Get("MediaExport_Close")).AsDialogAction();
         footer.Children.Add(_export); footer.Children.Add(_close);
         Grid.SetRow(footer, 3); root.Children.Add(footer);
         Content = root;
@@ -986,7 +986,7 @@ internal sealed class VideoExportDialog : Window
 
             Element = new Border { Child = row, Padding = new Thickness(2), BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Left };
             Element.SetResourceReference(Border.BackgroundProperty, "Surface.Sunken");
-            Element.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+            Element.SetResourceReference(Border.BorderBrushProperty, "Border.Control");
             Element.SetResourceReference(Border.CornerRadiusProperty, "Radius.Md");
         }
 

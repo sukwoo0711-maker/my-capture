@@ -2,6 +2,7 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -808,19 +809,91 @@ public sealed class GalleryTests : KoreanCaptionTest
     }
 
     [Theory]
-    [InlineData(0, 2)]        // before first layout → minimum
-    [InlineData(-50, 2)]      // nonsense width → minimum
-    [InlineData(400, 2)]      // one track fits, floored to the minimum of 2
-    [InlineData(512, 2)]      // exactly two tracks → 2
-    [InlineData(767, 2)]      // just below the three-track boundary
-    [InlineData(768, 3)]      // exactly three tracks → 3
-    [InlineData(1024, 4)]     // four tracks fill the default content width
-    [InlineData(1280, 5)]     // wide desktop → 5
-    [InlineData(1536, 6)]     // extra-wide desktop → 6
-    [InlineData(4000, 6)]     // clamped to the maximum of 6
-    public void ColumnCountForWidth_ClampsBetweenTwoAndSix(double width, int expected)
+    [InlineData(0, 1)]        // before first layout → minimum
+    [InlineData(-50, 1)]      // nonsense width → minimum
+    [InlineData(200, 1)]      // narrower than one track: still one card, never zero
+    [InlineData(447, 1)]      // one DIP short of two 224-DIP minimum tracks
+    [InlineData(448, 2)]      // two minimum tracks → 2
+    [InlineData(458, 2)]      // the minimum window with the details pane open: two cards
+    [InlineData(671, 2)]      // just below the three-track boundary
+    [InlineData(672, 3)]      // three minimum tracks → 3
+    [InlineData(896, 4)]      // four tracks
+    [InlineData(1344, 6)]     // wide desktop → 6
+    [InlineData(2240, 10)]    // ten tracks
+    [InlineData(4000, 10)]    // clamped to the maximum of 10
+    public void ColumnCountForWidth_CountsWholeMinimumTracks(double width, int expected)
     {
         Assert.Equal(expected, GalleryRowBuilder.ColumnCountForWidth(width));
+    }
+
+    [Theory]
+    [InlineData(0, 1)]        // before first layout → minimum
+    [InlineData(149, 1)]      // narrower than one compact track: still one card
+    [InlineData(299, 1)]      // one DIP short of two 150-DIP tracks
+    [InlineData(300, 2)]      // two compact cards
+    [InlineData(458, 3)]      // the minimum window with the details pane open: three compact cards, two full cards
+    [InlineData(760, 5)]      // the default window's content width: five instead of three
+    [InlineData(1000, 6)]     // where four full cards fit
+    [InlineData(2250, 15)]    // fifteen compact tracks
+    [InlineData(4000, 15)]    // clamped to the compact maximum
+    public void ColumnCountForWidth_CompactFolderCardsUseMoreColumns(double width, int expected)
+    {
+        Assert.Equal(expected, GalleryRowBuilder.ColumnCountForWidth(width, compact: true));
+        Assert.True(expected >= GalleryRowBuilder.ColumnCountForWidth(width));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ColumnCountForWidth_CardsStayBetweenTheMinimumAndAGrowthLimit(bool compact)
+    {
+        double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
+        int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
+        for (double width = track; width <= track * (max + 2); width += 1)
+        {
+            int columns = GalleryRowBuilder.ColumnCountForWidth(width, compact);
+            // Every card gets at least the minimum track...
+            Assert.True(columns * track <= width, $"{columns} cards of {track} DIP overflow {width} DIP");
+            // ...and once the row holds two, no card grows past one and a half tracks before
+            // another column is added (a full card stays at most 320 DIPs wide).
+            Assert.True(columns == max || (columns + 1) * track > width, $"{width} DIP fits more than {columns} cards");
+            if (columns >= 2 && columns < max)
+                Assert.True(width / columns - GalleryRowBuilder.CardInset < track * 1.5 - GalleryRowBuilder.CardInset,
+                    $"{width} DIP in {columns} columns makes {width / columns - GalleryRowBuilder.CardInset:0.#}-DIP cards");
+        }
+        Assert.Equal(compact ? 134 : 208, track - GalleryRowBuilder.CardInset);
+    }
+
+    [Theory]
+    [InlineData(244, 292)]    // the reference card
+    [InlineData(208, 263)]    // the narrowest full card
+    [InlineData(320, 353)]    // the widest full card before another column
+    public void CardHeightGrowsWithTheCardWidthAtThePreviewProportion(double width, double height)
+    {
+        Assert.Equal(height, GalleryCardRowPanel.CardHeightFor(width, 244, 292, 0.8));
+    }
+
+    [Fact]
+    public void CardRowPanelDividesTheWholeRowIntoEqualCellsAndKeepsShortRowsOnTheGrid()
+    {
+        RunSta(() =>
+        {
+            var panel = new GalleryCardRowPanel { Columns = 3 };
+            for (int index = 0; index < 2; index++) panel.Children.Add(new Border());
+            panel.Measure(new Size(690, double.PositiveInfinity));
+            panel.Arrange(new Rect(panel.DesiredSize));
+            // 690 / 3 = 230-DIP cells holding 214 x 268 cards; the third cell stays empty so the short row lines up.
+            Assert.Equal(690, panel.DesiredSize.Width);
+            Assert.Equal(new Rect(0, 0, 230, 268 + 16), LayoutInformation.GetLayoutSlot((FrameworkElement)panel.Children[0]));
+            Assert.Equal(new Rect(230, 0, 230, 268 + 16), LayoutInformation.GetLayoutSlot((FrameworkElement)panel.Children[1]));
+
+            // Outside the library, without a width limit, a cell is the reference card plus its inset.
+            var loose = new GalleryCardRowPanel();
+            loose.Children.Add(new Border());
+            loose.Children.Add(new Border());
+            loose.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Assert.Equal(new Size(2 * (244 + 16), 292 + 16), loose.DesiredSize);
+        });
     }
 
     [Fact]
@@ -879,17 +952,40 @@ public sealed class GalleryTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void Build_RaisesColumnsBelowMinimumToTwo()
+    public void Build_OneColumnPutsEachCardOnItsOwnRowAndRaisesNonPositiveCounts()
     {
         GalleryGroupViewModel group = Group("오늘", 3);
 
-        // A caller asking for 1 column must still get rows of at most 2 (never 1).
+        // A narrow window lays one card per row, in order.
         IReadOnlyList<GalleryTileRow> rows =
             GalleryRowBuilder.Build([group], columns: 1).OfType<GalleryTileRow>().ToList();
+        Assert.Equal(3, rows.Count);
+        Assert.All(rows, row => Assert.Single(row.Tiles));
+        Assert.Equal(group.Items, rows.Select(row => row.Tiles[0]));
 
-        Assert.Equal(2, rows.Count);
-        Assert.Equal(2, rows[0].Tiles.Count);
-        Assert.Single(rows[1].Tiles);
+        // A caller asking for zero columns still gets one card per row, never an empty row.
+        IReadOnlyList<GalleryTileRow> raised =
+            GalleryRowBuilder.Build([group], columns: 0).OfType<GalleryTileRow>().ToList();
+        Assert.Equal(3, raised.Count);
+        Assert.All(raised, row => Assert.Single(row.Tiles));
+    }
+
+    [Fact]
+    public void ArrowKeysFollowASingleColumn()
+    {
+        GalleryGroupViewModel today = Group("오늘", 2);
+        GalleryGroupViewModel yesterday = Group("어제", 1);
+        IReadOnlyList<GalleryRow> rows = GalleryRowBuilder.Build([today, yesterday], columns: 1);
+        GalleryItemViewModel first = today.Items[0], second = today.Items[1], third = yesterday.Items[0];
+
+        // Down and Right both reach the next card, across the date heading; Up and Left go back.
+        Assert.Same(second, GallerySelectionNavigation.FindNeighbor(rows, first, vertical: true, 1));
+        Assert.Same(second, GallerySelectionNavigation.FindNeighbor(rows, first, vertical: false, 1));
+        Assert.Same(third, GallerySelectionNavigation.FindNeighbor(rows, second, vertical: true, 1));
+        Assert.Same(third, GallerySelectionNavigation.FindVertical(rows, second, 1));
+        Assert.Same(first, GallerySelectionNavigation.FindNeighbor(rows, second, vertical: true, -1));
+        Assert.Same(first, GallerySelectionNavigation.FindNeighbor(rows, first, vertical: true, -1));
+        Assert.Null(GallerySelectionNavigation.FindVertical(rows, third, 1));
     }
 
     [Fact]
@@ -917,22 +1013,26 @@ public sealed class GalleryTests : KoreanCaptionTest
                     settings.ThumbnailLongEdge,
                     () => now);
 
-                // The constructor already resolved the minimum (2) columns, so asking for a
-                // width still in the 2-column band is a no-op.
-                Assert.Equal(2, vm.ColumnCount);
-                Assert.False(vm.SetColumnCountForWidth(544));
-                Assert.Equal(2, vm.ColumnCount);
-                // header + ceil(5/2)=3 tile rows = 4 rows.
-                Assert.Equal(4, vm.Rows.Count);
+                // The constructor already resolved the minimum (1) column, so asking for a
+                // width still in the 1-column band is a no-op: header + 5 single-card rows.
+                Assert.Equal(1, vm.ColumnCount);
+                Assert.False(vm.SetColumnCountForWidth(400));
+                Assert.Equal(1, vm.ColumnCount);
+                Assert.Equal(6, vm.Rows.Count);
                 Assert.IsType<GalleryHeaderRow>(vm.Rows[0]);
 
+                // Two tracks fit: header + ceil(5/2)=3 tile rows = 4 rows.
+                Assert.True(vm.SetColumnCountForWidth(544));
+                Assert.Equal(2, vm.ColumnCount);
+                Assert.Equal(4, vm.Rows.Count);
+
                 // A resize that stays inside the 2-column band changes nothing.
-                Assert.False(vm.SetColumnCountForWidth(500));
+                Assert.False(vm.SetColumnCountForWidth(600));
                 Assert.Equal(2, vm.ColumnCount);
                 Assert.Equal(4, vm.Rows.Count);
 
                 // Widen to 4 columns → header + ceil(5/4)=2 tile rows = 3 rows.
-                Assert.True(vm.SetColumnCountForWidth(1200));
+                Assert.True(vm.SetColumnCountForWidth(900));
                 Assert.Equal(4, vm.ColumnCount);
                 Assert.Equal(3, vm.Rows.Count);
 

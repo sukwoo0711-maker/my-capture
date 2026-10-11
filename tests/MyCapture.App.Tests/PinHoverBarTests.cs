@@ -171,7 +171,7 @@ public sealed class PinHoverBarTests
             Assert.Equal("Ctrl+휠 위", Item("더 불투명하게").InputGestureText);
             Assert.Equal("Ctrl+Alt+T", Item("뒤 창 클릭 허용").InputGestureText);
             Assert.Equal("Ctrl+S", Item("빠른 저장").InputGestureText);
-            Assert.Contains("닫은 고정 창 다시 열기", headers);
+            Assert.Contains("닫은 핀 다시 열기", headers);
             Assert.Equal("드래그: 이동 · 휠: 확대·축소 · 오른쪽 클릭: 메뉴", pin.ToolTip);
 
             pin.ApplyClickThrough(true);

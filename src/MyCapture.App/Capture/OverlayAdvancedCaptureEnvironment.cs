@@ -14,6 +14,7 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
     private readonly WindowTitleService _windowTitles;
     private readonly Func<bool> _includeCursor;
     private readonly BrowserPageUrlService _pageUrls = new();
+    private readonly WindowSourceService _windowSources = new();
 
     internal OverlayAdvancedCaptureEnvironment(
         CaptureOverlayCoordinator coordinator,
@@ -70,6 +71,20 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
         return documents.GetValueOrDefault(window.Handle);
     }
 
+    // Same bounded-wait pattern as the page read: the application and Explorer folder reads run on
+    // their own threads under their own deadlines.
+    public WindowSourceSnapshot? ReadWindowSource(WindowUnderCursor? window) =>
+        ReadWindowSourceAsync(window).GetAwaiter().GetResult();
+
+    public async Task<WindowSourceSnapshot?> ReadWindowSourceAsync(WindowUnderCursor? window)
+    {
+        if (window is null || window.Handle == IntPtr.Zero || window.ProcessId == 0) return null;
+        IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> sources = await _windowSources.ReadAsync([
+            new WindowCandidate(window.Handle, window.ScreenBounds, window.Title, ProcessId: window.ProcessId),
+        ]).ConfigureAwait(false);
+        return sources.GetValueOrDefault(window.Handle);
+    }
+
     public RectD? ResolveRepeatRegion(RegionHistoryEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -99,7 +114,8 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
             selection.Region,
             selection.SourceTitle,
             selection.RecordForRepeat,
-            selection.SourcePageUrl);
+            selection.SourcePageUrl,
+            selection.SourceDetails);
 
     private static bool Contains(RectD outer, RectD inner) =>
         inner.Left >= outer.Left

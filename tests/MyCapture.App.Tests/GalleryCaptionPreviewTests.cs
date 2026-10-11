@@ -202,7 +202,10 @@ public sealed class GalleryCaptionPreviewTests
         using Stream gallery = typeof(GalleryCaptionPreviewTests).Assembly.GetManifestResourceStream("GalleryFixture.Window.xaml")!;
         XElement product = XDocument.Load(gallery).Root!;
         CopyNamespaces(product, combined);
-        string[] keys = ["Gallery.IconButton", "Gallery.TileTemplate", "Gallery.TileRowList"];
+        // Import the card's local motion wash as well as its overflow menu and folder badge.
+        // Every entry comes from product markup; the fixture preserves the real state layers.
+        string[] keys = ["LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "Gallery.FolderBadge",
+            "Gallery.FolderBadgeContent", "Gallery.TileTemplate", "Gallery.TileRowList"];
         foreach (XElement entry in product.Element(p + "Window.Resources")!.Element(p + "ResourceDictionary")!.Elements()
             .Where(element => keys.Contains((string?)element.Attribute(x + "Key"))))
         {
@@ -210,6 +213,16 @@ public sealed class GalleryCaptionPreviewTests
             // Event handlers belong to GalleryWindow and are irrelevant to the unchanged
             // card visuals. Keep all production bindings, templates and sizing intact.
             foreach (XAttribute handler in copy.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName == "Click").ToArray()) handler.Remove();
+            // x:Shared is honoured only in compiled dictionaries; XamlReader rejects it.
+            copy.Attribute(x + "Shared")?.Remove();
+            // Product types used as elements (the card row panel) keep the window's
+            // assembly-less namespace; outside the compiled window they need the assembly.
+            foreach (XElement element in copy.DescendantsAndSelf())
+            {
+                if (element.Name.NamespaceName.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal)
+                    && !element.Name.NamespaceName.Contains(";assembly=", StringComparison.Ordinal))
+                    element.Name = XName.Get(element.Name.LocalName, element.Name.NamespaceName + ";assembly=MyCapture");
+            }
             combined.Add(copy);
         }
         window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined.ToString(SaveOptions.DisableFormatting)));

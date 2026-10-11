@@ -15,7 +15,6 @@ public sealed class AdvancedCaptureSourcePageTests
     private static readonly BrowserDocumentSnapshot Document = new(42, "A document", "document-1", Url);
 
     [Theory]
-    [InlineData("full")]
     [InlineData("window")]
     [InlineData("fixed")]
     [InlineData("repeat")]
@@ -30,7 +29,6 @@ public sealed class AdvancedCaptureSourcePageTests
     });
 
     [Theory]
-    [InlineData("full")]
     [InlineData("window")]
     [InlineData("fixed")]
     [InlineData("repeat")]
@@ -44,7 +42,6 @@ public sealed class AdvancedCaptureSourcePageTests
     });
 
     [Theory]
-    [InlineData("full")]
     [InlineData("window")]
     [InlineData("fixed")]
     [InlineData("repeat")]
@@ -79,9 +76,24 @@ public sealed class AdvancedCaptureSourcePageTests
             },
             ReadFailure = invalid == "timeout" ? new TimeoutException() : null,
         };
-        Assert.True(Capture("full", environment).IsCompleted);
+        Assert.True(Capture("window", environment).IsCompleted);
         Assert.Equal(string.Empty, environment.Selection!.SourcePageUrl);
         Assert.Equal(1, environment.CaptureCount);
+    });
+
+    /// <summary>
+    /// A whole-monitor shortcut capture has no single source, like the selector's full-screen button
+    /// and a desktop click: no title, no page link, and no metadata probe delays the frame.
+    /// </summary>
+    [Fact]
+    public void Fullscreen_HasNoSourceAndNeverProbesTheWindowUnderTheCursor() => StaTestHost.Run(() =>
+    {
+        var environment = new Environment();
+        Assert.True(Capture("full", environment).IsCompleted);
+        Assert.Equal(string.Empty, environment.Selection!.SourcePageUrl);
+        Assert.Equal(string.Empty, environment.Selection.SourceTitle);
+        Assert.True(environment.Selection.SourceDetails is null || environment.Selection.SourceDetails.IsEmpty);
+        Assert.Equal(new[] { "capture", "editor" }, environment.Events);
     });
 
     [Theory]

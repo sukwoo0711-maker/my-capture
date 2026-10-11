@@ -282,7 +282,10 @@ public sealed class CaptureModeBarTests
             Assert.Equal("Full screen", AutomationProperties.GetName(bar.FullScreenButton));
             Assert.Equal("Copy text", AutomationProperties.GetName(bar.TextButton));
             Assert.Equal("Copy color", AutomationProperties.GetName(bar.ColorButton));
-            Assert.Equal("Click a window to capture it, or drag to capture any area.", view.StartGuideCardForTest!.BodyText);
+            CaptureStartGuideCard card = view.StartGuideCardForTest!;
+            Assert.Equal(["Click: Capture window", "Drag: Capture region"], card.ActionTexts);
+            Assert.Equal("Esc: Cancel", card.EscapeText);
+            Assert.Equal("Click a window to capture it, or drag to capture the region you want. Press Esc to cancel.", card.HelpText);
             Assert.Equal("Capture", AutomationProperties.GetName(bar.CaptureKindButton));
             Assert.Equal("Record", AutomationProperties.GetName(bar.RecordKindButton));
         }
@@ -303,8 +306,9 @@ public sealed class CaptureModeBarTests
             view.InitializePointer();
             Render(view);
             CaptureStartGuideCard card = view.StartGuideCardForTest!;
-            // One sentence: what a click and a drag do. The bar's buttons explain themselves.
-            Assert.Equal("창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다.", card.BodyText);
+            // Two pictures named with the overlay's own words: what a click and a drag do. The bar's
+            // buttons explain themselves.
+            Assert.Equal(["클릭: 창 캡처", "드래그: 영역 캡처"], card.ActionTexts);
             Assert.False(card.IsHitTestVisible);
             Assert.True(view.StartGuideTimerRunningForTest);
             Assert.Equal(TimeSpan.FromSeconds(8), CaptureOverlayView.StartGuideDuration);
@@ -348,6 +352,114 @@ public sealed class CaptureModeBarTests
         {
             view.ReleaseResources();
             FluidMotion.AnimationsEnabledOverrideForTest = previous;
+        }
+    });
+
+    [Fact]
+    public void StartGuideCardNamesBothActionsForUiAutomation() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        PointD pointer = new(640, 400);
+        CaptureOverlayView view = BarView(Desktop(), () => pointer);
+        view.ShowStartGuide = true;
+        try
+        {
+            view.InitializePointer();
+            Render(view);
+            CaptureStartGuideCard card = view.StartGuideCardForTest!;
+            Assert.False(card.Focusable);
+            Assert.False(card.IsHitTestVisible);
+
+            // One group whose help text says what a click and a drag do; the pictures are shapes
+            // without peers, so a screen reader reads only the words under them and the Esc line.
+            AutomationPeer peer = UIElementAutomationPeer.CreatePeerForElement(card);
+            Assert.Equal(AutomationControlType.Group, peer.GetAutomationControlType());
+            Assert.Equal("캡처 방법", peer.GetName());
+            Assert.Equal("창 위에서 클릭하면 그 창을, 드래그하면 원하는 영역을 캡처합니다. Esc로 취소합니다.", peer.GetHelpText());
+            Assert.Equal(["클릭: 창 캡처", "드래그: 영역 캡처", "Esc: 취소"], peer.GetChildren().Select(child => child.GetName()));
+            Assert.Equal(["클릭: 창 캡처", "드래그: 영역 캡처"], card.ActionTexts);
+            double bothWidth = card.DesiredSize.Width;
+
+            // Without window detection a click captures nothing, so only the drag picture remains.
+            view.DetectWindows = false;
+            Render(view);
+            Assert.Equal(["드래그: 영역 캡처"], card.ActionTexts);
+            Assert.Equal("드래그하면 원하는 영역을 캡처합니다. Esc로 취소합니다.", peer.GetHelpText());
+            Assert.True(card.DesiredSize.Width < bothWidth - CaptureStartGuideCard.PictureWidth);
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", 96, 1.0)]
+    [InlineData("ko-KR", 144, 1.5)]
+    [InlineData("en-US", 144, 1.5)]
+    [InlineData("ko-KR", 144, 1.0)]
+    public void StartGuideCardFitsA1280By720MonitorAt100And150Percent(string culture, int monitorDpi, double overlayScale) =>
+        StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage(culture);
+        // A 1280x720 display with a 48-pixel taskbar; the last case is a 150% display under an overlay
+        // that renders at 100%, where the card is scaled up to keep the display's physical size.
+        IReadOnlyList<MonitorInfo> monitors =
+            [new(@"\\.\DISPLAY1", new RectD(0, 0, Width, Height), new RectD(0, 0, Width, 672), (uint)monitorDpi, IsPrimary: true)];
+        PointD pointer = new(900, 520);
+        var view = new CaptureOverlayView(Desktop(), showMagnifier: false)
+        {
+            ReadCursor = () => pointer,
+            ReadMonitors = () => monitors,
+            DetectWindows = true,
+            WindowCandidates = [Browser, Notes, Taskbar, Shell],
+            TextCaptureAvailable = true,
+            CopyColorText = _ => Task.FromResult(true),
+            ShowModeBar = true,
+            OffersOtherActions = true,
+            ShowStartGuide = true,
+        };
+        UsePalette(view, CaptureGuidePalette.Create(AppTheme.Glass, customColor: null, systemHighContrast: false));
+        try
+        {
+            view.InitializePointer();
+            RenderTargetBitmap shown = Render(view, overlayScale);
+            CaptureStartGuideCard card = view.StartGuideCardForTest!;
+            double scale = view.GuideScaleForTest;
+            Assert.Equal(monitorDpi / 96.0 / overlayScale, scale, 3);
+
+            // Inside the work area, clear of the bar with the edge margin between them.
+            var work = new Rect(0, 0, Width / overlayScale, 672 / overlayScale);
+            Rect slot = LayoutInformation.GetLayoutSlot(card);
+            Rect bar = view.ModeBarBoundsForTest!.Value;
+            Assert.True(slot.Left >= work.Left - 0.5 && slot.Right <= work.Right + 0.5
+                && slot.Top >= work.Top - 0.5 && slot.Bottom <= work.Bottom + 0.5, $"{slot} leaves {work}");
+            Assert.True(slot.Top >= bar.Bottom + (CaptureModeBarLayout.EdgeMargin * scale) - 0.5, $"{slot} reaches the bar {bar}");
+
+            // Arranged at the size it asked for, so nothing in it is squeezed or clipped.
+            Near(card.DesiredSize.Width, slot.Width, 0.5);
+            Near(card.DesiredSize.Height, slot.Height, 0.5);
+            Near(card.RenderSize.Width * scale, slot.Width, 0.5);
+            Near(card.RenderSize.Height * scale, slot.Height, 0.5);
+
+            // Each caption stays on one line under its picture.
+            TextBlock[] texts = Descendants(card).OfType<TextBlock>().ToArray();
+            Assert.Equal(3, texts.Length);
+            foreach (TextBlock text in texts)
+            {
+                Assert.True(text.ActualHeight < text.FontSize * 2, $"'{text.Text}' wraps: {text.ActualHeight}");
+                Assert.True(text.ActualWidth <= CaptureStartGuideCard.PictureWidth + 0.5, $"'{text.Text}' is wider than its picture");
+            }
+
+            SaveEvidence(shown, $"start-guide-fit-{culture}-{monitorDpi}dpi-overlay{overlayScale * 100:0}.png");
+        }
+        finally { view.ReleaseResources(); }
+
+        static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                yield return child;
+                foreach (DependencyObject nested in Descendants(child)) yield return nested;
+            }
         }
     });
 

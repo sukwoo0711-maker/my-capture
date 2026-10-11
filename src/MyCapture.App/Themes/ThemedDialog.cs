@@ -43,7 +43,7 @@ internal sealed class ThemedDialog : Window
             expander.SetResourceReference(ForegroundProperty, "Text.Primary");
             panel.Children.Add(expander);
         }
-        var actions = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
+        var actions = CreateActionRow();
         if (recovery is not null)
         {
             var resolve = MakeButton(recoveryLabel ?? UiText.Get("Dialog.Return"), MessageBoxResult.OK, true, false);
@@ -67,10 +67,49 @@ internal sealed class ThemedDialog : Window
 
     private Button MakeButton(string label, MessageBoxResult result, bool isDefault, bool isCancel)
     {
-        var button = new Button { Content = label, MinWidth = 80, MinHeight = 36,
-            Margin = new Thickness(8, 4, 0, 0), IsDefault = isDefault, IsCancel = isCancel };
-        button.SetResourceReference(StyleProperty, isDefault ? "Button.Primary" : "Button.Secondary");
+        Button button = CreateActionButton(label, primary: isDefault);
+        button.IsDefault = isDefault;
+        button.IsCancel = isCancel;
         button.Click += (_, _) => { Result = result; Close(); };
+        return button;
+    }
+
+    /// <summary>Gap between the buttons of a dialog's action row.</summary>
+    internal const double ActionSpacing = 8;
+
+    /// <summary>Smallest width of a dialog action, so short captions keep a steady target.</summary>
+    internal const double ActionMinWidth = 88;
+
+    /// <summary>Height of a dialog action: the regular 36-DIP hit target.</summary>
+    internal const double ActionHeight = 36;
+
+    /// <summary>
+    /// The action row every ordinary dialog ends with: right-aligned, the confirming action
+    /// first and the dismissal last, as Windows dialogs and this app's settings and editor order
+    /// them. Long captions wrap to another row instead of leaving the dialog.
+    /// </summary>
+    /// <remarks>
+    /// The caller keeps <see cref="Button.IsDefault"/> on the confirming action and
+    /// <see cref="Button.IsCancel"/> on the dismissal. A destructive confirmation makes the
+    /// dismissal the default instead, so Enter never deletes.
+    /// </remarks>
+    internal static WrapPanel CreateActionRow(params Button[] actions)
+    {
+        var row = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
+        foreach (Button action in actions) row.Children.Add(action);
+        return row;
+    }
+
+    /// <summary>One dialog action in the filled (primary) or bordered (secondary) tier.</summary>
+    internal static Button CreateActionButton(string label, bool primary)
+    {
+        var button = new Button
+        {
+            Content = label, MinWidth = ActionMinWidth, MinHeight = ActionHeight,
+            // The leading gap of the first button falls outside the right-aligned row.
+            Margin = new Thickness(ActionSpacing, 4, 0, 0),
+        };
+        button.SetResourceReference(StyleProperty, primary ? "Button.Primary" : "Button.Secondary");
         return button;
     }
 

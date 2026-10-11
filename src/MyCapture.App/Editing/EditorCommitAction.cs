@@ -12,22 +12,24 @@ namespace MyCapture.App.Editing;
 /// <para>
 /// Every action flattens the annotations onto the original. Done, Quick Save and Save As
 /// then save the result into the library (the capture queue), copy it to the clipboard and
-/// close the editor; any failure keeps the editor open for a retry. Copy is the one
-/// secondary action: clipboard only, the library is untouched and the editor stays open.
+/// close the editor; any failure keeps the editor open for a retry. The editor's Copy
+/// command and Ctrl+C finish the same way as Done; copy-only remains for other callers.
 /// <see cref="CaptureCommitService.CommitAsync"/> carries out each action.
 /// </para>
 /// </remarks>
 internal enum EditorCommitAction
 {
     /// <summary>
-    /// Done (the filled button), Ctrl+Enter, or Save and close in the close confirmation.
+    /// Done (the filled button), Ctrl+Enter, Copy (Ctrl+C), or Save and close in the close
+    /// confirmation.
     /// Flatten, save into the library, copy to the clipboard, then close.
     /// </summary>
     Done,
 
     /// <summary>
-    /// Copy, Ctrl+C. Flatten and copy to the clipboard only. Nothing is saved to the library
-    /// and the editor stays open; the status line reports whether the copy succeeded.
+    /// Flatten and copy to the clipboard only. Nothing is saved to the library and the
+    /// editor stays open; the status line reports whether the copy succeeded. The editor's
+    /// own Copy command finishes as <see cref="Done"/>.
     /// </summary>
     CopyToClipboard,
 

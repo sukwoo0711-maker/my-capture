@@ -14,6 +14,12 @@ public enum CaptureMatchField
     MediaType = 8,
     Tags = 16,
     SourcePageUrl = 32,
+
+    /// <summary>The source application's friendly name or executable file name.</summary>
+    SourceApp = 64,
+
+    /// <summary>The folder or file path the source window showed.</summary>
+    SourceDocumentPath = 128,
 }
 
 /// <summary>
@@ -44,7 +50,8 @@ public readonly record struct OcrCoverage(int Total, int Indexed, int WithOcrTex
 
 /// <summary>
 /// Full-text search over the persistent capture queue: matches a free-text query against
-/// each record's title, tags, source-window title, and recognised OCR text.
+/// each record's title, tags, source-window title, source page, source application and folder, and
+/// recognised OCR text.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -151,6 +158,7 @@ public static class CaptureTextSearch
         string title = record.Title ?? string.Empty;
         string window = record.SourceWindowTitle ?? string.Empty;
         string ocr = record.OcrText ?? string.Empty;
+        string sourceApp = SourceAppText(record);
         string media = record.IsVideo
             ? "동영상 비디오 video recording mp4"
             : "이미지 사진 스크린샷 image screenshot png";
@@ -187,6 +195,12 @@ public static class CaptureTextSearch
             if (Contains(record.SourcePageUrl ?? string.Empty, term))
                 termFields |= CaptureMatchField.SourcePageUrl;
 
+            if (Contains(sourceApp, term))
+                termFields |= CaptureMatchField.SourceApp;
+
+            if (Contains(record.SourceDocumentPath ?? string.Empty, term))
+                termFields |= CaptureMatchField.SourceDocumentPath;
+
             // AND semantics: a term found in no field fails the whole record.
             if (termFields == CaptureMatchField.None)
             {
@@ -198,6 +212,19 @@ public static class CaptureTextSearch
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Searchable text for the source application: its friendly name and executable file name. The
+    /// executable's folder is left out, because "Program Files" or "Windows" would match nearly every
+    /// capture and hide the ones the user is looking for.
+    /// </summary>
+    internal static string SourceAppText(CaptureRecord record)
+    {
+        string name = record.SourceAppName ?? string.Empty;
+        string path = record.SourceAppPath ?? string.Empty;
+        string file = path.Length == 0 ? string.Empty : Path.GetFileName(path);
+        return name.Length == 0 ? file : file.Length == 0 ? name : name + " " + file;
     }
 
     private static bool Contains(string haystack, string term) =>

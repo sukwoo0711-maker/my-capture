@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -47,18 +47,19 @@ public sealed class VideoLayerTimelineRegressionTests
             Assert.Equal(56, timeline.Height);
             Assert.Null(timeline.SelectedId);
 
-            // 1. Same mutable text list gains first layer
+            // 1. Same mutable text list gains first layer. Next to a layer the other kind's empty
+            // "no layers" lane is not drawn, so one layer is a single 28 DIP track plus padding.
             var t1 = new TimedTextOverlay { Text = "Layer 1", StartMs = 0, EndMs = 1000 };
             textList.Add(t1);
             timeline.SetLayers(textList, frameList);
-            Assert.Equal(62, timeline.Height);
+            Assert.Equal(36, timeline.Height);
             Assert.Equal(t1.Id, timeline.SelectedId);
 
             // 2. Same mutable text list gains second layer
             var t2 = new TimedTextOverlay { Text = "Layer 2", StartMs = 1000, EndMs = 2000 };
             textList.Add(t2);
             timeline.SetLayers(textList, frameList);
-            Assert.Equal(94, timeline.Height);
+            Assert.Equal(68, timeline.Height);
             Assert.Equal(t1.Id, timeline.SelectedId);
 
             // 3. Selection change
@@ -68,7 +69,7 @@ public sealed class VideoLayerTimelineRegressionTests
             // 4. Same mutable text list removes selected layer (t2) -> selection falls back to t1
             textList.Remove(t2);
             timeline.SetLayers(textList, frameList);
-            Assert.Equal(62, timeline.Height);
+            Assert.Equal(36, timeline.Height);
             Assert.Equal(t1.Id, timeline.SelectedId);
 
             // 5. Same mutable text list removes remaining layer -> selection becomes null
@@ -81,18 +82,18 @@ public sealed class VideoLayerTimelineRegressionTests
             var f1 = new FrameEditLayer { Name = "Frame 1", StartMs = 0, EndMs = 1000 };
             frameList.Add(f1);
             timeline.SetLayers(textList, frameList);
-            Assert.Equal(62, timeline.Height);
+            Assert.Equal(36, timeline.Height);
             Assert.Equal(f1.Id, timeline.SelectedId);
 
             var f2 = new FrameEditLayer { Name = "Frame 2", StartMs = 1000, EndMs = 2000 };
             frameList.Add(f2);
             timeline.SetLayers(textList, frameList);
-            Assert.Equal(94, timeline.Height);
+            Assert.Equal(68, timeline.Height);
 
             timeline.SelectLayer(f2.Id);
             frameList.Remove(f2);
             timeline.SetLayers(textList, frameList);
-            Assert.Equal(62, timeline.Height);
+            Assert.Equal(36, timeline.Height);
             Assert.Equal(f1.Id, timeline.SelectedId);
 
             frameList.Clear();

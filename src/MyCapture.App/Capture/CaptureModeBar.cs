@@ -6,6 +6,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using MyCapture.App.Themes;
 
 namespace MyCapture.App.Capture;
 
@@ -85,7 +86,7 @@ internal sealed class CaptureModeBar : Border
     private static readonly Geometry RecordIcon = Geometry.Parse(
         "M10,3.25 A6.75,6.75 0 1 1 9.99,3.25 M10,7.25 A2.75,2.75 0 1 1 9.99,7.25");
     private static readonly Geometry MoreIcon = Geometry.Parse(
-        "M4.5,10 L4.6,10 M10,10 L10.1,10 M15.5,10 L15.6,10");
+        "M5,9 A1,1 0 1 0 4.99,9 M10,9 A1,1 0 1 0 9.99,9 M15,9 A1,1 0 1 0 14.99,9");
 
     private readonly RadioButton _capture;
     private readonly RadioButton _text;
@@ -382,26 +383,13 @@ internal sealed class CaptureModeBar : Border
     private static FrameworkElement ButtonContent(ButtonBase owner, Geometry icon, TextBlock? label)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        var glyph = new Path
+        var glyph = new SymbolIcon
         {
+            Size = 20,
             Data = icon,
-            Width = 18,
-            Height = 18,
-            Stretch = Stretch.Uniform,
-            StrokeThickness = 1.6,
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
-            StrokeLineJoin = PenLineJoin.Round,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        if (ReferenceEquals(icon, MoreIcon))
-        {
-            // Three dots on the 20x20 grid: keep their spacing instead of stretching them into a line.
-            glyph.Stretch = Stretch.None;
-            glyph.StrokeThickness = 2.4;
-            glyph.Width = glyph.Height = 20;
-        }
-        glyph.SetBinding(Shape.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = owner });
+        glyph.SetBinding(SymbolIcon.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = owner });
         panel.Children.Add(glyph);
         if (label is not null)
         {
@@ -433,8 +421,9 @@ internal sealed class CaptureModeBar : Border
     /// <summary>
     /// Chrome, content and an inset focus ring with no layout footprint. A checked mode is filled
     /// with the guide accent and takes the accent's readable text colour; the capture/record switch
-    /// marks its side with the quieter hover wash so the bar keeps one accent fill. Focus never moves
-    /// anything.
+    /// marks its side with the quieter hover wash so the bar keeps one accent fill. Hover and the
+    /// checked fill are layers that fade (FluidMotion.FadeTo) rather than background swaps, so a
+    /// mode change glides like the shared controls. Focus never moves anything.
     /// </summary>
     private static ControlTemplate CreateTemplate(Type type, bool checkable, bool subtleCheck)
     {
@@ -443,11 +432,32 @@ internal sealed class CaptureModeBar : Border
         chrome.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
         chrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
         chrome.SetValue(Border.BorderBrushProperty, Brushes.Transparent);
+        var hoverLayer = StateLayer("HoverLayer", MotionSpeed.Fast);
+        hoverLayer.SetResourceReference(Border.BackgroundProperty, HoverKey);
+        FrameworkElementFactory? checkedLayer = null;
+        if (checkable)
+        {
+            checkedLayer = StateLayer("CheckedLayer", MotionSpeed.Normal);
+            if (subtleCheck)
+            {
+                // The quiet selected side: a wash and an outline in the text colour, which also reads in high contrast.
+                checkedLayer.SetResourceReference(Border.BackgroundProperty, HoverKey);
+                checkedLayer.SetResourceReference(Border.BorderBrushProperty, MutedKey);
+            }
+            else
+            {
+                checkedLayer.SetResourceReference(Border.BackgroundProperty, AccentKey);
+            }
+        }
+
+        // The presenter keeps the one-pixel chrome inset it had as the chrome's child.
+        var content = new FrameworkElementFactory(typeof(Border));
+        content.SetValue(Border.BorderThicknessProperty, new Thickness(1));
         var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
         presenter.SetValue(FrameworkElement.MarginProperty, new TemplateBindingExtension(Control.PaddingProperty));
         presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
         presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-        chrome.AppendChild(presenter);
+        content.AppendChild(presenter);
         var ring = new FrameworkElementFactory(typeof(Border), "FocusRing");
         ring.SetValue(FrameworkElement.MarginProperty, new Thickness(2));
         ring.SetValue(Border.BorderThicknessProperty, new Thickness(2));
@@ -457,28 +467,31 @@ internal sealed class CaptureModeBar : Border
         ring.SetResourceReference(Border.BorderBrushProperty, TextKey);
         var root = new FrameworkElementFactory(typeof(Grid));
         root.AppendChild(chrome);
+        if (checkedLayer is not null)
+        {
+            root.AppendChild(checkedLayer);
+        }
+
+        root.AppendChild(hoverLayer);
+        root.AppendChild(content);
         root.AppendChild(ring);
 
         var template = new ControlTemplate(type) { VisualTree = root };
         var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-        hover.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension(HoverKey), "Chrome"));
+        hover.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1.0, "HoverLayer"));
         template.Triggers.Add(hover);
         var pressed = new Trigger { Property = ButtonBase.IsPressedProperty, Value = true };
-        pressed.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension(HoverKey), "Chrome"));
+        pressed.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1.0, "HoverLayer"));
         template.Triggers.Add(pressed);
-        if (checkable && subtleCheck)
-        {
-            // The quiet selected side: a wash and an outline in the text colour, which also reads in high contrast.
-            var on = new Trigger { Property = ToggleButton.IsCheckedProperty, Value = true };
-            on.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension(HoverKey), "Chrome"));
-            on.Setters.Add(new Setter(Border.BorderBrushProperty, new DynamicResourceExtension(MutedKey), "Chrome"));
-            template.Triggers.Add(on);
-        }
-        else if (checkable)
+        if (checkable)
         {
             var on = new Trigger { Property = ToggleButton.IsCheckedProperty, Value = true };
-            on.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension(AccentKey), "Chrome"));
-            on.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension(AccentTextKey)));
+            on.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1.0, "CheckedLayer"));
+            if (!subtleCheck)
+            {
+                on.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension(AccentTextKey)));
+            }
+
             template.Triggers.Add(on);
         }
 
@@ -500,5 +513,18 @@ internal sealed class CaptureModeBar : Border
         template.Triggers.Add(disabled);
         template.Seal();
         return template;
+    }
+
+    /// <summary>A hidden, hit-test-transparent wash with the chrome's shape that fades in on a state.</summary>
+    private static FrameworkElementFactory StateLayer(string name, MotionSpeed speed)
+    {
+        var layer = new FrameworkElementFactory(typeof(Border), name);
+        layer.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+        layer.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+        layer.SetValue(Border.BorderBrushProperty, Brushes.Transparent);
+        layer.SetValue(UIElement.OpacityProperty, 0.0);
+        layer.SetValue(UIElement.IsHitTestVisibleProperty, false);
+        layer.SetValue(FluidMotion.TransitionProperty, speed);
+        return layer;
     }
 }

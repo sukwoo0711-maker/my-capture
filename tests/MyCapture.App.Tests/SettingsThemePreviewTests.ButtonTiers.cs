@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -41,14 +41,15 @@ public sealed partial class SettingsThemePreviewTests
         {
             ShortcutPresentation.ReadEnabled = () => settings.General.ShowShortcutHints;
             ShortcutPresentation.Refresh();
-            var button = new Button { Content = "Undo", ToolTip = "Undo the last change" };
-            ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "Undo");
+            // A single-key command: key combinations such as Ctrl+Z are never printed, only shown in the tooltip.
+            var button = new Button { Content = "Rotate", ToolTip = "Rotate left" };
+            ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "RotateLeft");
             TextBlock caption = Assert.IsType<StackPanel>(button.Content).Children.OfType<TextBlock>().Last();
-            Assert.Equal("Ctrl+Z", caption.Text);
+            Assert.Equal("Q", caption.Text);
             Assert.Equal(expected, caption.Visibility);
             // The key stays discoverable either way: tooltip and accelerator property.
-            Assert.Equal("Undo the last change (Ctrl+Z)", button.ToolTip);
-            Assert.Equal("Ctrl+Z", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(button));
+            Assert.Equal("Rotate left (Q)", button.ToolTip);
+            Assert.Equal("Q", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(button));
         }
         ShortcutPresentation.ReadEnabled = null;
     }
@@ -68,10 +69,11 @@ public sealed partial class SettingsThemePreviewTests
                 ("Button.GhostCompact", ButtonTier.Borderless, null),
                 ("Button.Danger", ButtonTier.Borderless, null),
                 ("Button.Icon", ButtonTier.Borderless, null),
-                // Editor buttons that carry a key caption keep the same rule.
-                ("Button.Ghost", ButtonTier.Borderless, "Redo"),
-                ("Button.Secondary", ButtonTier.Bordered, "Privacy"),
-                ("Button.Primary", ButtonTier.Filled, "Done"),
+                // Editor buttons that carry a key caption keep the same rule. Only single keys are
+                // printed under a command, so the samples use Q, W and Del.
+                ("Button.Ghost", ButtonTier.Borderless, "RotateLeft"),
+                ("Button.Secondary", ButtonTier.Bordered, "RotateRight"),
+                ("Button.Primary", ButtonTier.Filled, "Delete"),
             };
 
             foreach (AppTheme theme in SettingsUxEvidenceThemes)
@@ -147,7 +149,9 @@ public sealed partial class SettingsThemePreviewTests
                                 Assert.Equal(Wpf(Token("Accent.Default")), fill);
                                 break;
                             case ButtonTier.Bordered:
-                                Assert.Equal(Wpf(Token("Border.Subtle")), border);
+                                // Control outlines have their own token: Border.Subtle is decorative
+                                // and too faint on glass to mark a button.
+                                Assert.Equal(Wpf(Token("Border.Control")), border);
                                 Assert.Equal(Wpf(Token("Surface.Overlay")), fill);
                                 break;
                             default:
@@ -166,6 +170,8 @@ public sealed partial class SettingsThemePreviewTests
                         double borderRatio = tier == ButtonTier.Bordered ? ThemeContrast.Ratio(Over(Theme(border), page), page) : double.NaN;
                         if (style != "Button.Danger")
                             Assert.True(enabledRatio >= 4.5, $"{label}: label contrast {enabledRatio:0.00}");
+                        if (tier == ButtonTier.Bordered)
+                            Assert.True(borderRatio >= 3.0, $"{label}: outline contrast {borderRatio:0.00}");
                         Assert.True(disabledRatio < enabledRatio, $"{label}: disabled label is not dimmer");
                         table.AppendLine(string.Create(CultureInfo.InvariantCulture,
                             $"{AppThemeNames.ToSetting(theme)},{style}{(enabled.Content is Panel ? "+key" : string.Empty)},{tier},{enabledRatio:0.00},{disabledRatio:0.00},{borderRatio:0.00}"));

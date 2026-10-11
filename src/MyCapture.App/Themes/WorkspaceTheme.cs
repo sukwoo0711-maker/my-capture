@@ -76,6 +76,7 @@ internal static class WorkspaceTheme
             ["Accent.Cool"] = light ? "#5A48E0" : "#9789FF",
             ["Accent.Gradient"] = "#7C6CFF",
             ["Border.Subtle"] = light ? "#ccdcd6" : "#354650",
+            ["Border.Control"] = light ? "#7a8d86" : "#627784",
             ["Border.Focus"] = light ? "#5A48E0" : "#9789FF",
             ["Border.Accent"] = "#7C6CFF",
             ["Timeline.Background"] = light ? "#edf3f2" : "#141b22",
@@ -86,12 +87,15 @@ internal static class WorkspaceTheme
         };
     }
 
-    internal static void Apply(ResourceDictionary resources, WorkspaceRole role, AppTheme theme)
+    internal static void Apply(ResourceDictionary resources, WorkspaceRole role, AppTheme theme,
+        bool? systemHighContrast = null)
     {
+        bool contrast = systemHighContrast ?? ThemeService.IsSystemHighContrast;
         AppTheme palette = theme == AppTheme.Workspace
             ? role == WorkspaceRole.Gallery ? AppTheme.Daylight : AppTheme.Midnight : theme;
-        ThemeService.ApplyResources(palette, resources);
-        if (theme != AppTheme.Workspace) return;
+        ThemeService.ApplyResources(palette, resources, systemHighContrast: contrast);
+        // The inline role colours are a palette of their own; a Windows contrast theme replaces them too.
+        if (theme != AppTheme.Workspace || contrast) return;
         var values = WorkspaceOverrides(role);
         foreach ((string key, string value) in values)
         {

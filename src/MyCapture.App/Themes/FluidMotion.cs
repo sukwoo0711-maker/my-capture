@@ -7,6 +7,19 @@ using System.Windows.Threading;
 
 namespace MyCapture.App.Themes;
 
+/// <summary>Which motion token a state transition uses (Tokens.xaml Motion.*).</summary>
+public enum MotionSpeed
+{
+    /// <summary>83ms: hover and press.</summary>
+    Fast,
+
+    /// <summary>167ms: selection, check and toggle indicators.</summary>
+    Normal,
+
+    /// <summary>250ms: panel changes.</summary>
+    Deliberate,
+}
+
 /// <summary>
 /// Small, cancellable motion primitives shared by the desktop chrome.
 /// </summary>
@@ -32,10 +45,74 @@ public static class FluidMotion
             typeof(FluidMotion),
             new PropertyMetadata(false, OnPressFeedbackChanged));
 
+    /// <summary>
+    /// Slides a switch template's thumb and fades its accent fill when the toggle changes.
+    /// The template names <c>PART_SwitchTrack</c>, <c>PART_SwitchFill</c>,
+    /// <c>PART_SwitchThumb</c> and <c>PART_SwitchThumbOn</c>.
+    /// </summary>
+    public static readonly DependencyProperty SwitchMotionProperty =
+        DependencyProperty.RegisterAttached(
+            "SwitchMotion",
+            typeof(bool),
+            typeof(FluidMotion),
+            new PropertyMetadata(false, OnSwitchMotionChanged));
+
+    /// <summary>
+    /// The opacity a template layer settles at. Triggers set this instead of Opacity and the
+    /// layer fades there over its <see cref="TransitionProperty"/> token; it snaps while the
+    /// layer is not loaded yet or Windows animation effects are off. The state itself (the
+    /// trigger, focus, IsChecked) never waits for the fade.
+    /// </summary>
+    public static readonly DependencyProperty FadeToProperty =
+        DependencyProperty.RegisterAttached(
+            "FadeTo",
+            typeof(double),
+            typeof(FluidMotion),
+            new PropertyMetadata(0d, OnFadeToChanged));
+
+    /// <summary>The uniform scale an element settles at, animated like <see cref="FadeToProperty"/>.</summary>
+    public static readonly DependencyProperty ScaleToProperty =
+        DependencyProperty.RegisterAttached(
+            "ScaleTo",
+            typeof(double),
+            typeof(FluidMotion),
+            new PropertyMetadata(1d, OnScaleToChanged));
+
+    /// <summary>
+    /// The angle, in degrees, an element settles at around its centre, animated like
+    /// <see cref="FadeToProperty"/>: an expander chevron turns instead of jumping.
+    /// </summary>
+    public static readonly DependencyProperty RotateToProperty =
+        DependencyProperty.RegisterAttached(
+            "RotateTo",
+            typeof(double),
+            typeof(FluidMotion),
+            new PropertyMetadata(0d, OnRotateToChanged));
+
+    /// <summary>The motion token <see cref="FadeToProperty"/>, <see cref="ScaleToProperty"/> and <see cref="RotateToProperty"/> use.</summary>
+    public static readonly DependencyProperty TransitionProperty =
+        DependencyProperty.RegisterAttached(
+            "Transition",
+            typeof(MotionSpeed),
+            typeof(FluidMotion),
+            new PropertyMetadata(MotionSpeed.Fast));
+
+    /// <summary>
+    /// A button template part that takes the press feedback instead of the whole control, so a
+    /// check box or radio button scales its glyph and leaves the label still.
+    /// </summary>
+    internal const string PressTargetName = "PART_PressTarget";
+
     private static readonly DependencyProperty PressTransformProperty =
         DependencyProperty.RegisterAttached(
             "PressTransform",
             typeof(ScaleTransform),
+            typeof(FluidMotion));
+
+    private static readonly DependencyProperty RotationTransformProperty =
+        DependencyProperty.RegisterAttached(
+            "RotationTransform",
+            typeof(RotateTransform),
             typeof(FluidMotion));
 
     private static readonly DependencyProperty WindowEntranceTransformProperty =
@@ -55,6 +132,9 @@ public static class FluidMotion
 
     private const double PressedScale = 0.985;
 
+    // An 18px glyph needs a deeper press than a whole button to read as pressed at all.
+    private const double PressedGlyphScale = 0.9;
+
     public static void SetWindowEntrance(DependencyObject element, bool value) =>
         element.SetValue(WindowEntranceProperty, value);
 
@@ -66,6 +146,36 @@ public static class FluidMotion
 
     public static bool GetPressFeedback(DependencyObject element) =>
         (bool)element.GetValue(PressFeedbackProperty);
+
+    public static void SetSwitchMotion(DependencyObject element, bool value) =>
+        element.SetValue(SwitchMotionProperty, value);
+
+    public static bool GetSwitchMotion(DependencyObject element) =>
+        (bool)element.GetValue(SwitchMotionProperty);
+
+    public static void SetFadeTo(DependencyObject element, double value) =>
+        element.SetValue(FadeToProperty, value);
+
+    public static double GetFadeTo(DependencyObject element) =>
+        (double)element.GetValue(FadeToProperty);
+
+    public static void SetScaleTo(DependencyObject element, double value) =>
+        element.SetValue(ScaleToProperty, value);
+
+    public static double GetScaleTo(DependencyObject element) =>
+        (double)element.GetValue(ScaleToProperty);
+
+    public static void SetRotateTo(DependencyObject element, double value) =>
+        element.SetValue(RotateToProperty, value);
+
+    public static double GetRotateTo(DependencyObject element) =>
+        (double)element.GetValue(RotateToProperty);
+
+    public static void SetTransition(DependencyObject element, MotionSpeed value) =>
+        element.SetValue(TransitionProperty, value);
+
+    public static MotionSpeed GetTransition(DependencyObject element) =>
+        (MotionSpeed)element.GetValue(TransitionProperty);
 
     /// <summary>Whether motion should run for the current Windows session.</summary>
     internal static bool AnimationsEnabled =>
@@ -314,7 +424,8 @@ public static class FluidMotion
 
     private static void AnimatePress(ButtonBase button, bool pressed)
     {
-        ScaleTransform? scale = (ScaleTransform?)button.GetValue(PressTransformProperty);
+        UIElement element = button.Template?.FindName(PressTargetName, button) as UIElement ?? button;
+        ScaleTransform? scale = (ScaleTransform?)element.GetValue(PressTransformProperty);
 
         if (!AnimationsEnabled)
         {
@@ -322,10 +433,10 @@ public static class FluidMotion
             {
                 scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                button.ClearValue(PressTransformProperty);
-                if (ReferenceEquals(button.RenderTransform, scale))
+                element.ClearValue(PressTransformProperty);
+                if (ReferenceEquals(element.RenderTransform, scale))
                 {
-                    button.ClearValue(UIElement.RenderTransformProperty);
+                    element.ClearValue(UIElement.RenderTransformProperty);
                 }
             }
 
@@ -336,18 +447,19 @@ public static class FluidMotion
         {
             // A control that deliberately owns a transform keeps it; motion must never trample
             // component-specific rendering or replace a transform used for hit testing.
-            if (button.ReadLocalValue(UIElement.RenderTransformProperty) != DependencyProperty.UnsetValue)
+            if (element.ReadLocalValue(UIElement.RenderTransformProperty) != DependencyProperty.UnsetValue)
             {
                 return;
             }
 
             scale = new ScaleTransform(1, 1);
-            button.RenderTransformOrigin = new Point(0.5, 0.5);
-            button.RenderTransform = scale;
-            button.SetValue(PressTransformProperty, scale);
+            element.RenderTransformOrigin = new Point(0.5, 0.5);
+            element.RenderTransform = scale;
+            element.SetValue(PressTransformProperty, scale);
         }
 
-        double target = pressed ? PressedScale : 1.0;
+        double pressedScale = ReferenceEquals(element, button) ? PressedScale : PressedGlyphScale;
+        double target = pressed ? pressedScale : 1.0;
         Duration duration = pressed ? FastDuration : NormalDuration;
         IEasingFunction easing = pressed ? StandardEasing : SoftLandingEasing;
         var x = new DoubleAnimation(scale.ScaleX, target, duration)
@@ -368,13 +480,13 @@ public static class FluidMotion
             y.Completed += (_, _) =>
             {
                 if (!button.IsPressed
-                    && ReferenceEquals(button.GetValue(PressTransformProperty), scale)
-                    && ReferenceEquals(button.RenderTransform, scale))
+                    && ReferenceEquals(element.GetValue(PressTransformProperty), scale)
+                    && ReferenceEquals(element.RenderTransform, scale))
                 {
                     scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                     scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                    button.ClearValue(PressTransformProperty);
-                    button.ClearValue(UIElement.RenderTransformProperty);
+                    element.ClearValue(PressTransformProperty);
+                    element.ClearValue(UIElement.RenderTransformProperty);
                 }
             };
         }
@@ -388,6 +500,191 @@ public static class FluidMotion
             y,
             HandoffBehavior.SnapshotAndReplace);
     }
+
+    private static void OnSwitchMotionChanged(
+        DependencyObject dependencyObject,
+        DependencyPropertyChangedEventArgs e)
+    {
+        if (dependencyObject is not ToggleButton toggle)
+        {
+            return;
+        }
+
+        toggle.Loaded -= OnSwitchLoaded;
+        toggle.Checked -= OnSwitchToggled;
+        toggle.Unchecked -= OnSwitchToggled;
+        if (e.NewValue is true)
+        {
+            toggle.Loaded += OnSwitchLoaded;
+            toggle.Checked += OnSwitchToggled;
+            toggle.Unchecked += OnSwitchToggled;
+            if (toggle.IsLoaded)
+            {
+                MoveSwitch(toggle, animate: false);
+            }
+        }
+    }
+
+    private static void OnSwitchLoaded(object sender, RoutedEventArgs e)
+    {
+        _ = e;
+        if (sender is ToggleButton toggle)
+        {
+            MoveSwitch(toggle, animate: false);
+        }
+    }
+
+    private static void OnSwitchToggled(object sender, RoutedEventArgs e)
+    {
+        _ = e;
+        if (sender is ToggleButton toggle)
+        {
+            MoveSwitch(toggle, animate: toggle.IsLoaded);
+        }
+    }
+
+    /// <summary>Places the thumb and fill for the current state, sliding when motion is on.</summary>
+    internal static void MoveSwitch(ToggleButton toggle, bool animate)
+    {
+        toggle.ApplyTemplate();
+        if (toggle.Template?.FindName("PART_SwitchThumb", toggle) is not FrameworkElement thumb)
+        {
+            return;
+        }
+
+        bool on = toggle.IsChecked == true;
+        // Template transforms may be frozen; the thumb owns one it can animate.
+        if (thumb.RenderTransform is not TranslateTransform shift || shift.IsFrozen)
+        {
+            shift = new TranslateTransform();
+            thumb.RenderTransform = shift;
+        }
+
+        double travel = toggle.Template.FindName("PART_SwitchTrack", toggle) is FrameworkElement track
+            && track.ActualWidth > 0 && thumb.ActualWidth > 0
+                ? track.ActualWidth - thumb.ActualWidth - (2 * thumb.Margin.Left)
+                : 16;
+        Animate(shift, TranslateTransform.XProperty, on ? travel : 0, animate);
+        if (toggle.Template.FindName("PART_SwitchFill", toggle) is UIElement fill)
+        {
+            Animate(fill, UIElement.OpacityProperty, on ? 1 : 0, animate);
+        }
+
+        if (toggle.Template.FindName("PART_SwitchThumbOn", toggle) is UIElement thumbOn)
+        {
+            Animate(thumbOn, UIElement.OpacityProperty, on ? 1 : 0, animate);
+        }
+    }
+
+    private static void Animate(IAnimatable target, DependencyProperty property, double to, bool animate) =>
+        Animate(target, property, to, animate, NormalDuration);
+
+    private static void Animate(IAnimatable target, DependencyProperty property, double to, bool animate,
+        Duration duration)
+    {
+        var owner = (DependencyObject)target;
+        double from = (double)owner.GetValue(property);
+        target.BeginAnimation(property, null);
+        owner.SetValue(property, to);
+        if (!animate || !AnimationsEnabled || from.Equals(to))
+        {
+            return;
+        }
+
+        var slide = new DoubleAnimation(from, to, duration)
+        {
+            EasingFunction = StandardEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        target.BeginAnimation(property, slide, HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private static void OnFadeToChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
+    {
+        if (dependencyObject is UIElement element)
+        {
+            if (element is FrameworkElement layer)
+            {
+                layer.Unloaded -= OnStateLayerUnloaded;
+                layer.Unloaded += OnStateLayerUnloaded;
+            }
+            Animate(element, UIElement.OpacityProperty, (double)e.NewValue, IsShown(element),
+                TransitionDuration(element));
+        }
+    }
+
+    private static void OnScaleToChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
+    {
+        if (dependencyObject is not UIElement element)
+        {
+            return;
+        }
+
+        // Template transforms may be frozen or shared; the element owns one it can animate.
+        if (element.RenderTransform is not ScaleTransform scale || scale.IsFrozen)
+        {
+            scale = new ScaleTransform(1, 1);
+            element.RenderTransformOrigin = new Point(0.5, 0.5);
+            element.RenderTransform = scale;
+        }
+
+        double to = (double)e.NewValue;
+        bool animate = IsShown(element);
+        Duration duration = TransitionDuration(element);
+        Animate(scale, ScaleTransform.ScaleXProperty, to, animate, duration);
+        Animate(scale, ScaleTransform.ScaleYProperty, to, animate, duration);
+    }
+
+    private static void OnRotateToChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
+    {
+        if (dependencyObject is not UIElement element)
+        {
+            return;
+        }
+
+        // Even a mutable transform can be shared by two template consumers. Only reuse
+        // the transform created for this element; clone an existing rotation otherwise.
+        var rotate = (RotateTransform?)element.GetValue(RotationTransformProperty);
+        if (rotate is null || !ReferenceEquals(element.RenderTransform, rotate))
+        {
+            rotate = element.RenderTransform is RotateTransform existing
+                ? existing.CloneCurrentValue()
+                : new RotateTransform();
+            element.RenderTransformOrigin = new Point(0.5, 0.5);
+            element.RenderTransform = rotate;
+            element.SetValue(RotationTransformProperty, rotate);
+        }
+
+        if (element is FrameworkElement part)
+        {
+            part.Unloaded -= OnRotationUnloaded;
+            part.Unloaded += OnRotationUnloaded;
+        }
+        Animate(rotate, RotateTransform.AngleProperty, (double)e.NewValue, IsShown(element), TransitionDuration(element));
+    }
+
+    private static void OnStateLayerUnloaded(object sender, RoutedEventArgs e)
+    {
+        var layer = (FrameworkElement)sender;
+        Animate(layer, UIElement.OpacityProperty, GetFadeTo(layer), animate: false);
+    }
+
+    private static void OnRotationUnloaded(object sender, RoutedEventArgs e)
+    {
+        var part = (FrameworkElement)sender;
+        if (part.GetValue(RotationTransformProperty) is RotateTransform rotate)
+            Animate(rotate, RotateTransform.AngleProperty, GetRotateTo(part), animate: false);
+    }
+
+    // A layer that is still being templated takes its first state at once.
+    private static bool IsShown(UIElement element) => element is FrameworkElement { IsLoaded: true };
+
+    private static Duration TransitionDuration(DependencyObject element) => GetTransition(element) switch
+    {
+        MotionSpeed.Normal => NormalDuration,
+        MotionSpeed.Deliberate => DeliberateDuration,
+        _ => FastDuration,
+    };
 
     private static Duration ResourceDuration(string key, TimeSpan fallback) =>
         Application.Current?.TryFindResource(key) is Duration duration

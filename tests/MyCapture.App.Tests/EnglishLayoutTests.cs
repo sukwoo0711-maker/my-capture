@@ -28,11 +28,12 @@ public sealed class EnglishLayoutTests
         window.Content = button;
         button.Measure(new Size(300, 80));
         button.Arrange(new Rect(0, 0, 300, 80));
-        var path = Assert.Single(Descendants(button).OfType<System.Windows.Shapes.Path>());
+        var path = Assert.Single(Descendants(button).OfType<MyCapture.App.Themes.SymbolIcon>());
         Assert.NotNull(path.Data);
         Assert.NotNull(path.Fill);
         Assert.Null(path.Stroke);
-        Assert.Equal(20, path.Width);
+        Assert.Equal(20, path.Size);
+        Assert.Equal(0, path.StrokeThickness);
         Assert.Same(window.FindResource("Button.Primary"), button.Style);
     });
 
@@ -122,7 +123,9 @@ public sealed class EnglishLayoutTests
             detailToggle.IsChecked = false;
             window.UpdateLayout();
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
-            foreach (string caption in new[] { "Add layer", UiText.Get("Workspace.EditProperties"), "Save to library", "Export · MP4 / GIF" })
+            // The layer panel's separate "Edit properties" button repeated the edit icon (F2)
+            // above the list, so it was removed with the duplicated properties summary.
+            foreach (string caption in new[] { "Add layer", "Save to library", "Export · MP4 / GIF" })
             {
                 Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);

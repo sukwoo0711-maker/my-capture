@@ -90,13 +90,11 @@ public sealed class CaptureEditorFlowTests
 
             bool handled = editor.HandleShortcut(Key.C, ModifierKeys.Control);
 
-            // Copy is a secondary action: it hands the pixels over and the editor stays open.
+            // Ctrl+C finishes the edit like Done: save, copy and close.
             Assert.True(handled);
             Assert.NotNull(requested);
-            Assert.Null(completed);
-            Assert.False(editor.IsCommitInProgress);
-            Assert.Equal(UiText.Get("EditorFlow_Copied"), editor.StatusText);
-            Assert.Equal(EditorCommitAction.CopyToClipboard, requested!.Action);
+            Assert.Same(requested, completed);
+            Assert.Equal(EditorCommitAction.Done, requested!.Action);
             Assert.Equal(frame.ScreenBounds, requested.Frame.ScreenBounds);
             Assert.Equal(frame.Monitor, requested.Frame.Monitor);
             Assert.Equal(frame.DpiScale, requested.Frame.DpiScale);

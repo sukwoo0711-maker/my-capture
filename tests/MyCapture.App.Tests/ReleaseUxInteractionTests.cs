@@ -43,8 +43,13 @@ public sealed class ReleaseUxInteractionTests
                     .SelectMany(row => row.Children.OfType<WrapPanel>()).Select(System.Windows.Automation.AutomationProperties.GetName));
                 var capture = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(((TabItem)tabs.Items[0]).Content).Content);
                 Assert.Contains(capture.Children.OfType<UniformGrid>(), row => row.Children.OfType<WrapPanel>().Any(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Ctrl+F8"));
+                // A search shows one list across every tab instead of filtering the selected one.
                 root.Children.OfType<Grid>().Single().Children.OfType<TextBox>().Single().Text = "Ctrl+F8";
-                Assert.Single(capture.Children.OfType<UniformGrid>(), row => row.Visibility == Visibility.Visible);
+                Assert.Equal(Visibility.Collapsed, tabs.Visibility);
+                var results = Assert.IsType<StackPanel>(root.Children.OfType<ScrollViewer>().Single().Content);
+                Border match = Assert.Single(results.Children.OfType<Border>(), row => row.Visibility == Visibility.Visible);
+                Assert.Contains(FirstRunWelcomeTests.Descendants(match).OfType<WrapPanel>(),
+                    keys => System.Windows.Automation.AutomationProperties.GetName(keys) == "Ctrl+F8");
                 help.Close();
                 // The first-run welcome moved to its own window (FirstRunWelcomeTests); it still
                 // shows the configured capture keys.

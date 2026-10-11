@@ -59,6 +59,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _recordingStartDelaySeconds = string.Empty;
     private bool _recordingIncludeCursor;
     private bool _recordingCursorHighlight;
+    private bool _useRecordingFixedSize;
     private string _recordingPresetWidth = "0";
     private string _recordingPresetHeight = "0";
     private string _recordingCaptureMode = RecordingCaptureModeNames.Auto;
@@ -221,18 +222,41 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set => Set(ref _recordingCursorHighlight, value);
     }
 
-    /// <summary>Optional fixed recording width in physical pixels. 0 = free drag.</summary>
+    /// <summary>
+    /// True records every region at <see cref="RecordingPresetWidth"/> × <see cref="RecordingPresetHeight"/>
+    /// and the drag only places it; false records the size the user drags. Saved as a preset
+    /// size or as no preset, so older settings without a size (or with 0) load as the dragged size.
+    /// </summary>
+    public bool UseRecordingFixedSize
+    {
+        get => _useRecordingFixedSize;
+        set
+        {
+            if (!Set(ref _useRecordingFixedSize, value)) return;
+            RaisePropertyChanged(nameof(UseRecordingDraggedSize));
+            ValidateRecordingPresetSize();
+        }
+    }
+
+    /// <summary>The other choice of <see cref="UseRecordingFixedSize"/>, for its own radio button.</summary>
+    public bool UseRecordingDraggedSize
+    {
+        get => !_useRecordingFixedSize;
+        set => UseRecordingFixedSize = !value;
+    }
+
+    /// <summary>Fixed recording width in physical pixels; used only with <see cref="UseRecordingFixedSize"/>.</summary>
     public string RecordingPresetWidth
     {
         get => _recordingPresetWidth;
-        set { if (Set(ref _recordingPresetWidth, value)) ValidateInt(value, SettingsRanges.ThumbnailLongEdge); }
+        set { if (Set(ref _recordingPresetWidth, value)) ValidateRecordingPresetSize(); }
     }
 
-    /// <summary>Optional fixed recording height in physical pixels. 0 = free drag.</summary>
+    /// <summary>Fixed recording height in physical pixels; used only with <see cref="UseRecordingFixedSize"/>.</summary>
     public string RecordingPresetHeight
     {
         get => _recordingPresetHeight;
-        set { if (Set(ref _recordingPresetHeight, value)) ValidateInt(value, SettingsRanges.ThumbnailLongEdge); }
+        set { if (Set(ref _recordingPresetHeight, value)) ValidateRecordingPresetSize(); }
     }
 
     /// <summary>Recording capture method as its setting name: <c>auto</c> (WGC first) or <c>gdi</c>.</summary>
@@ -570,8 +594,14 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _recordingStartDelaySeconds = Int(s.Recording.StartDelaySeconds);
         _recordingIncludeCursor = s.Recording.IncludeCursor;
         _recordingCursorHighlight = s.Recording.CursorHighlight;
-        _recordingPresetWidth = (s.Recording.PresetWidth ?? 0).ToString(CultureInfo.InvariantCulture);
-        _recordingPresetHeight = (s.Recording.PresetHeight ?? 0).ToString(CultureInfo.InvariantCulture);
+        // The recorder applies a preset only when both sides are positive; no preset, the 0 older
+        // versions saved, or a single side all record the dragged size. The boxes then offer a
+        // common size, ready for when the fixed size is chosen.
+        int? presetWidth = s.Recording.PresetWidth;
+        int? presetHeight = s.Recording.PresetHeight;
+        _useRecordingFixedSize = presetWidth > 0 && presetHeight > 0;
+        _recordingPresetWidth = Int(presetWidth > 0 ? presetWidth.Value : SuggestedRecordingWidth);
+        _recordingPresetHeight = Int(presetHeight > 0 ? presetHeight.Value : SuggestedRecordingHeight);
         _recordingCaptureMode = RecordingCaptureModeNames.ToSetting(s.Recording.CaptureMode);
 
         _captureHotkey = s.Hotkeys.Capture.ToString();
@@ -672,7 +702,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         B(_includeCursor), B(_autoDetectWindows), B(_showMagnifier), B(_showSelectionGrid), B(_abortOnFocusLoss),
         _preservedColorFormat.ToString(), _delaySeconds, _regionHistoryLimit,
         _recordingFrameRate, B(_useRecordingStartDelay), _recordingStartDelaySeconds, B(_recordingIncludeCursor),
-        B(_recordingCursorHighlight), _recordingPresetWidth, _recordingPresetHeight, _recordingCaptureMode,
+        B(_recordingCursorHighlight), B(_useRecordingFixedSize), _recordingPresetWidth, _recordingPresetHeight, _recordingCaptureMode,
         Int(_preservedRecordingBitrateBitsPerSecond), Dbl(_preservedRecordingCoarseStepSeconds),
         _captureHotkey, _openLibraryHotkey, _pasteToScreenHotkey, _hideAllPinsHotkey, _toggleClickThroughHotkey,
         _repeatLastRegionHotkey, _captureWindowHotkey, _captureFullScreenHotkey, _recordRegionHotkey,
@@ -740,8 +770,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 CursorHighlight = _recordingCursorHighlight,
                 BitrateBitsPerSecond = _preservedRecordingBitrateBitsPerSecond,
                 CoarseStepSeconds = _preservedRecordingCoarseStepSeconds,
-                PresetWidth = ParseOptionalInt(_recordingPresetWidth),
-                PresetHeight = ParseOptionalInt(_recordingPresetHeight),
+                // The dragged size is saved as no preset, which the recorder already reads as free.
+                PresetWidth = _useRecordingFixedSize ? ParseOptionalInt(_recordingPresetWidth) : null,
+                PresetHeight = _useRecordingFixedSize ? ParseOptionalInt(_recordingPresetHeight) : null,
                 CaptureMode = RecordingCaptureModeNames.Parse(_recordingCaptureMode),
             },
             Hotkeys =
@@ -881,6 +912,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             _recordingStartDelaySeconds,
             SettingsRanges.RecordingStartDelaySeconds,
             nameof(RecordingStartDelaySeconds));
+        ValidateRecordingPresetSize();
         ValidateInt(_maxItems, SettingsRanges.MaxItems, nameof(MaxItems));
         ValidateMaxGiB(_maxGiB);
         ValidateInt(_thumbnailLongEdge, SettingsRanges.ThumbnailLongEdge, nameof(ThumbnailLongEdge));
@@ -913,6 +945,24 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         }
 
         SetErrorState(property!, range.Contains(parsed), UiText.Format("Text_CF32FE576AE7", range.Describe()));
+    }
+
+    /// <summary>
+    /// Validates the size boxes only while the fixed size is chosen; with the dragged size they
+    /// are disabled and ignored, so a stale value there never blocks Apply.
+    /// </summary>
+    private void ValidateRecordingPresetSize()
+    {
+        if (_useRecordingFixedSize)
+        {
+            ValidateInt(_recordingPresetWidth, SettingsRanges.RecordingPresetSize, nameof(RecordingPresetWidth));
+            ValidateInt(_recordingPresetHeight, SettingsRanges.RecordingPresetSize, nameof(RecordingPresetHeight));
+        }
+        else
+        {
+            ClearError(nameof(RecordingPresetWidth));
+            ClearError(nameof(RecordingPresetHeight));
+        }
     }
 
     private void ValidateRecordingFrameRate(string value)
@@ -1253,6 +1303,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));
 
     private void RaiseAllChanged() => RaisePropertyChanged(null);
+
+    /// <summary>The fixed recording size the boxes offer while no size is saved (720p).</summary>
+    private const int SuggestedRecordingWidth = 1280;
+    private const int SuggestedRecordingHeight = 720;
 
     // ================= Preserved (non-UI) members =================
 

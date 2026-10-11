@@ -103,6 +103,9 @@ internal sealed class AnnotationEditorControl : Grid
     private Button _redoButton = null!;
     private Button _rotateLeftButton = null!;
     private Button _rotateRightButton = null!;
+    private StackPanel _rotationCommands = null!;
+    private Border _editRotationHost = null!;
+    private Border _cropRotationHost = null!;
     private Button _deleteButton = null!;
     private Button _redactButton = null!;
     private Slider _thicknessSlider = null!;
@@ -212,10 +215,13 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.BaseHeightAtZeroTurns = selectedBitmap.PixelHeight;
         AnnotationDefaults defaults = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
         _controller.StrokeColor = defaults.StrokeColor;
-        _controller.StrokeThickness = double.IsFinite(defaults.StrokeThickness) ? Math.Clamp(defaults.StrokeThickness, 1, 24) : 3;
+        // The settings contract is the editor's range: a width saved in settings is the width drawn.
+        _controller.StrokeThickness = double.IsFinite(defaults.StrokeThickness)
+            ? Math.Clamp(defaults.StrokeThickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max) : 3;
         _controller.ApplyStrokeStyle(Enum.IsDefined(defaults.StrokeStyle) ? defaults.StrokeStyle : AnnotationStrokeStyle.Solid);
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
-        _controller.DefaultFontSize = double.IsFinite(defaults.FontSize) ? Math.Clamp(defaults.FontSize, 8, 200) : 18;
+        _controller.DefaultFontSize = double.IsFinite(defaults.FontSize)
+            ? Math.Clamp(defaults.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : 18;
         _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
         _controller.ApplyBlurRadius(defaults.BlurRadius);
         _mosaicBlockSize = defaults.MosaicBlockSize;
@@ -419,7 +425,7 @@ internal sealed class AnnotationEditorControl : Grid
         {
             _hangulNoticeTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
             {
-                Interval = TimeSpan.FromMilliseconds(HangulNoticeMilliseconds),
+                Interval = MyCapture.App.Themes.FeedbackTiming.Result,
             };
             _hangulNoticeTimer.Tick += (_, _) =>
             {
@@ -436,7 +442,6 @@ internal sealed class AnnotationEditorControl : Grid
         _hangulNoticeTimer.Start();
     }
 
-    private const int HangulNoticeMilliseconds = 6000;
     private const int HangulNoticeRepeatMilliseconds = 3000;
 
     /// <summary>The status line text, for tests.</summary>
@@ -474,7 +479,8 @@ internal sealed class AnnotationEditorControl : Grid
     {
         foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
         _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
-        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.CopyToClipboard);
+        // Copying is how people finish an edit, so Copy saves, copies and closes like Done.
+        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.Done);
         _shortcutActions["Save"] = () => Commit(EditorCommitAction.QuickSave);
         _shortcutActions["SaveAs"] = () => Commit(EditorCommitAction.SaveAs);
         _shortcutActions["Privacy"] = () => _ = ApplyPrivacyRedactionsAsync();
@@ -1334,8 +1340,14 @@ internal sealed class AnnotationEditorControl : Grid
         left.Children.Add(_redoButton);
         left.Children.Add(Separator());
 
-        // The single way into crop. Rotation, the ratio and the automatic margin finder live
-        // inside crop mode, so no second crop entry point remains on the tool rail.
+        // Rotation changes the whole image independently of cropping. Keep its names next to
+        // the image commands, separated from the history arrows.
+        _rotationCommands = BuildRotationCommands();
+        _editRotationHost = new Border { Child = _rotationCommands };
+        left.Children.Add(_editRotationHost);
+        left.Children.Add(Separator());
+
+        // The single way into crop; the ratio and automatic margin finder live in that mode.
         Button crop = IconTextButton(UiText.Get("Tools_Crop"), UiText.Get("EditorFlow_CropHint"), "Icon.Crop", FallbackCrop,
             () => { SelectTool(EditorTool.Crop); Focus(); });
         AutomationProperties.SetAutomationId(crop, "Capture410Crop");
@@ -1358,7 +1370,7 @@ internal sealed class AnnotationEditorControl : Grid
         Button save = BuildSaveOverflowMenu();
         Button copy = IconTextButton(
             UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_74EEFE6E43AE"), "Icon.Copy", FallbackCopy,
-            () => Commit(EditorCommitAction.CopyToClipboard));
+            () => Commit(EditorCommitAction.Done));
         copy.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
         Button done = IconTextButton(
             UiText.Get("Text_727333AB0740"), UiText.Get("EditorFlow_DoneHint"), "Icon.Check", FallbackCheck,
@@ -1394,14 +1406,10 @@ internal sealed class AnnotationEditorControl : Grid
     private CommandGroupsPanel BuildCropCommands()
     {
         var left = CommandRow();
-        // An image-plus-arrow icon and a visible label, like the rotate commands in Photos and
-        // Paint: a bare curved arrow beside Undo and Redo read as another history command.
-        _rotateLeftButton = IconTextButton(UiText.Get("EditorUx_RotateLeft"), UiText.Get("EditorUx_RotateLeftHint"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
-        _rotateRightButton = IconTextButton(UiText.Get("EditorUx_RotateRight"), UiText.Get("EditorUx_RotateRightHint"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
-        AutomationName(_rotateLeftButton, UiText.Get("EditorUx_RotateLeftHint"));
-        AutomationName(_rotateRightButton, UiText.Get("EditorUx_RotateRightHint"));
-        left.Children.Add(_rotateLeftButton);
-        left.Children.Add(_rotateRightButton);
+        // The same controls move here while a crop frame is open, keeping rotation's existing
+        // crop-frame reset and ratio behavior without making crop the entry point for rotation.
+        _cropRotationHost = new Border();
+        left.Children.Add(_cropRotationHost);
         left.Children.Add(Separator());
 
         var ratioLabel = new TextBlock
@@ -1442,14 +1450,29 @@ internal sealed class AnnotationEditorControl : Grid
         right.Children.Add(apply);
         right.Children.Add(cancel);
 
-        CommandButton(_rotateLeftButton, borderless: true, ShortcutScope.Annotation, "RotateLeft");
-        CommandButton(_rotateRightButton, borderless: true, ShortcutScope.Annotation, "RotateRight");
         CommandButton(_autoTrimButton, borderless: true);
         CommandButton(apply, borderless: false, ShortcutScope.Crop, "Apply");
         CommandButton(cancel, borderless: true, ShortcutScope.Crop, "Cancel");
         var panel = new CommandGroupsPanel { Children = { left, right } };
         AutomationProperties.SetName(panel, UiText.Get("EditorFlow_CropBarName"));
         return panel;
+    }
+
+    private StackPanel BuildRotationCommands()
+    {
+        // The image-plus-arrow symbols and names distinguish image rotation from undo/redo.
+        _rotateLeftButton = IconTextButton(UiText.Get("EditorUx_RotateLeft"), UiText.Get("EditorUx_RotateLeftHint"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
+        _rotateRightButton = IconTextButton(UiText.Get("EditorUx_RotateRight"), UiText.Get("EditorUx_RotateRightHint"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
+        AutomationName(_rotateLeftButton, UiText.Get("EditorUx_RotateLeftHint"));
+        AutomationName(_rotateRightButton, UiText.Get("EditorUx_RotateRightHint"));
+        CommandButton(_rotateLeftButton, borderless: true, ShortcutScope.Annotation, "RotateLeft");
+        CommandButton(_rotateRightButton, borderless: true, ShortcutScope.Annotation, "RotateRight");
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _rotateLeftButton, _rotateRightButton },
+        };
     }
 
     private static StackPanel CommandRow() => new()
@@ -1498,9 +1521,15 @@ internal sealed class AnnotationEditorControl : Grid
         if (_editCommands is null || _cropCommands is null) return;
         bool cropping = _crop is not null;
         bool hidingFocus = (cropping ? _editCommands : _cropCommands).IsKeyboardFocusWithin;
+        if (hidingFocus) Focus();
+        Border rotationHost = cropping ? _cropRotationHost : _editRotationHost;
+        if (!ReferenceEquals(_rotationCommands.Parent, rotationHost))
+        {
+            if (_rotationCommands.Parent is Border previousHost) previousHost.Child = null;
+            rotationHost.Child = _rotationCommands;
+        }
         _editCommands.Visibility = cropping ? Visibility.Collapsed : Visibility.Visible;
         _cropCommands.Visibility = cropping ? Visibility.Visible : Visibility.Collapsed;
-        if (hidingFocus) Focus();
     }
 
     /// <summary>Whether the crop commands are showing, for tests.</summary>
@@ -1631,6 +1660,26 @@ internal sealed class AnnotationEditorControl : Grid
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
         // Tighter than the shared rail padding: six groups must still fit the 460 DIP minimum height.
         panel.Padding = new Thickness(6, 4, 6, 4);
+        // A wrapped command row reduces the available rail height. Keep every tool's
+        // hit area intact and reclaim only spacing between tools and intent groups.
+        var regularHeight = panel.Padding.Top + panel.Padding.Bottom + groups.Children
+            .OfType<FrameworkElement>()
+            .Sum(child => child is UniformGrid grid
+                ? Math.Ceiling(grid.Children.Count / (double)grid.Columns) * 40
+                : 9);
+        panel.SizeChanged += (_, _) =>
+        {
+            var compact = panel.ActualHeight < regularHeight;
+            foreach (var button in _toolButtons.Values)
+            {
+                button.Margin = new Thickness(1, compact ? 0 : 1, 1, compact ? 0 : 1);
+            }
+
+            foreach (var separator in groups.Children.OfType<Border>())
+            {
+                separator.Margin = new Thickness(8, compact ? 1 : 4, 8, compact ? 1 : 4);
+            }
+        };
         return panel;
     }
 
@@ -1898,7 +1947,8 @@ internal sealed class AnnotationEditorControl : Grid
                 Padding = new Thickness(0),
                 ToolTip = UiText.Format("Text_151C77170A94", swatchColor.ToHex()),
                 BorderThickness = new Thickness(1),
-                BorderBrush = Brush("Border.Subtle", Colors.Gray),
+                // A control boundary, so a dark swatch stays outlined on a dark panel.
+                BorderBrush = Brush("Border.Control", Colors.Gray),
                 Background = swatchColor.ToBrush(),
             };
             AutomationName(swatchButton, UiText.Format("Text_151C77170A94", swatchColor.ToHex()));
@@ -1998,20 +2048,24 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement BuildThicknessSection()
     {
         var panel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("Text_70EC2D232B4F")));
 
+        // The settings window accepts the same range; the editor never narrows it.
         _thicknessSlider = new Slider
         {
-            Minimum = 1,
-            Maximum = 24,
+            Minimum = SettingsRanges.StrokeThickness.Min,
+            Maximum = SettingsRanges.StrokeThickness.Max,
             Value = _controller.StrokeThickness,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0, 2, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
             ToolTip = UiText.Get("Text_70EC2D232B4F"),
             SmallChange = 1,
-            LargeChange = 2,
+            LargeChange = 4,
+            TickFrequency = 1,
+            IsSnapToTickEnabled = true,
         };
         AutomationName(_thicknessSlider, UiText.Get("Text_70EC2D232B4F"));
+        panel.Children.Add(SliderHeader(UiText.Get("Text_70EC2D232B4F"),
+            ValueEntry(_thicknessSlider, UiText.Get("Editor_UnitPx"), UiText.Get("Text_70EC2D232B4F"))));
         _thicknessSlider.ValueChanged += (_, args) =>
         {
             if (_syncingInspector)
@@ -2099,20 +2153,21 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement BuildFontSizeSection()
     {
         var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("Text_5F3A9C8D1E20")));
 
         _fontSizeSlider = new Slider
         {
-            Minimum = 8,
-            Maximum = 200,
+            Minimum = SettingsRanges.FontSize.Min,
+            Maximum = SettingsRanges.FontSize.Max,
             Value = _controller.DefaultFontSize,
             SmallChange = 1,
             LargeChange = 4,
             TickFrequency = 1,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0, 2, 0, 0),
             ToolTip = UiText.Get("Text_5F3A9C8D1E20"),
         };
         AutomationName(_fontSizeSlider, UiText.Get("Text_5F3A9C8D1E20"));
+        panel.Children.Add(SliderHeader(UiText.Get("Text_5F3A9C8D1E20"),
+            ValueEntry(_fontSizeSlider, UiText.Get("Editor_UnitPt"), UiText.Get("Text_5F3A9C8D1E20"))));
         _fontSizeSlider.ValueChanged += (_, args) =>
         {
             if (_syncingInspector)
@@ -2140,7 +2195,6 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement BuildBlurSection()
     {
         var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("EditorBlur_Strength")));
 
         _blurSlider = new Slider
         {
@@ -2151,10 +2205,12 @@ internal sealed class AnnotationEditorControl : Grid
             LargeChange = 4,
             TickFrequency = 1,
             IsSnapToTickEnabled = true,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0, 2, 0, 0),
             ToolTip = UiText.Get("EditorBlur_StrengthHint"),
         };
         AutomationName(_blurSlider, UiText.Get("EditorBlur_Strength"));
+        panel.Children.Add(SliderHeader(UiText.Get("EditorBlur_Strength"),
+            ValueEntry(_blurSlider, UiText.Get("Editor_UnitPx"), UiText.Get("EditorBlur_Strength"))));
         AutomationProperties.SetHelpText(_blurSlider, UiText.Get("EditorBlur_StrengthHint"));
         _blurSlider.ValueChanged += (_, args) =>
         {
@@ -2338,6 +2394,34 @@ internal sealed class AnnotationEditorControl : Grid
         };
         label.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         return label;
+    }
+
+    /// <summary>
+    /// The number box for an inspector slider. Enter and Esc hand the keyboard back to the
+    /// canvas, as the custom colour box does, so the next letter is a tool shortcut again.
+    /// </summary>
+    private SliderValueEntry ValueEntry(Slider slider, string unit, string name)
+    {
+        var entry = new SliderValueEntry(slider, unit, name);
+        entry.Finished += (_, _) => Focus();
+        // A value past the range is applied at the nearest limit; the status says which.
+        entry.Clamped += (_, value) => SetStatus(UiText.Format("SliderValue_Clamped",
+            SliderValueEntry.Format(slider.Minimum), SliderValueEntry.Format(slider.Maximum), unit, SliderValueEntry.Format(value)));
+        return entry;
+    }
+
+    /// <summary>A section label with the slider's value box at the right of the same row.</summary>
+    private static FrameworkElement SliderHeader(string label, SliderValueEntry entry)
+    {
+        var row = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(entry.Element, Dock.Right);
+        row.Children.Add(entry.Element);
+        TextBlock text = SectionLabel(label);
+        text.Margin = new Thickness(0, 0, 8, 0);
+        text.VerticalAlignment = VerticalAlignment.Center;
+        text.TextTrimming = TextTrimming.CharacterEllipsis;
+        row.Children.Add(text);
+        return row;
     }
 
     /// <summary>
@@ -2861,8 +2945,8 @@ internal sealed class AnnotationEditorControl : Grid
         // Keep styling reachable in compact windows; vertical scrolling handles short heights.
         // No command label is ever folded away here: a button reduced to its shortcut letter
         // (the old narrow-window rotate buttons showed only Q and W) tells a beginner nothing.
-        // The rotate commands now live in crop mode, which leaves room for every label at the
-        // 680 DIP minimum width.
+        // The command groups wrap at the 680 DIP minimum width so the image command names and
+        // finishing actions stay visible.
         bool compact = ActualWidth > 0 && ActualWidth < InspectorCompactWidth;
 
         if (compact == _inspectorCompact)

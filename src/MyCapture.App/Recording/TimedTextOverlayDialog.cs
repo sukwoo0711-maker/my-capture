@@ -154,17 +154,14 @@ internal sealed class TimedTextOverlayDialog : Window
         _error.Margin = new Thickness(0, 8, 0, 0);
         root.Children.Add(_error);
 
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 16, 0, 0),
-        };
-        var cancel = new Button { Content = UiText.Get("Text_BE876433993A"), MinWidth = 88, IsCancel = true };
-        var save = new Button { Content = UiText.Get("Text_D9F974C95F68"), MinWidth = 112, IsDefault = true, Margin = new Thickness(8, 0, 0, 0) };
+        // Save first, then cancel, like every other dialog in the app.
+        Button save = ThemedDialog.CreateActionButton(UiText.Get("Text_D9F974C95F68"), primary: true);
+        save.IsDefault = true;
         save.Click += (_, _) => Save();
-        buttons.Children.Add(cancel);
-        buttons.Children.Add(save);
+        Button cancel = ThemedDialog.CreateActionButton(UiText.Get("Text_BE876433993A"), primary: false);
+        cancel.IsCancel = true;
+        WrapPanel buttons = ThemedDialog.CreateActionRow(save, cancel);
+        buttons.Margin = new Thickness(0, 12, 0, 0);
         Grid.SetRow(buttons, 5);
         root.Children.Add(buttons);
         return root;

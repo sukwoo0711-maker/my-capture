@@ -158,6 +158,13 @@ public sealed class BrowserPageUrlService
         return IsSupportedBrowser(process.ProcessName, className.ToString());
     }
 
+    /// <summary>
+    /// Browsers whose top-level window and page document come from Chromium or Gecko, which expose the
+    /// visited document URL through UI Automation. The process allow-list keeps Chromium-based apps
+    /// that are not browsers (VS Code, WebView2 hosts, chat clients) from contributing a page link.
+    /// Naver Whale is a Chromium browser (<c>whale.exe</c>, <c>Chrome_WidgetWin_1</c>) with the same
+    /// document provider. Arc stays out until its window tree has been checked.
+    /// </summary>
     internal static bool IsSupportedBrowser(string processName, string windowClass) =>
         processName.Equals("firefox", StringComparison.OrdinalIgnoreCase)
             ? windowClass == "MozillaWindowClass"
@@ -166,7 +173,8 @@ public sealed class BrowserPageUrlService
                || processName.Equals("msedge", StringComparison.OrdinalIgnoreCase)
                || processName.Equals("brave", StringComparison.OrdinalIgnoreCase)
                || processName.Equals("vivaldi", StringComparison.OrdinalIgnoreCase)
-               || processName.Equals("opera", StringComparison.OrdinalIgnoreCase));
+               || processName.Equals("opera", StringComparison.OrdinalIgnoreCase)
+               || processName.Equals("whale", StringComparison.OrdinalIgnoreCase));
 
     internal static bool IsSemanticDocument(object? controlType, object? isControlElement, object? isContentElement) =>
         controlType is int type && type == 50030 && (isControlElement is true || isContentElement is true);

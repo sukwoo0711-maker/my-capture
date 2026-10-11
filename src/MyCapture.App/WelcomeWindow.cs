@@ -217,10 +217,9 @@ internal sealed class WelcomeWindow : Window
         double x = (104 - width) / 2;
         for (int i = 0; i < icons.Length; i++)
         {
-            var glyph = new Path { Width = 22, Height = 22, Stretch = Stretch.Uniform, StrokeThickness = 1.6,
-                StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round };
-            glyph.SetResourceReference(Path.DataProperty, icons[i]);
-            glyph.SetResourceReference(Shape.StrokeProperty, i == icons.Length - 1 ? "Accent.Cool" : "Text.Primary");
+            var glyph = new SymbolIcon { Size = SymbolIcon.CommandSize };
+            glyph.SetResourceReference(SymbolIcon.DataProperty, icons[i]);
+            glyph.SetResourceReference(SymbolIcon.StrokeProperty, i == icons.Length - 1 ? "Accent.Cool" : "Text.Primary");
             Canvas.SetLeft(glyph, x);
             Canvas.SetTop(glyph, 27);
             canvas.Children.Add(glyph);
@@ -253,9 +252,9 @@ internal sealed class WelcomeWindow : Window
         Canvas.SetLeft(ring, 58);
         Canvas.SetTop(ring, 47);
         canvas.Children.Add(ring);
-        var icon = new Path { Width = 12, Height = 12, Stretch = Stretch.Uniform, StrokeThickness = 1.4 };
-        icon.SetResourceReference(Path.DataProperty, "Icon.Capture");
-        icon.SetResourceReference(Shape.StrokeProperty, "Accent.Cool");
+        var icon = new SymbolIcon { Size = 12 };
+        icon.SetResourceReference(SymbolIcon.DataProperty, "Icon.Capture");
+        icon.SetResourceReference(SymbolIcon.StrokeProperty, "Accent.Cool");
         Canvas.SetLeft(icon, 62);
         Canvas.SetTop(icon, 51);
         canvas.Children.Add(icon);
@@ -302,9 +301,8 @@ internal sealed class WelcomeWindow : Window
 
     private static FrameworkElement Glyph(Geometry geometry, double x, double y, double size, string stroke)
     {
-        var path = new Path { Data = geometry, Width = size, Height = size, Stretch = Stretch.Uniform, StrokeThickness = 1.6,
-            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round };
-        path.SetResourceReference(Shape.StrokeProperty, stroke);
+        var path = new SymbolIcon { Size = size, Data = geometry };
+        path.SetResourceReference(SymbolIcon.StrokeProperty, stroke);
         Canvas.SetLeft(path, x);
         Canvas.SetTop(path, y);
         return path;

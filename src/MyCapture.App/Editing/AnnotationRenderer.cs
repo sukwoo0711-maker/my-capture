@@ -197,9 +197,28 @@ internal sealed class AnnotationRenderer
         }
 
         Pen pen = StrokePen(polyline.Stroke, polyline.StrokeThickness);
-        for (int i = 0; i < points.Count - 1; i++)
+        // An arrow's shaft stops where its head begins. Drawn to the tip, the shaft's round cap
+        // blunted the point by half the stroke width: 32 px at the 64 px maximum.
+        double headLength = polyline.StrokeThickness * polyline.HeadSizeFactor;
+        int last = points.Count - 2;
+        for (int i = 0; i <= last; i++)
         {
-            dc.DrawLine(pen, ToPoint(points[i]), ToPoint(points[i + 1]));
+            Point from = ToPoint(points[i]);
+            Point to = ToPoint(points[i + 1]);
+            Vector along = to - from;
+            double length = along.Length;
+            double startInset = i == 0 && polyline.HeadAtStart ? headLength : 0;
+            double endInset = i == last && polyline.HeadAtEnd ? headLength : 0;
+            if (startInset + endInset == 0)
+            {
+                dc.DrawLine(pen, from, to);
+            }
+            else if (length > startInset + endInset)
+            {
+                // A segment shorter than its heads is all head; the head covers it.
+                along /= length;
+                dc.DrawLine(pen, from + (along * startInset), to - (along * endInset));
+            }
         }
 
         if (polyline.HeadAtEnd)

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using MyCapture.Core.Capture;
 
 namespace MyCapture.Core.Queue;
 
@@ -158,6 +159,47 @@ public sealed class CaptureRecord
     public string SourcePageUrl { get; set; } = string.Empty;
 
     /// <summary>
+    /// Friendly name of the application that owned the source window, from its executable's file
+    /// description or, failing that, its file name. Absent for older records and unattributed captures.
+    /// </summary>
+    /// <remarks>
+    /// The three source fields are optional and omitted while null, so an older build loads a new
+    /// index (System.Text.Json skips unknown members) and a new build loads an older one unchanged.
+    /// They describe the user's desktop and stay in the local record only.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceAppName { get; set; }
+
+    /// <summary>Full path of the source application's executable; null when unknown.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceAppPath { get; set; }
+
+    /// <summary>
+    /// Folder or file the source window showed, observed around the captured frame (for example the
+    /// current folder of a File Explorer window); null when unknown.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceDocumentPath { get; set; }
+
+    /// <summary>The validated source fields; unsafe stored values read as empty.</summary>
+    [JsonIgnore]
+    public CaptureSourceDetails SourceDetails =>
+        CaptureSourceDetails.Create(SourceAppName, SourceAppPath, SourceDocumentPath);
+
+    /// <summary>Stores validated source fields, leaving absent ones null so they are not written.</summary>
+    public void SetSourceDetails(CaptureSourceDetails? details)
+    {
+        CaptureSourceDetails source = details is null
+            ? CaptureSourceDetails.Empty
+            : CaptureSourceDetails.Create(details.AppName, details.AppPath, details.DocumentPath);
+        SourceAppName = NullIfEmpty(source.AppName);
+        SourceAppPath = NullIfEmpty(source.AppPath);
+        SourceDocumentPath = NullIfEmpty(source.DocumentPath);
+    }
+
+    private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
+
+    /// <summary>
     /// Capture-time title option used to reconstruct an interrupted initial render.
     /// Later editor saves choose their own displayed option; null means a legacy record
     /// did not persist this preference, while new captures explicitly record true or false.
@@ -203,6 +245,8 @@ public sealed class CaptureRecord
             Tags,
             SourceWindowTitle,
             SourcePageUrl,
+            CaptureTextSearch.SourceAppText(this),
+            SourceDocumentPath ?? string.Empty,
             OcrText ?? string.Empty,
             IsVideo ? "동영상 비디오 video recording" : "이미지 스크린샷 image screenshot");
 }

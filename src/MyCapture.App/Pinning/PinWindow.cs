@@ -42,8 +42,17 @@ internal sealed class PinWindow : Window
     private const double ArrowNudgeDip = 1.0;
     private const double ArrowNudgeShiftDip = 10.0;
 
-    /// <summary>How long the bottom feedback overlay stays visible before auto-hiding.</summary>
-    private static readonly TimeSpan FeedbackDuration = TimeSpan.FromMilliseconds(1000);
+    /// <summary>Outer corner radius of the pin frame; Windows 11 rounds top-level windows by 8.</summary>
+    internal const double FrameCornerRadiusDip = 8.0;
+
+    private const double FrameThicknessDip = 1.0;
+
+    /// <summary>
+    /// The image clip edge sits half a DIP inside the outline's outer edge, under the stroke at
+    /// every display scale, so neither the desktop nor an anti-aliased image edge shows between
+    /// the outline and the image.
+    /// </summary>
+    private const double FrameClipInsetDip = 0.5;
 
     private readonly PinContent _content;
     private readonly BitmapSource _image;
@@ -53,11 +62,18 @@ internal sealed class PinWindow : Window
     private readonly Func<PinSettings> _settings;
     private readonly IPinDragInput _dragInput;
     private readonly Image _imageElement;
-    private readonly Border _chrome;
+    private readonly RectangleGeometry _imageClip;
+    private readonly Grid _chrome;
     private readonly SolidColorBrush _chromeBrush;
     private readonly ScaleTransform _pinScale;
-    private readonly TextBlock _feedback;
-    private readonly DispatcherTimer _feedbackTimer;
+    private readonly Border _feedback;
+    private readonly TextBlock _feedbackText;
+    private readonly Button _feedbackDismiss;
+    private readonly FeedbackCountdown _feedbackCountdown;
+    private FeedbackKind _feedbackKind;
+    private (string Text, FeedbackKind Kind)? _heldFeedback;
+    private int _feedbackGeneration;
+    private bool _feedbackHiding;
     private readonly DispatcherTimer _ctrlClickTimer;
     private readonly DispatcherTimer _zoomSettleTimer;
     private readonly DispatcherTimer _hoverHideTimer;
@@ -123,32 +139,76 @@ internal sealed class PinWindow : Window
         };
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.HighQuality);
 
-        _feedback = new TextBlock
+        // The bottom message wraps inside narrow pins. It takes the pointer only to pause its
+        // countdown and to offer a close button for a failure; dragging through it still moves the pin.
+        _feedbackText = new TextBlock
+        {
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _feedbackText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        var dismissGlyph = new SymbolIcon
+        {
+            Size = 16,
+            Data = Application.Current?.TryFindResource("Icon.Close") as Geometry ?? Geometry.Parse("M5,5 L15,15 M15,5 L5,15"),
+        };
+        dismissGlyph.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Primary");
+        _feedbackDismiss = new Button
+        {
+            Content = dismissGlyph,
+            Width = 22,
+            Height = 22,
+            MinWidth = 0,
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            Margin = new Thickness(8, -2, -4, -2),
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+            ToolTip = UiText.Get("Feedback.Dismiss"),
+        };
+        _feedbackDismiss.SetResourceReference(StyleProperty, "Button.Ghost");
+        AutomationProperties.SetName(_feedbackDismiss, UiText.Get("Feedback.Dismiss"));
+        _feedbackDismiss.Click += (_, _) => DismissFeedback();
+        DockPanel.SetDock(_feedbackDismiss, Dock.Right);
+        _feedback = new Border
         {
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(0, 0, 0, 8),
+            Margin = new Thickness(8, 0, 8, 8),
             Padding = new Thickness(10, 5, 10, 5),
-            Foreground = ThemeBrushes.Follow("Text.Primary", Brushes.White),
+            CornerRadius = new CornerRadius(6),
             Background = ThemeBrushes.Follow("Surface.Floating", Color.FromArgb(0xE8, 0x15, 0x1E, 0x2B)),
-            FontSize = 12,
-            FontWeight = FontWeights.SemiBold,
+            Child = new DockPanel { Children = { _feedbackDismiss, _feedbackText } },
             Visibility = Visibility.Collapsed,
-            IsHitTestVisible = false,
         };
 
-        // Image-first chrome: a neutral one-pixel boundary rests quietly and warms to a
-        // restrained warm yellow on hover, while rounded clipping keeps scaled pins consistent
-        // with the rest of the desktop surfaces.
+        // Image-first chrome: one continuous one-DIP outline with Windows 11 rounded corners
+        // rests quietly and takes the accent colour on hover. The image fills the whole pin
+        // and is clipped to the rounded rectangle the outline follows, and the outline is drawn
+        // over the image's outermost edge. A Border's CornerRadius does not clip its child and
+        // a child draws over its parent's stroke, so an image inset inside a Border covered the
+        // corner arcs and left resampled edge rows beside the straight outline segments.
         _chromeBrush = new SolidColorBrush(ResolveChromeColor("Border.Subtle", hovering: false));
         _pinScale = new ScaleTransform(1, 1);
-        _chrome = new Border
+        _imageClip = new RectangleGeometry(
+            ImageClipBounds(new Size(_state.WidthDip, _state.HeightDip)),
+            FrameCornerRadiusDip - FrameClipInsetDip,
+            FrameCornerRadiusDip - FrameClipInsetDip);
+        _imageElement.Clip = _imageClip;
+        _imageElement.SizeChanged += (_, args) => _imageClip.Rect = ImageClipBounds(args.NewSize);
+        var outline = new Border
         {
-            BorderThickness = new Thickness(1),
+            BorderThickness = new Thickness(FrameThicknessDip),
             BorderBrush = _chromeBrush,
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(FrameCornerRadiusDip),
+            IsHitTestVisible = false,
+        };
+        _chrome = new Grid
+        {
             ClipToBounds = true,
-            Child = new Grid { Children = { _imageElement, _feedback } },
+            Children = { _imageElement, outline, _feedback },
             RenderTransform = _pinScale,
             RenderTransformOrigin = new Point(0.5, 0.5),
         };
@@ -166,14 +226,12 @@ internal sealed class PinWindow : Window
 
         BuildContextMenu();
 
-        // Auto-hides the bottom feedback overlay so it never lingers on screen. The tick
-        // handler runs on the dispatcher thread that owns this window, so touching WPF
-        // elements from it is thread-safe.
-        _feedbackTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
-        {
-            Interval = FeedbackDuration,
-        };
-        _feedbackTimer.Tick += OnFeedbackTimerTick;
+        // Hides the bottom message after its kind's display time (FeedbackTiming); pointing at
+        // it or focusing its close button pauses the countdown.
+        _feedbackCountdown = new FeedbackCountdown(
+            Dispatcher,
+            () => _feedback.IsMouseOver || _feedback.IsKeyboardFocusWithin,
+            OnFeedbackExpired);
 
         // Tracks the double-click interval without modifying the clipboard on a single click.
         // Ctrl+C copies the rendered image; Ctrl+double-click copies text.
@@ -364,7 +422,14 @@ internal sealed class PinWindow : Window
     internal bool IsFeedbackVisible => _feedback.Visibility == Visibility.Visible;
 
     /// <summary>Test hook: whether the auto-hide feedback timer is currently running.</summary>
-    internal bool IsFeedbackTimerRunning => _feedbackTimer.IsEnabled;
+    internal bool IsFeedbackTimerRunning => _feedbackCountdown.IsRunning;
+
+    /// <summary>Test hook: the bottom message, its kind and whether it offers a close button.</summary>
+    internal (string Text, FeedbackKind Kind, bool Dismissible) FeedbackForTest =>
+        (_feedbackText.Text, _feedbackKind, _feedbackDismiss.Visibility == Visibility.Visible);
+
+    /// <summary>Test hook: spends display time as the countdown's clock would.</summary>
+    internal void AdvanceFeedbackForTest(TimeSpan elapsed) => _feedbackCountdown.Advance(elapsed);
 
     /// <summary>
     /// Test hook: fires the feedback auto-hide logic immediately, without waiting for the
@@ -372,7 +437,8 @@ internal sealed class PinWindow : Window
     /// </summary>
     internal void ForceFeedbackTimeoutForTest()
     {
-        _feedbackTimer.Stop();
+        _heldFeedback = null;
+        _feedbackCountdown.Stop();
         HideFeedback(immediate: true);
     }
 
@@ -389,24 +455,31 @@ internal sealed class PinWindow : Window
                 string fileName = string.IsNullOrWhiteSpace(result.Path)
                     ? "PNG"
                     : System.IO.Path.GetFileName(result.Path);
-                ShowFeedback(UiText.Format("Text_E3F51EDC0F16", fileName));
+                // The file name is worth reading, so this is a result rather than a quick confirmation.
+                ShowFeedback(UiText.Format("Text_E3F51EDC0F16", fileName), FeedbackKind.Result);
                 break;
             case PinSaveStatus.Cancelled:
-                ShowFeedback(UiText.Get("Text_F122632462DF"));
+                ShowFeedback(UiText.Get("Text_F122632462DF"), FeedbackKind.Confirmation);
                 break;
             default:
-                ShowFeedback(UiText.Get("Text_AE94EC51B2C2"));
+                ShowFeedback(UiText.Get("Text_AE94EC51B2C2"), FeedbackKind.ActionRequired);
                 break;
         }
     }
 
     /// <summary>Completes pin-local clipboard feedback after the asynchronous copy.</summary>
-    internal void ReportCopyResult(bool copied) =>
-        ShowFeedback(copied ? UiText.Get("Text_9693E1EB3EDB") : UiText.Get("Text_0642E2D15469"));
+    internal void ReportCopyResult(bool copied) => ShowFeedback(
+        copied ? UiText.Get("Text_9693E1EB3EDB") : UiText.Get("Text_0642E2D15469"),
+        copied ? FeedbackKind.Confirmation : FeedbackKind.ActionRequired);
 
     /// <summary>Completes feedback for copying a rendered pin's retained source text.</summary>
-    internal void ReportOriginalTextCopyResult(bool copied) =>
-        ShowFeedback(copied ? UiText.Get("Text_5C9B3C62EC41") : UiText.Get("Text_BCC2F939B733"));
+    /// <remarks>
+    /// For an image pin the text comes from OCR, and a failure there usually means no text was
+    /// found, which retrying cannot fix; it is a warning rather than a message that stays.
+    /// </remarks>
+    internal void ReportOriginalTextCopyResult(bool copied) => ShowFeedback(
+        copied ? UiText.Get("Text_5C9B3C62EC41") : UiText.Get("Text_BCC2F939B733"),
+        copied ? FeedbackKind.Confirmation : _originalText is null ? FeedbackKind.Warning : FeedbackKind.ActionRequired);
 
     /// <summary>Test hook: whether the Ctrl+click copy debounce timer is currently armed.</summary>
     internal bool IsCtrlClickTimerRunning => _ctrlClickTimer.IsEnabled;
@@ -436,7 +509,10 @@ internal sealed class PinWindow : Window
         }
 
         if (enabled) HideHoverBar();
-        ShowFeedback(enabled ? UiText.Format("Onboard_PinClickThroughOn", ClickThroughRecoveryHint()) : UiText.Get("Onboard_PinClickThroughOff"));
+        // Turning it on carries the key that turns it off again, which needs time to read.
+        ShowFeedback(
+            enabled ? UiText.Format("Onboard_PinClickThroughOn", ClickThroughRecoveryHint()) : UiText.Get("Onboard_PinClickThroughOff"),
+            enabled ? FeedbackKind.Result : FeedbackKind.Confirmation);
     }
 
     /// <summary>Toggles click-through and returns the new state.</summary>
@@ -608,6 +684,13 @@ internal sealed class PinWindow : Window
             HandoffBehavior.SnapshotAndReplace);
     }
 
+    /// <summary>The rounded image clip for an image laid out at <paramref name="size"/>.</summary>
+    internal static Rect ImageClipBounds(Size size) => new(
+        FrameClipInsetDip,
+        FrameClipInsetDip,
+        Math.Max(0, size.Width - (2 * FrameClipInsetDip)),
+        Math.Max(0, size.Height - (2 * FrameClipInsetDip)));
+
     private static Color ResolveChromeColor(string key, bool hovering)
     {
         if (Application.Current?.TryFindResource(key) is SolidColorBrush brush)
@@ -772,6 +855,13 @@ internal sealed class PinWindow : Window
         {
             case Key.Escape:
             case Key.Delete:
+                // Esc first dismisses a failure message that stays; the next Esc closes the pin.
+                if (e.Key == Key.Escape && DismissFeedback())
+                {
+                    e.Handled = true;
+                    break;
+                }
+
                 Close();
                 e.Handled = true;
                 break;
@@ -967,13 +1057,13 @@ internal sealed class PinWindow : Window
 
     private void CopyImageToClipboard()
     {
-        ShowFeedback(UiText.Get("Text_4C160257F02C"));
+        ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
         CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl));
     }
 
     private void RequestOcr()
     {
-        ShowFeedback(UiText.Get("Text_15A871A266BE"));
+        ShowFeedback(UiText.Get("Text_15A871A266BE"), FeedbackKind.Progress);
         OcrRequested?.Invoke(this, _image);
     }
 
@@ -996,7 +1086,7 @@ internal sealed class PinWindow : Window
             return;
         }
 
-        ShowFeedback(UiText.Get("Text_BDB7C68F7452"));
+        ShowFeedback(UiText.Get("Text_BDB7C68F7452"), FeedbackKind.Progress);
         OriginalTextCopyRequested?.Invoke(this, _originalText);
     }
 
@@ -1004,19 +1094,21 @@ internal sealed class PinWindow : Window
     {
         if (_saveInProgress)
         {
-            ShowFeedback(UiText.Get("Text_88DAAEEDFE4C"));
+            ShowFeedback(UiText.Get("Text_88DAAEEDFE4C"), FeedbackKind.Progress);
             return;
         }
 
         EventHandler<PinSaveRequestedEventArgs>? handler = SaveRequested;
         if (handler is null)
         {
-            ShowFeedback(UiText.Get("Text_9A07C688760E"));
+            ShowFeedback(UiText.Get("Text_9A07C688760E"), FeedbackKind.Warning);
             return;
         }
 
         _saveInProgress = true;
-        ShowFeedback(mode == PinSaveMode.SaveAs ? UiText.Get("Text_B53B72EF2371") : UiText.Get("Text_88DAAEEDFE4C"));
+        ShowFeedback(
+            mode == PinSaveMode.SaveAs ? UiText.Get("Text_B53B72EF2371") : UiText.Get("Text_88DAAEEDFE4C"),
+            FeedbackKind.Progress);
         handler.Invoke(this, new PinSaveRequestedEventArgs(mode, _image, SourcePageUrl));
     }
 
@@ -1100,16 +1192,43 @@ internal sealed class PinWindow : Window
 
     // ----- Feedback toast -----
 
-    private void ShowFeedback(string text)
+    /// <summary>
+    /// Shows <paramref name="text"/> at the bottom of the pin for as long as
+    /// <see cref="FeedbackTiming"/> gives <paramref name="kind"/> over the user's content.
+    /// </summary>
+    /// <remarks>
+    /// Progress and failures to act on have no display time. A zoom or opacity readout passes
+    /// over them and they come back when it expires; any other message is the newer outcome
+    /// and replaces them.
+    /// </remarks>
+    private void ShowFeedback(string text, FeedbackKind kind = FeedbackKind.Echo)
     {
         // OCR/clipboard completions can arrive after Close detached the timer's stop handler.
         // Never restart that timer or animate a window whose lifetime has ended.
         if (_isClosed) return;
-        _feedback.Text = text;
+        if (kind != FeedbackKind.Echo)
+        {
+            _heldFeedback = FeedbackTiming.DisplayTime(kind) is null ? (text, kind) : null;
+        }
+
+        PresentFeedback(text, kind, announce: true);
+    }
+
+    private void PresentFeedback(string text, FeedbackKind kind, bool announce)
+    {
+        bool dismissible = FeedbackTiming.StaysUntilDismissed(kind);
+        bool showing = _feedback.Visibility == Visibility.Visible && !_feedbackHiding;
+        _feedbackGeneration++;
+        _feedbackHiding = false;
+        _feedbackKind = kind;
+        _feedbackText.Text = text;
+        _feedbackText.SetResourceReference(TextBlock.ForegroundProperty, dismissible ? "State.Danger" : "Text.Primary");
+        _feedbackDismiss.Visibility = dismissible ? Visibility.Visible : Visibility.Collapsed;
         _feedback.Visibility = Visibility.Visible;
         _feedback.BeginAnimation(UIElement.OpacityProperty, null);
         _feedback.Opacity = 1;
-        if (FluidMotion.AnimationsEnabled)
+        // A message replacing a visible one changes in place; only a new appearance fades in.
+        if (!showing && FluidMotion.AnimationsEnabled)
         {
             var fade = new DoubleAnimation(0, 1, FluidMotion.FastDuration)
             {
@@ -1119,28 +1238,48 @@ internal sealed class PinWindow : Window
             _feedback.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
         }
 
-        // Restart the countdown on every message so rapid feedback keeps the latest text
-        // visible for the full duration rather than expiring mid-sequence.
-        _feedbackTimer.Stop();
-        _feedbackTimer.Start();
+        // Every message restarts the countdown, so the latest text gets its full display time.
+        _feedbackCountdown.Start(FeedbackTiming.DisplayTime(kind, overContent: true));
+        if (announce) FeedbackTiming.Announce(_feedbackText, text, kind, "MyCapture.Pin.Feedback");
     }
 
-    private void OnFeedbackTimerTick(object? sender, EventArgs e)
+    private void OnFeedbackExpired()
     {
-        _feedbackTimer.Stop();
+        if (_isClosed) return;
+        if (_heldFeedback is { } held)
+        {
+            PresentFeedback(held.Text, held.Kind, announce: false);
+            return;
+        }
+
         HideFeedback(immediate: false);
+    }
+
+    /// <summary>Closes a failure message that stays until dismissed; false when none is showing.</summary>
+    private bool DismissFeedback()
+    {
+        if (!IsFeedbackVisible || !FeedbackTiming.StaysUntilDismissed(_feedbackKind)) return false;
+        _heldFeedback = null;
+        _feedbackCountdown.Stop();
+        HideFeedback(immediate: false);
+        return true;
     }
 
     private void HideFeedback(bool immediate)
     {
+        int generation = ++_feedbackGeneration;
+        _feedbackKind = FeedbackKind.Echo;
+        _feedbackDismiss.Visibility = Visibility.Collapsed;
         _feedback.BeginAnimation(UIElement.OpacityProperty, null);
         if (immediate || !FluidMotion.AnimationsEnabled || _isClosed)
         {
+            _feedbackHiding = false;
             _feedback.Visibility = Visibility.Collapsed;
             _feedback.Opacity = 1;
             return;
         }
 
+        _feedbackHiding = true;
         var fade = new DoubleAnimation(_feedback.Opacity, 0, FluidMotion.FastDuration)
         {
             EasingFunction = FluidMotion.StandardEasing,
@@ -1148,6 +1287,9 @@ internal sealed class PinWindow : Window
         };
         fade.Completed += (_, _) =>
         {
+            // A message shown during the fade owns the overlay now.
+            if (generation != _feedbackGeneration) return;
+            _feedbackHiding = false;
             _feedback.Visibility = Visibility.Collapsed;
             _feedback.Opacity = 1;
         };
@@ -1286,33 +1428,13 @@ internal sealed class PinWindow : Window
 
         if (iconResourceKey is not null && Application.Current?.TryFindResource(iconResourceKey) is Geometry geometry)
         {
-            var glyph = new Path
+            var glyph = SymbolIcon.Create(geometry, SymbolIcon.InlineSize);
+            glyph.SetBinding(SymbolIcon.ForegroundProperty, new Binding(nameof(Control.Foreground))
             {
-                Data = geometry,
-                StrokeThickness = 1.6,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round,
-                Fill = Brushes.Transparent,
-                Stretch = Stretch.None,
-            };
-            glyph.SetBinding(
-                Shape.StrokeProperty,
-                new Binding(nameof(Control.Foreground))
-                {
-                    RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(MenuItem), 1),
-                    FallbackValue = Application.Current.TryFindResource("Text.Secondary") as Brush ?? Brushes.LightGray,
-                });
-
-            var canvas = new Canvas { Width = 20, Height = 20 };
-            canvas.Children.Add(glyph);
-            item.Icon = new Viewbox
-            {
-                Width = 20,
-                Height = 20,
-                Stretch = Stretch.Uniform,
-                Child = canvas,
-            };
+                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(MenuItem), 1),
+                FallbackValue = Application.Current.TryFindResource("Text.Secondary") as Brush ?? Brushes.LightGray,
+            });
+            item.Icon = glyph;
         }
 
         item.Click += onClick;
@@ -1323,8 +1445,7 @@ internal sealed class PinWindow : Window
     {
         _isClosed = true;
         EndDrag();
-        _feedbackTimer.Stop();
-        _feedbackTimer.Tick -= OnFeedbackTimerTick;
+        _feedbackCountdown.Stop();
         _ctrlClickTimer.Stop();
         _ctrlClickTimer.Tick -= OnCtrlClickTimerTick;
         _zoomSettleTimer.Stop();

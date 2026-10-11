@@ -23,7 +23,8 @@ public sealed class BoolToVisibilityConverter : IValueConverter
 
 /// <summary>
 /// Maps the kept (manually pinned) state to the library menu label ("보관 해제" when kept, "보관" when
-/// not). "고정" stays reserved for pinning a capture to the screen, the card's pin button.
+/// not). "핀" names a capture floated on top of other windows (the card's pin button), and the
+/// library never calls keeping "고정", the word Windows uses for taskbar and Start pins.
 /// </summary>
 public sealed class PinLabelConverter : IValueConverter
 {

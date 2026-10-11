@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
 
 namespace MyCapture.App.Gallery;
@@ -33,14 +34,13 @@ internal sealed class GalleryFolderEditDialog : Window
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) };
         AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Polite);
         content.Children.Add(error);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 20, 0, 0) };
-        CancelButton = new Button { Content = UiText.Get("Library.Action.Cancel"), IsCancel = true,
-            MinWidth = 84, Margin = new Thickness(0, 0, 8, 0) };
-        CancelButton.SetResourceReference(StyleProperty, "Button.Secondary");
-        SaveButton = new Button { Content = UiText.Get(actionKey), IsDefault = true, MinWidth = 84 };
-        SaveButton.SetResourceReference(StyleProperty, "Button.Primary");
-        buttons.Children.Add(CancelButton); buttons.Children.Add(SaveButton);
+        // The action first, then cancel, like every other dialog in the app.
+        SaveButton = ThemedDialog.CreateActionButton(UiText.Get(actionKey), primary: true);
+        SaveButton.IsDefault = true;
+        CancelButton = ThemedDialog.CreateActionButton(UiText.Get("Library.Action.Cancel"), primary: false);
+        CancelButton.IsCancel = true;
+        WrapPanel buttons = ThemedDialog.CreateActionRow(SaveButton, CancelButton);
+        buttons.Margin = new Thickness(0, 16, 0, 0);
         content.Children.Add(buttons);
         Content = content;
         Loaded += (_, _) => { input.Focus(); if (input is TextBox text) text.SelectAll(); };
@@ -112,16 +112,16 @@ internal sealed class GalleryFolderDeletionDialog : Window
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) });
         content.Children.Add(new TextBlock { Text = UiText.Get("Folder410.DeleteIrreversible"),
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) });
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 24, 0, 0) };
-        CancelButton = new Button { Content = UiText.Get("Library.Action.Cancel"), IsCancel = true, IsDefault = true,
-            MinWidth = 84, Margin = new Thickness(0, 0, 8, 0) };
-        CancelButton.SetResourceReference(StyleProperty, "Button.Secondary");
-        DeleteButton = new Button { Content = UiText.Get("Folder410.Delete"), IsDefault = false, MinWidth = 140 };
-        DeleteButton.SetResourceReference(StyleProperty, "Button.Secondary");
+        // Delete comes first like any confirming action, but Enter and Esc both cancel: a
+        // destructive command is never the default. As in ThemedDialog, the default carries the fill.
+        DeleteButton = ThemedDialog.CreateActionButton(UiText.Get("Folder410.Delete"), primary: false);
         DeleteButton.SetResourceReference(ForegroundProperty, "State.DangerHover");
         DeleteButton.Click += (_, _) => DialogResult = true;
-        buttons.Children.Add(CancelButton); buttons.Children.Add(DeleteButton);
+        CancelButton = ThemedDialog.CreateActionButton(UiText.Get("Library.Action.Cancel"), primary: true);
+        CancelButton.IsCancel = true;
+        CancelButton.IsDefault = true;
+        WrapPanel buttons = ThemedDialog.CreateActionRow(DeleteButton, CancelButton);
+        buttons.Margin = new Thickness(0, 20, 0, 0);
         content.Children.Add(buttons);
         Content = content;
         Loaded += (_, _) => CancelButton.Focus();

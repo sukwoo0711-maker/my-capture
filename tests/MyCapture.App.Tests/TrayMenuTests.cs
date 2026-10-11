@@ -58,7 +58,7 @@ public sealed class TrayMenuTests
         var keys = new HotkeySettings { RestoreClosedPin = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x72) };
         IReadOnlyList<ThemedShellPresenter.MenuEntry> menu = TrayMenuLayout.Build(Commands(calls), keys,
             canRestoreClosedPin: true, scrollingActive: true);
-        Assert.Equal(["영역 캡처", "화면 녹화", "다른 캡처", "닫은 고정 창 다시 열기", "", "라이브러리", "설정", "단축키 보기", "", "종료"],
+        Assert.Equal(["영역 캡처", "화면 녹화", "다른 캡처", "닫은 핀 다시 열기", "", "라이브러리", "설정", "단축키 보기", "", "종료"],
             menu.Select(entry => entry.Label));
         Assert.Equal("Ctrl+Alt+F3", menu[3].Gesture);
         Assert.Equal("스크롤 캡처 취소", menu[2].Children![2].Label);

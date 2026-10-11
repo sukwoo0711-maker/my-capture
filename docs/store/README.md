@@ -119,7 +119,7 @@ Store 목록용 스크린샷은 실제 MyCapture 창을 렌더링해 만듭니�
 .\artifacts\release\4.1.0\publish-win-x64\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\4.1.0\en en
 ```
 
-- 결과는 2560×1440 PNG 10장(라이브러리, 주석, 빠른 가리기, 캡처 후 카드, 화면 고정, 텍스트 인식, 영상 편집기, GIF 내보내기, 설정, 밝은 테마 라이브러리)과 `store-screenshots-report.txt`입니다.
+- 결과는 2560×1440 PNG 10장(라이브러리, 주석, 빠른 가리기, 캡처 후 카드, 핀, 텍스트 인식, 영상 편집기, GIF 내보내기, 설정, 밝은 테마 라이브러리)과 `store-screenshots-report.txt`입니다.
 - 생성하는 동안 화면 왼쪽 위에 MyCapture 창이 잠깐씩 나타났다 닫힙니다.
 - 한국어(ko-KR) 목록에는 `ko`, 영어(en-US) 목록에는 `en` 결과를 올립니다.
 

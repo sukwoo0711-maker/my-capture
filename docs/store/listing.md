@@ -17,20 +17,30 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 
 ## 한국어 (ko-KR)
 
+### 짧은 소개
+
+개발자를 위한 무료 Windows 11 캡처·핀 도구. 오류 화면에 주석을 달고, 참고할 코드와 이미지를 다른 창 위에 띄울 수 있습니다.
+
 ### 설명
 
-MyCapture는 화면 캡처, 주석 편집, 화면 고정, OCR, 라이브러리, 영역 녹화를 한곳에 모은 Windows용 캡처 도구입니다. 캡처와 텍스트 인식은 PC 안에서 처리하며, 전역 단축키와 트레이 메뉴로 반복 작업을 빠르게 이어 갑니다.
+MyCapture는 개발자를 위한 무료 Windows 11 캡처·핀 도구입니다. 코드와 참고 화면을 곁에 두고 작업하거나, 오류가 발생한 화면을 캡처해 설명할 때 사용합니다.
 
-영역을 선택해 캡처하면 라이브러리에 먼저 저장하고 클립보드에 복사한 뒤 편집기를 엽니다. 사각형, 화살표, 연필, 텍스트, 이미지 레이어로 주석을 달고, 로컬 OCR이 찾은 이메일·전화번호·카드번호 같은 민감정보를 빠른 가리기로 한 번에 가릴 수 있습니다. 화면 영역은 MP4로 녹화하고, 영상 편집기에서 구간을 자르고 텍스트를 얹은 뒤 MP4나 GIF로 내보냅니다.
+원하는 영역, 창, 전체 화면을 캡처하고 화살표·단계 번호·텍스트로 필요한 부분을 표시할 수 있습니다. 이미지를 자르거나 회전하고, 블러와 모자이크로 일부를 가릴 수 있습니다. 오류 재현 절차나 코드 리뷰에서 설명할 내용을 이미지로 정리할 때 유용합니다.
 
-녹화에는 소리가 포함되지 않습니다. 로그인할 때 자동으로 시작하는 기능은 처음에는 꺼져 있으며, 설정에서 켤 수 있습니다.
+코드 예제나 비교할 화면은 핀으로 띄워 다른 창을 보면서 참고할 수 있습니다. 캡처한 이미지뿐 아니라 클립보드의 텍스트와 표도 다른 창 위에 표시하며, 닫은 핀을 다시 열 수 있습니다.
+
+OCR로 이미지 속 글자를 텍스트로 복사하고, 표를 CSV·Markdown·탭 구분 형식으로 가져올 수 있습니다. 캡처는 라이브러리에서 검색하고 폴더로 정리하며, 폴더나 ZIP으로 내보낼 수 있습니다.
+
+움직임을 설명해야 할 때는 화면 영역을 MP4로 녹화합니다. 녹화한 영상은 구간을 자르고 텍스트를 추가한 뒤 MP4나 GIF로 내보낼 수 있습니다. 녹화에는 소리가 포함되지 않습니다.
+
+전역 단축키와 트레이 메뉴를 지원하며, 한국어·영어 인터페이스와 고대비를 포함한 6가지 테마를 제공합니다.
 
 ### 기능 목록
 
 - 모니터 경계를 넘나드는 영역 캡처와 창, 전체 화면, 지연, 스크롤 캡처
 - 포인터 아래 창을 강조하고 클릭으로 선택하는 창 감지와 색상 값 복사
 - 타원·형광펜·단계 번호·모자이크·블러를 포함한 비파괴 주석 편집과 실행 취소·다시 실행
-- 클립보드 이미지·텍스트·표를 항상 위에 보이는 창으로 고정하고, 닫은 창을 다시 열기
+- 클립보드 이미지·텍스트·표를 다른 창 위에 항상 보이는 핀으로 띄우고, 닫은 핀을 다시 열기
 - 한국어·영어 혼합 텍스트를 PC 안에서 인식하는 로컬 OCR
 - 영역을 선택하면 텍스트만 클립보드에 복사하는 텍스트 캡처
 - OCR로 찾은 민감정보를 한 번에 가리는 빠른 가리기
@@ -46,29 +56,41 @@ MyCapture는 화면 캡처, 주석 편집, 화면 고정, OCR, 라이브러리, 
 - 라이브러리의 날짜별 폴더와 하위 폴더로 캡처를 정리하고 폴더·ZIP으로 내보낼 수 있습니다.
 - 폴더에 보관한 캡처는 자동 정리에서 제외되며, 폴더에서 꺼내면 보관 기간이 다시 시작됩니다.
 - 선택 도구에서 이미지 가장자리·모서리를 끌어 자르기를 시작하고 여백을 자동으로 제거할 수 있습니다.
+- 자르기를 열지 않아도 편집기에서 이미지를 왼쪽·오른쪽으로 회전할 수 있습니다.
 - 표·코드·텍스트에 맞춘 추출 화면과 표의 CSV·Markdown·탭 구분 복사를 제공합니다.
 - 캡처 가이드 색을 설정할 수 있으며, 첫 실행 안내·단축키 모음·빠른 작업 카드를 다듬었습니다.
+- 좁은 창의 도구 배치, 핀과 주석 편집, 테마 전환 안정성을 개선했습니다.
 
 ### 검색어
 
-캡처, 스크린샷, OCR, 화면 녹화, GIF, 주석, 화면 고정
+캡처, 스크린샷, OCR, 화면 녹화, GIF, 주석, 핀
 
 ## English (en-US)
 
+### Short description
+
+A free screenshot and pinning tool for developers on Windows 11. Annotate error screenshots and keep reference code or images above other windows.
+
 ### Description
 
-MyCapture brings screenshots, annotation, pinning, OCR, a capture library and region recording together in one Windows capture tool. Captures and text recognition are processed on your PC, and global shortcuts and the tray menu keep repeated work fast.
+MyCapture is a free screenshot and pinning tool for developers on Windows 11. Use it to keep code and reference images in view, or capture an error screen when explaining a problem.
 
-A region capture is saved to the library and copied to the clipboard before the editor opens. Annotate with rectangle, arrow, pencil, text and image layers, and cover sensitive details such as email addresses, phone numbers and card numbers found by local OCR in one step with Quick Redact. Record a screen region to MP4, then trim it, add timed text and export MP4 or GIF in the video editor.
+Capture a region, a window or the full screen, then mark the details with arrows, step numbers and text. Crop or rotate images, and cover parts with blur or mosaic when preparing a bug report or showing changes in a review.
 
-Recordings have no audio. Launch at sign-in starts turned off and can be turned on in Settings.
+Pin code examples or screenshots above other windows while you work. Pins support captured images as well as text and tables from the clipboard, and you can reopen pins you have closed.
+
+Use OCR to copy text from an image, or extract a table as CSV, Markdown or tab-separated text. Search captures in the library, organize them into folders, and export folders or ZIP archives.
+
+When a screenshot is not enough to show what happens, record a screen region to MP4. Trim the recording, add text, then export MP4 or GIF. Recordings do not include audio.
+
+MyCapture supports global shortcuts, a tray menu, Korean and English interfaces, and six themes including high contrast.
 
 ### Features
 
 - Region capture across monitors, plus window, full screen, delayed and scrolling capture
 - Window highlighting with click-to-select and color value copying while selecting
 - Non-destructive annotation with ellipse, highlighter, step numbers, mosaic, blur, undo and redo
-- Pin clipboard images, text and tables in always-on-top windows, and reopen closed pins
+- Pin clipboard images, text and tables on top of other windows, and reopen closed pins
 - On-device OCR for mixed Korean and English text
 - Text capture that copies only the recognized text of a selected region
 - Quick Redact for sensitive details found by OCR
@@ -84,8 +106,10 @@ Recordings have no audio. Launch at sign-in starts turned off and can be turned 
 - Organize captures in dated folders and subfolders, and export folders or ZIP archives.
 - Captures kept in folders are excluded from automatic cleanup. Their retention period restarts when moved out.
 - Start cropping by dragging an empty image edge or corner with the Select tool, or trim blank margins automatically.
+- Rotate images left or right from the editor without opening the Crop tool.
 - Extract tables, code and text in dedicated views, and copy tables as CSV, Markdown or tab-separated text.
 - Customize capture guide colors and use refined first-run guidance, keyboard shortcut help and quick action cards.
+- Improved tool layouts in narrow windows, pins, annotation editing and stability when switching themes.
 
 ### Search terms
 
