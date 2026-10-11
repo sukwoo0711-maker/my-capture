@@ -103,6 +103,9 @@ internal sealed class AnnotationEditorControl : Grid
     private Button _redoButton = null!;
     private Button _rotateLeftButton = null!;
     private Button _rotateRightButton = null!;
+    private StackPanel _rotationCommands = null!;
+    private Border _editRotationHost = null!;
+    private Border _cropRotationHost = null!;
     private Button _deleteButton = null!;
     private Button _redactButton = null!;
     private Slider _thicknessSlider = null!;
@@ -1337,8 +1340,14 @@ internal sealed class AnnotationEditorControl : Grid
         left.Children.Add(_redoButton);
         left.Children.Add(Separator());
 
-        // The single way into crop. Rotation, the ratio and the automatic margin finder live
-        // inside crop mode, so no second crop entry point remains on the tool rail.
+        // Rotation changes the whole image independently of cropping. Keep its names next to
+        // the image commands, separated from the history arrows.
+        _rotationCommands = BuildRotationCommands();
+        _editRotationHost = new Border { Child = _rotationCommands };
+        left.Children.Add(_editRotationHost);
+        left.Children.Add(Separator());
+
+        // The single way into crop; the ratio and automatic margin finder live in that mode.
         Button crop = IconTextButton(UiText.Get("Tools_Crop"), UiText.Get("EditorFlow_CropHint"), "Icon.Crop", FallbackCrop,
             () => { SelectTool(EditorTool.Crop); Focus(); });
         AutomationProperties.SetAutomationId(crop, "Capture410Crop");
@@ -1397,14 +1406,10 @@ internal sealed class AnnotationEditorControl : Grid
     private CommandGroupsPanel BuildCropCommands()
     {
         var left = CommandRow();
-        // An image-plus-arrow icon and a visible label, like the rotate commands in Photos and
-        // Paint: a bare curved arrow beside Undo and Redo read as another history command.
-        _rotateLeftButton = IconTextButton(UiText.Get("EditorUx_RotateLeft"), UiText.Get("EditorUx_RotateLeftHint"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
-        _rotateRightButton = IconTextButton(UiText.Get("EditorUx_RotateRight"), UiText.Get("EditorUx_RotateRightHint"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
-        AutomationName(_rotateLeftButton, UiText.Get("EditorUx_RotateLeftHint"));
-        AutomationName(_rotateRightButton, UiText.Get("EditorUx_RotateRightHint"));
-        left.Children.Add(_rotateLeftButton);
-        left.Children.Add(_rotateRightButton);
+        // The same controls move here while a crop frame is open, keeping rotation's existing
+        // crop-frame reset and ratio behavior without making crop the entry point for rotation.
+        _cropRotationHost = new Border();
+        left.Children.Add(_cropRotationHost);
         left.Children.Add(Separator());
 
         var ratioLabel = new TextBlock
@@ -1445,14 +1450,29 @@ internal sealed class AnnotationEditorControl : Grid
         right.Children.Add(apply);
         right.Children.Add(cancel);
 
-        CommandButton(_rotateLeftButton, borderless: true, ShortcutScope.Annotation, "RotateLeft");
-        CommandButton(_rotateRightButton, borderless: true, ShortcutScope.Annotation, "RotateRight");
         CommandButton(_autoTrimButton, borderless: true);
         CommandButton(apply, borderless: false, ShortcutScope.Crop, "Apply");
         CommandButton(cancel, borderless: true, ShortcutScope.Crop, "Cancel");
         var panel = new CommandGroupsPanel { Children = { left, right } };
         AutomationProperties.SetName(panel, UiText.Get("EditorFlow_CropBarName"));
         return panel;
+    }
+
+    private StackPanel BuildRotationCommands()
+    {
+        // The image-plus-arrow symbols and names distinguish image rotation from undo/redo.
+        _rotateLeftButton = IconTextButton(UiText.Get("EditorUx_RotateLeft"), UiText.Get("EditorUx_RotateLeftHint"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
+        _rotateRightButton = IconTextButton(UiText.Get("EditorUx_RotateRight"), UiText.Get("EditorUx_RotateRightHint"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
+        AutomationName(_rotateLeftButton, UiText.Get("EditorUx_RotateLeftHint"));
+        AutomationName(_rotateRightButton, UiText.Get("EditorUx_RotateRightHint"));
+        CommandButton(_rotateLeftButton, borderless: true, ShortcutScope.Annotation, "RotateLeft");
+        CommandButton(_rotateRightButton, borderless: true, ShortcutScope.Annotation, "RotateRight");
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _rotateLeftButton, _rotateRightButton },
+        };
     }
 
     private static StackPanel CommandRow() => new()
@@ -1501,9 +1521,15 @@ internal sealed class AnnotationEditorControl : Grid
         if (_editCommands is null || _cropCommands is null) return;
         bool cropping = _crop is not null;
         bool hidingFocus = (cropping ? _editCommands : _cropCommands).IsKeyboardFocusWithin;
+        if (hidingFocus) Focus();
+        Border rotationHost = cropping ? _cropRotationHost : _editRotationHost;
+        if (!ReferenceEquals(_rotationCommands.Parent, rotationHost))
+        {
+            if (_rotationCommands.Parent is Border previousHost) previousHost.Child = null;
+            rotationHost.Child = _rotationCommands;
+        }
         _editCommands.Visibility = cropping ? Visibility.Collapsed : Visibility.Visible;
         _cropCommands.Visibility = cropping ? Visibility.Visible : Visibility.Collapsed;
-        if (hidingFocus) Focus();
     }
 
     /// <summary>Whether the crop commands are showing, for tests.</summary>
@@ -1634,6 +1660,26 @@ internal sealed class AnnotationEditorControl : Grid
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
         // Tighter than the shared rail padding: six groups must still fit the 460 DIP minimum height.
         panel.Padding = new Thickness(6, 4, 6, 4);
+        // A wrapped command row reduces the available rail height. Keep every tool's
+        // hit area intact and reclaim only spacing between tools and intent groups.
+        var regularHeight = panel.Padding.Top + panel.Padding.Bottom + groups.Children
+            .OfType<FrameworkElement>()
+            .Sum(child => child is UniformGrid grid
+                ? Math.Ceiling(grid.Children.Count / (double)grid.Columns) * 40
+                : 9);
+        panel.SizeChanged += (_, _) =>
+        {
+            var compact = panel.ActualHeight < regularHeight;
+            foreach (var button in _toolButtons.Values)
+            {
+                button.Margin = new Thickness(1, compact ? 0 : 1, 1, compact ? 0 : 1);
+            }
+
+            foreach (var separator in groups.Children.OfType<Border>())
+            {
+                separator.Margin = new Thickness(8, compact ? 1 : 4, 8, compact ? 1 : 4);
+            }
+        };
         return panel;
     }
 
@@ -2899,8 +2945,8 @@ internal sealed class AnnotationEditorControl : Grid
         // Keep styling reachable in compact windows; vertical scrolling handles short heights.
         // No command label is ever folded away here: a button reduced to its shortcut letter
         // (the old narrow-window rotate buttons showed only Q and W) tells a beginner nothing.
-        // The rotate commands now live in crop mode, which leaves room for every label at the
-        // 680 DIP minimum width.
+        // The command groups wrap at the 680 DIP minimum width so the image command names and
+        // finishing actions stay visible.
         bool compact = ActualWidth > 0 && ActualWidth < InspectorCompactWidth;
 
         if (compact == _inspectorCompact)

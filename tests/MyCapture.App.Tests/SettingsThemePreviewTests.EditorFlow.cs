@@ -119,8 +119,8 @@ public sealed partial class SettingsThemePreviewTests
 
     /// <summary>
     /// At the 680 × 460 DIP minimum window, with the real theme styles and the shortcut key
-    /// lines shown, the command bar stays on one row in both modes and both languages, no
-    /// command is reduced to its key letter, and every rail tool is fully visible.
+    /// lines shown, command groups wrap only when necessary in both modes and languages,
+    /// no command is reduced to its key letter, and every rail tool is fully visible.
     /// </summary>
     [Fact]
     public Task EditorFlow_MinimumWindowKeepsEveryCommandLabelAndEveryTool() =>
@@ -159,8 +159,17 @@ public sealed partial class SettingsThemePreviewTests
                         var left = (FrameworkElement)bar.Children[0];
                         var right = (FrameworkElement)bar.Children[1];
                         report.AppendLine($"{scene}: bar {bar.ActualWidth:0.#} left {left.ActualWidth:0.#} right {right.ActualWidth:0.#}");
-                        Assert.True(Math.Abs(left.TranslatePoint(default, bar).Y - right.TranslatePoint(default, bar).Y) < 0.5,
-                            $"{scene}: the command bar wrapped onto a second row.");
+                        Assert.True(left.ActualWidth <= bar.ActualWidth + 0.5 && right.ActualWidth <= bar.ActualWidth + 0.5,
+                            $"{scene}: a command group exceeds the available width.");
+                        Rect leftBounds = left.TransformToAncestor(bar).TransformBounds(new Rect(left.RenderSize));
+                        Rect rightBounds = right.TransformToAncestor(bar).TransformBounds(new Rect(right.RenderSize));
+                        bool wraps = left.ActualWidth + right.ActualWidth > bar.ActualWidth;
+                        Assert.Equal(wraps, rightBounds.Top >= leftBounds.Bottom - 0.5);
+                        Rect overlap = Rect.Intersect(leftBounds, rightBounds);
+                        Assert.True(overlap.IsEmpty || overlap.Width <= 0.5 || overlap.Height <= 0.5,
+                            $"{scene}: the command groups overlap.");
+                        Assert.InRange(bar.ActualHeight, (wraps ? left.ActualHeight + right.ActualHeight : Math.Max(left.ActualHeight, right.ActualHeight)) - 0.5,
+                            (wraps ? left.ActualHeight + right.ActualHeight : Math.Max(left.ActualHeight, right.ActualHeight)) + 0.5);
 
                         Rect client = new(0, 0, window.Editor.ActualWidth, window.Editor.ActualHeight);
                         foreach (System.Windows.Controls.Primitives.ButtonBase button in EditorKeysTests.Descendants(bar)
