@@ -24,7 +24,7 @@ internal readonly record struct GalleryDropPlan(GalleryDropAction Action, Captur
 }
 
 /// <summary>
-/// Pure drop rules for the library, shared by folder cards, the folder tree, dates and "모든 항목".
+/// Pure drop rules for the library, shared by folder cards, the folder tree, dates and the library root ("라이브러리").
 /// </summary>
 /// <remarks>
 /// <para>

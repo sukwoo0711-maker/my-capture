@@ -202,7 +202,9 @@ public sealed class GalleryCaptionPreviewTests
         using Stream gallery = typeof(GalleryCaptionPreviewTests).Assembly.GetManifestResourceStream("GalleryFixture.Window.xaml")!;
         XElement product = XDocument.Load(gallery).Root!;
         CopyNamespaces(product, combined);
-        string[] keys = ["Gallery.IconButton", "Gallery.TileTemplate", "Gallery.TileRowList"];
+        // The card template also uses the shared overflow menu and the folder badge resources.
+        string[] keys = ["Gallery.IconButton", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "Gallery.FolderBadge",
+            "Gallery.FolderBadgeContent", "Gallery.TileTemplate", "Gallery.TileRowList"];
         foreach (XElement entry in product.Element(p + "Window.Resources")!.Element(p + "ResourceDictionary")!.Elements()
             .Where(element => keys.Contains((string?)element.Attribute(x + "Key"))))
         {
@@ -210,6 +212,8 @@ public sealed class GalleryCaptionPreviewTests
             // Event handlers belong to GalleryWindow and are irrelevant to the unchanged
             // card visuals. Keep all production bindings, templates and sizing intact.
             foreach (XAttribute handler in copy.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName == "Click").ToArray()) handler.Remove();
+            // x:Shared is honoured only in compiled dictionaries; XamlReader rejects it.
+            copy.Attribute(x + "Shared")?.Remove();
             combined.Add(copy);
         }
         window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined.ToString(SaveOptions.DisableFormatting)));

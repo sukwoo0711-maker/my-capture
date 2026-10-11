@@ -95,7 +95,7 @@ internal sealed partial class GalleryWindow
 
     /// <summary>
     /// Shows a scope without changing the saved keep-after-close destination. A folder or date
-    /// opens with all of its items, like any other navigation pane selection.
+    /// opens as a location without a media view, like any other navigation pane selection.
     /// </summary>
     private void ShowScope(CaptureFolderScope scope)
     {
@@ -543,7 +543,7 @@ internal sealed partial class GalleryWindow
 
     // ---- Dropping captures on folders --------------------------------------------------
     //
-    // One handler on the library root serves folder cards, the folder tree, dates and "모든 항목".
+    // One handler on the library root serves folder cards, the folder tree, dates and "라이브러리".
     // The OLE payload exposes rendered copies only. Internal drops move metadata explicitly,
     // while negotiating Copy keeps external receivers from consuming staging.
 

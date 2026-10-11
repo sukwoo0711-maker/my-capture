@@ -148,9 +148,9 @@ internal sealed partial class GalleryWindow : Window
     internal void OpenCapture(Guid id, bool edit)
     {
         ShowGallery();
-        // "Show in library" must find the capture even when another folder is open.
-        if (_controller.Find(id) is { } record
-            && !_queue.RecordsInScope(_viewModel.SelectedScope).Any(candidate => candidate.Id == id))
+        // "Show in library" must find the capture even when another folder is open, and a filed
+        // capture is listed only in its own folder while browsing.
+        if (_controller.Find(id) is { } record && !_viewModel.ListsLocation(record))
             ShowScope(record.FolderId is { } folderId ? CaptureFolderScope.ForFolder(folderId) : CaptureFolderScope.All);
         _viewModel.Select(id);
         if (edit && _viewModel.FindTile(id) is { } tile) OpenReedit(tile);

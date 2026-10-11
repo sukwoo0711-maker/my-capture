@@ -823,6 +823,21 @@ public sealed class GalleryTests : KoreanCaptionTest
         Assert.Equal(expected, GalleryRowBuilder.ColumnCountForWidth(width));
     }
 
+    [Theory]
+    [InlineData(0, 2)]        // before first layout → minimum
+    [InlineData(300, 2)]      // narrower than two compact tracks, still two columns
+    [InlineData(491, 2)]      // just below three 164-DIP tracks
+    [InlineData(492, 3)]      // three compact cards where only two full cards fit
+    [InlineData(760, 4)]      // the default window's content width: four instead of two
+    [InlineData(1000, 6)]     // where three full cards fit
+    [InlineData(1640, 10)]    // ten compact tracks
+    [InlineData(4000, 10)]    // clamped to the compact maximum
+    public void ColumnCountForWidth_CompactFolderCardsUseMoreColumns(double width, int expected)
+    {
+        Assert.Equal(expected, GalleryRowBuilder.ColumnCountForWidth(width, compact: true));
+        Assert.True(expected >= GalleryRowBuilder.ColumnCountForWidth(width));
+    }
+
     [Fact]
     public void Build_EmitsHeaderThenTileRowsInOrderForEachGroup()
     {

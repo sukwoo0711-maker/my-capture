@@ -96,6 +96,30 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     public bool IsPinned => Record.IsManuallyPinned;
     internal Func<CaptureRecord, string>? FolderFileName { get; set; }
 
+    private string _folderBadge = string.Empty;
+    private string _folderPath = string.Empty;
+
+    /// <summary>
+    /// The folder this capture lives in, shown on its card only where a view lists it outside
+    /// that folder: a search or the image, video and kept views. Empty while browsing.
+    /// </summary>
+    public string FolderBadge => _folderBadge;
+
+    public bool HasFolderBadge => _folderBadge.Length > 0;
+
+    /// <summary>Sets or clears the folder badge for the view being shown.</summary>
+    internal void SetFolderBadge((string Name, string Path)? folder)
+    {
+        string name = folder?.Name ?? string.Empty;
+        string path = folder?.Path ?? string.Empty;
+        if (_folderBadge == name && _folderPath == path) return;
+        _folderBadge = name;
+        _folderPath = path;
+        Raise(nameof(FolderBadge));
+        Raise(nameof(HasFolderBadge));
+        Raise(nameof(AccessibleName));
+    }
+
     public bool HasAnnotations => Record.HasAnnotations;
 
     public bool IsVideo => Record.IsVideo;
@@ -133,6 +157,9 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
 
+    /// <summary>The single line under a compact card: its caption, else the capture time.</summary>
+    public string CompactCaption => HasCaption ? Caption : TimeCaption;
+
     /// <summary>Non-empty label for confirmations, OCR windows and other contextual UI.</summary>
     public string ContextLabel => HasCaption
         ? Caption
@@ -146,7 +173,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
             string time = Record.CreatedAt.DateTime.ToString("yyyy-MM-dd HH:mm");
             string pin = IsPinned ? UiText.Get("LibraryUx_KeptAccessible") : string.Empty;
             string media = IsVideo ? UiText.Format("Text_DFB3664A9A08", DurationCaption) : UiText.Get("Text_AA3D7105289A");
-            return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}";
+            string folder = HasFolderBadge ? UiText.Format("LibraryUx_InFolderAccessible", _folderPath) : string.Empty;
+            return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}{folder}";
         }
     }
 
@@ -213,6 +241,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(DurationCaption));
         Raise(nameof(Caption));
         Raise(nameof(HasCaption));
+        Raise(nameof(CompactCaption));
         Raise(nameof(ContextLabel));
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));
@@ -224,6 +253,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     {
         Raise(nameof(Caption));
         Raise(nameof(HasCaption));
+        Raise(nameof(CompactCaption));
         Raise(nameof(ContextLabel));
         Raise(nameof(TagsCaption));
         Raise(nameof(SourcePageUrl));

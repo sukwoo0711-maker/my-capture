@@ -77,6 +77,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
     private string _searchQuery = string.Empty;
     private int _columnCount = GalleryRowBuilder.MinColumns;
+    private double _availableWidth = double.NaN;
+    private bool _rowsCompact;
 
     public GallerySelection Selection { get; } = new();
     public IReadOnlyList<GalleryItemViewModel> SelectedTiles => Selection.SelectedIds
@@ -173,7 +175,15 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public bool QueueIsEmpty => _controller.Count == 0;
 
     public int VisibleCount => _groups.Sum(group => group.Items.Count);
-    public string ResultCountText => UiText.Format("Library.Search.Count", VisibleCount, _controller.Count);
+
+    /// <summary>
+    /// Captures this view gives access to: its tiles plus the captures inside the folder cards
+    /// shown with them. Browsing the library root therefore reaches the whole library even though
+    /// filed captures sit behind their folder cards.
+    /// </summary>
+    internal int ReachableCount => VisibleCount + _groups.Sum(group => group.Folders.Sum(card => card.CaptureCount));
+
+    public string ResultCountText => UiText.Format("Library.Search.Count", ReachableCount, _controller.Count);
     public string EmptyStateTitle => UiText.Get(IsBrowsingFolderWithoutQuery
         ? "Folder410.EmptyFolder" : QueueIsEmpty ? "Library.Empty.Start" : "Library.Empty.NoResults");
 
@@ -220,8 +230,9 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         IsRefreshingFolderTree = true;
         try { RefreshFolderTree(); }
         finally { IsRefreshingFolderTree = false; }
-        // Folder cards belong to browsing, like the empty-folder state: a search or media filter
-        // shows matching captures only.
+        // Browsing shows a location like File Explorer: its folder cards and only the captures
+        // directly in it. A search or media filter cuts across folders instead and shows matching
+        // captures only, each naming the folder it lives in (see GalleryController.RecordsInView).
         bool showFolders = string.IsNullOrWhiteSpace(_searchQuery) && _filter == GalleryFilter.All;
         IReadOnlyList<GalleryGroupedRecords> grouped = _controller.BuildGroups(_searchQuery, _clock(), _scope, _sortOrder,
             showFolders);
@@ -229,6 +240,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         var seenTiles = new HashSet<Guid>();
         var seenFolders = new HashSet<Guid>();
         FolderCardIndex? folderIndex = null;
+        var badges = new Dictionary<Guid, (string Name, string Path)?>();
 
         _groups.Clear();
         foreach (GalleryGroupedRecords group in grouped)
@@ -239,7 +251,12 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
                 if (_filter == GalleryFilter.Images && !record.IsImage
                     || _filter == GalleryFilter.Videos && !record.IsVideo
                     || _filter == GalleryFilter.Pinned && !record.IsManuallyPinned) continue;
-                tiles.Add(GetOrCreateTile(record));
+                GalleryItemViewModel tile = GetOrCreateTile(record);
+                // Only a capture listed outside its own folder carries the badge; while browsing
+                // every listed capture is in the location shown, so none does.
+                tile.SetFolderBadge(record.FolderId is { } folderId && folderId != _scope.FolderId
+                    ? FolderBadgeFor(folderId, badges) : null);
+                tiles.Add(tile);
                 seenTiles.Add(record.Id);
             }
 
@@ -268,6 +285,14 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             }
         }
 
+        // An opened folder lays out the smaller cards in more columns from the same width.
+        if (IsCompactLayout != _rowsCompact)
+        {
+            _rowsCompact = IsCompactLayout;
+            int columns = GalleryRowBuilder.ColumnCountForWidth(_availableWidth, _rowsCompact);
+            if (columns != _columnCount) { _columnCount = columns; Raise(nameof(ColumnCount)); }
+            Raise(nameof(IsCompactLayout));
+        }
         RebuildRows();
 
         Selection.SetVisible(_groups.SelectMany(g => g.Items).Select(t => t.Id));
@@ -293,7 +318,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     /// <returns><see langword="true"/> when the column count changed and rows were rebuilt.</returns>
     public bool SetColumnCountForWidth(double availableWidth)
     {
-        int next = GalleryRowBuilder.ColumnCountForWidth(availableWidth);
+        _availableWidth = availableWidth;
+        int next = GalleryRowBuilder.ColumnCountForWidth(availableWidth, _rowsCompact);
         if (next == _columnCount)
         {
             return false;
@@ -305,12 +331,18 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         return true;
     }
 
+    /// <summary>
+    /// True inside an opened folder, where captures and subfolders use the compact cards so more
+    /// of the folder fits at once. The library root, dates and the media views keep full cards.
+    /// </summary>
+    public bool IsCompactLayout => _scope.FolderId is not null;
+
     private void RebuildRows()
     {
-        IReadOnlyList<GalleryRow> built = GalleryRowBuilder.Build(_groups, _columnCount);
+        IReadOnlyList<GalleryRow> built = GalleryRowBuilder.Build(_groups, _columnCount, _rowsCompact);
 
         if (_rows.Count == built.Count && _rows.Zip(built).All(pair =>
-            (pair.First, pair.Second) switch
+            pair.First.IsCompact == pair.Second.IsCompact && (pair.First, pair.Second) switch
             {
                 (GalleryHeaderRow a, GalleryHeaderRow b) => a.Heading == b.Heading,
                 (GalleryFolderRow a, GalleryFolderRow b) => a.Folders.SequenceEqual(b.Folders),
@@ -327,6 +359,18 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
     public GalleryItemViewModel? FindTile(Guid id) =>
         _tileCache.TryGetValue(id, out GalleryItemViewModel? tile) ? tile : null;
+
+    /// <summary>A folder's name and display path, resolved once per refresh for every card it labels.</summary>
+    private (string Name, string Path)? FolderBadgeFor(Guid folderId, Dictionary<Guid, (string Name, string Path)?> resolved)
+    {
+        if (!resolved.TryGetValue(folderId, out (string Name, string Path)? badge))
+        {
+            CaptureQueue queue = _controller.Queue;
+            resolved[folderId] = badge = queue.FindFolder(folderId) is { } folder
+                ? (folder.Name, queue.GetFolderDisplayPath(folderId)) : null;
+        }
+        return badge;
+    }
 
     private GalleryItemViewModel GetOrCreateTile(CaptureRecord record)
     {

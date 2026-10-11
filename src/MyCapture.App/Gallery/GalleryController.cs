@@ -58,9 +58,12 @@ public sealed class GalleryController
     /// day, newest day first) and avoids the caller re-sorting.
     /// </para>
     /// <para>
-    /// With <paramref name="includeFolders"/>, a group also carries the folders a user can open
-    /// from that view: root folders on their creation day, or a folder's direct children. A
-    /// group can then hold folders only, so an empty new folder is still visible.
+    /// With <paramref name="includeFolders"/>, the groups describe a location being browsed, like a
+    /// File Explorer folder: they carry the folders a user can open from there (root folders on
+    /// their creation day, or a folder's direct children) and only the captures directly in that
+    /// location (see <see cref="RecordsInView"/>). A group can then hold folders only, so an
+    /// empty new folder is still visible. Without it the result covers every folder under the
+    /// location, as a search or a media view needs.
     /// </para>
     /// </remarks>
     public IReadOnlyList<GalleryGroupedRecords> BuildGroups(string? query, DateTimeOffset now,
@@ -68,7 +71,7 @@ public sealed class GalleryController
         bool includeFolders = false)
     {
         CaptureFolder[] folders = includeFolders ? FolderCardsInScope(scope) : [];
-        IEnumerable<CaptureRecord> matches = _queue.RecordsInScope(scope);
+        IEnumerable<CaptureRecord> matches = RecordsInView(scope, browsing: includeFolders);
         string? trimmed = query?.Trim();
         if (!string.IsNullOrEmpty(trimmed))
             matches = matches.Where(record => Matches(record, trimmed)
@@ -98,6 +101,33 @@ public sealed class GalleryController
             .Select(day => new GalleryGroupedRecords(day, recordsByDay[day].ToArray()) { Folders = foldersByDay[day].ToArray() })
             .ToArray();
     }
+
+    /// <summary>
+    /// The captures a library view lists for <paramref name="scope"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Browsing a location works like File Explorer: the library root and a date list only the
+    /// captures that are in no folder, and a folder lists only its own captures. Everything filed
+    /// deeper is one folder card away, so a capture dropped on a folder leaves the view it was
+    /// dragged from at once. Payloads never move; only the listing follows the folder metadata.
+    /// </para>
+    /// <para>
+    /// A search, or the image, video and kept views, cuts across locations instead and covers
+    /// every folder under <paramref name="scope"/> (the whole library from the root), so a capture
+    /// filed in a folder never becomes unreachable. Such results name the folder on each card
+    /// that lives elsewhere. Folder deletion and export keep the subtree meaning of
+    /// <see cref="CaptureQueue.RecordsInScope"/>.
+    /// </para>
+    /// </remarks>
+    internal IEnumerable<CaptureRecord> RecordsInView(CaptureFolderScope scope, bool browsing) => browsing
+        ? _queue.Records.Where(record => IsDirectlyIn(record, scope))
+        : _queue.RecordsInScope(scope);
+
+    /// <summary>True when <paramref name="record"/> is listed while browsing <paramref name="scope"/>.</summary>
+    internal static bool IsDirectlyIn(CaptureRecord record, CaptureFolderScope scope) =>
+        record.FolderId == scope.FolderId
+        && (scope.Date is not { } date || DateOnly.FromDateTime(record.CreatedAt.DateTime) == date);
 
     /// <summary>Folders opened from the library body: roots for All or a date, children for a folder.</summary>
     private CaptureFolder[] FolderCardsInScope(CaptureFolderScope scope) => _queue.Folders

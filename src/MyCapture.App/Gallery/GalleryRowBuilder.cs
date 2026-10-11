@@ -34,23 +34,37 @@ public static class GalleryRowBuilder
     /// <summary>Caps ultra-wide layouts while avoiding the previous large empty right gutter.</summary>
     public const int MaxColumns = 6;
 
+    /// <summary>The horizontal track of a compact card inside an opened folder.</summary>
+    /// <remarks>
+    /// A compact tile is 148x180 (about 60% of the 244x292 tile, see
+    /// <c>Gallery.CompactTileTemplate</c>) with 6-DIP margins and the 2-DIP selection outline on
+    /// each side; a compact folder card is the same size with 8-DIP margins. Both therefore take
+    /// 164 DIPs, so folder and capture rows keep one column grid for arrow keys.
+    /// </remarks>
+    public const double CompactTileTrackWidth = 164.0;
+
+    /// <summary>The compact grid's cap: about as wide as <see cref="MaxColumns"/> full tiles.</summary>
+    public const int CompactMaxColumns = 10;
+
     /// <summary>
     /// Chooses the column count for a gallery content width, clamped to
-    /// <see cref="MinColumns"/>..<see cref="MaxColumns"/>.
+    /// <see cref="MinColumns"/>..<see cref="MaxColumns"/>, or to
+    /// <see cref="CompactMaxColumns"/> for the compact cards of an opened folder.
     /// </summary>
     /// <param name="availableWidth">
     /// The width available to the tile rows, in device-independent pixels. A non-positive
     /// width (before first layout) yields <see cref="MinColumns"/>.
     /// </param>
-    public static int ColumnCountForWidth(double availableWidth)
+    /// <param name="compact">True for the smaller cards shown inside a folder.</param>
+    public static int ColumnCountForWidth(double availableWidth, bool compact = false)
     {
         if (double.IsNaN(availableWidth) || availableWidth <= 0)
         {
             return MinColumns;
         }
 
-        int fit = (int)Math.Floor(availableWidth / TileTrackWidth);
-        return Math.Clamp(fit, MinColumns, MaxColumns);
+        int fit = (int)Math.Floor(availableWidth / (compact ? CompactTileTrackWidth : TileTrackWidth));
+        return Math.Clamp(fit, MinColumns, compact ? CompactMaxColumns : MaxColumns);
     }
 
     /// <summary>
@@ -61,9 +75,11 @@ public static class GalleryRowBuilder
     /// </summary>
     /// <param name="groups">The date groups, already ordered newest-first.</param>
     /// <param name="columns">Tiles per row; values below <see cref="MinColumns"/> are raised.</param>
+    /// <param name="compact">Marks folder and tile rows for the smaller cards of an opened folder.</param>
     public static IReadOnlyList<GalleryRow> Build(
         IReadOnlyList<GalleryGroupViewModel> groups,
-        int columns)
+        int columns,
+        bool compact = false)
     {
         int perRow = Math.Max(MinColumns, columns);
         var rows = new List<GalleryRow>();
@@ -75,7 +91,7 @@ public static class GalleryRowBuilder
             IReadOnlyList<GalleryFolderCardViewModel> folders = group.Folders;
             for (int start = 0; start < folders.Count; start += perRow)
             {
-                rows.Add(new GalleryFolderRow(folders.Skip(start).Take(perRow).ToArray()));
+                rows.Add(new GalleryFolderRow(folders.Skip(start).Take(perRow).ToArray(), compact));
             }
 
             IReadOnlyList<GalleryItemViewModel> tiles = group.Items;
@@ -88,7 +104,7 @@ public static class GalleryRowBuilder
                     slice.Add(tiles[start + i]);
                 }
 
-                rows.Add(new GalleryTileRow(slice));
+                rows.Add(new GalleryTileRow(slice, compact));
             }
         }
 

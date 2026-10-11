@@ -3627,8 +3627,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="SettingsUx_CloseApply" xml:space="preserve"><value>Apply and close</value></data>
   <data name="SettingsUx_CloseDiscard" xml:space="preserve"><value>Don't apply</value></data>
   <data name="LibraryUx_NavName" xml:space="preserve"><value>Library navigation</value></data>
-  <data name="LibraryUx_NavAll" xml:space="preserve"><value>All items</value></data>
-  <data name="LibraryUx_NavAllHint" xml:space="preserve"><value>Shows every capture regardless of date or folder. Drop captures here to remove them from their folder.</value></data>
+  <data name="LibraryUx_NavAll" xml:space="preserve"><value>Library</value></data>
+  <data name="LibraryUx_NavAllHint" xml:space="preserve"><value>Shows folders and the captures that are not in a folder. Open a folder or search to find the captures inside it. Drop captures here to remove them from their folder.</value></data>
   <data name="LibraryUx_NavKept" xml:space="preserve"><value>Kept</value></data>
   <data name="LibraryUx_NavKeptHint" xml:space="preserve"><value>Captures kept from automatic cleanup. Keep a capture from its More menu.</value></data>
   <data name="LibraryUx_NavItemName" xml:space="preserve"><value>{0}, {1} items</value></data>
@@ -3660,6 +3660,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LibraryUx_KeepToggleName" xml:space="preserve"><value>Toggle keep</value></data>
   <data name="LibraryUx_KeptBadge" xml:space="preserve"><value>Kept</value></data>
   <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, kept</value></data>
+  <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, in folder {0}</value></data>
   <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More — keep, export and recognize text</value></data>
   <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, apps, image text</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>

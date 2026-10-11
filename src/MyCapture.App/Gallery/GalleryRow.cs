@@ -24,6 +24,11 @@ namespace MyCapture.App.Gallery;
 /// </remarks>
 public abstract class GalleryRow
 {
+    /// <summary>
+    /// True for the smaller cards shown inside an opened folder. Header rows are never compact;
+    /// the flag lives on the base type so the row container can bind it on every row.
+    /// </summary>
+    public bool IsCompact { get; protected init; }
 }
 
 /// <summary>A date-group heading row, shown once above that day's tile rows.</summary>
@@ -42,9 +47,12 @@ public sealed class GalleryHeaderRow : GalleryRow
 /// </summary>
 public sealed class GalleryTileRow : GalleryRow
 {
-    public GalleryTileRow(IReadOnlyList<GalleryItemViewModel> tiles) =>
+    public GalleryTileRow(IReadOnlyList<GalleryItemViewModel> tiles, bool compact = false)
+    {
         Tiles = new ReadOnlyObservableCollection<GalleryItemViewModel>(
             new ObservableCollection<GalleryItemViewModel>(tiles));
+        IsCompact = compact;
+    }
 
     /// <summary>The 2-4 tiles laid out left-to-right in this row.</summary>
     public ReadOnlyObservableCollection<GalleryItemViewModel> Tiles { get; }
@@ -56,9 +64,12 @@ public sealed class GalleryTileRow : GalleryRow
 /// </summary>
 public sealed class GalleryFolderRow : GalleryRow
 {
-    public GalleryFolderRow(IReadOnlyList<GalleryFolderCardViewModel> folders) =>
+    public GalleryFolderRow(IReadOnlyList<GalleryFolderCardViewModel> folders, bool compact = false)
+    {
         Folders = new ReadOnlyObservableCollection<GalleryFolderCardViewModel>(
             new ObservableCollection<GalleryFolderCardViewModel>(folders));
+        IsCompact = compact;
+    }
 
     /// <summary>The folder cards laid out left-to-right in this row.</summary>
     public ReadOnlyObservableCollection<GalleryFolderCardViewModel> Folders { get; }

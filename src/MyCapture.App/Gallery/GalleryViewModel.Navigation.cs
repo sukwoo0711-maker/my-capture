@@ -3,7 +3,7 @@ using MyCapture.Core.Queue;
 
 namespace MyCapture.App.Gallery;
 
-/// <summary>One step of the location shown above an opened folder or date, for example "모든 항목 › 제품리뷰".</summary>
+/// <summary>One step of the location shown above an opened folder or date, for example "라이브러리 › 제품리뷰".</summary>
 public sealed record GalleryBreadcrumb(string Name, CaptureFolderScope Scope, bool IsCurrent)
 {
     /// <summary>Every step except the current one opens its scope.</summary>
@@ -12,9 +12,9 @@ public sealed record GalleryBreadcrumb(string Name, CaptureFolderScope Scope, bo
 
 /// <summary>
 /// Navigation pane, location header, status line and drag state of the library. Like a Windows
-/// navigation view, the views (all items, images, videos, kept), folders and dates share one
-/// selection: choosing a folder or date shows all of its items, and choosing a view returns to
-/// the whole library.
+/// navigation view, the library root ("라이브러리"), the views (images, videos, kept), folders and
+/// dates share one selection. The root, a folder or a date is a location: it shows its folders and
+/// the captures filed directly in it. The image, video and kept views cover the whole library.
 /// </summary>
 public sealed partial class GalleryViewModel
 {
@@ -24,6 +24,10 @@ public sealed partial class GalleryViewModel
     /// <summary>Root folders of every date, in the tree's name order. Subfolders hang off each node.</summary>
     public ObservableCollection<GalleryFolderNode> FolderRoots { get; } = [];
 
+    /// <summary>
+    /// Every capture in the library, like the other view counts. The root lists the captures
+    /// outside folders and reaches the rest through its folder cards, so this is what it holds.
+    /// </summary>
     public int AllItemsCount => _controller.Count;
     public int ImageCount => _controller.Records.Count(record => record.IsImage);
     public int VideoCount => _controller.Records.Count(record => record.IsVideo);
@@ -64,17 +68,28 @@ public sealed partial class GalleryViewModel
     /// </summary>
     public bool ShowNewCaptureDestination => NewCaptureFolderId is { } id && id != _scope.FolderId;
 
-    /// <summary>"전체 71개 중 12개" only when a search, view or location hides part of the library.</summary>
-    public bool ShowResultCount => VisibleCount != _controller.Count;
+    /// <summary>
+    /// "전체 71개 중 12개" only when a search, view or location hides part of the library. Captures
+    /// inside the folder cards shown count as reachable, so the library root never reports one.
+    /// </summary>
+    public bool ShowResultCount => ReachableCount != _controller.Count;
 
-    /// <summary>Highlights "모든 항목" while captures dragged over it would leave their folder.</summary>
+    /// <summary>
+    /// True when the view would list <paramref name="record"/> without a search term: browsing,
+    /// only where it is filed; a media or kept view, anywhere under the location.
+    /// </summary>
+    internal bool ListsLocation(CaptureRecord record) => _filter == GalleryFilter.All
+        ? GalleryController.IsDirectlyIn(record, _scope)
+        : _controller.RecordsInView(_scope, browsing: false).Contains(record);
+
+    /// <summary>Highlights the library root while captures dragged over it would leave their folder.</summary>
     public bool IsAllItemsDropTarget
     {
         get => _isAllItemsDropTarget;
         internal set { if (_isAllItemsDropTarget != value) { _isAllItemsDropTarget = value; Raise(); } }
     }
 
-    /// <summary>Shows one of the navigation pane's views over the whole library.</summary>
+    /// <summary>Shows the library root, or one of the image, video and kept views over the whole library.</summary>
     public void ShowView(GalleryFilter filter)
     {
         if (IsRefreshingFolderTree || (_scope.IsAll && _filter == filter)) return;
@@ -85,7 +100,7 @@ public sealed partial class GalleryViewModel
         else Refresh();
     }
 
-    /// <summary>Opens a folder or date with all of its items; the media views apply to the whole library.</summary>
+    /// <summary>Opens a folder or date as a location, without a media view; those apply to the whole library.</summary>
     public void NavigateTo(CaptureFolderScope scope)
     {
         if (IsRefreshingFolderTree) return;

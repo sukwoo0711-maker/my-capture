@@ -47,6 +47,91 @@
                       Click="OnDeleteFolderClick" />
         </ContextMenu>
 
+        <!-- The capture card's overflow menu, shared by the full and compact cards. It inherits the
+             More button's DataContext (the tile view model) via PlacementTarget, and each item
+             carries the tile as CommandParameter so the handler always resolves the right record
+             even though menu items are outside the visual tree. -->
+        <ContextMenu x:Key="Gallery.TileContextMenu" x:Shared="False"
+                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
+                      InputGestureText="P"
+                      Click="OnPinMenuClick" />
+            <MenuItem Header="{loc:Text Text_854582314EBD}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text Text_854582314EBD}"
+                      InputGestureText="T"
+                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
+                      Click="OnOcrMenuClick">
+                <MenuItem.Icon>
+                    <Path Data="{StaticResource Icon.Ocr}" Width="18" Height="18"
+                          Stretch="Uniform"
+                          Stroke="{DynamicResource Text.Secondary}"
+                          StrokeThickness="1.6"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          StrokeLineJoin="Round" Fill="Transparent" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="{loc:Text Text_D44617983641}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text Text_D44617983641}"
+                      InputGestureText="G"
+                      Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
+                      Click="OnGifMenuClick" />
+            <MenuItem Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
+                      InputGestureText="M" Click="OnMoveCapturesClick" />
+            <Separator />
+            <MenuItem Header="{loc:Text ExportReduction_Title}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text ExportReduction_Title}"
+                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
+                      Click="OnReducedExportClick" />
+            <MenuItem Header="{loc:Text Text_6139B6C3ED73}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text Text_6139B6C3ED73}"
+                      InputGestureText="Delete"
+                      Foreground="{DynamicResource State.DangerHover}"
+                      Click="OnDeleteMenuClick">
+                <MenuItem.Icon>
+                    <Path Data="{StaticResource Icon.Delete}" Width="18" Height="18"
+                          Stretch="Uniform"
+                          Stroke="{DynamicResource State.DangerHover}"
+                          StrokeThickness="1.6"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          StrokeLineJoin="Round" Fill="Transparent" />
+                </MenuItem.Icon>
+            </MenuItem>
+        </ContextMenu>
+
+        <!-- Declared ahead of the card templates, which use it for the folder badge. -->
+        <PathGeometry x:Key="LibraryUx.Icon.Folder"
+                      Figures="M2.75,5.25 A1.25,1.25 0 0 1 4,4 L7.6,4 L9.4,5.75 L16,5.75 A1.25,1.25 0 0 1 17.25,7 L17.25,14.75 A1.25,1.25 0 0 1 16,16 L4,16 A1.25,1.25 0 0 1 2.75,14.75 Z" />
+
+        <!-- A search or the image, video and kept views list captures from every folder; a card
+             filed in a folder other than the one open names it, so the result says where it lives. -->
+        <Style x:Key="Gallery.FolderBadge" TargetType="Border">
+            <Setter Property="Padding" Value="7,4" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="{DynamicResource Surface.BadgeStrong}" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="Visibility" Value="{Binding HasFolderBadge, Converter={StaticResource BoolToVisibility}}" />
+        </Style>
+
+        <DataTemplate x:Key="Gallery.FolderBadgeContent" DataType="{x:Type gallery:GalleryItemViewModel}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="12" Height="12" Stretch="Uniform"
+                      Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding FolderBadge}" Margin="4,0,0,0"
+                           Foreground="{DynamicResource Text.Badge}" FontSize="{StaticResource FontSize.Caption}"
+                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </Grid>
+        </DataTemplate>
+
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
             <!-- A 244px tile plus 6px margins occupies a 256px track, matching
                  GalleryRowBuilder.TileTrackWidth. Four cards now fill the default window
@@ -143,12 +228,15 @@
                             <StackPanel Orientation="Horizontal"
                                         HorizontalAlignment="Left" VerticalAlignment="Top"
                                         Margin="8">
-                                <Border Padding="8,4" CornerRadius="6"
+                                <Border Padding="8,4" CornerRadius="6" Margin="0,0,6,0"
                                         Background="{DynamicResource Accent.Default}"
                                         Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Text="{loc:Text LibraryUx_KeptBadge}" FontSize="{StaticResource FontSize.Caption}"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource Text.OnAccent}" />
+                                </Border>
+                                <Border x:Name="FolderBadge" Style="{StaticResource Gallery.FolderBadge}" MaxWidth="120">
+                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource Gallery.FolderBadgeContent}" />
                                 </Border>
                             </StackPanel>
                             <Border HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -243,6 +331,7 @@
                                 Style="{StaticResource Gallery.IconButton}"
                                 ToolTip="{loc:Text LibraryUx_TileMoreHint}"
                                 AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
+                                ContextMenu="{StaticResource Gallery.TileContextMenu}"
                                 Click="OnMoreClick">
                             <Path Data="{StaticResource Icon.More}" Width="20" Height="20"
                                   Stretch="None"
@@ -251,64 +340,6 @@
                                   StrokeThickness="1.6"
                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                                   StrokeLineJoin="Round" />
-                            <Button.ContextMenu>
-                                <!-- The context menu inherits the button's DataContext (the tile
-                                     view model) via PlacementTarget, and each item carries the tile
-                                     as CommandParameter so the handler always resolves the right
-                                     record even though menu items are outside the visual tree. -->
-                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext,
-                                                                   RelativeSource={RelativeSource Self}}">
-                                    <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
-                                              CommandParameter="{Binding}"
-                                              AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
-                                              InputGestureText="P"
-                                              Click="OnPinMenuClick" />
-                                    <MenuItem Header="{loc:Text Text_854582314EBD}"
-                                              CommandParameter="{Binding}"
-                                              AutomationProperties.Name="{loc:Text Text_854582314EBD}"
-                                              InputGestureText="T"
-                                              Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
-                                              Click="OnOcrMenuClick">
-                                        <MenuItem.Icon>
-                                            <Path Data="{StaticResource Icon.Ocr}" Width="18" Height="18"
-                                                  Stretch="Uniform"
-                                                  Stroke="{DynamicResource Text.Secondary}"
-                                                  StrokeThickness="1.6"
-                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                                  StrokeLineJoin="Round" Fill="Transparent" />
-                                        </MenuItem.Icon>
-                                    </MenuItem>
-                                    <MenuItem Header="{loc:Text Text_D44617983641}"
-                                              CommandParameter="{Binding}"
-                                              AutomationProperties.Name="{loc:Text Text_D44617983641}"
-                                              InputGestureText="G"
-                                              Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
-                                              Click="OnGifMenuClick" />
-                                    <MenuItem Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
-                                              InputGestureText="M" Click="OnMoveCapturesClick" />
-                                    <Separator />
-                                    <MenuItem Header="{loc:Text ExportReduction_Title}"
-                                              CommandParameter="{Binding}"
-                                              AutomationProperties.Name="{loc:Text ExportReduction_Title}"
-                                              Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
-                                              Click="OnReducedExportClick" />
-                                    <MenuItem Header="{loc:Text Text_6139B6C3ED73}"
-                                              CommandParameter="{Binding}"
-                                              AutomationProperties.Name="{loc:Text Text_6139B6C3ED73}"
-                                              InputGestureText="Delete"
-                                              Foreground="{DynamicResource State.DangerHover}"
-                                              Click="OnDeleteMenuClick">
-                                        <MenuItem.Icon>
-                                            <Path Data="{StaticResource Icon.Delete}" Width="18" Height="18"
-                                                  Stretch="Uniform"
-                                                  Stroke="{DynamicResource State.DangerHover}"
-                                                  StrokeThickness="1.6"
-                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                                  StrokeLineJoin="Round" Fill="Transparent" />
-                                        </MenuItem.Icon>
-                                    </MenuItem>
-                                </ContextMenu>
-                            </Button.ContextMenu>
                         </Button>
                     </Grid>
                 </Grid>
@@ -417,6 +448,124 @@
                      MouseDoubleClick="OnTileDoubleClick" />
         </DataTemplate>
 
+        <!-- Inside an opened folder: about 60% of the full card. 148x180 plus 6px margins and the
+             2px selection outline is the 164px track of GalleryRowBuilder.CompactTileTrackWidth,
+             so a folder shows more captures per row. One caption line and the overflow menu stay
+             on the card; float, copy and edit remain on the keyboard, double-click and the details
+             panel. Selection, dragging and the automation name are the full card's. -->
+        <DataTemplate x:Key="Gallery.CompactTileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
+            <Border Width="148" Height="180" Margin="6"
+                    Background="{DynamicResource Surface.Raised}"
+                    BorderBrush="{DynamicResource Border.Subtle}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource Radius.Lg}"
+                    SnapsToDevicePixels="True">
+                <Grid Margin="6">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border Background="{DynamicResource Surface.Sunken}"
+                            BorderBrush="{DynamicResource Border.Subtle}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource Radius.Md}"
+                            ClipToBounds="True">
+                        <Grid>
+                            <Image Source="{Binding Thumbnail}"
+                                   Margin="2"
+                                   Stretch="Uniform"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   AutomationProperties.Name="{Binding AccessibleName}" />
+                            <TextBlock Text="{Binding PreviewUnavailableText}"
+                                       Style="{DynamicResource Text.MutedBlock}"
+                                       FontSize="{StaticResource FontSize.Caption}"
+                                       TextWrapping="Wrap" TextAlignment="Center" Margin="6,0"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding IsBroken, Converter={StaticResource BoolToVisibility}}" />
+                            <Border Width="36" Height="36" CornerRadius="18"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Background="{DynamicResource Surface.Badge}"
+                                    BorderBrush="{DynamicResource Border.Badge}" BorderThickness="1"
+                                    IsHitTestVisible="False"
+                                    Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                <Path Data="{StaticResource Icon.Play}"
+                                      Width="16" Height="16" Stretch="Uniform"
+                                      Fill="{DynamicResource Text.Badge}"
+                                      Stroke="{DynamicResource Text.Badge}" StrokeThickness="1.2"
+                                      StrokeLineJoin="Round"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                    Margin="5" Padding="5,2" CornerRadius="4"
+                                    Background="{DynamicResource Surface.BadgeStrong}"
+                                    IsHitTestVisible="False"
+                                    Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding DurationCaption}"
+                                           Foreground="{DynamicResource Text.Badge}"
+                                           FontFamily="{StaticResource Font.Mono}"
+                                           FontSize="{StaticResource FontSize.Caption}" />
+                            </Border>
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Margin="5" Padding="6,2" CornerRadius="5"
+                                    Background="{DynamicResource Accent.Default}"
+                                    Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{loc:Text LibraryUx_KeptBadge}" FontSize="{StaticResource FontSize.Caption}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Text.OnAccent}" />
+                            </Border>
+                            <!-- Only a search inside the folder lists captures of its subfolders. -->
+                            <Border x:Name="FolderBadge" Style="{StaticResource Gallery.FolderBadge}"
+                                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                    Margin="5" Padding="5,2" CornerRadius="4" MaxWidth="80">
+                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource Gallery.FolderBadgeContent}" />
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1" Margin="2,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding CompactCaption}"
+                                   Foreground="{DynamicResource Text.Primary}"
+                                   FontWeight="SemiBold"
+                                   FontSize="{StaticResource FontSize.Caption}"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource Gallery.IconButton}"
+                                Width="30" Height="30" MinWidth="30" MinHeight="30" Padding="4"
+                                ToolTip="{loc:Text LibraryUx_TileMoreHint}"
+                                AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
+                                ContextMenu="{StaticResource Gallery.TileContextMenu}"
+                                Click="OnMoreClick">
+                            <Path Data="{StaticResource Icon.More}" Width="20" Height="20"
+                                  Stretch="None"
+                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round" />
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <Style x:Key="Gallery.CompactTileRowList" TargetType="ListBox" BasedOn="{StaticResource Gallery.TileRowList}">
+            <Setter Property="ItemTemplate" Value="{StaticResource Gallery.CompactTileTemplate}" />
+        </Style>
+
+        <DataTemplate x:Key="Gallery.CompactTileRowTemplate" DataType="{x:Type gallery:GalleryTileRow}">
+            <ListBox Style="{StaticResource Gallery.CompactTileRowList}"
+                     ItemsSource="{Binding Tiles}"
+                     PreviewKeyDown="OnTileKeyDown"
+                     PreviewMouseLeftButtonDown="OnTileMouseLeftButtonDown"
+                     MouseDoubleClick="OnTileDoubleClick" />
+        </DataTemplate>
+
         <!-- Library icons on the shared 20x20 symbol grid, local so the shared Symbols.xaml stays untouched. -->
         <PathGeometry x:Key="LibraryUx.Icon.AllItems"
                       Figures="M4,3.25 L8,3.25 A0.75,0.75 0 0 1 8.75,4 L8.75,8 A0.75,0.75 0 0 1 8,8.75 L4,8.75 A0.75,0.75 0 0 1 3.25,8 L3.25,4 A0.75,0.75 0 0 1 4,3.25 Z M12,3.25 L16,3.25 A0.75,0.75 0 0 1 16.75,4 L16.75,8 A0.75,0.75 0 0 1 16,8.75 L12,8.75 A0.75,0.75 0 0 1 11.25,8 L11.25,4 A0.75,0.75 0 0 1 12,3.25 Z M4,11.25 L8,11.25 A0.75,0.75 0 0 1 8.75,12 L8.75,16 A0.75,0.75 0 0 1 8,16.75 L4,16.75 A0.75,0.75 0 0 1 3.25,16 L3.25,12 A0.75,0.75 0 0 1 4,11.25 Z M12,11.25 L16,11.25 A0.75,0.75 0 0 1 16.75,12 L16.75,16 A0.75,0.75 0 0 1 16,16.75 L12,16.75 A0.75,0.75 0 0 1 11.25,16 L11.25,12 A0.75,0.75 0 0 1 12,11.25 Z" />
@@ -424,8 +573,6 @@
                       Figures="M3.25,4.75 L16.75,4.75 A1.25,1.25 0 0 1 18,6 L18,14 A1.25,1.25 0 0 1 16.75,15.25 L3.25,15.25 A1.25,1.25 0 0 1 2,14 L2,6 A1.25,1.25 0 0 1 3.25,4.75 Z M8.25,7.5 L12.75,10 L8.25,12.5 Z" />
         <PathGeometry x:Key="LibraryUx.Icon.Kept"
                       Figures="M5.25,3.25 L14.75,3.25 L14.75,17 L10,13.5 L5.25,17 Z" />
-        <PathGeometry x:Key="LibraryUx.Icon.Folder"
-                      Figures="M2.75,5.25 A1.25,1.25 0 0 1 4,4 L7.6,4 L9.4,5.75 L16,5.75 A1.25,1.25 0 0 1 17.25,7 L17.25,14.75 A1.25,1.25 0 0 1 16,16 L4,16 A1.25,1.25 0 0 1 2.75,14.75 Z" />
         <PathGeometry x:Key="LibraryUx.Icon.Add" Figures="M10,4.25 L10,15.75 M4.25,10 L15.75,10" />
         <PathGeometry x:Key="LibraryUx.Icon.Calendar"
                       Figures="M4.25,4.75 L15.75,4.75 A1,1 0 0 1 16.75,5.75 L16.75,15.75 A1,1 0 0 1 15.75,16.75 L4.25,16.75 A1,1 0 0 1 3.25,15.75 L3.25,5.75 A1,1 0 0 1 4.25,4.75 Z M3.25,8.5 L16.75,8.5 M7,3 L7,6.25 M13,3 L13,6.25" />
@@ -572,6 +719,84 @@
             </ItemsControl>
         </DataTemplate>
 
+        <!-- A subfolder inside an opened folder: the compact card's 148x180 frame with the same
+             8-DIP margins as a full folder card, so it keeps the compact column grid. -->
+        <Style x:Key="Gallery.CompactFolderCardButton" TargetType="Button" BasedOn="{StaticResource Gallery.FolderCardButton}">
+            <Setter Property="Width" Value="148" />
+            <Setter Property="Height" Value="180" />
+            <Setter Property="Padding" Value="8,14,8,8" />
+        </Style>
+
+        <DataTemplate x:Key="Gallery.CompactFolderCardTemplate" DataType="{x:Type gallery:GalleryFolderCardViewModel}">
+            <Button Style="{StaticResource Gallery.CompactFolderCardButton}"
+                    AutomationProperties.Name="{Binding AccessibleName}"
+                    ToolTip="{Binding ToolTipText}"
+                    Click="OnFolderCardClick"
+                    PreviewKeyDown="OnFolderCardKeyDown">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border Background="{DynamicResource Surface.Sunken}"
+                            BorderBrush="{DynamicResource Border.Folder}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource Radius.Md}"
+                            ClipToBounds="True">
+                        <Grid>
+                            <Image Source="{Binding Preview.Thumbnail}"
+                                   Stretch="UniformToFill"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   Visibility="{Binding HasPreview, Converter={StaticResource BoolToVisibility}}" />
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasPreview}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="44" Height="44" Stretch="Uniform"
+                                      Fill="{DynamicResource Accent.Folder}" HorizontalAlignment="Center" />
+                                <TextBlock Text="{loc:Text LibraryUx_CardEmpty}" Margin="0,4,0,0" HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <!-- One line: folder glyph, name, capture count; the tooltip and name carry the details. -->
+                    <Grid Grid.Row="1" Margin="2,7,2,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="14" Height="14" Stretch="Uniform"
+                              Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="5,0,0,0"
+                                   FontWeight="SemiBold" FontSize="{StaticResource FontSize.Caption}"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="{Binding CaptureCount}" Margin="6,0,0,0"
+                                   Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="Gallery.CompactFolderRowTemplate" DataType="{x:Type gallery:GalleryFolderRow}">
+            <ItemsControl ItemsSource="{Binding Folders}"
+                          ItemTemplate="{StaticResource Gallery.CompactFolderCardTemplate}"
+                          Focusable="False">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </DataTemplate>
+
         <Style x:Key="Gallery.RowContainer" TargetType="ListBoxItem">
             <Setter Property="Margin" Value="0" />
             <Setter Property="Padding" Value="0" />
@@ -585,7 +810,11 @@
                 </Setter.Value>
             </Setter>
             <Setter Property="ContentTemplate" Value="{StaticResource Gallery.TileRowTemplate}" />
+            <!-- Later triggers win: a compact folder row takes the compact folder template. -->
             <Style.Triggers>
+                <DataTrigger Binding="{Binding IsCompact}" Value="True">
+                    <Setter Property="ContentTemplate" Value="{StaticResource Gallery.CompactTileRowTemplate}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding Converter={StaticResource IsHeaderRow}}" Value="True">
                     <Setter Property="ContentTemplate" Value="{StaticResource Gallery.HeaderRowTemplate}" />
 
@@ -594,6 +823,13 @@
                 <DataTrigger Binding="{Binding Converter={StaticResource IsFolderRow}}" Value="True">
                     <Setter Property="ContentTemplate" Value="{StaticResource Gallery.FolderRowTemplate}" />
                 </DataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Converter={StaticResource IsFolderRow}}" Value="True" />
+                        <Condition Binding="{Binding IsCompact}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="ContentTemplate" Value="{StaticResource Gallery.CompactFolderRowTemplate}" />
+                </MultiDataTrigger>
             </Style.Triggers>
         </Style>
 

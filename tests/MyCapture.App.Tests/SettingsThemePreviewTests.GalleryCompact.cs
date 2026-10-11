@@ -59,7 +59,7 @@ public sealed partial class SettingsThemePreviewTests
         paths.EnsureCreated();
         var settings = new AppSettings();
         var queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
-        queue.CreateFolderAsync("Review").GetAwaiter().GetResult();
+        CaptureFolder review = queue.CreateFolderAsync("Review").GetAwaiter().GetResult();
         BitmapSource sample = BitmapSource.Create(4, 3, 96, 96, PixelFormats.Bgra32, null, new byte[4 * 3 * 4], 4 * 4);
         byte[] png = ImageCodec.EncodePng(sample);
         DateTimeOffset now = DateTimeOffset.Now;
@@ -77,6 +77,8 @@ public sealed partial class SettingsThemePreviewTests
             File.WriteAllBytes(Path.Combine(directory, CaptureFileNames.Rendered), png);
             File.WriteAllBytes(Path.Combine(directory, CaptureFileNames.Original), png);
         }
+        // Half of them are filed, so the folder view below lays out real compact cards.
+        queue.MoveCapturesAsync(queue.Records.Take(6).Select(record => record.Id).ToArray(), review.Id).GetAwaiter().GetResult();
         var controller = new GalleryController(queue, NullLogger<GalleryController>.Instance);
         var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue,
             NullLogger<CapturePersistenceService>.Instance);
@@ -160,16 +162,38 @@ public sealed partial class SettingsThemePreviewTests
             }
             ThemeService.Apply(AppTheme.Glass);
             SaveLibraryUxEvidence(window, AppTheme.Glass, $"after-narrow-selection-glass-{language}.png");
-
-            // Inside a folder the location header joins the content column and a full card still fits.
             vm.ClearSelection();
-            vm.NavigateTo(CaptureFolderScope.ForFolder(queue.Folders.Single().Id));
+            SettleGalleryLayout(window);
+            int rootCardsInView = CardsFullyInView(rows, scroll);
+
+            // Inside a folder the location header joins the content column. A date shows the same
+            // header above full cards, so a full card must still fit under it.
+            vm.NavigateTo(CaptureFolderScope.ForFolder(review.Id));
             SettleGalleryLayout(window);
             var check = (CheckBox)window.FindName("CurrentFolderCaptureCheck");
             AssertInsideClient(check, client, language);
             AssertNotTrimmed(Descendants(check).OfType<TextBlock>().Single(text => text.Text == UiText.Get("LibraryUx_SaveHere")), language);
             Assert.True(scroll.ViewportHeight >= GalleryCompactFullCardHeight,
                 $"{language}: compact folder viewport {scroll.ViewportHeight:0.##} DIP must fit a full {GalleryCompactFullCardHeight}-DIP card");
+            // The folder's own captures use the compact card: every card of the first row sits
+            // inside the viewport with its overflow menu, and more of the folder is in view at once
+            // than full cards show at the library root.
+            Assert.True(vm.IsCompactLayout);
+            GalleryTileRow compactRow = vm.Rows.OfType<GalleryTileRow>().First();
+            Assert.True(compactRow.IsCompact);
+            ListBoxItem[] compactTiles = Descendants(rows).OfType<ListBoxItem>()
+                .Where(item => item.DataContext is GalleryItemViewModel tile && compactRow.Tiles.Contains(tile)).ToArray();
+            Assert.Equal(compactRow.Tiles.Count, compactTiles.Length);
+            foreach (ListBoxItem item in compactTiles)
+            {
+                double left = item.TranslatePoint(new Point(), scroll).X;
+                Assert.True(left >= -0.5 && left + item.ActualWidth <= scroll.ViewportWidth + 0.5,
+                    $"{language}: a compact card spans {left:0.#}..{left + item.ActualWidth:0.#} in a {scroll.ViewportWidth:0.#}-DIP viewport");
+                AssertInsideClient(Descendants(item).OfType<Button>().Single(button => button.IsVisible), client, language);
+            }
+            int folderCardsInView = CardsFullyInView(rows, scroll);
+            Assert.True(folderCardsInView > rootCardsInView,
+                $"{language}: {folderCardsInView} compact cards in view must exceed {rootCardsInView} full cards ({vm.ColumnCount} columns)");
             SaveLibraryUxEvidence(window, AppTheme.Glass, $"after-narrow-folder-glass-{language}.png");
         }
         finally
@@ -178,6 +202,16 @@ public sealed partial class SettingsThemePreviewTests
             ThemeService.Apply(AppTheme.Midnight);
         }
     }
+
+    /// <summary>Capture cards whose whole frame is inside the library viewport.</summary>
+    private static int CardsFullyInView(ListBox rows, ScrollViewer scroll) =>
+        Descendants(rows).OfType<ListBoxItem>().Where(item => item.DataContext is GalleryItemViewModel && item.IsVisible)
+            .Count(item =>
+            {
+                Point topLeft = item.TranslatePoint(new Point(), scroll);
+                return topLeft.X >= -0.5 && topLeft.Y >= -0.5 && topLeft.X + item.ActualWidth <= scroll.ViewportWidth + 0.5
+                    && topLeft.Y + item.ActualHeight <= scroll.ViewportHeight + 0.5;
+            });
 
     private static void SettleGalleryLayout(Window window)
     {

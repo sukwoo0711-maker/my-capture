@@ -45,8 +45,12 @@ public sealed class GalleryFolderCardTests
         GalleryGroupViewModel folderOnly = Assert.Single(vm.Groups, group => group.Folders.Any(card => card.FolderId == older.Id));
         Assert.Empty(folderOnly.Items);
         Assert.Equal(GalleryDateGrouping.Resolve(older.CreatedAt, Now).Heading, folderOnly.Heading);
-        // Folders stay out of capture counts; captures in a folder still appear on their day.
-        Assert.Equal(3, vm.VisibleCount);
+        // Like File Explorer, captures filed in a folder leave the root and its days: the two in
+        // Design are reached through its card, so their days have no group of their own.
+        Assert.Equal(2, vm.Groups.Count);
+        Assert.Equal(1, vm.VisibleCount);
+        Assert.Equal(3, vm.ReachableCount);
+        Assert.False(vm.ShowResultCount);
 
         Assert.IsType<GalleryHeaderRow>(vm.Rows[0]);
         Assert.Equal(today.Folders, Assert.IsType<GalleryFolderRow>(vm.Rows[1]).Folders);
@@ -95,10 +99,14 @@ public sealed class GalleryFolderCardTests
             vm.SortIndex = (int)sort;
             GalleryGroupViewModel group = Assert.Single(vm.Groups);
             Assert.Equal([alpha.Id, beta.Id], group.Folders.Select(card => card.FolderId));
-            Assert.Equal(2, group.Items.Count);
+            // Only the folder's own capture; the one in Alpha / Nested is behind Alpha's card.
+            Assert.Equal([direct.Id], group.Items.Select(tile => tile.Id));
             Assert.IsType<GalleryHeaderRow>(vm.Rows[0]);
             Assert.Equal(group.Folders, Assert.IsType<GalleryFolderRow>(vm.Rows[1]).Folders);
             Assert.All(vm.Rows.Skip(2), row => Assert.IsType<GalleryTileRow>(row));
+            // An opened folder uses the compact cards for both subfolders and captures.
+            Assert.All(vm.Rows.Skip(1), row => Assert.True(row.IsCompact));
+            Assert.False(vm.Rows[0].IsCompact);
         }
         GalleryFolderCardViewModel alphaCard = vm.Groups[0].Folders[0];
         GalleryFolderCardViewModel betaCard = vm.Groups[0].Folders[1];
