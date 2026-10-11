@@ -78,7 +78,7 @@ jobs:
           try { .\build\package-store.ps1 -Version $env:PACKAGE_VERSION -LocalTest }
           finally { Stop-Transcript | Out-Null }
 
-      - name: Run all seven packaged self-tests
+      - name: Run all eight packaged self-tests
         run: |
           $ErrorActionPreference = 'Stop'
           Start-Transcript -Path artifacts/validation/hosted/packaged-self-tests.log | Out-Null
@@ -135,23 +135,15 @@ jobs:
           if ($sums.Count -ne 3 -or @(Compare-Object $expectedSums $sums -CaseSensitive).Count -ne 0) { throw 'Release checksum mismatch.' }
           $runs = @(Get-ChildItem artifacts/validation/hosted/packaged-self-tests -Directory)
           if ($runs.Count -ne 1) { throw 'Expected exactly one packaged validation run.' }
-          $reportPaths = @(
-            'capture/selftest-report.txt', 'shell/shell-selftest-report.txt',
-            'advanced/advanced-selftest-report.txt', 'settings/settings-selftest-report.txt',
-            'ocr/ocr-selftest-report.txt', 'recording/recording-selftest-report.txt',
-            'video-editor/video-editor-selftest-report.txt'
-          )
-          $reports = @($reportPaths | ForEach-Object {
-            $report = Join-Path $runs[0].FullName $_
-            $results = @(Get-Content -LiteralPath $report -Encoding utf8 | Where-Object { $_.StartsWith('RESULT:', [StringComparison]::Ordinal) })
-            if ($results.Count -ne 1 -or $results[0] -cne 'RESULT: PASS') { throw "Packaged report did not pass: $_" }
-            [pscustomobject]@{ Path = $_; Result = $results[0]; Sha256 = (Get-FileHash -LiteralPath $report -Algorithm SHA256).Hash.ToLowerInvariant() }
-          })
+          . ./build/packaged-validation.ps1
+          $selfTests = Assert-PackagedSelfTestResult $runs[0].FullName
+          if ($selfTests.PublishRoot -ine [IO.Path]::GetFullPath("$releaseRoot/publish-win-x64")) { throw 'Self-test evidence targets a different publish folder.' }
+          $reports = @($selfTests.Tests)
           [ordered]@{
             SourceCommit = $head; SourceTreeClean = $true; Version = $env:PACKAGE_VERSION
             Result = 'PASS'; PackagedSelfTests = $reports; ReleaseAssets = $assets
           } | ConvertTo-Json -Depth 5 | Set-Content artifacts/validation/hosted/validation.json -Encoding utf8
-          "Packaged validation: PASS (7/7), source $head, version $env:PACKAGE_VERSION" | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "Packaged validation: PASS ($($selfTests.PassCount)/$($reports.Count)), source $head, version $env:PACKAGE_VERSION" | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Upload six validated release assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -178,6 +170,7 @@ jobs:
             artifacts/validation/hosted/*.json
             artifacts/validation/hosted/*.log
             artifacts/validation/hosted/packaged-self-tests/**/*report.txt
+            artifacts/validation/hosted/packaged-self-tests/**/result.json
             artifacts/validation/update-restart/*/acceptance-result.json
             artifacts/validation/update-restart/*/verified-install-result.json
             artifacts/validation/update-restart/*/restart-process.json

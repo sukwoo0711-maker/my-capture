@@ -41,16 +41,11 @@ $runName = '{0}-{1}' -f [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ'), [guid]:
 $runRoot = Join-Path $outputBase $runName
 [IO.Directory]::CreateDirectory($runRoot) | Out-Null
 
-$tests = @(
-    [pscustomobject]@{ Name = 'capture'; Switch = '--selftest-capture'; Report = 'selftest-report.txt' },
-    [pscustomobject]@{ Name = 'shell'; Switch = '--selftest-shell'; Report = 'shell-selftest-report.txt' },
-    [pscustomobject]@{ Name = 'advanced'; Switch = '--selftest-advanced'; Report = 'advanced-selftest-report.txt' },
-    [pscustomobject]@{ Name = 'settings'; Switch = '--selftest-settings'; Report = 'settings-selftest-report.txt' },
-    [pscustomobject]@{ Name = 'ocr'; Switch = '--selftest-ocr'; Report = 'ocr-selftest-report.txt' },
-    [pscustomobject]@{ Name = 'recording'; Switch = '--selftest-recording'; Report = 'recording-selftest-report.txt' },
-    [pscustomobject]@{ Name = 'video-editor'; Switch = '--selftest-video-editor'; Report = 'video-editor-selftest-report.txt' },
-    [pscustomobject]@{ Name = 'hotfix-ux'; Switch = '--selftest-hotfix-ux'; Report = 'hotfix-ux-report.txt' }
-)
+. (Join-Path $PSScriptRoot 'packaged-validation.ps1')
+$tests = @(Get-PackagedSelfTests)
+$evidence = @($tests | ForEach-Object {
+    [pscustomobject]@{ Name = $_.Name; Path = "$($_.Name)/$($_.Report)"; ExitCode = $null; Result = ''; Sha256 = '' }
+})
 
 $failures = New-Object 'System.Collections.Generic.List[string]'
 $passCount = 0
@@ -71,6 +66,7 @@ try {
         [EnvironmentVariableTarget]::Process)
 
     foreach ($test in $tests) {
+        $record = @($evidence | Where-Object { $_.Name -ceq $test.Name })[0]
         $testRoot = Join-Path $runRoot ([string]$test.Name)
         [IO.Directory]::CreateDirectory($testRoot) | Out-Null
 
@@ -106,6 +102,7 @@ try {
                     throw 'The self-test process exit code was not observed.'
                 }
                 $exitCode = [int]$process.ExitCode
+                $record.ExitCode = $exitCode
             }
         }
         catch {
@@ -134,6 +131,8 @@ try {
 
         $resultLines = @(Get-Content -LiteralPath $reportPath -Encoding UTF8 |
             Where-Object { $_.StartsWith('RESULT:', [StringComparison]::Ordinal) })
+        $record.Result = $resultLines -join ' | '
+        $record.Sha256 = (Get-FileHash -LiteralPath $reportPath -Algorithm SHA256).Hash.ToLowerInvariant()
         $hasExactPass =
             $resultLines.Count -eq 1 -and
             [string]::Equals($resultLines[0], 'RESULT: PASS', [StringComparison]::Ordinal)
@@ -163,6 +162,12 @@ finally {
             [EnvironmentVariableTarget]::Process)
     }
 }
+
+[ordered]@{
+    SchemaVersion = 1; PublishRoot = $publish; PassCount = $passCount
+    Result = $(if ($failures.Count -eq 0 -and $passCount -eq $tests.Count) { 'PASS' } else { 'FAIL' })
+    Tests = $evidence; Failures = @($failures.ToArray())
+} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $runRoot 'result.json') -Encoding UTF8
 
 if ($failures.Count -gt 0 -or $passCount -ne $tests.Count) {
     Write-Host "SELF_TESTS=FAIL PASSES=$passCount/$($tests.Count) OUTPUT=$runRoot" -ForegroundColor Red
