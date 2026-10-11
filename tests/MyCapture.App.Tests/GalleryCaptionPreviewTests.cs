@@ -202,8 +202,9 @@ public sealed class GalleryCaptionPreviewTests
         using Stream gallery = typeof(GalleryCaptionPreviewTests).Assembly.GetManifestResourceStream("GalleryFixture.Window.xaml")!;
         XElement product = XDocument.Load(gallery).Root!;
         CopyNamespaces(product, combined);
-        // The card template also uses the shared overflow menu and the folder badge resources.
-        string[] keys = ["Gallery.IconButton", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "Gallery.FolderBadge",
+        // Import the card's local motion wash as well as its overflow menu and folder badge.
+        // Every entry comes from product markup; the fixture preserves the real state layers.
+        string[] keys = ["LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "Gallery.FolderBadge",
             "Gallery.FolderBadgeContent", "Gallery.TileTemplate", "Gallery.TileRowList"];
         foreach (XElement entry in product.Element(p + "Window.Resources")!.Element(p + "ResourceDictionary")!.Elements()
             .Where(element => keys.Contains((string?)element.Attribute(x + "Key"))))
