@@ -151,6 +151,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public string TagsCaption => Record.Tags ?? string.Empty;
 
+    public bool HasTags => !string.IsNullOrWhiteSpace(Record.Tags);
+
     public string SourcePageUrl => MyCapture.Core.Capture.SourcePageUrl.Normalize(Record.SourcePageUrl);
 
     public bool HasSourcePageUrl => SourcePageUrl.Length > 0;
@@ -286,6 +288,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(CompactCaption));
         Raise(nameof(ContextLabel));
         Raise(nameof(TagsCaption));
+        Raise(nameof(HasTags));
         Raise(nameof(SourcePageUrl));
         Raise(nameof(HasSourcePageUrl));
         Raise(nameof(HasSource));

@@ -1662,56 +1662,226 @@
                 </Border>
             </Grid>
 
-            <!-- After the library content, so Tab follows the visual order: pane, content, details. -->
-            <Border x:Name="GalleryDetailsPanel" Grid.Column="2" Background="{DynamicResource Surface.Raised}" CornerRadius="10" Padding="14" Margin="8,0,0,0"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
-<TextBlock Text="{loc:Text Workspace.Details}" Style="{DynamicResource Text.Section}" Margin="0,0,0,14" />
-<TextBlock Text="{loc:Text Workspace.SelectHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding SingleSelectedTile}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
-<StackPanel DataContext="{Binding SingleSelectedTile}"><StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></StackPanel.Style>
-<Border Height="136" Background="{DynamicResource Surface.Sunken}" CornerRadius="8"><Image x:Name="SelectedDetailThumbnail" Source="{Binding Thumbnail}" Stretch="Uniform" AutomationProperties.Name="{Binding AccessibleName}" /></Border>
-<TextBlock Text="{Binding ContextLabel}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,14,0,8" /><TextBlock Text="{Binding TagsCaption}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Secondary}" Margin="0,0,0,8" /><Button Content="{loc:Text Library.Organize.Action}" Style="{StaticResource Button.Secondary}" Click="OnOrganizeClick" ToolTip="F2" Margin="0,0,0,12" />
-<!-- Source: the app and window a capture came from, and its web page or folder when known. -->
-<StackPanel AutomationProperties.AutomationId="LibrarySourceSection" AutomationProperties.Name="{loc:Text Library.Source.Label}"
-            Visibility="{Binding HasSource, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,14">
-    <TextBlock Text="{loc:Text Library.Source.Label}" FontWeight="SemiBold" Margin="0,0,0,6" />
-    <TextBlock AutomationProperties.AutomationId="LibrarySourceApp" Text="{Binding SourceAppName}" TextWrapping="Wrap"
-               ToolTip="{Binding SourceAppToolTip}" AutomationProperties.Name="{Binding SourceAppAutomationName}"
-               Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}" />
-    <TextBlock AutomationProperties.AutomationId="LibrarySourceWindow" Text="{Binding SourceWindowTitle}"
-               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="58" Margin="0,2,0,0"
-               Foreground="{DynamicResource Text.Secondary}" ToolTip="{Binding SourceWindowTitle}"
-               AutomationProperties.Name="{Binding SourceWindowTitleAutomationName}"
-               Visibility="{Binding HasSourceWindowTitle, Converter={StaticResource BoolToVisibility}}" />
-    <StackPanel AutomationProperties.AutomationId="LibrarySourcePage" Margin="0,8,0,0"
-                Visibility="{Binding HasSourcePageUrl, Converter={StaticResource BoolToVisibility}}">
-        <TextBlock Text="{loc:Text Library.SourcePage.Label}" Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,0,0,4" />
-        <TextBox Text="{Binding SourcePageUrl, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="104"
-                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                 AutomationProperties.Name="{loc:Text Library.SourcePage.Label}" />
-        <WrapPanel Margin="0,6,0,0">
-            <Button Content="{loc:Text Library.SourcePage.Open}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourcePageClick" Margin="0,0,6,6" />
-            <Button Content="{loc:Text Library.SourcePage.Copy}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePageClick" Margin="0,0,0,6" />
-        </WrapPanel>
-    </StackPanel>
-    <StackPanel AutomationProperties.AutomationId="LibrarySourceLocation" Margin="0,8,0,0"
-                Visibility="{Binding HasSourceDocumentPath, Converter={StaticResource BoolToVisibility}}">
-        <TextBlock Text="{loc:Text Library.Source.Location}" Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,0,0,4" />
-        <TextBox Text="{Binding SourceDocumentPath, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="104"
-                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                 AutomationProperties.Name="{loc:Text Library.Source.Location}" />
-        <WrapPanel Margin="0,6,0,0">
-            <Button Content="{loc:Text Library.Source.OpenFolder}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourceFolderClick" Margin="0,0,6,6" />
-            <Button Content="{loc:Text Library.Source.CopyPath}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePathClick" Margin="0,0,0,6" />
-        </WrapPanel>
-    </StackPanel>
-</StackPanel>
-<TextBlock Text="{Binding TimeCaption}" Foreground="{DynamicResource Text.Secondary}" />
-<TextBlock Text="{Binding DetailDimensions}" Foreground="{DynamicResource Text.Secondary}" Margin="0,6,0,0" />
-<TextBlock Text="{Binding RetentionCaption}" Foreground="{DynamicResource Text.Muted}" Margin="0,6,0,16" />
-<Button Content="{Binding ActionLabel}" Style="{StaticResource Button.Primary}" Click="OnEditClick" />
-<Button Content="{loc:Text Gallery.Float}" Style="{StaticResource Button.Secondary}" Margin="0,8,0,0" Click="OnFloatClick" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}" />
-<Button Content="{loc:Text Text_42A667BC71B0}" Style="{StaticResource Button.Secondary}" Margin="0,8,0,0" Click="OnCopyClick" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}" />
-<TextBlock Text="{loc:Text Workspace.EditHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,16,0,0" />
-</StackPanel></StackPanel></ScrollViewer></Border>
+            <!-- After the library content, so Tab follows the visual order: pane, content, details.
+                 The selected capture's preview, title and main commands stay at the top; only the
+                 information below them scrolls, and nothing inside it scrolls on its own. -->
+            <Border x:Name="GalleryDetailsPanel" Grid.Column="2" Margin="8,0,0,0" Padding="16"
+                    Background="{DynamicResource Surface.Raised}" CornerRadius="{StaticResource Radius.Lg}"
+                    AutomationProperties.Name="{loc:Text Workspace.Details}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="GalleryDetailsHeading" Text="{loc:Text Workspace.Details}" Style="{DynamicResource Text.Section}"
+                               Margin="0,0,0,16" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="1" Text="{loc:Text Workspace.SelectHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SingleSelectedTile}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Grid x:Name="GalleryDetailsContent" Grid.Row="1" DataContext="{Binding SingleSelectedTile}">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <!-- The preview gives up height first in a short window; the commands never move. -->
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" MinHeight="72" MaxHeight="136" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="2*" />
+                        </Grid.RowDefinitions>
+                        <Border Background="{DynamicResource Surface.Sunken}" CornerRadius="{StaticResource Radius.Md}">
+                            <Image x:Name="SelectedDetailThumbnail" Source="{Binding Thumbnail}" Stretch="Uniform"
+                                   AutomationProperties.Name="{Binding AccessibleName}" />
+                        </Border>
+                        <TextBlock Grid.Row="1" AutomationProperties.AutomationId="LibraryDetailsTitle" Margin="0,12,0,0"
+                                   FontWeight="SemiBold" ToolTip="{Binding ContextLabel}"
+                                   gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding ContextLabel}" />
+
+                        <!-- Main commands: Edit is the panel's one filled button; pin and copy share a row. -->
+                        <StackPanel Grid.Row="2" AutomationProperties.AutomationId="LibraryDetailsActions" Margin="0,12,0,0">
+                            <Button x:Name="DetailsEditButton" Content="{Binding ActionLabel}" Style="{StaticResource Button.Primary}"
+                                    Click="OnEditClick" />
+                            <Grid Margin="0,8,0,0" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="DetailsFloatButton" Style="{StaticResource Button.Secondary}" Padding="8,8"
+                                        ToolTip="{loc:Text Gallery.FloatHint}" AutomationProperties.Name="{loc:Text Gallery.Float}"
+                                        Click="OnFloatClick">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Data="{StaticResource Icon.Pin}" Width="20" Height="20" Stretch="None"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round" Fill="Transparent" VerticalAlignment="Center" />
+                                        <TextBlock Text="{loc:Text QuickAccess.Pin}" Margin="6,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="DetailsCopyButton" Grid.Column="2" Style="{StaticResource Button.Secondary}" Padding="8,8"
+                                        ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
+                                        Click="OnCopyClick">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Data="{StaticResource Icon.Copy}" Width="20" Height="20" Stretch="None"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round" Fill="Transparent" VerticalAlignment="Center" />
+                                        <TextBlock Text="{loc:Text QuickAccess.Copy}" Margin="6,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Information only: the panel's one scrolling area. -->
+                        <ScrollViewer x:Name="GalleryDetailsScroll" Grid.Row="3" Margin="0,16,0,0" Focusable="False"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <StackPanel AutomationProperties.AutomationId="LibraryDetailsInfo">
+                                    <TextBlock Text="{Binding TimeCaption}" Foreground="{DynamicResource Text.Secondary}" />
+                                    <TextBlock Text="{Binding DetailDimensions}" Foreground="{DynamicResource Text.Secondary}" Margin="0,4,0,0" />
+                                    <TextBlock Text="{Binding RetentionCaption}" Foreground="{DynamicResource Text.Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                </StackPanel>
+                                <StackPanel Margin="0,16,0,0">
+                                    <TextBlock AutomationProperties.AutomationId="LibraryDetailsTags" Foreground="{DynamicResource Text.Secondary}"
+                                               Margin="0,0,0,8" ToolTip="{Binding TagsCaption}"
+                                               gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding TagsCaption}"
+                                               Visibility="{Binding HasTags, Converter={StaticResource BoolToVisibility}}" />
+                                    <Button Content="{loc:Text Library.Organize.Action}" Style="{StaticResource Button.Secondary}"
+                                            Click="OnOrganizeClick" ToolTip="F2" />
+                                </StackPanel>
+                                <!-- Source: the app and window a capture came from, and its web page or folder when known. Long
+                                     addresses and paths show two lines with "show all" and a copy command, never a nested scroller. -->
+                                <StackPanel AutomationProperties.AutomationId="LibrarySourceSection" AutomationProperties.Name="{loc:Text Library.Source.Label}"
+                                            Visibility="{Binding HasSource, Converter={StaticResource BoolToVisibility}}" Margin="0,16,0,0">
+                                    <StackPanel.Resources>
+                                        <!-- A quiet text toggle beside a value's label; expanded is not a selected state. -->
+                                        <Style x:Key="LibrarySource.ExpandToggle" TargetType="ToggleButton">
+                                            <Setter Property="Content" Value="{loc:Text Library.Source.ShowAll}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+                                            <Setter Property="Background" Value="Transparent" />
+                                            <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                            <Setter Property="Padding" Value="6,2" />
+                                            <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
+                                            <Setter Property="Margin" Value="8,0,0,0" />
+                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                            <Setter Property="Cursor" Value="Hand" />
+                                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ToggleButton">
+                                                        <Grid>
+                                                            <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius.Sm}">
+                                                                <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                            <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                                                                    CornerRadius="{DynamicResource Radius.Sm}" IsHitTestVisible="False" Opacity="0" />
+                                                        </Grid>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsPressed" Value="True">
+                                                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Pressed}" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                                                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter Property="Content" Value="{loc:Text Library.Source.ShowLess}" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Resources>
+                                    <TextBlock Text="{loc:Text Library.Source.Label}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                    <TextBlock AutomationProperties.AutomationId="LibrarySourceApp" Text="{Binding SourceAppName}" TextWrapping="Wrap"
+                                               ToolTip="{Binding SourceAppToolTip}" AutomationProperties.Name="{Binding SourceAppAutomationName}"
+                                               Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}" />
+                                    <TextBlock AutomationProperties.AutomationId="LibrarySourceWindow" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource Text.Secondary}" ToolTip="{Binding SourceWindowTitle}"
+                                               gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourceWindowTitle}"
+                                               AutomationProperties.Name="{Binding SourceWindowTitleAutomationName}"
+                                               Visibility="{Binding HasSourceWindowTitle, Converter={StaticResource BoolToVisibility}}" />
+                                    <StackPanel AutomationProperties.AutomationId="LibrarySourcePage" Margin="0,12,0,0"
+                                                Visibility="{Binding HasSourcePageUrl, Converter={StaticResource BoolToVisibility}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="SourcePageLabel" Text="{loc:Text Library.SourcePage.Label}" Foreground="{DynamicResource Text.Muted}"
+                                                       FontSize="{StaticResource FontSize.Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <ToggleButton x:Name="SourcePageToggle" Grid.Column="1" Style="{StaticResource LibrarySource.ExpandToggle}"
+                                                          AutomationProperties.AutomationId="LibrarySourcePageToggle"
+                                                          AutomationProperties.Name="{loc:Text Library.SourcePage.ShowFull}"
+                                                          gallery:GalleryTextClamp.ToggleTarget="{Binding ElementName=SourcePageValue}" />
+                                        </Grid>
+                                        <TextBlock x:Name="SourcePageValue" AutomationProperties.AutomationId="LibrarySourcePageValue" Margin="0,2,0,0"
+                                                   FontSize="{StaticResource FontSize.Control}" ToolTip="{Binding SourcePageUrl}"
+                                                   AutomationProperties.LabeledBy="{Binding ElementName=SourcePageLabel}"
+                                                   gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourcePageUrl}" />
+                                        <WrapPanel Margin="0,8,0,0">
+                                            <Button Content="{loc:Text Library.SourcePage.Open}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourcePageClick" Margin="0,0,8,8" />
+                                            <Button Content="{loc:Text Library.SourcePage.Copy}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePageClick" Margin="0,0,0,8" />
+                                        </WrapPanel>
+                                    </StackPanel>
+                                    <StackPanel AutomationProperties.AutomationId="LibrarySourceLocation" Margin="0,12,0,0"
+                                                Visibility="{Binding HasSourceDocumentPath, Converter={StaticResource BoolToVisibility}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="SourcePathLabel" Text="{loc:Text Library.Source.Location}" Foreground="{DynamicResource Text.Muted}"
+                                                       FontSize="{StaticResource FontSize.Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <ToggleButton x:Name="SourcePathToggle" Grid.Column="1" Style="{StaticResource LibrarySource.ExpandToggle}"
+                                                          AutomationProperties.AutomationId="LibrarySourcePathToggle"
+                                                          AutomationProperties.Name="{loc:Text Library.Source.ShowFullPath}"
+                                                          gallery:GalleryTextClamp.ToggleTarget="{Binding ElementName=SourcePathValue}" />
+                                        </Grid>
+                                        <TextBlock x:Name="SourcePathValue" AutomationProperties.AutomationId="LibrarySourcePathValue" Margin="0,2,0,0"
+                                                   FontSize="{StaticResource FontSize.Control}" ToolTip="{Binding SourceDocumentPath}"
+                                                   AutomationProperties.LabeledBy="{Binding ElementName=SourcePathLabel}"
+                                                   gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourceDocumentPath}" />
+                                        <WrapPanel Margin="0,8,0,0">
+                                            <Button Content="{loc:Text Library.Source.OpenFolder}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourceFolderClick" Margin="0,0,8,8" />
+                                            <Button Content="{loc:Text Library.Source.CopyPath}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePathClick" Margin="0,0,0,8" />
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock Text="{loc:Text Workspace.EditHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}"
+                                           FontSize="{StaticResource FontSize.Caption}" Margin="0,16,0,0"
+                                           Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{loc:Text Workspace.VideoHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}"
+                                           FontSize="{StaticResource FontSize.Caption}" Margin="0,16,0,0"
+                                           Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Border>
         </Grid>
 
         <!-- Status line: the library summary and the last action's result, which fades out on its own. -->

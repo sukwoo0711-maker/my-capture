@@ -2,7 +2,10 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -49,28 +52,39 @@ public sealed class GallerySourceDetailTests
             Assert.True(title.ActualHeight <= 58.5, $"window title grew to {title.ActualHeight}");
 
             StackPanel page = Named<StackPanel>(panel, "LibrarySourcePage");
-            TextBox link = Assert.Single(Descendants(page).OfType<TextBox>());
+            // No text box or scroller of its own: the details panel's information area is the one scrolling surface.
+            Assert.Empty(Descendants(panel).OfType<TextBox>());
+            Assert.Empty(Descendants(panel).OfType<ScrollViewer>());
+            TextBlock link = Named<TextBlock>(page, "LibrarySourcePageValue");
             Assert.Equal(Url, link.Text);
-            Assert.True(link.IsReadOnly);
-            Assert.Equal(UiText.Get("Library.SourcePage.Label"), AutomationProperties.GetName(link));
+            Assert.Equal(Url, link.ToolTip);
+            Assert.Equal(Url, new TextBlockAutomationPeer(link).GetName());
+            Assert.Equal(UiText.Get("Library.SourcePage.Label"), Assert.IsType<TextBlock>(AutomationProperties.GetLabeledBy(link)).Text);
+            ToggleButton showAll = Named<ToggleButton>(page, "LibrarySourcePageToggle");
+            AssertTwoLineSummary(link, showAll, UiText.Get("Library.SourcePage.ShowFull"), language);
+            Assert.True(GalleryTextClamp.GetIsOverflowing(link), $"{language}: the long address must be summarized");
             Button[] actions = Descendants(page).OfType<Button>().ToArray();
             Assert.Equal(new[] { UiText.Get("Library.SourcePage.Open"), UiText.Get("Library.SourcePage.Copy") },
                 actions.Select(action => action.Content?.ToString() ?? string.Empty));
-            AssertReachable(panel, actions, language);
+            AssertReachable(panel, actions.Append<ButtonBase>(showAll), language);
             Assert.All(actions, action => Assert.Equal(Url, ResolveAction("SourceUrlForAction", action)));
             Assert.All(actions, action => Assert.Empty(ResolveAction("SourcePathForAction", action)));
-            link.SelectAll();
-            Assert.Equal(Url, link.SelectedText);
-            link.Select(0, 0);
             SaveEvidence(window, $"gallery-source-page-{language}-{width:0}.png");
+            showAll.IsChecked = true;
+            Drain(window);
+            AssertWholeValueShown(link, showAll, language);
+            SaveEvidence(window, $"gallery-source-page-expanded-{language}-{width:0}.png");
 
-            // Retargeting to another record moves both the text and the action target.
+            // Retargeting to another record moves both the text and the action target, and the
+            // new address starts as a summary again.
             const string secondUrl = "https://example.org/other-page?version=2#details";
             var second = Tile(Image(EdgeSource(), "Other", secondUrl));
             window.DataContext = Tile(Image(EdgeSource(), "Ambient", "https://wrong-ambient.example/"));
             panel.DataContext = second;
             Drain(window);
             Assert.Equal(secondUrl, link.Text);
+            Assert.False(showAll.IsChecked);
+            Assert.False(GalleryTextClamp.GetIsExpanded(link));
             Assert.All(actions, action => Assert.Equal(secondUrl, ResolveAction("SourceUrlForAction", action)));
 
             foreach (string? invalid in new[] { "", "javascript:alert(1)", "file:///C:/private.txt", "https://user:secret@example.com/", null })
@@ -93,17 +107,42 @@ public sealed class GallerySourceDetailTests
             AssertShown(panel, "LibrarySourceApp", "LibrarySourceWindow", "LibrarySourceLocation");
             AssertHidden(panel, "LibrarySourcePage");
             StackPanel location = Named<StackPanel>(panel, "LibrarySourceLocation");
-            TextBox path = Assert.Single(Descendants(location).OfType<TextBox>());
+            Assert.Empty(Descendants(panel).OfType<TextBox>());
+            Assert.Empty(Descendants(panel).OfType<ScrollViewer>());
+            TextBlock path = Named<TextBlock>(location, "LibrarySourcePathValue");
             Assert.Equal(Folder, path.Text);
-            Assert.True(path.IsReadOnly);
-            Assert.Equal(UiText.Get("Library.Source.Location"), AutomationProperties.GetName(path));
+            Assert.Equal(Folder, path.ToolTip);
+            Assert.Equal(Folder, new TextBlockAutomationPeer(path).GetName());
+            Assert.Equal(UiText.Get("Library.Source.Location"), Assert.IsType<TextBlock>(AutomationProperties.GetLabeledBy(path)).Text);
+            ToggleButton showAll = Named<ToggleButton>(location, "LibrarySourcePathToggle");
+            AssertTwoLineSummary(path, showAll, UiText.Get("Library.Source.ShowFullPath"), language);
             Button[] actions = Descendants(location).OfType<Button>().ToArray();
             Assert.Equal(new[] { UiText.Get("Library.Source.OpenFolder"), UiText.Get("Library.Source.CopyPath") },
                 actions.Select(action => action.Content?.ToString() ?? string.Empty));
-            AssertReachable(panel, actions, language);
+            // At the widest panel the path fits its two lines and offers no toggle.
+            AssertReachable(panel, showAll.IsVisible ? actions.Append<ButtonBase>(showAll) : actions, language);
             Assert.All(actions, action => Assert.Equal(Folder, ResolveAction("SourcePathForAction", action)));
             Assert.All(actions, action => Assert.Empty(ResolveAction("SourceUrlForAction", action)));
             SaveEvidence(window, $"gallery-source-folder-{language}-{width:0}.png");
+            showAll.IsChecked = true;
+            Drain(window);
+            AssertWholeValueShown(path, showAll, language);
+            // Collapsing returns to the two-line summary.
+            showAll.IsChecked = false;
+            Drain(window);
+            AssertTwoLineSummary(path, showAll, UiText.Get("Library.Source.ShowFullPath"), language);
+        });
+
+    [Fact]
+    public void ShortValuesFitTheirLinesWithoutAToggle() =>
+        Render("ko-KR", 252, Image(new CaptureSourceDetails("Windows 탐색기", ExplorerPath, @"C:\Work"), "Work"),
+            (window, panel, tile) =>
+        {
+            TextBlock path = Named<TextBlock>(panel, "LibrarySourcePathValue");
+            Assert.Equal(@"C:\Work", path.Text);
+            Assert.False(GalleryTextClamp.GetIsOverflowing(path));
+            Assert.Equal(Visibility.Collapsed, Named<ToggleButton>(panel, "LibrarySourcePathToggle").Visibility);
+            Assert.True(path.ActualHeight <= path.LineHeight + 0.5, $"a one-line path is {path.ActualHeight} DIP tall");
         });
 
     [Fact]
@@ -204,16 +243,56 @@ public sealed class GallerySourceDetailTests
         finally { window.Close(); }
     });
 
-    private static void AssertReachable(StackPanel panel, IEnumerable<Button> actions, string language)
+    /// <summary>
+    /// A value longer than two lines shows exactly two, ending in an ellipsis, with "show all"
+    /// beside its label; a value that fits shows whole and offers no toggle.
+    /// </summary>
+    private static void AssertTwoLineSummary(TextBlock value, ToggleButton showAll, string toggleName, string language)
     {
-        foreach (TextBox box in Descendants(panel).OfType<TextBox>().Where(box => box.IsVisible))
+        Assert.Equal(2, GalleryTextClamp.GetMaxLines(value));
+        Assert.Equal(TextTrimming.CharacterEllipsis, value.TextTrimming);
+        bool longer = FullValueHeight(value) > 2 * value.LineHeight + .5;
+        Assert.Equal(longer, GalleryTextClamp.GetIsOverflowing(value));
+        Assert.Equal(longer, showAll.IsVisible);
+        Assert.Equal(Math.Min(FullValueHeight(value), 2 * value.LineHeight), value.ActualHeight, 1);
+        Assert.False(showAll.IsChecked);
+        Assert.Equal(UiText.Get("Library.Source.ShowAll"), showAll.Content);
+        Assert.Equal(toggleName, AutomationProperties.GetName(showAll));
+        Assert.Equal(ToggleState.Off, ((IToggleProvider)new ToggleButtonAutomationPeer(showAll)).ToggleState);
+    }
+
+    /// <summary>Expanded, the value takes every line it needs and the toggle offers to collapse.</summary>
+    private static void AssertWholeValueShown(TextBlock value, ToggleButton showAll, string language)
+    {
+        Assert.True(GalleryTextClamp.GetIsExpanded(value));
+        Assert.True(value.ActualHeight + .5 >= FullValueHeight(value),
+            $"{language}: the expanded value is {value.ActualHeight:0.#} DIP of the {FullValueHeight(value):0.#} DIP it needs");
+        Assert.Equal(UiText.Get("Library.Source.ShowLess"), showAll.Content);
+        Assert.Equal(ToggleState.On, ((IToggleProvider)new ToggleButtonAutomationPeer(showAll)).ToggleState);
+    }
+
+    private static double FullValueHeight(TextBlock value)
+    {
+        var probe = new TextBlock
         {
-            Point origin = box.TranslatePoint(new Point(), panel);
-            Assert.True(origin.X >= 0 && origin.X + box.ActualWidth <= panel.ActualWidth + .5,
-                $"{language}: {AutomationProperties.GetName(box)} escaped panel width");
+            Text = value.Text, FontFamily = value.FontFamily, FontSize = value.FontSize, FontWeight = value.FontWeight,
+            TextWrapping = TextWrapping.Wrap, LineHeight = value.LineHeight, LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+        };
+        TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(value));
+        probe.Measure(new Size(value.ActualWidth, double.PositiveInfinity));
+        return probe.DesiredSize.Height;
+    }
+
+    private static void AssertReachable(StackPanel panel, IEnumerable<ButtonBase> actions, string language)
+    {
+        foreach (TextBlock value in Descendants(panel).OfType<TextBlock>().Where(text => text.IsVisible))
+        {
+            Point origin = value.TranslatePoint(new Point(), panel);
+            Assert.True(origin.X >= 0 && origin.X + value.ActualWidth <= panel.ActualWidth + .5,
+                $"{language}: '{value.Text}' escaped panel width");
         }
 
-        foreach (Button action in actions)
+        foreach (ButtonBase action in actions)
         {
             Assert.True(action.IsVisible && action.ActualHeight >= 32, $"{language}: {action.Content} is not a full-size target");
             Assert.True(action.Focusable && action.IsTabStop, $"{language}: {action.Content} is not keyboard reachable");
@@ -272,6 +351,18 @@ public sealed class GallerySourceDetailTests
         // The real XAML's event hookups and production target resolvers are checked above. Rendering
         // this bounded fixture never opens a browser or Explorer and never touches the clipboard.
         foreach (XAttribute handler in panel.Descendants().Attributes("Click").ToArray()) handler.Remove();
+        // Attached properties such as GalleryTextClamp keep the window's assembly-less namespace.
+        foreach (XElement element in panel.DescendantsAndSelf())
+            foreach (XAttribute attached in element.Attributes()
+                         .Where(attribute => !attribute.IsNamespaceDeclaration && WithAssembly(attribute.Name.NamespaceName) != attribute.Name.NamespaceName)
+                         .ToArray())
+            {
+                attached.Remove();
+                element.SetAttributeValue(XName.Get(attached.Name.LocalName, WithAssembly(attached.Name.NamespaceName)), attached.Value);
+            }
+        // A binding path such as (gallery:GalleryTextClamp.IsOverflowing) resolves its prefix inside
+        // the template, so the panel declares the window's prefixes itself, as the window's BAML does.
+        CopyNamespaces(product, panel);
         combined.Add(new XElement(p + "DataTemplate", new XAttribute(x + "Key", "Gallery.SourceFixture"), panel));
         window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined.ToString(SaveOptions.DisableFormatting)));
     }
@@ -279,13 +370,13 @@ public sealed class GallerySourceDetailTests
     private static void CopyNamespaces(XElement source, XElement destination)
     {
         foreach (XAttribute attribute in source.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
-        {
-            string value = attribute.Value;
-            if (value.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal) && !value.Contains(";assembly=", StringComparison.Ordinal))
-                value += ";assembly=MyCapture";
-            destination.SetAttributeValue(attribute.Name, value);
-        }
+            destination.SetAttributeValue(attribute.Name, WithAssembly(attribute.Value));
     }
+
+    private static string WithAssembly(string xmlNamespace) =>
+        xmlNamespace.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal)
+            && !xmlNamespace.Contains(";assembly=", StringComparison.Ordinal)
+            ? xmlNamespace + ";assembly=MyCapture" : xmlNamespace;
 
     private static void Drain(Window window)
     {

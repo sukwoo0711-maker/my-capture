@@ -115,19 +115,42 @@ public sealed partial class SettingsThemePreviewTests
             FluidMotion.SetWindowEntrance(window, false);
             window.Show();
             SettleGalleryLayout(window);
-            var details = (FrameworkElement)window.FindName("GalleryDetailsPanel");
+            var details = (Border)window.FindName("GalleryDetailsPanel");
+            var metadata = (ScrollViewer)window.FindName("GalleryDetailsScroll");
+            Assert.Equal(new Thickness(16), details.Padding);
             foreach ((string kind, _, _, _) in sources)
             {
                 vm.Select(ids[kind]);
                 SettleGalleryLayout(window);
+                // Edit, pin and copy sit above the information and are never scrolled away; the
+                // information area is the panel's only scrolling surface and holds no text box.
+                metadata.ScrollToBottom();
+                SettleGalleryLayout(window);
+                Assert.Same(metadata, Assert.Single(Descendants(details).OfType<ScrollViewer>()));
+                Assert.Empty(Descendants(details).OfType<TextBox>());
+                double metadataTop = metadata.TranslatePoint(new Point(), details).Y;
+                Button[] main = Descendants(details).OfType<Button>()
+                    .Where(button => button.Name is "DetailsEditButton" or "DetailsFloatButton" or "DetailsCopyButton").ToArray();
+                Assert.Equal(3, main.Length);
+                foreach (Button button in main)
+                {
+                    Assert.True(button.IsVisible, $"{language}/{kind}: {button.Name} is hidden");
+                    Rect bounds = button.TransformToAncestor(details).TransformBounds(new Rect(button.RenderSize));
+                    Assert.True(bounds.Top >= 0 && bounds.Bottom <= metadataTop && bounds.Left >= 0 && bounds.Right <= details.ActualWidth,
+                        $"{language}/{kind}: {button.Name} at {bounds} is not in the fixed area above {metadataTop:0.#}");
+                    Assert.False(IsDescendantOf(button, metadata), $"{language}/{kind}: {button.Name} scrolls with the information");
+                }
+                metadata.ScrollToTop();
+                SettleGalleryLayout(window);
                 FrameworkElement section = Descendants(details).OfType<FrameworkElement>()
                     .Single(element => AutomationProperties.GetAutomationId(element) == "LibrarySourceSection");
+                Assert.True(IsDescendantOf(section, metadata), $"{language}/{kind}: the source must scroll with the information");
                 Assert.True(section.IsVisible, $"{language}/{kind}: the source section must be shown");
                 FrameworkElement[] visible = Descendants(section).OfType<FrameworkElement>()
-                    .Where(element => element.IsVisible && element is TextBlock or TextBox or Button).ToArray();
+                    .Where(element => element.IsVisible && element is TextBlock or Button).ToArray();
                 Assert.Contains(visible, element => element is TextBlock text && text.Text == sources.Single(item => item.Kind == kind).Source.AppName);
                 Assert.Equal(kind == "app" ? 0 : 2, visible.OfType<Button>().Count());
-                foreach (FrameworkElement element in visible.Where(element => element is TextBox or Button))
+                foreach (FrameworkElement element in visible.Where(element => element is TextBlock or Button))
                 {
                     Point left = element.TranslatePoint(new Point(), details);
                     Point right = element.TranslatePoint(new Point(element.ActualWidth, 0), details);
@@ -148,5 +171,12 @@ public sealed partial class SettingsThemePreviewTests
             window.CloseForExit();
             ThemeService.Apply(AppTheme.Midnight);
         }
+    }
+
+    private static bool IsDescendantOf(DependencyObject element, DependencyObject ancestor)
+    {
+        for (DependencyObject? current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+            if (ReferenceEquals(current, ancestor)) return true;
+        return false;
     }
 }
