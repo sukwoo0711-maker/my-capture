@@ -272,15 +272,17 @@ public sealed class VideoEditorUxLayoutTests
             TextBlock status = Field<TextBlock>(editor, "_statusLabel");
             // The layout-only clip reports a media failure after opening; the idle status is
             // what every later refresh writes.
+            // The lengths live in the trim bar's summary right above, and the layer count on the
+            // layer switch, so the status line no longer repeats them.
             typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
-            Assert.Equal("전체 길이 00:10.0 · 손잡이를 끌거나 I·O로 남길 구간을 정합니다", status.Text);
+            Assert.Equal("손잡이를 끌거나 I·O로 남길 구간을 정합니다", status.Text);
             Assert.DoesNotContain("녹화 드롭", status.Text);
             Assert.True(editor.TimelineForTest.SetTrimRange(2_000, 8_000));
             typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
-            Assert.Equal("남는 길이 00:06.0 · 잘림 00:04.0 · 라이브러리에 저장 또는 내보내기로 적용합니다", status.Text);
+            Assert.Equal("라이브러리에 저장 또는 내보내기로 적용합니다", status.Text);
             typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
             typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
-            Assert.EndsWith("· 레이어 1", status.Text);
+            Assert.Equal("라이브러리에 저장 또는 내보내기로 적용합니다", status.Text);
             // Recording health moved to the clip facts in the command bar.
             TextBlock details = Field<TextBlock>(editor, "_identityDetails");
             Assert.Equal(UiText.Get("Text_C1BE53C8ADAF"), details.ToolTip);

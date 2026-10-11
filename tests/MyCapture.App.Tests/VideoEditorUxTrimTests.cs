@@ -329,7 +329,7 @@ public sealed class VideoEditorUxTrimTests
             Assert.Equal(0, tools.VerticalOffset);
             FrameworkElement strip = TrimStrip(editor.TimelineForTest);
             AssertInside(strip, tools, tools.ViewportHeight);
-            var bar = Assert.Single(Descendants(layout).OfType<WrapPanel>(), panel => panel.Name == "VideoTrimBar");
+            var bar = Assert.Single(Descendants(layout).OfType<Panel>(), panel => panel.Name == "VideoTrimBar");
             foreach (FrameworkElement control in Descendants(bar).OfType<FrameworkElement>().Where(e => e is Button or TextBox))
             {
                 AssertInside(control, tools, tools.ViewportHeight);

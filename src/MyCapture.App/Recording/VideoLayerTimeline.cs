@@ -234,11 +234,15 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         double timelineWidth = Math.Max(1, width - LabelWidth);
         double currentTop = PaddingTop;
 
-        // Draw Text Rows
+        // Draw Text Rows. An empty lane shows only when there is no layer at all: next to a
+        // frame layer, a "no text layers" row is noise that takes height from the preview.
         if (_textLayers.Count == 0)
         {
-            DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_541F62E38579"), UiText.Get("Text_49931F796C95"), timelineWidth);
-            currentTop += EmptyTrackHeight + Gap;
+            if (_frameLayers.Count == 0)
+            {
+                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_541F62E38579"), UiText.Get("Text_49931F796C95"), timelineWidth);
+                currentTop += EmptyTrackHeight + Gap;
+            }
         }
         else
         {
@@ -265,8 +269,11 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         // Draw Frame Rows
         if (_frameLayers.Count == 0)
         {
-            DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_01EC445E93F5"), UiText.Get("Text_986A825EE823"), timelineWidth);
-            currentTop += EmptyTrackHeight + Gap;
+            if (_textLayers.Count == 0)
+            {
+                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_01EC445E93F5"), UiText.Get("Text_986A825EE823"), timelineWidth);
+                currentTop += EmptyTrackHeight + Gap;
+            }
         }
         else
         {
@@ -359,25 +366,29 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
     private static double ComputeDesiredHeight(int textCount, int frameCount)
     {
-        return PaddingTop + GetTextSectionHeight(textCount) + Gap + GetFrameSectionHeight(frameCount) + PaddingBottom;
+        double text = GetSectionHeight(textCount, frameCount);
+        double frame = GetSectionHeight(frameCount, textCount);
+        return PaddingTop + text + (text > 0 && frame > 0 ? Gap : 0) + frame + PaddingBottom;
     }
 
-    private static double GetTextSectionHeight(int count) =>
+    /// <summary>
+    /// One kind's rows. A kind without layers keeps its "no layers" row only while the other
+    /// kind is empty too; otherwise it takes no height at all.
+    /// </summary>
+    private static double GetSectionHeight(int count, int otherCount) =>
         count == 0
-            ? EmptyTrackHeight
-            : (count * LayerTrackHeight) + ((count - 1) * Gap);
-
-    private static double GetFrameSectionHeight(int count) =>
-        count == 0
-            ? EmptyTrackHeight
+            ? (otherCount == 0 ? EmptyTrackHeight : 0)
             : (count * LayerTrackHeight) + ((count - 1) * Gap);
 
     private double ComputeDesiredHeight() =>
         ComputeDesiredHeight(_textLayers.Count, _frameLayers.Count);
 
-    private double GetTextSectionHeight() => GetTextSectionHeight(_textLayers.Count);
-
-    private double GetFrameSectionHeight() => GetFrameSectionHeight(_frameLayers.Count);
+    /// <summary>Where the frame rows start: under the text rows and their gap, if there are any.</summary>
+    private double FrameSectionTop()
+    {
+        double text = GetSectionHeight(_textLayers.Count, _frameLayers.Count);
+        return PaddingTop + text + (text > 0 ? Gap : 0);
+    }
 
     private Rect GetTextBarRect(int index, double actualWidth)
     {
@@ -400,7 +411,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         }
 
         FrameEditLayer layer = _frameLayers[index];
-        double frameSectionTop = PaddingTop + GetTextSectionHeight() + Gap;
+        double frameSectionTop = FrameSectionTop();
         double top = frameSectionTop + (index * (LayerTrackHeight + Gap));
         double barTop = top + ((LayerTrackHeight - BarHeight) / 2.0);
         return GetBarRect(layer.StartMs, layer.EndMs, barTop, actualWidth);
@@ -501,7 +512,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
         if (_frameLayers.Count > 0)
         {
-            double frameSectionTop = PaddingTop + GetTextSectionHeight() + Gap;
+            double frameSectionTop = FrameSectionTop();
             for (int i = 0; i < _frameLayers.Count; i++)
             {
                 double top = frameSectionTop + (i * (LayerTrackHeight + Gap));

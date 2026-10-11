@@ -353,12 +353,15 @@ internal static class UxReviewSelfTest
                             }
                             if (window is VideoEditorWindow)
                             {
-                                Button properties = Descendants(window).OfType<Button>().Single(button =>
-                                    Equals(button.Content, UiText.Get("Workspace.EditProperties")));
-                                Rect bounds = properties.TransformToAncestor(window).TransformBounds(new Rect(properties.RenderSize));
-                                bool fits = bounds.Top >= 0 && bounds.Bottom <= window.ActualHeight
-                                    && bounds.Left >= 0 && bounds.Right <= window.ActualWidth;
-                                report.AppendLine($"Video properties [{themeLabel}] compact={compact}; fully visible={fits}");
+                                // The layer panel's commands: add a layer, and edit the selected one.
+                                bool fits = Descendants(window).OfType<Button>().Where(button =>
+                                        Equals(button.Content, UiText.Get("Video.AddLayer"))
+                                        || AutomationProperties.GetName(button) == UiText.Get("Text_AEB8B9AA4E6F"))
+                                    .Select(button => button.TransformToAncestor(window).TransformBounds(new Rect(button.RenderSize)))
+                                    .DefaultIfEmpty(Rect.Empty)
+                                    .All(bounds => !bounds.IsEmpty && bounds.Top >= 0 && bounds.Bottom <= window.ActualHeight
+                                        && bounds.Left >= 0 && bounds.Right <= window.ActualWidth);
+                                report.AppendLine($"Video layer commands [{themeLabel}] compact={compact}; fully visible={fits}");
                                 if (!fits) failures++;
                             }
                             string label = name + (compact ? "-compact" : "-normal") + "-" + themeLabel;

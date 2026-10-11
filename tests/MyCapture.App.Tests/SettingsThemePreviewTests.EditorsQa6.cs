@@ -119,6 +119,110 @@ public sealed partial class SettingsThemePreviewTests
         }
     }
 
+    [Fact]
+    public Task EditorsQa6_VideoEditorKeepsThePreviewAtEverySizeAndLanguage() =>
+        RunIsolated(nameof(EditorsQa6_VideoEditorKeepsThePreviewAtEverySizeAndLanguage), VerifyVideoEditorSizes);
+
+    private static void VerifyVideoEditorSizes()
+    {
+        Application application = CreateQa6Application();
+        string root = OwnedTestDirectory.Create("mc-qa6-video-");
+        try
+        {
+            MyCapture.Platform.Recording.RecordingResult recording = UxReviewSelfTest.CreateFixtureVideo(Path.Combine(root, "fixture.mp4"), Qa6Background(640, 360));
+            foreach (string language in new[] { "ko-KR", "en-US" })
+            {
+                using var culture = UiText.UseLanguage(language);
+                // Media and timer callbacks run outside the scoped language; this child process
+                // owns its culture, so set it the way the app does at startup.
+                UiText.Configure(language);
+                foreach (AppTheme theme in new[] { AppTheme.Glass, AppTheme.Daylight })
+                {
+                    ThemeService.Apply(theme);
+                    RenderVideoScene(recording, root, theme, language);
+                }
+            }
+        }
+        finally
+        {
+            application.Shutdown();
+            OwnedTestDirectory.Delete(root);
+        }
+    }
+
+    private static void RenderVideoScene(MyCapture.Platform.Recording.RecordingResult recording, string root, AppTheme theme, string language)
+    {
+        var document = MyCapture.Core.Recording.VideoEditDocument.CreateFor(recording.Width, recording.Height, recording.DurationMs);
+        document.TextOverlays.Add(new MyCapture.Core.Recording.TimedTextOverlay
+        {
+            Text = language == "ko-KR" ? "텍스트 표시 구간 · 드래그로 조절" : "Timed text · drag to adjust", StartMs = 300, EndMs = 2200,
+        });
+        var editor = new MyCapture.App.Recording.VideoEditorWindow(recording, MyCapture.Core.Storage.AppPaths.CreateForRoot(root),
+            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance, document)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
+            ShowActivated = false, ShowInTaskbar = false,
+        };
+        FluidMotion.SetWindowEntrance(editor, false);
+        try
+        {
+            editor.Show();
+            DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+            while (!editor.IsMediaReadyForTest && !editor.HasMediaFailedForTest && DateTime.UtcNow < deadline)
+                Qa6Pump(TimeSpan.FromMilliseconds(25));
+            Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
+            EditorKeysTests.Descendants(editor).OfType<ListBox>().Single().SelectedIndex = 0;
+            foreach ((int width, int height) in new[] { (760, 555), (780, 560), (920, 680), (1400, 900) })
+            {
+                editor.Width = width;
+                editor.Height = height;
+                Qa6Pump(TimeSpan.FromMilliseconds(150));
+                Drain(editor);
+                var viewport = EditorKeysTests.Descendants(editor).OfType<Grid>().Single(grid => grid.Name == "VideoPreviewViewport");
+                Assert.True(viewport.ActualHeight >= 140, $"{language} {theme} {width}x{height}: preview {viewport.ActualHeight:0.#}");
+                foreach (int dpi in theme == AppTheme.Glass && language == "ko-KR" ? new[] { 96, 144 } : new[] { 96 })
+                    SaveQa6Evidence(RenderAtDpi(editor, dpi),
+                        $"video-{theme}-{language}-{width}x{height}-{dpi}dpi-{Qa6Phase}.png");
+            }
+
+            // Playing switches the large button to the pause glyph (two bars) and back to the triangle.
+            Assert.IsType<PathGeometry>(editor.PlayGlyphDataForTest);
+            Assert.True(editor.HandleShortcut(System.Windows.Input.Key.Space, System.Windows.Input.ModifierKeys.None));
+            Assert.IsType<GeometryGroup>(editor.PlayGlyphDataForTest);
+            Assert.True(editor.HandleShortcut(System.Windows.Input.Key.Space, System.Windows.Input.ModifierKeys.None));
+            Assert.IsType<PathGeometry>(editor.PlayGlyphDataForTest);
+        }
+        finally
+        {
+            editor.Close();
+            Drain(editor);
+        }
+    }
+
+    private static BitmapSource RenderAtDpi(Window window, int dpi)
+    {
+        Drain(window);
+        double scale = dpi / 96.0;
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth * scale), (int)Math.Ceiling(window.ActualHeight * scale),
+            dpi, dpi, PixelFormats.Pbgra32);
+        var backdrop = new DrawingVisual();
+        using (DrawingContext context = backdrop.RenderOpen())
+            context.DrawRectangle((Brush)window.FindResource("Surface.Base"), null, new Rect(0, 0, window.ActualWidth, window.ActualHeight));
+        bitmap.Render(backdrop);
+        bitmap.Render(window);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    private static void Qa6Pump(TimeSpan duration)
+    {
+        var frame = new System.Windows.Threading.DispatcherFrame();
+        var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = duration };
+        timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
+        timer.Start();
+        System.Windows.Threading.Dispatcher.PushFrame(frame);
+    }
+
     private static BitmapSource Qa6Background(int width, int height)
     {
         byte[] pixels = new byte[width * height * 4];

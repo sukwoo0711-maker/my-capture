@@ -98,8 +98,6 @@ internal sealed class VideoEditorWindow : Window
     private readonly TextBlock _loadingLabel;
     private readonly Border _loadingOverlay;
     private readonly ListBox _overlayList;
-    private TextBlock? _layerPropertiesSummary;
-    private Button? _layerPropertiesEdit;
     private Button? _undoButton;
     private Button? _redoButton;
     private Button _addTextButton = null!;
@@ -308,7 +306,9 @@ internal sealed class VideoEditorWindow : Window
             SelectionMode = SelectionMode.Single,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
         };
-        ScrollViewer.SetHorizontalScrollBarVisibility(_overlayList, ScrollBarVisibility.Auto);
+        // Rows take the panel's width and trim a long name; a sideways scroll bar under a
+        // single layer took a row of its own in small windows.
+        ScrollViewer.SetHorizontalScrollBarVisibility(_overlayList, ScrollBarVisibility.Disabled);
         ScrollViewer.SetVerticalScrollBarVisibility(_overlayList, ScrollBarVisibility.Auto);
         _overlayList.SelectionChanged += OnOverlaySelectionChanged;
         _overlayList.MouseDoubleClick += (_, _) => EditSelectedOverlay();
@@ -995,12 +995,16 @@ internal sealed class VideoEditorWindow : Window
     /// </summary>
     /// <remarks>
     /// Dragging the handles stays the primary path, so a committed value applies immediately
-    /// and there is no separate "apply" gate to forget. Enter is kept for typed values.
+    /// and there is no separate "apply" gate to forget. Enter is kept for typed values. In a
+    /// narrow window the bar becomes two deliberate rows, the actions with their result over
+    /// the typed range, rather than wrapping whichever control no longer fits.
     /// </remarks>
     private FrameworkElement BuildTrimBar()
     {
-        var row = new WrapPanel { Name = "VideoTrimBar", Margin = new Thickness(0, 4, 0, 0) };
-        AutomationProperties.SetName(row, UiText.Get("VideoEditorUx_TrimBarName"));
+        var bar = new TrimBarPanel { Name = "VideoTrimBar", Margin = new Thickness(0, 4, 0, 0) };
+        AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_TrimBarName"));
+        _trimBar = bar;
+        var row = new StackPanel { Name = "VideoTrimActions", Orientation = Orientation.Horizontal };
         row.Children.Add(MakeMarkButton(UiText.Get("VideoEditorUx_MarkInHere"), UiText.Get("VideoEditorUx_MarkInHelp"),
             "M9.5,3.5 H5.5 V16.5 H9.5 M8,10 H16", "In"));
         row.Children.Add(MakeMarkButton(UiText.Get("VideoEditorUx_MarkOutHere"), UiText.Get("VideoEditorUx_MarkOutHelp"),
@@ -1014,38 +1018,50 @@ internal sealed class VideoEditorWindow : Window
         {
             Name = "VideoTrimSummary",
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(6, 0, 12, 0),
+            Margin = new Thickness(6, 0, 8, 0),
             MinWidth = 120,
         };
         summary.Children.Add(_keptLengthLabel);
         summary.Children.Add(_removedLengthLabel);
         row.Children.Add(summary);
+        bar.Children.Add(row);
 
-        var inputs = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 8, 2) };
+        // The range: the exact start and end, and the way back to the whole recording.
+        var range = new StackPanel { Name = "VideoTrimRange", Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         TextBox Input(string name)
         {
-            inputs.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 5, 0) });
-            var input = new TextBox { Width = 120, MinHeight = 36, Padding = new Thickness(8, 4, 8, 4), VerticalContentAlignment = VerticalAlignment.Center, ToolTip = UiText.Get("Video.SourceTimeHint") };
+            range.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 5, 0) });
+            var input = new TextBox
+            {
+                Width = 120, MinHeight = 36, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(8, 4, 8, 4),
+                VerticalAlignment = VerticalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
+                ToolTip = UiText.Get("Video.SourceTimeHint"),
+            };
             AutomationProperties.SetName(input, name);
             AutomationProperties.SetHelpText(input, UiText.Get("Video.SourceTimeHint"));
             input.PreviewKeyDown += (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; ApplyTrimInputs(); } };
             input.LostFocus += (_, _) => ApplyTrimInputs();
-            inputs.Children.Add(input); _editControls.Add(input);
+            range.Children.Add(input); _editControls.Add(input);
             return input;
         }
         _trimInInput = Input(UiText.Get("Video.TrimIn"));
         _trimOutInput = Input(UiText.Get("Video.TrimOut"));
-        row.Children.Add(inputs);
 
         _resetTrimButton = MakeButton(UiText.Get("VideoEditorUx_ResetTrim"), UiText.Get("VideoEditorUx_ResetTrim"), "Button.Secondary", ResetTrim);
-        _resetTrimButton.MinHeight = 40;
-        _resetTrimButton.Margin = new Thickness(0, 2, 0, 2);
+        _resetTrimButton.MinHeight = 36;
+        _resetTrimButton.Margin = new Thickness(0);
         _resetTrimButton.ToolTip = UiText.Get("VideoEditorUx_ResetTrimHelp");
         AutomationProperties.SetHelpText(_resetTrimButton, UiText.Get("VideoEditorUx_ResetTrimHelp"));
-        row.Children.Add(_resetTrimButton);
+        range.Children.Add(_resetTrimButton);
+        bar.Children.Add(range);
         RefreshTrimInputs();
-        return row;
+        return bar;
     }
+
+    private TrimBarPanel? _trimBar;
+
+    /// <summary>Whether the trim bar currently puts the typed range on a second row.</summary>
+    internal bool TrimBarHasTwoRowsForTest => _trimBar?.IsTwoRows == true;
 
     private Grid BuildTimeline()
     {
@@ -1088,9 +1104,9 @@ internal sealed class VideoEditorWindow : Window
         var lane = new Grid();
 
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        // The list scrolls inside this row. Its reserved minimum only binds in the smallest
-        // windows, where the command bar above and the trim tools below need the height.
-        lane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 32 });
+        // The list scrolls inside this row. Its reserved minimum, one layer, only binds in the
+        // smallest windows, where the command bar above and the trim tools below need the height.
+        lane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 48 });
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var label = new TextBlock
@@ -1106,31 +1122,13 @@ internal sealed class VideoEditorWindow : Window
         var layerHeader = new DockPanel();
         lane.Children.Add(layerHeader);
 
+        // Each row already shows its layer's name and visible interval, and the edit and delete
+        // commands above act on the selected row. A separate properties block repeated the same
+        // name and times under the list and took the height the preview needs in small windows.
         Grid.SetRow(_overlayList, 1);
-        _overlayList.MaxHeight = 120;
-        _overlayList.Margin = new Thickness(0, 8, 0, 8);
-        var inspectorContent = new StackPanel();
-        inspectorContent.Children.Add(_overlayList);
-        inspectorContent.Children.Add(new TextBlock
-        {
-            Text = UiText.Get("Workspace.Properties"), FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 8, 0, 8),
-        });
-        _layerPropertiesSummary = new TextBlock
-        {
-            Text = UiText.Get("Workspace.SelectLayer"), TextWrapping = TextWrapping.Wrap,
-            Foreground = TryBrush("Text.Secondary", Colors.LightGray), FontSize = 12,
-            Margin = new Thickness(0, 0, 0, 8),
-        };
-        inspectorContent.Children.Add(_layerPropertiesSummary);
-        _layerPropertiesEdit = MakeButton(UiText.Get("Workspace.EditProperties"), UiText.Get("Workspace.EditProperties"), "Button.Secondary", EditSelectedOverlay);
-        var inspectorScroll = new ScrollViewer
-        {
-            Content = inspectorContent, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = false,
-        };
-        Grid.SetRow(inspectorScroll, 1);
-        lane.Children.Add(inspectorScroll);
+        _overlayList.MaxHeight = double.PositiveInfinity;
+        _overlayList.Margin = new Thickness(0, 6, 0, 6);
+        lane.Children.Add(_overlayList);
 
         var actions = new WrapPanel
         {
@@ -1156,7 +1154,6 @@ internal sealed class VideoEditorWindow : Window
         _editTextButton = MakeTransportIcon("Icon.Edit", UiText.Get("Text_AEB8B9AA4E6F"), "Button.Ghost", EditSelectedOverlay);
         _deleteTextButton = MakeTransportIcon("Icon.Delete", UiText.Get("Text_9163C86EDB22"), "Button.Ghost", DeleteSelectedOverlay);
         actions.Children.Add(_addTextButton);
-        actions.Children.Add(_layerPropertiesEdit);
         var selectedActions = new StackPanel { Orientation = Orientation.Horizontal };
         selectedActions.Children.Add(_editTextButton);
         selectedActions.Children.Add(_deleteTextButton);
@@ -1203,8 +1200,10 @@ internal sealed class VideoEditorWindow : Window
         // Cluster 1: transport position.
         transport.Children.Add(MakeTransportIcon("Icon.First", UiText.Get("Text_DC710AA11970"), "Button.Ghost", () => Seek(_timeline.InMs)));
         transport.Children.Add(MakeTransportIcon("Icon.Rewind", UiText.Get("Text_E166B75FADF4"), "Button.Ghost", () => StepCoarse(-1)));
-        // The single filled primary of this row, and its largest target: play/pause.
-        Button play = MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Primary", TogglePlay, glyphSize: 24);
+        // The row's largest target: play/pause. It is bordered, not filled: the one filled
+        // accent button in this window is Save to library, the action that finishes the edit,
+        // and the accent elsewhere marks the selection (trim range, chosen layer).
+        Button play = MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Secondary", TogglePlay, glyphSize: 24);
         play.MinWidth = 56;
         play.MinHeight = 48;
         play.Margin = new Thickness(0, 0, 3, 0);
@@ -2100,8 +2099,14 @@ internal sealed class VideoEditorWindow : Window
         };
         DockPanel.SetDock(symbol, Dock.Left); row.Children.Add(symbol);
         var caption = new StackPanel();
-        caption.Children.Add(new TextBlock { Text = title, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 140 });
-        var timing = new TextBlock { Text = $"{UiText.Get("Video.TrimIn")} {SourceTimeInput.Format(start)}\n{UiText.Get("Video.TrimOut")} {SourceTimeInput.Format(end)}", FontSize = 11 };
+        caption.Children.Add(new TextBlock { Text = title, TextTrimming = TextTrimming.CharacterEllipsis });
+        // The visible interval on one line: the times read as a range without 시작/끝 rows.
+        var timing = new TextBlock
+        {
+            Text = UiText.Format("VideoEditorUx_LayerInterval", FormatMs(start), FormatMs(end)),
+            FontSize = 12,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
         timing.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         caption.Children.Add(timing); row.Children.Add(caption);
         return row;
@@ -2195,16 +2200,6 @@ internal sealed class VideoEditorWindow : Window
         bool anySelected = textSelected || SelectedFrameLayer() is not null;
         _editTextButton.IsEnabled = interactive && anySelected;
         _deleteTextButton.IsEnabled = interactive && anySelected;
-        if (_layerPropertiesEdit is not null) _layerPropertiesEdit.IsEnabled = interactive && anySelected;
-        if (_layerPropertiesSummary is not null)
-        {
-            string title = SelectedOverlay()?.Text ?? SelectedFrameLayer()?.Name ?? string.Empty;
-            double? start = SelectedOverlay()?.StartMs ?? SelectedFrameLayer()?.StartMs;
-            double? end = SelectedOverlay()?.EndMs ?? SelectedFrameLayer()?.EndMs;
-            _layerPropertiesSummary.Text = start.HasValue && end.HasValue
-                ? $"{title}\n{UiText.Get("Video.TrimIn")} {SourceTimeInput.Format(start.Value)}\n{UiText.Get("Video.TrimOut")} {SourceTimeInput.Format(end.Value)}"
-                : UiText.Get("Workspace.SelectLayer");
-        }
     }
 
     private void RefreshTextPreview()
@@ -2748,22 +2743,13 @@ internal sealed class VideoEditorWindow : Window
         }
 
         // The idle status says what to do next, not every count the editor knows: an
-        // untrimmed clip gets the trim hint, a trimmed one its result and how to apply it.
-        // Layer and drop counts appear only when there is something to report.
-        var parts = new List<string>(3)
+        // untrimmed clip gets the trim hint, a trimmed one how to apply it. The lengths are in
+        // the trim bar's summary and the layer count on the layer switch, so neither repeats
+        // here. Dropped frames appear only when there is something to report.
+        var parts = new List<string>(2)
         {
-            _timeline.IsFullClip
-                ? UiText.Format("VideoEditorUx_StatusUntrimmed", TrimPresentation.Clock(_timeline.DurationMs))
-                : UiText.Format("VideoEditorUx_StatusTrimmed",
-                    TrimPresentation.KeptLength(_timeline.InMs, _timeline.OutMs),
-                    TrimPresentation.RemovedLength(_timeline.DurationMs, _timeline.InMs, _timeline.OutMs)),
+            UiText.Get(_timeline.IsFullClip ? "VideoEditorUx_StatusUntrimmed" : "VideoEditorUx_StatusTrimmed"),
         };
-        int layerCount = _editDocument.TextOverlays.Count + _editDocument.FrameEditLayers.Count;
-        if (layerCount > 0)
-        {
-            parts.Add(UiText.Format("VideoEditorUx_StatusLayers", layerCount));
-        }
-
         if (_recording.DroppedFrames > 0)
         {
             parts.Add(RecordingHealth());
@@ -2904,9 +2890,11 @@ internal sealed class VideoEditorWindow : Window
             Margin = new Thickness(0, 0, 8, 0),
             MinWidth = 64,
             VerticalAlignment = VerticalAlignment.Center,
-            Style = TryStyle(styleKey),
             ToolTip = automationName,
         };
+        // A resource reference, so the tier also applies when the theme arrives after the
+        // window is built (an isolated window or a test that loads the theme afterwards).
+        button.SetResourceReference(StyleProperty, styleKey);
         AutomationProperties.SetName(button, automationName);
         button.Click += (_, _) => onClick();
         _editControls.Add(button);

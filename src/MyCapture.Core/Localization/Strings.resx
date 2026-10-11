@@ -3099,6 +3099,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Video.MarkIn" xml:space="preserve"><value>시작</value></data>
   <data name="Video.MarkOut" xml:space="preserve"><value>끝</value></data>
   <data name="Video.Layers" xml:space="preserve"><value>레이어</value></data>
+  <data name="VideoEditorUx_LayerInterval" xml:space="preserve">
+    <value>{0}–{1}</value>
+  </data>
   <data name="Video.EditTextHint" xml:space="preserve"><value>미리보기에서 텍스트를 두 번 눌러 편집합니다.</value></data>
   <data name="Capture.DisplayChanged" xml:space="preserve"><value>모니터 구성이 변경되었습니다. 영역 선택을 다시 시작하십시오.</value></data>
   <data name="Video.Trim" xml:space="preserve"><value>잘라내기</value></data>
@@ -3128,8 +3131,6 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Workspace.EditHint" xml:space="preserve"><value>편집 내용을 저장하면 라이브러리에서 이어서 편집할 수 있습니다.</value></data>
   <data name="Workspace.VideoHint" xml:space="preserve"><value>편집 저장은 라이브러리에, 내보내기는 새 파일로 저장합니다.</value></data>
   <data name="Workspace.Properties" xml:space="preserve"><value>레이어 속성</value></data>
-<data name="Workspace.EditProperties" xml:space="preserve"><value>속성 편집</value></data>
-<data name="Workspace.SelectLayer" xml:space="preserve"><value>레이어를 선택하면 내용과 표시 구간을 확인할 수 있습니다.</value></data>
   <data name="Text_3F8046019B32" xml:space="preserve"><value>모자이크</value></data>
   <data name="Text_3F8046019B33" xml:space="preserve"><value>가릴 영역을 드래그하십시오 (M)</value></data>
   <data name="Text_3F8046019B34" xml:space="preserve"><value>해당 영역을 픽셀화했습니다.</value></data>
@@ -3604,10 +3605,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>재생 위치부터 표시할 텍스트 레이어를 추가합니다.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>이 장면에 그리기</value></data>
   <data name="VideoEditorUx_LayerPanel" xml:space="preserve"><value>레이어</value></data>
-  <data name="VideoEditorUx_LayerPanelHelp" xml:space="preserve"><value>텍스트·도형·이미지 레이어 목록과 속성 패널을 표시하거나 숨깁니다. 레이어를 추가하면 자동으로 열립니다.</value></data>
-  <data name="VideoEditorUx_StatusUntrimmed" xml:space="preserve"><value>전체 길이 {0} · 손잡이를 끌거나 I·O로 남길 구간을 정합니다</value></data>
-  <data name="VideoEditorUx_StatusTrimmed" xml:space="preserve"><value>{0} · {1} · 라이브러리에 저장 또는 내보내기로 적용합니다</value></data>
-  <data name="VideoEditorUx_StatusLayers" xml:space="preserve"><value>레이어 {0}</value></data>
+  <data name="VideoEditorUx_LayerPanelHelp" xml:space="preserve"><value>텍스트·도형·이미지 레이어 목록을 표시하거나 숨깁니다. 레이어를 추가하면 자동으로 열립니다.</value></data>
+  <data name="VideoEditorUx_StatusUntrimmed" xml:space="preserve"><value>손잡이를 끌거나 I·O로 남길 구간을 정합니다</value></data>
+  <data name="VideoEditorUx_StatusTrimmed" xml:space="preserve"><value>라이브러리에 저장 또는 내보내기로 적용합니다</value></data>
   <data name="VideoEditorUx_Play" xml:space="preserve"><value>재생</value></data>
   <data name="VideoEditorUx_Pause" xml:space="preserve"><value>일시정지</value></data>
   <data name="VideoEditorUx_PreviousFrameShort" xml:space="preserve">

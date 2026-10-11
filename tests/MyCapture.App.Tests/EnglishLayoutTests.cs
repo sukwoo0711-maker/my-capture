@@ -122,7 +122,9 @@ public sealed class EnglishLayoutTests
             detailToggle.IsChecked = false;
             window.UpdateLayout();
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
-            foreach (string caption in new[] { "Add layer", UiText.Get("Workspace.EditProperties"), "Save to library", "Export · MP4 / GIF" })
+            // The layer panel's separate "Edit properties" button repeated the edit icon (F2)
+            // above the list, so it was removed with the duplicated properties summary.
+            foreach (string caption in new[] { "Add layer", "Save to library", "Export · MP4 / GIF" })
             {
                 Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);
