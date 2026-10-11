@@ -3,6 +3,7 @@
         xmlns:settings="clr-namespace:MyCapture.App.Settings"
         xmlns:coreSettings="clr-namespace:MyCapture.Core.Settings;assembly=MyCapture.Core"
         xmlns:loc="clr-namespace:MyCapture.App.Localization"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:ClassModifier="internal"
         Style="{StaticResource Window.Standard}"
@@ -45,24 +46,68 @@
 
         <!-- Heading of a second or later group inside a page. The first group of a page has
              no heading: the category name already says what it is, and the window title bar is
-             the only window title. -->
+             the only window title. With the 12 below the field before it, groups sit 24 apart. -->
         <Style x:Key="Settings.GroupHeading" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="FontSize" Value="{StaticResource FontSize.Subtitle}" />
             <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Margin" Value="0,14,0,8" />
+            <Setter Property="Margin" Value="0,12,0,8" />
         </Style>
 
-        <!-- One labelled field block. -->
+        <!-- One labelled field block: 12 between fields. -->
         <Style x:Key="Settings.Field" TargetType="StackPanel">
-            <Setter Property="Margin" Value="0,0,0,14" />
+            <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
 
-        <!-- Text input built on the shared TextBox style. Only the validation additions
-             (error border colour, tooltip, automation help text) are layered on top; the
-             base look, focus, and hover come from the theme so there is no duplication. -->
+        <!-- Text input built on the shared TextBox style, at the 32 height of the settings
+             ComboBoxes. The validation additions (error border colour, tooltip, automation help
+             text) are layered on top. The template repeats the shared one except that the content
+             host takes no margin: TextBoxBase already copies Padding onto that host, so the
+             shared template's Margin="{TemplateBinding Padding}" applies the padding twice
+             (a 53-high box with the text pushed 24 in). -->
         <Style x:Key="Settings.TextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Grid>
+                            <Border x:Name="Chrome"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{DynamicResource Radius.Md}">
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Border>
+                            <Border x:Name="FocusRing"
+                                    Margin="1"
+                                    BorderBrush="{DynamicResource Border.Focus}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.Sm}"
+                                    IsHitTestVisible="False"
+                                    Opacity="0" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                            <Trigger Property="IsReadOnly" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Raised}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Setter Property="Validation.ErrorTemplate">
                 <Setter.Value>
                     <ControlTemplate>
@@ -83,8 +128,83 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Secret input with the same chrome as the shared TextBox. A PasswordBox never exposes
-             its value through UI Automation, and the window never logs it. -->
+        <!-- A short number: wide enough for "0.125" or "7680". -->
+        <Style x:Key="Settings.NumberBox" TargetType="TextBox" BasedOn="{StaticResource Settings.TextBox}">
+            <Setter Property="Width" Value="80" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+
+        <!-- Body-size text between inputs on one line ("Width", "×", "px"); dims with them. -->
+        <Style x:Key="Settings.InlineText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+
+        <!-- One short value per row: label | input | range or unit, with an optional note on
+             the line below. Rows on one page share the label column (the page sets
+             Grid.IsSharedSizeScope), so every input starts at the same x. A disabled row dims
+             its label and range with the input. -->
+        <Style TargetType="settings:SettingsField">
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="settings:SettingsField">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="SettingsFieldLabel" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock x:Name="FieldLabel" Style="{StaticResource Settings.Label}"
+                                       Margin="0,0,16,0" MaxWidth="240" TextWrapping="Wrap"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" />
+                            <ContentPresenter Grid.Column="1" VerticalAlignment="Center" />
+                            <TextBlock x:Name="FieldHint" Grid.Column="2" Style="{StaticResource Settings.Description}"
+                                       Margin="8,0,0,0" VerticalAlignment="Center"
+                                       Text="{TemplateBinding Hint}" />
+                            <!-- Text notes take the description look; an element note (a named
+                                 TextBlock kept current by code-behind) is shown as it is. -->
+                            <ContentPresenter x:Name="FieldNote" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,4,0,0"
+                                              Content="{TemplateBinding Note}">
+                                <ContentPresenter.Resources>
+                                    <DataTemplate DataType="{x:Type sys:String}">
+                                        <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{Binding}" />
+                                    </DataTemplate>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Hint" Value="{x:Null}">
+                                <Setter TargetName="FieldHint" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                            <Trigger Property="Note" Value="{x:Null}">
+                                <Setter TargetName="FieldNote" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="FieldLabel" Property="Opacity" Value="0.5" />
+                                <Setter TargetName="FieldHint" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Secret input with the same chrome as Settings.TextBox. A PasswordBox never exposes
+             its value through UI Automation, and the window never logs it. Like TextBoxBase, the
+             PasswordBox copies Padding onto its content host, so the host takes no margin. -->
         <Style x:Key="Settings.PasswordBox" TargetType="PasswordBox">
             <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
@@ -92,8 +212,9 @@
             <Setter Property="SelectionBrush" Value="{DynamicResource Accent.Default}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="11,8" />
-            <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget}" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
@@ -105,7 +226,8 @@
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="{DynamicResource Radius.Md}">
-                                <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                             </Border>
                             <Border x:Name="FocusRing"
                                     Margin="1"
@@ -211,6 +333,12 @@
         <Style x:Key="Settings.CheckBox" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
             <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
             <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+
+        <!-- Radio button built on the shared RadioButton style, at the checkbox text size. -->
+        <Style x:Key="Settings.RadioButton" TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
 
         <!-- ===================== Category navigation =====================
@@ -328,9 +456,12 @@
             <Setter Property="Padding" Value="14,11" />
         </Style>
 
-        <!-- Browse button reuses the shared secondary button, just narrower with a gap. -->
+        <!-- Browse button reuses the shared secondary button, just narrower with a gap, and as
+             high as the folder box beside it. -->
         <Style x:Key="Settings.BrowseButton" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
             <Setter Property="MinWidth" Value="76" />
+            <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
+            <Setter Property="Padding" Value="12,5" />
             <Setter Property="Margin" Value="8,0,0,0" />
         </Style>
 
@@ -401,7 +532,7 @@
                      ToolTip="{loc:Text SettingsUx_TabCaptureHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabCaptureHelp}"
                      Tag="{StaticResource Icon.Capture}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
-                    <StackPanel>
+                    <StackPanel Grid.IsSharedSizeScope="True">
                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture.AfterAction}" />
                         <ComboBox SelectedValue="{Binding AfterCapture}" SelectedValuePath="Tag" MinWidth="250" HorizontalAlignment="Left"
                                   AutomationProperties.Name="{loc:Text Capture.AfterAction}" Margin="0,4,0,8">
@@ -489,21 +620,18 @@
                                   AutomationProperties.Name="{loc:Text Text_B36A1FC25CCE}"
                                   IsChecked="{Binding AbortOnFocusLoss}" />
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_8839D136ACA2}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Text_85C1E3734392}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Margin="0,6,0,12"
+                                                Header="{loc:Text Text_8839D136ACA2}" Hint="{loc:Text Text_85C1E3734392}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_8839D136ACA2}"
                                      Text="{Binding DelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_337B5BC36C27}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Text_C4656CD904CA}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text Text_337B5BC36C27}" Note="{loc:Text Text_C4656CD904CA}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_337B5BC36C27}"
                                      Text="{Binding RegionHistoryLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -513,7 +641,7 @@
                      ToolTip="{loc:Text SettingsUx_TabRecordingHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabRecordingHelp}"
                      Tag="{StaticResource Icon.Record}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
-                    <StackPanel>
+                    <StackPanel Grid.IsSharedSizeScope="True">
                         <Border Style="{StaticResource Settings.InfoCard}" Margin="0,0,0,16">
                             <StackPanel>
                                 <TextBlock Text="{loc:Text Text_93EB8FA7F9BC}" Style="{StaticResource Text.Section}" />
@@ -523,36 +651,56 @@
                             </StackPanel>
                         </Border>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_9C49B0923292}" />
-                            <TextBlock Style="{StaticResource Settings.Description}"
-                                       Text="{loc:Text Text_AE6C1447BA99}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}"
-                                     Width="120"
-                                     HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text Text_9C49B0923292}" Note="{loc:Text Text_AE6C1447BA99}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_BC1D92BC8EFA}"
                                      Text="{Binding RecordingFrameRate, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
+                        <!-- Recording size: the size the user drags, or a fixed width × height that
+                             the drag only places. The boxes sit on the fixed choice's own line and
+                             take input only while it is chosen. The two radio buttons group by their
+                             shared parent, not a GroupName: WPF matches GroupName members by visual
+                             root, and every page not on screen has the same (null) root. -->
+                        <StackPanel x:Name="RecordingSizeField" Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Recording_SizePreset}" />
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="8" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Style="{StaticResource Settings.TextBox}"
-                                         Width="120" HorizontalAlignment="Left"
-                                         AutomationProperties.Name="{loc:Text Recording_PresetWidth}"
-                                         Text="{Binding RecordingPresetWidth, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                                <TextBlock Grid.Column="2" Text="×" VerticalAlignment="Center" />
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <RadioButton x:Name="RecordingSizeDraggedOption" Style="{StaticResource Settings.RadioButton}"
+                                             Grid.ColumnSpan="2"
+                                             Content="{loc:Text Recording_SizeDragged}"
+                                             AutomationProperties.Name="{loc:Text Recording_SizeDragged}"
+                                             IsChecked="{Binding UseRecordingDraggedSize}" />
+                                <RadioButton x:Name="RecordingSizeFixedOption" Style="{StaticResource Settings.RadioButton}"
+                                             Grid.Row="1" Margin="0,0,12,0"
+                                             Content="{loc:Text Recording_SizeFixed}"
+                                             AutomationProperties.Name="{loc:Text Recording_SizeFixed}"
+                                             IsChecked="{Binding UseRecordingFixedSize}" />
+                                <StackPanel x:Name="RecordingSizeRow" Grid.Row="1" Grid.Column="1" Orientation="Horizontal"
+                                            IsEnabled="{Binding UseRecordingFixedSize}">
+                                    <TextBlock Style="{StaticResource Settings.InlineText}" Margin="0,0,8,0"
+                                               Text="{loc:Text Recording_SizeWidth}" />
+                                    <TextBox x:Name="RecordingPresetWidthBox" Style="{StaticResource Settings.NumberBox}"
+                                             AutomationProperties.Name="{loc:Text Recording_PresetWidth}"
+                                             Text="{Binding RecordingPresetWidth, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    <TextBlock Style="{StaticResource Settings.InlineText}" Margin="8,0" Text="×" />
+                                    <TextBlock Style="{StaticResource Settings.InlineText}" Margin="0,0,8,0"
+                                               Text="{loc:Text Recording_SizeHeight}" />
+                                    <TextBox x:Name="RecordingPresetHeightBox" Style="{StaticResource Settings.NumberBox}"
+                                             AutomationProperties.Name="{loc:Text Recording_PresetHeight}"
+                                             Text="{Binding RecordingPresetHeight, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    <TextBlock Style="{StaticResource Settings.InlineText}" Margin="8,0,0,0" Text="px" />
+                                </StackPanel>
                             </Grid>
-                            <TextBox Style="{StaticResource Settings.TextBox}"
-                                     Width="120" HorizontalAlignment="Left" Margin="0,6,0,0"
-                                     AutomationProperties.Name="{loc:Text Recording_PresetHeight}"
-                                     Text="{Binding RecordingPresetHeight, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Recording_LastRegion}" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0,4,0,0"
+                                       Text="{loc:Text Recording_SizeHint}" />
                         </StackPanel>
 
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
@@ -560,16 +708,12 @@
                                   AutomationProperties.Name="{loc:Text Text_F1C1BB1D5771}"
                                   IsChecked="{Binding UseRecordingStartDelay}" />
 
-                        <StackPanel Style="{StaticResource Settings.Field}"
-                                    IsEnabled="{Binding UseRecordingStartDelay}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_1D9A98A69018}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Text_94A8B744467B}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}"
-                                     Width="120"
-                                     HorizontalAlignment="Left"
+                        <settings:SettingsField Margin="0,6,0,12" IsEnabled="{Binding UseRecordingStartDelay}"
+                                                Header="{loc:Text Text_1D9A98A69018}" Hint="{loc:Text Text_94A8B744467B}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_1C856E8BF798}"
                                      Text="{Binding RecordingStartDelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text Text_F0CFD62F0971}"
@@ -601,56 +745,45 @@
                      ToolTip="{loc:Text SettingsUx_TabEditingHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabEditingHelp}"
                      Tag="{StaticResource Icon.Edit}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
-                    <StackPanel>
+                    <StackPanel Grid.IsSharedSizeScope="True">
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Margin="0,0,0,8"
                                    Text="{loc:Text SettingsUx_EditingDefaultsHeading}" />
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_70EC2D232B4F}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="1 ~ 64." />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text Text_70EC2D232B4F}" Hint="1 ~ 64.">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_70EC2D232B4F}"
                                      Text="{Binding StrokeThickness, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_A51DCD82F2A1}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="6 ~ 400." />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text Text_A51DCD82F2A1}" Hint="6 ~ 400.">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_A51DCD82F2A1}"
                                      Text="{Binding FontSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_4E8DBEEA67E4}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="280" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text Text_4E8DBEEA67E4}">
+                            <TextBox Style="{StaticResource Settings.TextBox}" Width="200" HorizontalAlignment="Left"
                                      AutomationProperties.Name="{loc:Text Text_4E8DBEEA67E4}"
                                      Text="{Binding FontFamily, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_9B59CBE34062}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Text_A91B71C5A3C7}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text Text_9B59CBE34062}" Hint="{loc:Text Text_A91B71C5A3C7}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_9B59CBE34062}"
                                      Text="{Binding MosaicBlockSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_FA5045A86267}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="0 ~ 255." />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text Text_FA5045A86267}" Hint="0 ~ 255.">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_22A29FBD57AD}"
                                      Text="{Binding HighlighterAlpha, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text EditorBlur_Strength}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text EditorBlur_StrengthRange}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text EditorBlur_Strength}" Hint="{loc:Text EditorBlur_StrengthRange}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text EditorBlur_Strength}"
                                      Text="{Binding BlurRadius, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text Text_33EFD44366A7}" />
 
@@ -659,29 +792,24 @@
                                   AutomationProperties.Name="{loc:Text Text_F0C27AB1BA08}"
                                   IsChecked="{Binding CloseOnDoubleClick}" />
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_9165ADFF8EF8}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Text_2C6314D22377}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Margin="0,6,0,12"
+                                                Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text Text_2C6314D22377}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_9165ADFF8EF8}"
                                      Text="{Binding InitialOpacity, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_7AF81E702151}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Text_9900FB36633B}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text Text_7AF81E702151}" Note="{loc:Text Text_9900FB36633B}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_628CA8F9904F}"
                                      Text="{Binding ZoomStep, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_LimitLabel}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text PinRestore_LimitDescription}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="120" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text PinRestore_LimitLabel}" Note="{loc:Text PinRestore_LimitDescription}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text PinRestore_LimitLabel}"
                                      Text="{Binding ClosedWindowRestoreLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text SettingsUx_PinCopy}" />
@@ -847,41 +975,36 @@
                      ToolTip="{loc:Text SettingsUx_TabStorageHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabStorageHelp}"
                      Tag="{StaticResource Icon.Storage}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
-                    <StackPanel>
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_71FBF04B7201}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Text_80FD8A8BF5F2}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
+                    <StackPanel Grid.IsSharedSizeScope="True">
+                        <settings:SettingsField Header="{loc:Text Text_71FBF04B7201}" Hint="{loc:Text Text_80FD8A8BF5F2}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_71FBF04B7201}"
                                      Text="{Binding MaxItems, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text SettingsUx_MaxStorage}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_MaxStorageRange}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text SettingsUx_MaxStorage}" Hint="{loc:Text SettingsUx_MaxStorageRange}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text SettingsUx_MaxStorage}"
                                      Text="{Binding MaxGiB, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text SettingsUx_PreviewSize}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_PreviewSizeRange}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
+                        <settings:SettingsField Header="{loc:Text SettingsUx_PreviewSize}" Hint="{loc:Text SettingsUx_PreviewSizeRange}">
+                            <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text SettingsUx_PreviewSize}"
                                      Text="{Binding ThumbnailLongEdge, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                        </settings:SettingsField>
 
-                        <!-- The description reads the typed value, so it always states the period that
-                             will apply instead of a fixed number of days. -->
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text SettingsUx_Retention}" />
-                            <TextBlock x:Name="RetentionSummary" Style="{StaticResource Settings.Description}"
-                                       AutomationProperties.LiveSetting="Polite" />
-                            <TextBox x:Name="RetentionHoursBox" Style="{StaticResource Settings.TextBox}" Width="140" HorizontalAlignment="Left"
+                        <!-- The note reads the typed value, so it always states the period that will
+                             apply instead of a fixed number of days. -->
+                        <settings:SettingsField Header="{loc:Text SettingsUx_Retention}">
+                            <TextBox x:Name="RetentionHoursBox" Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text SettingsUx_Retention}"
                                      Text="{Binding ImageRetentionHours, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
+                            <settings:SettingsField.Note>
+                                <TextBlock x:Name="RetentionSummary" Style="{StaticResource Settings.Description}" Margin="0"
+                                           AutomationProperties.LiveSetting="Polite" />
+                            </settings:SettingsField.Note>
+                        </settings:SettingsField>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_99A2B3E1BD9D}" />
@@ -950,12 +1073,14 @@
                         <TextBlock Style="{StaticResource Settings.Description}"
                                    Text="{loc:Text Settings.ShowSourceWindowTitleHint}" />
 
-                        <!-- GitHub upload is optional and rare: it stays folded until opened. -->
-                        <Expander x:Name="AdvancedExpander" Style="{StaticResource Settings.Expander}" Margin="-6,18,0,0"
+                        <!-- GitHub upload is optional and rare: it stays folded until opened. The
+                             header starts at the page edge; pulled further left, the page clipped
+                             the left side of its hover fill and keyboard focus border. -->
+                        <Expander x:Name="AdvancedExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
                                   Header="{loc:Text SettingsUx_AdvancedHeading}"
                                   AutomationProperties.Name="{loc:Text SettingsUx_AdvancedHeading}"
                                   AutomationProperties.HelpText="{loc:Text SettingsUx_AdvancedHint}">
-                            <StackPanel Margin="6,0,0,0">
+                            <StackPanel>
                                 <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,12"
                                            Text="{loc:Text SettingsUx_AdvancedHint}" />
                                 <StackPanel Style="{StaticResource Settings.Field}">

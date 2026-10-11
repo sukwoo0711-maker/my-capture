@@ -25,7 +25,8 @@ public sealed class HotkeyRecorder : StackPanel
     internal static Func<Hotkey, bool>? CanRegister { get; set; }
     private readonly Button _record = new() { MinWidth = 210, MinHeight = 38, HorizontalContentAlignment = HorizontalAlignment.Left };
     private readonly Button? _reset;
-    private readonly TextBlock _conflict = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 380, Margin = new Thickness(0, 4, 0, 0) };
+    // Collapsed while empty: an empty TextBlock still takes a line under every recorder.
+    private readonly TextBlock _conflict = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 380, Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
 
     public HotkeyRecorder()
     {
@@ -103,13 +104,13 @@ public sealed class HotkeyRecorder : StackPanel
         Hotkey? chord = FromKey(key, modifiers);
         if (chord is not null) Accept(chord);
         else if (key is not (Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin))
-            _conflict.Text = UiText.Get("Hotkey.ModifierRequired");
+            ShowConflict(UiText.Get("Hotkey.ModifierRequired"));
         return true;
     }
 
     internal void Accept(Hotkey chord)
     {
-        if (!chord.IsSafeGlobalShortcut) { _conflict.Text = UiText.Get("Hotkey.ModifierRequired"); return; }
+        if (!chord.IsSafeGlobalShortcut) { ShowConflict(UiText.Get("Hotkey.ModifierRequired")); return; }
         SetCurrentValue(TextProperty, chord.ToString());
         GetBindingExpression(TextProperty)?.UpdateSource();
         Stop();
@@ -136,7 +137,13 @@ public sealed class HotkeyRecorder : StackPanel
             string? error = draft.GetErrors(binding.ParentBinding.Path.Path).Cast<string>().FirstOrDefault();
             if (error is not null) message = error;
         }
+        ShowConflict(message);
+    }
+
+    private void ShowConflict(string message)
+    {
         _conflict.Text = message;
+        _conflict.Visibility = message.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void Refresh()
