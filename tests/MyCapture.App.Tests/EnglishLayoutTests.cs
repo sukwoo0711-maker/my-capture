@@ -28,11 +28,12 @@ public sealed class EnglishLayoutTests
         window.Content = button;
         button.Measure(new Size(300, 80));
         button.Arrange(new Rect(0, 0, 300, 80));
-        var path = Assert.Single(Descendants(button).OfType<System.Windows.Shapes.Path>());
+        var path = Assert.Single(Descendants(button).OfType<MyCapture.App.Themes.SymbolIcon>());
         Assert.NotNull(path.Data);
         Assert.NotNull(path.Fill);
         Assert.Null(path.Stroke);
-        Assert.Equal(20, path.Width);
+        Assert.Equal(20, path.Size);
+        Assert.Equal(0, path.StrokeThickness);
         Assert.Same(window.FindResource("Button.Primary"), button.Style);
     });
 

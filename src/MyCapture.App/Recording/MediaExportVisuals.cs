@@ -3,7 +3,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
-using System.Windows.Shapes;
+using MyCapture.App.Themes;
 
 namespace MyCapture.App.Recording;
 
@@ -16,9 +16,9 @@ internal static class MediaExportVisuals
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         if (icon is not null)
         {
-            var path = new Path { Width = 20, Height = 20, Stretch = Stretch.None, Margin = new Thickness(0, 0, 6, 0) };
-            path.SetResourceReference(Path.DataProperty, icon);
-            path.SetBinding(Shape.FillProperty, new Binding(nameof(Control.Foreground)) { Source = button });
+            var path = new SymbolIcon { Size = 20, StrokeThickness = 0, Margin = new Thickness(0, 0, 6, 0) };
+            path.SetResourceReference(SymbolIcon.DataProperty, icon);
+            path.SetBinding(SymbolIcon.FillProperty, new Binding(nameof(Control.Foreground)) { Source = button });
             panel.Children.Add(path);
         }
         panel.Children.Add(new TextBlock { Text = caption, VerticalAlignment = VerticalAlignment.Center });

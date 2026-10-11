@@ -86,12 +86,8 @@
                       Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
                       Click="OnOcrMenuClick">
                 <MenuItem.Icon>
-                    <Path Data="{StaticResource Icon.Ocr}" Width="18" Height="18"
-                          Stretch="Uniform"
-                          Stroke="{DynamicResource Text.Secondary}"
-                          StrokeThickness="1.6"
-                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                          StrokeLineJoin="Round" Fill="Transparent" />
+                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Ocr}"
+                          Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
                 </MenuItem.Icon>
             </MenuItem>
             <MenuItem Header="{loc:Text Text_D44617983641}"
@@ -115,12 +111,8 @@
                       Foreground="{DynamicResource State.DangerHover}"
                       Click="OnDeleteMenuClick">
                 <MenuItem.Icon>
-                    <Path Data="{StaticResource Icon.Delete}" Width="18" Height="18"
-                          Stretch="Uniform"
-                          Stroke="{DynamicResource State.DangerHover}"
-                          StrokeThickness="1.6"
-                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                          StrokeLineJoin="Round" Fill="Transparent" />
+                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Delete}"
+                          Stroke="{DynamicResource State.DangerHover}" Fill="Transparent" />
                 </MenuItem.Icon>
             </MenuItem>
         </ContextMenu>
@@ -145,7 +137,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="12" Height="12" Stretch="Uniform"
+                <themes:SymbolIcon StrokeThickness="0" Size="12" Data="{StaticResource LibraryUx.Icon.Folder}"
                       Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{Binding FolderBadge}" Margin="4,0,0,0"
                            Foreground="{DynamicResource Text.Badge}" FontSize="{StaticResource FontSize.Caption}"
@@ -208,11 +200,9 @@
                                     BorderBrush="{DynamicResource Border.Badge}" BorderThickness="1"
                                     IsHitTestVisible="False"
                                     Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                <Path Data="{StaticResource Icon.Play}"
-                                      Width="24" Height="24" Stretch="Uniform"
+                                <themes:SymbolIcon Size="24" Data="{StaticResource Icon.Play}"
                                       Fill="{DynamicResource Text.Badge}"
-                                      Stroke="{DynamicResource Text.Badge}" StrokeThickness="1.2"
-                                      StrokeLineJoin="Round"
+                                      Stroke="{DynamicResource Text.Badge}"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
 
@@ -309,12 +299,8 @@
                                 AutomationProperties.Name="{loc:Text Gallery.Float}"
                                 Click="OnFloatClick"
                                 Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
-                            <Path Data="{StaticResource Icon.Pin}" Width="20" Height="20"
-                                  Stretch="None"
-                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.6"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round" Fill="Transparent" />
+                            <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Pin}"
+                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
                         </Button>
 
                         <Button Grid.Column="1" Style="{StaticResource Gallery.IconButton}"
@@ -322,12 +308,8 @@
                                 AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
                                 Click="OnCopyClick"
                                 Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
-                            <Path Data="{StaticResource Icon.Copy}" Width="20" Height="20"
-                                  Stretch="None"
-                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.6"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round" Fill="Transparent" />
+                            <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Copy}"
+                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
                         </Button>
 
                         <!-- Borderless like the other card tools: the details panel owns the one filled Edit. -->
@@ -336,21 +318,16 @@
                                 ToolTip="{loc:Text Text_0400CF56D074}"
                                 AutomationProperties.Name="{loc:Text Text_1003CFC78E66}"
                                 Click="OnEditClick">
-                            <Path Data="{StaticResource Icon.Edit}" Width="20" Height="20" Stretch="Uniform"
-                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.6" StrokeLineJoin="Round" Fill="Transparent" />
+                            <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Edit}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
                         </Button>
 
                         <Button Grid.Column="3" Style="{StaticResource Gallery.IconButton}"
                                 ToolTip="{loc:Text Text_784572D51B63}"
                                 AutomationProperties.Name="{loc:Text Text_89D4979D7596}"
                                 Click="OnDeleteClick">
-                            <Path Data="{StaticResource Icon.Delete}" Width="20" Height="20"
-                                  Stretch="None"
-                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.6"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round" Fill="Transparent" />
+                            <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Delete}"
+                                  Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
                         </Button>
 
                         <Button Grid.Column="4"
@@ -359,13 +336,9 @@
                                 AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
                                 ContextMenu="{StaticResource Gallery.TileContextMenu}"
                                 Click="OnMoreClick">
-                            <Path Data="{StaticResource Icon.More}" Width="20" Height="20"
-                                  Stretch="None"
+                            <themes:SymbolIcon Size="20" Data="{StaticResource Icon.More}"
                                   Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.6"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round" />
+                                  Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </Button>
                     </Grid>
                 </Grid>
@@ -534,11 +507,9 @@
                                     BorderBrush="{DynamicResource Border.Badge}" BorderThickness="1"
                                     IsHitTestVisible="False"
                                     Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                <Path Data="{StaticResource Icon.Play}"
-                                      Width="16" Height="16" Stretch="Uniform"
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Play}"
                                       Fill="{DynamicResource Text.Badge}"
-                                      Stroke="{DynamicResource Text.Badge}" StrokeThickness="1.2"
-                                      StrokeLineJoin="Round"
+                                      Stroke="{DynamicResource Text.Badge}"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <Border HorizontalAlignment="Left" VerticalAlignment="Top"
@@ -590,13 +561,9 @@
                                 AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
                                 ContextMenu="{StaticResource Gallery.TileContextMenu}"
                                 Click="OnMoreClick">
-                            <Path Data="{StaticResource Icon.More}" Width="20" Height="20"
-                                  Stretch="None"
+                            <themes:SymbolIcon Size="20" Data="{StaticResource Icon.More}"
                                   Stroke="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.6"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  StrokeLineJoin="Round" />
+                                  Fill="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </Button>
                     </Grid>
                 </Grid>
@@ -733,7 +700,7 @@
                     </Grid.RowDefinitions>
                     <!-- Where a capture card shows its time, a folder card says it is a folder. -->
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="1,0,1,8">
-                        <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="16" Height="16" Stretch="Uniform"
+                        <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                               Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
                         <TextBlock Text="{loc:Text LibraryUx_CardKind}" Margin="6,0,0,0" VerticalAlignment="Center"
                                    Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}" />
@@ -760,7 +727,7 @@
                                         </Style.Triggers>
                                     </Style>
                                 </StackPanel.Style>
-                                <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="72" Height="72" Stretch="Uniform"
+                                <themes:SymbolIcon StrokeThickness="0" Size="72" Data="{StaticResource LibraryUx.Icon.Folder}"
                                       Fill="{DynamicResource Accent.Folder}" HorizontalAlignment="Center" />
                                 <TextBlock Text="{loc:Text LibraryUx_CardEmpty}" Margin="0,6,0,0" HorizontalAlignment="Center"
                                            Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}" />
@@ -827,7 +794,7 @@
                                         </Style.Triggers>
                                     </Style>
                                 </StackPanel.Style>
-                                <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="44" Height="44" Stretch="Uniform"
+                                <themes:SymbolIcon StrokeThickness="0" Size="44" Data="{StaticResource LibraryUx.Icon.Folder}"
                                       Fill="{DynamicResource Accent.Folder}" HorizontalAlignment="Center" />
                                 <TextBlock Text="{loc:Text LibraryUx_CardEmpty}" Margin="0,4,0,0" HorizontalAlignment="Center"
                                            Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}" />
@@ -841,7 +808,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="14" Height="14" Stretch="Uniform"
+                        <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                               Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
                         <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="5,0,0,0"
                                    FontWeight="SemiBold" FontSize="{StaticResource FontSize.Caption}"
@@ -976,9 +943,7 @@
             </Setter>
         </Style>
 
-        <Style x:Key="LibraryUx.NavGlyph" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
-            <Setter Property="Width" Value="18" />
-            <Setter Property="Height" Value="18" />
+        <Style x:Key="LibraryUx.NavGlyph" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
             <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Control}}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
@@ -1006,11 +971,9 @@
                     <ControlTemplate TargetType="ToggleButton">
                         <!-- The chevron turns over Motion.Normal (FluidMotion.RotateTo) as the row expands. -->
                         <Border Background="Transparent">
-                            <Path x:Name="Chevron" Style="{StaticResource StatePart.Normal}"
-                                  Data="{StaticResource LibraryUx.Icon.Chevron}" Width="12" Height="12"
-                                  Stretch="Uniform" Stroke="{DynamicResource Text.Secondary}" StrokeThickness="1.5"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <themes:SymbolIcon Size="16" x:Name="Chevron" Style="{StaticResource StatePart.Normal}"
+                                               Data="{StaticResource LibraryUx.Icon.Chevron}" Stroke="{DynamicResource Text.Secondary}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
@@ -1096,7 +1059,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="16" Height="16" Stretch="Uniform"
+                <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                       Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{Binding Name}" ToolTip="{Binding Caption}" Margin="8,0,8,0"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
@@ -1111,8 +1074,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Path Data="{StaticResource LibraryUx.Icon.Calendar}" Style="{StaticResource LibraryUx.NavGlyph}"
-                      Width="16" Height="16" />
+                <themes:SymbolIcon Size="20" Data="{StaticResource LibraryUx.Icon.Calendar}" Style="{StaticResource LibraryUx.NavGlyph}" />
                 <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="8,0,8,0" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="2" Text="{Binding Count}" Style="{StaticResource LibraryUx.NavCount}" />
@@ -1190,11 +1152,9 @@
                                                     BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" />
                                             <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
                                             <DockPanel Margin="12,0,8,0">
-                                                <Path x:Name="Chevron" Style="{StaticResource StatePart.Normal}" DockPanel.Dock="Right"
-                                                      Data="{StaticResource LibraryUx.Icon.Chevron}"
-                                                      Width="12" Height="12" Stretch="Uniform" Stroke="{DynamicResource Text.Secondary}"
-                                                      StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                                      StrokeLineJoin="Round" VerticalAlignment="Center" />
+                                                <themes:SymbolIcon Size="16" x:Name="Chevron" Style="{StaticResource StatePart.Normal}" DockPanel.Dock="Right"
+                                                                   Data="{StaticResource LibraryUx.Icon.Chevron}" Stroke="{DynamicResource Text.Secondary}"
+                                                                   VerticalAlignment="Center" />
                                                 <ContentPresenter VerticalAlignment="Center" />
                                             </DockPanel>
                                             <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}"
@@ -1248,9 +1208,7 @@
             <Setter Property="Margin" Value="0,0,4,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
-        <Style x:Key="LibraryUx.CommandGlyph" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
-            <Setter Property="Width" Value="18" />
-            <Setter Property="Height" Value="18" />
+        <Style x:Key="LibraryUx.CommandGlyph" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
             <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
@@ -1332,13 +1290,12 @@
                         FontSize="{StaticResource FontSize.Body}" FontWeight="Normal" Padding="6,4" MaxWidth="220"
                         Foreground="{DynamicResource Text.Secondary}" AutomationProperties.Name="{Binding Name}"
                         Visibility="{Binding IsLink, Converter={StaticResource BoolToVisibility}}" />
-                <Path Data="{StaticResource LibraryUx.Icon.Chevron}" Width="12" Height="12" Stretch="Uniform" Margin="2,0"
-                      Stroke="{DynamicResource Text.Muted}" StrokeThickness="1.5" StrokeStartLineCap="Round"
-                      StrokeEndLineCap="Round" VerticalAlignment="Center"
+                <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Chevron}" Margin="2,0"
+                      Stroke="{DynamicResource Text.Muted}" VerticalAlignment="Center"
                       Visibility="{Binding IsLink, Converter={StaticResource BoolToVisibility}}" />
                 <StackPanel Orientation="Horizontal" Margin="6,0,0,0"
                             Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVisibility}}">
-                    <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="18" Height="18" Stretch="Uniform"
+                    <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                           Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center"
                           Visibility="{Binding Scope.FolderId, Converter={StaticResource LibraryUx.HasValue}}" />
                     <TextBlock Text="{Binding Name}" Margin="8,0,0,0" MaxWidth="280" TextTrimming="CharacterEllipsis"
@@ -1389,9 +1346,8 @@
                             AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
                             Click="OnCaptureRegionClick">
                         <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource Icon.Capture}" Width="16" Height="16" Stretch="Uniform"
-                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.4" StrokeLineJoin="Round" Fill="Transparent" />
+                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Capture}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
                             <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="7,0,0,0" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
@@ -1399,9 +1355,8 @@
                             AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}"
                             Click="OnRecordRegionClick">
                         <StackPanel Orientation="Horizontal">
-                            <Path Data="{StaticResource Icon.Record}" Width="16" Height="16" Stretch="Uniform"
-                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                  StrokeThickness="1.4" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Record}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                             <TextBlock Text="{loc:Text Text_4F5AF20FAA6E}" Margin="7,0,0,0" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
@@ -1411,11 +1366,11 @@
                             Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
                     <Button x:Name="CaptureRegionIconButton" Style="{StaticResource LibraryUx.CommandIcon}"
                             AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}" Click="OnCaptureRegionClick">
-                        <Path Data="{StaticResource Icon.Capture}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                        <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Capture}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                     </Button>
                     <Button x:Name="RecordRegionIconButton" Style="{StaticResource LibraryUx.CommandIcon}"
                             AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}" Click="OnRecordRegionClick">
-                        <Path Data="{StaticResource Icon.Record}" Style="{StaticResource LibraryUx.CommandGlyph}"
+                        <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Record}" Style="{StaticResource LibraryUx.CommandGlyph}"
                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                     </Button>
                 </StackPanel>
@@ -1468,8 +1423,8 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Path Grid.Column="0" Data="{StaticResource Icon.Search}"
-                          Style="{StaticResource Icon.Glyph.Muted}" Width="18" Height="18"
+                    <themes:SymbolIcon Size="16" Grid.Column="0" Data="{StaticResource Icon.Search}"
+                          Style="{StaticResource Icon.Symbol.Muted}"
                           Margin="10,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
                     <TextBox x:Name="SearchBox" Grid.Column="1"
                              Background="Transparent"
@@ -1513,7 +1468,7 @@
                         ToolTip="{loc:Text LibraryUx_NewFolderHint}" AutomationProperties.Name="{loc:Text Folder410.NewFolder}"
                         Click="OnNewFolderClick">
                     <StackPanel Orientation="Horizontal">
-                        <Path Data="{StaticResource LibraryUx.Icon.Folder}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                        <themes:SymbolIcon Size="20" Data="{StaticResource LibraryUx.Icon.Folder}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                         <TextBlock Text="{loc:Text Folder410.NewFolder}" Margin="7,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
@@ -1527,7 +1482,7 @@
                 <Button x:Name="MoreCommandsButton" Style="{StaticResource LibraryUx.CommandIcon}" Margin="0"
                         ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
                         Click="OnMoreCommandsClick">
-                    <Path Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
+                    <themes:SymbolIcon Size="20" Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
                           Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                     <Button.ContextMenu>
                         <ContextMenu>
@@ -1545,7 +1500,7 @@
                 <Button x:Name="ClearSelectionButton" Style="{StaticResource LibraryUx.CommandIcon}"
                         ToolTip="{loc:Text LibraryUx_ClearSelectionHint}" AutomationProperties.Name="{loc:Text LibraryUx_ClearSelection}"
                         Click="OnClearSelectionClick">
-                    <Path Data="{StaticResource Icon.Close}" Style="{StaticResource LibraryUx.CommandGlyph}" Width="14" Height="14" />
+                    <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Close}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                 </Button>
                 <TextBlock x:Name="SelectionCountLabel" Text="{Binding SelectionText}" VerticalAlignment="Center" Margin="2,0,10,0"
                            FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
@@ -1638,7 +1593,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Path Data="{StaticResource LibraryUx.Icon.AllItems}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                            <themes:SymbolIcon Size="20" Data="{StaticResource LibraryUx.Icon.AllItems}" Style="{StaticResource LibraryUx.NavGlyph}" />
                             <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavAll}" Margin="10,0,8,0" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding AllItemsCount}" Style="{StaticResource LibraryUx.NavCount}" />
@@ -1653,7 +1608,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Path Data="{StaticResource Icon.Image}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                            <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Image}" Style="{StaticResource LibraryUx.NavGlyph}" />
                             <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavImages}" Margin="10,0,8,0" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding ImageCount}" Style="{StaticResource LibraryUx.NavCount}" />
@@ -1668,7 +1623,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Path Data="{StaticResource LibraryUx.Icon.Video}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                            <themes:SymbolIcon Size="20" Data="{StaticResource LibraryUx.Icon.Video}" Style="{StaticResource LibraryUx.NavGlyph}" />
                             <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavVideos}" Margin="10,0,8,0" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding VideoCount}" Style="{StaticResource LibraryUx.NavCount}" />
@@ -1683,7 +1638,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Path Data="{StaticResource LibraryUx.Icon.Kept}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                            <themes:SymbolIcon Size="20" Data="{StaticResource LibraryUx.Icon.Kept}" Style="{StaticResource LibraryUx.NavGlyph}" />
                             <TextBlock Grid.Column="1" Text="{loc:Text LibraryUx_NavKept}" Margin="10,0,8,0" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding KeptCount}" Style="{StaticResource LibraryUx.NavCount}" />
@@ -1700,15 +1655,13 @@
                     <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Background="Transparent"
                                 ToolTip="{Binding FolderSectionToolTip}">
                         <TextBlock Text="{loc:Text Folder410.Title}" Style="{StaticResource LibraryUx.SectionLabel}" />
-                        <Path Data="{StaticResource LibraryUx.Icon.Info}" Style="{StaticResource Icon.Glyph.Muted}"
-                              Width="14" Height="14" Margin="6,0,0,0" StrokeThickness="1.3" VerticalAlignment="Center" />
+                        <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Info}" Style="{StaticResource Icon.Symbol.Muted}" Margin="6,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
                     <Button x:Name="NewFolderPaneButton" Grid.Column="1" Style="{StaticResource Button.Icon.Compact}"
                             Width="30" Height="30" MinWidth="30" MinHeight="30" Padding="5"
                             ToolTip="{loc:Text LibraryUx_NewFolderHint}" AutomationProperties.Name="{loc:Text Folder410.NewFolder}"
                             Click="OnNewFolderClick">
-                        <Path Data="{StaticResource LibraryUx.Icon.Add}" Style="{StaticResource LibraryUx.CommandGlyph}"
-                              Width="14" Height="14" />
+                        <themes:SymbolIcon Size="20" Data="{StaticResource LibraryUx.Icon.Add}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                     </Button>
                 </Grid>
 
@@ -1804,7 +1757,7 @@
                 <Button x:Name="ShowDetailsButton" Style="{StaticResource Button.Icon.Compact}" VerticalAlignment="Top"
                         ToolTip="{loc:Text LibraryUx_DetailsShow}" AutomationProperties.Name="{loc:Text LibraryUx_DetailsShow}"
                         Click="OnShowDetailsClick">
-                    <Path Data="{StaticResource LibraryUx.Icon.DetailsPane}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                    <themes:SymbolIcon Size="20" Data="{StaticResource LibraryUx.Icon.DetailsPane}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                 </Button>
             </Border>
             <Border x:Name="GalleryDetailsPanel" Grid.Column="2" Width="232" Margin="8,0,0,0" Padding="16"
@@ -1826,7 +1779,7 @@
                         <Button x:Name="HideDetailsButton" Grid.Column="1" Style="{StaticResource Button.Icon.Compact}" Margin="8,-6,-6,-6"
                                 ToolTip="{loc:Text LibraryUx_DetailsHide}" AutomationProperties.Name="{loc:Text LibraryUx_DetailsHide}"
                                 Click="OnHideDetailsClick">
-                            <Path Data="{StaticResource LibraryUx.Icon.DetailsPane}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                            <themes:SymbolIcon Size="20" Data="{StaticResource LibraryUx.Icon.DetailsPane}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                         </Button>
                     </Grid>
                     <TextBlock Grid.Row="1" Text="{loc:Text Workspace.SelectHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}">
@@ -1880,10 +1833,8 @@
                                         ToolTip="{loc:Text Gallery.FloatHint}" AutomationProperties.Name="{loc:Text Gallery.Float}"
                                         Click="OnFloatClick">
                                     <StackPanel Orientation="Horizontal">
-                                        <Path Data="{StaticResource Icon.Pin}" Width="20" Height="20" Stretch="None"
-                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                              StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                              StrokeLineJoin="Round" Fill="Transparent" VerticalAlignment="Center" />
+                                        <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Pin}"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" VerticalAlignment="Center" />
                                         <TextBlock Text="{loc:Text QuickAccess.Pin}" Margin="6,0,0,0" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
@@ -1891,10 +1842,8 @@
                                         ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
                                         Click="OnCopyClick">
                                     <StackPanel Orientation="Horizontal">
-                                        <Path Data="{StaticResource Icon.Copy}" Width="20" Height="20" Stretch="None"
-                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                              StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                              StrokeLineJoin="Round" Fill="Transparent" VerticalAlignment="Center" />
+                                        <themes:SymbolIcon Size="20" Data="{StaticResource Icon.Copy}"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" VerticalAlignment="Center" />
                                         <TextBlock Text="{loc:Text QuickAccess.Copy}" Margin="6,0,0,0" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
@@ -2067,8 +2016,8 @@
                 <StackPanel Orientation="Horizontal" Visibility="{Binding ShowFolderStorageInfo, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="{loc:Text Folder410.StorageInfo}" Background="Transparent">
                     <TextBlock Text="  ·  " Style="{StaticResource StatusBar.Text}" Foreground="{DynamicResource Text.Muted}" />
-                    <Path Data="{StaticResource LibraryUx.Icon.Info}" Width="14" Height="14" Stretch="Uniform"
-                          Stroke="{DynamicResource State.Warning}" StrokeThickness="1.4" VerticalAlignment="Center" />
+                    <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Info}"
+                          Stroke="{DynamicResource State.Warning}" VerticalAlignment="Center" />
                     <TextBlock Text="{loc:Text Folder410.StorageInfo}" Margin="6,0,0,0" MaxWidth="360"
                                Style="{StaticResource StatusBar.Text}" />
                 </StackPanel>
@@ -2086,7 +2035,7 @@
             <Border x:Name="DragHint" Visibility="Collapsed" Padding="10,6" CornerRadius="6"
                     Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Border.Accent}" BorderThickness="1">
                 <StackPanel Orientation="Horizontal">
-                    <Path Data="{StaticResource LibraryUx.Icon.Folder}" Width="16" Height="16" Stretch="Uniform"
+                    <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                           Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
                     <TextBlock x:Name="DragHintText" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"
                                Foreground="{DynamicResource Text.Primary}" />

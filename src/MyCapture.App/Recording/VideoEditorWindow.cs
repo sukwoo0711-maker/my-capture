@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -713,19 +713,15 @@ internal sealed class VideoEditorWindow : Window
 
         // 1. Identity: this is the recording (video) editor, with the clip's facts. The mark is
         // the recording glyph, not a play triangle that would look like a second play button.
-        var mark = new System.Windows.Shapes.Path
+        var mark = new SymbolIcon
         {
+            Size = 16,
             Data = TryGeometry("Icon.Record"),
-            Width = 14,
-            Height = 14,
-            Stretch = Stretch.Uniform,
-            StrokeThickness = 1.6,
-            StrokeLineJoin = PenLineJoin.Round,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        mark.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Accent.Default");
-        mark.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Accent.Default");
+        mark.SetResourceReference(SymbolIcon.StrokeProperty, "Accent.Default");
+        mark.SetResourceReference(SymbolIcon.FillProperty, "Accent.Default");
         var tile = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Center, Child = mark };
         tile.SetResourceReference(Border.BackgroundProperty, "Accent.Subtle");
         tile.SetResourceReference(Border.BorderBrushProperty, "Border.Accent");
@@ -1203,7 +1199,7 @@ internal sealed class VideoEditorWindow : Window
         // The row's largest target: play/pause. It is bordered, not filled: the one filled
         // accent button in this window is Save to library, the action that finishes the edit,
         // and the accent elsewhere marks the selection (trim range, chosen layer).
-        Button play = MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Secondary", TogglePlay, glyphSize: 24);
+        Button play = MakeTransportIcon("Icon.Play", UiText.Get("Text_9A9C87658130"), "Button.Secondary", TogglePlay, glyphSize: 20);
         play.MinWidth = 56;
         play.MinHeight = 48;
         play.Margin = new Thickness(0, 0, 3, 0);
@@ -1302,9 +1298,9 @@ internal sealed class VideoEditorWindow : Window
         _playButtonShowsPause = playing;
     }
 
-    private static System.Windows.Shapes.Path? FindGlyph(object? content) => content switch
+    private static SymbolIcon? FindGlyph(object? content) => content switch
     {
-        System.Windows.Shapes.Path path => path,
+        SymbolIcon icon => icon,
         Panel panel => panel.Children.Cast<object>().Select(FindGlyph).FirstOrDefault(found => found is not null),
         _ => null,
     };
@@ -2091,10 +2087,11 @@ internal sealed class VideoEditorWindow : Window
     private FrameworkElement LayerCaption(string title, double start, double end, string icon)
     {
         var row = new DockPanel { LastChildFill = true };
-        var symbol = new System.Windows.Shapes.Path
+        var symbol = new SymbolIcon
         {
-            Data = TryGeometry(icon), Width = 18, Height = 18, Margin = new Thickness(0, 0, 10, 0),
-            Stretch = Stretch.Uniform, StrokeThickness = 1.6, Stroke = TryBrush("Accent.Default", Colors.Teal),
+            Size = 16,
+            Data = TryGeometry(icon), Margin = new Thickness(0, 0, 10, 0),
+            Stroke = TryBrush("Accent.Default", Colors.Teal),
             VerticalAlignment = VerticalAlignment.Center,
         };
         DockPanel.SetDock(symbol, Dock.Left); row.Children.Add(symbol);
@@ -2907,19 +2904,13 @@ internal sealed class VideoEditorWindow : Window
     /// </summary>
     private Button MakeMarkButton(string label, string help, string bracketFigures, string command)
     {
-        var glyph = new System.Windows.Shapes.Path
+        var glyph = new SymbolIcon
         {
+            Size = 20,
             Data = Geometry.Parse(bracketFigures),
-            Width = 18,
-            Height = 18,
-            Stretch = Stretch.Uniform,
-            StrokeThickness = 2,
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
-            StrokeLineJoin = PenLineJoin.Round,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        glyph.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Accent.Default");
+        glyph.SetResourceReference(SymbolIcon.StrokeProperty, "Accent.Default");
         var content = new StackPanel { Orientation = Orientation.Horizontal };
         content.Children.Add(glyph);
         content.Children.Add(new TextBlock { Text = label, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
@@ -2955,7 +2946,7 @@ internal sealed class VideoEditorWindow : Window
         return button;
     }
 
-    private Button MakeTransportIcon(string iconKey, string automationName, string styleKey, Action onClick, double glyphSize = 18)
+    private Button MakeTransportIcon(string iconKey, string automationName, string styleKey, Action onClick, double glyphSize = 20)
     {
         string? command = iconKey switch
         {
@@ -2996,23 +2987,17 @@ internal sealed class VideoEditorWindow : Window
         return button;
     }
 
-    private static StackPanel BuildIconLabel(string iconKey, string label, double glyphSize = 18)
+    private static StackPanel BuildIconLabel(string iconKey, string label, double glyphSize = 20)
     {
-        var glyph = new System.Windows.Shapes.Path
+        var glyph = new SymbolIcon
         {
+            Size = glyphSize,
             Data = TryGeometry(iconKey),
-            Width = glyphSize,
-            Height = glyphSize,
-            Stretch = Stretch.Uniform,
-            StrokeThickness = 1.6,
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
-            StrokeLineJoin = PenLineJoin.Round,
             Fill = Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
         };
         glyph.SetBinding(
-            System.Windows.Shapes.Shape.StrokeProperty,
+            SymbolIcon.StrokeProperty,
             new Binding(nameof(Control.Foreground))
             {
                 // ButtonBase so toggle buttons (the detail timeline switch) draw their glyph too.

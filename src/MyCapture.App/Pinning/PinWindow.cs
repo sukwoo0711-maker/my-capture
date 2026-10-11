@@ -149,15 +149,12 @@ internal sealed class PinWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         };
         _feedbackText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
-        var dismissGlyph = new Path
+        var dismissGlyph = new SymbolIcon
         {
+            Size = 16,
             Data = Application.Current?.TryFindResource("Icon.Close") as Geometry ?? Geometry.Parse("M5,5 L15,15 M15,5 L5,15"),
-            Stretch = Stretch.Uniform,
-            Width = 10,
-            Height = 10,
-            StrokeThickness = 1.6,
         };
-        dismissGlyph.SetResourceReference(Shape.StrokeProperty, "Text.Primary");
+        dismissGlyph.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Primary");
         _feedbackDismiss = new Button
         {
             Content = dismissGlyph,
@@ -1431,33 +1428,13 @@ internal sealed class PinWindow : Window
 
         if (iconResourceKey is not null && Application.Current?.TryFindResource(iconResourceKey) is Geometry geometry)
         {
-            var glyph = new Path
+            var glyph = SymbolIcon.Create(geometry, SymbolIcon.InlineSize);
+            glyph.SetBinding(SymbolIcon.ForegroundProperty, new Binding(nameof(Control.Foreground))
             {
-                Data = geometry,
-                StrokeThickness = 1.6,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round,
-                Fill = Brushes.Transparent,
-                Stretch = Stretch.None,
-            };
-            glyph.SetBinding(
-                Shape.StrokeProperty,
-                new Binding(nameof(Control.Foreground))
-                {
-                    RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(MenuItem), 1),
-                    FallbackValue = Application.Current.TryFindResource("Text.Secondary") as Brush ?? Brushes.LightGray,
-                });
-
-            var canvas = new Canvas { Width = 20, Height = 20 };
-            canvas.Children.Add(glyph);
-            item.Icon = new Viewbox
-            {
-                Width = 20,
-                Height = 20,
-                Stretch = Stretch.Uniform,
-                Child = canvas,
-            };
+                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(MenuItem), 1),
+                FallbackValue = Application.Current.TryFindResource("Text.Secondary") as Brush ?? Brushes.LightGray,
+            });
+            item.Icon = glyph;
         }
 
         item.Click += onClick;

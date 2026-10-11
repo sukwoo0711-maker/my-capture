@@ -282,18 +282,15 @@
                                                 CornerRadius="{DynamicResource Radius.Md}"
                                                 Padding="{TemplateBinding Padding}">
                                             <StackPanel Orientation="Horizontal">
-                                                <Path x:Name="Chevron"
+                                                <themes:SymbolIcon Size="16" x:Name="Chevron"
                                                       Data="{StaticResource Icon.ChevronDown}"
-                                                      Width="12" Height="12" Stretch="Uniform"
                                                       Stroke="{DynamicResource Text.Secondary}"
-                                                      StrokeThickness="1.8"
-                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
                                                       VerticalAlignment="Center"
                                                       RenderTransformOrigin="0.5,0.5">
-                                                    <Path.RenderTransform>
+                                                    <themes:SymbolIcon.RenderTransform>
                                                         <RotateTransform Angle="-90" />
-                                                    </Path.RenderTransform>
-                                                </Path>
+                                                    </themes:SymbolIcon.RenderTransform>
+                                                </themes:SymbolIcon>
                                                 <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"
                                                                   TextElement.FontSize="{StaticResource FontSize.Subtitle}"
                                                                   TextElement.FontWeight="Bold" />
@@ -384,20 +381,14 @@
                                         Width="3"
                                         Background="{DynamicResource Accent.Default}"
                                         CornerRadius="2" />
-                                <Viewbox Grid.Column="1" Width="18" Height="18"
+                                <Grid Grid.Column="1"
                                          Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <Path x:Name="Glyph"
+                                    <themes:SymbolIcon Size="20" x:Name="Glyph"
                                           Data="{Binding Path=Tag,
                                                          RelativeSource={RelativeSource TemplatedParent}}"
-                                          Width="20" Height="20"
-                                          Stretch="Uniform"
                                           Stroke="{DynamicResource Text.Secondary}"
-                                          StrokeThickness="1.6"
-                                          StrokeStartLineCap="Round"
-                                          StrokeEndLineCap="Round"
-                                          StrokeLineJoin="Round"
                                           Fill="Transparent" />
-                                </Viewbox>
+                                </Grid>
                                 <ContentPresenter Grid.Column="2" ContentSource="Header"
                                                   Margin="10,0,0,0"
                                                   HorizontalAlignment="Left"

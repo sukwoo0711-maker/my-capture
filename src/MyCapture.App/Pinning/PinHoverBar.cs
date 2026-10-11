@@ -221,7 +221,7 @@ internal sealed class PinHoverBar : Window
         };
         button.SetResourceReference(StyleProperty, "Button.Ghost");
         var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        SymbolIcon icon = Glyph(glyph, SymbolIcon.InlineSize);
+        SymbolIcon icon = Glyph(glyph, SymbolIcon.CommandSize);
         icon.SetBinding(SymbolIcon.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = button });
         content.Children.Add(icon);
         if (showLabel)

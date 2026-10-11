@@ -45,11 +45,14 @@ internal sealed class ShortcutHelpWindow : Window
             };
             var searchBox = new Grid { Margin = new Thickness(0, 0, 0, 16) };
             searchBox.Children.Add(search);
-            var searchIcon = new System.Windows.Shapes.Path { Width = 16, Height = 16, StrokeThickness = 1.6,
-                Data = Geometry.Parse("M11,7 A4,4 0 1 1 3,7 A4,4 0 1 1 11,7 M10,10 L15,15"),
-                Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
+            var searchIcon = new SymbolIcon
+            {
+                Size = SymbolIcon.InlineSize,
+                Data = Geometry.Parse("M8.75,3.5 A5.25,5.25 0 1 1 8.74,3.5 M12.5,12.5 L16.75,16.75"),
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(12,0,0,0), IsHitTestVisible = false };
-            searchIcon.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Text.Secondary");
+            searchIcon.SetResourceReference(SymbolIcon.DataProperty, "Icon.Search");
+            searchIcon.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Secondary");
             searchBox.Children.Add(searchIcon);
             // Border 1 + padding 36 + the text view's own 2: the hint starts where typed text does.
             var hint = new TextBlock { Text = UiText.Get("Help.Search"), Margin = new Thickness(39,0,12,0),

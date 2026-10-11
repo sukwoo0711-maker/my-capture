@@ -1153,43 +1153,14 @@
         <Setter Property="StrokeThickness" Value="0.6" />
     </Style>
 
-    <!-- Legacy Path glyph styles. Stretch="Uniform" fits each glyph's own bounds, so
-         narrow and wide symbols render at different sizes and weights; new code uses the
-         Icon.Symbol styles above. Kept only until the remaining Path consumers move over. -->
-    <Style x:Key="Icon.Glyph" TargetType="Path">
-        <Setter Property="Width" Value="20" />
-        <Setter Property="Height" Value="20" />
-        <Setter Property="Stretch" Value="Uniform" />
-        <Setter Property="Stroke" Value="{DynamicResource Text.Secondary}" />
-        <Setter Property="StrokeThickness" Value="1.6" />
-        <Setter Property="StrokeStartLineCap" Value="Round" />
-        <Setter Property="StrokeEndLineCap" Value="Round" />
-        <Setter Property="StrokeLineJoin" Value="Round" />
-        <Setter Property="Fill" Value="Transparent" />
-        <Setter Property="SnapsToDevicePixels" Value="False" />
-    </Style>
-    <!-- Emphasis variants: reuse the same geometry, differ only in stroke brush. -->
-    <Style x:Key="Icon.Glyph.Primary" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
-        <Setter Property="Stroke" Value="{DynamicResource Text.Primary}" />
-    </Style>
-    <Style x:Key="Icon.Glyph.Muted" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
-        <Setter Property="Stroke" Value="{DynamicResource Text.Muted}" />
-    </Style>
-    <Style x:Key="Icon.Glyph.Accent" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
-        <Setter Property="Stroke" Value="{DynamicResource Accent.Default}" />
-    </Style>
-    <Style x:Key="Icon.Glyph.OnAccent" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
-        <Setter Property="Stroke" Value="{DynamicResource Text.OnAccent}" />
-    </Style>
-    <Style x:Key="Icon.Glyph.Danger" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
-        <Setter Property="Stroke" Value="{DynamicResource State.DangerHover}" />
-    </Style>
-    <!-- The 'More' / dot-based glyphs read better filled; a solid variant is provided. -->
-    <Style x:Key="Icon.Glyph.Filled" TargetType="Path" BasedOn="{StaticResource Icon.Glyph}">
-        <Setter Property="Fill" Value="{DynamicResource Text.Secondary}" />
-        <Setter Property="Stroke" Value="{DynamicResource Text.Secondary}" />
-        <Setter Property="StrokeThickness" Value="0.6" />
-    </Style>
+    <!-- Compatibility names use the same fixed-grid renderer as Icon.Symbol. -->
+    <Style x:Key="Icon.Glyph" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}" />
+    <Style x:Key="Icon.Glyph.Primary" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.Primary}" />
+    <Style x:Key="Icon.Glyph.Muted" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.Muted}" />
+    <Style x:Key="Icon.Glyph.Accent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.Accent}" />
+    <Style x:Key="Icon.Glyph.OnAccent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.OnAccent}" />
+    <Style x:Key="Icon.Glyph.Danger" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.Danger}" />
+    <Style x:Key="Icon.Glyph.Filled" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.Filled}" />
 
     <!-- The embedded multi-resolution ICO is used consistently in window chrome and
          top-level product headers. It remains decorative beside the visible product name. -->

@@ -86,7 +86,7 @@ internal sealed class CaptureModeBar : Border
     private static readonly Geometry RecordIcon = Geometry.Parse(
         "M10,3.25 A6.75,6.75 0 1 1 9.99,3.25 M10,7.25 A2.75,2.75 0 1 1 9.99,7.25");
     private static readonly Geometry MoreIcon = Geometry.Parse(
-        "M4.5,10 L4.6,10 M10,10 L10.1,10 M15.5,10 L15.6,10");
+        "M5,9 A1,1 0 1 0 4.99,9 M10,9 A1,1 0 1 0 9.99,9 M15,9 A1,1 0 1 0 14.99,9");
 
     private readonly RadioButton _capture;
     private readonly RadioButton _text;
@@ -383,26 +383,13 @@ internal sealed class CaptureModeBar : Border
     private static FrameworkElement ButtonContent(ButtonBase owner, Geometry icon, TextBlock? label)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        var glyph = new Path
+        var glyph = new SymbolIcon
         {
+            Size = 20,
             Data = icon,
-            Width = 18,
-            Height = 18,
-            Stretch = Stretch.Uniform,
-            StrokeThickness = 1.6,
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
-            StrokeLineJoin = PenLineJoin.Round,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        if (ReferenceEquals(icon, MoreIcon))
-        {
-            // Three dots on the 20x20 grid: keep their spacing instead of stretching them into a line.
-            glyph.Stretch = Stretch.None;
-            glyph.StrokeThickness = 2.4;
-            glyph.Width = glyph.Height = 20;
-        }
-        glyph.SetBinding(Shape.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = owner });
+        glyph.SetBinding(SymbolIcon.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = owner });
         panel.Children.Add(glyph);
         if (label is not null)
         {

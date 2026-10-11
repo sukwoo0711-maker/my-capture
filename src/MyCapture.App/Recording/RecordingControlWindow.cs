@@ -73,7 +73,7 @@ internal sealed class RecordingControlWindow : Window
     private static readonly Geometry StopGlyph = Frozen(new RectangleGeometry(new Rect(4.5, 4.5, 11, 11), 1.5, 1.5));
     private static readonly Geometry PauseGlyph = Geometry.Parse("M5,4 L8.5,4 L8.5,16 L5,16 Z M11.5,4 L15,4 L15,16 L11.5,16 Z");
     private static readonly Geometry ResumeGlyph = Geometry.Parse("M6,3.75 L16,10 L6,16.25 Z");
-    private static readonly Geometry MoreGlyph = Geometry.Parse("M4.5,10 L4.6,10 M10,10 L10.1,10 M15.5,10 L15.6,10");
+    private static readonly Geometry MoreGlyph = Geometry.Parse("M5,9 A1,1 0 1 0 4.99,9 M10,9 A1,1 0 1 0 9.99,9 M15,9 A1,1 0 1 0 14.99,9");
     private static readonly Geometry CheckGlyph = Geometry.Parse("M3.75,10.25 L8.15,14.65 L16.25,5.35");
 
     private static Geometry Frozen(Geometry geometry)
@@ -289,12 +289,12 @@ internal sealed class RecordingControlWindow : Window
 
     private static FrameworkElement MenuGlyph(Geometry geometry)
     {
-        var glyph = new System.Windows.Shapes.Path
+        var glyph = new SymbolIcon
         {
-            Data = geometry, Width = 16, Height = 16, Stretch = Stretch.Uniform, StrokeThickness = 1.8,
-            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
+            Size = 16,
+            Data = geometry,
         };
-        glyph.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Text.Primary");
+        glyph.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Primary");
         return glyph;
     }
 
@@ -308,11 +308,14 @@ internal sealed class RecordingControlWindow : Window
         }
 
         var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        var path = new System.Windows.Shapes.Path
+        var path = new SymbolIcon
         {
-            Data = glyph, Width = 12, Height = 12, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center,
+            Size = 20,
+            StrokeThickness = 0,
+            Data = glyph,
+            VerticalAlignment = VerticalAlignment.Center,
         };
-        path.SetBinding(System.Windows.Shapes.Shape.FillProperty,
+        path.SetBinding(SymbolIcon.FillProperty,
             new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = button });
         panel.Children.Add(path);
         panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
@@ -501,12 +504,12 @@ internal sealed class RecordingControlWindow : Window
             Style = TryStyle("Button.Ghost"),
             ToolTip = UiText.Get("Onboard_RecordMoreHelp"),
         };
-        var moreGlyph = new System.Windows.Shapes.Path
+        var moreGlyph = new SymbolIcon
         {
-            Data = MoreGlyph, Width = 20, Height = 20, StrokeThickness = 2.4,
-            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            Size = 20,
+            Data = MoreGlyph,
         };
-        moreGlyph.SetBinding(System.Windows.Shapes.Shape.StrokeProperty,
+        moreGlyph.SetBinding(SymbolIcon.StrokeProperty,
             new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = more });
         more.Content = moreGlyph;
         more.Click += (_, _) => OpenMoreMenu();

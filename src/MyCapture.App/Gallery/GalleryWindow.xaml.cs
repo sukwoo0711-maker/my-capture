@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -855,12 +856,12 @@ internal sealed partial class GalleryWindow : Window
             () => LibraryStatusBar.IsMouseOver || LibraryStatusBar.IsKeyboardFocusWithin, ExpireActionStatus);
         // A failure stays until closed, so it gets a close button beside it (column 2, which the
         // archive Cancel button only uses while an export is still running).
-        var glyph = new System.Windows.Shapes.Path
+        var glyph = new SymbolIcon
         {
+            Size = 16,
             Data = TryFindResource("Icon.Close") as Geometry ?? Geometry.Parse("M5,5 L15,15 M15,5 L5,15"),
-            Stretch = Stretch.Uniform, Width = 10, Height = 10, StrokeThickness = 1.6,
-        };
-        glyph.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Text.Secondary");
+            };
+        glyph.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Secondary");
         _statusDismiss = new Button
         {
             Content = glyph, Margin = new Thickness(8, 0, 0, 0), Visibility = Visibility.Collapsed,

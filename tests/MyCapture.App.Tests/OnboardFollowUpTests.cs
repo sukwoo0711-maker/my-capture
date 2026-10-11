@@ -82,7 +82,7 @@ public sealed class QuickAccessCardLabelTests
     {
         foreach (object child in LogicalTreeHelper.GetChildren(root))
         {
-            if (child is StackPanel { Children.Count: 2 } face && face.Children[0] is System.Windows.Shapes.Path
+            if (child is StackPanel { Children.Count: 2 } face && face.Children[0] is MyCapture.App.Themes.SymbolIcon
                 && face.Children[1] is TextBlock name) return name;
             if (child is DependencyObject node && FaceName(node) is { } found) return found;
         }

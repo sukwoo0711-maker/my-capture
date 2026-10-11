@@ -148,7 +148,7 @@ public sealed class SymbolIcon : FrameworkElement
 
     protected override System.Windows.Size MeasureOverride(System.Windows.Size availableSize) => new(Size, Size);
 
-    protected override System.Windows.Size ArrangeOverride(System.Windows.Size finalSize) => new(Size, Size);
+    protected override System.Windows.Size ArrangeOverride(System.Windows.Size finalSize) => finalSize;
 
     protected override void OnRender(DrawingContext drawingContext)
     {
