@@ -29,6 +29,12 @@ public abstract class GalleryRow
     /// the flag lives on the base type so the row container can bind it on every row.
     /// </summary>
     public bool IsCompact { get; protected init; }
+
+    /// <summary>
+    /// The column count the row was built for. Its card panel divides the row's width into this
+    /// many equal cells, so a short final row lines up with the full rows above it.
+    /// </summary>
+    public int Columns { get; protected init; }
 }
 
 /// <summary>A date-group heading row, shown once above that day's tile rows.</summary>
@@ -42,16 +48,17 @@ public sealed class GalleryHeaderRow : GalleryRow
 
 /// <summary>
 /// A strip of tiles from one date group, one up to the column count. Because a row holds only a
-/// handful of items, its panel can be a non-virtual horizontal stack without cost — the virtualization that matters
-/// happens at the row level, in the outer list.
+/// handful of items, its panel can be a non-virtual card row without cost — the virtualization
+/// that matters happens at the row level, in the outer list.
 /// </summary>
 public sealed class GalleryTileRow : GalleryRow
 {
-    public GalleryTileRow(IReadOnlyList<GalleryItemViewModel> tiles, bool compact = false)
+    public GalleryTileRow(IReadOnlyList<GalleryItemViewModel> tiles, bool compact = false, int columns = 0)
     {
         Tiles = new ReadOnlyObservableCollection<GalleryItemViewModel>(
             new ObservableCollection<GalleryItemViewModel>(tiles));
         IsCompact = compact;
+        Columns = columns > 0 ? columns : tiles.Count;
     }
 
     /// <summary>The tiles laid out left-to-right in this row.</summary>
@@ -59,16 +66,17 @@ public sealed class GalleryTileRow : GalleryRow
 }
 
 /// <summary>
-/// A strip of folder cards shown under a group heading and above that group's tiles. Cards use
-/// the tile track width, so folder and tile rows share one column grid for keyboard movement.
+/// A strip of folder cards shown under a group heading and above that group's tiles. Cards take
+/// the tiles' cells, so folder and tile rows share one column grid for keyboard movement.
 /// </summary>
 public sealed class GalleryFolderRow : GalleryRow
 {
-    public GalleryFolderRow(IReadOnlyList<GalleryFolderCardViewModel> folders, bool compact = false)
+    public GalleryFolderRow(IReadOnlyList<GalleryFolderCardViewModel> folders, bool compact = false, int columns = 0)
     {
         Folders = new ReadOnlyObservableCollection<GalleryFolderCardViewModel>(
             new ObservableCollection<GalleryFolderCardViewModel>(folders));
         IsCompact = compact;
+        Columns = columns > 0 ? columns : folders.Count;
     }
 
     /// <summary>The folder cards laid out left-to-right in this row.</summary>

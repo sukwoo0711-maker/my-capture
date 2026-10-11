@@ -41,9 +41,9 @@ internal sealed partial class GalleryWindow
     }
 
     /// <summary>
-    /// The width a tile row can fill: the list's scrolling area inside its chrome, less the
-    /// vertical scrollbar. The scrollbar is always reserved, so a row never runs under it and
-    /// showing or hiding it never changes the column count.
+    /// The width the column count is chosen from: the list's scrolling area inside its chrome,
+    /// less the vertical scrollbar. The scrollbar is always reserved, so showing or hiding it
+    /// never changes the column count; the card rows themselves fill whatever width is left.
     /// </summary>
     private double RowsContentWidth(double listWidth)
     {
@@ -54,10 +54,10 @@ internal sealed partial class GalleryWindow
                 - RowsList.Padding.Left - RowsList.Padding.Right - SystemParameters.VerticalScrollBarWidth;
         }
 
+        // The themed scrollbar's own width; the system metric only when the template has none.
         double scrollBar = scroll.Template?.FindName("PART_VerticalScrollBar", scroll) is ScrollBar bar
-            && !double.IsNaN(bar.Width) ? bar.Width : 0;
-        return scroll.ActualWidth - scroll.Padding.Left - scroll.Padding.Right
-            - Math.Max(scrollBar, SystemParameters.VerticalScrollBarWidth);
+            && !double.IsNaN(bar.Width) && bar.Width > 0 ? bar.Width : SystemParameters.VerticalScrollBarWidth;
+        return scroll.ActualWidth - scroll.Padding.Left - scroll.Padding.Right - scrollBar;
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject

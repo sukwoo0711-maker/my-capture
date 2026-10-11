@@ -341,8 +341,11 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     {
         IReadOnlyList<GalleryRow> built = GalleryRowBuilder.Build(_groups, _columnCount, _rowsCompact);
 
+        // A row also keeps its column count: cells are a share of the row, so a short row built
+        // for another count would no longer line up with the rows around it.
         if (_rows.Count == built.Count && _rows.Zip(built).All(pair =>
-            pair.First.IsCompact == pair.Second.IsCompact && (pair.First, pair.Second) switch
+            pair.First.IsCompact == pair.Second.IsCompact && pair.First.Columns == pair.Second.Columns
+            && (pair.First, pair.Second) switch
             {
                 (GalleryHeaderRow a, GalleryHeaderRow b) => a.Heading == b.Heading,
                 (GalleryFolderRow a, GalleryFolderRow b) => a.Folders.SequenceEqual(b.Folders),

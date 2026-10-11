@@ -170,7 +170,8 @@ public sealed partial class SettingsThemePreviewTests
             Button emptyCard = cards.Single(card => ((GalleryFolderCardViewModel)card.DataContext).FolderId == f.Empty.Id);
             ListBoxItem firstTile = Descendants(rowsList).OfType<ListBoxItem>()
                 .First(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[0].Id);
-            Border tileCard = Descendants(firstTile).OfType<Border>().First(border => border.Width == 244);
+            Border tileCard = Descendants(firstTile).OfType<Border>().Single(border => border.Name == "TileCard");
+            double fullCardWidth = tileCard.ActualWidth;
             Assert.Equal(tileCard.ActualWidth, designCard.ActualWidth, 1);
             Assert.Equal(tileCard.ActualHeight, designCard.ActualHeight, 1);
             Assert.Same(window.FindResource("Surface.Folder"), designCard.Background);
@@ -300,8 +301,10 @@ public sealed partial class SettingsThemePreviewTests
             ListBoxItem compactTile = PumpLibraryUntil(window, () => Descendants(rowsList).OfType<ListBoxItem>()
                     .FirstOrDefault(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[4].Id),
                 item => item is not null, label + ": compact tile");
-            Border compactCard = Descendants(compactTile).OfType<Border>().First(border => border.Width == 148);
-            Assert.Equal(180, compactCard.ActualHeight, 1);
+            Border compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "CompactTileCard");
+            // Smaller than the full card, at the compact card's own proportion.
+            Assert.True(compactCard.ActualWidth < fullCardWidth, $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP");
+            Assert.Equal(GalleryCardRowPanel.CardHeightFor(compactCard.ActualWidth, 148, 180, 1), compactCard.ActualHeight, 1);
             Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");
             Assert.All(vm.Rows.Skip(1), row => Assert.True(row.IsCompact));
             AssertInsideClient(compactTile, client, label);
@@ -315,8 +318,8 @@ public sealed partial class SettingsThemePreviewTests
             Button subfolder = PumpLibraryUntil(window, () => FolderCardButtons(rowsList)
                     .SingleOrDefault(card => ((GalleryFolderCardViewModel)card.DataContext).FolderId == final.Id),
                 card => card is not null, label + ": compact subfolder card");
-            Assert.Equal(148, subfolder.ActualWidth, 1);
-            Assert.Equal(180, subfolder.ActualHeight, 1);
+            Assert.Equal(compactCard.ActualWidth, subfolder.ActualWidth, 1);
+            Assert.Equal(compactCard.ActualHeight, subfolder.ActualHeight, 1);
             Assert.Equal(compactTile.TranslatePoint(new Point(), rowsList).X + 8, subfolder.TranslatePoint(new Point(), rowsList).X, 1);
             foreach (TextBlock text in Descendants(subfolder).OfType<TextBlock>().Where(text => text.IsVisible))
                 AssertNotTrimmed(text, label);
@@ -337,7 +340,7 @@ public sealed partial class SettingsThemePreviewTests
             ListBoxItem found = PumpLibraryUntil(window, () => Descendants(rowsList).OfType<ListBoxItem>()
                     .FirstOrDefault(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[4].Id),
                 item => item is not null, label + ": search result");
-            Assert.Contains(Descendants(found).OfType<Border>(), border => border.Width == 244);
+            Assert.Contains(Descendants(found).OfType<Border>(), border => border.Name == "TileCard");
             var badge = Descendants(found).OfType<Border>().Single(border => border.Name == "FolderBadge");
             Assert.True(badge.IsVisible);
             TextBlock badgeText = Descendants(badge).OfType<TextBlock>().Single();

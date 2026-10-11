@@ -53,7 +53,7 @@ public sealed class GalleryFolderCardTests
         Assert.False(vm.ShowResultCount);
 
         // Two full cards per row, so both folder cards share the first folder row.
-        vm.SetColumnCountForWidth(2 * GalleryRowBuilder.TileTrackWidth);
+        vm.SetColumnCountForWidth(2 * GalleryRowBuilder.MinTileTrackWidth);
         Assert.IsType<GalleryHeaderRow>(vm.Rows[0]);
         Assert.Equal(today.Folders, Assert.IsType<GalleryFolderRow>(vm.Rows[1]).Folders);
         Assert.Equal(loose.Id, Assert.Single(Assert.IsType<GalleryTileRow>(vm.Rows[2]).Tiles).Id);
@@ -97,7 +97,7 @@ public sealed class GalleryFolderCardTests
         var vm = f.ViewModel();
         vm.SelectScope(CaptureFolderScope.ForFolder(root.Id));
         // Room for both subfolder cards in one compact row.
-        vm.SetColumnCountForWidth(2 * GalleryRowBuilder.CompactTileTrackWidth);
+        vm.SetColumnCountForWidth(2 * GalleryRowBuilder.MinCompactTileTrackWidth);
         foreach (GallerySortOrder sort in new[] { GallerySortOrder.Oldest, GallerySortOrder.Name, GallerySortOrder.Newest })
         {
             vm.SortIndex = (int)sort;

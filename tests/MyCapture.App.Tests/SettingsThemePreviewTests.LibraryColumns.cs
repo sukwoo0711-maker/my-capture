@@ -68,8 +68,8 @@ public sealed partial class SettingsThemePreviewTests
             PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2, "library columns: folder cards");
             ScrollViewer scroll = Descendants(rowsList).OfType<ScrollViewer>().First();
 
-            // The minimum window with the details pane open fits one full card, not one and a half.
-            Assert.Equal(1, vm.ColumnCount);
+            // The minimum window with the details pane open fits two full cards that share its width.
+            Assert.Equal(2, vm.ColumnCount);
             AssertCardsInsideLibrary(rowsList, scroll, vm, "minimum root");
             SaveLibraryUxEvidence(window, AppTheme.Glass, "columns-minimum-root-glass-ko-KR.png");
 
@@ -104,7 +104,7 @@ public sealed partial class SettingsThemePreviewTests
                     if (keyboard) Assert.True(showDetails.IsKeyboardFocused, "focus must move to the rail's show button");
                     AssertInsideClient(showDetails, client, pane);
                     Assert.Equal(UiText.Get("LibraryUx_DetailsShow"), AutomationProperties.GetName(showDetails));
-                    // Two full cards fit the minimum window once the pane is hidden.
+                    // The two cards take the width the pane gave back instead of leaving it empty.
                     Assert.Equal(2, vm.ColumnCount);
                     AssertCardsInsideLibrary(rowsList, scroll, vm, $"minimum root, {pane}");
                     SaveLibraryUxEvidence(window, AppTheme.Glass, "columns-minimum-root-details-hidden-glass-ko-KR.png");
@@ -146,8 +146,26 @@ public sealed partial class SettingsThemePreviewTests
             // The pane is usable at once; its fade-in only softens the arrival and settles at full opacity.
             Assert.True(details.IsHitTestVisible && details.IsEnabled);
             PumpLibraryUntil(window, () => details.Opacity, opacity => opacity == 1.0, "details fade-in");
-            Assert.Equal(1, vm.ColumnCount);
+            Assert.Equal(2, vm.ColumnCount);
             AssertCardsInsideLibrary(rowsList, scroll, vm, "minimum root, details shown again");
+
+            // The default height shows whole rows; render the widths the owner compares, with the
+            // details pane shown and hidden. Only kept when MYCAPTURE_LIBRARY_UX_EVIDENCE is set.
+            window.Height = 760;
+            vm.Select(f.Records[0].Id);
+            foreach (bool open in new[] { true, false })
+            {
+                window.SetDetailsPaneOpen(open);
+                foreach (double width in new[] { window.MinWidth, 1200, 1600 })
+                {
+                    window.Width = width;
+                    SettleGalleryLayout(window);
+                    if (Math.Abs(window.ActualWidth - width) > 0.5) continue;
+                    AssertCardsInsideLibrary(rowsList, scroll, vm, $"evidence {width:0} DIP, details {(open ? "shown" : "hidden")}");
+                    SaveLibraryUxEvidence(window, AppTheme.Glass, $"layout-{width:0}-{(open ? "details" : "no-details")}-glass-ko-KR.png");
+                }
+            }
+            window.SetDetailsPaneOpen(true);
         }
         finally
         {
@@ -239,11 +257,12 @@ public sealed partial class SettingsThemePreviewTests
     /// </summary>
     private static IEnumerable<double> LibrarySweepWidths(Window window, ScrollViewer scroll, bool compact)
     {
-        double track = compact ? GalleryRowBuilder.CompactTileTrackWidth : GalleryRowBuilder.TileTrackWidth;
+        double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
         int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
-        // The library's scrolling area grows one DIP for every DIP the window grows.
+        // The library's scrolling area grows one DIP for every DIP the window grows; the themed
+        // vertical scrollbar (16 DIPs) is always reserved when the column count is chosen.
         double chrome = window.ActualWidth - scroll.ActualWidth;
-        double reserve = Math.Max(16, SystemParameters.VerticalScrollBarWidth);
+        const double reserve = 16;
         var widths = new SortedSet<double>();
         for (int columns = 1; columns <= max; columns++)
             foreach (double delta in new[] { -1d, 0, 1 })
@@ -260,13 +279,20 @@ public sealed partial class SettingsThemePreviewTests
     }
 
     /// <summary>
-    /// Every realised card, and every visible command on it, lies inside the library viewport,
-    /// and the row holds as many cards as the width fits.
+    /// Every realised card, and every visible command on it, lies inside the library viewport;
+    /// cards are never narrower than the minimum track allows and keep their height for their
+    /// width; and a full row reaches the right edge of the library, leaving no empty band beyond
+    /// the card's own margin and layout rounding.
     /// </summary>
     private static void AssertCardsInsideLibrary(ListBox rowsList, ScrollViewer scroll, GalleryViewModel vm, string label)
     {
+        bool compact = vm.IsCompactLayout;
+        double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
+        int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
+        (double baseWidth, double baseHeight, double slope) = compact ? (148d, 180d, 1d) : (244d, 292d, 0.8);
+        // The visible card: a capture card inside its selection outline, or a folder card button.
         FrameworkElement[] cards = Descendants(rowsList).OfType<FrameworkElement>()
-            .Where(element => element.IsVisible && (element is ListBoxItem { DataContext: GalleryItemViewModel }
+            .Where(element => element.IsVisible && (element is Border { Name: "TileCard" or "CompactTileCard" }
                 || element is Button { DataContext: GalleryFolderCardViewModel }))
             .ToArray();
         Assert.NotEmpty(cards);
@@ -276,6 +302,9 @@ public sealed partial class SettingsThemePreviewTests
             double right = card.TranslatePoint(new Point(card.ActualWidth, 0), scroll).X;
             Assert.True(left >= -0.5 && right <= scroll.ViewportWidth + 0.5,
                 $"{label}: a card spans {left:0.#}..{right:0.#} in a {scroll.ViewportWidth:0.#}-DIP library ({vm.ColumnCount} columns)");
+            Assert.True(card.ActualWidth >= track - GalleryRowBuilder.CardInset - 1,
+                $"{label}: a {card.ActualWidth:0.#}-DIP card is narrower than the {track - GalleryRowBuilder.CardInset}-DIP minimum");
+            Assert.Equal(GalleryCardRowPanel.CardHeightFor(card.ActualWidth, baseWidth, baseHeight, slope), card.ActualHeight, 1.5);
             foreach (Button command in Descendants(card).OfType<Button>().Where(button => button.IsVisible))
             {
                 double commandRight = command.TranslatePoint(new Point(command.ActualWidth, 0), scroll).X;
@@ -284,10 +313,22 @@ public sealed partial class SettingsThemePreviewTests
             }
         }
 
-        double track = vm.IsCompactLayout ? GalleryRowBuilder.CompactTileTrackWidth : GalleryRowBuilder.TileTrackWidth;
-        int max = vm.IsCompactLayout ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
-        Assert.True(vm.ColumnCount == max || (vm.ColumnCount + 1) * track > scroll.ViewportWidth - 2,
-            $"{label}: {vm.ColumnCount} columns leave room for another card in {scroll.ViewportWidth:0.#} DIP");
+        // Rows of the full column count end one card margin (8 DIPs) short of the right edge.
+        foreach (IGrouping<double, FrameworkElement> row in cards.GroupBy(card => Math.Round(card.TranslatePoint(new Point(), scroll).Y)))
+        {
+            double first = row.Min(card => card.TranslatePoint(new Point(), scroll).X);
+            Assert.Equal(GalleryRowBuilder.CardInset / 2, first, 1);
+            if (row.Count() < vm.ColumnCount) continue;
+            double end = row.Max(card => card.TranslatePoint(new Point(card.ActualWidth, 0), scroll).X) + GalleryRowBuilder.CardInset / 2;
+            Assert.True(Math.Abs(scroll.ViewportWidth - end) < 2,
+                $"{label}: a full row of {row.Count()} cards ends at {end:0.#} in a {scroll.ViewportWidth:0.#}-DIP library");
+        }
+
+        // As many columns as minimum tracks fit beside the reserved scrollbar, and not one more.
+        double usable = scroll.ActualWidth - 16;
+        Assert.True(vm.ColumnCount * track <= usable + 0.5, $"{label}: {vm.ColumnCount} columns do not fit {usable:0.#} DIP");
+        Assert.True(vm.ColumnCount == max || (vm.ColumnCount + 1) * track > usable - 0.5,
+            $"{label}: {vm.ColumnCount} columns leave room for another card in {usable:0.#} DIP");
         GalleryTileRow? fullest = vm.Rows.OfType<GalleryTileRow>().MaxBy(row => row.Tiles.Count);
         if (fullest is not null) Assert.True(fullest.Tiles.Count <= vm.ColumnCount, $"{label}: a row holds more cards than columns");
     }

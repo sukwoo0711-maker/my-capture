@@ -133,10 +133,10 @@
         </DataTemplate>
 
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
-            <!-- A 244px tile plus 6px margins and the item's 2px selection outline occupies the
-                 260px track of GalleryRowBuilder.TileTrackWidth. A narrow window shows fewer
-                 cards per row, down to one, instead of shrinking the image or its action targets. -->
-            <Border Width="244" Height="292" Margin="6"
+            <!-- The card fills its cell of the row (GalleryCardRowPanel) inside 6px margins and the
+                 item's 2px selection outline: 208 to 320 wide, 244 x 292 being the reference size.
+                 Only the preview area grows with it; the image keeps its own proportions. -->
+            <Border x:Name="TileCard" Margin="6"
                     Background="{DynamicResource Surface.Raised}"
                     BorderBrush="{DynamicResource Border.Subtle}"
                     BorderThickness="1"
@@ -225,9 +225,14 @@
                                            FontWeight="SemiBold" />
                             </Border>
 
-                            <StackPanel Orientation="Horizontal"
-                                        HorizontalAlignment="Left" VerticalAlignment="Top"
-                                        Margin="8">
+                            <!-- One top line: on a narrow card the folder name gives way (trimmed)
+                                 instead of the kept and annotation badges overlapping it. -->
+                            <Grid VerticalAlignment="Top" Margin="8" IsHitTestVisible="False">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
                                 <Border Padding="8,4" CornerRadius="6" Margin="0,0,6,0"
                                         Background="{DynamicResource Accent.Default}"
                                         Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
@@ -235,19 +240,19 @@
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource Text.OnAccent}" />
                                 </Border>
-                                <Border x:Name="FolderBadge" Style="{StaticResource Gallery.FolderBadge}" MaxWidth="120">
+                                <Border x:Name="FolderBadge" Grid.Column="1" Style="{StaticResource Gallery.FolderBadge}" MaxWidth="120"
+                                        HorizontalAlignment="Left">
                                     <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource Gallery.FolderBadgeContent}" />
                                 </Border>
-                            </StackPanel>
-                            <Border HorizontalAlignment="Right" VerticalAlignment="Top"
-                                    Margin="8" Padding="8,4" CornerRadius="6"
-                                    Background="{DynamicResource Surface.Floating}"
-                                    BorderBrush="{DynamicResource Border.Subtle}"
-                                    BorderThickness="1"
-                                    Visibility="{Binding HasAnnotations, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="{loc:Text Text_2C64DDA4D878}" FontSize="{StaticResource FontSize.Caption}"
-                                           Foreground="{DynamicResource Text.Secondary}" />
-                            </Border>
+                                <Border Grid.Column="2" Margin="6,0,0,0" Padding="8,4" CornerRadius="6"
+                                        Background="{DynamicResource Surface.Floating}"
+                                        BorderBrush="{DynamicResource Border.Subtle}"
+                                        BorderThickness="1"
+                                        Visibility="{Binding HasAnnotations, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="{loc:Text Text_2C64DDA4D878}" FontSize="{StaticResource FontSize.Caption}"
+                                               Foreground="{DynamicResource Text.Secondary}" />
+                                </Border>
+                            </Grid>
                         </Grid>
                     </Border>
 
@@ -363,10 +368,12 @@
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
             <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="Contained" />
             <Setter Property="ItemTemplate" Value="{StaticResource Gallery.TileTemplate}" />
+            <!-- Equal cells over the row's whole width; the card height follows its width. -->
             <Setter Property="ItemsPanel">
                 <Setter.Value>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
+                        <gallery:GalleryCardRowPanel Columns="{Binding Columns}"
+                                                     BaseCardWidth="244" BaseCardHeight="292" HeightPerWidth="0.8" CardInset="16" />
                     </ItemsPanelTemplate>
                 </Setter.Value>
             </Setter>
@@ -448,13 +455,13 @@
                      MouseDoubleClick="OnTileDoubleClick" />
         </DataTemplate>
 
-        <!-- Inside an opened folder: about 60% of the full card. 148x180 plus 6px margins and the
-             2px selection outline is the 164px track of GalleryRowBuilder.CompactTileTrackWidth,
-             so a folder shows more captures per row. One caption line and the overflow menu stay
-             on the card; float, copy and edit remain on the keyboard, double-click and the details
-             panel. Selection, dragging and the automation name are the full card's. -->
+        <!-- Inside an opened folder: about 60% of the full card (148 x 180 at the reference size),
+             filling its cell of the row from 134 to 209 wide inside 6px margins and the 2px selection
+             outline, so a folder shows more captures per row. One caption line and the overflow menu
+             stay on the card; float, copy and edit remain on the keyboard, double-click and the
+             details panel. Selection, dragging and the automation name are the full card's. -->
         <DataTemplate x:Key="Gallery.CompactTileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
-            <Border Width="148" Height="180" Margin="6"
+            <Border x:Name="CompactTileCard" Margin="6"
                     Background="{DynamicResource Surface.Raised}"
                     BorderBrush="{DynamicResource Border.Subtle}"
                     BorderThickness="1"
@@ -496,16 +503,6 @@
                                       StrokeLineJoin="Round"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
-                            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                    Margin="5" Padding="5,2" CornerRadius="4"
-                                    Background="{DynamicResource Surface.BadgeStrong}"
-                                    IsHitTestVisible="False"
-                                    Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="{Binding DurationCaption}"
-                                           Foreground="{DynamicResource Text.Badge}"
-                                           FontFamily="{StaticResource Font.Mono}"
-                                           FontSize="{StaticResource FontSize.Caption}" />
-                            </Border>
                             <Border HorizontalAlignment="Left" VerticalAlignment="Top"
                                     Margin="5" Padding="6,2" CornerRadius="5"
                                     Background="{DynamicResource Accent.Default}"
@@ -514,12 +511,26 @@
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource Text.OnAccent}" />
                             </Border>
-                            <!-- Only a search inside the folder lists captures of its subfolders. -->
-                            <Border x:Name="FolderBadge" Style="{StaticResource Gallery.FolderBadge}"
-                                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                                    Margin="5" Padding="5,2" CornerRadius="4" MaxWidth="80">
-                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource Gallery.FolderBadgeContent}" />
-                            </Border>
+                            <!-- One bottom line: the folder name (only a search inside the folder lists
+                                 captures of its subfolders) gives way to a video's duration. -->
+                            <Grid VerticalAlignment="Bottom" Margin="5" IsHitTestVisible="False">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="FolderBadge" Style="{StaticResource Gallery.FolderBadge}"
+                                        HorizontalAlignment="Left" Padding="5,2" CornerRadius="4" MaxWidth="80">
+                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource Gallery.FolderBadgeContent}" />
+                                </Border>
+                                <Border Grid.Column="1" Margin="5,0,0,0" Padding="5,2" CornerRadius="4"
+                                        Background="{DynamicResource Surface.BadgeStrong}"
+                                        Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="{Binding DurationCaption}"
+                                               Foreground="{DynamicResource Text.Badge}"
+                                               FontFamily="{StaticResource Font.Mono}"
+                                               FontSize="{StaticResource FontSize.Caption}" />
+                                </Border>
+                            </Grid>
                         </Grid>
                     </Border>
 
@@ -556,6 +567,14 @@
 
         <Style x:Key="Gallery.CompactTileRowList" TargetType="ListBox" BasedOn="{StaticResource Gallery.TileRowList}">
             <Setter Property="ItemTemplate" Value="{StaticResource Gallery.CompactTileTemplate}" />
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate>
+                        <gallery:GalleryCardRowPanel Columns="{Binding Columns}"
+                                                     BaseCardWidth="148" BaseCardHeight="180" HeightPerWidth="1" CardInset="16" />
+                    </ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <DataTemplate x:Key="Gallery.CompactTileRowTemplate" DataType="{x:Type gallery:GalleryTileRow}">
@@ -586,13 +605,12 @@
         <PathGeometry x:Key="LibraryUx.FolderCardShape"
                       Figures="M0,10 A10,10 0 0 1 10,0 L84,0 C90,0 92,3 95,7 L97,10 C99,13 101,14 106,14 L232,14 A12,12 0 0 1 244,26 L244,280 A12,12 0 0 1 232,292 L12,292 A12,12 0 0 1 0,280 Z" />
 
-        <!-- Folder cards use the capture card's 244x292 frame. Their 8-DIP margins match a tile's
-             6-DIP margins plus its 2-DIP selection outline, so folder and capture rows share one
-             column grid for arrow keys. The folder tab, warm Surface.Folder fill, Border.Folder
-             outline and a large folder glyph keep them apart from captures in every palette. -->
+        <!-- Folder cards fill the same cells as capture cards (GalleryCardRowPanel), so they share
+             the capture card's size. Their 8-DIP margins match a tile's 6-DIP margins plus its 2-DIP
+             selection outline, so folder and capture rows share one column grid for arrow keys. The
+             folder tab, warm Surface.Folder fill, Border.Folder outline and a large folder glyph
+             keep them apart from captures in every palette. -->
         <Style x:Key="Gallery.FolderCardButton" TargetType="Button">
-            <Setter Property="Width" Value="244" />
-            <Setter Property="Height" Value="292" />
             <Setter Property="Margin" Value="8" />
             <Setter Property="Padding" Value="12,22,12,12" />
             <Setter Property="Background" Value="{DynamicResource Surface.Folder}" />
@@ -716,17 +734,16 @@
                           Focusable="False">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
+                        <gallery:GalleryCardRowPanel Columns="{Binding Columns}"
+                                                     BaseCardWidth="244" BaseCardHeight="292" HeightPerWidth="0.8" CardInset="16" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
         </DataTemplate>
 
-        <!-- A subfolder inside an opened folder: the compact card's 148x180 frame with the same
-             8-DIP margins as a full folder card, so it keeps the compact column grid. -->
+        <!-- A subfolder inside an opened folder: the compact card's cell with the same 8-DIP
+             margins as a full folder card, so it keeps the compact column grid. -->
         <Style x:Key="Gallery.CompactFolderCardButton" TargetType="Button" BasedOn="{StaticResource Gallery.FolderCardButton}">
-            <Setter Property="Width" Value="148" />
-            <Setter Property="Height" Value="180" />
             <Setter Property="Padding" Value="8,14,8,8" />
         </Style>
 
@@ -794,7 +811,8 @@
                           Focusable="False">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
+                        <gallery:GalleryCardRowPanel Columns="{Binding Columns}"
+                                                     BaseCardWidth="148" BaseCardHeight="180" HeightPerWidth="1" CardInset="16" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>

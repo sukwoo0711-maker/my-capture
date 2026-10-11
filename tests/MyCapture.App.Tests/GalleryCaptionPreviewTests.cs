@@ -214,6 +214,14 @@ public sealed class GalleryCaptionPreviewTests
             foreach (XAttribute handler in copy.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName == "Click").ToArray()) handler.Remove();
             // x:Shared is honoured only in compiled dictionaries; XamlReader rejects it.
             copy.Attribute(x + "Shared")?.Remove();
+            // Product types used as elements (the card row panel) keep the window's
+            // assembly-less namespace; outside the compiled window they need the assembly.
+            foreach (XElement element in copy.DescendantsAndSelf())
+            {
+                if (element.Name.NamespaceName.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal)
+                    && !element.Name.NamespaceName.Contains(";assembly=", StringComparison.Ordinal))
+                    element.Name = XName.Get(element.Name.LocalName, element.Name.NamespaceName + ";assembly=MyCapture");
+            }
             combined.Add(copy);
         }
         window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined.ToString(SaveOptions.DisableFormatting)));

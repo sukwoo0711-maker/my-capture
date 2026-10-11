@@ -299,8 +299,8 @@ public sealed class LibraryUxTests
         f.Add(Now.AddHours(-1));
         await f.Queue.MoveCapturesAsync(filed.Select(record => record.Id), parent.Id);
         GalleryViewModel vm = f.ViewModel();
-        // The default window's content width: two full cards per row.
-        vm.SetColumnCountForWidth(760);
+        // Two full cards per row; four compact cards fit the same width.
+        vm.SetColumnCountForWidth(640);
         Assert.False(vm.IsCompactLayout);
         Assert.Equal(2, vm.ColumnCount);
         Assert.DoesNotContain(vm.Rows, row => row.IsCompact);
@@ -322,7 +322,7 @@ public sealed class LibraryUxTests
         Assert.Equal(6, vm.ColumnCount);
         vm.NavigateTo(CaptureFolderScope.All);
         Assert.False(vm.IsCompactLayout);
-        Assert.Equal(3, vm.ColumnCount);
+        Assert.Equal(4, vm.ColumnCount);
         Assert.DoesNotContain(vm.Rows, row => row.IsCompact);
     }
 

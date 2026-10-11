@@ -12,46 +12,51 @@ namespace MyCapture.App.Gallery;
 /// count actually changes (a "meaningful" width change), not on every pixel of resize.
 /// </para>
 /// <para>
-/// A tile row holds at most <see cref="ColumnCountForWidth"/> tiles: one where two cards would
-/// not fit (the minimum window with the details pane open) and up to 6 on very wide desktops.
-/// Each date group emits one header row followed by however many tile rows its tiles fill; a
-/// partial final row keeps its remaining tiles rather than padding, so selection and keyboard
-/// order stay dense.
+/// A tile row holds at most <see cref="ColumnCountForWidth"/> tiles: as many minimum tracks as
+/// fit, two even at the minimum window with the details pane open. The tracks are fluid:
+/// <see cref="GalleryCardRowPanel"/> divides the row's whole width between them, so the cards grow
+/// until another column fits instead of leaving an empty band. Each date group emits one header
+/// row followed by however many tile rows its tiles fill; a partial final row keeps its remaining
+/// tiles rather than padding, so selection and keyboard order stay dense.
 /// </para>
 /// </remarks>
 public static class GalleryRowBuilder
 {
-    /// <summary>The horizontal track of a full card, used to derive the column count from width.</summary>
+    /// <summary>
+    /// The narrowest track of a full card: a 208-DIP card plus the 16 DIPs around it (a tile's
+    /// 6-DIP margins and 2-DIP selection outline, or a folder card's 8-DIP margins). The column
+    /// count is the number of these that fit; the cards then share the leftover width.
+    /// </summary>
     /// <remarks>
-    /// A tile is 244 wide with a 6-DIP margin and the 2-DIP selection outline on each side (see
-    /// <c>Gallery.TileTemplate</c>); a folder card is the same width with 8-DIP margins. Both
-    /// therefore take 260 DIPs, so folder and capture rows keep one column grid for arrow keys,
-    /// and a row of N cards never needs more than N tracks.
+    /// 208 still fits the card's five commands, and two tracks fit the library at the window's
+    /// minimum width with the details pane open. With two or more columns a card therefore stays
+    /// between 208 and 320 DIPs wide before a further column is added.
     /// </remarks>
-    public const double TileTrackWidth = 260.0;
+    public const double MinTileTrackWidth = 224.0;
 
     /// <summary>
     /// One card per row when two do not fit, so a narrow window never clips a card or its commands.
     /// </summary>
     public const int MinColumns = 1;
 
-    /// <summary>Caps ultra-wide layouts while avoiding the previous large empty right gutter.</summary>
-    public const int MaxColumns = 6;
+    /// <summary>Caps ultra-wide layouts; beyond it the cards keep growing.</summary>
+    public const int MaxColumns = 10;
 
-    /// <summary>The horizontal track of a compact card inside an opened folder.</summary>
+    /// <summary>The narrowest track of a compact card inside an opened folder.</summary>
     /// <remarks>
-    /// A compact tile is 148x180 (about 60% of the 244x292 tile, see
-    /// <c>Gallery.CompactTileTemplate</c>) with 6-DIP margins and the 2-DIP selection outline on
-    /// each side; a compact folder card is the same size with 8-DIP margins. Both therefore take
-    /// 164 DIPs, so folder and capture rows keep one column grid for arrow keys.
+    /// A compact card is at least 134 DIPs wide (about 60% of a full card) plus the same 16 DIPs
+    /// around it, so a folder shows more of its captures per row than the library root does.
     /// </remarks>
-    public const double CompactTileTrackWidth = 164.0;
+    public const double MinCompactTileTrackWidth = 150.0;
 
     /// <summary>The compact grid's cap: about as wide as <see cref="MaxColumns"/> full tiles.</summary>
-    public const int CompactMaxColumns = 10;
+    public const int CompactMaxColumns = 15;
+
+    /// <summary>Space around a card inside its track, both sides together.</summary>
+    public const double CardInset = 16.0;
 
     /// <summary>
-    /// Chooses the column count for a gallery content width: as many whole tracks as fit,
+    /// Chooses the column count for a gallery content width: as many minimum tracks as fit,
     /// clamped to <see cref="MinColumns"/>..<see cref="MaxColumns"/>, or to
     /// <see cref="CompactMaxColumns"/> for the compact cards of an opened folder.
     /// </summary>
@@ -67,7 +72,7 @@ public static class GalleryRowBuilder
             return MinColumns;
         }
 
-        int fit = (int)Math.Floor(availableWidth / (compact ? CompactTileTrackWidth : TileTrackWidth));
+        int fit = (int)Math.Floor(availableWidth / (compact ? MinCompactTileTrackWidth : MinTileTrackWidth));
         return Math.Clamp(fit, MinColumns, compact ? CompactMaxColumns : MaxColumns);
     }
 
@@ -95,7 +100,7 @@ public static class GalleryRowBuilder
             IReadOnlyList<GalleryFolderCardViewModel> folders = group.Folders;
             for (int start = 0; start < folders.Count; start += perRow)
             {
-                rows.Add(new GalleryFolderRow(folders.Skip(start).Take(perRow).ToArray(), compact));
+                rows.Add(new GalleryFolderRow(folders.Skip(start).Take(perRow).ToArray(), compact, perRow));
             }
 
             IReadOnlyList<GalleryItemViewModel> tiles = group.Items;
@@ -108,7 +113,7 @@ public static class GalleryRowBuilder
                     slice.Add(tiles[start + i]);
                 }
 
-                rows.Add(new GalleryTileRow(slice, compact));
+                rows.Add(new GalleryTileRow(slice, compact, perRow));
             }
         }
 
