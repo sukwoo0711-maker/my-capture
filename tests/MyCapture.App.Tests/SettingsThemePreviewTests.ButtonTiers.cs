@@ -113,14 +113,31 @@ public sealed partial class SettingsThemePreviewTests
                         Border on = Assert.IsType<Border>(enabled.Template.FindName("Chrome", enabled));
                         Border off = Assert.IsType<Border>(disabled.Template.FindName("Chrome", disabled));
 
-                        // Same shape: fill, border colour and thickness do not change when disabled.
-                        Assert.True(Same(on.Background, off.Background), $"{label}: disabled fill changed");
-                        Assert.True(Same(on.BorderBrush, off.BorderBrush), $"{label}: disabled border changed");
+                        ThemeColor page = PageSurface(theme, Token("Surface.Raised"), Token("Surface.Base"));
                         Assert.Equal(on.BorderThickness, off.BorderThickness);
-                        // Only fades, by the one shared amount.
                         Assert.Equal(1, enabled.Opacity, 3);
-                        Assert.Equal(0.46, disabled.Opacity, 3);
-                        Assert.True(Same(enabled.Foreground, disabled.Foreground), $"{label}: disabled label colour changed");
+                        double disabledFilledRatio = double.NaN;
+                        if (tier == ButtonTier.Filled)
+                        {
+                            // Like WinUI's disabled accent button the fill stays but turns neutral
+                            // with disabled text: a faded accent fill left its ink caption and
+                            // shortcut near 2:1 on dark themes. It must stay readable (3:1).
+                            Assert.Equal(Wpf(Token("Surface.Overlay")), ColorOf(off.Background));
+                            Assert.Equal(Wpf(Token("Surface.Overlay")), ColorOf(off.BorderBrush));
+                            Assert.Equal(1, disabled.Opacity, 3);
+                            Assert.Equal(Wpf(Token("Text.Disabled")), ColorOf(disabled.Foreground));
+                            disabledFilledRatio = ThemeContrast.Ratio(Theme(ColorOf(disabled.Foreground)), Over(Theme(ColorOf(off.Background)), page));
+                            Assert.True(disabledFilledRatio >= 3, $"{label}: disabled label contrast {disabledFilledRatio:0.00}");
+                        }
+                        else
+                        {
+                            // Same shape: fill, border colour and thickness do not change when disabled.
+                            Assert.True(Same(on.Background, off.Background), $"{label}: disabled fill changed");
+                            Assert.True(Same(on.BorderBrush, off.BorderBrush), $"{label}: disabled border changed");
+                            // Only fades, by the one shared amount.
+                            Assert.Equal(0.46, disabled.Opacity, 3);
+                            Assert.True(Same(enabled.Foreground, disabled.Foreground), $"{label}: disabled label colour changed");
+                        }
 
                         Color fill = ColorOf(on.Background);
                         Color border = ColorOf(on.BorderBrush);
@@ -140,11 +157,12 @@ public sealed partial class SettingsThemePreviewTests
                         }
 
                         // Contrast of the label (and the border of the bordered tier) on the page surface.
-                        ThemeColor page = PageSurface(theme, Token("Surface.Raised"), Token("Surface.Base"));
                         ThemeColor background = tier == ButtonTier.Borderless ? page : Over(Theme(fill), page);
                         ThemeColor text = Theme(ColorOf(enabled.Foreground));
                         double enabledRatio = ThemeContrast.Ratio(text, background);
-                        double disabledRatio = ThemeContrast.Ratio(Fade(text, page), Fade(background, page));
+                        double disabledRatio = tier == ButtonTier.Filled
+                            ? disabledFilledRatio
+                            : ThemeContrast.Ratio(Fade(text, page), Fade(background, page));
                         double borderRatio = tier == ButtonTier.Bordered ? ThemeContrast.Ratio(Over(Theme(border), page), page) : double.NaN;
                         if (style != "Button.Danger")
                             Assert.True(enabledRatio >= 4.5, $"{label}: label contrast {enabledRatio:0.00}");

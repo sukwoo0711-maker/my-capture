@@ -100,8 +100,9 @@
     <!--   Secondary (Button.Secondary, the base, Button.Compact) bordered.               -->
     <!--   Tool      (Button.Ghost, GhostCompact, Icon, Danger) borderless; hover only    -->
     <!--             washes the background, so no border ever appears or disappears.      -->
-    <!--   Disabled keeps each tier's shape (fill, border or none) and only fades the      -->
-    <!--   whole button by Button.DisabledOpacity, the same amount in every tier.          -->
+    <!--   Disabled keeps each tier's shape (fill, border or none). Bordered and tool      -->
+    <!--   tiers fade by Button.DisabledOpacity; the filled tier keeps its fill but turns  -->
+    <!--   neutral (Surface.Overlay + Text.Disabled), as WinUI does, so it stays readable. -->
     <!--   Focus: recolour border to accent + fade in inset focus ring. Thickness fixed.   -->
     <!-- ============================================================= -->
     <sys:Double x:Key="Button.DisabledOpacity">0.46</sys:Double>
@@ -208,8 +209,13 @@
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                         </Trigger>
+                        <!-- Like WinUI's disabled accent button: the fill stays but turns neutral
+                             with disabled text. Fading the accent fill made its ink-on-accent
+                             caption and shortcut drop to about 2:1 on dark themes. -->
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="{StaticResource Button.DisabledOpacity}" />
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Overlay}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Surface.Overlay}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.Disabled}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
                     </ControlTemplate.Triggers>
