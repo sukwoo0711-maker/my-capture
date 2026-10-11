@@ -20,7 +20,7 @@ env:
 
 jobs:
   packaged-validation:
-    name: Exact-source package and seven native self-tests
+    name: Exact-source package and eight native self-tests
     runs-on: windows-latest
     timeout-minutes: 120
     defaults:
@@ -108,7 +108,7 @@ jobs:
           }
           finally { Stop-Transcript | Out-Null }
 
-      - name: Verify release provenance and preserve seven reports
+      - name: Verify release provenance and preserve eight reports
         run: |
           $ErrorActionPreference = 'Stop'
           $head = git rev-parse HEAD

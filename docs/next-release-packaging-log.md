@@ -30,3 +30,9 @@ working directory: `C:\GitRepositories\my-capture\.claude\worktrees\agent-a49140
 최종 fixture는 8종 정의/정상 evidence/누락 hotfix-ux/비0 exit/미관측 exit/중복 RESULT/변조 보고서/변조 JSON/중복 inventory/동일 버전 stale SHA/dirty provenance/잘못된 architecture/version/변조 payload/추가 파일을 확인한다. 테스트는 별도 로컬 합성 Git repository만 만들고 모든 자료를 보존한다.
 
 구현·fixture 검증은 완료됐으며 실제 publish/8종 앱 실행·독립 검토·통합·Store 제출은 아직 완료되지 않았다.
+
+## 독립 검토 후 계약 테스트 수정
+
+검토자 `/root/library_motion`이 기존 `ReleaseVersionContractTests`에서 8종 literal을 runner 본문에서 찾는 회귀를 확인했다. 단일 정의 파일에서 동일한 8개 switch를 검사하도록 옮기고 runner의 dot-source/Get-PackagedSelfTests 연결 assertion을 추가했다. 기존 exit 0·handle 보존·exit 미관측 거부·정확한 단일 RESULT: PASS·전체 pass count assertion은 유지했다. workflow의 잔여 `seven` 두 레이블도 `eight`로 수정했다. 다른 correctness finding은 없었으며 실제 publish/앱 실행은 총괄 보류 지시를 유지했다.
+
+동일 working directory에서 `dotnet test tests/MyCapture.Core.Tests/MyCapture.Core.Tests.csproj -c Release --filter FullyQualifiedName~ReleaseVersionContractTests --logger "trx;LogFileName=packaging-contract.trx" --results-directory artifacts/validation/packaging-core-contract` 실행: **PASS, exit 0, 9/9 passed, failed 0, skipped 0**. TRX counters를 직접 대조했다. WPF build·전체 테스트·StoreOnly 실행은 하지 않았다. `git diff --check`도 exit 0이다.
