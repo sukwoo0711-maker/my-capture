@@ -239,6 +239,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 다음 배포 브랜치를 최종 main3994219 이력과 연결한 5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18 완료(exit0, clean). 직전02f073d와 작업 파일/인덱스 diff 모두 exit0, tree SHA247976680015a6fe420c2f70be4bbdc89a2b36d3 동일. 직전 main 테스트 fixture 통합 뒤 Release 테스트 프로젝트 빌드 및 LibraryColumns 집중검사2/2 PASS(exit0, actual session93636). 최종 이력 연결은 파일 내용 변경이 없어 검사를 중복 실행하지 않음.
 - 2026-10-12 Codex: `Get-Process MyCapture`로 사용자 QA6 PID55532 및 경로 재확인(exit0). 종료 허용 질문은 아직 응답 대기이며 앱을 보존함. 8종 packaged selftest, MSIX 생성/업로드/심사 제출, 다음 StoreOnly 실경로 검증은 NOT RUN(exitN/A, §5 앱 종료 금지와 runner의 앱 부재 사전조건). Partner Center에는 새 한/영 설명이 저장된 Submission4 초안이 있으며 공개 버전은4.0.3.0. 배포 source3994219와 artifact provenance를 유지하도록 현재 상태 문서만 별도 chore/store-4.1.0-handoff 브랜치에 기록함.
 
+- 2026-10-12 Codex: 사용자가 직전 QA6 앱 종료 및 배포 재개 질문에 “진행해”로 승인함. 재개 시 Get-Process MyCapture 조회에서 실행 프로세스가 없어 종료 명령 없이 선행 조건 충족을 확인함. release/store-4.1.0의 exact source3994219로 돌아가 8종 패키지 자체검사와 MSIX/Store 제출을 진행함.
+
 ## 9. 인계 체크리스트
 
 **넘기는 쪽 (현재 오케스트레이터)**
