@@ -14,7 +14,8 @@ internal sealed record AdvancedSelection(
     RectD Region,
     string SourceTitle,
     bool RecordForRepeat = false,
-    string SourcePageUrl = "");
+    string SourcePageUrl = "",
+    CaptureSourceDetails? SourceDetails = null);
 
 /// <summary>Platform and WPF seams used by the deterministic advanced-mode orchestration.</summary>
 internal interface IAdvancedCaptureEnvironment
@@ -36,6 +37,12 @@ internal interface IAdvancedCaptureEnvironment
 
     Task<BrowserDocumentSnapshot?> ReadSourceDocumentAsync(WindowUnderCursor? window) =>
         Task.FromResult(ReadSourceDocument(window));
+
+    /// <summary>Optional application and Explorer folder of a window; absence never prevents capture.</summary>
+    WindowSourceSnapshot? ReadWindowSource(WindowUnderCursor? window) => null;
+
+    Task<WindowSourceSnapshot?> ReadWindowSourceAsync(WindowUnderCursor? window) =>
+        Task.FromResult(ReadWindowSource(window));
 
     /// <summary>Resolves a stored region against the current display topology.</summary>
     RectD? ResolveRepeatRegion(RegionHistoryEntry entry);
@@ -75,6 +82,12 @@ internal sealed class AdvancedCaptureService
         _delay = delay ?? Task.Delay;
     }
 
+    /// <summary>
+    /// Captures the whole monitor under the cursor without a source. Like the selector's full-screen
+    /// button and a desktop click, a monitor image usually shows several windows, and the cursor's
+    /// position when the shortcut was pressed says nothing about which of them the user meant. A
+    /// window title, page link or folder attached by that guess would mislead later, so none is kept.
+    /// </summary>
     public CaptureOutcome CaptureFullScreen()
     {
         if (BusyOutcome() is { } busy)
@@ -84,15 +97,9 @@ internal sealed class AdvancedCaptureService
 
         try
         {
-            PointD cursor = _environment.CursorPosition;
-            WindowUnderCursor? window = _environment.WindowAt(cursor);
-            BrowserDocumentSnapshot? before = ReadDocument(window);
             FrozenFrame frame = _environment.CaptureMonitorUnderCursor();
-            BrowserDocumentSnapshot? after = frame.ScreenBounds.Contains(cursor)
-                ? ReadCurrentDocument(window, cursor) : null;
             var region = new RectD(0, 0, frame.PixelWidth, frame.PixelHeight);
-            return Open(new AdvancedSelection(frame, region, window?.Title ?? string.Empty,
-                SourcePageUrl: StableUrl(before, after)));
+            return Open(new AdvancedSelection(frame, region, string.Empty));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -121,11 +128,14 @@ internal sealed class AdvancedCaptureService
             }
 
             BrowserDocumentSnapshot? before = ReadDocument(window);
+            WindowSourceSnapshot? sourceBefore = ReadSource(window);
             FrozenFrame frame = _environment.CaptureScreenRegion(window.ScreenBounds);
             BrowserDocumentSnapshot? after = ReadCurrentDocument(window, frame.ScreenBounds.Center,
                 frame.ScreenBounds);
+            WindowSourceSnapshot? sourceAfter = ReadCurrentSource(window, frame.ScreenBounds.Center);
             var region = new RectD(0, 0, frame.PixelWidth, frame.PixelHeight);
-            return Open(new AdvancedSelection(frame, region, window.Title, SourcePageUrl: StableUrl(before, after)));
+            return Open(new AdvancedSelection(frame, region, window.Title, SourcePageUrl: StableUrl(before, after),
+                SourceDetails: StableSource(window, sourceBefore, sourceAfter)));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -152,6 +162,7 @@ internal sealed class AdvancedCaptureService
             PointD cursor = _environment.CursorPosition;
             WindowUnderCursor? window = _environment.WindowAt(cursor);
             BrowserDocumentSnapshot? before = ReadDocument(window);
+            WindowSourceSnapshot? sourceBefore = ReadSource(window);
             FrozenFrame frame = _environment.CaptureMonitorUnderCursor();
             RectD? placement = FixedRegionPlanner.PlaceAtCursor(width, height, cursor, frame.ScreenBounds);
             if (placement is null)
@@ -161,10 +172,12 @@ internal sealed class AdvancedCaptureService
 
             RectD region = frame.ToBitmapSpace(placement.Value);
             BrowserDocumentSnapshot? after = ReadCurrentDocument(window, placement.Value.Center, placement.Value);
+            WindowSourceSnapshot? sourceAfter = region.IsEmpty ? null : ReadCurrentSource(window, placement.Value.Center);
             return region.IsEmpty
                 ? CaptureOutcome.NothingToCapture(UiText.Get("Text_E2B271067CCF"))
                 : Open(new AdvancedSelection(frame, region, window?.Title ?? string.Empty,
-                    SourcePageUrl: StableUrl(before, after)));
+                    SourcePageUrl: StableUrl(before, after),
+                    SourceDetails: StableSource(window, sourceBefore, sourceAfter)));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -198,12 +211,15 @@ internal sealed class AdvancedCaptureService
 
             WindowUnderCursor? window = _environment.WindowAt(resolved.Value.Center);
             BrowserDocumentSnapshot? before = ReadDocument(window);
+            WindowSourceSnapshot? sourceBefore = ReadSource(window);
             FrozenFrame frame = _environment.CaptureScreenRegion(resolved.Value);
             BrowserDocumentSnapshot? after = ReadCurrentDocument(window, frame.ScreenBounds.Center,
                 frame.ScreenBounds);
+            WindowSourceSnapshot? sourceAfter = ReadCurrentSource(window, frame.ScreenBounds.Center);
             var region = new RectD(0, 0, frame.PixelWidth, frame.PixelHeight);
             return Open(new AdvancedSelection(frame, region, window?.Title ?? string.Empty,
-                SourcePageUrl: StableUrl(before, after)));
+                SourcePageUrl: StableUrl(before, after),
+                SourceDetails: StableSource(window, sourceBefore, sourceAfter)));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -254,6 +270,7 @@ internal sealed class AdvancedCaptureService
             try { window = _environment.WindowAt(region.Center); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { window = null; }
             var source = new ScrollingSource(window?.Handle == targetWindow ? window : null);
+            source.SourceBefore = await ReadSourceAsync(source.Window, region, cancellation);
             ScrollFrame seed = ScrollFrameBridge.ToScrollFrame(
                 await CaptureScrollingFrameAsync(region, source, cancellation));
             ScrollAppendResult seeded = stitcher.Append(seed);
@@ -278,7 +295,8 @@ internal sealed class AdvancedCaptureService
                             stitcher,
                             UiText.Get("Text_257BE22416F8"),
                             cancellation,
-                            source.Url);
+                            source,
+                            region);
                 }
 
                 await _delay(DefaultSettleDelay, cancellation);
@@ -352,7 +370,7 @@ internal sealed class AdvancedCaptureService
             }
 
             cancellation.ThrowIfCancellationRequested();
-            return await OpenVerifiedPartialAsync(stitcher, completionMessage, cancellation, source.Url);
+            return await OpenVerifiedPartialAsync(stitcher, completionMessage, cancellation, source, region);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -372,12 +390,18 @@ internal sealed class AdvancedCaptureService
         return stitcher.Append(ScrollFrameBridge.ToScrollFrame(shot));
     }
 
-    private Task<CaptureOutcome> OpenVerifiedPartialAsync(
+    private async Task<CaptureOutcome> OpenVerifiedPartialAsync(
         ScrollStitcher stitcher,
         string completionMessage,
         CancellationToken cancellation,
-        string sourcePageUrl)
+        ScrollingSource source,
+        RectD region)
     {
+        cancellation.ThrowIfCancellationRequested();
+        // The application and folder seen before the first frame must still hold after the last one.
+        WindowSourceSnapshot? sourceAfter = source.SourceBefore is null
+            ? null : await ReadSourceAsync(source.Window, region, cancellation);
+        CaptureSourceDetails sourceDetails = StableSource(source.Window, source.SourceBefore, sourceAfter);
         cancellation.ThrowIfCancellationRequested();
         ScrollFrame image = stitcher.ToImage();
         BitmapSource stitched = ScrollFrameBridge.ToBitmap(image);
@@ -390,11 +414,47 @@ internal sealed class AdvancedCaptureService
             0);
         var resultRegion = new RectD(0, 0, stitched.PixelWidth, stitched.PixelHeight);
         CaptureOutcome opened = Open(new AdvancedSelection(resultFrame, resultRegion, string.Empty,
-            SourcePageUrl: sourcePageUrl));
-        return Task.FromResult(opened.IsCompleted && !string.IsNullOrWhiteSpace(completionMessage)
+            SourcePageUrl: source.Url, SourceDetails: sourceDetails));
+        return opened.IsCompleted && !string.IsNullOrWhiteSpace(completionMessage)
             ? CaptureOutcome.Completed(completionMessage)
-            : opened);
+            : opened;
     }
+
+    private WindowSourceSnapshot? ReadSource(WindowUnderCursor? window)
+    {
+        if (window is null || window.ProcessId == 0 || window.Handle == IntPtr.Zero) return null;
+        try { return ValidateSource(window, _environment.ReadWindowSource(window)); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+    }
+
+    /// <summary>
+    /// Application and folder follow the window the title names, so unlike the page link they do not
+    /// require the captured region to stay inside that window; the window itself must not change.
+    /// </summary>
+    private WindowSourceSnapshot? ReadCurrentSource(WindowUnderCursor? expected, PointD point) =>
+        WindowStillMatches(expected, point, containedRegion: null) ? ReadSource(expected) : null;
+
+    private async Task<WindowSourceSnapshot?> ReadSourceAsync(WindowUnderCursor? expected, RectD region,
+        CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        if (!WindowStillMatches(expected, region.Center, containedRegion: null)) return null;
+        try
+        {
+            WindowSourceSnapshot? source = await _environment.ReadWindowSourceAsync(expected);
+            cancellation.ThrowIfCancellationRequested();
+            return ValidateSource(expected!, source);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+    }
+
+    private static WindowSourceSnapshot? ValidateSource(WindowUnderCursor window, WindowSourceSnapshot? source) =>
+        source is not null && source.ProcessId == window.ProcessId ? source : null;
+
+    private static CaptureSourceDetails StableSource(WindowUnderCursor? window, WindowSourceSnapshot? before,
+        WindowSourceSnapshot? after) =>
+        window is null ? CaptureSourceDetails.Empty : WindowSourceService.StableDetails(before, after, window.ProcessId);
 
     private BrowserDocumentSnapshot? ReadDocument(WindowUnderCursor? window)
     {
@@ -464,6 +524,7 @@ internal sealed class AdvancedCaptureService
     private sealed class ScrollingSource(WindowUnderCursor? window)
     {
         internal WindowUnderCursor? Window { get; } = window;
+        internal WindowSourceSnapshot? SourceBefore { get; set; }
         internal bool IsStable { get; private set; } = window is { ProcessId: > 0 };
         private BrowserDocumentSnapshot? _document;
         internal string Url => IsStable ? SourcePageUrl.Normalize(_document?.Url) : string.Empty;

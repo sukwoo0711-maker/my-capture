@@ -6,14 +6,25 @@ namespace MyCapture.App.Capture;
 /// <summary>Brackets the pixel acquisition, so selection never reads a later live browser tab.</summary>
 internal static class CapturePageContext
 {
+    /// <param name="readSources">
+    /// Optional application/folder reader. It runs beside the page reader, before and after the pixels,
+    /// and only values both reads agree on are kept (<see cref="WindowSourceService.StableDetails"/>).
+    /// </param>
     internal static async Task<(FrozenFrame Frame, IReadOnlyList<WindowCandidate> Windows)> AcquireAsync(
         IReadOnlyList<WindowCandidate> candidates, Func<FrozenFrame> acquireFrame,
         Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> read,
-        Func<IReadOnlyList<WindowCandidate>>? refreshCandidates = null)
+        Func<IReadOnlyList<WindowCandidate>>? refreshCandidates = null,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? readSources = null)
     {
         WindowCandidate[] original = candidates.ToArray();
         WindowCandidate[] probeCandidates = GetUrlCandidates(original);
-        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> before = await ReadSafeAsync(read, probeCandidates).ConfigureAwait(false);
+        Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> beforePages = ReadSafeAsync(read, probeCandidates);
+        Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>> beforeSourcesRead = readSources is null
+            ? Task.FromResult(NoSources)
+            : ReadSafeAsync(readSources, probeCandidates);
+        await Task.WhenAll(beforePages, beforeSourcesRead).ConfigureAwait(false);
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> before = await beforePages.ConfigureAwait(false);
+        IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> beforeSources = await beforeSourcesRead.ConfigureAwait(false);
         (FrozenFrame frame, bool stableWindows) = await Task.Run(() =>
         {
             // UIA can take long enough for a window to move or another surface to rise.
@@ -31,14 +42,37 @@ internal static class CapturePageContext
         WindowCandidate[] afterCandidates = stableWindows
             ? probeCandidates.Where(candidate => before.ContainsKey(candidate.Handle)).ToArray()
             : [];
-        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> after = afterCandidates.Length == 0
-            ? new Dictionary<IntPtr, BrowserDocumentSnapshot>()
-            : await ReadSafeAsync(read, afterCandidates).ConfigureAwait(false);
+        WindowCandidate[] afterSourceCandidates = stableWindows && readSources is not null
+            ? probeCandidates.Where(candidate => beforeSources.ContainsKey(candidate.Handle)).ToArray()
+            : [];
+        Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> afterPages = afterCandidates.Length == 0
+            ? Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>())
+            : ReadSafeAsync(read, afterCandidates);
+        Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>> afterSourcesRead = afterSourceCandidates.Length == 0
+            ? Task.FromResult(NoSources)
+            : ReadSafeAsync(readSources!, afterSourceCandidates);
+        await Task.WhenAll(afterPages, afterSourcesRead).ConfigureAwait(false);
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> after = await afterPages.ConfigureAwait(false);
+        IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> afterSources = await afterSourcesRead.ConfigureAwait(false);
         WindowCandidate[] frozen = original.Select(candidate => candidate with
         {
-            SourcePageUrl = stableWindows ? StableUrl(candidate, before, after) : string.Empty
+            SourcePageUrl = stableWindows ? StableUrl(candidate, before, after) : string.Empty,
+            Source = readSources is null ? candidate.Source
+                : stableWindows ? StableSource(candidate, beforeSources, afterSources) : null,
         }).ToArray();
         return (frame, frozen);
+    }
+
+    private static readonly IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> NoSources =
+        new Dictionary<IntPtr, WindowSourceSnapshot>();
+
+    internal static CaptureSourceDetails? StableSource(WindowCandidate candidate,
+        IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> before,
+        IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> after)
+    {
+        CaptureSourceDetails details = WindowSourceService.StableDetails(before.GetValueOrDefault(candidate.Handle),
+            after.GetValueOrDefault(candidate.Handle), candidate.ProcessId);
+        return details.IsEmpty ? null : details;
     }
 
     private static WindowCandidate[] GetUrlCandidates(WindowCandidate[] candidates)
@@ -85,13 +119,13 @@ internal static class CapturePageContext
         return true;
     }
 
-    private static async Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> ReadSafeAsync(
-        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> read,
+    private static async Task<IReadOnlyDictionary<IntPtr, T>> ReadSafeAsync<T>(
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, T>>> read,
         IReadOnlyList<WindowCandidate> candidates)
     {
         try { return await read(candidates).ConfigureAwait(false); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { return new Dictionary<IntPtr, BrowserDocumentSnapshot>(); }
+        { return new Dictionary<IntPtr, T>(); }
     }
 
     internal static string StableUrl(WindowCandidate candidate,

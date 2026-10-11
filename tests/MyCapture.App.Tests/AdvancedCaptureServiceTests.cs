@@ -137,7 +137,8 @@ public sealed class AdvancedCaptureServiceTests
         Assert.Equal(CaptureOutcomeKind.Completed, result.Kind);
         Assert.Equal(new RectD(0, 0, 300, 200), env.LastSelection!.Region);
         Assert.False(env.LastSelection.RecordForRepeat);
-        Assert.Equal("매출.xlsx - Excel", env.LastSelection.SourceTitle);
+        // A monitor image has no single source window, the same as the selector's full-screen button.
+        Assert.Equal(string.Empty, env.LastSelection.SourceTitle);
         Assert.Equal(0, store.Count);
     });
 

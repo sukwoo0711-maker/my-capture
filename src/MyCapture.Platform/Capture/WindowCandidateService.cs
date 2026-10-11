@@ -8,8 +8,10 @@ namespace MyCapture.Platform.Capture;
 
 /// <summary>A visible top-level window in virtual-desktop physical pixels.</summary>
 /// <param name="ClassName">Registered window class (GetClassName), used to recognise the desktop shell.</param>
+/// <param name="Source">Application and folder observed around the frozen frame; null when unknown.</param>
 public sealed record WindowCandidate(IntPtr Handle, RectD ScreenBounds, string Title = "",
-    string SourcePageUrl = "", uint ProcessId = 0, string ClassName = "");
+    string SourcePageUrl = "", uint ProcessId = 0, string ClassName = "",
+    MyCapture.Core.Capture.CaptureSourceDetails? Source = null);
 
 /// <summary>
 /// Snap candidates captured before the selection overlay appears. EnumWindows returns
@@ -91,26 +93,33 @@ public sealed class WindowCandidateService
     /// intersecting window. Never query the live foreground window after selection.
     /// The desktop shell's own caption ("Program Manager") is never a source title.
     /// </summary>
-    public static string ResolveSourceTitle(IReadOnlyList<WindowCandidate> candidates, RectD selection)
+    public static string ResolveSourceTitle(IReadOnlyList<WindowCandidate> candidates, RectD selection) =>
+        ResolveSourceWindow(candidates, selection)?.Title ?? string.Empty;
+
+    /// <summary>
+    /// The window whose title <see cref="ResolveSourceTitle"/> reports. Its application and folder are
+    /// the capture's source as well, so title, application and folder always describe one window.
+    /// </summary>
+    public static WindowCandidate? ResolveSourceWindow(IReadOnlyList<WindowCandidate> candidates, RectD selection)
     {
         RectD region = selection.Normalized();
-        if (region.IsEmpty) return string.Empty;
-        string title = string.Empty;
+        if (region.IsEmpty) return null;
+        WindowCandidate? source = null;
         double largestArea = 0;
         foreach (WindowCandidate candidate in candidates)
         {
             if (string.IsNullOrWhiteSpace(candidate.Title) || IsDesktopShell(candidate, candidates)) continue;
             RectD overlap = Intersect(candidate.ScreenBounds, region);
             if (overlap.IsEmpty) continue;
-            if (candidate.ScreenBounds.Contains(region.Center)) return candidate.Title;
+            if (candidate.ScreenBounds.Contains(region.Center)) return candidate;
             double area = overlap.Width * overlap.Height;
             if (area > largestArea)
             {
                 largestArea = area;
-                title = candidate.Title;
+                source = candidate;
             }
         }
-        return title;
+        return source;
     }
 
     /// <summary>URL attribution requires the frontmost window at the selection centre, even if untitled.</summary>

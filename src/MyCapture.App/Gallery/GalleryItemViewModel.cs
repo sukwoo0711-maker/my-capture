@@ -155,6 +155,36 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public bool HasSourcePageUrl => SourcePageUrl.Length > 0;
 
+    /// <summary>
+    /// Whether the details panel shows a source section. Videos have no capture-time source; their
+    /// stored window title is the generic recording label, not a window.
+    /// </summary>
+    public bool HasSource => IsImage && (HasSourceApp || HasSourceWindowTitle || HasSourcePageUrl || HasSourceDocumentPath);
+
+    public string SourceAppName => IsImage ? Record.SourceDetails.AppName : string.Empty;
+
+    public bool HasSourceApp => SourceAppName.Length > 0;
+
+    /// <summary>Executable path, offered as the application line's tooltip.</summary>
+    public string SourceAppPath => IsImage ? Record.SourceDetails.AppPath : string.Empty;
+
+    /// <summary>Null rather than empty, so a record without a path shows no empty tooltip.</summary>
+    public string? SourceAppToolTip => SourceAppPath.Length > 0 ? SourceAppPath : null;
+
+    public string SourceAppAutomationName => HasSourceApp ? UiText.Format("Library.Source.AppAccessible", SourceAppName) : string.Empty;
+
+    public string SourceWindowTitle => IsImage ? (Record.SourceWindowTitle ?? string.Empty).Trim() : string.Empty;
+
+    public bool HasSourceWindowTitle => SourceWindowTitle.Length > 0;
+
+    public string SourceWindowTitleAutomationName =>
+        HasSourceWindowTitle ? UiText.Format("Library.Source.WindowAccessible", SourceWindowTitle) : string.Empty;
+
+    /// <summary>The folder or file the window showed. A page link, when present, is the location shown instead.</summary>
+    public string SourceDocumentPath => IsImage && !HasSourcePageUrl ? Record.SourceDetails.DocumentPath : string.Empty;
+
+    public bool HasSourceDocumentPath => SourceDocumentPath.Length > 0;
+
     public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
 
     /// <summary>The single line under a compact card: its caption, else the capture time.</summary>
@@ -258,6 +288,17 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(TagsCaption));
         Raise(nameof(SourcePageUrl));
         Raise(nameof(HasSourcePageUrl));
+        Raise(nameof(HasSource));
+        Raise(nameof(SourceAppName));
+        Raise(nameof(HasSourceApp));
+        Raise(nameof(SourceAppPath));
+        Raise(nameof(SourceAppToolTip));
+        Raise(nameof(SourceAppAutomationName));
+        Raise(nameof(SourceWindowTitle));
+        Raise(nameof(HasSourceWindowTitle));
+        Raise(nameof(SourceWindowTitleAutomationName));
+        Raise(nameof(SourceDocumentPath));
+        Raise(nameof(HasSourceDocumentPath));
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));

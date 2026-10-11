@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Interop;
 using MyCapture.App.Themes;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
@@ -313,13 +314,17 @@ internal sealed class CaptureOverlayWindow : Window
         System.Windows.Media.Imaging.BitmapSource crop = ScreenCaptureEngine.Crop(frame, bitmapRegion);
         var selectedScreenRegion = new RectD(_screenBounds.Left + bitmapRegion.Left, _screenBounds.Top + bitmapRegion.Top,
             bitmapRegion.Width, bitmapRegion.Height);
-        string sourceTitle = WindowCandidateService.ResolveSourceTitle(SourceWindows, selectedScreenRegion);
+        WindowCandidate? sourceWindow = WindowCandidateService.ResolveSourceWindow(SourceWindows, selectedScreenRegion);
+        string sourceTitle = sourceWindow?.Title ?? string.Empty;
         string sourcePageUrl = WindowCandidateService.ResolveSourcePageUrl(SourceWindows, selectedScreenRegion);
+        // Application and folder always come from the same window as the title.
+        CaptureSourceDetails sourceDetails = sourceWindow?.Source ?? CaptureSourceDetails.Empty;
         if (wholeMonitor)
         {
             // The full-screen button, like a desktop click, captures a monitor rather than a window.
             sourceTitle = string.Empty;
             sourcePageUrl = string.Empty;
+            sourceDetails = CaptureSourceDetails.Empty;
         }
         else if (detectedWindow is not null)
         {
@@ -333,11 +338,13 @@ internal sealed class CaptureOverlayWindow : Window
                 // window that happens to cover the monitor centre is that capture's source.
                 sourceTitle = string.Empty;
                 sourcePageUrl = string.Empty;
+                sourceDetails = CaptureSourceDetails.Empty;
             }
             else if (!string.IsNullOrWhiteSpace(window.Title))
             {
                 sourceTitle = window.Title;
                 sourcePageUrl = MyCapture.Core.Capture.SourcePageUrl.Normalize(window.SourcePageUrl);
+                sourceDetails = window.Source ?? CaptureSourceDetails.Empty;
             }
         }
 
@@ -352,6 +359,7 @@ internal sealed class CaptureOverlayWindow : Window
                     sourcePageUrl: sourcePageUrl)
                 {
                     TextCapture = textCapture,
+                    SourceDetails = sourceDetails,
                 });
         }
         finally
@@ -444,6 +452,17 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
     internal string SourceTitle { get; }
 
     internal string SourcePageUrl { get; }
+
+    /// <summary>Application and folder of the window the title came from; empty when unknown.</summary>
+    internal CaptureSourceDetails SourceDetails
+    {
+        get => _sourceDetails;
+        init => _sourceDetails = value is null
+            ? CaptureSourceDetails.Empty
+            : CaptureSourceDetails.Create(value.AppName, value.AppPath, value.DocumentPath);
+    }
+
+    private readonly CaptureSourceDetails _sourceDetails = CaptureSourceDetails.Empty;
 
     /// <summary>
     /// The selection was made in text capture mode: recognise and copy its text instead of

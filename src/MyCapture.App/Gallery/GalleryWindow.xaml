@@ -1669,15 +1669,40 @@
 <StackPanel DataContext="{Binding SingleSelectedTile}"><StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></StackPanel.Style>
 <Border Height="136" Background="{DynamicResource Surface.Sunken}" CornerRadius="8"><Image x:Name="SelectedDetailThumbnail" Source="{Binding Thumbnail}" Stretch="Uniform" AutomationProperties.Name="{Binding AccessibleName}" /></Border>
 <TextBlock Text="{Binding ContextLabel}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,14,0,8" /><TextBlock Text="{Binding TagsCaption}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Secondary}" Margin="0,0,0,8" /><Button Content="{loc:Text Library.Organize.Action}" Style="{StaticResource Button.Secondary}" Click="OnOrganizeClick" ToolTip="F2" Margin="0,0,0,12" />
-<StackPanel Visibility="{Binding HasSourcePageUrl, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,14">
-    <TextBlock Text="{loc:Text Library.SourcePage.Label}" FontWeight="SemiBold" Margin="0,0,0,6" />
-    <TextBox Text="{Binding SourcePageUrl, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="104"
-             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-             AutomationProperties.Name="{loc:Text Library.SourcePage.Label}" />
-    <WrapPanel Margin="0,6,0,0">
-        <Button Content="{loc:Text Library.SourcePage.Open}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourcePageClick" Margin="0,0,6,6" />
-        <Button Content="{loc:Text Library.SourcePage.Copy}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePageClick" Margin="0,0,0,6" />
-    </WrapPanel>
+<!-- Source: the app and window a capture came from, and its web page or folder when known. -->
+<StackPanel AutomationProperties.AutomationId="LibrarySourceSection" AutomationProperties.Name="{loc:Text Library.Source.Label}"
+            Visibility="{Binding HasSource, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,14">
+    <TextBlock Text="{loc:Text Library.Source.Label}" FontWeight="SemiBold" Margin="0,0,0,6" />
+    <TextBlock AutomationProperties.AutomationId="LibrarySourceApp" Text="{Binding SourceAppName}" TextWrapping="Wrap"
+               ToolTip="{Binding SourceAppToolTip}" AutomationProperties.Name="{Binding SourceAppAutomationName}"
+               Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}" />
+    <TextBlock AutomationProperties.AutomationId="LibrarySourceWindow" Text="{Binding SourceWindowTitle}"
+               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="58" Margin="0,2,0,0"
+               Foreground="{DynamicResource Text.Secondary}" ToolTip="{Binding SourceWindowTitle}"
+               AutomationProperties.Name="{Binding SourceWindowTitleAutomationName}"
+               Visibility="{Binding HasSourceWindowTitle, Converter={StaticResource BoolToVisibility}}" />
+    <StackPanel AutomationProperties.AutomationId="LibrarySourcePage" Margin="0,8,0,0"
+                Visibility="{Binding HasSourcePageUrl, Converter={StaticResource BoolToVisibility}}">
+        <TextBlock Text="{loc:Text Library.SourcePage.Label}" Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,0,0,4" />
+        <TextBox Text="{Binding SourcePageUrl, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="104"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                 AutomationProperties.Name="{loc:Text Library.SourcePage.Label}" />
+        <WrapPanel Margin="0,6,0,0">
+            <Button Content="{loc:Text Library.SourcePage.Open}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourcePageClick" Margin="0,0,6,6" />
+            <Button Content="{loc:Text Library.SourcePage.Copy}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePageClick" Margin="0,0,0,6" />
+        </WrapPanel>
+    </StackPanel>
+    <StackPanel AutomationProperties.AutomationId="LibrarySourceLocation" Margin="0,8,0,0"
+                Visibility="{Binding HasSourceDocumentPath, Converter={StaticResource BoolToVisibility}}">
+        <TextBlock Text="{loc:Text Library.Source.Location}" Foreground="{DynamicResource Text.Muted}" FontSize="12" Margin="0,0,0,4" />
+        <TextBox Text="{Binding SourceDocumentPath, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="104"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                 AutomationProperties.Name="{loc:Text Library.Source.Location}" />
+        <WrapPanel Margin="0,6,0,0">
+            <Button Content="{loc:Text Library.Source.OpenFolder}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourceFolderClick" Margin="0,0,6,6" />
+            <Button Content="{loc:Text Library.Source.CopyPath}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePathClick" Margin="0,0,0,6" />
+        </WrapPanel>
+    </StackPanel>
 </StackPanel>
 <TextBlock Text="{Binding TimeCaption}" Foreground="{DynamicResource Text.Secondary}" />
 <TextBlock Text="{Binding DetailDimensions}" Foreground="{DynamicResource Text.Secondary}" Margin="0,6,0,0" />

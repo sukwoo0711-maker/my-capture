@@ -19,6 +19,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private readonly Func<bool, FrozenFrame> _acquireFrame;
     private readonly Func<RectD> _desktopBounds;
     private readonly BrowserPageUrlService _pageUrls = new();
+    private readonly WindowSourceService _windowSources = new();
     private CapturePreparation? _preparation;
     private bool _disposed;
     private CaptureOverlayWindow? _activeOverlay;
@@ -51,9 +52,17 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         _desktopBounds = desktopBounds ?? MonitorEnumerator.GetVirtualDesktopBounds;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _dispatcher.ShutdownStarted += OnDispatcherShutdownStarted;
+        ReadWindowSources = _windowSources.ReadAsync;
     }
 
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
+
+    /// <summary>
+    /// Reads each exposed window's application and Explorer folder around the frozen frame. Tests
+    /// replace it; null skips source metadata entirely.
+    /// </summary>
+    internal Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? ReadWindowSources { get; set; }
+
     internal Func<bool> OpenEditorAfterCapture { get; set; } = () => true;
 
     /// <summary>Reads Capture.AutoDetectWindows when each selector opens. Off unless the app wires it.</summary>
@@ -223,7 +232,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                     throw new InvalidOperationException("Capture acquisition must return a frozen bitmap.");
                 return acquired;
             }, _pageUrls.ReadAsync,
-                () => _windowCandidates.GetCandidates(preparation.DesktopBounds)).ConfigureAwait(false);
+                () => _windowCandidates.GetCandidates(preparation.DesktopBounds),
+                ReadWindowSources).ConfigureAwait(false);
             frame = capturedFrame;
             preparation.SourceWindows = sourceWindows;
             _log.LogInformation("Capture frame acquired after {Elapsed:0.0}ms (acquisition {Acquisition:0.0}ms)",
@@ -369,7 +379,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         RectD region,
         string sourceTitle,
         bool recordForRepeat,
-        string sourcePageUrl = "")
+        string sourcePageUrl = "",
+        MyCapture.Core.Capture.CaptureSourceDetails? sourceDetails = null)
     {
         ArgumentNullException.ThrowIfNull(frame);
         VerifyDispatcherAccess();
@@ -394,7 +405,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             crop,
             sourceTitle,
             recordForRepeat,
-            sourcePageUrl: sourcePageUrl);
+            sourcePageUrl: sourcePageUrl)
+        {
+            SourceDetails = sourceDetails ?? MyCapture.Core.Capture.CaptureSourceDetails.Empty,
+        };
 
         _log.LogInformation(
             "Opening standalone editor over region {Region} on a {Width}x{Height} frame",

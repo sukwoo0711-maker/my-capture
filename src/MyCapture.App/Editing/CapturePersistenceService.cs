@@ -114,8 +114,14 @@ internal sealed class CapturePersistenceService
 
     internal static CaptureRecord CreatePendingRecord(BitmapSource original, double dpiScale,
         string sourceWindowTitle, string sourceMonitor, bool initialRenderShowsSourceWindowTitle = false,
-        string sourcePageUrl = "") =>
-        CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor, initialRenderShowsSourceWindowTitle, sourcePageUrl);
+        string sourcePageUrl = "", MyCapture.Core.Capture.CaptureSourceDetails? sourceDetails = null)
+    {
+        CaptureRecord record = CreateRecord(original, dpiScale, sourceWindowTitle, sourceMonitor,
+            initialRenderShowsSourceWindowTitle, sourcePageUrl);
+        // Local library metadata only: the PNG writers below receive the page link alone.
+        record.SetSourceDetails(sourceDetails);
+        return record;
+    }
 
     internal async Task<CaptureRecord> PersistPendingOriginalAsync(CaptureRecord record, BitmapSource original,
         BitmapSource? initialRendered = null)

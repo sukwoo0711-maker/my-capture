@@ -1103,7 +1103,7 @@ public partial class App : Application
         _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
             e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty,
             initialRenderShowsSourceWindowTitle: _settings?.Export.ShowSourceWindowTitle == true,
-            sourcePageUrl: e.SourcePageUrl);
+            sourcePageUrl: e.SourcePageUrl, sourceDetails: e.SourceDetails);
         if (_pendingRecord.SourcePageUrl.Length > 0)
             _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
         Task<bool>? automaticClipboardCopy = _commit is not null
