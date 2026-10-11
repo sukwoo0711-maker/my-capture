@@ -32,7 +32,20 @@ public sealed partial class SettingsThemePreviewTests
     {
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
-            StaTestHost.Run(verify);
+            // End the STA thread's dispatcher with it. Left running, its windows could still
+            // receive a message while the child process was exiting, which crashed the host
+            // ("managed code after the runtime thread state has been destroyed") under load.
+            StaTestHost.Run(() =>
+            {
+                try
+                {
+                    verify();
+                }
+                finally
+                {
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+                }
+            });
             string receipt = DiagnosticOutputPaths.Child(
                 Environment.GetEnvironmentVariable(ReceiptRoot) ?? throw new IOException("Missing parent test receipt."), "completed.txt");
             File.WriteAllText(receipt, "PASS");

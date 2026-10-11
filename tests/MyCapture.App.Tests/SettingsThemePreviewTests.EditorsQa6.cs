@@ -45,16 +45,6 @@ public sealed partial class SettingsThemePreviewTests
         return application;
     }
 
-    /// <summary>
-    /// Ends the scene's application and its dispatcher, so no window message reaches this
-    /// child process after the runtime has started to shut down.
-    /// </summary>
-    private static void ShutdownQa6(Application application)
-    {
-        application.Shutdown();
-        System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
-    }
-
     private static string Qa6Phase =>
         Environment.GetEnvironmentVariable("MYCAPTURE_EDITORS_QA6_PHASE") is { Length: > 0 } label ? label : "after";
 
@@ -76,7 +66,7 @@ public sealed partial class SettingsThemePreviewTests
         }
         finally
         {
-            ShutdownQa6(application);
+            application.Shutdown();
         }
     }
 
@@ -155,7 +145,7 @@ public sealed partial class SettingsThemePreviewTests
         }
         finally
         {
-            ShutdownQa6(application);
+            application.Shutdown();
             OwnedTestDirectory.Delete(root);
         }
     }
@@ -231,7 +221,7 @@ public sealed partial class SettingsThemePreviewTests
         }
         finally
         {
-            ShutdownQa6(application);
+            application.Shutdown();
         }
     }
 
