@@ -3196,6 +3196,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Source.OpenFolderFailed" xml:space="preserve"><value>Could not open the folder.</value></data>
   <data name="Library.Source.FolderMissing" xml:space="preserve"><value>The folder could not be found. It may have been moved or deleted.</value></data>
   <data name="QuickAccess.Copied" xml:space="preserve"><value>Copied</value></data>
+  <data name="QuickAccess.Copying" xml:space="preserve"><value>Copying…</value></data>
   <data name="QuickAccess.Copy" xml:space="preserve"><value>Copy</value></data>
   <data name="QuickAccess.Drag" xml:space="preserve"><value>Drag into another app</value></data>
   <data name="QuickAccess.Edit" xml:space="preserve"><value>Edit</value></data>
@@ -3205,9 +3206,12 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.Library" xml:space="preserve"><value>Open in library</value></data>
   <data name="QuickAccess.Pin" xml:space="preserve"><value>Pin</value></data>
   <data name="QuickAccess.Pinned" xml:space="preserve"><value>Pinned</value></data>
+  <data name="QuickAccess.Pinning" xml:space="preserve"><value>Pinning…</value></data>
   <data name="QuickAccess.Ready" xml:space="preserve"><value>Saved to library</value></data>
+  <data name="QuickAccess.Preparing" xml:space="preserve"><value>Preparing file…</value></data>
   <data name="QuickAccess.Save" xml:space="preserve"><value>Save</value></data>
   <data name="QuickAccess.Saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="QuickAccess.Saving" xml:space="preserve"><value>Saving…</value></data>
   <data name="QuickAccess.Sound" xml:space="preserve"><value>Play capture sound</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>Capture quick access</value></data>
   <data name="Hotkey.Clear" xml:space="preserve"><value>Clear</value></data>

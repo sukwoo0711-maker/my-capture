@@ -190,10 +190,9 @@ public sealed class HotfixUxRegressionTests
         var card = Card();
         Exception error = new InvalidOperationException("private diagnostic detail");
         if (userFacing) error = UserFacingError.Mark(new InvalidOperationException(UiText.Get("Text_D0FD12A01E4A")));
-        var run = typeof(QuickAccessWindow).GetMethod("RunAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        ((Task)run.Invoke(card, new object[] { (Func<Task<bool>>)(() => Task.FromException<bool>(error)), "QuickAccess.Copied" })!).GetAwaiter().GetResult();
-        TextBlock status = ((StackPanel)((Border)card.Content).Child).Children.OfType<TextBlock>().Single();
-        Assert.Equal(UiText.Get(userFacing ? "Text_D0FD12A01E4A" : "QuickAccess.Failed"), status.Text);
+        card.RunAsync("Copy", () => Task.FromException<bool>(error), "QuickAccess.Copying", "QuickAccess.Copied").GetAwaiter().GetResult();
+        Assert.Equal(UiText.Get(userFacing ? "Text_D0FD12A01E4A" : "QuickAccess.Failed"), card.StatusForTest.Text);
+        Assert.Equal(FeedbackKind.ActionRequired, card.StatusForTest.Kind);
         card.Close();
     });
 

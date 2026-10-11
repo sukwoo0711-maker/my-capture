@@ -20,12 +20,29 @@ namespace MyCapture.App.Capture;
 internal sealed class QuickAccessWindow : Window
 {
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(100) };
-    private readonly ProgressBar _remaining = new() { Minimum = 0, Maximum = 100, Value = 100, Height = 3 };
+    private readonly ProgressBar _remaining = new() { Minimum = 0, Maximum = 100, Value = 100, Height = 3, BorderThickness = new Thickness(0) };
     private readonly ToggleButton _keep;
-    private readonly TextBlock _status = new() { FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, Visibility = Visibility.Collapsed };
+    // Up to two wrapped lines beside the close button, where the card already has room.
+    private readonly TextBlock _status = new()
+    {
+        TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
+        LineStackingStrategy = LineStackingStrategy.BlockLineHeight, LineHeight = StatusLineHeight, MaxHeight = StatusLineHeight * 2,
+    };
+    private readonly System.Windows.Shapes.Path _statusGlyph = new()
+    {
+        Width = 14, Height = 14, Stretch = Stretch.Uniform, StrokeThickness = 1.6, Margin = new Thickness(0, 1, 6, 0),
+        VerticalAlignment = VerticalAlignment.Center, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+    };
+    private readonly DockPanel _statusRow = new() { Margin = new Thickness(2, 0, 8, 0), Visibility = Visibility.Collapsed };
+    private readonly DispatcherTimer _progressReveal = new() { Interval = FeedbackTiming.ProgressRevealDelay };
+    private readonly HashSet<string> _running = [];
+    private readonly Dictionary<string, Button> _actionButtons = [];
+    private FeedbackKind _statusKind = FeedbackKind.Echo;
+    private bool _heldForFailure;
+    private bool _progressShown;
     private TimeSpan _elapsed;
     private long _lastTick;
-    private bool _busy;
+    private bool IsBusy => _running.Count > 0;
     private Point _dragStart;
     private bool _dragArmed;
     private bool _keyboardInteracting;
@@ -42,12 +59,23 @@ internal sealed class QuickAccessWindow : Window
     private readonly Dictionary<string, Action> _actions = [];
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _actions;
     internal static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(6);
+    private const double StatusLineHeight = 16;
     internal static DispatcherOperation Schedule(Dispatcher dispatcher, Action show) =>
         dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, show);
     internal bool IsKept { get => _keep.IsChecked == true; set => _keep.IsChecked = value; }
     internal bool CanActivateByHotkey => IsVisible && _timer.IsEnabled && !IsKept;
     internal bool IsPointerOver => IsVisible && WindowStyleFacade.IsPointerOverWindow(new WindowInteropHelper(this).Handle);
-    internal string TimeoutStateForTest => $"enabled={_timer.IsEnabled}; elapsed={_elapsed.TotalSeconds:0.000}; keep={IsKept}; keyboard={_keyboardInteracting}/{IsKeyboardFocusWithin}; busy={_busy}";
+    internal string TimeoutStateForTest => $"enabled={_timer.IsEnabled}; elapsed={_elapsed.TotalSeconds:0.000}; keep={IsKept}; keyboard={_keyboardInteracting}/{IsKeyboardFocusWithin}; busy={IsBusy}; held={_heldForFailure}";
+
+    /// <summary>Test hook: the status line, its kind, and whether the progress indicator runs.</summary>
+    internal (string Text, FeedbackKind Kind, bool Visible, bool Progress) StatusForTest =>
+        (AutomationProperties.GetName(_status), _statusKind, _statusRow.Visibility == Visibility.Visible, _progressShown);
+
+    /// <summary>Test hook: display time the card has left before it closes itself.</summary>
+    internal TimeSpan RemainingForTest => Lifetime - _elapsed;
+
+    /// <summary>Test hook: the progress reveal delay passing while an action still runs.</summary>
+    internal void ElapseProgressDelayForTest() => RevealProgress();
 
     internal QuickAccessWindow(BitmapSource bitmap, Func<Task<bool>> copy, Action edit,
         Func<Task> pin, Func<Task<bool>> save, Action library, Func<Task<string>> export, bool excludeFromCapture = true,
@@ -72,8 +100,21 @@ internal sealed class QuickAccessWindow : Window
         close.Content = Glyph("Icon.Close");
         close.Width = 26; close.Height = 26; close.MinHeight = 0; close.MinWidth = 0;
         close.Padding = new Thickness(4); close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.VerticalAlignment = VerticalAlignment.Top;
         close.SetResourceReference(StyleProperty, "Button.Ghost");
-        panel.Children.Add(close);
+        // The status shares the close button's row, so a one-line message never moves the actions.
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _status.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
+        AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
+        DockPanel.SetDock(_statusGlyph, Dock.Left);
+        _statusRow.Children.Add(_statusGlyph);
+        _statusRow.Children.Add(_status);
+        header.Children.Add(_statusRow);
+        Grid.SetColumn(close, 1);
+        header.Children.Add(close);
+        panel.Children.Add(header);
         var row = new DockPanel { LastChildFill = true };
         _keep = new ToggleButton { Content = Glyph("Icon.Unlock"), Width = 24, Height = 30, MinWidth = 0, MinHeight = 0,
             Padding = new Thickness(2), Focusable = false, ToolTip = UiText.Get("Onboard_QuickKeep") };
@@ -90,22 +131,24 @@ internal sealed class QuickAccessWindow : Window
         preview.MouseMove += async (_, e) =>
         {
             Point p = e.GetPosition(preview);
-            if (!_dragArmed || _busy || e.LeftButton != MouseButtonState.Pressed
+            if (!_dragArmed || _running.Contains("Drag") || e.LeftButton != MouseButtonState.Pressed
                 || (Math.Abs(p.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
                     && Math.Abs(p.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)) return;
             _dragArmed = false;
-            await RunAsync(async () =>
+            await RunAsync("Drag", async () =>
             {
                 string path = await export();
+                // The file is ready; the drag itself is the user's own gesture, not work to wait on.
+                if (_running.Count == 1) EndProgressDisplay();
                 if (IsVisible && Mouse.LeftButton == MouseButtonState.Pressed)
                     DragDrop.DoDragDrop(preview, new DataObject(DataFormats.FileDrop, new[] { path }), DragDropEffects.Copy);
                 return true;
-            }, "QuickAccess.Ready");
+            }, "QuickAccess.Preparing", "QuickAccess.Ready");
         };
-        _actions["Copy"] = async () => await RunAsync(copy, "QuickAccess.Copied");
+        _actions["Copy"] = async () => await RunAsync("Copy", copy, "QuickAccess.Copying", "QuickAccess.Copied");
         _actions["Edit"] = () => { edit(); Close(); };
-        _actions["Pin"] = async () => await RunAsync(async () => { await pin(); return true; }, "QuickAccess.Pinned");
-        _actions["Save"] = async () => await RunAsync(save, "QuickAccess.Saved");
+        _actions["Pin"] = async () => await RunAsync("Pin", async () => { await pin(); return true; }, "QuickAccess.Pinning", "QuickAccess.Pinned");
+        _actions["Save"] = async () => await RunAsync("Save", save, "QuickAccess.Saving", "QuickAccess.Saved");
         _actions["Close"] = Close;
         _actions["Activate"] = () => ActivateForKeyboard();
         var actions = new UniformGrid { Columns = 4, VerticalAlignment = VerticalAlignment.Center };
@@ -124,6 +167,7 @@ internal sealed class QuickAccessWindow : Window
             button.MinWidth = 0; button.MinHeight = 46; button.Padding = new Thickness(1, 4, 1, 3); button.Margin = new Thickness(1);
             ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action);
             ShortToolTip(button);
+            _actionButtons[action] = button;
             actions.Children.Add(button);
         }
         row.Children.Add(actions); panel.Children.Add(row);
@@ -137,8 +181,11 @@ internal sealed class QuickAccessWindow : Window
         footer.Children.Add(_dimensions); panel.Children.Add(footer);
         _keyboardTargets.Remove(close);
         _keyboardTargets.Add(close);
-        AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
-        panel.Children.Add(_status); panel.Children.Add(_remaining);
+        // The countdown is neutral; colour is kept for the result it reports.
+        _remaining.SetResourceReference(BackgroundProperty, "Surface.Hover");
+        _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
+        _progressReveal.Tick += (_, _) => RevealProgress();
+        panel.Children.Add(_remaining);
         var surface = new Border { Child = panel, Margin = new Thickness(8), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1) };
         surface.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
         surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
@@ -166,10 +213,10 @@ internal sealed class QuickAccessWindow : Window
             long now = Stopwatch.GetTimestamp();
             TimeSpan elapsed = Stopwatch.GetElapsedTime(_lastTick, now);
             _lastTick = now;
-            Advance(elapsed, IsPointerOver || IsMouseCaptured || (_keyboardInteracting && IsKeyboardFocusWithin) || _busy);
+            Advance(elapsed, IsPointerOver || IsMouseCaptured || (_keyboardInteracting && IsKeyboardFocusWithin) || IsBusy);
         };
         SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
-        Closed += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); _activationKey = null; };
+        Closed += (_, _) => { _timer.Stop(); _progressReveal.Stop(); UpdateActivationHotkey(); _activationKey = null; };
         IsVisibleChanged += (_, _) => UpdateActivationHotkey();
         _keep.Checked += (_, _) => { _keep.Content = Glyph("Icon.Lock"); _timer.Stop(); UpdateActivationHotkey(); };
         _keep.Unchecked += (_, _) =>
@@ -338,11 +385,14 @@ internal sealed class QuickAccessWindow : Window
 
     internal void Advance(TimeSpan time, bool interacting)
     {
-        if (IsKept || interacting) return;
+        // A failure keeps the card until the user closes it or a retry succeeds.
+        if (IsKept || interacting || _heldForFailure) return;
         _elapsed += time;
-        _remaining.Value = Math.Max(0, 100 * (1 - _elapsed.TotalSeconds / Lifetime.TotalSeconds));
+        UpdateRemaining();
         if (_elapsed >= Lifetime) Close();
     }
+
+    private void UpdateRemaining() => _remaining.Value = Math.Max(0, 100 * (1 - _elapsed.TotalSeconds / Lifetime.TotalSeconds));
 
     private Button Button(string key, Action action)
     {
@@ -353,13 +403,106 @@ internal sealed class QuickAccessWindow : Window
         return button;
     }
 
-    private async Task RunAsync(Func<Task<bool>> action, string success)
+    /// <summary>
+    /// Runs one card action. Its button is disabled and the status says what is happening at
+    /// once; work that outlasts <see cref="FeedbackTiming.ProgressRevealDelay"/> also runs the
+    /// progress indicator. Other actions stay usable: each renders its own copy of the image.
+    /// </summary>
+    internal async Task RunAsync(string action, Func<Task<bool>> work, string progress, string success)
     {
-        if (_busy) return;
-        _busy = true;
-        _status.Visibility = Visibility.Visible;
-        try { _status.Text = UiText.Get(await action() ? success : "QuickAccess.Failed"); }
-        catch (Exception error) { _status.Text = UserFacingError.GetMessage(error) ?? UiText.Get("QuickAccess.Failed"); }
-        finally { _busy = false; }
+        if (!_running.Add(action)) return;
+        Button? button = _actionButtons.GetValueOrDefault(action);
+        bool refocus = button?.IsKeyboardFocused == true;
+        if (button is not null) button.IsEnabled = false;
+        ShowStatus(UiText.Get(progress), FeedbackKind.Progress);
+        if (_running.Count == 1) _progressReveal.Start();
+        string message;
+        FeedbackKind kind;
+        try
+        {
+            (message, kind) = await work()
+                ? (UiText.Get(success), FeedbackKind.Confirmation)
+                : (UiText.Get("QuickAccess.Failed"), FeedbackKind.ActionRequired);
+        }
+        catch (Exception error)
+        {
+            (message, kind) = (UserFacingError.GetMessage(error) ?? UiText.Get("QuickAccess.Failed"), FeedbackKind.ActionRequired);
+        }
+        finally
+        {
+            _running.Remove(action);
+            if (button is not null) button.IsEnabled = true;
+            if (_running.Count == 0) EndProgressDisplay();
+        }
+
+        if (refocus && IsActive) button!.Focus();
+        ShowStatus(message, kind);
+    }
+
+    /// <summary>
+    /// Shows the status line. A success keeps the card for at least
+    /// <see cref="FeedbackTiming.HoldAfterResult"/>; a failure keeps it until it is closed.
+    /// </summary>
+    private void ShowStatus(string text, FeedbackKind kind)
+    {
+        _statusKind = kind;
+        KoreanWordWrap.SetText(_status, text);
+        _status.ToolTip = text;
+        bool failed = FeedbackTiming.StaysUntilDismissed(kind);
+        _status.SetResourceReference(TextBlock.ForegroundProperty, failed ? "State.Danger" : kind == FeedbackKind.Progress ? "Text.Secondary" : "Text.Primary");
+        _statusGlyph.Data = kind switch
+        {
+            FeedbackKind.Confirmation => TryFindResource("Icon.Check") as Geometry,
+            FeedbackKind.ActionRequired => FailureGlyph,
+            _ => null,
+        };
+        _statusGlyph.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, failed ? "State.Danger" : "State.Success");
+        _statusGlyph.Visibility = _statusGlyph.Data is null ? Visibility.Collapsed : Visibility.Visible;
+        _statusRow.Visibility = Visibility.Visible;
+        if (kind != FeedbackKind.Progress)
+        {
+            _heldForFailure = failed;
+            // While held, the countdown bar would promise a close that is not coming.
+            _remaining.Visibility = failed && !IsBusy ? Visibility.Hidden : Visibility.Visible;
+            if (!failed)
+            {
+                TimeSpan hold = Lifetime - FeedbackTiming.HoldAfterResult;
+                if (_elapsed > hold) _elapsed = hold;
+                UpdateRemaining();
+            }
+        }
+
+        FeedbackTiming.Announce(_status, text, kind, "MyCapture.QuickAccess.Status");
+    }
+
+    // A circled exclamation mark in the 20-unit icon grid; frozen, because cards live on any UI thread.
+    private static readonly Geometry FailureGlyph = Frozen(Geometry.Parse("M10,2.5 A7.5,7.5 0 1 1 9.99,2.5 Z M10,6.2 V10.8 M10,13.6 V13.7"));
+
+    private static Geometry Frozen(Geometry geometry)
+    {
+        geometry.Freeze();
+        return geometry;
+    }
+
+    private void RevealProgress()
+    {
+        _progressReveal.Stop();
+        if (!IsBusy) return;
+        // Reduced motion keeps a steady accent bar; the status text already says what is running.
+        _progressShown = true;
+        _remaining.Visibility = Visibility.Visible;
+        _remaining.SetResourceReference(ForegroundProperty, "Accent.Default");
+        _remaining.IsIndeterminate = FluidMotion.AnimationsEnabled;
+        if (!FluidMotion.AnimationsEnabled) _remaining.Value = 100;
+    }
+
+    private void EndProgressDisplay()
+    {
+        _progressReveal.Stop();
+        _progressShown = false;
+        _remaining.IsIndeterminate = false;
+        _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
+        UpdateRemaining();
+        if (_statusKind == FeedbackKind.Progress) _statusRow.Visibility = Visibility.Collapsed;
     }
 }
