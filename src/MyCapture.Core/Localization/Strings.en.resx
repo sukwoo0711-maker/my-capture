@@ -3191,6 +3191,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Source.Label" xml:space="preserve"><value>Source</value></data>
   <data name="Library.Source.AppAccessible" xml:space="preserve"><value>App: {0}</value></data>
   <data name="Library.Source.WindowAccessible" xml:space="preserve"><value>Window title: {0}</value></data>
+  <data name="Library.Source.LocationAccessible" xml:space="preserve"><value>Location: {0}</value></data>
+  <data name="Library.SourcePage.Accessible" xml:space="preserve"><value>Source webpage: {0}</value></data>
   <data name="Library.Source.Location" xml:space="preserve"><value>Location</value></data>
   <data name="Library.Source.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="Library.Source.CopyPath" xml:space="preserve"><value>Copy path</value></data>

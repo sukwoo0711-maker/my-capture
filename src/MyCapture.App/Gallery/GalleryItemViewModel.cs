@@ -157,6 +157,10 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public bool HasSourcePageUrl => SourcePageUrl.Length > 0;
 
+    /// <summary>The whole address with its label, read by screen readers whatever the summary shows.</summary>
+    public string SourcePageUrlAutomationName =>
+        HasSourcePageUrl ? UiText.Format("Library.SourcePage.Accessible", SourcePageUrl) : string.Empty;
+
     /// <summary>
     /// Whether the details panel shows a source section. Videos have no capture-time source; their
     /// stored window title is the generic recording label, not a window.
@@ -186,6 +190,10 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     public string SourceDocumentPath => IsImage && !HasSourcePageUrl ? Record.SourceDetails.DocumentPath : string.Empty;
 
     public bool HasSourceDocumentPath => SourceDocumentPath.Length > 0;
+
+    /// <summary>The whole path with its label, read by screen readers whatever the summary shows.</summary>
+    public string SourceDocumentPathAutomationName =>
+        HasSourceDocumentPath ? UiText.Format("Library.Source.LocationAccessible", SourceDocumentPath) : string.Empty;
 
     public bool HasCaption => !string.IsNullOrWhiteSpace(Caption);
 
@@ -291,6 +299,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(HasTags));
         Raise(nameof(SourcePageUrl));
         Raise(nameof(HasSourcePageUrl));
+        Raise(nameof(SourcePageUrlAutomationName));
         Raise(nameof(HasSource));
         Raise(nameof(SourceAppName));
         Raise(nameof(HasSourceApp));
@@ -302,6 +311,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(SourceWindowTitleAutomationName));
         Raise(nameof(SourceDocumentPath));
         Raise(nameof(HasSourceDocumentPath));
+        Raise(nameof(SourceDocumentPathAutomationName));
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));

@@ -1738,7 +1738,7 @@
                                    gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding ContextLabel}" />
 
                         <!-- Main commands: Edit is the panel's one filled button; pin and copy share a row. -->
-                        <StackPanel Grid.Row="2" AutomationProperties.AutomationId="LibraryDetailsActions" Margin="0,12,0,0">
+                        <StackPanel Grid.Row="2" AutomationProperties.AutomationId="LibraryDetailsActions" Margin="0,16,0,0">
                             <Button x:Name="DetailsEditButton" Content="{Binding ActionLabel}" Style="{StaticResource Button.Primary}"
                                     Click="OnEditClick" />
                             <Grid Margin="0,8,0,0" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
@@ -1865,7 +1865,7 @@
                                         </Grid>
                                         <TextBlock x:Name="SourcePageValue" AutomationProperties.AutomationId="LibrarySourcePageValue" Margin="0,2,0,0"
                                                    FontSize="{StaticResource FontSize.Control}" ToolTip="{Binding SourcePageUrl}"
-                                                   AutomationProperties.LabeledBy="{Binding ElementName=SourcePageLabel}"
+                                                   AutomationProperties.Name="{Binding SourcePageUrlAutomationName}"
                                                    gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourcePageUrl}" />
                                         <WrapPanel Margin="0,8,0,0">
                                             <Button Content="{loc:Text Library.SourcePage.Open}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourcePageClick" Margin="0,0,8,8" />
@@ -1888,7 +1888,7 @@
                                         </Grid>
                                         <TextBlock x:Name="SourcePathValue" AutomationProperties.AutomationId="LibrarySourcePathValue" Margin="0,2,0,0"
                                                    FontSize="{StaticResource FontSize.Control}" ToolTip="{Binding SourceDocumentPath}"
-                                                   AutomationProperties.LabeledBy="{Binding ElementName=SourcePathLabel}"
+                                                   AutomationProperties.Name="{Binding SourceDocumentPathAutomationName}"
                                                    gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourceDocumentPath}" />
                                         <WrapPanel Margin="0,8,0,0">
                                             <Button Content="{loc:Text Library.Source.OpenFolder}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourceFolderClick" Margin="0,0,8,8" />

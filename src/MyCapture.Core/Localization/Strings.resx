@@ -3191,6 +3191,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Source.Label" xml:space="preserve"><value>출처</value></data>
   <data name="Library.Source.AppAccessible" xml:space="preserve"><value>앱: {0}</value></data>
   <data name="Library.Source.WindowAccessible" xml:space="preserve"><value>창 제목: {0}</value></data>
+  <data name="Library.Source.LocationAccessible" xml:space="preserve"><value>위치: {0}</value></data>
+  <data name="Library.SourcePage.Accessible" xml:space="preserve"><value>원본 웹페이지: {0}</value></data>
   <data name="Library.Source.Location" xml:space="preserve"><value>위치</value></data>
   <data name="Library.Source.OpenFolder" xml:space="preserve"><value>폴더 열기</value></data>
   <data name="Library.Source.CopyPath" xml:space="preserve"><value>경로 복사</value></data>

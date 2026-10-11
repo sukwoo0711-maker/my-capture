@@ -58,8 +58,8 @@ public sealed class GallerySourceDetailTests
             TextBlock link = Named<TextBlock>(page, "LibrarySourcePageValue");
             Assert.Equal(Url, link.Text);
             Assert.Equal(Url, link.ToolTip);
-            Assert.Equal(Url, new TextBlockAutomationPeer(link).GetName());
-            Assert.Equal(UiText.Get("Library.SourcePage.Label"), Assert.IsType<TextBlock>(AutomationProperties.GetLabeledBy(link)).Text);
+            // A screen reader hears the label and the whole address, never the two-line summary.
+            Assert.Equal(UiText.Format("Library.SourcePage.Accessible", Url), new TextBlockAutomationPeer(link).GetName());
             ToggleButton showAll = Named<ToggleButton>(page, "LibrarySourcePageToggle");
             AssertTwoLineSummary(link, showAll, UiText.Get("Library.SourcePage.ShowFull"), language);
             Assert.True(GalleryTextClamp.GetIsOverflowing(link), $"{language}: the long address must be summarized");
@@ -83,6 +83,7 @@ public sealed class GallerySourceDetailTests
             panel.DataContext = second;
             Drain(window);
             Assert.Equal(secondUrl, link.Text);
+            Assert.Equal(UiText.Format("Library.SourcePage.Accessible", secondUrl), AutomationProperties.GetName(link));
             Assert.False(showAll.IsChecked);
             Assert.False(GalleryTextClamp.GetIsExpanded(link));
             Assert.All(actions, action => Assert.Equal(secondUrl, ResolveAction("SourceUrlForAction", action)));
@@ -112,8 +113,7 @@ public sealed class GallerySourceDetailTests
             TextBlock path = Named<TextBlock>(location, "LibrarySourcePathValue");
             Assert.Equal(Folder, path.Text);
             Assert.Equal(Folder, path.ToolTip);
-            Assert.Equal(Folder, new TextBlockAutomationPeer(path).GetName());
-            Assert.Equal(UiText.Get("Library.Source.Location"), Assert.IsType<TextBlock>(AutomationProperties.GetLabeledBy(path)).Text);
+            Assert.Equal(UiText.Format("Library.Source.LocationAccessible", Folder), new TextBlockAutomationPeer(path).GetName());
             ToggleButton showAll = Named<ToggleButton>(location, "LibrarySourcePathToggle");
             AssertTwoLineSummary(path, showAll, UiText.Get("Library.Source.ShowFullPath"), language);
             Button[] actions = Descendants(location).OfType<Button>().ToArray();
