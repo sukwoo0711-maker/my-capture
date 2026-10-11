@@ -31,6 +31,24 @@
             <Setter Property="Margin" Value="4,0,0,0" />
         </Style>
 
+        <!-- Library states follow the shared control templates (Themes/Controls.xaml): hover and
+             selection are layers over the rest chrome whose opacity triggers move through
+             FluidMotion.FadeTo (hover and press over Motion.Fast, selection over Motion.Normal),
+             snapping when Windows animation effects are off. Brushes are never animated. -->
+        <!-- A selected navigation row's wash: StateLayer.Selected's fill and timing without its
+             accent outline, so the row keeps its look (the wash and the accent pill). -->
+        <Style x:Key="LibraryUx.SelectedWash" TargetType="Border" BasedOn="{StaticResource StateLayer}">
+            <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
+        </Style>
+        <!-- A rest outline that hands over to a hover outline: it fades out while the hover copy
+             fades in, so the hovered edge is the hover colour alone, never one over the other. -->
+        <Style x:Key="LibraryUx.RestEdge" TargetType="FrameworkElement">
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
+        </Style>
+
         <ContextMenu x:Key="Gallery.FolderContextMenu" x:Shared="False" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
             <MenuItem Header="{loc:Text Folder410.NewFolder}" CommandParameter="{Binding}"
                       InputGestureText="Ctrl+Shift+N" Click="OnNewFolderClick" />
@@ -407,23 +425,39 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="Outline"
-                                            Background="Transparent"
-                                            BorderBrush="Transparent"
-                                            BorderThickness="2"
-                                            CornerRadius="{StaticResource Radius.Lg}">
-                                        <ContentPresenter />
-                                    </Border>
+                                    <!-- The transparent outline takes the pointer; hover and selection fade in
+                                         over it. Selection sits above hover, so a hovered selected card keeps
+                                         its selected wash and accent edge. -->
+                                    <Grid>
+                                        <Border x:Name="Outline"
+                                                Background="Transparent"
+                                                BorderBrush="Transparent"
+                                                BorderThickness="2"
+                                                CornerRadius="{StaticResource Radius.Lg}" />
+                                        <Border x:Name="HoverLayer"
+                                                Style="{StaticResource StateLayer.Hover}"
+                                                BorderThickness="2"
+                                                CornerRadius="{StaticResource Radius.Lg}" />
+                                        <Border x:Name="SelectedLayer"
+                                                Style="{StaticResource StateLayer.Selected}"
+                                                BorderThickness="2"
+                                                CornerRadius="{StaticResource Radius.Lg}" />
+                                        <Border BorderThickness="2">
+                                            <ContentPresenter />
+                                        </Border>
+                                    </Grid>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Outline" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                         </Trigger>
                                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                            <Setter TargetName="Outline" Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                                            <Setter TargetName="Outline" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                                            <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                         </DataTrigger>
+                                        <!-- Focus recolours the fixed edge at once, on the layers too. -->
                                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                             <Setter TargetName="Outline" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                            <Setter TargetName="SelectedLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -624,10 +658,23 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
+                        <!-- Hover hands the folder edge over to an Accent.Folder edge and fades the wash in;
+                             press deepens the wash. Every state part moves only its opacity. The fill keeps a
+                             transparent stroke so it fills, and takes the pointer, exactly as the stroked shape did. -->
                         <Grid>
                             <Path x:Name="Chrome" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
-                                  Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}"
+                                  Fill="{TemplateBinding Background}" Stroke="Transparent"
                                   StrokeThickness="1" SnapsToDevicePixels="True" />
+                            <Path x:Name="Edge" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
+                                  Style="{StaticResource LibraryUx.RestEdge}"
+                                  Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" SnapsToDevicePixels="True" />
+                            <!-- A contrast theme's Border.Hover edge rides on top, so hover shows there too. -->
+                            <Grid x:Name="HoverEdge" Opacity="0" IsHitTestVisible="False">
+                                <Path Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
+                                      Stroke="{DynamicResource Accent.Folder}" StrokeThickness="1" SnapsToDevicePixels="True" />
+                                <Path Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
+                                      Stroke="{DynamicResource Border.Hover}" StrokeThickness="1" SnapsToDevicePixels="True" />
+                            </Grid>
                             <Path x:Name="Wash" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Fill="{DynamicResource Surface.Hover}" Opacity="0" IsHitTestVisible="False" />
                             <Path x:Name="DropRing" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
@@ -642,11 +689,12 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Stroke" Value="{DynamicResource Accent.Folder}" />
-                                <Setter TargetName="Wash" Property="Opacity" Value="0.35" />
+                                <Setter TargetName="Edge" Property="themes:FluidMotion.FadeTo" Value="0" />
+                                <Setter TargetName="HoverEdge" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="Wash" Property="themes:FluidMotion.FadeTo" Value="0.35" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Wash" Property="Opacity" Value="0.6" />
+                                <Setter TargetName="Wash" Property="themes:FluidMotion.FadeTo" Value="0.6" />
                             </Trigger>
                             <!-- While captures are dragged, every folder that can take them shows a dashed edge. -->
                             <DataTrigger Binding="{Binding IsDropAvailable}" Value="True">
@@ -892,10 +940,13 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
+                        <!-- The checked wash sits above the hover wash; the accent pill fades in with it. -->
                         <Grid Background="Transparent">
                             <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" />
-                            <Border x:Name="Indicator" Width="3" Height="16" Margin="1,0,0,0"
+                            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
+                            <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
+                            <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
                                     Background="{DynamicResource Accent.Default}" CornerRadius="{DynamicResource Radius.Pill}"
                                     Opacity="0" IsHitTestVisible="False" />
@@ -905,15 +956,16 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                                <Setter TargetName="Indicator" Property="Opacity" Value="1" />
+                                <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -950,23 +1002,17 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
+                        <!-- The chevron turns over Motion.Normal (FluidMotion.RotateTo) as the row expands. -->
                         <Border Background="Transparent">
-                            <Path x:Name="Chevron" Data="{StaticResource LibraryUx.Icon.Chevron}" Width="12" Height="12"
+                            <Path x:Name="Chevron" Style="{StaticResource StatePart.Normal}"
+                                  Data="{StaticResource LibraryUx.Icon.Chevron}" Width="12" Height="12"
                                   Stretch="Uniform" Stroke="{DynamicResource Text.Secondary}" StrokeThickness="1.5"
                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
-                                <Path.RenderTransform>
-                                    <RotateTransform Angle="0" />
-                                </Path.RenderTransform>
-                            </Path>
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Chevron" Property="RenderTransform">
-                                    <Setter.Value>
-                                        <RotateTransform Angle="90" />
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter TargetName="Chevron" Property="themes:FluidMotion.RotateTo" Value="90" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -988,7 +1034,9 @@
                             <Grid x:Name="Row" MinHeight="34" Background="Transparent">
                                 <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
                                         CornerRadius="{DynamicResource Radius.Md}" />
-                                <Border x:Name="Indicator" Width="3" Height="16" Margin="1,0,0,0"
+                                <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
+                                <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
+                                <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                         HorizontalAlignment="Left" VerticalAlignment="Center"
                                         Background="{DynamicResource Accent.Default}" CornerRadius="{DynamicResource Radius.Pill}"
                                         Opacity="0" IsHitTestVisible="False" />
@@ -1011,19 +1059,22 @@
                                 <Setter TargetName="Expander" Property="Visibility" Value="Hidden" />
                             </Trigger>
                             <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                                <Setter TargetName="Indicator" Property="Opacity" Value="1" />
+                                <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
+                            <!-- Drop feedback stays immediate, as File Explorer's does: it follows the pointer
+                                 during a drag. -->
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
                             </DataTrigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -1074,10 +1125,13 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
+                        <!-- The same layers as a folder row. -->
                         <Grid MinHeight="34" Background="Transparent">
                             <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
                                     CornerRadius="{DynamicResource Radius.Md}" />
-                            <Border x:Name="Indicator" Width="3" Height="16" Margin="1,0,0,0"
+                            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
+                            <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
+                            <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
                                     Background="{DynamicResource Accent.Default}" CornerRadius="{DynamicResource Radius.Pill}"
                                     Opacity="0" IsHitTestVisible="False" />
@@ -1087,11 +1141,11 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                                <Setter TargetName="Indicator" Property="Opacity" Value="1" />
+                                <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
@@ -1100,6 +1154,7 @@
                             </DataTrigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -1121,18 +1176,17 @@
                                           IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
+                                        <!-- The hover wash fades; the chevron turns over Motion.Normal as the section opens. -->
                                         <Grid Background="Transparent">
                                             <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent"
                                                     BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" />
+                                            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
                                             <DockPanel Margin="12,0,8,0">
-                                                <Path x:Name="Chevron" DockPanel.Dock="Right" Data="{StaticResource LibraryUx.Icon.Chevron}"
+                                                <Path x:Name="Chevron" Style="{StaticResource StatePart.Normal}" DockPanel.Dock="Right"
+                                                      Data="{StaticResource LibraryUx.Icon.Chevron}"
                                                       Width="12" Height="12" Stretch="Uniform" Stroke="{DynamicResource Text.Secondary}"
                                                       StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                                      StrokeLineJoin="Round" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
-                                                    <Path.RenderTransform>
-                                                        <RotateTransform Angle="0" />
-                                                    </Path.RenderTransform>
-                                                </Path>
+                                                      StrokeLineJoin="Round" VerticalAlignment="Center" />
                                                 <ContentPresenter VerticalAlignment="Center" />
                                             </DockPanel>
                                             <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}"
@@ -1141,17 +1195,14 @@
                                         </Grid>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                                <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                             </Trigger>
                                             <Trigger Property="IsChecked" Value="True">
-                                                <Setter TargetName="Chevron" Property="RenderTransform">
-                                                    <Setter.Value>
-                                                        <RotateTransform Angle="90" />
-                                                    </Setter.Value>
-                                                </Setter>
+                                                <Setter TargetName="Chevron" Property="themes:FluidMotion.RotateTo" Value="90" />
                                             </Trigger>
                                             <Trigger Property="IsKeyboardFocused" Value="True">
                                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                                <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                                             </Trigger>
                                         </ControlTemplate.Triggers>
@@ -1220,15 +1271,20 @@
                         <Grid Background="Transparent">
                             <StackPanel Orientation="Horizontal" Margin="8,0,6,0" VerticalAlignment="Center">
                                 <ContentPresenter VerticalAlignment="Center" Margin="0,0,10,0" />
-                                <!-- FluidMotion.SwitchMotion slides the thumb and fades the fill. -->
+                                <!-- FluidMotion.SwitchMotion slides the thumb and fades the fill. Hover hands the
+                                     track edge and the off thumb over to Text.Primary copies that fade in while
+                                     the rest parts fade out; the label's colour changes with the pointer. -->
                                 <Grid x:Name="PART_SwitchTrack" Width="36" Height="20" VerticalAlignment="Center">
-                                    <Border x:Name="Track" CornerRadius="10" BorderThickness="1"
+                                    <Border x:Name="Track" CornerRadius="10" BorderThickness="1" Style="{StaticResource LibraryUx.RestEdge}"
                                             BorderBrush="{DynamicResource Text.Secondary}" Background="Transparent" />
+                                    <Border x:Name="TrackHover" CornerRadius="10" BorderThickness="1" Opacity="0" IsHitTestVisible="False"
+                                            BorderBrush="{DynamicResource Text.Primary}" />
                                     <Border x:Name="PART_SwitchFill" CornerRadius="10" Opacity="0"
                                             Background="{DynamicResource Accent.Default}" />
                                     <Grid x:Name="PART_SwitchThumb" Width="12" Height="12" Margin="4,0,0,0"
                                           HorizontalAlignment="Left" VerticalAlignment="Center">
-                                        <Ellipse x:Name="ThumbOff" Fill="{DynamicResource Text.Secondary}" />
+                                        <Ellipse x:Name="ThumbOff" Style="{StaticResource LibraryUx.RestEdge}" Fill="{DynamicResource Text.Secondary}" />
+                                        <Ellipse x:Name="ThumbHover" Opacity="0" IsHitTestVisible="False" Fill="{DynamicResource Text.Primary}" />
                                         <Ellipse x:Name="PART_SwitchThumbOn" Fill="{DynamicResource Text.OnAccent}" Opacity="0" />
                                     </Grid>
                                 </Grid>
@@ -1239,11 +1295,16 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
-                                <Setter TargetName="ThumbOff" Property="Fill" Value="{DynamicResource Text.Primary}" />
+                                <Setter TargetName="Track" Property="themes:FluidMotion.FadeTo" Value="0" />
+                                <Setter TargetName="TrackHover" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="ThumbOff" Property="themes:FluidMotion.FadeTo" Value="0" />
+                                <Setter TargetName="ThumbHover" Property="themes:FluidMotion.FadeTo" Value="1" />
                             </Trigger>
+                            <!-- On, the track keeps its accent edge whether or not the pointer is over it. -->
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
+                                <Setter TargetName="Track" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                <Setter TargetName="TrackHover" Property="themes:FluidMotion.FadeTo" Value="0" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
@@ -1352,24 +1413,46 @@
                 </StackPanel>
             </StackPanel>
 
-            <Border x:Name="SearchField" Grid.Column="1" Padding="2" Margin="6,0,12,0"
-                    MaxWidth="560" VerticalAlignment="Center" HorizontalAlignment="Stretch">
-                <!-- An input boundary, not a decorative card line: it takes the control outline
-                     and the focus colour while the search box inside has keyboard focus. -->
-                <Border.Style>
-                    <Style TargetType="Border" BasedOn="{StaticResource Card.Sunken}">
-                        <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
-                        <Style.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
-                <Grid>
+            <!-- An input boundary, not a decorative card line: it takes the control outline, hands it
+                 over to the stronger outline on hover (the two fade, like the shared TextBox), and takes
+                 the focus colour at once while the search box inside has keyboard focus. -->
+            <Grid x:Name="SearchField" Grid.Column="1" Margin="6,0,12,0"
+                  MaxWidth="560" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                <!-- The sunken well; its outline is drawn by the two edges above it. -->
+                <Border x:Name="SearchWell" Style="{StaticResource Card.Sunken}" BorderBrush="Transparent" />
+                <Border x:Name="SearchEdge" BorderThickness="1" CornerRadius="{DynamicResource Radius.Lg}" SnapsToDevicePixels="True">
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource LibraryUx.RestEdge}">
+                            <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
+                                    <Setter Property="themes:FluidMotion.FadeTo" Value="0" />
+                                </DataTrigger>
+                                <!-- Focus keeps this edge whole, so the outline never dims while the pointer crosses it. -->
+                                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchField}" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                    <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+                <Border x:Name="SearchHoverLayer" BorderThickness="1" CornerRadius="{DynamicResource Radius.Lg}">
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource StateLayer}">
+                            <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
+                                    <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchField}" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+                <Grid Margin="3">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -1402,7 +1485,7 @@
                         </TextBlock.Style>
                     </TextBlock>
                 </Grid>
-            </Border>
+            </Grid>
 
             <!-- Library commands (nothing selected). -->
             <StackPanel x:Name="LibraryCommands" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
@@ -1845,20 +1928,26 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="ToggleButton">
+                                                        <!-- Hover and press washes fade over the whole chip; the contrast-theme
+                                                             hover outline (Border.Hover, transparent otherwise) fades with them. -->
                                                         <Grid>
-                                                            <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius.Sm}">
-                                                                <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                            </Border>
+                                                            <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius.Sm}" />
+                                                            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" CornerRadius="{DynamicResource Radius.Sm}" />
+                                                            <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}" CornerRadius="{DynamicResource Radius.Sm}" />
+                                                            <Border x:Name="HoverOutline" Style="{StaticResource StateLayer}" BorderThickness="1"
+                                                                    CornerRadius="{DynamicResource Radius.Sm}" />
+                                                            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                             <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
                                                                     CornerRadius="{DynamicResource Radius.Sm}" IsHitTestVisible="False" Opacity="0" />
                                                         </Grid>
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                                                <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                                                <Setter TargetName="HoverOutline" Property="themes:FluidMotion.FadeTo" Value="1" />
                                                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                                                             </Trigger>
                                                             <Trigger Property="IsPressed" Value="True">
-                                                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Pressed}" />
+                                                                <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                                             </Trigger>
                                                             <Trigger Property="IsKeyboardFocused" Value="True">
                                                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />

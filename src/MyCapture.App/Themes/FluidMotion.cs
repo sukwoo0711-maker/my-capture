@@ -78,7 +78,18 @@ public static class FluidMotion
             typeof(FluidMotion),
             new PropertyMetadata(1d, OnScaleToChanged));
 
-    /// <summary>The motion token <see cref="FadeToProperty"/> and <see cref="ScaleToProperty"/> use.</summary>
+    /// <summary>
+    /// The angle, in degrees, an element settles at around its centre, animated like
+    /// <see cref="FadeToProperty"/>: an expander chevron turns instead of jumping.
+    /// </summary>
+    public static readonly DependencyProperty RotateToProperty =
+        DependencyProperty.RegisterAttached(
+            "RotateTo",
+            typeof(double),
+            typeof(FluidMotion),
+            new PropertyMetadata(0d, OnRotateToChanged));
+
+    /// <summary>The motion token <see cref="FadeToProperty"/>, <see cref="ScaleToProperty"/> and <see cref="RotateToProperty"/> use.</summary>
     public static readonly DependencyProperty TransitionProperty =
         DependencyProperty.RegisterAttached(
             "Transition",
@@ -147,6 +158,12 @@ public static class FluidMotion
 
     public static double GetScaleTo(DependencyObject element) =>
         (double)element.GetValue(ScaleToProperty);
+
+    public static void SetRotateTo(DependencyObject element, double value) =>
+        element.SetValue(RotateToProperty, value);
+
+    public static double GetRotateTo(DependencyObject element) =>
+        (double)element.GetValue(RotateToProperty);
 
     public static void SetTransition(DependencyObject element, MotionSpeed value) =>
         element.SetValue(TransitionProperty, value);
@@ -605,6 +622,24 @@ public static class FluidMotion
         Duration duration = TransitionDuration(element);
         Animate(scale, ScaleTransform.ScaleXProperty, to, animate, duration);
         Animate(scale, ScaleTransform.ScaleYProperty, to, animate, duration);
+    }
+
+    private static void OnRotateToChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
+    {
+        if (dependencyObject is not UIElement element)
+        {
+            return;
+        }
+
+        // Template transforms may be frozen or shared; the element owns one it can animate.
+        if (element.RenderTransform is not RotateTransform rotate || rotate.IsFrozen)
+        {
+            rotate = new RotateTransform();
+            element.RenderTransformOrigin = new Point(0.5, 0.5);
+            element.RenderTransform = rotate;
+        }
+
+        Animate(rotate, RotateTransform.AngleProperty, (double)e.NewValue, IsShown(element), TransitionDuration(element));
     }
 
     // A layer that is still being templated takes its first state at once.
