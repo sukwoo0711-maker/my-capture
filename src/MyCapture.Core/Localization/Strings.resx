@@ -3136,6 +3136,11 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="GitHub_TokenLabel" xml:space="preserve"><value>개인 액세스 토큰(repo 권한)</value></data>
   <data name="GitHub_TokenHint" xml:space="preserve"><value>토큰 사용 시 브라우저를 열지 않고 이미지를 업로드합니다. 토큰은 이 PC에만 저장됩니다.</value></data>
   <data name="Recording_SizePreset" xml:space="preserve"><value>녹화 크기</value></data>
+  <data name="Recording_SizeDragged" xml:space="preserve"><value>드래그한 크기</value></data>
+  <data name="Recording_SizeFixed" xml:space="preserve"><value>고정 크기</value></data>
+  <data name="Recording_SizeWidth" xml:space="preserve"><value>가로</value></data>
+  <data name="Recording_SizeHeight" xml:space="preserve"><value>세로</value></data>
+  <data name="Recording_SizeHint" xml:space="preserve"><value>고정 크기를 고르면 녹화 영역을 지정할 때 드래그로 위치만 정합니다. 가로·세로 96 ~ 7680픽셀.</value></data>
   <data name="Recording_LastRegion" xml:space="preserve"><value>마지막 영역</value></data>
   <data name="Recording_Free" xml:space="preserve"><value>자유</value></data>
   <data name="Recording_Fixed720" xml:space="preserve"><value>1280×720</value></data>
@@ -3144,8 +3149,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Ocr_ExportDone" xml:space="preserve"><value>텍스트를 저장했습니다.</value></data>
   <data name="Ocr_ExportNone" xml:space="preserve"><value>내보낼 인식 텍스트가 없습니다.</value></data>
   <data name="GitHub.TokenFailed" xml:space="preserve"><value>토큰 업로드 실패 — 브라우저 방식으로 전환합니다.</value></data>
-  <data name="Recording_PresetWidth" xml:space="preserve"><value>고정 너비 (px, 0=자유)</value></data>
-  <data name="Recording_PresetHeight" xml:space="preserve"><value>고정 높이 (px, 0=자유)</value></data>
+  <data name="Recording_PresetWidth" xml:space="preserve"><value>고정 크기 가로(픽셀)</value></data>
+  <data name="Recording_PresetHeight" xml:space="preserve"><value>고정 크기 세로(픽셀)</value></data>
   <data name="Recording_CursorHighlight" xml:space="preserve"><value>녹화 화면에 커서 강조 표시 (클릭 중에는 빨간색)</value></data>
   <data name="Library.Organize.Title" xml:space="preserve"><value>캡처 정리</value></data>
   <data name="Library.Organize.Action" xml:space="preserve"><value>제목·태그 편집</value></data>

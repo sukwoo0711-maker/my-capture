@@ -25,6 +25,12 @@ public static class SettingsRanges
     public static readonly Range<int> RecordingStartDelaySeconds = new(1, 10);
 
     /// <summary>
+    /// Each side of a fixed recording size, in physical pixels. The selection overlay clamps
+    /// the box to the screen anyway, so the ceiling only rejects typing mistakes.
+    /// </summary>
+    public static readonly Range<int> RecordingPresetSize = new(96, 7680);
+
+    /// <summary>
     /// Frame rates offered by the recording settings UI and accepted from
     /// <c>settings.json</c>. An explicit list prevents unsupported arbitrary values.
     /// </summary>
