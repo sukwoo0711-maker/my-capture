@@ -1,7 +1,8 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Media;
 using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Recording;
@@ -27,11 +28,11 @@ public sealed class VideoEditorUxLayoutTests
             editor = OpenReadyEditor(root, 10_000, show: true, 1400, 820);
             FitWide(editor);
             // WindowIdentity puts the product first, as in every MyCapture window.
-            Assert.Equal("MyCapture — 녹화 동영상 편집", editor.Title);
-            Assert.Equal("녹화 동영상 편집 창", AutomationProperties.GetName(editor));
+            Assert.Equal("MyCapture — 동영상 편집", editor.Title);
+            Assert.Equal("동영상 편집 창", AutomationProperties.GetName(editor));
             var bar = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
             TextBlock[] texts = Descendants(bar).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
-            Assert.Contains(texts, text => text.Text == "녹화 동영상 편집");
+            Assert.Contains(texts, text => text.Text == "동영상 편집");
             Assert.Contains(texts, text => text.Text == "동영상 00:10.0 · 640×360 · 30fps");
         }
         finally
@@ -162,6 +163,122 @@ public sealed class VideoEditorUxLayoutTests
 
             Assert.True(narrowest > wide, $"760 DIP kept level {narrowest}, the wide window had {wide}");
             Assert.Equal(wide, editor.CommandBarLevelForTest);
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void LayerPanelOpensWithTheFirstLayerAndClosesWithTheLast() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        string root = OwnedTestDirectory.Create("mc-video-ux-panel-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true);
+            var layout = (Grid)editor.Content;
+            Border panel = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoLayersPanel");
+            Grid viewport = Assert.Single(Descendants(layout).OfType<Grid>(), grid => grid.Name == "VideoPreviewViewport");
+            void Settle() => editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+
+            // A plain trim keeps the whole width for the preview: no empty layer panel.
+            Assert.Equal(Visibility.Collapsed, panel.Visibility);
+            Assert.False(editor.IsLayerPanelVisibleForTest);
+            double wide = viewport.ActualWidth;
+
+            void AddShape() => typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
+            void Undo() => typeof(VideoEditorWindow).GetMethod("RestoreEdit", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
+            AddShape();
+            Settle();
+            Assert.True(editor.IsLayerPanelVisibleForTest);
+            Assert.True(viewport.ActualWidth < wide - 200, $"preview {viewport.ActualWidth} of {wide}");
+            Undo();
+            Settle();
+            Assert.False(editor.IsLayerPanelVisibleForTest);
+            Assert.Equal(wide, viewport.ActualWidth, precision: 0);
+
+            // The switch in the command bar is the user's choice and wins over the automatic rule.
+            var toggle = Assert.Single(Descendants(layout).OfType<System.Windows.Controls.Primitives.ToggleButton>(),
+                t => AutomationProperties.GetName(t) == UiText.Get("VideoEditorUx_LayerPanel"));
+            Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(toggle)));
+            toggle.IsChecked = true;
+            Settle();
+            Assert.True(editor.IsLayerPanelVisibleForTest);
+            AddShape();
+            Undo();
+            Settle();
+            Assert.True(editor.IsLayerPanelVisibleForTest);
+            toggle.IsChecked = false;
+            Settle();
+            Assert.False(editor.IsLayerPanelVisibleForTest);
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void TimelineViewToolsSitAtTheRightOfACentredTransport() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        string root = OwnedTestDirectory.Create("mc-video-ux-transport-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true);
+            var layout = (Grid)editor.Content;
+            StackPanel transport = Assert.Single(Descendants(layout).OfType<StackPanel>(), panel => panel.Name == "VideoTransport");
+            StackPanel view = Assert.Single(Descendants(layout).OfType<StackPanel>(), panel => panel.Name == "VideoTimelineViewTools");
+            var row = (Grid)VisualTreeHelper.GetParent(transport);
+            double rowCentre = row.ActualWidth / 2;
+            double transportCentre = transport.TranslatePoint(new Point(transport.ActualWidth / 2, 0), row).X;
+            Assert.Equal(rowCentre, transportCentre, precision: 0);
+            double transportRight = transport.TranslatePoint(new Point(transport.ActualWidth, 0), row).X;
+            double viewLeft = view.TranslatePoint(new Point(), row).X;
+            Assert.True(viewLeft > transportRight, $"view tools at {viewLeft}, transport ends at {transportRight}");
+            foreach (string key in new[] { "Text_48D137437347", "Text_C5176D8C3041", "Text_6CA53DEDFF4A" })
+                Assert.Contains(Descendants(view).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key));
+            Assert.Contains(Descendants(view).OfType<System.Windows.Controls.Primitives.ToggleButton>(),
+                t => AutomationProperties.GetName(t) == UiText.Get("VideoEditorUx_DetailTimeline"));
+            Assert.Equal(2, editor.ControlRowCountForTest);
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void StatusLineHintsTheNextStepInsteadOfListingCounts() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        string root = OwnedTestDirectory.Create("mc-video-ux-status-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true);
+            TextBlock status = Field<TextBlock>(editor, "_statusLabel");
+            // The layout-only clip reports a media failure after opening; the idle status is
+            // what every later refresh writes.
+            typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
+            Assert.Equal("전체 길이 00:10.0 · 손잡이를 끌거나 I·O로 남길 구간을 정합니다", status.Text);
+            Assert.DoesNotContain("녹화 드롭", status.Text);
+            Assert.True(editor.TimelineForTest.SetTrimRange(2_000, 8_000));
+            typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
+            Assert.Equal("남는 길이 00:06.0 · 잘림 00:04.0 · 라이브러리에 저장 또는 내보내기로 적용합니다", status.Text);
+            typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
+            typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
+            Assert.EndsWith("· 레이어 1", status.Text);
+            // Recording health moved to the clip facts in the command bar.
+            TextBlock details = Field<TextBlock>(editor, "_identityDetails");
+            Assert.Equal(UiText.Get("Text_C1BE53C8ADAF"), details.ToolTip);
         }
         finally
         {

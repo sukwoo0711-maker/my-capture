@@ -319,11 +319,14 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
                 try
                 {
                     Assert.NotNull(dialog);
-                    ComboBox format = Descendants(dialog).OfType<ComboBox>().Single(combo => combo.Items.Contains("MP4"));
-                    Assert.Equal("GIF", format.SelectedItem);
-                    Button save = Descendants(dialog).OfType<Button>().Single(button =>
-                        System.Windows.Automation.AutomationProperties.GetName(button) == "다른 이름으로 저장");
-                    Assert.False(save.IsEnabled, "GIF shortcut must open settings before any calculation/save");
+                    System.Windows.Controls.Primitives.ToggleButton gif = Descendants(dialog)
+                        .OfType<System.Windows.Controls.Primitives.ToggleButton>()
+                        .Single(toggle => System.Windows.Automation.AutomationProperties.GetName(toggle) == "GIF");
+                    Assert.True(gif.IsChecked == true && dialog.IsGif, "GIF shortcut must preselect the GIF format");
+                    Button export = Descendants(dialog).OfType<Button>().Single(button =>
+                        System.Windows.Automation.AutomationProperties.GetName(button) == "내보내기");
+                    Assert.True(export.IsEnabled && !dialog.IsExporting && !dialog.IsProgressVisible,
+                        "GIF shortcut must open the form ready to export without starting an encode");
                     typeof(VideoEditorWindow).GetMethod("ExportGif", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(editor, null);
                     Assert.Single(editor.OwnedWindows.OfType<VideoExportDialog>());
                 }
