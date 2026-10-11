@@ -9,9 +9,11 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 통합 브랜치 | `fix/realdevice-qa-round4` (Store 4.1.0 제출을 위한 원격 통합 진행 중) |
-| Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (통합 브랜치를 체크아웃한 git worktree) |
-| 이 문서 위치 | 통합 브랜치의 `docs/handoff/claude-codex-orchestration.md` |
+| 현재 기록 브랜치 | `chore/store-4.1.0-handoff` (Store 제출 대기 상태 기록) |
+| Store 소스 브랜치 | `release/store-4.1.0`, main과 같은 `39942191fbdc49d018ccfd01c975701f0d002532` |
+| 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
+| Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
+| 이 문서 위치 | 현재 기록 브랜치의 `docs/handoff/claude-codex-orchestration.md` |
 
 **소통 규칙**
 
@@ -38,13 +40,23 @@
 
 - 저장소: `C:\GitRepositories\my-capture`, 원격 `sukwoo0711-maker/my-capture`, 기본 브랜치 `main`
 - **메인 체크아웃**(`C:\GitRepositories\my-capture`)은 `feat/library-workspace-aac1a031`에 있습니다. 여기에는 다른 세션의 미커밋 변경이 있습니다(README, CONTRIBUTING, docs/market, docs/design/visual-identity-2026-10-11, AGENTS.md). **건드리지 마십시오.**
-- **통합 브랜치** `fix/realdevice-qa-round4`
-  - 구성: `origin/main`(dbaff2f) + PR #74 커밋(753773f) + R4~R6 커밋 37개 + 이 인계 문서 커밋
-  - 원격에 push하지 않았습니다. PR #74가 먼저 병합되어야 깔끔합니다.
+- **원 통합 브랜치** `fix/realdevice-qa-round4`
+  - 인계 당시 구성: `origin/main`(dbaff2f) + PR #74 커밋(753773f) + R4~R6 커밋 37개 + 이 인계 문서 커밋. 이후 R7·Store 설명·CI fixture 수정을 포함해 최종 `75dc4e3`까지 push했고 PR #75로 main에 squash 병합했습니다.
+  - 현재 Store 소스는 `release/store-4.1.0`의 `3994219`, 최신 상태 기록은 `chore/store-4.1.0-handoff`입니다. 원 통합 브랜치는 보존했습니다.
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12, 코드 87192d8, QA7 회전 배치 수정·전체 검증·Release 빌드 완료)
+## 3. 현재 상태 (2026-10-12, Store 소스 3994219, 패키지 자체검사 전 사용자 앱 종료 확인 대기)
+
+### 3.0 Store 4.1.0 및 다음 배포 준비
+
+- **현재 공개 버전은 4.0.3.0입니다. 4.1.0 심사 제출은 아직 하지 않았습니다.** PR #74와 #75를 squash 병합했고, main `3994219`의 깨끗한 소스에서 4.1.0 배포 파일을 생성했습니다. 공개·심사 상태와 로컬 빌드 상태를 구분합니다.
+- 최종 PR #75 CI 두 건(`38162513743`, `38162518261`) 모두 SUCCESS. 수집한 실제 CI 로그는 Core 1066 통과, App 2233 통과·실패 0·기존 조건부 7개 건너뜀입니다. 작은 CI 데스크톱에서 중단되던 라이브러리 폭 sweep은 같은 카드·최소폭·열 수 assertion을 유지하는 loaded client 폭 검사로 보완했고 재현검사도 추가했습니다.
+- `powershell.exe -NoProfile -File build\package.ps1 -Version 4.1.0` PASS(exit 0). `artifacts\release\4.1.0\publish-win-x64`의 281개 파일 전체 경로·크기·SHA256, manifest의 exact source commit/clean/version/runtime/self-contained, setup·portable 및 checksum 3개를 독립 검증했습니다. Store MSIX는 아직 만들지 않았습니다.
+- Partner Center 제품 `9PB33MC095VR`, Submission 4 초안 `1152921505702097950`에 한국어·영어 소개/짧은 설명/4.1.0 변경사항을 저장하고 다시 열어 확인했습니다. 첫 문장은 “MyCapture는 개발자를 위한 무료 Windows 11 캡처·핀 도구입니다.”이며 Snipaste·ShareX·Greenshot의 작업 중심 소개를 참고했습니다. 가격 0원, 240개 시장 공개, 인증 통과 즉시 공개 설정을 확인했습니다. 기존 스크린샷과 아이콘은 유지했습니다.
+- **유일한 현재 선행 조건:** 사용자 QA6 앱 PID `55532` (`artifacts\qa6-build-1\MyCapture.exe`)이 실행 중입니다. §5의 종료 금지와 8종 자체검사 runner의 실행 앱 부재 조건 때문에 사용자 종료 또는 명시적 종료 허용을 기다립니다. 8종 자체검사/MSIX 생성/업로드/심사 제출은 NOT RUN(exit N/A)입니다.
+- 다음 배포 최적화는 별도 worktree `C:\GitRepositories\my-capture\.claude\worktrees\agent-aeae29401bfb142cf`의 `perf/next-release-optimization`에 완료했습니다. 선택 상태 getter의 반복 배열 생성을 줄였고, 8종 검증 정의·결과 증거·source/payload 무결성 계약을 공통화했으며 `-StoreOnly` 경로를 추가했습니다. Release 빌드 경고·오류 0, Core 1066·App 2233 통과(9개 건너뜀), 패키징 계약 15개 통과. 단일 선택 getter 2000회 fixture에서 할당 5,040,000→176,000 bytes(96.5% 감소), 전체 앱 성능 측정은 아닙니다. 마지막 main 이력 연결 `5e463c9`는 직전 검증 트리와 동일합니다. 실제 StoreOnly/8종 native/MSIX 실행 검증은 위 선행 조건 후 수행합니다.
+- 현재 Store 근거: `artifacts\store-410-verification\`. 다음 배포 근거: `artifacts\next-release-optimization-verification\` 및 `%LOCALAPPDATA%\Temp\mcux\perf-next-release-app\verification-log.txt`. 기존 작업 사본·빌드·임시 근거는 보존했습니다.
 
 ### 3.1 Astra 17개 항목
 
@@ -106,8 +118,10 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
    dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1
    ```
    실행 파일은 `C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1\MyCapture.exe`입니다. 새 확인 포인트는 자르기 진입 없이 왼쪽·오른쪽 회전, 실행 취소, 최소 창에서 모든 도구 표시입니다. 이전 라운드 확인 포인트도 유지합니다: 폴더 스위치 애니메이션, 동영상 편집기 버튼, Excel 표 핀(고배율 모니터에서 크기 포함), VS Code 코드 핀 모서리, 좁은 라이브러리, 상세 패널, 대화상자 순서, 고대비, 호버 전환, 슬라이더·입력란 높이, 빠른 작업 진행 표시, 오류 안내 유지, 설정 녹화 크기, 단축키 검색, 용량 줄이기, 동영상 좁은 창.
-4. **다음 — 사용자 실기 피드백 반영**: QA7의 회전 발견성 수정은 완료했습니다. 새 빌드에 대한 다음 피드백을 받으면 이어서 수정합니다.
-5. **PR**: 사용자가 요청할 때만 만듭니다. 순서는 PR #74 병합 → 통합 브랜치를 최신 main에 맞춤 → PR 생성입니다. push·PR·병합은 사용자 요청이 있어야 합니다.
+4. **완료 — 원격 소스 통합**: 사용자의 명시적 Store 배포 요청으로 PR #74와 #75를 병합했습니다. 최종 main은 `3994219`이며 현재 release 산출물의 source commit과 일치합니다.
+5. **다음 — Store 패키지 자체검사와 제출**: 사용자 QA6 앱 종료 또는 명시적 종료 허용을 먼저 확인합니다. 이 문서의 최신 상태를 읽고 현재 기록 브랜치를 보존한 뒤 `git switch release/store-4.1.0`으로 깨끗한 exact source `3994219`를 사용합니다. 기존 publish는 재생성하지 않습니다. 짧은 새 `MYCAPTURE_DATA_ROOT`, `TMP`, `TEMP`를 설정하고 `build\run-packaged-self-tests.ps1 -PublishRoot artifacts\release\4.1.0\publish-win-x64 -OutputRoot <새 짧은 경로>`의 8/8, exit 0, 각 정확한 `RESULT: PASS`를 확인합니다. 이후 `docs/store/README.md`의 identity로 `build\package-store.ps1 -Version 4.1.0`을 실행하고 MSIX 버전·identity·hash 검증 후 Submission 4에 업로드·저장·심사 제출합니다. 기존 4.0.3 패키지만 있는 초안을 제출하지 않습니다. 배포 요청 권한은 유지되므로 같은 배포 승인을 다시 묻지 않습니다.
+6. **다음 — 다음 배포 최적화 실행 검증**: 별도 `perf/next-release-optimization` worktree에서 새 출력·데이터 경로로 `-StoreOnly` 및 실제 8종 native/MSIX 경로를 검증합니다. 현재 제출용 4.1.0 소스에는 다음 최적화를 섞지 않습니다.
+7. **사용자 실기 피드백 반영**: QA7 회전 배치 수정과 Release 빌드 전달은 완료했습니다. 새로운 피드백은 이후 수정합니다.
 
 **미뤄 둔 작은 항목**
 - 라이브러리 상태 줄의 안내 종류를 문구 비교로 추정합니다(`GalleryWindow.xaml.cs` `ClassifyActionStatus`). 호출부에서 종류를 넘기는 방식이 더 견고합니다.
@@ -220,6 +234,11 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: Store 제출 준비 커밋 dfc3000 및 PR #75 생성/원격 push PASS(exit 0). cwd 통합 worktree에서 `powershell.exe -NoProfile -File build\build.ps1 -Configuration Release -Test` PASS(exit 0, actual session 79938): 경고·오류 0, Core1066 통과, App2230 통과/기존 조건부9건 건너뜀. 원본 `artifacts/store-410-verification/release-build.log`, `release-test.log`. Partner Center Submission4 초안에 한국어·영어 설명/짧은소개/4.1.0변경사항과 pin/GIF 기능 문구를 저장하고 다시 열어 값 대조 및 JPG 증거 저장 완료. Store 공개/심사 제출은 아직 아님.
 - 2026-10-12 Codex: PR75 CI run38161277525/38161254064 FAIL(exit1): Core1066 통과, App2231 통과/1실패/7건 건너뜀. `LibraryColumns_NoCardIsClippedFromTheMinimumWidthUp`에서 width sweep이 요청/ActualWidth 불일치로 조기 종료되어 root/details open 2열만 관측함. 제품 변경 없이 테스트를 보완: 가능한 실제 창 폭은 기존 검사, 데스크톱 제한 이후는 실제 loaded LibraryRoot의 명시적 DIP 폭에서 같은 SizeChanged/카드/명령/전체행/최소폭 assertion 및 3개 이상 열 수 검사를 유지. MaxWidth=MinWidth인 별도 재현검사 추가. 독립 검토 지적 없음. 집중 `dotnet test tests/MyCapture.App.Tests -c Release --filter FullyQualifiedName~LibraryColumns_ --logger trx;LogFileName=ci-library-columns.trx --results-directory artifacts/store-410-verification` PASS(exit0, actual session77818, 2/2). 단조 증가 sweep에서 최소폭으로 매회 돌아가던 fixture 재구성을 줄인 후 같은 검사 `ci-library-columns-final.trx` PASS(exit0, actual session45014, 2/2,31초). 첫 CI 실패 로그와 두 TRX 모두 보존.
 - 2026-10-12 Codex: 다음 배포용 앱/패키징 최적화는 재사용 worktree agent-aeae29401bfb142cf의 perf/next-release-optimization에 분리. HEAD4d54fc8(앱690483f, 패키징원본a1ccabd/d607bf→d912bf4/4d54fc8), clean. 독립 검토 지적 해소, 15개 패키징 합성계약 PASS(exit0). `powershell.exe -NoProfile -File build/build.ps1 -Configuration Release -Test` PASS(exit0, actual session74880): Release 경고·오류0, Core1066, App2233통과/9건건너뜀. 선택getter 2000회 동일fixture 측정에서 단일선택 할당5,040,000→176,000 bytes,6조건checksum동일. 근거 `%LOCALAPPDATA%/Temp/mcux/perf-next-release-app/`. 실제 StoreOnly/8종 native 자체검사는 사용자앱 종료 조건 때문에 아직 미실행.
+- 2026-10-12 Codex: 최종 CI run38162513743/38162518261 모두 SUCCESS. `gh pr checks 75 --watch` actual session66682 완료(exit0). 다운로드한 CI 로그/ZIP을 `artifacts/store-410-verification`에 보존하고 Core1066/App2233 통과·실패0·조건부7건 건너뜀 및 hosted symlink 필수검사 PASS를 확인함. `gh pr merge 75 --squash --match-head-commit 75dc4e3a1377189f7e54d49ef56beeed142b1656` PASS(exit0), main39942191fbdc49d018ccfd01c975701f0d002532 병합 확인. `git diff --exit-code HEAD origin/main -- .` PASS(exit0, 파일 트리 동일) 후 clean release/store-4.1.0 브랜치로 이동함.
+- 2026-10-12 Codex: cwd `C:\GitRepositories\my-capture-codex`, source3994219 clean; `powershell.exe -NoProfile -File build\package.ps1 -Version 4.1.0` PASS(exit0, actual session99883). publish281개, setup/portable/release-manifest/SHA256SUMS 생성. `/root/delegation_recovery` 독립 PowerShell 읽기 검증 PASS(exit0): exactSourceCommit/clean/4.1.0/win-x64/x64/self-contained 일치, publish281개 총250621689 bytes의 경로·크기·SHA256 전수 일치, 중복·추가 없음, checksum3/3 일치. setup102338560 bytes SHA256 AA647F0F5C0462EA9C6FA3A18B8E4DF7743CA75B73A2D2DCFA8B0F277DCE8F15; portable104034509 bytes SHA256 D86DBD080ED3A267488E29316BEEF409EAD0A2F8068D0A2CBF5CC8CD7839116E. installer-stage와 모든 근거 보존, 삭제 없음.
+- 2026-10-12 Codex: 다음 배포 브랜치를 최종 main3994219 이력과 연결한 5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18 완료(exit0, clean). 직전02f073d와 작업 파일/인덱스 diff 모두 exit0, tree SHA247976680015a6fe420c2f70be4bbdc89a2b36d3 동일. 직전 main 테스트 fixture 통합 뒤 Release 테스트 프로젝트 빌드 및 LibraryColumns 집중검사2/2 PASS(exit0, actual session93636). 최종 이력 연결은 파일 내용 변경이 없어 검사를 중복 실행하지 않음.
+- 2026-10-12 Codex: `Get-Process MyCapture`로 사용자 QA6 PID55532 및 경로 재확인(exit0). 종료 허용 질문은 아직 응답 대기이며 앱을 보존함. 8종 packaged selftest, MSIX 생성/업로드/심사 제출, 다음 StoreOnly 실경로 검증은 NOT RUN(exitN/A, §5 앱 종료 금지와 runner의 앱 부재 사전조건). Partner Center에는 새 한/영 설명이 저장된 Submission4 초안이 있으며 공개 버전은4.0.3.0. 배포 source3994219와 artifact provenance를 유지하도록 현재 상태 문서만 별도 chore/store-4.1.0-handoff 브랜치에 기록함.
+
 ## 9. 인계 체크리스트
 
 **넘기는 쪽 (현재 오케스트레이터)**
