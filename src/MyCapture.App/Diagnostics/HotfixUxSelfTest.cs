@@ -258,9 +258,9 @@ internal static class HotfixUxSelfTest
                 var receipt = Card(sample); owned.Add(receipt); receipt.IsKept = true;
                 receipt.Show(); Pump(70); receipt.UpdateLayout();
                 var keep = ((StackPanel)((Border)receipt.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<ToggleButton>().Single();
-                string locked = ((System.Windows.Shapes.Path)keep.Content).Data.ToString();
+                string locked = ((SymbolIcon)keep.Content).Data!.ToString();
                 receipt.IsKept = false;
-                string unlocked = ((System.Windows.Shapes.Path)keep.Content).Data.ToString();
+                string unlocked = ((SymbolIcon)keep.Content).Data!.ToString();
                 Check($"{language}/{theme}: keep on/off glyphs differ from each other and screen pin",
                     locked != unlocked && locked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString()
                     && unlocked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString());

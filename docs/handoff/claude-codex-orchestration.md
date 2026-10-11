@@ -43,7 +43,7 @@
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12, 통합 브랜치 d7f26b2 + 인계 문서 커밋)
+## 3. 현재 상태 (2026-10-12, 아이콘·모션 통합 4e59cc7, 전체 검증 진행)
 
 ### 3.1 Astra 17개 항목
 
@@ -58,9 +58,9 @@
 | 7 | 녹화 크기 입력 | 완료. `0`의 실제 의미는 "매번 드래그". "드래그한 크기 / 고정 크기" 선택, 범위 96–7680 | 336f92f, 4b84ff6 |
 | 8 | 편집기 선 두께 1–24 제한 | 완료. 1–64 단일 출처. 글자 크기 6–400도 같은 버그라 함께 수정 | fc59359 |
 | 9 | 확인·취소 순서 | 완료. 앱 전체 `[확정][취소]`, 최소 폭 88, 간격 8 | 612862d, d7f26b2 |
-| 10 | 호버·선택 즉시 전환 | 공통 컨트롤, 설정 메뉴, 캡처 모드 바는 완료. **라이브러리 자체 템플릿은 WIP**(§3.3) | 4ba2358, 87fa325 |
+| 10 | 호버·선택 즉시 전환 | 완료. 라이브러리 자체 템플릿 페이드·날짜 회전과 공유 브러시·모션 축소·빠른 전환 검증 추가. 최종 상태 12쌍 픽셀 일치 | 4ba2358, 87fa325, 86464e9 |
 | 11 | glass 장식선이 강함 | 완료. `Border.Control` 토큰 분리(3:1 이상), 장식선은 `Border.Subtle` | 7829492, d2c91ce, d7f26b2 |
-| 12 | 아이콘 크기·굵기 불일치 | **WIP**(§3.3) | — |
+| 12 | 아이콘 크기·굵기 불일치 | 완료. 고정 20×20 격자와 1.6 선을 함께 배율 조정하는 SymbolIcon, 메뉴 16·명령 20, 소비 화면 이전 및 48개 지오메트리 대조 | 4e59cc7 |
 | 13 | 단축키 글자 9px | 완료. 12px 보통 굵기, 조합 키는 툴팁으로, 프레임 이동은 글자 레이블 | 2069a9a, 5e080b3, c190597 |
 | 14 | 슬라이더 모양과 값 확인 | 완료. 공통 템플릿과 편집기 값 입력란(선 두께·글자 크기·흐림) | d84d00a, fc59359 |
 | 15 | 동영상 좁은 창 배치 | 완료. 자르기 두 줄, 중복 정보 제거, 미리보기 높이 증가 | 03d1983 |
@@ -80,15 +80,15 @@ R5 항목: 폴더 저장 스위치 슬라이드 애니메이션(803d727), 동영
 
 **실기 테스트 빌드:** 아직 새로 만들지 않았습니다. 사용자가 마지막으로 쓴 빌드는 `artifacts\qa4-build-2`(Claude 작업 공간 안, R4 시점)입니다.
 
-### 3.3 진행 중이던 WIP (Claude 하위 작업을 중단하며 보존, 빌드·테스트 안 됨)
+### 3.3 인계 시 WIP의 완성·통합 기록
 
-1. **⑫ 아이콘 통일**: 브랜치 `qa6-icons` 커밋 67377db (worktree `.claude\worktrees\agent-aeae29401bfb142cf`, 기준 d7f26b2)
+1. **⑫ 아이콘 통일 — Codex 완료·통합**: 브랜치 `qa6-icons` 커밋 67377db → 4336b34 (worktree `.claude\worktrees\agent-aeae29401bfb142cf`, 기준 d7f26b2). 통합 커밋 `7cdfb8f`, `4e59cc7`.
    - 진행분: 새 `Themes/SymbolIcon.cs`(20×20 고정 격자 렌더러), `Controls.xaml`의 `Icon.Glyph` 수정, `Symbols.xaml`(프레임 이동 아이콘 추가 추정), QuickAccessWindow·PinHoverBar 이전 시작.
-   - 남은 일: 나머지 소비처 이전(VideoEditorWindow, RecordingControlWindow, RecordingWallClockWindow, CaptureModeBar, WelcomeWindow, ShortcutHelpWindow, SettingsWindow.xaml, Gallery/*), 테스트, 전후 렌더, 전체 글리프 대조표.
+   - 완료: 나머지 소비 화면 이전, 렌더러·화면 회귀 32개 및 동영상 관련 38개 통과(공통 검사 6개 중복), 실제 동영상 화면 10쌍, 48개 지오메트리의 전후 대조표 8 PNG. RecordingWallClockWindow는 심볼 소비가 없는 텍스트 Viewbox이므로 유지함. 라이브러리 화살표 충돌 두 곳은 새 SymbolIcon과 StatePart.Normal·RotateTo를 함께 보존하여 통합함.
    - 원칙: Symbols.xaml 글리프는 20×20 격자 그대로 그리고 격자 전체를 목표 크기(메뉴 16, 명령 20)로 축소·확대합니다. `Stretch=Uniform`으로 글리프 외곽을 상자에 맞추지 않습니다. 이미지·썸네일과 격자 밖 지오메트리는 예외입니다. 편집기(AnnotationEditorControl)의 Canvas+Viewbox 방식이 기준입니다.
-2. **⑩ 라이브러리 템플릿 페이드**: 브랜치 `qa6-library-motion` 커밋 d7cd854 (worktree `.claude\worktrees\agent-a491402ad82aa2759`, 기준 d2c91ce)
+2. **⑩ 라이브러리 템플릿 페이드 — Codex 완료·통합**: 브랜치 `qa6-library-motion` 커밋 d7cd854 → d3481a6 (worktree `.claude\worktrees\agent-a491402ad82aa2759`, 기준 d2c91ce). 통합 커밋 `7ae945a`, `86464e9`.
    - 진행분: `GalleryWindow.xaml` 템플릿(카드 외곽선, 폴더 카드, 보기 메뉴, 폴더 행, 목록 행, 날짜 펼침, 저장 스위치 호버, 상세 버튼)에 `FluidMotion.FadeTo` 상태 레이어 30곳, `FluidMotion.cs` 보조 변경, 증거 테스트 파일.
-   - 남은 일: 빌드, 테스트 클래스 추가, 렌더로 최종 상태 픽셀 비교, 통합 브랜치(d2c91ce 이후 커밋들)에 맞춰 cherry-pick.
+   - 완료: Debug 빌드 경고·오류 0, 관련 22/22 통과, 4개 테마 × 루트·폴더·날짜 12쌍 픽셀 일치, 충돌 없이 cherry-pick. 전체 통합 검증은 §3.2와 §8의 최신 기록을 따릅니다.
    - 패턴 참고: `Controls.xaml`의 `StateLayer*` 스타일, 87fa325의 설정 메뉴·모드 바 변환.
 
 ## 4. 앞으로 할 일 (우선순위 순)
@@ -175,6 +175,12 @@ R5 항목: 폴더 저장 스위치 슬라이드 애니메이션(803d727), 동영
 
 - 2026-10-12 Codex: 인수 기록 커밋 `91ff8b4` 완료(`git commit`, cwd 통합 worktree, exit 0). WebGPT 우선 위임 등록 `node C:/Users/sukwo/.codex/skills/webgpt/scripts/client.mjs register --cwd C:/GitRepositories/my-capture/.claude/worktrees/agent-aeae29401bfb142cf`는 `tunnel_unavailable`로 실패(exit 1, 과업 미등록·미전송). 읽기 전용 점검에서 저장 PID 31076 부재, `WebGPT-tunnel-sukwo` 작업의 LastTaskResult 1과 stale lock을 확인함. 설정 변경 없이 native Sol 작업자 `/root/icons`, `/root/library_motion`에 기존 각 WIP worktree를 배정함. Native 연결은 `model_provider=openai`, localhost 8768의 소유 프로세스 `Codexon.exe --model-proxy --upstream chatgpt --managed`로 확인함.
 - 2026-10-12 Codex: 전체 검증 준비 중 R4 출처 테스트의 직접 삭제 두 곳을 기존 `TestRecycleBin` 생성·정리로 교체함. cwd `C:\GitRepositories\my-capture-codex`; `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit 0, 경고 0·오류 0); `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --filter FullyQualifiedName~FolderActionTargetDistinguishesFoldersFilesAndMissingPaths --logger "trx;LogFileName=qa6-recycle-source.trx"` PASS(exit 0, 1/1). 별도 opt-in Explorer 실창 테스트는 기본 전체 테스트에서 건너뜀을 유지함.
+
+- 2026-10-12 Codex: 테스트 정리 수정 커밋 `3583daf` 완료(exit 0). 독립 검토자 `/root/delegation_recovery`가 TestRecycleBin API·기존 테스트 의미·UX selftest 실행 경로를 읽고 지적 없음으로 반환함. 추적된 테스트의 직접 File/Directory.Delete 검색 결과 0개, 별도 녹화 벤치마크의 삭제 코드는 이번 UX 실행 경로 밖임을 확인함.
+- 2026-10-12 Codex: 라이브러리 모션 작업자 `/root/library_motion`의 `d7cd854`, `d3481a6`을 직접 diff·PNG 검토 후 `git cherry-pick d7cd854 d3481a6`으로 통합(exit 0; `7ae945a`, `86464e9`). 원 worktree cwd에서 Debug 빌드 경고·오류 0(exit 0), 관련 테스트 22/22(exit 0). 전후 최종 상태 12쌍은 동일. 명령·환경·중간 실패 및 수정 근거 LOG: `%LOCALAPPDATA%\Temp\mcux\qa6-library-motion-verified\library-motion-validation.md`; 실제 PNG·비교 보고서도 같은 폴더. AS-IS `qa6-library-motion-before`, 비 Git 기준 snapshot `qa6-library-motion-baseline-source`와 ZIP은 보존함. 통합 후 독립 읽기 전용 Antigravity 검토를 실제 session `59542`로 시작함(결과 대기).
+
+- 2026-10-12 Codex: 아이콘 작업자 `/root/icons`의 `67377db`, `4336b34` diff·실제 동영상 PNG·48개 글리프 대조표를 검토함. `git cherry-pick 67377db 4336b34` 첫 커밋은 `7cdfb8f`, 두 번째는 GalleryWindow.xaml 화살표 2곳 충돌(exit 1). 고정 격자 SymbolIcon과 Normal 회전 토큰을 함께 보존한 뒤 `git cherry-pick --continue`로 `4e59cc7` 완료(exit 0). 원 worktree 검증 LOG는 `artifacts/qa6-verification-20261012/icons-validation.txt`, 모션 LOG는 같은 폴더의 `library-motion-validation.md`에 수집함. 기존 모션 비교는 아이콘 이전 전 기준이며, 최종 통합 PNG에는 승인된 아이콘 차이가 포함됨.
+- 2026-10-12 Codex: 아이콘 독립 검토 `/root/delegation_recovery`가 `HotfixUxSelfTest.cs`의 이전 Path 형변환 2곳을 지적하여 SymbolIcon으로 수정함. 그 외 지적 없음. cwd 통합 worktree에서 `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit 0, 경고 0·오류 0); `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --logger "trx;LogFileName=qa6-core.trx" --results-directory C:\GitRepositories\my-capture-codex\artifacts\qa6-verification-20261012` PASS(exit 0, 1066/1066). App 전체 테스트는 actual session `92692`로 실행 중이며 결과 대기.
 
 ## 9. 인계 체크리스트
 
