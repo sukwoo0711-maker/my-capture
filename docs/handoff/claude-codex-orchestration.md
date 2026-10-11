@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `chore/store-4.1.0-handoff` (검증된 MSIX 업로드 전 브라우저 설정 대기) |
+| 현재 기록 브랜치 | `chore/store-4.1.0-handoff` (Store 4.1.0 심사 제출 완료, 사전 처리 중) |
 | Store 소스 브랜치 | `release/store-4.1.0`, main과 같은 `39942191fbdc49d018ccfd01c975701f0d002532` |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -46,17 +46,17 @@
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12, Store 소스 3994219, 8종 자체검사·MSIX 검증 완료, 업로드 설정 대기)
+## 3. 현재 상태 (2026-10-12 08:50 KST, Store 4.1.0 심사 제출 완료, 다음 배포 최적화 검증 완료)
 
 ### 3.0 Store 4.1.0 및 다음 배포 준비
 
-- **현재 공개 버전은 4.0.3.0입니다. 4.1.0 심사 제출은 아직 하지 않았습니다.** PR #74와 #75를 squash 병합했고, main `3994219`의 깨끗한 소스에서 4.1.0 배포 파일을 생성했습니다. 공개·심사 상태와 로컬 빌드 상태를 구분합니다.
+- **4.1.0.0 심사 제출을 완료했습니다.** Partner Center Submission 4 (`1152921505702097950`)의 현재 상태는 `Update in certification` / `Product update: In certification`입니다. 제출 단계 Complete, Pre-processing In progress, Certification·Publishing Not started를 2026-10-12 08:50 KST에 직접 확인했습니다. 인증 통과 즉시 자동 공개 설정이며, 현재 공개 버전은 아직 4.0.3.0입니다. PR #74와 #75를 squash 병합했고, main `3994219`의 깨끗한 소스에서 검증된 4.1.0 배포 파일을 생성했습니다.
 - 최종 PR #75 CI 두 건(`38162513743`, `38162518261`) 모두 SUCCESS. 수집한 실제 CI 로그는 Core 1066 통과, App 2233 통과·실패 0·기존 조건부 7개 건너뜀입니다. 작은 CI 데스크톱에서 중단되던 라이브러리 폭 sweep은 같은 카드·최소폭·열 수 assertion을 유지하는 loaded client 폭 검사로 보완했고 재현검사도 추가했습니다.
 - `powershell.exe -NoProfile -File build\package.ps1 -Version 4.1.0` PASS(exit 0). `artifacts\release\4.1.0\publish-win-x64`의 281개 파일 전체 경로·크기·SHA256, manifest의 exact source commit/clean/version/runtime/self-contained, setup·portable 및 checksum 3개를 독립 검증했습니다. 이후 8종 자체검사와 Store MSIX 생성·독립 검증도 완료했습니다.
 - Partner Center 제품 `9PB33MC095VR`, Submission 4 초안 `1152921505702097950`에 한국어·영어 소개/짧은 설명/4.1.0 변경사항을 저장하고 다시 열어 확인했습니다. 첫 문장은 “MyCapture는 개발자를 위한 무료 Windows 11 캡처·핀 도구입니다.”이며 Snipaste·ShareX·Greenshot의 작업 중심 소개를 참고했습니다. 가격 0원, 240개 시장 공개, 인증 통과 즉시 공개 설정을 확인했습니다. 기존 스크린샷과 아이콘은 유지했습니다.
 - **앱 종료 조건 해결:** 사용자가 “진행해”로 종료와 제출 재개를 승인했습니다. 재조회에서는 앱이 이미 없어 종료 명령 없이 진행했습니다. 최종 8종 runner actual session `27603`, exit 0, `SELF_TESTS=PASS PASSES=8/8`. 앞선 native 키 입력/전경 획득 실패를 보존했고 UI 도구 중지 상태에서 동일 binary의 hotfix 단독 193개 검사 및 최종 전체 8종이 연속 통과했습니다. 초기 실패의 정확한 원인은 미확정이며 `native-input-diagnosis.md`에 기록했습니다. 검사 조건·Windows 설정은 변경하지 않았습니다.
 - **검증된 Store 파일:** `artifacts\store\4.1.0\sukwoo0711.MyCapture_4.1.0.0_x64.msix`, 106019168 bytes, SHA256 `89d6e223117163966c074d66060463a53e7c3ba889162635c8d4c37e185c2a7a`. 생성 session `56707`, exit 0. 독립 ZIP 검증 exit 0: 342개 entry = publish 281개 + 로고 PNG 57개 + metadata/PRI 4개, 모든 payload path/size/hash 일치. identity/version/minOS/capabilities/startup disabled/summary/checksum 확인.
-- **현재 차단:** Partner Center에서 위 MSIX를 filechooser로 업로드하려 했으나 Edge ChatGPT 확장의 `Allow access to file URLs` 설정이 꺼져 있어 실패했습니다. 업로드·심사 제출은 아직 완료되지 않았습니다. `edge://extensions` 열기도 브라우저 URL 보안 정책(HTTP/HTTPS만 허용)에 의해 거부되어 우회하지 않았습니다. 사용자가 Edge → 확장 → ChatGPT → 세부 정보에서 파일 URL 접근을 직접 켜고 알려줘야 합니다. 설정 대기 중에도 기존 초안과 공개 4.0.3.0은 보존돼 있습니다.
+- **업로드 차단 해결:** 사용자의 “완료” 응답 뒤 기존 Partner Center 탭에서 이미 업로드된 4.1.0.0/x64/101.1MB, Windows.Desktop min22000, ko-kr/en-us를 확인했습니다. 사용자가 어떤 방식으로 업로드했는지는 따로 확인하지 않았고 확장 설정 변경을 추정하지 않습니다. 기존 4.0.3 자동 제거 제안은 `Don't remove this package`로 해제해 보존했고 새 4.1.0을 우선순위 1로 저장했습니다. Overview의 4.1.0 `Validated`, Packages·Store listings `Updated` 확인 후 `Submit for certification`을 실행해 접수 완료를 확인했습니다. 기존 runFullTrust 승인 안내는 인증 절차에서 다뤄집니다. 현재 사용자 추가 조치나 로컬 검증 작업은 남아 있지 않습니다.
 - 다음 배포 최적화는 별도 worktree `C:\GitRepositories\my-capture\.claude\worktrees\agent-aeae29401bfb142cf`의 `perf/next-release-optimization`에 완료했습니다. 선택 상태 getter의 반복 배열 생성을 줄였고, 8종 검증 정의·결과 증거·source/payload 무결성 계약을 공통화했으며 `-StoreOnly` 경로를 추가했습니다. Release 빌드 경고·오류 0, Core 1066·App 2233 통과(9개 건너뜀), 패키징 계약 15개 통과. 단일 선택 getter 2000회 fixture에서 할당 5,040,000→176,000 bytes(96.5% 감소), 전체 앱 성능 측정은 아닙니다. 마지막 main 이력 연결 `5e463c9`는 직전 검증 트리와 동일합니다. 실제 `-StoreOnly` 실행도 PASS(exit0,84.095초,8종8/8)이며 281개 inventory·각 report/result JSON hash·exact source/clean 검증 및 ZIP/IExpress 산출물 부재 확인을 완료했습니다. 후속 MSIX 생성 PASS(exit0,10.119초), 독립 ZIP 검증 PASS:342entries/281publish/340stage·blockmap파일/4037blocks/CRC·identity·hash 일치. 이 다음 배포 검증 사본은 현재 제출 파일과 별개로 보존했으며 업로드하지 않았습니다.
 - 현재 Store 근거: `artifacts\store-410-verification\`. 다음 배포 근거: `artifacts\next-release-optimization-verification\` 및 `%LOCALAPPDATA%\Temp\mcux\perf-next-release-app\verification-log.txt`. 기존 작업 사본·빌드·임시 근거는 보존했습니다.
 
@@ -121,7 +121,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
    ```
    실행 파일은 `C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1\MyCapture.exe`입니다. 새 확인 포인트는 자르기 진입 없이 왼쪽·오른쪽 회전, 실행 취소, 최소 창에서 모든 도구 표시입니다. 이전 라운드 확인 포인트도 유지합니다: 폴더 스위치 애니메이션, 동영상 편집기 버튼, Excel 표 핀(고배율 모니터에서 크기 포함), VS Code 코드 핀 모서리, 좁은 라이브러리, 상세 패널, 대화상자 순서, 고대비, 호버 전환, 슬라이더·입력란 높이, 빠른 작업 진행 표시, 오류 안내 유지, 설정 녹화 크기, 단축키 검색, 용량 줄이기, 동영상 좁은 창.
 4. **완료 — 원격 소스 통합**: 사용자의 명시적 Store 배포 요청으로 PR #74와 #75를 병합했습니다. 최종 main은 `3994219`이며 현재 release 산출물의 source commit과 일치합니다.
-5. **다음 — 검증된 Store MSIX 업로드와 제출**: 8종 자체검사와 MSIX 생성·독립 검증은 완료했습니다(§3.0). 사용자의 Edge 확장 파일 URL 접근 설정 완료를 확인한 뒤, 보존된 exact MSIX의 SHA256을 재확인하고 Submission 4에 업로드·저장·심사 제출합니다. 브라우저는 기존 Edge ID `2`, Partner Center 탭 `977755822`를 재사용합니다. 기존 4.0.3 패키지만 있는 초안을 제출하지 않습니다. 배포 승인과 앱 종료 허용은 유지되므로 다시 묻지 않습니다. 기존 publish와 MSIX는 재생성할 필요가 없습니다. source branch `release/store-4.1.0`의 `3994219`는 그대로 보존돼 있습니다.
+5. **완료 — Store MSIX 업로드·저장·심사 제출**: 8종 자체검사·MSIX 생성·독립 검증 및 source/hash 재대조 후 Submission 4를 심사 제출했습니다. 인증 결과와 실제 공개 여부는 이후 Partner Center에서 확인합니다. 제품 URL은 `https://apps.microsoft.com/detail/9PB33MC095VR`, overview는 `https://partner.microsoft.com/en-us/dashboard/products/9PB33MC095VR/overview`입니다. 기존 Edge ID `2`, 탭 `977755822`를 결과 화면으로 보존했습니다. source branch `release/store-4.1.0`의 `3994219`와 exact MSIX는 그대로 보존돼 있습니다. 심사 중 제출을 취소하거나 중복 제출하지 않습니다.
 6. **완료 — 다음 배포 최적화 실행 검증**: 별도 `perf/next-release-optimization` worktree에서 새 nopt1 데이터 경로로 `-StoreOnly`와 실제 8종 native/MSIX 경로 및 생성물을 검증했습니다. 현재 제출용 4.1.0 소스에는 다음 최적화를 섞지 않습니다. 다음 실제 배포를 시작할 때는 최적화 브랜치를 통합하고 새 버전으로 올린 뒤 해당 버전의 필수 검증·패키징을 수행합니다. 현재 next-opt MSIX는 4.1.0.0인 검증 사본이므로 이번 제출 파일로 대체하거나 후속 업데이트로 올리지 않습니다.
 7. **사용자 실기 피드백 반영**: QA7 회전 배치 수정과 Release 빌드 전달은 완료했습니다. 새로운 피드백은 이후 수정합니다.
 
@@ -249,6 +249,9 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 - 2026-10-12 Codex: 다음 배포 최적화 source5e463c9 clean, cwd `C:\GitRepositories\my-capture\.claude\worktrees\agent-aeae29401bfb142cf`; 작업자 `powershell.exe -NoProfile -NonInteractive -File <cwd>\build\package.ps1 -Version 4.1.0 -StoreOnly` PASS(exit0,actual session47668,84.095초,8종8/8). nopt1 격리data/tmp, foreground실패 없음. 독립 Python 검증 exit0:manifest exactsource/clean/StoreOnly/x64/self-contained,8개 process exit0/단일PASS/reporthash/resultJSONhash,281개inventory path/size/hash,ZIP/IExpress 부재. 이어 `package-store.ps1 -PublishDir <cwd>\artifacts\store-publish\4.1.0\publish-win-x64 -OutputRoot <cwd>\artifacts\store\next-opt-5e463c9-4.1.0`와 기존Store identity인수로 PASS(exit0,session44644,10.119초). MSIX106019943bytes SHA25687a02e20ffcd6d58e2bfa3c8ef61a9bd72ba730d0b39d47c2a79fa0a37de682f. 독립 ZIP검증 exit0:342unique/CRC,281publish·340stage파일hash,340blockmap파일4037SHA블록,identity/source/manifesthash 일치. 최종sourceclean,추가코드변경/commit/remote 없음. 실제전체명령·exit LOG와 JSON을 `artifacts/next-release-optimization-verification/storeonly-msix`에 수집. Purpose=next-release-validation-only, 현재배포MSIX와별도보존,설치·업로드없음.
 - 2026-10-12 Codex: Store 업로드 설정 응답은 아직 없음. 권한 변경 없이 사용자가 Partner Center의 browse your files로 검증된 root MSIX를 직접 올리는 대안도 안내함. Edge tab977755822를 markHandoff하고 현재 패키지 화면 JPG를 `artifacts/store-410-verification/store-upload-awaiting-access.jpg`에 저장·직접확인함. 초안 패키지에는 아직4.0.3.0만 있으므로 제출하지 않았음. `git diff --check`와 상태 문서 검증 후 현재 기록 브랜치에 보존하며, 다음 재개는 사용자 fileURL설정 완료 또는 exact MSIX 직접 업로드 완료 확인부터 진행함.
+
+- 2026-10-12 Codex: 사용자 “완료” 응답 후 기존 Edge2/PartnerCenter977755822에서 업로드된4.1.0.0/x64/101.1MB, minWindows22000, ko-kr/en-us 확인. 기존4.0.3 자동제거제안은 Don't remove this package로 해제하고 보존, 새4.1.0 rank1로 Save. Overview의4.1.0 Validated와 Packages/Storelistings Updated 확인. `/root/delegation_recovery`가 실제제출MSIX106019168bytes/SHA25689d6e223117163966c074d66060463a53e7c3ba889162635c8d4c37e185c2a7a,source3994219/clean근거,최종8/8를 읽기전용 재대조 PASS(exit0)하여 기존독립LOG에추가함. 브라우저내부설정 변경은 수행하지 않음.
+- 2026-10-12 Codex: 08:50 KST(UTC2026-10-11T23:50경) Submit for certification 클릭 후 `Update in certification` 및 `Product update: In certification (Submission4)`를 직접확인. Submission Complete / Pre-processing In progress / Certification·Publishing Not started. `Your product will start publishing as soon as it passes certification` 확인. 선택적만족도설문은 Close로닫고응답전송없음. 결과화면을 markDeliverable, `artifacts/store-410-verification/store-certification-submitted.jpg` 저장. 현재공개4.0.3.0,새4.1.0.0은심사접수완료/공개대기. 사용자추가설정요청해소, 다음배포최적화실행검증도이미완료. 파일·기존패키지·작업사본·근거자료삭제없음.
 
 ## 9. 인계 체크리스트
 
