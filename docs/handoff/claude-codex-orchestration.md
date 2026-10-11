@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 통합 브랜치 | `fix/realdevice-qa-round4` (로컬 전용, 원격에 push하지 않음) |
+| 통합 브랜치 | `fix/realdevice-qa-round4` (Store 4.1.0 제출을 위한 원격 통합 진행 중) |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (통합 브랜치를 체크아웃한 git worktree) |
 | 이 문서 위치 | 통합 브랜치의 `docs/handoff/claude-codex-orchestration.md` |
 
@@ -214,6 +214,12 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 - 2026-10-12 Codex: `qa7-app.trx`를 XML로 직접 집계해 total 2239 / Passed 2230 / Failed 0 / NotExecuted 9를 확인(exit 0). `git diff --check` PASS(exit 0). Explorer에서 `artifacts\qa7-build-1\MyCapture.exe`를 선택해 열고 Shell.Application으로 열린 폴더와 선택 항목을 확인(exit 0). §3·§4·§6을 최신 QA7 상태로 갱신했으며 사용자 실기 피드백 대기로 전환함.
 
+- 2026-10-12 Codex: 사용자 요청으로 Microsoft Store 배포와 다음 배포용 앱 내부·패키징 로직 최적화 모두 착수. 기존 §4.5의 원격 대기 조건은 이번 명시적 배포 요청으로 충족함. 현재 QA7 소스를 Store 4.1.0으로 제출하고 다음 최적화는 별도 브랜치로 유지함. 사용자 추가 요청에 따라 무료·개발자·캡처·핀을 앞세운 한/영 Store 설명 수정. Snipaste(https://www.snipaste.com/), ShareX(https://getsharex.com/), Greenshot(https://getgreenshot.org/) 공식 소개의 작업 중심 구성과 어투를 조사함. Partner Center에서 현재 공개 패키지 4.0.3.0과 신규 Submission 4 초안(1152921505702097950)을 확인함.
+- 2026-10-12 Codex: cwd 통합 worktree; PR #74 exact head 753773fcb32040155b5597e180ff4a233925919c의 CI 2개 SUCCESS 확인. `gh pr merge 74 --repo sukwoo0711-maker/my-capture --merge --match-head-commit 753773fcb32040155b5597e180ff4a233925919c` FAIL(exit 1, 저장소 merge commit 금지). 저장소 허용 방식 확인 후 같은 exact head에 `--squash`로 재실행 PASS(exit 0), main 46bf027359829bf7af990b8a77ebd143f81b0dcc 병합 확인. `git merge origin/main --no-edit`는 PinWindow·ThemeService 중복 변경 충돌로 exit 1. 이미 개선된 QA7 구현을 보존해 해결하고 `git diff --exit-code c437af1 -- .` PASS(exit 0, 전체 파일 트리 동일)를 확인 후 병합 커밋 2893a0d 완료(exit 0).
+- 2026-10-12 Codex: 사용자 QA6 MyCapture PID 55532 실행을 재확인함. Store 자체검사 runner의 실행 앱 부재 조건과 §5의 사용자 앱 종료 금지에 따라 종료 여부를 질문하고 응답 대기 중. 앱은 종료하지 않았으며 소스·설명·배포 준비를 계속함. 다음 최적화 작업은 기존 worktree를 재사용해 perf/next-release-app 및 perf/next-release-packaging에 분리하고, native 독립 검토와 실제 검증 근거를 수집 중임.
+- 2026-10-12 Codex: Store 제출 준비 커밋 dfc3000 및 PR #75 생성/원격 push PASS(exit 0). cwd 통합 worktree에서 `powershell.exe -NoProfile -File build\build.ps1 -Configuration Release -Test` PASS(exit 0, actual session 79938): 경고·오류 0, Core1066 통과, App2230 통과/기존 조건부9건 건너뜀. 원본 `artifacts/store-410-verification/release-build.log`, `release-test.log`. Partner Center Submission4 초안에 한국어·영어 설명/짧은소개/4.1.0변경사항과 pin/GIF 기능 문구를 저장하고 다시 열어 값 대조 및 JPG 증거 저장 완료. Store 공개/심사 제출은 아직 아님.
+- 2026-10-12 Codex: PR75 CI run38161277525/38161254064 FAIL(exit1): Core1066 통과, App2231 통과/1실패/7건 건너뜀. `LibraryColumns_NoCardIsClippedFromTheMinimumWidthUp`에서 width sweep이 요청/ActualWidth 불일치로 조기 종료되어 root/details open 2열만 관측함. 제품 변경 없이 테스트를 보완: 가능한 실제 창 폭은 기존 검사, 데스크톱 제한 이후는 실제 loaded LibraryRoot의 명시적 DIP 폭에서 같은 SizeChanged/카드/명령/전체행/최소폭 assertion 및 3개 이상 열 수 검사를 유지. MaxWidth=MinWidth인 별도 재현검사 추가. 독립 검토 지적 없음. 집중 `dotnet test tests/MyCapture.App.Tests -c Release --filter FullyQualifiedName~LibraryColumns_ --logger trx;LogFileName=ci-library-columns.trx --results-directory artifacts/store-410-verification` PASS(exit0, actual session77818, 2/2). 단조 증가 sweep에서 최소폭으로 매회 돌아가던 fixture 재구성을 줄인 후 같은 검사 `ci-library-columns-final.trx` PASS(exit0, actual session45014, 2/2,31초). 첫 CI 실패 로그와 두 TRX 모두 보존.
+- 2026-10-12 Codex: 다음 배포용 앱/패키징 최적화는 재사용 worktree agent-aeae29401bfb142cf의 perf/next-release-optimization에 분리. HEAD4d54fc8(앱690483f, 패키징원본a1ccabd/d607bf→d912bf4/4d54fc8), clean. 독립 검토 지적 해소, 15개 패키징 합성계약 PASS(exit0). `powershell.exe -NoProfile -File build/build.ps1 -Configuration Release -Test` PASS(exit0, actual session74880): Release 경고·오류0, Core1066, App2233통과/9건건너뜀. 선택getter 2000회 동일fixture 측정에서 단일선택 할당5,040,000→176,000 bytes,6조건checksum동일. 근거 `%LOCALAPPDATA%/Temp/mcux/perf-next-release-app/`. 실제 StoreOnly/8종 native 자체검사는 사용자앱 종료 조건 때문에 아직 미실행.
 ## 9. 인계 체크리스트
 
 **넘기는 쪽 (현재 오케스트레이터)**
