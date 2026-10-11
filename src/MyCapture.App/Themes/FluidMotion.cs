@@ -32,6 +32,18 @@ public static class FluidMotion
             typeof(FluidMotion),
             new PropertyMetadata(false, OnPressFeedbackChanged));
 
+    /// <summary>
+    /// Slides a switch template's thumb and fades its accent fill when the toggle changes.
+    /// The template names <c>PART_SwitchTrack</c>, <c>PART_SwitchFill</c>,
+    /// <c>PART_SwitchThumb</c> and <c>PART_SwitchThumbOn</c>.
+    /// </summary>
+    public static readonly DependencyProperty SwitchMotionProperty =
+        DependencyProperty.RegisterAttached(
+            "SwitchMotion",
+            typeof(bool),
+            typeof(FluidMotion),
+            new PropertyMetadata(false, OnSwitchMotionChanged));
+
     private static readonly DependencyProperty PressTransformProperty =
         DependencyProperty.RegisterAttached(
             "PressTransform",
@@ -66,6 +78,12 @@ public static class FluidMotion
 
     public static bool GetPressFeedback(DependencyObject element) =>
         (bool)element.GetValue(PressFeedbackProperty);
+
+    public static void SetSwitchMotion(DependencyObject element, bool value) =>
+        element.SetValue(SwitchMotionProperty, value);
+
+    public static bool GetSwitchMotion(DependencyObject element) =>
+        (bool)element.GetValue(SwitchMotionProperty);
 
     /// <summary>Whether motion should run for the current Windows session.</summary>
     internal static bool AnimationsEnabled =>
@@ -387,6 +405,100 @@ public static class FluidMotion
             ScaleTransform.ScaleYProperty,
             y,
             HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private static void OnSwitchMotionChanged(
+        DependencyObject dependencyObject,
+        DependencyPropertyChangedEventArgs e)
+    {
+        if (dependencyObject is not ToggleButton toggle)
+        {
+            return;
+        }
+
+        toggle.Loaded -= OnSwitchLoaded;
+        toggle.Checked -= OnSwitchToggled;
+        toggle.Unchecked -= OnSwitchToggled;
+        if (e.NewValue is true)
+        {
+            toggle.Loaded += OnSwitchLoaded;
+            toggle.Checked += OnSwitchToggled;
+            toggle.Unchecked += OnSwitchToggled;
+            if (toggle.IsLoaded)
+            {
+                MoveSwitch(toggle, animate: false);
+            }
+        }
+    }
+
+    private static void OnSwitchLoaded(object sender, RoutedEventArgs e)
+    {
+        _ = e;
+        if (sender is ToggleButton toggle)
+        {
+            MoveSwitch(toggle, animate: false);
+        }
+    }
+
+    private static void OnSwitchToggled(object sender, RoutedEventArgs e)
+    {
+        _ = e;
+        if (sender is ToggleButton toggle)
+        {
+            MoveSwitch(toggle, animate: toggle.IsLoaded);
+        }
+    }
+
+    /// <summary>Places the thumb and fill for the current state, sliding when motion is on.</summary>
+    internal static void MoveSwitch(ToggleButton toggle, bool animate)
+    {
+        toggle.ApplyTemplate();
+        if (toggle.Template?.FindName("PART_SwitchThumb", toggle) is not FrameworkElement thumb)
+        {
+            return;
+        }
+
+        bool on = toggle.IsChecked == true;
+        // Template transforms may be frozen; the thumb owns one it can animate.
+        if (thumb.RenderTransform is not TranslateTransform shift || shift.IsFrozen)
+        {
+            shift = new TranslateTransform();
+            thumb.RenderTransform = shift;
+        }
+
+        double travel = toggle.Template.FindName("PART_SwitchTrack", toggle) is FrameworkElement track
+            && track.ActualWidth > 0 && thumb.ActualWidth > 0
+                ? track.ActualWidth - thumb.ActualWidth - (2 * thumb.Margin.Left)
+                : 16;
+        Animate(shift, TranslateTransform.XProperty, on ? travel : 0, animate);
+        if (toggle.Template.FindName("PART_SwitchFill", toggle) is UIElement fill)
+        {
+            Animate(fill, UIElement.OpacityProperty, on ? 1 : 0, animate);
+        }
+
+        if (toggle.Template.FindName("PART_SwitchThumbOn", toggle) is UIElement thumbOn)
+        {
+            Animate(thumbOn, UIElement.OpacityProperty, on ? 1 : 0, animate);
+        }
+    }
+
+    private static void Animate(IAnimatable target, DependencyProperty property, double to, bool animate)
+    {
+        var owner = (DependencyObject)target;
+        double from = (double)owner.GetValue(property);
+        target.BeginAnimation(property, null);
+        owner.SetValue(property, to);
+        if (!animate || !AnimationsEnabled || from.Equals(to))
+        {
+            return;
+        }
+
+        var slide = new DoubleAnimation(from, to, NormalDuration)
+        {
+            EasingFunction = StandardEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        target.BeginAnimation(property, slide, HandoffBehavior.SnapshotAndReplace);
     }
 
     private static Duration ResourceDuration(string key, TimeSpan fallback) =>

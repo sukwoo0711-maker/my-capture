@@ -71,14 +71,19 @@ public sealed class VideoEditorUxLayoutTests
                 return button.TranslatePoint(new Point(), bar).X;
             }
 
-            // Undo/redo, then trim · add text · frame image, then save · export at the right.
+            // Undo/redo, then trim · add text · frame image, then export · save (emphasised) at the right.
             double[] order =
             [
                 X(UiText.Get("Text_CE706412FA75")), X(UiText.Get("Text_078C44D5A66E")),
                 X(UiText.Get("VideoEditorUx_Trim")), X(UiText.Get("VideoEditorUx_AddText")), X(UiText.Get("VideoEditorUx_FrameImageEdit")),
-                X(UiText.Get("MediaExport_SaveEdits")), X(UiText.Get("MediaExport_ExportFormats")),
+                X(UiText.Get("MediaExport_ExportFormats")), X(UiText.Get("MediaExport_SaveEdits")),
             ];
             Assert.Equal(order.Order().ToArray(), order);
+            // Saving into the library finishes the edit, so it carries the emphasis, as Done does.
+            Button saveEdits = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_SaveEdits"));
+            Button exportFile = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_ExportFormats"));
+            Assert.Same(saveEdits.FindResource("Button.Primary"), saveEdits.Style);
+            Assert.Same(exportFile.FindResource("Button.Secondary"), exportFile.Style);
             foreach (var (name, gesture) in new[]
             {
                 ("VideoEditorUx_Trim", "X"), ("VideoEditorUx_AddText", "Ctrl+T"), ("VideoEditorUx_FrameImageEdit", "E"),
@@ -156,8 +161,8 @@ public sealed class VideoEditorUxLayoutTests
                 editor.Width = width;
                 editor.Height = height;
                 editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
-                Button export = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_ExportFormats"));
-                AssertInside(export, layout, layout.ActualHeight);
+                Button save = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_SaveEdits"));
+                AssertInside(save, layout, layout.ActualHeight);
                 if (width == 760) narrowest = Math.Max(narrowest, editor.CommandBarLevelForTest);
             }
 

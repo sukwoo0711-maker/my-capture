@@ -770,20 +770,21 @@ internal sealed class VideoEditorWindow : Window
         Grid.SetColumn(editing, 2);
         bar.Children.Add(editing);
 
-        // 4. Output, at the right edge: save into the library, or export a new file.
+        // 4. Output, at the right edge: export a new file, then the finishing action. Saving
+        // into the library is the emphasised last button, like Done in the image editor.
         var output = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
         // Each button says what it does to the library and to the original; the shared hint
         // left people unsure which one keeps the recording intact.
-        Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"));
+        Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"), primary: true);
         saveEdits.ToolTip = UiText.Get("VideoEditorUx_SaveEditsHelp");
         AutomationProperties.SetHelpText(saveEdits, UiText.Get("VideoEditorUx_SaveEditsHelp"));
         saveEdits.Click += (_, _) => CommitTrim();
-        Button export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_ExportFormats"), "MediaExport_ArrowExport", true);
+        Button export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_ExportFormats"), "MediaExport_ArrowExport");
         export.ToolTip = UiText.Get("VideoEditorUx_ExportHelp");
         AutomationProperties.SetHelpText(export, UiText.Get("VideoEditorUx_ExportHelp"));
         export.Click += (_, _) => OpenExport();
         _editControls.Add(saveEdits); _editControls.Add(export);
-        output.Children.Add(saveEdits); output.Children.Add(export);
+        output.Children.Add(export); output.Children.Add(saveEdits);
         Grid.SetColumn(output, 4);
         bar.Children.Add(output);
 

@@ -1184,6 +1184,7 @@
         <!-- "Save new captures here" is a setting of the open folder, not part of its name: a
              quiet switch at the far end of the header, the way Windows shows an on/off option. -->
         <Style x:Key="LibraryUx.SaveHereSwitch" TargetType="CheckBox">
+            <Setter Property="themes:FluidMotion.SwitchMotion" Value="True" />
             <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Cursor" Value="Hand" />
@@ -1196,12 +1197,17 @@
                         <Grid Background="Transparent">
                             <StackPanel Orientation="Horizontal" Margin="8,0,6,0" VerticalAlignment="Center">
                                 <ContentPresenter VerticalAlignment="Center" Margin="0,0,10,0" />
-                                <Grid Width="36" Height="20" VerticalAlignment="Center">
+                                <!-- FluidMotion.SwitchMotion slides the thumb and fades the fill. -->
+                                <Grid x:Name="PART_SwitchTrack" Width="36" Height="20" VerticalAlignment="Center">
                                     <Border x:Name="Track" CornerRadius="10" BorderThickness="1"
                                             BorderBrush="{DynamicResource Text.Secondary}" Background="Transparent" />
-                                    <Ellipse x:Name="Thumb" Width="10" Height="10" Margin="5,0,0,0"
-                                             HorizontalAlignment="Left" VerticalAlignment="Center"
-                                             Fill="{DynamicResource Text.Secondary}" />
+                                    <Border x:Name="PART_SwitchFill" CornerRadius="10" Opacity="0"
+                                            Background="{DynamicResource Accent.Default}" />
+                                    <Grid x:Name="PART_SwitchThumb" Width="12" Height="12" Margin="4,0,0,0"
+                                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                                        <Ellipse x:Name="ThumbOff" Fill="{DynamicResource Text.Secondary}" />
+                                        <Ellipse x:Name="PART_SwitchThumbOn" Fill="{DynamicResource Text.OnAccent}" Opacity="0" />
+                                    </Grid>
                                 </Grid>
                             </StackPanel>
                             <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
@@ -1211,16 +1217,10 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                                 <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
-                                <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource Text.Primary}" />
+                                <Setter TargetName="ThumbOff" Property="Fill" Value="{DynamicResource Text.Primary}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource Accent.Default}" />
                                 <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
-                                <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource Text.OnAccent}" />
-                                <Setter TargetName="Thumb" Property="Width" Value="12" />
-                                <Setter TargetName="Thumb" Property="Height" Value="12" />
-                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
-                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,4,0" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
