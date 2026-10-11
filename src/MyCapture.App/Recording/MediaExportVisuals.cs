@@ -27,4 +27,14 @@ internal static class MediaExportVisuals
         button.ToolTip = caption;
         return button;
     }
+
+    /// <summary>Sizes a dialog's closing action like every other dialog: 88 wide at least, 8 apart.</summary>
+    internal static Button AsDialogAction(this Button button)
+    {
+        button.MinWidth = DialogActionMinWidth;
+        button.Margin = new Thickness(8, 0, 0, 0);
+        return button;
+    }
+
+    internal const double DialogActionMinWidth = 88;
 }

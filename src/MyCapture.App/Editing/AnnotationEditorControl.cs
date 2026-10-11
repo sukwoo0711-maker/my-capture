@@ -422,7 +422,7 @@ internal sealed class AnnotationEditorControl : Grid
         {
             _hangulNoticeTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
             {
-                Interval = TimeSpan.FromMilliseconds(HangulNoticeMilliseconds),
+                Interval = MyCapture.App.Themes.FeedbackTiming.Result,
             };
             _hangulNoticeTimer.Tick += (_, _) =>
             {
@@ -439,7 +439,6 @@ internal sealed class AnnotationEditorControl : Grid
         _hangulNoticeTimer.Start();
     }
 
-    private const int HangulNoticeMilliseconds = 6000;
     private const int HangulNoticeRepeatMilliseconds = 3000;
 
     /// <summary>The status line text, for tests.</summary>
@@ -1902,7 +1901,8 @@ internal sealed class AnnotationEditorControl : Grid
                 Padding = new Thickness(0),
                 ToolTip = UiText.Format("Text_151C77170A94", swatchColor.ToHex()),
                 BorderThickness = new Thickness(1),
-                BorderBrush = Brush("Border.Subtle", Colors.Gray),
+                // A control boundary, so a dark swatch stays outlined on a dark panel.
+                BorderBrush = Brush("Border.Control", Colors.Gray),
                 Background = swatchColor.ToBrush(),
             };
             AutomationName(swatchButton, UiText.Format("Text_151C77170A94", swatchColor.ToHex()));

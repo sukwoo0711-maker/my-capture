@@ -1915,6 +1915,15 @@
     <value>2 ~ 128 (이미지 픽셀).</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="SettingsUx_RangeStrokeWidth" xml:space="preserve">
+    <value>1 ~ 64 (px).</value>
+  </data>
+  <data name="SettingsUx_RangeFontSize" xml:space="preserve">
+    <value>6 ~ 400 (pt).</value>
+  </data>
+  <data name="SettingsUx_RangeHighlighterAlpha" xml:space="preserve">
+    <value>0 ~ 255.</value>
+  </data>
   <data name="Text_A925E80E33B3" xml:space="preserve">
     <value>닫기</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>

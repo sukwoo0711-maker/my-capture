@@ -96,6 +96,7 @@ internal sealed class ImageReductionExportDialog : Window
         {
             button.Margin = new Thickness(4, 10, 4, 10);
             button.Padding = new Thickness(12, 7, 12, 7);
+            button.MinWidth = MediaExportVisuals.DialogActionMinWidth;
         }
         AutomationProperties.SetName(_target, UiText.Get("ExportReduction_TargetLabel"));
         _target.ValueChanged += (_, _) =>

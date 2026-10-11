@@ -158,11 +158,14 @@ internal sealed class QuickAccessWindow : Window
             // An icon over its short name; the key stays in the tooltip and the accelerator key.
             var face = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
             face.Children.Add(Glyph("Icon." + action));
-            face.Children.Add(new TextBlock
+            // Names use the caption size, so the always-visible key letter is never larger than the name.
+            var name = new TextBlock
             {
-                Text = AutomationProperties.GetName(button), FontSize = 11, Margin = new Thickness(0, 3, 0, 0),
+                Text = AutomationProperties.GetName(button), Margin = new Thickness(0, 3, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
-            });
+            };
+            name.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
+            face.Children.Add(name);
             button.Content = face;
             button.MinWidth = 0; button.MinHeight = 46; button.Padding = new Thickness(1, 4, 1, 3); button.Margin = new Thickness(1);
             ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action);
@@ -173,11 +176,12 @@ internal sealed class QuickAccessWindow : Window
         row.Children.Add(actions); panel.Children.Add(row);
         var footer = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
         var libraryButton = Button("QuickAccess.Library", () => { library(); Close(); });
-        libraryButton.MinHeight = 0; libraryButton.Padding = new Thickness(2); libraryButton.FontSize = 11;
+        libraryButton.MinHeight = 0; libraryButton.Padding = new Thickness(2);
+        libraryButton.SetResourceReference(FontSizeProperty, "FontSize.Caption");
         libraryButton.SetResourceReference(StyleProperty, "Button.Ghost");
         DockPanel.SetDock(libraryButton, Dock.Right); footer.Children.Add(libraryButton);
         _dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight}";
-        _dimensions.FontSize = 10; _dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        _dimensions.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption"); _dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         footer.Children.Add(_dimensions); panel.Children.Add(footer);
         _keyboardTargets.Remove(close);
         _keyboardTargets.Add(close);

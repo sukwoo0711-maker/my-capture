@@ -761,13 +761,13 @@
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Margin="0,0,0,8"
                                    Text="{loc:Text SettingsUx_EditingDefaultsHeading}" />
 
-                        <settings:SettingsField Header="{loc:Text Text_70EC2D232B4F}" Hint="1 ~ 64.">
+                        <settings:SettingsField Header="{loc:Text Text_70EC2D232B4F}" Hint="{loc:Text SettingsUx_RangeStrokeWidth}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_70EC2D232B4F}"
                                      Text="{Binding StrokeThickness, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_A51DCD82F2A1}" Hint="6 ~ 400.">
+                        <settings:SettingsField Header="{loc:Text Text_A51DCD82F2A1}" Hint="{loc:Text SettingsUx_RangeFontSize}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_A51DCD82F2A1}"
                                      Text="{Binding FontSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
@@ -785,7 +785,7 @@
                                      Text="{Binding MosaicBlockSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_FA5045A86267}" Hint="0 ~ 255.">
+                        <settings:SettingsField Header="{loc:Text Text_FA5045A86267}" Hint="{loc:Text SettingsUx_RangeHighlighterAlpha}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_22A29FBD57AD}"
                                      Text="{Binding HighlighterAlpha, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
