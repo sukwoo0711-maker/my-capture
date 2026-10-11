@@ -30,6 +30,7 @@
 | R4 | 실기 피드백 6개: 폴더 저장 칩, 편집기 Ctrl+C = 완료, 단계 번호, 폴더에 넣은 캡처, 출처 메타데이터, "화면 고정" → "핀", 캡처 안내 | 완료(70aeca6 ~ f58e2a7). 단계 번호는 유지하기로 결정 |
 | R5 | 토글에 애니메이션이 없음, 감성품질이 낮음, 동영상 편집기 저장·내보내기 위치와 강조, 엑셀 표 F3 핀 모양, VS Code 코드 핀 모서리. 그리고 "Astra에게 감성품질 조사를 맡겨 결과를 받아올 것" | 완료(803d727, 6ce6d3c). Astra 조사 보고서: `docs/handoff/astra-ux-audit-2026-10-11/report.md` (17개 항목) |
 | R6 | "다고쳐": Astra 17개 항목 전부 수정 | 17개 완료·통합. Codex가 ⑫ 아이콘과 추가 라이브러리 모션 WIP를 완성하고 전체 검증·새 Release 실기 빌드까지 완료(§3) |
+| R7 | "자르기를 선택해야 화면회전이 가능한건 납득하기 어려운 배치구성" | 일반 편집 화면에 왼쪽·오른쪽 회전 노출, 최소 창에서 명령·모든 도구 표시 보장. 전체 검증 및 QA7 Release 빌드 완료(87192d8) |
 
 **다음 사용자 접점:** 새 실기 테스트 빌드를 전달하면 사용자가 테스트하고 다음 피드백을 줍니다. 사용자는 "빠르게 대응"을 원합니다.
 
@@ -43,7 +44,7 @@
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12, 코드 03cc9db, 전체 검증·Release 실기 빌드 완료)
+## 3. 현재 상태 (2026-10-12, 코드 87192d8, QA7 회전 배치 수정·전체 검증·Release 빌드 완료)
 
 ### 3.1 Astra 17개 항목
 
@@ -69,19 +70,21 @@
 
 R5 항목: 폴더 저장 스위치 슬라이드 애니메이션(803d727), 동영상 편집기 `[내보내기][라이브러리에 저장(강조)]`(803d727), 엑셀 표 핀은 Excel이 넣는 셀 그림으로 표시(6ce6d3c), 코드 핀 모서리는 둥근 외곽선과 이미지 클립(6ce6d3c). 엑셀·VS Code 실제 클립보드로는 확인하지 못했으므로 실기 확인이 필요합니다.
 
-### 3.2 최종 검증 결과 (코드 03cc9db)
+R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표시합니다. 같은 버튼을 자르기 명령행에서도 사용하며 회전·undo/redo·Q/W·선택 도구·크롭 취소 의미는 유지합니다. 최소 680×460에서는 명령 묶음을 두 줄로 배치하고, 필요한 경우 도구 레일의 세로 여백만 줄여 모든 40×38 도구 버튼을 표시합니다. 한/영 최소 창과 포커스 전환 검증, 1180/680 × Glass/고대비 전후 렌더, 독립 소스 검토를 완료했습니다(`87192d8`).
+
+### 3.2 최종 검증 결과 (코드 87192d8)
 
 | 검증 | 결과 |
 |---|---|
 | `dotnet build MyCapture.slnx -c Debug -v q -nologo` | PASS, exit 0, 경고 0·오류 0 |
-| `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build` | PASS, exit 0, 통과 1066 / 실패 0. 47ef1e4 시점 실행 후 변경은 App 테스트 fixture 2개뿐 |
-| `dotnet test tests/MyCapture.App.Tests -c Debug --no-build` | PASS, exit 0, 통과 2227 / 실패 0 / 기존 조건부 검사 건너뜀 9, 5분 35초. 첫 실행의 fixture 리소스 누락 15건을 수정한 뒤 전체 재실행 |
-| UX 자체 테스트(통합 Debug exe) | PASS, exit 0, `RESULT: PASS`. 화면 PNG 446개, fixture 포함 재귀 PNG 606개. 빠른 작업 전후·좁은 라이브러리·고대비 동영상·설정 144dpi 직접 시각 확인 |
-| `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa6-build-1` | PASS, exit 0, 경고 0·오류 0. 새 출력 폴더 생성 후 exe·DLL·deps·runtimeconfig 존재와 파일 크기 확인 |
+| `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build` | PASS, exit 0, 통과 1066 / 실패 0 |
+| `dotnet test tests/MyCapture.App.Tests -c Debug --no-build` | PASS, exit 0, 통과 2230 / 실패 0 / 기존 조건부 검사 건너뜀 9, 5분 28초 |
+| UX 자체 테스트(통합 Debug exe) | PASS, exit 0, `RESULT: PASS`. 화면 PNG 446개, fixture 포함 재귀 PNG 606개. 회전 전후·최소 창 및 통합 편집기의 밝은 테마 144dpi·고대비 192dpi 직접 시각 확인 |
+| `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1` | PASS, exit 0, 경고 0·오류 0. 새 출력 폴더 생성 후 exe·DLL·deps·runtimeconfig 존재와 파일 크기 확인 |
 
-검증 cwd는 `C:\GitRepositories\my-capture-codex`입니다. TRX·빌드 로그·UX report·대표 전후 PNG: `artifacts\qa6-verification-20261012\`. 최종 UX 전체 화면: `%LOCALAPPDATA%\Temp\mcux\qa6-codex-final-1\tmp\MyCapture-ux-review-usklf4wn.h2z\`. 실제 Windows 고대비 전환과 Excel·VS Code 클립보드 경험은 다음 사용자 실기 피드백 대상입니다.
+검증 cwd는 `C:\GitRepositories\my-capture-codex`입니다. 최신 TRX·빌드 로그·UX report·대표 전후 PNG: `artifacts\qa7-rotation-verification\`. 최종 UX 전체 화면: `%LOCALAPPDATA%\Temp\mcux\qa7-codex-final-1\tmp\MyCapture-ux-review-w1j40ikd.akw\`. 이전 QA6 근거는 `artifacts\qa6-verification-20261012\`에 보존했습니다. 실제 Windows 고대비 전환과 Excel·VS Code 클립보드 경험은 다음 사용자 실기 피드백 대상입니다.
 
-**실기 테스트 빌드:** `C:\GitRepositories\my-capture-codex\artifacts\qa6-build-1\MyCapture.exe`. 같은 폴더의 의존 파일과 함께 실행합니다. 이전 QA4 빌드는 보존했습니다.
+**최신 실기 테스트 빌드:** `C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1\MyCapture.exe`. 같은 폴더의 의존 파일과 함께 실행합니다. 이전 QA4·QA6 빌드와 실행 중인 사용자 앱은 보존했습니다.
 
 ### 3.3 인계 시 WIP의 완성·통합 기록
 
@@ -97,13 +100,13 @@ R5 항목: 폴더 저장 스위치 슬라이드 애니메이션(803d727), 동영
 ## 4. 앞으로 할 일 (우선순위 순)
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
-2. **완료 — 통합 검증**: Debug 빌드 경고 0, Core 1066·App 2227 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
-3. **완료 — 실기 테스트 빌드**: 새 폴더 `artifacts\qa6-build-1`에 Release 빌드했습니다. 기존 빌드와 작업 사본을 보존했고, 사용자 MyCapture를 종료하지 않았습니다.
+2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
+3. **완료 — 실기 테스트 빌드**: 새 폴더 `artifacts\qa7-build-1`에 Release 빌드했습니다. 기존 빌드와 작업 사본을 보존했고, 사용자 MyCapture를 종료하지 않았습니다.
    ```
-   dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa6-build-1
+   dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1
    ```
-   실행 파일은 `C:\GitRepositories\my-capture-codex\artifacts\qa6-build-1\MyCapture.exe`입니다. 실기 확인 포인트: 폴더 스위치 애니메이션, 동영상 편집기 버튼, Excel 표 핀(고배율 모니터에서 크기 포함), VS Code 코드 핀 모서리, 좁은 라이브러리, 상세 패널, 대화상자 순서, 고대비, 호버 전환, 슬라이더·입력란 높이, 빠른 작업 진행 표시, 오류 안내 유지, 설정 녹화 크기, 단축키 검색, 용량 줄이기, 동영상 좁은 창.
-4. **다음 — 사용자 실기 피드백 반영**: 위 빌드의 피드백을 받은 뒤 다음 라운드로 진행합니다.
+   실행 파일은 `C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1\MyCapture.exe`입니다. 새 확인 포인트는 자르기 진입 없이 왼쪽·오른쪽 회전, 실행 취소, 최소 창에서 모든 도구 표시입니다. 이전 라운드 확인 포인트도 유지합니다: 폴더 스위치 애니메이션, 동영상 편집기 버튼, Excel 표 핀(고배율 모니터에서 크기 포함), VS Code 코드 핀 모서리, 좁은 라이브러리, 상세 패널, 대화상자 순서, 고대비, 호버 전환, 슬라이더·입력란 높이, 빠른 작업 진행 표시, 오류 안내 유지, 설정 녹화 크기, 단축키 검색, 용량 줄이기, 동영상 좁은 창.
+4. **다음 — 사용자 실기 피드백 반영**: QA7의 회전 발견성 수정은 완료했습니다. 새 빌드에 대한 다음 피드백을 받으면 이어서 수정합니다.
 5. **PR**: 사용자가 요청할 때만 만듭니다. 순서는 PR #74 병합 → 통합 브랜치를 최신 main에 맞춤 → PR 생성입니다. push·PR·병합은 사용자 요청이 있어야 합니다.
 
 **미뤄 둔 작은 항목**
@@ -143,8 +146,10 @@ R5 항목: 폴더 저장 스위치 슬라이드 애니메이션(803d727), 동영
 
 - Astra 감성품질 조사: `docs/handoff/astra-ux-audit-2026-10-11/report.md`, 요청문 `prompt.md`
 - 크래시 조사 기록: `docs/maintenance/2026-10-11-ux-review-native-crash.md`
-- Codex 최종 검증·대표 전후 렌더: `artifacts\qa6-verification-20261012\`
-- Codex 최종 통합 전체 렌더: `%LOCALAPPDATA%\Temp\mcux\qa6-codex-final-1\tmp\MyCapture-ux-review-usklf4wn.h2z\`
+- Codex QA7 최종 검증·대표 전후 렌더: `artifacts\qa7-rotation-verification\`
+- Codex QA7 최종 통합 전체 렌더: `%LOCALAPPDATA%\Temp\mcux\qa7-codex-final-1\tmp\MyCapture-ux-review-w1j40ikd.akw\`
+- Codex QA6 검증·대표 전후 렌더(보존): `artifacts\qa6-verification-20261012\`
+- Codex QA6 통합 전체 렌더(보존): `%LOCALAPPDATA%\Temp\mcux\qa6-codex-final-1\tmp\MyCapture-ux-review-usklf4wn.h2z\`
 - 인계 시 통합 상태 전체 렌더(보존): `%LOCALAPPDATA%\Temp\mcux\qa6-int\tmp\MyCapture-ux-review-xhaffrbt.u2w\`
 - 묶음별 전후 렌더(`%LOCALAPPDATA%\Temp\mcux\` 아래):
   - 라이브러리: `lib-before`, `lib-final`, `evidence-final\libux`, `fluid-before`, `fluid-after`
@@ -197,6 +202,17 @@ R5 항목: 폴더 저장 스위치 슬라이드 애니메이션(803d727), 동영
 - 2026-10-12 Codex: 코드 `03cc9db`, cwd 통합 worktree; 출력 폴더 부재 확인 후 `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa6-build-1` PASS(exit 0, 경고 0·오류 0, 4.87초). `artifacts\qa6-verification-20261012\release-build.log` 저장. `Get-Item` 확인(exit 0): `MyCapture.exe` 220672 bytes, `MyCapture.dll` 2339328 bytes, `MyCapture.deps.json` 18448 bytes, `MyCapture.runtimeconfig.json` 567 bytes. §4.1~3 완료, 다음 단계는 사용자 실기 피드백. 기존 빌드·각 WIP worktree·기준 snapshot·증거·실패한 Antigravity 검토 worktree는 재현을 위해 보존하며 정리하지 않음.
 
 - 2026-10-12 Codex: `/root/delegation_recovery`의 최종 읽기 전용 독립 확인 완료. Release의 .NET 10·Windows Desktop 10 runtimeconfig, Core·Platform·Ocr·관리 종속 DLL, Windows x64 SkiaSharp·ONNX 네이티브 DLL, OCR 모델 3개·사전·트레이 아이콘·영문 리소스 존재와 유효 크기 확인(exit 0). `qa6-app-final.trx`는 Completed, 통과 2227·실패 0·NotExecuted 9로 보고와 일치하며 error·timeout·aborted 0. 앱 실행·원격 작업·정리 없음.
+
+- 2026-10-12 Codex: 직전 최종 인계 커밋 `cce23fd` 완료(`git commit`, cwd 통합 worktree, exit 0), `git status --short` clean 확인. 사용자 요청에 따라 Explorer에서 `artifacts\qa6-build-1\MyCapture.exe`를 선택해 열고 Shell.Application으로 열린 경로·선택 항목 확인(exit 0). 이후 사용자가 자르기를 선택해야 회전 버튼을 찾을 수 있는 배치 문제를 피드백함. `BuildEditCommands`·`BuildCropCommands` 직접 확인으로 회전 버튼의 crop 전용 노출을 확인했고 수정 착수. 기존 WebGPT 연결 및 Antigravity 검토 실패 상태를 재사용하여 native 작업자 `/root/icons` 구현·`/root/delegation_recovery` 독립 검토를 배정함. 아이콘 작업자의 기존 worktree를 재사용하며 기준은 `cce23fd`, 신규 브랜치 `qa7-rotation-discovery`; 기존 QA6 빌드·사용자 앱·이전 브랜치는 보존함.
+
+- 2026-10-12 Codex: QA7 회전 발견성 수정 `5bd3a3a`를 직접 diff·실제 전후 PNG 검토 후 `git cherry-pick 5bd3a3a48c72efadca4db5048f6a98a7ad72157c`으로 통합(exit 0, 통합 커밋 `87192d8`). 같은 회전 버튼을 일반/자르기 명령행에 표시하며 기존 동작·선택도구·Q/W·undo/redo를 유지함. 680×460에서 명령 두 줄을 허용하되 실제 검사에서 발견한 마지막 도구 잘림은 버튼 40×38 영역을 유지하며 높이 부족 시 여백만 축소해 해결. 독립 검토 `/root/delegation_recovery`가 일반 변경과 추가 여백 변경을 각각 확인해 지적 없음. 원 worktree Debug 빌드 PASS, 집중 26개 및 관련 198개 PASS, 동일 fixture 전후 각 22 PNG 생성 PASS(모두 exit 0); crop 명령행 4쌍 픽셀 일치. 실제 명령·중간 실패·재검증·커밋 메시지 인코딩 정정은 `artifacts\qa7-rotation-verification\worker-verification-log.txt`에 수집함.
+- 2026-10-12 Codex: 코드 `87192d8`, cwd `C:\GitRepositories\my-capture-codex`; `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit 0, 경고 0·오류 0, `artifacts\qa7-rotation-verification\debug-build.log`); `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --logger "trx;LogFileName=qa7-core.trx" --results-directory C:\GitRepositories\my-capture-codex\artifacts\qa7-rotation-verification` PASS(exit 0, 1066/1066, actual session `60089` 완료). UX 자체 테스트는 별도 `MYCAPTURE_DATA_ROOT=%LOCALAPPDATA%\Temp\mcux\qa7-codex-final-1\data`, `TMP=TEMP=...\tmp`에서 `Start-Process ...\Debug\net10.0-windows10.0.22000.0\MyCapture.exe -ArgumentList '--selftest-ux-review','x' -WindowStyle Hidden -PassThru`로 시작(PID 48264, actual session `9535`, 결과 대기). 사용자 QA6 앱 PID 55532는 종료하지 않음.
+
+- 2026-10-12 Codex: QA7 UX 자체 테스트 actual session `9535` 완료. `WaitForExit` 후 exit 0, 출력 `%LOCALAPPDATA%\Temp\mcux\qa7-codex-final-1\tmp\MyCapture-ux-review-w1j40ikd.akw\ux-review-selftest-report.txt`의 `RESULT: PASS` 확인. report를 `artifacts\qa7-rotation-verification`에 수집함. cwd 통합 worktree에서 `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger "trx;LogFileName=qa7-app.trx" --results-directory C:\GitRepositories\my-capture-codex\artifacts\qa7-rotation-verification` 시작(actual session `99233`, 결과 대기).
+
+- 2026-10-12 Codex: 코드 `87192d8`, cwd 통합 worktree; App 전체 검사 actual session `99233` 완료, `qa7-app.trx` PASS(exit 0, 통과 2230·실패 0·기존 조건부 검사 건너뜀 9, 5분 28초). UX 출력 직접 집계 446개 화면 PNG·606개 재귀 PNG, 밝은 테마 144dpi·고대비 192dpi 편집기 직접 시각 확인. 출력 폴더 부재 확인 후 `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1` PASS(exit 0, 경고 0·오류 0, 4.62초). `Get-Item` 확인(exit 0): exe 220672 bytes, DLL 2340864 bytes, deps 18448 bytes, runtimeconfig 567 bytes. 실제 로그·TRX·report는 `artifacts\qa7-rotation-verification`에 보존. 이전 QA6 빌드·사용자 앱·qa6-icons 브랜치·재사용한 qa7-rotation-discovery worktree·전후 증거는 보존하고 정리하지 않음.
+
+- 2026-10-12 Codex: `qa7-app.trx`를 XML로 직접 집계해 total 2239 / Passed 2230 / Failed 0 / NotExecuted 9를 확인(exit 0). `git diff --check` PASS(exit 0). Explorer에서 `artifacts\qa7-build-1\MyCapture.exe`를 선택해 열고 Shell.Application으로 열린 폴더와 선택 항목을 확인(exit 0). §3·§4·§6을 최신 QA7 상태로 갱신했으며 사용자 실기 피드백 대기로 전환함.
 
 ## 9. 인계 체크리스트
 
