@@ -15,7 +15,7 @@ namespace MyCapture.App.Tests;
 /// <remarks>
 /// Never runs by default. With <c>MYCAPTURE_REAL_SOURCE_TEST=1</c> it opens one File Explorer window
 /// in its own process (<c>explorer.exe /separate</c>) on a new empty temporary folder, reads that
-/// window's application and folder, then closes only that window and deletes the folder. If Explorer
+/// window's application and folder, then closes only that window and recycles the folder. If Explorer
 /// puts the folder into an existing window instead, the test stops without touching that window.
 /// The second test only resolves application names of windows that are already open; it writes
 /// application names and window classes to the test output, never titles, links or paths.
@@ -26,7 +26,7 @@ public sealed class WindowSourceLiveTests(ITestOutputHelper output)
     public async Task ExplorerWindowInItsOwnProcessReportsItsFolderAndApplication()
     {
         string folder = Path.Combine(Path.GetTempPath(), "MyCapture source test " + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(folder);
+        TestRecycleBin.TrackNewDirectory(() => Directory.CreateDirectory(folder));
         HashSet<IntPtr> existing = [.. Windows().Where(window => window.ClassName == "CabinetWClass").Select(window => window.Handle)];
         IntPtr opened = IntPtr.Zero;
         try
@@ -71,7 +71,7 @@ public sealed class WindowSourceLiveTests(ITestOutputHelper output)
             if (opened != IntPtr.Zero) _ = PostMessage(opened, 0x0010 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero);
             for (int attempt = 0; attempt < 20 && Directory.Exists(folder); attempt++)
             {
-                try { Directory.Delete(folder); }
+                try { TestRecycleBin.DeleteDirectory(folder); }
                 catch (IOException) { await Task.Delay(250); }
             }
         }

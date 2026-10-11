@@ -173,6 +173,9 @@ R5 항목: 폴더 저장 스위치 슬라이드 애니메이션(803d727), 동영
 
 - 2026-10-12 Codex: 인계받음. HEAD `434ee12`, 통합 worktree `C:\GitRepositories\my-capture-codex`의 clean 상태와 WIP 두 worktree를 확인함. `git rev-parse`, `git status`, `git worktree list`, `git log origin/main..fix/realdevice-qa-round4` 확인 완료(exit 0); `Get-Process MyCapture`에서 실행 중인 MyCapture 없음. §4.1부터 아이콘·라이브러리 모션 WIP 완성, 통합 검증, 별도 Release 실기 빌드 순서로 진행함.
 
+- 2026-10-12 Codex: 인수 기록 커밋 `91ff8b4` 완료(`git commit`, cwd 통합 worktree, exit 0). WebGPT 우선 위임 등록 `node C:/Users/sukwo/.codex/skills/webgpt/scripts/client.mjs register --cwd C:/GitRepositories/my-capture/.claude/worktrees/agent-aeae29401bfb142cf`는 `tunnel_unavailable`로 실패(exit 1, 과업 미등록·미전송). 읽기 전용 점검에서 저장 PID 31076 부재, `WebGPT-tunnel-sukwo` 작업의 LastTaskResult 1과 stale lock을 확인함. 설정 변경 없이 native Sol 작업자 `/root/icons`, `/root/library_motion`에 기존 각 WIP worktree를 배정함. Native 연결은 `model_provider=openai`, localhost 8768의 소유 프로세스 `Codexon.exe --model-proxy --upstream chatgpt --managed`로 확인함.
+- 2026-10-12 Codex: 전체 검증 준비 중 R4 출처 테스트의 직접 삭제 두 곳을 기존 `TestRecycleBin` 생성·정리로 교체함. cwd `C:\GitRepositories\my-capture-codex`; `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit 0, 경고 0·오류 0); `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --filter FullyQualifiedName~FolderActionTargetDistinguishesFoldersFilesAndMissingPaths --logger "trx;LogFileName=qa6-recycle-source.trx"` PASS(exit 0, 1/1). 별도 opt-in Explorer 실창 테스트는 기본 전체 테스트에서 건너뜀을 유지함.
+
 ## 9. 인계 체크리스트
 
 **넘기는 쪽 (현재 오케스트레이터)**

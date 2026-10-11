@@ -188,7 +188,7 @@ public sealed class GallerySourceDetailTests
     [Fact]
     public void FolderActionTargetDistinguishesFoldersFilesAndMissingPaths()
     {
-        string root = Directory.CreateTempSubdirectory("mycapture-source-target-").FullName;
+        string root = TestRecycleBin.CreateTempSubdirectory("mycapture-source-target-").FullName;
         try
         {
             string file = Path.Combine(root, "보고서.txt");
@@ -200,7 +200,7 @@ public sealed class GallerySourceDetailTests
             Assert.Equal(GalleryWindow.SourceFolderTargetKind.Missing, GalleryWindow.ResolveFolderTarget("relative").Kind);
             Assert.Equal(GalleryWindow.SourceFolderTargetKind.Missing, GalleryWindow.ResolveFolderTarget("::{20D04FE0-3AEA-1069-A2D8-08002B30309D}").Kind);
         }
-        finally { Directory.Delete(root, recursive: true); }
+        finally { TestRecycleBin.DeleteDirectory(root, recursive: true); }
     }
 
     private static CaptureSourceDetails EdgeSource() => new("Microsoft Edge", EdgePath);
