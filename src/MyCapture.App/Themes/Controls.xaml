@@ -923,9 +923,190 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- ============================================================= -->
+    <!-- Slider: 4px rounded track, Foreground fills the value part,    -->
+    <!-- 16px round thumb whose accent centre grows on hover. The Track -->
+    <!-- stays PART_Track with its two page RepeatButtons and Thumb, so -->
+    <!-- Slider keeps keyboard steps, Home/End, tick snapping, move-to- -->
+    <!-- point and its RangeValue automation peer.                      -->
+    <!-- ============================================================= -->
+    <Style x:Key="Slider.TrackButton" TargetType="RepeatButton">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <!-- The full control height pages the value; only the 4px bar is drawn. -->
+                    <Grid Background="Transparent">
+                        <Border Height="4" CornerRadius="2" VerticalAlignment="Center"
+                                Background="{TemplateBinding Background}" SnapsToDevicePixels="True" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="Slider.TrackButton.Vertical" TargetType="RepeatButton" BasedOn="{StaticResource Slider.TrackButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Grid Background="Transparent">
+                        <Border Width="4" CornerRadius="2" HorizontalAlignment="Center"
+                                Background="{TemplateBinding Background}" SnapsToDevicePixels="True" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="Slider.Thumb" TargetType="Thumb">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <!-- Transparent across the track height, so the grab area is taller than the disc. -->
+                    <Grid Background="Transparent">
+                        <Ellipse Width="16" Height="16"
+                                 Fill="{DynamicResource Surface.Raised}"
+                                 Stroke="{DynamicResource Border.Control}"
+                                 StrokeThickness="1" />
+                        <Ellipse x:Name="Centre" Width="10" Height="10"
+                                 Fill="{TemplateBinding Foreground}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Centre" Property="themes:FluidMotion.ScaleTo" Value="1.2" />
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Centre" Property="themes:FluidMotion.ScaleTo" Value="0.8" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="Slider.Thumb.Vertical" TargetType="Thumb" BasedOn="{StaticResource Slider.Thumb}">
+        <Setter Property="Width" Value="Auto" />
+        <Setter Property="Height" Value="16" />
+    </Style>
+    <ControlTemplate x:Key="Slider.HorizontalTemplate" TargetType="Slider">
+        <Grid Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TickBar x:Name="TopTick" Grid.Row="0" Height="4" Placement="Top"
+                     Fill="{DynamicResource Text.Muted}" Visibility="Collapsed" />
+            <Track x:Name="PART_Track" Grid.Row="1">
+                <Track.DecreaseRepeatButton>
+                    <RepeatButton Style="{StaticResource Slider.TrackButton}"
+                                  Background="{TemplateBinding Foreground}"
+                                  Command="{x:Static Slider.DecreaseLarge}" />
+                </Track.DecreaseRepeatButton>
+                <Track.Thumb>
+                    <Thumb x:Name="Thumb" Style="{StaticResource Slider.Thumb}" Foreground="{TemplateBinding Foreground}" />
+                </Track.Thumb>
+                <Track.IncreaseRepeatButton>
+                    <RepeatButton Style="{StaticResource Slider.TrackButton}"
+                                  Background="{DynamicResource Border.Control}"
+                                  Command="{x:Static Slider.IncreaseLarge}" />
+                </Track.IncreaseRepeatButton>
+            </Track>
+            <TickBar x:Name="BottomTick" Grid.Row="2" Height="4" Placement="Bottom"
+                     Fill="{DynamicResource Text.Muted}" Visibility="Collapsed" />
+            <!-- Outset ring: the thumb reaches both ends of the control at its limits. -->
+            <Border x:Name="FocusRing" Grid.RowSpan="3" Margin="-4,0"
+                    BorderBrush="{DynamicResource Border.Focus}"
+                    BorderThickness="{DynamicResource Focus.RingThickness}"
+                    CornerRadius="{DynamicResource Radius.Sm}"
+                    IsHitTestVisible="False" Opacity="0" />
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="TickPlacement" Value="TopLeft">
+                <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="TickPlacement" Value="BottomRight">
+                <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="TickPlacement" Value="Both">
+                <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+                <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.46" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+    <ControlTemplate x:Key="Slider.VerticalTemplate" TargetType="Slider">
+        <Grid Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TickBar x:Name="TopTick" Grid.Column="0" Width="4" Placement="Left"
+                     Fill="{DynamicResource Text.Muted}" Visibility="Collapsed" />
+            <Track x:Name="PART_Track" Grid.Column="1">
+                <Track.DecreaseRepeatButton>
+                    <RepeatButton Style="{StaticResource Slider.TrackButton.Vertical}"
+                                  Background="{TemplateBinding Foreground}"
+                                  Command="{x:Static Slider.DecreaseLarge}" />
+                </Track.DecreaseRepeatButton>
+                <Track.Thumb>
+                    <Thumb x:Name="Thumb" Style="{StaticResource Slider.Thumb.Vertical}" Foreground="{TemplateBinding Foreground}" />
+                </Track.Thumb>
+                <Track.IncreaseRepeatButton>
+                    <RepeatButton Style="{StaticResource Slider.TrackButton.Vertical}"
+                                  Background="{DynamicResource Border.Control}"
+                                  Command="{x:Static Slider.IncreaseLarge}" />
+                </Track.IncreaseRepeatButton>
+            </Track>
+            <TickBar x:Name="BottomTick" Grid.Column="2" Width="4" Placement="Right"
+                     Fill="{DynamicResource Text.Muted}" Visibility="Collapsed" />
+            <Border x:Name="FocusRing" Grid.ColumnSpan="3" Margin="0,-4"
+                    BorderBrush="{DynamicResource Border.Focus}"
+                    BorderThickness="{DynamicResource Focus.RingThickness}"
+                    CornerRadius="{DynamicResource Radius.Sm}"
+                    IsHitTestVisible="False" Opacity="0" />
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="TickPlacement" Value="TopLeft">
+                <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="TickPlacement" Value="BottomRight">
+                <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="TickPlacement" Value="Both">
+                <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+                <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.46" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
     <Style TargetType="{x:Type Slider}">
         <Setter Property="Foreground" Value="{DynamicResource Accent.Default}" />
-        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Background" Value="Transparent" />
+        <!-- The track is 4px, but the whole 32px row takes pointer input. -->
+        <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template" Value="{StaticResource Slider.HorizontalTemplate}" />
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Vertical">
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="MinWidth" Value="{DynamicResource Size.HitTarget.Compact}" />
+                <Setter Property="Template" Value="{StaticResource Slider.VerticalTemplate}" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ============================================================= -->
