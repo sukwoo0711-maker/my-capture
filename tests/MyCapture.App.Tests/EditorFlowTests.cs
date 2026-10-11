@@ -228,30 +228,27 @@ public sealed class EditorFlowTests
     // ---- Copy and Done -----------------------------------------------------------------
 
     [Fact]
-    public void CopyLeavesTheEditorOpenAndReportsTheResult() => StaTestHost.Run(() =>
+    public void CopyFinishesTheEditLikeDone() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         using EditorWindowHost host = EditorWindowHost.Create();
         AddRectangle(Controller(host.Editor));
-        var results = new Queue<bool>([true, false]);
+        var results = new Queue<bool>([false, true]);
         var actions = new List<EditorCommitAction>();
         host.Window.CommitRequested = result => { actions.Add(result.Action); return Task.FromResult(results.Dequeue()); };
         int completed = 0;
         host.Window.Committed += (_, _) => completed++;
+        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C)", Command(host.Editor, "EditorFlowCopy").ToolTip);
 
+        // A failed save keeps the editor open for a retry, as Done does.
         ClickCommand(host.Editor, "EditorFlowCopy");
-        Assert.Equal("클립보드에 복사됨", host.Editor.StatusText);
+        Assert.Equal(UiText.Get("Text_06F58809C083"), host.Editor.StatusText);
         Assert.True(host.Window.IsVisible);
         Assert.True(host.Editor.IsHitTestVisible);
 
         Assert.True(host.Editor.HandleShortcut(Key.C, ModifierKeys.Control));
-        Assert.Equal(UiText.Get("Text_3D1E714B56CA"), host.Editor.StatusText);
-        Assert.True(host.Window.IsVisible);
-
-        Assert.Equal(new[] { EditorCommitAction.CopyToClipboard, EditorCommitAction.CopyToClipboard }, actions);
-        Assert.Equal(0, completed);
-        // Copying is not saving: closing still asks.
-        Assert.True(host.Editor.HasUnsavedChanges);
+        Assert.Equal(new[] { EditorCommitAction.Done, EditorCommitAction.Done }, actions);
+        Assert.Equal(1, completed);
     });
 
     [Fact]

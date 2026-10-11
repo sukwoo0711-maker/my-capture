@@ -945,8 +945,11 @@
         </Style>
 
         <!-- One toggle chip beside the folder name: checked = new captures join this folder. -->
-        <Style x:Key="LibraryUx.SaveHereChip" TargetType="CheckBox">
-            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <!-- "Save new captures here" is a setting of the open folder, not part of its name: a
+             quiet switch at the far end of the header, the way Windows shows an on/off option. -->
+        <Style x:Key="LibraryUx.SaveHereSwitch" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="MinHeight" Value="30" />
@@ -954,38 +957,36 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
-                        <Grid>
-                            <Border x:Name="Chrome" Background="Transparent" BorderBrush="{DynamicResource Border.Subtle}"
-                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Pill}" Padding="10,4,12,4">
-                                <StackPanel Orientation="Horizontal">
-                                    <Grid Width="16" Height="16" VerticalAlignment="Center">
-                                        <Path x:Name="Plus" Data="{StaticResource LibraryUx.Icon.Add}" Stretch="Uniform"
-                                              Stroke="{DynamicResource Text.Secondary}" StrokeThickness="1.6"
-                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="12" Height="12" />
-                                        <Path x:Name="Check" Data="{StaticResource Icon.Check}" Stretch="Uniform"
-                                              Stroke="{DynamicResource Text.OnAccent}" StrokeThickness="2"
-                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-                                              Width="12" Height="12" Visibility="Collapsed" />
-                                    </Grid>
-                                    <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Border>
-                            <Border x:Name="FocusRing" Margin="2" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
-                                    CornerRadius="{DynamicResource Radius.Pill}" Opacity="0" IsHitTestVisible="False" />
+                        <Grid Background="Transparent">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,6,0" VerticalAlignment="Center">
+                                <ContentPresenter VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <Grid Width="36" Height="20" VerticalAlignment="Center">
+                                    <Border x:Name="Track" CornerRadius="10" BorderThickness="1"
+                                            BorderBrush="{DynamicResource Text.Secondary}" Background="Transparent" />
+                                    <Ellipse x:Name="Thumb" Width="10" Height="10" Margin="5,0,0,0"
+                                             HorizontalAlignment="Left" VerticalAlignment="Center"
+                                             Fill="{DynamicResource Text.Secondary}" />
+                                </Grid>
+                            </StackPanel>
+                            <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.Md}" Opacity="0" IsHitTestVisible="False" />
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
+                                <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource Text.Primary}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Default}" />
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
-                                <Setter TargetName="Plus" Property="Visibility" Value="Collapsed" />
-                                <Setter TargetName="Check" Property="Visibility" Value="Visible" />
-                                <Setter Property="Foreground" Value="{DynamicResource Text.OnAccent}" />
+                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource Accent.Default}" />
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
+                                <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource Text.OnAccent}" />
+                                <Setter TargetName="Thumb" Property="Width" Value="12" />
+                                <Setter TargetName="Thumb" Property="Height" Value="12" />
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,4,0" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
@@ -1372,10 +1373,14 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Location header inside a folder or date: the way back, the name, and the
-                     folder's one "save new captures here" chip right beside the name. -->
+                <!-- Location header inside a folder or date: the way back and the name on the left,
+                     the folder's "save new captures here" switch at the right end. -->
                 <Grid x:Name="LocationHeader" Height="44" Margin="2,0,0,4" ClipToBounds="True"
                       Visibility="{Binding ShowLocationHeader, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ItemsControl x:Name="LocationBreadcrumb" ItemsSource="{Binding Breadcrumb}" Focusable="False"
                                       ItemTemplate="{StaticResource LibraryUx.BreadcrumbTemplate}"
@@ -1386,12 +1391,12 @@
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                         </ItemsControl>
-                        <CheckBox x:Name="CurrentFolderCaptureCheck" Style="{StaticResource LibraryUx.SaveHereChip}" Margin="14,0,0,0"
-                                  Content="{loc:Text LibraryUx_SaveHere}" ToolTip="{Binding SaveHereToolTip}"
-                                  IsEnabled="{Binding CanChangeNewCaptureFolder}"
-                                  IsChecked="{Binding SavesNewCapturesHere, Mode=OneWay}" Click="OnFolderCaptureTargetClick"
-                                  Visibility="{Binding ShowSaveHere, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
+                    <CheckBox x:Name="CurrentFolderCaptureCheck" Grid.Column="1" Style="{StaticResource LibraryUx.SaveHereSwitch}" Margin="12,0,4,0"
+                              Content="{loc:Text LibraryUx_SaveHere}" ToolTip="{Binding SaveHereToolTip}"
+                              IsEnabled="{Binding CanChangeNewCaptureFolder}"
+                              IsChecked="{Binding SavesNewCapturesHere, Mode=OneWay}" Click="OnFolderCaptureTargetClick"
+                              Visibility="{Binding ShowSaveHere, Converter={StaticResource BoolToVisibility}}" />
                 </Grid>
 
                 <ListBox x:Name="RowsList" Grid.Row="1"

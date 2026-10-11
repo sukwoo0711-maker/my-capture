@@ -91,7 +91,7 @@ internal static class HotfixUxSelfTest
             editor.CommitRequested = value => { committed = value.Action; return Task.FromResult(false); };
             Check("editor Ctrl+C command accepted", editor.Editor.HandleShortcut(Key.C, ModifierKeys.Control));
             Pump(150);
-            Check("Ctrl+C reaches editor commit, not receipt", committed == EditorCommitAction.CopyToClipboard);
+            Check("Ctrl+C reaches editor commit, not receipt", committed == EditorCommitAction.Done);
             // Keep the real dispatcher timer running while editor commands execute.
             var lifetime = Stopwatch.StartNew();
             while (card.IsVisible && lifetime.Elapsed < TimeSpan.FromSeconds(12)) Pump(100);

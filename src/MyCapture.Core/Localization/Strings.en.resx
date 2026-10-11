@@ -1362,7 +1362,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_74EEFE6E43AE" xml:space="preserve">
-    <value>Copy the edited image to the clipboard (Ctrl+C)</value>
+    <value>Copy to the clipboard, save to the library and close (Ctrl+C)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_75306DAE2E60" xml:space="preserve">

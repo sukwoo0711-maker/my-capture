@@ -1362,7 +1362,7 @@
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_74EEFE6E43AE" xml:space="preserve">
-    <value>편집한 이미지를 클립보드에 복사 (Ctrl+C)</value>
+    <value>클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_75306DAE2E60" xml:space="preserve">

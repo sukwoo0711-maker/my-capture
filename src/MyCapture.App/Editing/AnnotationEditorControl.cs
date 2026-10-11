@@ -474,7 +474,8 @@ internal sealed class AnnotationEditorControl : Grid
     {
         foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
         _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
-        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.CopyToClipboard);
+        // Copying is how people finish an edit, so Copy saves, copies and closes like Done.
+        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.Done);
         _shortcutActions["Save"] = () => Commit(EditorCommitAction.QuickSave);
         _shortcutActions["SaveAs"] = () => Commit(EditorCommitAction.SaveAs);
         _shortcutActions["Privacy"] = () => _ = ApplyPrivacyRedactionsAsync();
@@ -1358,7 +1359,7 @@ internal sealed class AnnotationEditorControl : Grid
         Button save = BuildSaveOverflowMenu();
         Button copy = IconTextButton(
             UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_74EEFE6E43AE"), "Icon.Copy", FallbackCopy,
-            () => Commit(EditorCommitAction.CopyToClipboard));
+            () => Commit(EditorCommitAction.Done));
         copy.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
         Button done = IconTextButton(
             UiText.Get("Text_727333AB0740"), UiText.Get("EditorFlow_DoneHint"), "Icon.Check", FallbackCheck,
