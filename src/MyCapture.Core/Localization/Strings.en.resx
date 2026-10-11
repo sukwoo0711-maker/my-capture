@@ -3242,6 +3242,10 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Help.Next" xml:space="preserve"><value>Next</value></data>
   <data name="Help.Play" xml:space="preserve"><value>Play / pause</value></data>
   <data name="Help.Search" xml:space="preserve"><value>Search actions or shortcuts</value></data>
+  <data name="Help.SearchCountOne" xml:space="preserve"><value>{0} result</value></data>
+  <data name="Help.SearchCount" xml:space="preserve"><value>{0} results</value></data>
+  <data name="Help.SearchEmpty" xml:space="preserve"><value>No results</value></data>
+  <data name="Help.SearchClear" xml:space="preserve"><value>Clear search</value></data>
   <data name="Help.Settings" xml:space="preserve"><value>Change shortcuts</value></data>
   <data name="Help.Start" xml:space="preserve"><value>Start</value></data>
   <data name="Help.Title" xml:space="preserve"><value>Keyboard shortcuts</value></data>

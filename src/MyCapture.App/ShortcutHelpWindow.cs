@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
 using MyCapture.App.Capture;
@@ -36,6 +37,12 @@ internal sealed class ShortcutHelpWindow : Window
             var search = new TextBox { MinHeight = 40, Padding = new Thickness(36, 8, 12, 8) };
             System.Windows.Automation.AutomationProperties.SetName(search, UiText.Get("Help.Search"));
             search.ToolTip = UiText.Get("Help.Search");
+            // TextBoxBase already copies Padding onto its content host; the shared template adds it
+            // again as that host's margin, which pushed typed text 36 to the right of the hint.
+            search.Loaded += (_, _) =>
+            {
+                if (search.Template?.FindName("PART_ContentHost", search) is FrameworkElement host) host.Margin = new Thickness(0);
+            };
             var searchBox = new Grid { Margin = new Thickness(0, 0, 0, 16) };
             searchBox.Children.Add(search);
             var searchIcon = new System.Windows.Shapes.Path { Width = 16, Height = 16, StrokeThickness = 1.6,
@@ -44,12 +51,39 @@ internal sealed class ShortcutHelpWindow : Window
                 Margin = new Thickness(12,0,0,0), IsHitTestVisible = false };
             searchIcon.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Text.Secondary");
             searchBox.Children.Add(searchIcon);
-            var hint = new TextBlock { Text = UiText.Get("Help.Search"), Margin = new Thickness(37,0,12,0),
+            // Border 1 + padding 36 + the text view's own 2: the hint starts where typed text does.
+            var hint = new TextBlock { Text = UiText.Get("Help.Search"), Margin = new Thickness(39,0,12,0),
                 VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
             hint.SetResourceReference(TextBlock.ForegroundProperty,"Text.Secondary");
             searchBox.Children.Add(hint);
-            search.TextChanged += (_, _) => hint.Visibility = search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
             DockPanel.SetDock(searchBox, Dock.Top); root.Children.Add(searchBox);
+
+            // While a search term is present, one list across every category replaces the tabs,
+            // so a match on another tab is never hidden behind the selected one. The tabs keep
+            // their selection and come back unchanged when the search is cleared.
+            var count = new TextBlock { FontSize = 12, Margin = new Thickness(12, 0, 12, 4), Visibility = Visibility.Collapsed };
+            count.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+            AutomationProperties.SetLiveSetting(count, AutomationLiveSetting.Polite);
+            DockPanel.SetDock(count, Dock.Top); root.Children.Add(count);
+
+            var emptyTitle = new TextBlock { Text = UiText.Get("Help.SearchEmpty"), FontSize = 14, FontWeight = FontWeights.SemiBold,
+                HorizontalAlignment = HorizontalAlignment.Center };
+            AutomationProperties.SetLiveSetting(emptyTitle, AutomationLiveSetting.Polite);
+            var clear = new Button { Content = UiText.Get("Help.SearchClear"), MinWidth = 120, Margin = new Thickness(0, 12, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Center };
+            clear.SetResourceReference(StyleProperty, "Button.Secondary");
+            AutomationProperties.SetName(clear, UiText.Get("Help.SearchClear"));
+            clear.Click += (_, _) => { search.Clear(); search.Focus(); };
+            var empty = new StackPanel { Margin = new Thickness(0, 40, 0, 0), Visibility = Visibility.Collapsed };
+            empty.Children.Add(emptyTitle);
+            empty.Children.Add(clear);
+            DockPanel.SetDock(empty, Dock.Top); root.Children.Add(empty);
+
+            var results = new StackPanel();
+            // Docked to the top, it grows into the space the hidden tabs leave and scrolls beyond it.
+            var resultsView = new ScrollViewer { Content = results, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Visibility = Visibility.Collapsed };
+            DockPanel.SetDock(resultsView, Dock.Top); root.Children.Add(resultsView);
             var tabs = new TabControl();
             (string Tab, (string Action, string Keys)[] Entries)[] sections =
             [
@@ -70,9 +104,10 @@ internal sealed class ShortcutHelpWindow : Window
                     ("Onboard_PinAllowClickThrough", Display(keys.ToggleClickThrough)), ("Onboard_TrayReopenPin", Display(keys.RestoreClosedPin)),
                     ("QuickAccess.Copy", "Ctrl+C"), ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
             ];
-            var rows = new List<(string Search, FrameworkElement Row)>();
+            var matches = new List<(string Search, FrameworkElement Row)>();
             foreach (var section in sections)
             {
+                string category = UiText.Get(section.Tab);
                 var panel = new StackPanel { Margin = new Thickness(12) };
                 foreach (var entry in section.Entries)
                 {
@@ -80,17 +115,71 @@ internal sealed class ShortcutHelpWindow : Window
                     var row = new UniformGrid { Columns = 2, Margin = new Thickness(0, 6, 0, 6) };
                     row.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
                     row.Children.Add(Keycaps(entry.Keys));
-                    panel.Children.Add(row); rows.Add(($"{label} {entry.Keys}", row));
+                    panel.Children.Add(row);
+                    FrameworkElement result = ResultRow(label, category, entry.Keys);
+                    results.Children.Add(result);
+                    matches.Add(($"{label} {entry.Keys} {category}", result));
                 }
-                var tab = new TabItem { Header = UiText.Get(section.Tab), Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
+                var tab = new TabItem { Header = category, Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
                 tab.SetResourceReference(StyleProperty, "Tab.Help");
                 tabs.Items.Add(tab);
             }
-            search.TextChanged += (_, _) => { foreach (var row in rows) row.Row.Visibility = row.Search.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase) ? Visibility.Visible : Visibility.Collapsed; };
+            search.TextChanged += (_, _) =>
+            {
+                hint.Visibility = search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+                string query = search.Text.Trim();
+                bool searching = query.Length > 0;
+                int found = 0;
+                foreach ((string text, FrameworkElement row) in matches)
+                {
+                    bool match = searching && text.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+                    row.Visibility = match ? Visibility.Visible : Visibility.Collapsed;
+                    if (match) found++;
+                }
+                tabs.Visibility = searching ? Visibility.Collapsed : Visibility.Visible;
+                resultsView.Visibility = count.Visibility = searching && found > 0 ? Visibility.Visible : Visibility.Collapsed;
+                empty.Visibility = searching && found == 0 ? Visibility.Visible : Visibility.Collapsed;
+                count.Text = UiText.Format(found == 1 ? "Help.SearchCountOne" : "Help.SearchCount", found);
+                if (!searching) return;
+                resultsView.ScrollToTop();
+                // Screen readers hear the new count, or that nothing matched.
+                TextBlock status = found > 0 ? count : emptyTitle;
+                UIElementAutomationPeer.CreatePeerForElement(status)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+            };
             root.Children.Add(tabs);
+
+            // Esc first clears a search, then closes.
+            PreviewKeyDown += (_, e) =>
+            {
+                if (e.Key != Key.Escape) return;
+                e.Handled = true;
+                if (search.Text.Length > 0) { search.Clear(); search.Focus(); }
+                else Close();
+            };
         }
         Content = root;
-        PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
+    }
+
+    /// <summary>
+    /// One search result: the action with its category in small text under it, then its keys.
+    /// Same two columns as a tab row, at least 36 high with 12 at each side.
+    /// </summary>
+    private static FrameworkElement ResultRow(string label, string category, string chord)
+    {
+        var grid = new Grid { MinHeight = 36 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+        // Semibold like a tab row, whose text takes the selected tab's weight.
+        text.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold });
+        var tag = new TextBlock { Text = category, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) };
+        tag.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        text.Children.Add(tag);
+        grid.Children.Add(text);
+        FrameworkElement keycaps = Keycaps(chord);
+        Grid.SetColumn(keycaps, 1);
+        grid.Children.Add(keycaps);
+        return new Border { Padding = new Thickness(12, 4, 12, 4), Child = grid, Visibility = Visibility.Collapsed };
     }
 
     /// <summary>
