@@ -199,6 +199,86 @@ public sealed partial class SettingsThemePreviewTests
         }
     }
 
+    [Fact]
+    public Task EditorsQa6_SizeReductionKeepsThePreviousResultWhileItRecalculates() =>
+        RunIsolated(nameof(EditorsQa6_SizeReductionKeepsThePreviousResultWhileItRecalculates), VerifySizeReductionStates);
+
+    private static void VerifySizeReductionStates()
+    {
+        Application application = CreateQa6Application();
+        try
+        {
+            foreach (string language in new[] { "ko-KR", "en-US" })
+            {
+                using var culture = UiText.UseLanguage(language);
+                UiText.Configure(language);
+                foreach (AppTheme theme in new[] { AppTheme.Glass, AppTheme.Daylight })
+                {
+                    ThemeService.Apply(theme);
+                    RenderSizeReductionScene(theme, language);
+                }
+            }
+        }
+        finally
+        {
+            application.Shutdown();
+        }
+    }
+
+    private static void RenderSizeReductionScene(AppTheme theme, string language)
+    {
+        var dialog = new ImageReductionExportDialog(Qa6Background(1280, 720), Path.Combine(Path.GetTempPath(), "qa6-review.png"))
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
+            ShowActivated = false, ShowInTaskbar = false,
+        };
+        // Recalculation runs when this scene says, so the in-between state can be captured.
+        Action? pending = null;
+        dialog.ScheduleRecalculation = (_, action) =>
+        {
+            pending = action;
+            return new Qa6Handle(() => pending = null);
+        };
+        FluidMotion.SetWindowEntrance(dialog, false);
+        try
+        {
+            dialog.Show();
+            Qa6PumpUntil(() => dialog.CanExport);
+            SaveQa6Evidence(RenderAtDpi(dialog, 96), $"reduction-1-result-{theme}-{language}-{Qa6Phase}.png");
+
+            dialog.TargetReductionPercent = 60;
+            Drain(dialog);
+            Assert.True(dialog.ShowsPreviousResultForTest);
+            Assert.False(dialog.CanExport);
+            SaveQa6Evidence(RenderAtDpi(dialog, 96), $"reduction-2-calculating-{theme}-{language}-{Qa6Phase}.png");
+
+            Assert.NotNull(pending);
+            // The real schedule fires from a dispatcher timer; run it with the same context.
+            SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(dialog.Dispatcher));
+            pending!();
+            Qa6PumpUntil(() => dialog.CanExport);
+            Assert.Equal(60, dialog.PreparedTargetForTest);
+            SaveQa6Evidence(RenderAtDpi(dialog, 96), $"reduction-3-updated-{theme}-{language}-{Qa6Phase}.png");
+        }
+        finally
+        {
+            dialog.Close();
+            Drain(dialog);
+        }
+    }
+
+    private sealed class Qa6Handle(Action dispose) : IDisposable
+    {
+        public void Dispose() => dispose();
+    }
+
+    private static void Qa6PumpUntil(Func<bool> condition)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(20);
+        while (!condition() && DateTime.UtcNow < deadline) Qa6Pump(TimeSpan.FromMilliseconds(20));
+        Assert.True(condition(), "timed out");
+    }
+
     private static BitmapSource RenderAtDpi(Window window, int dpi)
     {
         Drain(window);

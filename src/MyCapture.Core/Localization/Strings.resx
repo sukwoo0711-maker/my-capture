@@ -2965,16 +2965,20 @@
   <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · 픽셀 정밀 이동</value></data>
   <data name="CaptureSelectionStart" xml:space="preserve"><value>시작점</value></data>
   <data name="ExportReduction_Title" xml:space="preserve"><value>파일 크기 줄여 내보내기…</value></data>
-  <data name="ExportReduction_Preview" xml:space="preserve"><value>크기 확인</value></data>
   <data name="ExportReduction_Save" xml:space="preserve"><value>다른 이름으로 저장…</value></data>
   <data name="ExportReduction_Drag" xml:space="preserve"><value>폴더로 드래그</value></data>
   <data name="ExportReduction_Cancel" xml:space="preserve"><value>닫기</value></data>
-  <data name="ExportReduction_Description" xml:space="preserve"><value>기준 크기는 지금 편집한 이미지를 PNG로 저장한 크기이며, 원래 파일 크기와 다를 수 있습니다. 목표를 고른 뒤 크기 확인을 누르십시오. 불투명 이미지는 JPEG로 바꿀 수 있으며 픽셀 크기는 그대로입니다.</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>기준 크기는 지금 편집한 이미지를 PNG로 저장한 크기이며, 원래 파일 크기와 다를 수 있습니다. 목표를 바꾸면 결과를 자동으로 다시 계산합니다. 불투명 이미지는 JPEG로 바꿀 수 있으며 픽셀 크기는 그대로입니다.</value></data>
   <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>파일 크기 감소 목표</value></data>
-  <data name="ExportReduction_UpdateRequired" xml:space="preserve"><value>크기 확인을 눌러 실제 파일 크기를 확인하십시오.</value></data>
   <data name="ExportReduction_Original" xml:space="preserve"><value>원본 품질 · 줄이지 않음</value></data>
   <data name="ExportReduction_Target" xml:space="preserve"><value>목표: 원본 PNG보다 {0}% 작게</value></data>
   <data name="ExportReduction_Working" xml:space="preserve"><value>파일 크기 확인 중…</value></data>
+  <data name="ExportReduction_CalculatingPrevious" xml:space="preserve">
+    <value>새 목표로 계산 중 · 아래는 이전 설정 결과</value>
+  </data>
+  <data name="ExportReduction_PreviewName" xml:space="preserve">
+    <value>결과 미리보기</value>
+  </data>
   <data name="ExportReduction_Result" xml:space="preserve"><value>원본 {0} → 결과 {1}
 실제 {2}% 감소 · {3}</value></data>
   <data name="ExportReduction_Transparent" xml:space="preserve"><value>투명 배경을 지키려고 원본 PNG를 유지했습니다. JPEG 변환은 적용하지 않았습니다.</value></data>

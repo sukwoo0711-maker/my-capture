@@ -2965,16 +2965,20 @@ This cannot be undone.</value>
   <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · Pixel precision</value></data>
   <data name="CaptureSelectionStart" xml:space="preserve"><value>Start</value></data>
   <data name="ExportReduction_Title" xml:space="preserve"><value>Export a smaller file…</value></data>
-  <data name="ExportReduction_Preview" xml:space="preserve"><value>Check size</value></data>
   <data name="ExportReduction_Save" xml:space="preserve"><value>Save As…</value></data>
   <data name="ExportReduction_Drag" xml:space="preserve"><value>Drag to a folder</value></data>
   <data name="ExportReduction_Cancel" xml:space="preserve"><value>Close</value></data>
-  <data name="ExportReduction_Description" xml:space="preserve"><value>The baseline is the current edited image saved as PNG, which may differ from the original file size. Choose a target, then select Check size. Opaque images may use JPEG; pixel dimensions stay the same.</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>The baseline is the current edited image saved as PNG, which may differ from the original file size. Changing the target recalculates the result automatically. Opaque images may use JPEG; pixel dimensions stay the same.</value></data>
   <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>File size reduction target</value></data>
-  <data name="ExportReduction_UpdateRequired" xml:space="preserve"><value>Select Check size to see the actual file size.</value></data>
   <data name="ExportReduction_Original" xml:space="preserve"><value>Original quality · No reduction</value></data>
   <data name="ExportReduction_Target" xml:space="preserve"><value>Target: {0}% smaller than the original PNG</value></data>
   <data name="ExportReduction_Working" xml:space="preserve"><value>Checking file size…</value></data>
+  <data name="ExportReduction_CalculatingPrevious" xml:space="preserve">
+    <value>Calculating for the new target · below is the previous setting's result</value>
+  </data>
+  <data name="ExportReduction_PreviewName" xml:space="preserve">
+    <value>Result preview</value>
+  </data>
   <data name="ExportReduction_Result" xml:space="preserve"><value>Original {0} → result {1}
 Actual reduction {2}% · {3}</value></data>
   <data name="ExportReduction_Transparent" xml:space="preserve"><value>Kept the original PNG to preserve transparency. JPEG conversion was not applied.</value></data>
