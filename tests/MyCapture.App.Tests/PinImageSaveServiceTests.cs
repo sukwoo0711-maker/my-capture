@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Editing;
 using MyCapture.App.Pinning;
@@ -70,6 +71,23 @@ public sealed class PinImageSaveServiceTests
         Assert.Contains("PNG", result.ErrorMessage, StringComparison.Ordinal);
         Assert.False(File.Exists(target));
         Assert.Empty(Directory.EnumerateFiles(temp.Path, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task SaveAs_RejectedPathWithLineBreaks_IsLoggedOnOneLine()
+    {
+        using var temp = new TempDirectory();
+        string forged = Path.Combine(temp.Path, "wrong.jpg\r\n2026-01-01 [INF] Forged\u001b[2K");
+        var log = new CapturingLogger();
+        PinImageSaveService service = CreateService(temp.Path, log: log);
+        service.SaveAsPrompt = (_, _) => forged;
+
+        PinSaveResult result = await service.SaveAsAsync(AlphaImage(), owner: null);
+
+        Assert.Equal(PinSaveStatus.Failed, result.Status);
+        string logged = Assert.Single(log.Paths);
+        Assert.DoesNotContain(logged, char.IsControl);
+        Assert.EndsWith("wrong.jpg\\r\\n2026-01-01 [INF] Forged\\u001B[2K", logged, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -243,7 +261,10 @@ public sealed class PinImageSaveServiceTests
         Assert.True(File.Exists(editorPath));
     }
 
-    private static PinImageSaveService CreateService(string root, string pattern = "pin")
+    private static PinImageSaveService CreateService(
+        string root,
+        string pattern = "pin",
+        ILogger<PinImageSaveService>? log = null)
     {
         var settings = new AppSettings();
         settings.Export.FileNamePattern = pattern;
@@ -251,7 +272,7 @@ public sealed class PinImageSaveServiceTests
         return new PinImageSaveService(
             () => settings,
             () => paths,
-            NullLogger<PinImageSaveService>.Instance);
+            log ?? NullLogger<PinImageSaveService>.Instance);
     }
 
     private static AnnotationEditingResult MakeSaveAsResult(BitmapSource selected)
@@ -358,6 +379,35 @@ public sealed class PinImageSaveServiceTests
             catch (UnauthorizedAccessException)
             {
                 // Best-effort cleanup on scanners briefly retaining a generated PNG.
+            }
+        }
+    }
+
+    private sealed class CapturingLogger : ILogger<PinImageSaveService>
+    {
+        internal List<string> Paths { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (state is IEnumerable<KeyValuePair<string, object?>> values)
+            {
+                foreach (KeyValuePair<string, object?> value in values)
+                {
+                    if (value.Key == "Path")
+                    {
+                        Paths.Add(Convert.ToString(value.Value) ?? string.Empty);
+                    }
+                }
             }
         }
     }
