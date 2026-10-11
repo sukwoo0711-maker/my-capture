@@ -42,7 +42,13 @@ public static class SettingsRanges
     public static readonly Range<int> ClosedWindowRestoreLimit = new(0, 100);
     public static readonly Range<double> ZoomStep = new(0.02, 0.5);
 
+    /// <summary>
+    /// Stroke width in image pixels. The image editor's slider, number box and stored widths
+    /// use this same range, so a default saved here is drawn as saved.
+    /// </summary>
     public static readonly Range<double> StrokeThickness = new(1, 64);
+
+    /// <summary>Text size in points; the image editor applies the same range.</summary>
     public static readonly Range<double> FontSize = new(6, 400);
     public static readonly Range<int> MosaicBlockSize = new(2, 128);
     public static readonly Range<int> HighlighterAlpha = new(0, 255);

@@ -330,10 +330,12 @@ public sealed class SettingsStore
 
         // --- Annotation ---
         s.Annotation.StrokeThickness = ClampWithWarning(
-            s.Annotation.StrokeThickness, 1, 64, nameof(AnnotationDefaults.StrokeThickness), warnings);
+            s.Annotation.StrokeThickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max,
+            nameof(AnnotationDefaults.StrokeThickness), warnings);
 
         s.Annotation.FontSize = ClampWithWarning(
-            s.Annotation.FontSize, 6, 400, nameof(AnnotationDefaults.FontSize), warnings);
+            s.Annotation.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max,
+            nameof(AnnotationDefaults.FontSize), warnings);
 
         s.Annotation.MosaicBlockSize = ClampWithWarning(
             s.Annotation.MosaicBlockSize, 2, 128, nameof(AnnotationDefaults.MosaicBlockSize), warnings);

@@ -1305,6 +1305,18 @@
     <value>선 두께</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
+  <data name="Editor_UnitPx" xml:space="preserve">
+    <value>px</value>
+  </data>
+  <data name="Editor_UnitPt" xml:space="preserve">
+    <value>pt</value>
+  </data>
+  <data name="SliderValue_RangeHelp" xml:space="preserve">
+    <value>{0}–{1}{2} 범위의 값을 입력하고 Enter를 누르십시오. Esc를 누르면 현재 값으로 돌아갑니다.</value>
+  </data>
+  <data name="SliderValue_Clamped" xml:space="preserve">
+    <value>입력 범위 {0}–{1}{2} · {3}{2} 적용</value>
+  </data>
   <data name="Text_70EECBC7C211" xml:space="preserve">
     <value>캡처를 시작할 수 없습니다</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>

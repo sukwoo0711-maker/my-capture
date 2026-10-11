@@ -1,5 +1,6 @@
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Settings;
 using MyCapture.Core.Undo;
 
 namespace MyCapture.App.Editing;
@@ -655,6 +656,10 @@ internal sealed class AnnotationEditorController
 
     internal void ApplyStrokeThickness(double thickness)
     {
+        // The settings range is the one contract for a stroke width, wherever it is typed.
+        thickness = double.IsFinite(thickness)
+            ? Math.Clamp(thickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max)
+            : StrokeThickness;
         if ((_selected is ShapeAnnotation { StrokeStyle: AnnotationStrokeStyle.ThickDashed })
             || (_selected is null && Tool == EditorTool.Rectangle && StrokeStyle == AnnotationStrokeStyle.ThickDashed))
         {
@@ -729,7 +734,8 @@ internal sealed class AnnotationEditorController
     /// </summary>
     internal void ApplyFontSize(double fontSize)
     {
-        double size = double.IsFinite(fontSize) ? Math.Clamp(fontSize, 8, 200) : DefaultFontSize;
+        double size = double.IsFinite(fontSize)
+            ? Math.Clamp(fontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : DefaultFontSize;
         DefaultFontSize = size;
         if (_selected is not TextAnnotation text)
         {

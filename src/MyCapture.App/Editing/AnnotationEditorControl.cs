@@ -212,10 +212,13 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.BaseHeightAtZeroTurns = selectedBitmap.PixelHeight;
         AnnotationDefaults defaults = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
         _controller.StrokeColor = defaults.StrokeColor;
-        _controller.StrokeThickness = double.IsFinite(defaults.StrokeThickness) ? Math.Clamp(defaults.StrokeThickness, 1, 24) : 3;
+        // The settings contract is the editor's range: a width saved in settings is the width drawn.
+        _controller.StrokeThickness = double.IsFinite(defaults.StrokeThickness)
+            ? Math.Clamp(defaults.StrokeThickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max) : 3;
         _controller.ApplyStrokeStyle(Enum.IsDefined(defaults.StrokeStyle) ? defaults.StrokeStyle : AnnotationStrokeStyle.Solid);
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
-        _controller.DefaultFontSize = double.IsFinite(defaults.FontSize) ? Math.Clamp(defaults.FontSize, 8, 200) : 18;
+        _controller.DefaultFontSize = double.IsFinite(defaults.FontSize)
+            ? Math.Clamp(defaults.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : 18;
         _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
         _controller.ApplyBlurRadius(defaults.BlurRadius);
         _mosaicBlockSize = defaults.MosaicBlockSize;
@@ -1999,20 +2002,24 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement BuildThicknessSection()
     {
         var panel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("Text_70EC2D232B4F")));
 
+        // The settings window accepts the same range; the editor never narrows it.
         _thicknessSlider = new Slider
         {
-            Minimum = 1,
-            Maximum = 24,
+            Minimum = SettingsRanges.StrokeThickness.Min,
+            Maximum = SettingsRanges.StrokeThickness.Max,
             Value = _controller.StrokeThickness,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0, 2, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
             ToolTip = UiText.Get("Text_70EC2D232B4F"),
             SmallChange = 1,
-            LargeChange = 2,
+            LargeChange = 4,
+            TickFrequency = 1,
+            IsSnapToTickEnabled = true,
         };
         AutomationName(_thicknessSlider, UiText.Get("Text_70EC2D232B4F"));
+        panel.Children.Add(SliderHeader(UiText.Get("Text_70EC2D232B4F"),
+            ValueEntry(_thicknessSlider, UiText.Get("Editor_UnitPx"), UiText.Get("Text_70EC2D232B4F"))));
         _thicknessSlider.ValueChanged += (_, args) =>
         {
             if (_syncingInspector)
@@ -2100,20 +2107,21 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement BuildFontSizeSection()
     {
         var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("Text_5F3A9C8D1E20")));
 
         _fontSizeSlider = new Slider
         {
-            Minimum = 8,
-            Maximum = 200,
+            Minimum = SettingsRanges.FontSize.Min,
+            Maximum = SettingsRanges.FontSize.Max,
             Value = _controller.DefaultFontSize,
             SmallChange = 1,
             LargeChange = 4,
             TickFrequency = 1,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0, 2, 0, 0),
             ToolTip = UiText.Get("Text_5F3A9C8D1E20"),
         };
         AutomationName(_fontSizeSlider, UiText.Get("Text_5F3A9C8D1E20"));
+        panel.Children.Add(SliderHeader(UiText.Get("Text_5F3A9C8D1E20"),
+            ValueEntry(_fontSizeSlider, UiText.Get("Editor_UnitPt"), UiText.Get("Text_5F3A9C8D1E20"))));
         _fontSizeSlider.ValueChanged += (_, args) =>
         {
             if (_syncingInspector)
@@ -2141,7 +2149,6 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement BuildBlurSection()
     {
         var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("EditorBlur_Strength")));
 
         _blurSlider = new Slider
         {
@@ -2152,10 +2159,12 @@ internal sealed class AnnotationEditorControl : Grid
             LargeChange = 4,
             TickFrequency = 1,
             IsSnapToTickEnabled = true,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0, 2, 0, 0),
             ToolTip = UiText.Get("EditorBlur_StrengthHint"),
         };
         AutomationName(_blurSlider, UiText.Get("EditorBlur_Strength"));
+        panel.Children.Add(SliderHeader(UiText.Get("EditorBlur_Strength"),
+            ValueEntry(_blurSlider, UiText.Get("Editor_UnitPx"), UiText.Get("EditorBlur_Strength"))));
         AutomationProperties.SetHelpText(_blurSlider, UiText.Get("EditorBlur_StrengthHint"));
         _blurSlider.ValueChanged += (_, args) =>
         {
@@ -2339,6 +2348,34 @@ internal sealed class AnnotationEditorControl : Grid
         };
         label.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         return label;
+    }
+
+    /// <summary>
+    /// The number box for an inspector slider. Enter and Esc hand the keyboard back to the
+    /// canvas, as the custom colour box does, so the next letter is a tool shortcut again.
+    /// </summary>
+    private SliderValueEntry ValueEntry(Slider slider, string unit, string name)
+    {
+        var entry = new SliderValueEntry(slider, unit, name);
+        entry.Finished += (_, _) => Focus();
+        // A value past the range is applied at the nearest limit; the status says which.
+        entry.Clamped += (_, value) => SetStatus(UiText.Format("SliderValue_Clamped",
+            SliderValueEntry.Format(slider.Minimum), SliderValueEntry.Format(slider.Maximum), unit, SliderValueEntry.Format(value)));
+        return entry;
+    }
+
+    /// <summary>A section label with the slider's value box at the right of the same row.</summary>
+    private static FrameworkElement SliderHeader(string label, SliderValueEntry entry)
+    {
+        var row = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(entry.Element, Dock.Right);
+        row.Children.Add(entry.Element);
+        TextBlock text = SectionLabel(label);
+        text.Margin = new Thickness(0, 0, 8, 0);
+        text.VerticalAlignment = VerticalAlignment.Center;
+        text.TextTrimming = TextTrimming.CharacterEllipsis;
+        row.Children.Add(text);
+        return row;
     }
 
     /// <summary>

@@ -1305,6 +1305,18 @@ This cannot be undone.</value>
     <value>Stroke width</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
+  <data name="Editor_UnitPx" xml:space="preserve">
+    <value>px</value>
+  </data>
+  <data name="Editor_UnitPt" xml:space="preserve">
+    <value>pt</value>
+  </data>
+  <data name="SliderValue_RangeHelp" xml:space="preserve">
+    <value>Enter a value from {0} to {1} {2}, then press Enter. Esc keeps the current value.</value>
+  </data>
+  <data name="SliderValue_Clamped" xml:space="preserve">
+    <value>Range {0}–{1} {2} · {3} {2} applied</value>
+  </data>
   <data name="Text_70EECBC7C211" xml:space="preserve">
     <value>Cannot start capture</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
