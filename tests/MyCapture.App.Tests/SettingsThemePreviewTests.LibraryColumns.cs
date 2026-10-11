@@ -156,6 +156,84 @@ public sealed partial class SettingsThemePreviewTests
     }
 
     /// <summary>
+    /// The navigation pane's views are one radio group per window: choosing a view in one library
+    /// window never unchecks the view of another, open or closed, and within a window the views
+    /// still exclude each other.
+    /// </summary>
+    [Fact]
+    public Task LibraryViews_AreGroupedPerWindow() =>
+        RunIsolated(nameof(LibraryViews_AreGroupedPerWindow), () =>
+        {
+            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+                application.Resources.MergedDictionaries.Add(new ResourceDictionary
+                { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+            application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+            application.Resources["PinLabel"] = new PinLabelConverter();
+            application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+            using var scope = UiText.UseLanguage("ko-KR");
+            ThemeService.Apply(AppTheme.Glass);
+            LibraryUxFixture first = CreateLibraryUxFixture("mc-library-views-a-");
+            LibraryUxFixture second = CreateLibraryUxFixture("mc-library-views-b-");
+            LibraryUxFixture? third = null;
+            try
+            {
+                first.Window.Show();
+                second.Window.Show();
+                SettleGalleryLayout(first.Window);
+                SettleGalleryLayout(second.Window);
+                RadioButton[] firstViews = LibraryViews(first.Window), secondViews = LibraryViews(second.Window);
+                Assert.True(firstViews[0].IsChecked);
+                Assert.True(secondViews[0].IsChecked);
+
+                // Images in the second window: its own "all items" turns off, the first window keeps its view.
+                Select(secondViews[1]);
+                PumpLibraryUntil(second.Window, () => second.ViewModel.Filter == GalleryFilter.Images, "second window images view");
+                Assert.Equal([false, true, false, false], secondViews.Select(view => view.IsChecked == true));
+                Assert.Equal([true, false, false, false], firstViews.Select(view => view.IsChecked == true));
+                Assert.Equal(GalleryFilter.All, first.ViewModel.Filter);
+
+                // A closed library window's views do not reach the open one either.
+                Select(firstViews[2]);
+                PumpLibraryUntil(first.Window, () => first.ViewModel.Filter == GalleryFilter.Videos, "first window videos view");
+                Assert.True(secondViews[1].IsChecked);
+                first.Window.CloseForExit();
+                Select(secondViews[3]);
+                PumpLibraryUntil(second.Window, () => second.ViewModel.Filter == GalleryFilter.Pinned, "second window kept view");
+                Assert.Equal([false, false, false, true], secondViews.Select(view => view.IsChecked == true));
+                Select(secondViews[0]);
+                PumpLibraryUntil(second.Window, () => second.ViewModel.Filter == GalleryFilter.All, "second window all items");
+                Assert.Equal([true, false, false, false], secondViews.Select(view => view.IsChecked == true));
+
+                // A library window built but not shown yet has no visual root, like a closed one. A
+                // shared group name let the closed window's view change uncheck the new window's view.
+                third = CreateLibraryUxFixture("mc-library-views-c-");
+                var thirdAll = (RadioButton)third.Window.FindName("AllLibraryFilter");
+                Drain(third.Window);
+                Assert.True(thirdAll.IsChecked, "a new library window starts on all items");
+                first.ViewModel.ShowView(GalleryFilter.Images);
+                Drain(third.Window);
+                Assert.True(thirdAll.IsChecked, "a closed library window unchecked a new window's view");
+                third.Window.Show();
+                SettleGalleryLayout(third.Window);
+                Assert.Equal([true, false, false, false], LibraryViews(third.Window).Select(view => view.IsChecked == true));
+            }
+            finally
+            {
+                if (first.Window.IsLoaded) first.Window.CloseForExit();
+                second.Window.CloseForExit();
+                third?.Window.CloseForExit();
+                ThemeService.Apply(AppTheme.Midnight);
+                application.Shutdown();
+            }
+
+            static RadioButton[] LibraryViews(Window window) =>
+                Descendants((DependencyObject)window.FindName("GalleryFilterRail")).OfType<RadioButton>().ToArray();
+            static void Select(RadioButton view) =>
+                ((System.Windows.Automation.Provider.ISelectionItemProvider)new System.Windows.Automation.Peers.RadioButtonAutomationPeer(view)).Select();
+        });
+
+    /// <summary>
     /// Window widths from the minimum up: each column boundary, one DIP either side of it, and a
     /// coarse sweep in between. Widths the desktop cannot show are skipped.
     /// </summary>

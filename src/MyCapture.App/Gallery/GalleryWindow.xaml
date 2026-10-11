@@ -859,8 +859,10 @@
         <!-- Navigation pane: views, folders and dates share one selection, -->
         <!-- like a Windows navigation view (icon, name, count; accent pill).-->
         <!-- ============================================================= -->
+        <!-- The views share one parent panel, which groups them per window. A GroupName would be
+             shared by every library window, so a closed or not yet shown window could uncheck the
+             view of another. -->
         <Style x:Key="LibraryUx.NavItem" TargetType="RadioButton">
-            <Setter Property="GroupName" Value="LibraryFilter" />
             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="MinHeight" Value="36" />
             <Setter Property="Margin" Value="0,1" />
