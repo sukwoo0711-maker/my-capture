@@ -377,7 +377,7 @@ public sealed class PinManagerTests : KoreanCaptionTest
                 .Select(item => item.Header?.ToString() ?? string.Empty)
                 .ToList();
             Assert.Contains("원문 텍스트 복사", headers);
-            Assert.DoesNotContain("텍스트 인식 (OCR)", headers);
+            Assert.DoesNotContain("텍스트 복사", headers);
 
             manager.CloseAll();
         });

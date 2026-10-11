@@ -123,7 +123,7 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                 Invoke(controls, "OnPrimaryClicked");
                 PumpUntil(() => controls.CanCaptureStill);
                 RegionRecorder recorder = Field<RegionRecorder>(controls, "_recorder");
-                Field<CheckBox>(controls, "_clockCheckBox").IsChecked = true;
+                controls.ShowTime = true; // The ⋯ menu's "show time" (formerly the clock check box).
                 RecordingWallClockWindow clock = Field<RecordingWallClockWindow>(controls, "_wallClock");
 
                 // Hotkey pause: the capture stops at once, but the in-region badge waits until
@@ -138,7 +138,7 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                 PumpUntil(() => controls.IsPaused && !controls.IsPauseTransitionPending);
                 Assert.True(controls.IsRecording);
                 Assert.True(pause.IsEnabled);
-                Assert.Equal("재개", pause.Content);
+                Assert.Equal("재개", RecordingControlWindow.ButtonLabel(pause));
                 Assert.Equal("녹화 재개", AutomationProperties.GetName(pause));
                 Assert.StartsWith("일시정지됨", status.Text, StringComparison.Ordinal);
                 Assert.Equal(status.Text, AutomationProperties.GetName(status));
@@ -165,7 +165,7 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                 Assert.True(recorder.IsPaused);
                 PumpUntil(() => !controls.IsPaused && !controls.IsPauseTransitionPending);
                 Assert.False(recorder.IsPaused);
-                Assert.Equal("일시정지", pause.Content);
+                Assert.Equal("일시정지", RecordingControlWindow.ButtonLabel(pause));
                 Assert.Equal("녹화 일시정지", AutomationProperties.GetName(pause));
                 Assert.Equal(string.Empty, AutomationProperties.GetItemStatus(frame));
                 Assert.IsNotType<LinearGradientBrush>(frame.BorderBrush);

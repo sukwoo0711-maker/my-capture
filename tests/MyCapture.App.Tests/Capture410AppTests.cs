@@ -155,12 +155,20 @@ public sealed class Capture410AppTests
     {
         CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
         var editor = Editor(width: width);
-        foreach (string id in new[] { "Capture410Crop", "Capture410AutoTrim" })
+        // Crop is the one top command that opens crop mode; the automatic margin finder sets the
+        // crop frame, so it is a command of crop mode's bar.
+        foreach ((string id, bool cropMode) in new[] { ("Capture410Crop", false), ("Capture410AutoTrim", true) })
         {
+            if (cropMode)
+            {
+                Assert.True(editor.HandleShortcut(Key.X, ModifierKeys.None));
+                editor.UpdateLayout();
+            }
+
             Button button = Assert.Single(Descendants(editor).OfType<Button>(),
                 candidate => AutomationProperties.GetAutomationId(candidate) == id);
             Rect bounds = button.TransformToAncestor(editor).TransformBounds(new Rect(button.RenderSize));
-            Assert.Equal(Visibility.Visible, button.Visibility);
+            Assert.True(Shown(button), $"{id} is not shown in its mode");
             Assert.True(bounds.Left >= 0 && bounds.Right <= editor.ActualWidth + 0.1, $"{id}: {bounds}, width {editor.ActualWidth}");
             Assert.True(bounds.Top >= 0 && bounds.Bottom < 140);
             Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
@@ -218,19 +226,27 @@ public sealed class Capture410AppTests
             foreach (bool systemHighContrast in new[] { false, true })
             {
                 var brushes = CaptureGuidePalette.Create(theme, "#FF1234", systemHighContrast);
-                Assert.Equal(14, brushes.Count);
+                Assert.Equal(15, brushes.Count);
                 Assert.All(brushes.Values, brush => Assert.True(brush.IsFrozen));
                 bool highContrast = systemHighContrast || theme == AppTheme.HighContrast;
                 foreach (string role in new[] { "SelectionBorder", "Crosshair", "StartPoint", "ChipBorder", "MagnifierBorder" })
                     Assert.Equal(highContrast ? SystemColors.WindowTextColor : Color.FromRgb(255, 18, 52),
                         ((SolidColorBrush)brushes["CaptureGuide." + role]).Color);
+                Color accent = ((SolidColorBrush)brushes["CaptureGuide.SelectionBorder"]).Color;
+                Color accentText = ((SolidColorBrush)brushes["CaptureGuide.AccentText"]).Color;
+                // Accent-filled labels stay at AA contrast, including the system's own pair.
+                Assert.True(ThemeContrast.Ratio(ThemeColor.Rgb(accentText.R, accentText.G, accentText.B),
+                    ThemeColor.Rgb(accent.R, accent.G, accent.B)) >= 4.5);
                 if (highContrast)
                 {
                     Assert.Equal(SystemColors.WindowColor, ((SolidColorBrush)brushes["CaptureGuide.ChipSurface"]).Color);
                     Assert.Equal(SystemColors.WindowTextColor, ((SolidColorBrush)brushes["CaptureGuide.Text"]).Color);
+                    Assert.Equal(SystemColors.WindowColor, accentText);
                 }
                 else
                 {
+                    // #FF1234 is a mid-luminance red: black reads better than white on it.
+                    Assert.Equal(Colors.Black, accentText);
                     ThemeColor surface = ThemeCatalog.ColorsFor(theme)["Surface.Floating"];
                     Assert.Equal(Color.FromArgb(surface.A, surface.R, surface.G, surface.B),
                         ((SolidColorBrush)brushes["CaptureGuide.ChipSurface"]).Color);
@@ -329,6 +345,13 @@ public sealed class Capture410AppTests
 
     private static T Field<T>(object target, string name) =>
         (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
+
+    private static bool Shown(UIElement element)
+    {
+        for (DependencyObject? node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+            if (node is UIElement { Visibility: not Visibility.Visible }) return false;
+        return true;
+    }
 
     private static AnnotationEditorControl Editor(bool uniform = false, AnnotationDocument? document = null, int width = 1100)
     {

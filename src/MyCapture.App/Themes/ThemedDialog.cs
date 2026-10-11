@@ -87,13 +87,26 @@ internal sealed class ThemedDialog : Window
         _ => "Dialog.Unexpected",
     });
 
+    /// <summary>
+    /// An unexpected failure: what went wrong, then what to do next if it happens again (restart
+    /// MyCapture, then copy the details). The technical text stays under "Details".
+    /// </summary>
+    internal static string UnhandledMessage(Exception error) =>
+        RecoveryMessage(error) + "\n\n" + UiText.Get("Onboard_ErrorNextStep");
+
+    /// <summary>MyCapture could not start: the next steps replace "return to your work", which does not exist yet.</summary>
+    internal static void StartupFailure(Exception error) =>
+        Show(null, UiText.Get("Onboard_StartFailureBody"), UiText.Get("Onboard_StartFailureTitle"),
+            MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, error.ToString());
+
     internal static void ShowUnhandled(Exception error, Action<Exception>? showThemed = null,
         Action<string, string>? showFallback = null)
     {
         try
         {
             if (showThemed is not null) showThemed(error);
-            else Error(null, UiText.Get("Dialog.AppFailure"), error);
+            else Show(null, UnhandledMessage(error), UiText.Get("Dialog.AppFailure"), MessageBoxButton.OK,
+                MessageBoxImage.Error, MessageBoxResult.OK, error.ToString());
         }
         catch (Exception)
         {

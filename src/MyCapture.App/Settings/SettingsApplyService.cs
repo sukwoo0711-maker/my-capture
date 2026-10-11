@@ -50,7 +50,9 @@ public sealed class SettingsApplyService
     {
         if (queue is null) return;
         if (!edited) next.UseCurrentFolderForNewCaptures = queue.UseCurrentFolderForNewCaptures;
-        next.DefaultCaptureFolderId = next.UseCurrentFolderForNewCaptures ? queue.DefaultCaptureFolderId : null;
+        // Turning on "keep after closing" while the library shows a folder keeps that folder.
+        next.DefaultCaptureFolderId = next.UseCurrentFolderForNewCaptures
+            ? queue.DefaultCaptureFolderId ?? queue.BrowsingCaptureFolderId : null;
     }
 
     private readonly SettingsStore _store;
@@ -106,6 +108,8 @@ public sealed class SettingsApplyService
         AppSettings previous = _current();
         // The window never edits the Store rating state; keep what captures recorded meanwhile.
         next.StoreRating = previous.StoreRating;
+        // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.
+        next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);
         var messages = new List<string>();
 

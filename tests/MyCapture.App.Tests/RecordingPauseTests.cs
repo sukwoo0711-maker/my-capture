@@ -187,12 +187,12 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             sink.WaitForCount(1);
             Assert.Equal(Visibility.Visible, pause.Visibility);
             Assert.True(pause.IsEnabled && pause.Focusable && pause.IsTabStop);
-            Assert.Equal("일시정지", pause.Content);
+            Assert.Equal("일시정지", RecordingControlWindow.ButtonLabel(pause));
             Assert.Equal("녹화 일시정지", AutomationProperties.GetName(pause));
             Assert.Contains("동영상에 포함되지 않습니다", AutomationProperties.GetHelpText(pause), StringComparison.Ordinal);
             Brush recordingBrush = frame.BorderBrush;
 
-            Field<CheckBox>(window, "_clockCheckBox").IsChecked = true;
+            window.ShowTime = true; // The ⋯ menu's "show time" (formerly the clock check box).
             RecordingWallClockWindow clock = Field<RecordingWallClockWindow>(window, "_wallClock");
             Assert.False(clock.IsPaused);
 
@@ -200,7 +200,7 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             PumpUntil(() => window.IsPaused && !window.IsPauseTransitionPending);
             Assert.True(recorder.IsPaused);
             Assert.True(window.IsRecording); // Ctrl+Shift+X routes to RequestStop while paused
-            Assert.Equal("재개", pause.Content);
+            Assert.Equal("재개", RecordingControlWindow.ButtonLabel(pause));
             Assert.Equal("녹화 재개", AutomationProperties.GetName(pause));
             Assert.StartsWith("일시정지됨", status.Text, StringComparison.Ordinal);
             Assert.Equal(status.Text, AutomationProperties.GetName(status));
@@ -220,7 +220,7 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             PumpUntil(() => !window.IsPaused && !window.IsPauseTransitionPending);
             Assert.False(recorder.IsPaused);
             Assert.False(clock.IsPaused);
-            Assert.Equal("일시정지", pause.Content);
+            Assert.Equal("일시정지", RecordingControlWindow.ButtonLabel(pause));
             Assert.Equal(string.Empty, AutomationProperties.GetItemStatus(frame));
             Assert.IsNotType<LinearGradientBrush>(frame.BorderBrush);
             sink.WaitForCount(framesAtPause + 2);

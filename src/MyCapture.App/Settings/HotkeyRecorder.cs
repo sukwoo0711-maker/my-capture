@@ -13,18 +13,24 @@ public sealed class HotkeyRecorder : StackPanel
     public static readonly DependencyProperty TextProperty = DependencyProperty.Register(nameof(Text), typeof(string),
         typeof(HotkeyRecorder), new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
             (d, _) => { ((HotkeyRecorder)d).Refresh(); ((HotkeyRecorder)d).CheckConflict(); }));
+    /// <summary>
+    /// The chord "Default" restores. Empty for commands a new installation leaves unassigned,
+    /// where "Default" would only repeat "Clear", so that button is hidden.
+    /// </summary>
     public static readonly DependencyProperty DefaultTextProperty = DependencyProperty.Register(nameof(DefaultText), typeof(string),
-        typeof(HotkeyRecorder), new PropertyMetadata(string.Empty));
+        typeof(HotkeyRecorder), new PropertyMetadata(string.Empty, (d, _) => ((HotkeyRecorder)d).RefreshResetButton()));
     public string Text { get => (string)GetValue(TextProperty); set => SetValue(TextProperty, value); }
     public string DefaultText { get => (string)GetValue(DefaultTextProperty); set => SetValue(DefaultTextProperty, value); }
     internal static HotkeyRecorder? Active { get; private set; }
     internal static Func<Hotkey, bool>? CanRegister { get; set; }
     private readonly Button _record = new() { MinWidth = 210, MinHeight = 38, HorizontalContentAlignment = HorizontalAlignment.Left };
+    private readonly Button? _reset;
     private readonly TextBlock _conflict = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 380, Margin = new Thickness(0, 4, 0, 0) };
 
     public HotkeyRecorder()
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal };
+        _record.ToolTip = UiText.Get("SettingsUx_RecordHotkeyTip");
         row.Children.Add(_record);
         foreach ((string key, Action action) in new[]
         {
@@ -36,8 +42,10 @@ public sealed class HotkeyRecorder : StackPanel
             button.Click += (_, _) => action();
             AutomationProperties.SetName(button, UiText.Get(key));
             row.Children.Add(button);
+            if (key == "Hotkey.Reset") _reset = button;
         }
         Children.Add(row);
+        RefreshResetButton();
         _conflict.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         AutomationProperties.SetLiveSetting(_conflict, AutomationLiveSetting.Assertive);
         Children.Add(_conflict);
@@ -106,6 +114,11 @@ public sealed class HotkeyRecorder : StackPanel
         GetBindingExpression(TextProperty)?.UpdateSource();
         Stop();
         CheckConflict();
+    }
+
+    private void RefreshResetButton()
+    {
+        if (_reset is not null) _reset.Visibility = string.IsNullOrEmpty(DefaultText) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void Stop() { if (Active == this) Active = null; Refresh(); CheckConflict(); }

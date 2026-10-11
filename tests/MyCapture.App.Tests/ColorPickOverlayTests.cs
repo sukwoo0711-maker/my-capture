@@ -25,6 +25,7 @@ public sealed class ColorPickOverlayTests
                 ReadCursor = () => new PointD(120, 80),
                 CopyColorText = text => { copied.Add(text); return Task.FromResult(true); },
                 ReadColorFormat = () => format,
+                ShowModeBar = true,
             };
             int cancelled = 0;
             int confirmed = 0;
@@ -41,7 +42,12 @@ public sealed class ColorPickOverlayTests
                 Assert.Equal(UiText.Format("Tools_ColorCopied", expected), view.ToastMessageForTest);
                 Assert.Equal(0, cancelled);
                 Assert.Equal(0, confirmed);
-                Assert.Contains(UiText.Get("ColorPick_OverlayHint"), view.OverlayHintText);
+                // C is a shortcut, not a mode switch: the bar still shows image capture, and its
+                // colour button names C as its accelerator key and in its tooltip (no badge on the bar).
+                Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
+                Assert.Equal(System.Windows.Visibility.Visible, view.ModeBarForTest!.ColorButton.Visibility);
+                Assert.Equal("C", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(view.ModeBarForTest.ColorButton));
+                Assert.EndsWith("(C)", (string)view.ModeBarForTest.ColorButton.ToolTip, StringComparison.Ordinal);
             }
             finally { view.ReleaseResources(); }
         });

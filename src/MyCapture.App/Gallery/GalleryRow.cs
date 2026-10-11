@@ -49,3 +49,17 @@ public sealed class GalleryTileRow : GalleryRow
     /// <summary>The 2-4 tiles laid out left-to-right in this row.</summary>
     public ReadOnlyObservableCollection<GalleryItemViewModel> Tiles { get; }
 }
+
+/// <summary>
+/// A strip of folder cards shown under a group heading and above that group's tiles. Cards use
+/// the tile track width, so folder and tile rows share one column grid for keyboard movement.
+/// </summary>
+public sealed class GalleryFolderRow : GalleryRow
+{
+    public GalleryFolderRow(IReadOnlyList<GalleryFolderCardViewModel> folders) =>
+        Folders = new ReadOnlyObservableCollection<GalleryFolderCardViewModel>(
+            new ObservableCollection<GalleryFolderCardViewModel>(folders));
+
+    /// <summary>The folder cards laid out left-to-right in this row.</summary>
+    public ReadOnlyObservableCollection<GalleryFolderCardViewModel> Folders { get; }
+}

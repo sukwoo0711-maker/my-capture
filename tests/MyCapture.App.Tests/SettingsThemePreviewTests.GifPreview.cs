@@ -83,7 +83,8 @@ public sealed partial class SettingsThemePreviewTests
             PumpUntil(dialog, () => dialog.SamplePanel.HasSample, "the preview sample");
             GifPreviewPanel panel = dialog.SamplePanel;
             Assert.True(panel.FrameCount > 30, $"{theme}: {panel.FrameCount} frames");
-            Assert.True(dialog.CanExport, $"{theme}: a whole-range sample must be saveable at once");
+            Assert.True(dialog.HasMeasuredResult, $"{theme}: a whole-range sample must be the exact export at once");
+            Assert.True(dialog.CanExport && !dialog.IsProgressVisible, $"{theme}: 내보내기 is available before any encode");
             Assert.Contains(korean ? "측정" : "measured", dialog.EstimateText, StringComparison.Ordinal);
             Assert.False(string.IsNullOrWhiteSpace(dialog.AdviceText));
             Assert.Equal(animate, panel.IsPlaying);
@@ -128,10 +129,10 @@ public sealed partial class SettingsThemePreviewTests
 
             // A different preset invalidates the measured result and renders a new sample.
             dialog.QualityIndex = 3;
-            Assert.False(dialog.CanExport);
+            Assert.False(dialog.HasMeasuredResult);
             Assert.False(panel.HasSample);
             PumpUntil(dialog, () => panel.HasSample, "the 480 px sample");
-            Assert.True(dialog.CanExport);
+            Assert.True(dialog.HasMeasuredResult);
         }
         finally
         {
@@ -158,8 +159,9 @@ public sealed partial class SettingsThemePreviewTests
             dialog.Show();
             PumpUntil(dialog, () => dialog.SamplePanel.HasSample && dialog.SampleCompletion.IsCompleted, "the sample and its estimate segments");
             GifPreviewPanel panel = dialog.SamplePanel;
-            // 12 s is longer than one sample: a centred 3 s window, an estimate range, no saveable result yet.
-            Assert.False(dialog.CanExport);
+            // 12 s is longer than one sample: a centred 3 s window, an estimate range, no exact result yet.
+            Assert.False(dialog.HasMeasuredResult);
+            Assert.True(dialog.CanExport);
             Assert.StartsWith("원본 4.5~7.5초", panel.InfoText, StringComparison.Ordinal);
             Assert.Contains("예상 크기", dialog.EstimateText, StringComparison.Ordinal);
             Assert.Contains("~", dialog.EstimateText, StringComparison.Ordinal);

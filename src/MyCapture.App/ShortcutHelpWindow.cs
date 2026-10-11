@@ -18,10 +18,10 @@ internal sealed class ShortcutHelpWindow : Window
     internal static Func<bool> CanShowHelp { get; set; } = () => true;
     private static ShortcutHelpWindow? _open;
 
-    internal ShortcutHelpWindow(bool onboarding = false)
+    internal ShortcutHelpWindow()
     {
-        Title = UiText.Get(onboarding ? "Help.Welcome" : "Help.Title");
-        Width = onboarding ? 480 : 660; Height = onboarding ? 410 : 600;
+        Title = UiText.Get("Help.Title");
+        Width = 660; Height = 600;
         MinWidth = 420; MinHeight = 300;
         ResizeMode = ResizeMode.NoResize;
         StandardWindowTheme.Apply(this);
@@ -29,27 +29,9 @@ internal sealed class ShortcutHelpWindow : Window
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        var root = new DockPanel { Margin = new Thickness(24) };
-        var title = new TextBlock { Text = Title, FontSize = 22, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 16) };
-        DockPanel.SetDock(title, Dock.Top); root.Children.Add(title);
+        // The title bar already names the window; the body starts with the search box.
+        var root = new DockPanel { Margin = new Thickness(24, 16, 24, 24) };
         HotkeySettings keys = ReadHotkeys();
-        if (onboarding)
-        {
-            var steps = new[] { ("Text_096A13A757DB", keys.Capture), ("Text_75306DAE2E60", keys.RecordRegion), ("Text_66BA5DCDA810", keys.OpenLibrary) };
-            var panel = new StackPanel();
-            var progress = new TextBlock { Margin = new Thickness(0, 0, 0, 12) };
-            var task = new TextBlock { FontSize = 18, Margin = new Thickness(0, 0, 0, 10) };
-            var chord = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 24) };
-            var next = new Button { MinHeight = 36, IsDefault = true };
-            var settings = new Button { Content = UiText.Get("Help.Settings"), MinHeight = 36, Margin = new Thickness(0, 8, 0, 0) };
-            int step = 0;
-            void RenderStep() { progress.Text = $"{step + 1} / 3"; task.Text = UiText.Get(steps[step].Item1); chord.Content = Keycaps(Display(steps[step].Item2)); next.Content = UiText.Get(step == 2 ? "Help.Start" : "Help.Next"); }
-            next.Click += (_, _) => { if (++step == 3) Close(); else RenderStep(); };
-            settings.Click += (_, _) => { Close(); OpenSettings?.Invoke(); };
-            foreach (UIElement element in new UIElement[] { progress, task, chord, next, settings }) panel.Children.Add(element);
-            RenderStep(); root.Children.Add(panel);
-        }
-        else
         {
             var search = new TextBox { MinHeight = 40, Padding = new Thickness(36, 8, 12, 8) };
             System.Windows.Automation.AutomationProperties.SetName(search, UiText.Get("Help.Search"));
@@ -79,12 +61,13 @@ internal sealed class ShortcutHelpWindow : Window
                     ("ColorPick_HelpLabel", "C"), ("TextCapture_HelpToggle", "T")]),
                 ("Help.Annotation", [("Text_DC0760235344", "R"), ("Tools.Ellipse", "E"), ("Text_2785CE58DF74", "A"),
                     ("Text_37DB9D0B1C8E", "P"), ("Tools.Highlighter", "H"), ("Text_258AD4B095A1", "T"), ("Tools.StepNumber", "N"),
-                    ("Text_3F8046019B32", "M"), ("EditorBlur_Name", "B"), ("Tools_Crop", "X"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
+                    ("Text_3F8046019B32", "M"), ("EditorBlur_Name", "B"), ("Tools_Crop", "X"),
+                    ("EditorUx_RotateLeftHint", "Q"), ("EditorUx_RotateRightHint", "W"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
                 ("Folder410.Title", [("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2"),
                     ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del")]),
-                ("Help.Video", [("Help.Play", "Space"), ("Help.Frame", "Ctrl+← / Ctrl+→"), ("Video.TrimIn", "I"), ("Video.TrimOut", "O"), ("Help.Gif", "G")]),
+                ("Help.Video", [("Help.Play", "Space"), ("Help.Frame", FrameStepKeys), ("Video.TrimIn", "I"), ("Video.TrimOut", "O"), ("Help.Gif", "G")]),
                 ("QuickAccess.Pin", [("QuickAccess.Pin", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
-                    ("Text_67FE4AF7D334", Display(keys.ToggleClickThrough)), ("PinRestore_Command", Display(keys.RestoreClosedPin)),
+                    ("Onboard_PinAllowClickThrough", Display(keys.ToggleClickThrough)), ("Onboard_TrayReopenPin", Display(keys.RestoreClosedPin)),
                     ("QuickAccess.Copy", "Ctrl+C"), ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
             ];
             var rows = new List<(string Search, FrameworkElement Row)>();
@@ -110,6 +93,13 @@ internal sealed class ShortcutHelpWindow : Window
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
     }
 
+    /// <summary>
+    /// The previous and next frame keys as the recording editor's step buttons show them (",", ".")
+    /// and as its shortcut table routes them, so the help and the editor never disagree.
+    /// </summary>
+    internal static string FrameStepKeys =>
+        $"{ShortcutCatalog.Get(ShortcutScope.Video, "PreviousFrame").Hint} / {ShortcutCatalog.Get(ShortcutScope.Video, "NextFrame").Hint}";
+
     internal static void ShowHelp()
     {
         if (!CanShowHelp()) return;
@@ -133,8 +123,11 @@ internal sealed class ShortcutHelpWindow : Window
     {
         Window[] windows = Application.Current?.Windows.OfType<ShortcutHelpWindow>().Where(w => w.IsVisible).ToArray() ?? [];
         foreach (Window window in windows) window.Close();
+        // A capture shortcut pressed over the first-run welcome closes it without opening the library.
+        WelcomeWindow[] welcomes = Application.Current?.Windows.OfType<WelcomeWindow>().Where(w => w.IsVisible).ToArray() ?? [];
+        foreach (WelcomeWindow welcome in welcomes) welcome.DismissForCapture();
         if (_open?.IsVisible == true) { _open.Close(); return true; }
-        return windows.Length > 0;
+        return windows.Length > 0 || welcomes.Length > 0;
     }
 
     private static string Display(Hotkey key) => key.IsAssigned ? key.ToString() : UiText.Get("Hotkey.Unassigned");

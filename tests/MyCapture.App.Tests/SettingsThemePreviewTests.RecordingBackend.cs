@@ -48,15 +48,15 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.Show();
             var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Text_BFA39DD9B85B")));
+            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabRecording")));
             Drain(window);
 
             var selector = Assert.IsType<ComboBox>(window.FindName("RecordingCaptureModeSelector"));
             Assert.True(selector.IsVisible);
-            Assert.Equal("녹화 캡처 방식", AutomationProperties.GetName(selector));
+            Assert.Equal("녹화 방식", AutomationProperties.GetName(selector));
             Assert.Contains("호환 모드를 선택하십시오", AutomationProperties.GetHelpText(selector), StringComparison.Ordinal);
             Assert.Equal(
-                new[] { "자동(Windows Graphics Capture 우선)", "호환 모드(GDI)" },
+                new[] { "자동(권장)", "호환 모드" },
                 selector.Items.OfType<ComboBoxItem>().Select(item => (string)item.Content).ToArray());
             Assert.Equal("auto", selector.SelectedValue);
 

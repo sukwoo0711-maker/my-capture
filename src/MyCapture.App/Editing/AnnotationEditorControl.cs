@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using System.Globalization;
 using Microsoft.Win32;
 using MyCapture.App.Ocr;
@@ -31,13 +32,21 @@ namespace MyCapture.App.Editing;
 /// preserving physical-pixel annotation coordinates and editable object layers.
 /// </para>
 /// <para>
-/// Layout follows the warm-yellow/charcoal desktop UX direction: a calm top command bar
-/// (document context and Undo/Redo on the left, a save overflow menu plus Cancel/Copy/Done
-/// on the right), a fixed 72px left rail of vector-icon buttons, a central image-only
-/// viewport, a 232px contextual inspector, and a bottom live-status region. There is no
-/// horizontal toolbar scrolling. Every icon control carries a label, tooltip, automation
-/// name, and keyboard route, and the status region is an automation live region so screen
-/// readers hear each gesture result.
+/// Layout: a top command bar on the same surface as the title bar (Undo/Redo, Crop and
+/// Quick Redact on the left; Save to file, Copy, Done and Cancel on the right), a left rail
+/// of drawing tools grouped by intent, a central image-only viewport, a contextual
+/// inspector that shows values rather than instructions, and a bottom status line that
+/// reports results. Crop is a mode: while it is active the command bar becomes
+/// rotate / ratio / auto trim / Apply / Cancel, as in Photos, where rotation lives inside
+/// crop. There is no horizontal toolbar scrolling and no command shrinks to its shortcut
+/// letter. Every icon control carries a label, tooltip, automation name, and keyboard
+/// route, and the status region is an automation live region so screen readers hear each
+/// gesture result.
+/// </para>
+/// <para>
+/// Esc only ever steps back inside the editor (finish the text being typed, clear the
+/// selection, return to the select tool); it never closes the window. Closing with the
+/// title bar, Alt+F4 or Cancel asks before dropping unsaved edits.
 /// </para>
 /// </remarks>
 internal sealed class AnnotationEditorControl : Grid
@@ -112,13 +121,26 @@ internal sealed class AnnotationEditorControl : Grid
     private FrameworkElement _colorSection = null!;
     private FrameworkElement _thicknessSection = null!;
     private TextBlock _inspectorTitle = null!;
-    private TextBlock _inspectorInstruction = null!;
     private TextBlock _statusText = null!;
     private TextBlock _dimensionsText = null!;
     private bool _inspectorCompact;
+    private FrameworkElement _editCommands = null!;
+    private FrameworkElement _cropCommands = null!;
+    private readonly List<IReadOnlyList<EditorTool>> _toolGroups = [];
+    private FrameworkElement _stepSection = null!;
+    private Border _stepPreview = null!;
+    private Path _stepPreviewNumber = null!;
+    private readonly HangulShortcutRelay _hangulRelay;
+    private DispatcherTimer? _hangulNoticeTimer;
+    private long? _hangulNoticeShownAt;
+    private EditorPointerTarget _pointerTarget;
+    private int _cursorBaseSize = EditorCursors.DefaultBaseSize;
+    private EditorCursorStyle _cursorStyle = EditorCursorStyle.White;
 
     private TextBox? _activeTextBox;
     private TextAnnotation? _editingText;
+    // Distance from the live box's outer edge to its first glyph (see PlaceTextBox).
+    private Point _liveTextInset;
     private bool _completed;
     private bool _commitInProgress;
     private bool _redactionInProgress;
@@ -178,8 +200,14 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         AnnotationDocument document = initialDocument ?? AnnotationDocument.CreateFor(_canvasWidth, _canvasHeight);
+        foreach (TextAnnotation text in document.Items.OfType<TextAnnotation>())
+        {
+            // A repair, not an edit: older versions cut text that outgrew its box.
+            TextAnnotationLayout.GrowToText(text);
+        }
+
         var undo = new UndoStack();
-        _controller = new AnnotationEditorController(document, undo);
+        _controller = new AnnotationEditorController(document, undo) { TextFitter = TextAnnotationLayout.Measure };
         _controller.BaseWidthAtZeroTurns = selectedBitmap.PixelWidth;
         _controller.BaseHeightAtZeroTurns = selectedBitmap.PixelHeight;
         AnnotationDefaults defaults = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
@@ -211,9 +239,14 @@ internal sealed class AnnotationEditorControl : Grid
         SetResourceReference(BackgroundProperty, "Surface.Base");
         Focusable = true;
         FocusVisualStyle = null;
-
         BuildShortcutActions();
         BuildLayout();
+        DisableImeOutsideTextInputs(this);
+        // Second route for Hangul-mode shortcuts: jamo an IME still composes outside a text input.
+        _hangulRelay = new HangulShortcutRelay(this, () => !IsTextInputFocused(), HandleShortcut, ShowHangulShortcutNotice);
+        // Tool cursors follow the user's Windows pointer size and colour.
+        _cursorBaseSize = EditorCursors.ReadBaseSize();
+        _cursorStyle = EditorCursorStyle.Read();
 
         _controller.SelectionChanged += (_, _) => OnSelectionChanged();
         undo.Changed += (_, _) => OnHistoryChanged();
@@ -222,7 +255,6 @@ internal sealed class AnnotationEditorControl : Grid
         _viewport.MouseMove += OnSurfaceMouseMove;
         _viewport.MouseLeftButtonUp += OnSurfaceMouseUp;
         _viewport.MouseRightButtonDown += OnSurfaceRightDown;
-        _viewport.MouseLeave += (_, _) => { if (!_viewport.IsMouseCaptured) Cursor = Cursors.Arrow; };
         _viewport.LostMouseCapture += (_, e) =>
         {
             if (!ReferenceEquals(e.OriginalSource, _viewport) || _viewport.IsMouseCaptured) return;
@@ -243,6 +275,7 @@ internal sealed class AnnotationEditorControl : Grid
             _redactionCts?.Cancel();
             _redactionCts?.Dispose();
             _redactionCts = null;
+            _hangulNoticeTimer?.Stop();
             _blurCache.Clear();
         };
 
@@ -252,19 +285,54 @@ internal sealed class AnnotationEditorControl : Grid
         UpdateInspector();
     }
 
-    /// <summary>Raised when the user commits the edit (Done / Ctrl+Enter).</summary>
+    /// <summary>Raised when a commit that closes the editor succeeded (Done, Save, Save As).</summary>
     internal event EventHandler<AnnotationEditingResult>? EditingCompleted;
 
-    /// <summary>Raised when the user cancels the edit (Esc / cancel button).</summary>
-    internal event EventHandler? EditingCancelled;
+    /// <summary>
+    /// Raised when the user asks to close from inside the editor (the Cancel command). The
+    /// host window confirms unsaved edits exactly as it does for its title bar close button.
+    /// </summary>
+    internal event EventHandler? CloseRequested;
 
     /// <summary>
-    /// Invoked when the user asks to commit, before the editor closes. The
-    /// handler flattens, persists, and performs any clipboard/export the action requires,
-    /// and returns whether the editor should close. Returning <see langword="false"/> (a
-    /// cancelled or failed Save As) leaves the editor open.
+    /// Invoked when the user asks to commit. The handler flattens and performs what the
+    /// action requires (see <see cref="EditorCommitAction"/>) and returns whether it
+    /// succeeded. For a closing action success closes the editor and <see langword="false"/>
+    /// (a cancelled or failed save) leaves it open; Copy never closes, and the result only
+    /// decides which outcome the status line reports.
     /// </summary>
     internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested { get; set; }
+
+    /// <summary>
+    /// Whether closing now would lose work: any step on the undo stack (every edit, rotation
+    /// and crop records one), a caption still being typed, or a crop frame not yet applied.
+    /// Undoing back to the opened state counts as no change.
+    /// </summary>
+    internal bool HasUnsavedChanges
+    {
+        get
+        {
+            if (_completed) return false;
+            int steps = _controller.Undo.UndoCount;
+            // An empty caption is about to vanish on its own; only its placeholder add is recorded.
+            if (_activeTextBox is { } box && _editingText is not null && string.IsNullOrEmpty(box.Text)) steps--;
+            return steps > 0 || _crop is { } crop && crop.Region != crop.Bounds;
+        }
+    }
+
+    /// <summary>Saves through the normal Done commit, which closes the editor once it succeeds.</summary>
+    internal void SaveAndClose() => Commit(EditorCommitAction.Done);
+
+    /// <summary>
+    /// Tells the user, as the editor opens after a capture, that the capture has already been
+    /// saved to the library and, when it was, copied to the clipboard.
+    /// </summary>
+    /// <remarks>Called by the capture flow only after both results are known.</remarks>
+    internal void ShowCaptureReceipt(bool copiedToClipboard)
+    {
+        if (_completed || _commitInProgress) return;
+        SetStatus(UiText.Get(copiedToClipboard ? "Capture.CopiedAndSaved" : "Capture.Saved"));
+    }
 
     internal BitmapSource DisplayedBitmap => _surface.Frame.Bitmap;
 
@@ -308,8 +376,71 @@ internal sealed class AnnotationEditorControl : Grid
     internal bool HandleKeyDown(KeyEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
-        return HandleShortcut(e.Key, Keyboard.Modifiers);
+        // Hangul mode reports letters as ImeProcessed. Outside a text input they are still
+        // shortcuts; inside one the IME keeps the key so a composition and its Esc stay intact.
+        // Handling the key here, in the preview stage, also keeps it from the IME: WPF passes an
+        // unhandled ImeProcessed key to the text services and then never raises KeyDown.
+        bool textInput = IsTextInputFocused();
+        Key key = ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, textInput);
+        bool handled = HandleShortcut(key, Keyboard.Modifiers);
+        _hangulRelay.NoteKeyDown(e.Key, key, handled);
+        if (!handled && ShortcutInput.IsUnidentifiedImeKey(e.Key, e.ImeProcessedKey, textInput))
+        {
+            // The IME did not say which key it took. If it composes jamo instead, the relay runs
+            // the shortcut; only when nothing arrives is the user told why the key did nothing.
+            int activity = _hangulRelay.Activity;
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                if (_hangulRelay.Activity == activity) ShowHangulShortcutNotice();
+            });
+        }
+
+        return handled;
     }
+
+    private bool IsTextInputFocused() => _activeTextBox is not null || Keyboard.FocusedElement is TextBoxBase;
+
+    /// <summary>
+    /// Tells the user, briefly, that a key typed in Hangul mode could not be read as a shortcut.
+    /// </summary>
+    /// <remarks>
+    /// Shown only when the IME took a key without identifying it and composed nothing either;
+    /// every letter it reports, directly or as jamo, already runs its shortcut. Repeats within
+    /// a few seconds are dropped so key presses do not re-announce the same sentence.
+    /// </remarks>
+    private void ShowHangulShortcutNotice()
+    {
+        if (_completed || _statusText is null) return;
+        long now = Environment.TickCount64;
+        if (_hangulNoticeShownAt is long last && now - last < HangulNoticeRepeatMilliseconds) return;
+        _hangulNoticeShownAt = now;
+        SetStatus(UiText.Get("EditorUx_HangulShortcutNotice"));
+        if (_hangulNoticeTimer is null)
+        {
+            _hangulNoticeTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(HangulNoticeMilliseconds),
+            };
+            _hangulNoticeTimer.Tick += (_, _) =>
+            {
+                _hangulNoticeTimer.Stop();
+                if (string.Equals(_statusText.Text, UiText.Get("EditorUx_HangulShortcutNotice"), StringComparison.Ordinal))
+                {
+                    // The status line holds results; the notice gives way to an empty line.
+                    SetStatus(string.Empty);
+                }
+            };
+        }
+
+        _hangulNoticeTimer.Stop();
+        _hangulNoticeTimer.Start();
+    }
+
+    private const int HangulNoticeMilliseconds = 6000;
+    private const int HangulNoticeRepeatMilliseconds = 3000;
+
+    /// <summary>The status line text, for tests.</summary>
+    internal string StatusText => _statusText.Text;
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
@@ -347,7 +478,8 @@ internal sealed class AnnotationEditorControl : Grid
         _shortcutActions["Save"] = () => Commit(EditorCommitAction.QuickSave);
         _shortcutActions["SaveAs"] = () => Commit(EditorCommitAction.SaveAs);
         _shortcutActions["Privacy"] = () => _ = ApplyPrivacyRedactionsAsync();
-        _shortcutActions["Cancel"] = Cancel;
+        // Esc steps back; it is never a way out of the editor (closing asks first instead).
+        _shortcutActions["Cancel"] = StepBack;
         _shortcutActions["Undo"] = () => { if (_controller.PerformUndo()) SetStatus(UiText.Get("Text_DAF93C3AA95D")); };
         _shortcutActions["Redo"] = () => { if (_controller.PerformRedo()) SetStatus(UiText.Get("Text_8B22B7BBB0CD")); };
         _shortcutActions["Delete"] = DeleteSelected;
@@ -387,6 +519,7 @@ internal sealed class AnnotationEditorControl : Grid
     {
         _surface.PendingCrop = _crop;
         _surface.InvalidateVisual();
+        UpdateCommandMode();
         if (_crop is null)
         {
             _dirtyCropInputs.Clear();
@@ -655,16 +788,6 @@ internal sealed class AnnotationEditorControl : Grid
         if (_crop is null) _controller.PointerDown(start);
     }
 
-    private static Cursor CropCursor(CropGrip grip) => grip switch
-    {
-        CropGrip.Move => Cursors.SizeAll,
-        CropGrip.TopLeft or CropGrip.BottomRight => Cursors.SizeNWSE,
-        CropGrip.TopRight or CropGrip.BottomLeft => Cursors.SizeNESW,
-        CropGrip.Top or CropGrip.Bottom => Cursors.SizeNS,
-        CropGrip.Left or CropGrip.Right => Cursors.SizeWE,
-        _ => Cursors.Cross,
-    };
-
     internal async Task PreviewAutomaticTrimAsync()
     {
         if (_autoTrimInProgress || _completed || _commitInProgress) return;
@@ -747,7 +870,7 @@ internal sealed class AnnotationEditorControl : Grid
                 _crop.Drag(image, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
                 RefreshCrop();
             }
-            Cursor = CropCursor(_crop.HitTest(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel)));
+            ApplyCursor(new EditorPointerTarget(CropGrip: _crop.HitTest(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel))));
             return;
         }
         if (e.LeftButton == MouseButtonState.Pressed)
@@ -756,7 +879,7 @@ internal sealed class AnnotationEditorControl : Grid
         }
         else if (EdgeCropGripAt(image) is CropGrip edge)
         {
-            Cursor = CropCursor(edge);
+            ApplyCursor(new EditorPointerTarget(CropGrip: edge));
         }
         else if (_controller.Tool == EditorTool.Select)
         {
@@ -764,7 +887,7 @@ internal sealed class AnnotationEditorControl : Grid
         }
         else
         {
-            Cursor = Cursors.Cross;
+            ApplyCursor(default);
         }
     }
 
@@ -817,11 +940,11 @@ internal sealed class AnnotationEditorControl : Grid
         {
             if (toolBeforeCommit == EditorTool.Pen)
             {
-                SetStatus(UiText.Get("Text_F554B87B81B3"));
+                SetStatus(UiText.Format("EditorFlow_Added", _controller.Document.Items[^1].DisplayName));
             }
             else if (_controller.Selected is { } selected)
             {
-                SetStatus(UiText.Format("Text_C7E7E4FA07DA", selected.DisplayName));
+                SetStatus(UiText.Format("EditorFlow_Added", selected.DisplayName));
             }
         }
     }
@@ -842,37 +965,59 @@ internal sealed class AnnotationEditorControl : Grid
     {
         double tolerance = 8 / Math.Max(double.Epsilon, _surface.DipPerPixel);
         ResizeHandle handle = _controller.HandleAt(image, tolerance);
-        Cursor = handle switch
-        {
-            ResizeHandle.TopLeft or ResizeHandle.BottomRight => Cursors.SizeNWSE,
-            ResizeHandle.TopRight or ResizeHandle.BottomLeft => Cursors.SizeNESW,
-            ResizeHandle.TopCenter or ResizeHandle.BottomCenter => Cursors.SizeNS,
-            ResizeHandle.MiddleLeft or ResizeHandle.MiddleRight => Cursors.SizeWE,
-            _ when _controller.HitTest(image) is not null => Cursors.SizeAll,
-            _ => Cursors.Arrow,
-        };
+        ApplyCursor(new EditorPointerTarget(handle, handle == ResizeHandle.None && _controller.HitTest(image) is not null));
+    }
+
+    /// <summary>The cursor the canvas shows for the active tool and <paramref name="target"/>.</summary>
+    /// <remarks>
+    /// Set on the image viewport only, so the tool rail, command bar and inspector keep the
+    /// normal pointer while a tool is active.
+    /// </remarks>
+    private void ApplyCursor(EditorPointerTarget target)
+    {
+        _pointerTarget = target;
+        EditorCursorKind kind = EditorCursorPolicy.Resolve(_controller.Tool, target);
+        Cursor cursor = EditorCursors.Get(
+            kind,
+            EditorCursors.PixelSize(_cursorBaseSize, VisualTreeHelper.GetDpi(this).DpiScaleX),
+            kind == EditorCursorKind.StepNumber ? _controller.NextStepNumber : 0,
+            _controller.StrokeColor,
+            SystemParameters.HighContrast || ThemeService.Current == MyCapture.Core.Themes.AppTheme.HighContrast,
+            _cursorStyle);
+        if (!ReferenceEquals(_viewport.Cursor, cursor)) _viewport.Cursor = cursor;
+    }
+
+    /// <summary>The cursor kind the canvas shows now, for tests.</summary>
+    internal EditorCursorKind CanvasCursorKind => EditorCursorPolicy.Resolve(_controller.Tool, _pointerTarget);
+
+    /// <summary>The cursor object the canvas shows now, for tests.</summary>
+    internal Cursor? CanvasCursor => _viewport.Cursor;
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        ApplyCursor(_pointerTarget);
     }
 
     // ---- Text entry ----------------------------------------------------------------
 
     private void PlaceTextBox(PointD image)
     {
-        // Start the live box at the remaining canvas width so a long Korean sentence
-        // stays on one line. Wrapping begins only when the text hits the right edge.
-        double remainingPx = Math.Max(32, _canvasWidth - image.X - 8);
-        double lineHeightPx = Math.Max(24, _controller.DefaultFontSize * 1.8);
-        TextAnnotation annotation = _controller.BeginTextAnnotation(image, remainingPx, lineHeightPx);
+        // The controller sizes the caption to its (still empty) text; the live box follows
+        // the same fit as the user types.
+        double em = _controller.DefaultFontSize;
+        TextAnnotation annotation = _controller.BeginTextAnnotation(image, em, em * 1.4);
         _editingText = annotation;
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        Rect box = _surface.ToSurfaceRect(annotation.Rect);
         var textBox = new TextBox
         {
-            Width = Math.Max(60, box.Width),
-            MinWidth = 60,
-            MinHeight = Math.Max(28, box.Height),
+            MinWidth = 0,
+            MinHeight = 0,
             FontFamily = new FontFamily(annotation.FontFamily),
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
+            FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
+            FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = annotation.Foreground.ToBrush(),
             Background = Brush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
             BorderBrush = Brush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
@@ -881,12 +1026,21 @@ internal sealed class AnnotationEditorControl : Grid
             TextWrapping = TextWrapping.NoWrap,
             Padding = new Thickness(4, 2, 4, 2),
         };
+        // The committed caption is drawn with ideal glyph metrics (FormattedText). The editor
+        // window's display-mode text would space and wrap the live copy differently.
+        TextOptions.SetTextFormattingMode(textBox, TextFormattingMode.Ideal);
         AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
+        InputMethod.SetIsInputMethodEnabled(textBox, true);
 
-        Canvas.SetLeft(textBox, box.Left);
-        Canvas.SetTop(textBox, box.Top);
+        // Border, padding and the 2 DIP the text view keeps on each side; replaced by the
+        // laid-out value below.
+        _liveTextInset = new Point(
+            textBox.BorderThickness.Left + textBox.Padding.Left + 2,
+            textBox.BorderThickness.Top + textBox.Padding.Top);
         _overlayCanvas.Children.Add(textBox);
         _activeTextBox = textBox;
+        LayoutLiveTextBox(textBox);
+        MeasureLiveTextInset(textBox);
         SetStatus(UiText.Get("Text_230D26DEB9AE"));
 
         textBox.TextChanged += OnLiveTextBoxTextChanged;
@@ -895,45 +1049,66 @@ internal sealed class AnnotationEditorControl : Grid
     }
 
     /// <summary>
-    /// Keeps a long single line unwrapped until the box reaches the right edge of the
-    /// visible image (in surface coordinates, including letterbox origin).
+    /// Replaces the estimated inset with the laid-out one so the first glyph sits exactly
+    /// where the committed caption draws it.
     /// </summary>
-    private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
+    private void MeasureLiveTextInset(TextBox box)
     {
-        if (sender is not TextBox box)
+        if (PresentationSource.FromVisual(box) is null)
         {
             return;
         }
 
-        Rect canvas = _surface.ToSurfaceRect(new RectD(0, 0, _canvasWidth, _canvasHeight));
-        double left = Canvas.GetLeft(box);
-        double availableDip = Math.Max(60, canvas.Right - left - 4);
-        FormattedText measured = MeasureLiveText(box);
-        double desiredDip = measured.Width + box.Padding.Left + box.Padding.Right + 8;
-        if (desiredDip <= availableDip)
+        box.UpdateLayout();
+        Rect first = box.GetRectFromCharacterIndex(0);
+        if (first.IsEmpty || !double.IsFinite(first.X) || !double.IsFinite(first.Y))
+        {
+            return;
+        }
+
+        _liveTextInset = new Point(first.X, first.Y);
+        LayoutLiveTextBox(box);
+    }
+
+    private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            LayoutLiveTextBox(box);
+        }
+    }
+
+    /// <summary>
+    /// Sizes and places the live box from the fit the commit will store: the first glyph at
+    /// the caption's top-left, each paragraph on one line while it fits, and wrapping at
+    /// exactly the committed width once the text reaches the image's right edge.
+    /// </summary>
+    private void LayoutLiveTextBox(TextBox box)
+    {
+        if (_editingText is not { } editing)
+        {
+            return;
+        }
+
+        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        TextLayout fit = _controller.FitText(editing, box.Text ?? string.Empty, editing.FontSize, editing.AutoSize, editing.Rect);
+        Rect target = _surface.ToSurfaceRect(fit.Rect);
+        double chrome = 2 * _liveTextInset.X;
+        box.MinWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
+        if (fit.AutoSize)
         {
             box.TextWrapping = TextWrapping.NoWrap;
-            box.Width = Math.Max(box.MinWidth, desiredDip);
+            // Room for the caret after the last glyph, so the line never scrolls sideways.
+            box.Width = target.Width + chrome + 2;
         }
         else
         {
             box.TextWrapping = TextWrapping.Wrap;
-            box.Width = availableDip;
+            box.Width = target.Width + chrome;
         }
-    }
 
-    private FormattedText MeasureLiveText(TextBox box)
-    {
-        FontFamily family = box.FontFamily ?? new FontFamily("Malgun Gothic");
-        var typeface = new Typeface(family, box.FontStyle, box.FontWeight, FontStretches.Normal);
-        return new FormattedText(
-            box.Text ?? string.Empty,
-            CultureInfo.CurrentUICulture,
-            box.FlowDirection,
-            typeface,
-            box.FontSize,
-            Brushes.Black,
-            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        Canvas.SetLeft(box, target.Left - _liveTextInset.X);
+        Canvas.SetTop(box, target.Top - _liveTextInset.Y);
     }
 
     internal AnnotationDocument CreateCurrentImageSnapshot()
@@ -946,24 +1121,15 @@ internal sealed class AnnotationEditorControl : Grid
             && snapshot.Items.OfType<TextAnnotation>().FirstOrDefault(item => item.Id == editing.Id) is { } text)
         {
             if (string.IsNullOrEmpty(box.Text)) snapshot.Remove(text);
-            else { text.Text = box.Text; text.Rect = MeasureCommittedTextRect(box, editing); }
+            else
+            {
+                // Exactly what committing now would store.
+                text.Text = box.Text;
+                TextLayout.Apply(text, _controller.FitText(editing, box.Text, editing.FontSize, editing.AutoSize, editing.Rect));
+            }
         }
         snapshot.NormalizeZIndices();
         return snapshot;
-    }
-
-    private RectD MeasureCommittedTextRect(TextBox box, TextAnnotation annotation)
-    {
-        // Shrink-wrap to the typed text in image-pixel space so a wide live box does not
-        // leave a huge empty plate after commit.
-        double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        PointD imageOrigin = _surface.ToImagePoint(new Point(Canvas.GetLeft(box), Canvas.GetTop(box)));
-        FormattedText measured = MeasureLiveText(box);
-        double width = Math.Max(annotation.FontSize, (measured.Width + box.Padding.Left + box.Padding.Right + 8) / dipPerPixel);
-        double height = Math.Max(annotation.FontSize * 1.4, (measured.Height + box.Padding.Top + box.Padding.Bottom + 4) / dipPerPixel);
-        width = Math.Min(width, Math.Max(1, _canvasWidth - imageOrigin.X));
-        height = Math.Min(height, Math.Max(1, _canvasHeight - imageOrigin.Y));
-        return new RectD(imageOrigin.X, imageOrigin.Y, width, height);
     }
 
     private void CommitActiveText()
@@ -977,20 +1143,22 @@ internal sealed class AnnotationEditorControl : Grid
         TextAnnotation annotation = _editingText;
         _activeTextBox = null;
         _editingText = null;
+        // Esc, Ctrl+Enter and a canvas click commit from inside the box; give the keyboard back
+        // to the canvas so the next letter is a shortcut. A commit caused by focus moving
+        // elsewhere (a slider, a swatch) leaves that new focus alone.
+        bool hadKeyboardFocus = box.IsKeyboardFocusWithin;
 
         box.TextChanged -= OnLiveTextBoxTextChanged;
         _overlayCanvas.Children.Remove(box);
 
-        RectD finalRect = MeasureCommittedTextRect(box, annotation);
-        if (finalRect != annotation.Rect)
-        {
-            annotation.Rect = finalRect;
-        }
-
         bool hadText = !string.IsNullOrEmpty(box.Text);
         _controller.CommitTextEdit(annotation, box.Text ?? string.Empty);
-        SetStatus(hadText ? UiText.Get("Text_B09611FF35C1") : UiText.Get("Text_8BDB6F46B7FF"));
+        SetStatus(hadText ? UiText.Format("EditorFlow_Added", UiText.Get("Text_258AD4B095A1")) : UiText.Get("Text_8BDB6F46B7FF"));
         UpdateInspector();
+        if (hadKeyboardFocus)
+        {
+            Focus();
+        }
     }
 
     /// <summary>
@@ -1095,7 +1263,7 @@ internal sealed class AnnotationEditorControl : Grid
         var rect = new RectD(image.X - (width / 2), image.Y - (height / 2), width, height);
         _controller.AddImageAnnotation(loaded.Value.AssetFileName, sourceWidth, sourceHeight, rect);
         SyncToolButtons();
-        SetStatus(UiText.Get("Text_D8F8A6B5650D"));
+        SetStatus(UiText.Format("EditorFlow_Added", UiText.Get("Text_302BAE127938")));
     }
 
     // ---- Layout construction -------------------------------------------------------
@@ -1121,15 +1289,33 @@ internal sealed class AnnotationEditorControl : Grid
 
     private Border BuildCommandBar()
     {
-        var grid = new CommandGroupsPanel();
+        _editCommands = BuildEditCommands();
+        _cropCommands = BuildCropCommands();
+        var modes = new Grid();
+        modes.Children.Add(_editCommands);
+        modes.Children.Add(_cropCommands);
+        UpdateCommandMode();
 
-        var left = new StackPanel
+        // Same surface as the title bar and the editor body, with no rule underneath, so the
+        // caption and the commands read as one header rather than two stacked bars.
+        var bar = new Border
         {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
+            Name = "AnnotationCommandBar",
+            Padding = new Thickness(8, 6, 8, 6),
+            Child = modes,
+            SnapsToDevicePixels = true,
         };
-        left.Children.Add(Separator());
+        bar.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
+        return bar;
+    }
 
+    /// <summary>
+    /// The everyday commands: history and the image commands on the left; the ways to finish
+    /// on the right, in WinUI dialog order (the action, then the way out).
+    /// </summary>
+    private CommandGroupsPanel BuildEditCommands()
+    {
+        var left = CommandRow();
         _undoButton = IconButton(UiText.Get("Text_CE706412FA75"), UiText.Get("Text_C61A081610C9"), "Icon.Undo", FallbackUndo, () =>
         {
             if (_controller.PerformUndo())
@@ -1148,28 +1334,18 @@ internal sealed class AnnotationEditorControl : Grid
         left.Children.Add(_redoButton);
         left.Children.Add(Separator());
 
-        _rotateLeftButton = IconButton(UiText.Get("Text_6B2C41A9E532"), UiText.Get("Text_6B2C41A9E533"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
-        _rotateRightButton = IconButton(UiText.Get("Text_6B2C41A9E534"), UiText.Get("Text_6B2C41A9E535"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
-        left.Children.Add(_rotateLeftButton);
-        left.Children.Add(_rotateRightButton);
-        left.Children.Add(Separator());
-
-        Button crop = TextButton(UiText.Get("Capture410.Crop"), UiText.Get("Capture410.CropHint"),
-            "Button.Secondary", () => { SelectTool(EditorTool.Crop); Focus(); });
+        // The single way into crop. Rotation, the ratio and the automatic margin finder live
+        // inside crop mode, so no second crop entry point remains on the tool rail.
+        Button crop = IconTextButton(UiText.Get("Tools_Crop"), UiText.Get("EditorFlow_CropHint"), "Icon.Crop", FallbackCrop,
+            () => { SelectTool(EditorTool.Crop); Focus(); });
         AutomationProperties.SetAutomationId(crop, "Capture410Crop");
-        AutomationProperties.SetAcceleratorKey(crop, "X");
         left.Children.Add(crop);
-        _autoTrimButton = TextButton(UiText.Get("Capture410.AutoTrim"), UiText.Get("Capture410.AutoTrimHint"),
-            "Button.GhostCompact", () => _ = PreviewAutomaticTrimAsync());
-        AutomationProperties.SetAutomationId(_autoTrimButton, "Capture410AutoTrim");
-        left.Children.Add(_autoTrimButton);
 
         _redactButton = TextButton(
             UiText.Get("Text_E395E2567985"),
             UiText.Get("Text_A31A72A338DD"),
-            "Button.Secondary",
+            "Button.GhostCompact",
             () => _ = ApplyPrivacyRedactionsAsync());
-        _redactButton.MinWidth = 92;
         _redactButton.IsEnabled = _privacyRedactionService?.IsAvailable == true;
         AutomationProperties.SetHelpText(
             _redactButton,
@@ -1177,59 +1353,161 @@ internal sealed class AnnotationEditorControl : Grid
                 ? UiText.Get("Text_EB9AB8D7D13C")
                 : UiText.Get("Text_39E626945336"));
         left.Children.Add(_redactButton);
-        Grid.SetColumn(left, 0);
-        grid.Children.Add(left);
 
-        var right = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        // One primary action. Saving stays reachable through Done, Ctrl+S, and the
-        // overflow menu, so the four competing exit buttons collapse to cancel/copy/done.
-        var save = BuildSaveOverflowMenu();
-        ShortcutPresentation.Attach(save, ShortcutScope.Annotation, "Save");
-        right.Children.Add(save);
-        right.Children.Add(Separator());
-
-        Button cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("Text_22B802C1B7FF"), "Button.GhostCompact", Cancel);
+        var right = CommandRow();
+        Button save = BuildSaveOverflowMenu();
         Button copy = IconTextButton(
             UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_74EEFE6E43AE"), "Icon.Copy", FallbackCopy,
             () => Commit(EditorCommitAction.CopyToClipboard));
         copy.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
-        copy.MinWidth = 76;
-
         Button done = IconTextButton(
-            UiText.Get("Text_727333AB0740"), UiText.Get("Text_0B201CC58BDD"), "Icon.Check", FallbackCheck,
+            UiText.Get("Text_727333AB0740"), UiText.Get("EditorFlow_DoneHint"), "Icon.Check", FallbackCheck,
             () => Commit(EditorCommitAction.Done));
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
-        done.MinWidth = 78;
-
-        ShortcutPresentation.Attach(cancel, ShortcutScope.Annotation, "Cancel");
-        ShortcutPresentation.Attach(copy, ShortcutScope.Annotation, "Copy");
-        ShortcutPresentation.Attach(done, ShortcutScope.Annotation, "Done");
-        foreach (var (button, command) in new[] { (_undoButton, "Undo"), (_redoButton, "Redo"), (_rotateLeftButton, "RotateLeft"), (_rotateRightButton, "RotateRight"), (_redactButton, "Privacy") })
-        {
-            button.Width = double.NaN; button.Height = double.NaN; button.MinHeight = 42;
-            ShortcutPresentation.Attach(button, ShortcutScope.Annotation, command);
-        }
-        right.Children.Add(cancel);
+        // Esc no longer closes, so Cancel carries no shortcut; it closes like the title bar does.
+        Button cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CancelHint"), "Button.GhostCompact", RequestClose);
+        AutomationProperties.SetAutomationId(cancel, "EditorFlowCancel");
+        AutomationProperties.SetAutomationId(done, "EditorFlowDone");
+        AutomationProperties.SetAutomationId(copy, "EditorFlowCopy");
+        right.Children.Add(save);
         right.Children.Add(copy);
+        right.Children.Add(Separator());
         right.Children.Add(done);
-        Grid.SetColumn(right, 1);
-        grid.Children.Add(right);
+        right.Children.Add(cancel);
 
-        return ThemedBorder(new Border
+        foreach (var (button, command, borderless) in new[] { (_undoButton, "Undo", true), (_redoButton, "Redo", true),
+            (crop, "Crop", true), (_redactButton, "Privacy", true), (save, "Save", false), (copy, "Copy", false), (done, "Done", false) })
         {
-            Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
-            BorderBrush = Brush("Border.Subtle", Colors.Gray),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(12, 8, 12, 8),
-            Child = grid,
-            SnapsToDevicePixels = true,
-        }, "Surface.Raised");
+            CommandButton(button, borderless, ShortcutScope.Annotation, command);
+        }
+
+        CommandButton(cancel, borderless: true);
+        var panel = new CommandGroupsPanel { Children = { left, right } };
+        AutomationProperties.SetName(panel, UiText.Get("EditorFlow_CommandBarName"));
+        return panel;
     }
+
+    /// <summary>
+    /// Crop mode replaces the command bar, as in Photos: rotation, the frame ratio and the
+    /// automatic margin finder on the left, then Apply and Cancel.
+    /// </summary>
+    private CommandGroupsPanel BuildCropCommands()
+    {
+        var left = CommandRow();
+        // An image-plus-arrow icon and a visible label, like the rotate commands in Photos and
+        // Paint: a bare curved arrow beside Undo and Redo read as another history command.
+        _rotateLeftButton = IconTextButton(UiText.Get("EditorUx_RotateLeft"), UiText.Get("EditorUx_RotateLeftHint"), "Icon.RotateLeft", FallbackRotateLeft, () => RotateCapture(-1));
+        _rotateRightButton = IconTextButton(UiText.Get("EditorUx_RotateRight"), UiText.Get("EditorUx_RotateRightHint"), "Icon.RotateRight", FallbackRotateRight, () => RotateCapture(1));
+        AutomationName(_rotateLeftButton, UiText.Get("EditorUx_RotateLeftHint"));
+        AutomationName(_rotateRightButton, UiText.Get("EditorUx_RotateRightHint"));
+        left.Children.Add(_rotateLeftButton);
+        left.Children.Add(_rotateRightButton);
+        left.Children.Add(Separator());
+
+        var ratioLabel = new TextBlock
+        {
+            Text = UiText.Get("Crop.Ratio"),
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0, 6, 0),
+        };
+        ratioLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        left.Children.Add(ratioLabel);
+        _cropRatio = new ComboBox { MinHeight = 32, MinWidth = 96, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) };
+        foreach (string label in new[] { UiText.Get("Crop.Free"), UiText.Get("Crop.Original"), "1:1", "4:3", "16:9", "9:16" }) _cropRatio.Items.Add(label);
+        AutomationName(_cropRatio, UiText.Get("Crop.Ratio"));
+        _cropRatio.SelectedIndex = 0;
+        _cropRatio.SelectionChanged += (_, _) =>
+        {
+            ApplyCropRatio();
+            RefreshCrop();
+        };
+        ReturnFocusAfterMousePick(_cropRatio);
+        left.Children.Add(_cropRatio);
+
+        _autoTrimButton = TextButton(UiText.Get("Capture410.AutoTrim"), UiText.Get("Capture410.AutoTrimHint"),
+            "Button.GhostCompact", () => _ = PreviewAutomaticTrimAsync());
+        AutomationProperties.SetAutomationId(_autoTrimButton, "Capture410AutoTrim");
+        left.Children.Add(_autoTrimButton);
+
+        var right = CommandRow();
+        Button apply = TextButton(UiText.Get("Crop.Apply"), UiText.Get("EditorFlow_CropApplyHint"), "Button.Primary", ApplyPendingCrop);
+        Button cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CropCancelHint"), "Button.GhostCompact", () =>
+        {
+            CancelPendingCrop();
+            Focus();
+        });
+        AutomationProperties.SetAutomationId(apply, "EditorFlowCropApply");
+        AutomationProperties.SetAutomationId(cancel, "EditorFlowCropCancel");
+        right.Children.Add(apply);
+        right.Children.Add(cancel);
+
+        CommandButton(_rotateLeftButton, borderless: true, ShortcutScope.Annotation, "RotateLeft");
+        CommandButton(_rotateRightButton, borderless: true, ShortcutScope.Annotation, "RotateRight");
+        CommandButton(_autoTrimButton, borderless: true);
+        CommandButton(apply, borderless: false, ShortcutScope.Crop, "Apply");
+        CommandButton(cancel, borderless: true, ShortcutScope.Crop, "Cancel");
+        var panel = new CommandGroupsPanel { Children = { left, right } };
+        AutomationProperties.SetName(panel, UiText.Get("EditorFlow_CropBarName"));
+        return panel;
+    }
+
+    private static StackPanel CommandRow() => new()
+    {
+        Orientation = Orientation.Horizontal,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    /// <summary>
+    /// Gives a command bar button its shortcut (tooltip, accelerator key and the optional key
+    /// line beneath it) and the bar's common padding, type size and height.
+    /// </summary>
+    /// <remarks>
+    /// The disabled look comes from the shared button styles: each button level keeps its shape
+    /// and only dims. <paramref name="borderless"/> marks a tool-level command, which keeps the
+    /// compact padding of its borderless style.
+    /// </remarks>
+    private static void CommandButton(Button button, bool borderless, ShortcutScope? scope = null, string? command = null)
+    {
+        if (scope is { } shortcutScope && command is not null)
+        {
+            ShortcutPresentation.Attach(button, shortcutScope, command);
+        }
+
+        if (!borderless)
+        {
+            // The shared control padding is sized for dialogs; in the one-row bar it pushed the
+            // finishing buttons onto a second row at the 680 DIP minimum width.
+            button.Padding = new Thickness(10, 4, 10, 4);
+        }
+
+        // One type size and height for every command, so the bar keeps its height when crop
+        // mode swaps the commands.
+        button.FontSize = 12;
+        button.Width = double.NaN;
+        button.Height = double.NaN;
+        button.MinHeight = 42;
+    }
+
+    private void ApplyCropRatio() =>
+        _crop?.SetRatio(_cropRatio.SelectedIndex switch { 1 => (double)_canvasWidth / _canvasHeight, 2 => 1, 3 => 4.0 / 3, 4 => 16.0 / 9, 5 => 9.0 / 16, _ => null });
+
+    /// <summary>Shows the crop commands while a crop frame is open and the everyday commands otherwise.</summary>
+    private void UpdateCommandMode()
+    {
+        if (_editCommands is null || _cropCommands is null) return;
+        bool cropping = _crop is not null;
+        bool hidingFocus = (cropping ? _editCommands : _cropCommands).IsKeyboardFocusWithin;
+        _editCommands.Visibility = cropping ? Visibility.Collapsed : Visibility.Visible;
+        _cropCommands.Visibility = cropping ? Visibility.Visible : Visibility.Collapsed;
+        if (hidingFocus) Focus();
+    }
+
+    /// <summary>Whether the crop commands are showing, for tests.</summary>
+    internal bool IsCropCommandBarVisible => _cropCommands.Visibility == Visibility.Visible;
+
+    /// <summary>The tool rail's groups, top to bottom, for tests.</summary>
+    internal IReadOnlyList<IReadOnlyList<EditorTool>> ToolGroups => _toolGroups;
 
     private Button BuildSaveOverflowMenu()
     {
@@ -1268,7 +1546,8 @@ internal sealed class AnnotationEditorControl : Grid
         content.Children.Add(BuildIcon("Icon.Save", FallbackSave, 16));
         content.Children.Add(new TextBlock
         {
-            Text = UiText.Get("Text_5FB926229090"),
+            // "Save" alone read like Done, which also saves (to the library); this one writes a file.
+            Text = UiText.Get("EditorFlow_SaveToFile"),
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(6, 0, 4, 0),
@@ -1278,13 +1557,14 @@ internal sealed class AnnotationEditorControl : Grid
         var button = new Button
         {
             Content = content,
-            ToolTip = UiText.Get("Text_5825293860A7"),
+            ToolTip = UiText.Get("EditorFlow_SaveToFileHint"),
             MinWidth = 78,
             Margin = new Thickness(2, 0, 2, 0),
             ContextMenu = menu,
         };
-        button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
-        AutomationName(button, UiText.Get("Text_EA33C8FF45A0"));
+        button.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
+        AutomationName(button, UiText.Get("EditorFlow_SaveToFile"));
+        AutomationProperties.SetAutomationId(button, "EditorFlowSaveToFile");
         PreserveEditorMouseFocus(button);
         button.Click += (_, _) =>
         {
@@ -1324,33 +1604,65 @@ internal sealed class AnnotationEditorControl : Grid
 
     private Border BuildToolRail()
     {
-        var stack = new UniformGrid { Columns = 2, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(2, 4, 2, 0) };
-        // Grouped by intent so shape and insertion tools no longer read as one flat list.
-        AddToolButton(stack, EditorTool.Select, UiText.Get("Text_8D1A750C9351"), UiText.Get("Text_8A3ADCEB89EF"), "Icon.Select", FallbackSelect);
-        AddToolButton(stack, EditorTool.Crop, UiText.Get("Tools_Crop"), UiText.Get("Tools_CropHint"), "Icon.Crop", FallbackCrop);
-        AddToolButton(stack, EditorTool.Rectangle, UiText.Get("Text_DC0760235344"), UiText.Get("Text_B659038CC17D"), "Icon.Rectangle", FallbackRectangle);
-        AddToolButton(stack, EditorTool.Ellipse, UiText.Get("Tools.Ellipse"), UiText.Get("Tools.Ellipse"), "Icon.Ellipse", () => new EllipseGeometry(new Rect(3, 3, 14, 14)));
-        AddToolButton(stack, EditorTool.Arrow, UiText.Get("Text_2785CE58DF74"), UiText.Get("Text_D53ABD064C5E"), "Icon.Arrow", FallbackArrow);
-        AddToolButton(stack, EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen);
-        AddToolButton(stack, EditorTool.Highlighter, UiText.Get("Tools.Highlighter"), UiText.Get("Tools.Highlighter"), "Icon.Highlighter", () => Geometry.Parse("M4,14 L13,3 L17,7 L8,18 Z M2,18 H12"));
-        AddToolButton(stack, EditorTool.Text, UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText);
-        AddToolButton(stack, EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), UiText.Get("Tools.StepNumber"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13"));
-        AddToolButton(stack, EditorTool.Image, UiText.Get("Text_302BAE127938"), UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage);
-        AddToolButton(stack, EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic);
-        AddToolButton(stack, EditorTool.Blur, UiText.Get("EditorBlur_Name"), UiText.Get("EditorBlur_ToolTip"), "Icon.Blur", FallbackBlur);
+        // Grouped by intent, a rule between groups: select / shapes / freehand / words and
+        // numbers / covering / pictures. Each group starts a new row of the two-column grid,
+        // so a row never pairs tools from different groups. Crop is not here: it is an image
+        // command in the top bar, next to the rotate commands it now contains.
+        var groups = new StackPanel { Name = "AnnotationToolGroups", VerticalAlignment = VerticalAlignment.Top };
+        ToolGroup(groups, (EditorTool.Select, UiText.Get("Text_8D1A750C9351"), UiText.Get("Text_8A3ADCEB89EF"), "Icon.Select", FallbackSelect));
+        ToolGroup(groups,
+            (EditorTool.Rectangle, UiText.Get("Text_DC0760235344"), UiText.Get("Text_B659038CC17D"), "Icon.Rectangle", FallbackRectangle),
+            (EditorTool.Ellipse, UiText.Get("Tools.Ellipse"), UiText.Get("Tools.Ellipse"), "Icon.Ellipse", () => new EllipseGeometry(new Rect(3, 3, 14, 14))),
+            (EditorTool.Arrow, UiText.Get("Text_2785CE58DF74"), UiText.Get("Text_D53ABD064C5E"), "Icon.Arrow", FallbackArrow));
+        ToolGroup(groups,
+            (EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen),
+            (EditorTool.Highlighter, UiText.Get("Tools.Highlighter"), UiText.Get("Tools.Highlighter"), "Icon.Highlighter", () => Geometry.Parse("M4,14 L13,3 L17,7 L8,18 Z M2,18 H12")));
+        ToolGroup(groups,
+            (EditorTool.Text, UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText),
+            (EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), UiText.Get("EditorUx_StepNumberToolTip"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13")));
+        // The purpose sentence lives on the tool (tooltip and help text), not in the panel.
+        AutomationProperties.SetHelpText(_toolButtons[EditorTool.StepNumber], UiText.Get("EditorUx_StepNumberInstruction"));
+        ToolGroup(groups,
+            (EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic),
+            (EditorTool.Blur, UiText.Get("EditorBlur_Name"), UiText.Get("EditorBlur_ToolTip"), "Icon.Blur", FallbackBlur));
+        ToolGroup(groups, (EditorTool.Image, UiText.Get("Text_302BAE127938"), UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage));
 
-        var panel = new Border { Name = "AnnotationToolRail", Child = stack };
+        var panel = new Border { Name = "AnnotationToolRail", Child = groups };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
+        // Tighter than the shared rail padding: six groups must still fit the 460 DIP minimum height.
+        panel.Padding = new Thickness(6, 4, 6, 4);
         return panel;
     }
 
-    private Border RailSeparator() => new()
+    private void ToolGroup(Panel groups, params (EditorTool Tool, string Label, string ToolTip, string Icon, Func<Geometry> Fallback)[] tools)
     {
-        Height = 1,
-        Width = 20,
-        Margin = new Thickness(0, 6, 0, 6),
-        Background = Brush("Border.Subtle", Colors.DimGray),
-    };
+        if (groups.Children.Count > 0)
+        {
+            groups.Children.Add(RailSeparator());
+        }
+
+        var grid = new UniformGrid { Columns = 2, Margin = new Thickness(2, 0, 2, 0) };
+        foreach (var (tool, label, toolTip, icon, fallback) in tools)
+        {
+            AddToolButton(grid, tool, label, toolTip, icon, fallback);
+        }
+
+        groups.Children.Add(grid);
+        _toolGroups.Add([.. tools.Select(item => item.Tool)]);
+    }
+
+    private Border RailSeparator()
+    {
+        var rule = new Border
+        {
+            Height = 1,
+            Margin = new Thickness(8, 4, 8, 4),
+            SnapsToDevicePixels = true,
+            Tag = "AnnotationToolGroupSeparator",
+        };
+        rule.SetResourceReference(Border.BackgroundProperty, "Border.Subtle");
+        return rule;
+    }
 
     private Border BuildViewport()
     {
@@ -1384,18 +1696,13 @@ internal sealed class AnnotationEditorControl : Grid
             FontSize = 16,
             TextWrapping = TextWrapping.Wrap,
         };
-        _inspectorInstruction = new TextBlock
-        {
-            Text = string.Empty,
-            Foreground = Brush("Text.Secondary", Colors.LightGray),
-            FontSize = 13,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 6, 0, 0),
-        };
+        // The panel names what is being edited and shows its values. How a tool is used is in
+        // the tool's tooltip, and results are in the status line, so no sentence repeats here.
         _inspectorTitle.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         stack.Children.Add(_inspectorTitle);
-        _inspectorInstruction.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        stack.Children.Add(_inspectorInstruction);
+
+        _stepSection = BuildStepNumberSection();
+        stack.Children.Add(_stepSection);
 
         _colorSection = BuildColorSection();
         stack.Children.Add(_colorSection);
@@ -1434,21 +1741,76 @@ internal sealed class AnnotationEditorControl : Grid
         }, "Surface.Raised");
     }
 
+    /// <summary>
+    /// Shows, while the step tool is active, the badge the next click adds: "Next number [3]".
+    /// A value, not an explanation; the tool's tooltip says what the tool is for.
+    /// </summary>
+    private FrameworkElement BuildStepNumberSection()
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        panel.Children.Add(SectionLabel(UiText.Get("EditorUx_StepNumberNext")));
+        _stepPreviewNumber = new Path
+        {
+            Fill = Brushes.White,
+            Stroke = new SolidColorBrush(Color.FromRgb(0x0B, 0x0F, 0x17)),
+            StrokeThickness = 1,
+            StrokeLineJoin = PenLineJoin.Round,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _stepPreview = new Border
+        {
+            Width = 40,
+            Height = 40,
+            CornerRadius = new CornerRadius(4),
+            BorderThickness = new Thickness(1),
+            Child = _stepPreviewNumber,
+            SnapsToDevicePixels = true,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        _stepPreview.SetResourceReference(Border.BorderBrushProperty, "Border.Strong");
+        panel.Children.Add(_stepPreview);
+        return panel;
+    }
+
+    /// <summary>Paints the next badge in the colour and number the step tool will use.</summary>
+    private void UpdateStepPreview()
+    {
+        if (_stepPreview is null) return;
+        int number = _controller.NextStepNumber;
+        string text = number.ToString(CultureInfo.CurrentCulture);
+        ColorRgba color = _controller.StrokeColor;
+        _stepPreview.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
+        var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+            text.Length > 2 ? 15 : 20, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        Geometry digits = formatted.BuildGeometry(new Point(0, 0));
+        // Start the glyph outline at the path origin so the badge centres the ink, not the line box.
+        Rect ink = digits.Bounds;
+        if (!ink.IsEmpty) digits.Transform = new TranslateTransform(-ink.X, -ink.Y);
+        _stepPreviewNumber.Data = digits;
+        AutomationName(_stepPreview, UiText.Format("EditorUx_StepNumberNextName", number));
+    }
+
+    /// <summary>The number the step preview shows, for tests.</summary>
+    internal string StepPreviewName => AutomationProperties.GetName(_stepPreview);
+
+    /// <summary>Keeps the step preview and the numbered cursor on the next number and colour.</summary>
+    private void RefreshStepFeedback()
+    {
+        UpdateStepPreview();
+        if (_controller.Tool == EditorTool.StepNumber) ApplyCursor(_pointerTarget);
+    }
+
+    /// <summary>
+    /// The crop frame's size in pixels. The ratio, Apply and Cancel are in the crop command
+    /// bar, so the panel only holds the two values.
+    /// </summary>
     private FrameworkElement BuildCropSection()
     {
         var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("Crop.Ratio")));
-        _cropRatio = new ComboBox { MinHeight = 30 };
-        foreach (string label in new[] { UiText.Get("Crop.Free"), UiText.Get("Crop.Original"), "1:1", "4:3", "16:9", "9:16" }) _cropRatio.Items.Add(label);
-        AutomationName(_cropRatio, UiText.Get("Crop.Ratio"));
-        _cropRatio.SelectedIndex = 0;
-        _cropRatio.SelectionChanged += (_, _) =>
-        {
-            _crop?.SetRatio(_cropRatio.SelectedIndex switch { 1 => (double)_canvasWidth / _canvasHeight, 2 => 1, 3 => 4.0 / 3, 4 => 16.0 / 9, 5 => 9.0 / 16, _ => null });
-            RefreshCrop();
-        };
-        panel.Children.Add(_cropRatio);
-        var dimensions = new UniformGrid { Columns = 2, Margin = new Thickness(0, 10, 0, 10) };
+        var dimensions = new UniformGrid { Columns = 2, Margin = new Thickness(0, 4, 0, 10) };
         _cropWidth = new TextBox { MinHeight = 30, Margin = new Thickness(0, 0, 4, 0) };
         _cropHeight = new TextBox { MinHeight = 30 };
         foreach (var (box, key) in new[] { (_cropWidth, "Crop.Width"), (_cropHeight, "Crop.Height") })
@@ -1461,6 +1823,7 @@ internal sealed class AnnotationEditorControl : Grid
             _cropInputErrors.Add(box, (border, error));
             field.Children.Add(border); field.Children.Add(error); dimensions.Children.Add(field);
             AutomationName(box, UiText.Get(key));
+            InputMethod.SetIsInputMethodEnabled(box, false); // pixel counts only
             box.TextChanged += (_, _) =>
             {
                 if (!_syncingInspector && _crop is not null) _dirtyCropInputs.Add(box);
@@ -1468,12 +1831,6 @@ internal sealed class AnnotationEditorControl : Grid
             box.LostKeyboardFocus += (_, _) => ChangeCropSize(box);
         }
         panel.Children.Add(dimensions);
-        var actions = new UniformGrid { Columns = 2 };
-        var apply = TextButton(UiText.Get("Crop.Apply"), UiText.Get("Crop.Apply"), "Button.Primary", ApplyPendingCrop);
-        var cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("Text_BE876433993A"), "Button.GhostCompact", CancelPendingCrop);
-        ShortcutPresentation.Attach(apply, ShortcutScope.Crop, "Apply");
-        ShortcutPresentation.Attach(cancel, ShortcutScope.Crop, "Cancel");
-        actions.Children.Add(apply); actions.Children.Add(cancel); panel.Children.Add(actions);
         return panel;
     }
 
@@ -1490,8 +1847,10 @@ internal sealed class AnnotationEditorControl : Grid
         SetCropInputError(box, false);
         if (ReferenceEquals(box, _cropWidth)) _crop.SetWidth(value); else _crop.SetHeight(value);
         RefreshCrop();
-        if (_cropInputErrors.Values.All(error => error.Message.Visibility == Visibility.Collapsed))
-            SetStatus(ToolStatus(EditorTool.Crop));
+        // A corrected size clears the error report; there is no other result to show yet.
+        if (_cropInputErrors.Values.All(error => error.Message.Visibility == Visibility.Collapsed)
+            && string.Equals(StatusText, UiText.Get("Crop.InvalidSize"), StringComparison.Ordinal))
+            SetStatus(string.Empty);
         return true;
     }
 
@@ -1548,6 +1907,7 @@ internal sealed class AnnotationEditorControl : Grid
             {
                 _controller.ApplyStrokeColor(swatchColor);
                 RememberPreferences();
+                RefreshStepFeedback();
                 SetStatus(UiText.Format("Text_67CAE5B118A3", swatchColor.ToHex()));
             };
             _swatchPanel.Children.Add(swatchButton);
@@ -1556,23 +1916,84 @@ internal sealed class AnnotationEditorControl : Grid
         panel.Children.Add(_swatchPanel);
         var custom = new TextBox { Text = _controller.StrokeColor.ToHex(), MinHeight = 32, Margin = new Thickness(0, 4, 0, 4) };
         AutomationName(custom, UiText.Get("Tools.CustomColor"));
+        InputMethod.SetIsInputMethodEnabled(custom, true);
+        // Enter applies and Esc restores; both hand the keyboard back to the canvas so the next
+        // letter is a tool shortcut again instead of more text in this box. A composing IME
+        // reports ImeProcessed here and keeps its own Enter/Esc.
+        custom.PreviewKeyDown += (_, e) =>
+        {
+            if (Keyboard.Modifiers != ModifierKeys.None) return;
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                if (ApplyCustomColor(custom.Text)) Focus();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                custom.Text = _controller.StrokeColor.ToHex();
+                Focus();
+            }
+        };
         panel.Children.Add(custom);
         var apply = new Button { Content = UiText.Get("Tools.CustomColor"), MinHeight = 36 };
         AutomationName(apply, UiText.Get("Tools.CustomColor"));
         PreserveEditorMouseFocus(apply);
-        apply.Click += (_, _) =>
-        {
-            if (ColorRgba.TryParse(custom.Text, out ColorRgba color))
-            {
-                _controller.ApplyStrokeColor(color);
-                RememberPreferences();
-                SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
-            }
-            else SetStatus(UiText.Get("Tools.InvalidColor"));
-        };
+        apply.Click += (_, _) => ApplyCustomColor(custom.Text);
         panel.Children.Add(apply);
         return panel;
     }
+
+    /// <summary>
+    /// Turns the IME off for <paramref name="root"/> and every non-text control under it.
+    /// </summary>
+    /// <remarks>
+    /// The canvas, tool buttons, sliders and lists never take text, so a Hangul-mode IME must
+    /// not hold a hidden composition there: a typed T would become an invisible ㅅ that later
+    /// lands in a text box. WPF reads the setting from the focused element only (it does not
+    /// inherit), so each control gets it. Text inputs keep their own setting.
+    /// </remarks>
+    private static void DisableImeOutsideTextInputs(DependencyObject root)
+    {
+        InputMethod.SetIsInputMethodEnabled(root, false);
+        foreach (object child in LogicalTreeHelper.GetChildren(root))
+        {
+            if (child is DependencyObject element and not TextBoxBase)
+            {
+                DisableImeOutsideTextInputs(element);
+            }
+        }
+    }
+
+    private bool ApplyCustomColor(string text)
+    {
+        if (!ColorRgba.TryParse(text, out ColorRgba color))
+        {
+            SetStatus(UiText.Get("Tools.InvalidColor"));
+            return false;
+        }
+
+        _controller.ApplyStrokeColor(color);
+        RememberPreferences();
+        RefreshStepFeedback();
+        SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
+        return true;
+    }
+
+    /// <summary>
+    /// After a mouse pick from <paramref name="combo"/>'s list, returns the keyboard to the
+    /// canvas so letter shortcuts work again. A keyboard user keeps focus on the list.
+    /// </summary>
+    private void ReturnFocusAfterMousePick(ComboBox combo) =>
+        combo.DropDownClosed += (_, _) =>
+        {
+            if (InputManager.Current.MostRecentInputDevice is not MouseDevice) return;
+            // Deferred: the combo box restores its own focus while the drop-down closes.
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+            {
+                if (combo.IsKeyboardFocusWithin) Focus();
+            });
+        };
 
     private FrameworkElement BuildThicknessSection()
     {
@@ -1636,6 +2057,7 @@ internal sealed class AnnotationEditorControl : Grid
                 UpdateInspector();
             }
         };
+        ReturnFocusAfterMousePick(_strokeStyleComboBox);
         panel.Children.Add(_strokeStyleComboBox);
         _fillTransparencyLabel = SectionLabel(UiText.Get("Text_1E0DD4F46A0C"));
         _fillTransparencyLabel.Margin = new Thickness(0, 16, 0, 4);
@@ -1700,10 +2122,10 @@ internal sealed class AnnotationEditorControl : Grid
 
             _controller.ApplyFontSize(args.NewValue);
             RememberPreferences();
-            if (_activeTextBox is not null)
+            if (_activeTextBox is not null && _editingText is not null)
             {
-                _activeTextBox.FontSize = Math.Max(1, args.NewValue * _surface.DipPerPixel);
-                OnLiveTextBoxTextChanged(_activeTextBox, null!);
+                _activeTextBox.FontSize = Math.Max(1, _editingText.FontSize * _surface.DipPerPixel);
+                LayoutLiveTextBox(_activeTextBox);
             }
 
             if (_controller.Selected is TextAnnotation)
@@ -1834,7 +2256,7 @@ internal sealed class AnnotationEditorControl : Grid
             ToolTip = tooltip,
             Width = 32,
             Height = 32,
-            Padding = new Thickness(6),
+            Padding = new Thickness(6, 4, 6, 4),
             Margin = new Thickness(2, 0, 2, 0),
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
@@ -1903,7 +2325,7 @@ internal sealed class AnnotationEditorControl : Grid
     private Border Separator() => new()
     {
         Width = 1,
-        Margin = new Thickness(6, 4, 6, 4),
+        Margin = new Thickness(4, 4, 4, 4),
         Background = Brush("Border.Subtle", Colors.Gray),
     };
 
@@ -1997,9 +2419,10 @@ internal sealed class AnnotationEditorControl : Grid
 
     private static Geometry FallbackRedo() => Geometry.Parse("M12.75,5.25 L16.5,9 L12.75,12.75 M16.25,9 H8.75 A5,5 0 0 0 5.25,17");
 
-    private static Geometry FallbackRotateLeft() => Geometry.Parse("M6.5,5.5 L3.5,8.5 L6.5,11.5 M3.75,8.5 H11 A5.25,5.25 0 1 1 5.75,13.75");
+    // Same as the shared Icon.RotateLeft/RotateRight: a picture under a half-turn arrow.
+    private static Geometry FallbackRotateLeft() => Geometry.Parse("M7,8.75 H13 A1,1 0 0 1 14,9.75 V16 A1,1 0 0 1 13,17 H7 A1,1 0 0 1 6,16 V9.75 A1,1 0 0 1 7,8.75 Z M17,10.75 A7,7 0 0 0 3,10.75 M1,8.75 L3,10.75 L5,8.75");
 
-    private static Geometry FallbackRotateRight() => Geometry.Parse("M13.5,5.5 L16.5,8.5 L13.5,11.5 M16.25,8.5 H9 A5.25,5.25 0 1 0 14.25,13.75");
+    private static Geometry FallbackRotateRight() => Geometry.Parse("M13,8.75 H7 A1,1 0 0 0 6,9.75 V16 A1,1 0 0 0 7,17 H13 A1,1 0 0 0 14,16 V9.75 A1,1 0 0 0 13,8.75 Z M3,10.75 A7,7 0 0 1 17,10.75 M19,8.75 L17,10.75 L15,8.75");
 
     private static Geometry FallbackCopy() => Geometry.Parse("M7,3.5 H15.25 A1.25,1.25 0 0 1 16.5,4.75 V13 H7 Z M5,6.5 H4.75 A1.25,1.25 0 0 0 3.5,7.75 V15.25 A1.25,1.25 0 0 0 4.75,16.5 H12.25 A1.25,1.25 0 0 0 13.5,15.25 V15");
 
@@ -2035,9 +2458,11 @@ internal sealed class AnnotationEditorControl : Grid
         if (tool is not (EditorTool.Select or EditorTool.Crop)) _preferredTool = tool;
         RememberPreferences();
         SyncToolButtons();
-        Cursor = tool == EditorTool.Select ? Cursors.Arrow : Cursors.Cross;
+        ApplyCursor(default);
         UpdateInspector();
-        SetStatus(cancelledCrop ? UiText.Get("Crop.Cancelled") : ToolStatus(tool));
+        // Switching tools is not a result to report (the rail shows the active tool); leaving
+        // crop without applying it is.
+        if (cancelledCrop) SetStatus(UiText.Get("Crop.Cancelled"));
     }
 
     private void RememberPreferences()
@@ -2078,11 +2503,20 @@ internal sealed class AnnotationEditorControl : Grid
         UpdateInspector();
         RefreshHistoryButtons();
 
-        if (_controller.Selected is { } selected)
+        if (_controller.Selected is TextAnnotation { IsStepNumber: true } badge && _controller.Tool == EditorTool.StepNumber)
         {
-            SetStatus(UiText.Format("Text_0ECA3A448221", selected.DisplayName));
+            // The step tool selects the badge it just added: report the result only. The next
+            // number is already on the panel.
+            SetStatus(UiText.Format("EditorFlow_StepNumberAdded", badge.Text));
+        }
+        else if (_controller.Selected is { } selected)
+        {
+            SetStatus(UiText.Format("EditorFlow_Selected", ItemName(selected)));
         }
     }
+
+    private static string ItemName(AnnotationItem item) =>
+        item is TextAnnotation { IsStepNumber: true } badge ? UiText.Format("EditorUx_StepNumberSelected", badge.Text) : item.DisplayName;
 
     private void OnHistoryChanged()
     {
@@ -2091,9 +2525,17 @@ internal sealed class AnnotationEditorControl : Grid
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncBaseBitmapWithDocument();
         _dimensionsText.Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight);
-        if (_crop is not null) { _crop = new CropSelection(_canvasWidth, _canvasHeight); _cropRatio.SelectedIndex = 0; RefreshCrop(); }
+        if (_crop is not null)
+        {
+            // A rotation (or undo) inside crop mode changes the canvas: start the frame over on
+            // the new image and keep the ratio the user picked.
+            _crop = new CropSelection(_canvasWidth, _canvasHeight);
+            ApplyCropRatio();
+            RefreshCrop();
+        }
         RefreshHistoryButtons();
         UpdateInspector();
+        if (_controller.Tool == EditorTool.StepNumber) ApplyCursor(_pointerTarget);
     }
 
     /// <summary>
@@ -2179,9 +2621,9 @@ internal sealed class AnnotationEditorControl : Grid
     }
 
     /// <summary>
-    /// Reflects the current tool and selection into the inspector: object/tool name and a
-    /// plain-language instruction, colour and thickness only when they apply, and Delete only
-    /// when there is a selection.
+    /// Reflects the current tool and selection into the inspector: the object or tool name and
+    /// the values that apply to it (colour, thickness, the next step number, the crop size),
+    /// and Delete only when there is a selection.
     /// </summary>
     private void UpdateInspector()
     {
@@ -2196,18 +2638,8 @@ internal sealed class AnnotationEditorControl : Grid
         _deleteButton.IsEnabled = hasSelection;
         _deleteButton.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
 
-        if (selected is not null)
-        {
-            _inspectorTitle.Text = selected.DisplayName;
-            _inspectorInstruction.Text = selected.SupportsResize
-                ? UiText.Get("Text_4F445554C9D0")
-                : UiText.Get("Text_C2F4730D02E8");
-        }
-        else
-        {
-            _inspectorTitle.Text = ToolName(_controller.Tool);
-            _inspectorInstruction.Text = ToolInstruction(_controller.Tool);
-        }
+        bool stepTool = _controller.Tool == EditorTool.StepNumber;
+        _inspectorTitle.Text = selected is not null ? ItemName(selected) : ToolName(_controller.Tool);
 
         bool colorApplies = ColorApplies(selected, _controller.Tool);
         bool thicknessApplies = ThicknessApplies(selected, _controller.Tool);
@@ -2218,12 +2650,13 @@ internal sealed class AnnotationEditorControl : Grid
         bool cropping = _crop is not null;
         _cropSection.Visibility = cropping ? Visibility.Visible : Visibility.Collapsed;
         _deleteButton.Visibility = cropping ? Visibility.Collapsed : Visibility.Visible;
-        _inspectorInstruction.Visibility = cropping ? Visibility.Collapsed : Visibility.Visible;
         _colorSection.Visibility = colorApplies ? Visibility.Visible : Visibility.Collapsed;
         _thicknessSection.Visibility = thicknessApplies ? Visibility.Visible : Visibility.Collapsed;
         _shapeStyleSection.Visibility = shapeApplies ? Visibility.Visible : Visibility.Collapsed;
         _fontSizeSection.Visibility = fontSizeApplies ? Visibility.Visible : Visibility.Collapsed;
         _blurSection.Visibility = blurApplies ? Visibility.Visible : Visibility.Collapsed;
+        _stepSection.Visibility = stepTool && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        if (stepTool) UpdateStepPreview();
 
         _syncingInspector = true;
         try
@@ -2314,38 +2747,8 @@ internal sealed class AnnotationEditorControl : Grid
         EditorTool.Text => UiText.Get("Text_DAB3F35F5BD0"),
         EditorTool.Image => UiText.Get("Text_A5E52C2DDFC0"),
         EditorTool.Blur => UiText.Get("EditorBlur_ToolTitle"),
+        EditorTool.Mosaic => UiText.Get("Text_3F8046019B32"),
         _ => UiText.Get("Text_36C416EAD2CE"),
-    };
-
-    private static string ToolInstruction(EditorTool tool) => tool switch
-    {
-        EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
-        EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
-        EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
-        EditorTool.Select => UiText.Get("Text_563638D54DBC"),
-        EditorTool.Rectangle => UiText.Get("Text_205E8D74A1C2"),
-        EditorTool.Arrow => UiText.Get("Text_2AE708D62044"),
-        EditorTool.Pen => UiText.Get("Text_8AA2E937C447"),
-        EditorTool.Text => UiText.Get("Text_E8DF95164C87"),
-        EditorTool.Image => UiText.Get("Text_994DA3588A6B"),
-        EditorTool.Blur => UiText.Get("EditorBlur_Instruction"),
-        _ => string.Empty,
-    };
-
-    private static string ToolStatus(EditorTool tool) => tool switch
-    {
-        EditorTool.Crop => UiText.Get("Crop.Instruction"),
-        EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
-        EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
-        EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
-        EditorTool.Select => UiText.Get("Text_FEFD9D67E873"),
-        EditorTool.Rectangle => UiText.Get("Text_93103CC109A3"),
-        EditorTool.Arrow => UiText.Get("Text_190A3BE20786"),
-        EditorTool.Pen => UiText.Get("Text_9CD399964425"),
-        EditorTool.Text => UiText.Get("Text_632459CEB61F"),
-        EditorTool.Image => UiText.Get("Text_92675EB6DE53"),
-        EditorTool.Blur => UiText.Get("EditorBlur_ToolStatus"),
-        _ => string.Empty,
     };
 
     private void SetStatus(string message)
@@ -2456,7 +2859,12 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         // Keep styling reachable in compact windows; vertical scrolling handles short heights.
+        // No command label is ever folded away here: a button reduced to its shortcut letter
+        // (the old narrow-window rotate buttons showed only Q and W) tells a beginner nothing.
+        // The rotate commands now live in crop mode, which leaves room for every label at the
+        // 680 DIP minimum width.
         bool compact = ActualWidth > 0 && ActualWidth < InspectorCompactWidth;
+
         if (compact == _inspectorCompact)
         {
             return;
@@ -2534,46 +2942,72 @@ internal sealed class AnnotationEditorControl : Grid
             _rotationTurns,
             _controller.CropOrigin);
 
-        // Keep the editor alive while background PNG encoding or clipboard contention
-        // resolves. This guarantees Ctrl+C means copy-then-close, never close-then-copy.
+        // Keep the editor still while background PNG encoding or clipboard contention
+        // resolves, so a second command cannot interleave with this one.
         _commitInProgress = true;
         IsHitTestVisible = false;
-        string commitStatus = action == EditorCommitAction.CopyToClipboard ? UiText.Get("Text_78666F37A521") : UiText.Get("Text_88DAAEEDFE4C");
+        bool copyOnly = action == EditorCommitAction.CopyToClipboard;
+        string commitStatus = copyOnly ? UiText.Get("Text_78666F37A521") : UiText.Get("Text_88DAAEEDFE4C");
         SetStatus(appliedCrop ? UiText.Get("Crop.Applied") + " · " + commitStatus : commitStatus);
-        bool shouldClose;
+        bool succeeded;
         try
         {
-            shouldClose = CommitRequested is null || await CommitRequested(result);
+            // Copy needs a host that can reach the clipboard; a closing commit with no host
+            // simply finishes, as before.
+            succeeded = CommitRequested is null ? !copyOnly : await CommitRequested(result);
         }
         catch (Exception)
         {
-            shouldClose = false;
+            succeeded = false;
         }
 
-        if (shouldClose)
+        if (succeeded && !copyOnly)
         {
             _completed = true;
             EditingCompleted?.Invoke(this, result);
+            return;
         }
-        else
-        {
-            _commitInProgress = false;
-            IsHitTestVisible = true;
-            SetStatus(action == EditorCommitAction.CopyToClipboard
-                ? UiText.Get("Text_3D1E714B56CA")
-                : UiText.Get("Text_06F58809C083"));
-        }
+
+        // Copy is a secondary action: the editor stays open either way and the status line
+        // reports the outcome. A failed closing commit also stays open so the user can retry.
+        _commitInProgress = false;
+        IsHitTestVisible = true;
+        SetStatus(copyOnly
+            ? UiText.Get(succeeded ? "EditorFlow_Copied" : "Text_3D1E714B56CA")
+            : UiText.Get("Text_06F58809C083"));
     }
 
-    private void Cancel()
+    /// <summary>
+    /// Esc: finish typing (handled before this runs), else clear the selection, else go back
+    /// to the select tool. Crop mode has its own Esc (cancel the frame). It never closes.
+    /// </summary>
+    private void StepBack()
     {
         if (_completed || _commitInProgress)
         {
             return;
         }
 
-        _completed = true;
-        EditingCancelled?.Invoke(this, EventArgs.Empty);
+        if (_controller.Selected is not null)
+        {
+            _controller.SetSelected(null);
+            SetStatus(UiText.Get("EditorFlow_SelectionCleared"));
+        }
+        else if (_controller.Tool != EditorTool.Select)
+        {
+            SelectTool(EditorTool.Select);
+        }
+    }
+
+    /// <summary>The Cancel command: asks the host window to close (it confirms unsaved edits).</summary>
+    private void RequestClose()
+    {
+        if (_completed || _commitInProgress)
+        {
+            return;
+        }
+
+        CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 
     // ---- Resource helpers ----------------------------------------------------------

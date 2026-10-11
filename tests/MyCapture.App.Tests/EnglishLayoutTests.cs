@@ -110,10 +110,19 @@ public sealed class EnglishLayoutTests
                 Assert.InRange(top.Y, -0.5, bounds.ActualHeight + 0.5);
                 Assert.InRange(bottom.Y, 0, bounds.ActualHeight + 0.5);
             }
+            // The connector belongs to the detailed timeline, which is folded by default so the
+            // trim timeline comes first; open it to check its hint, then fold it again.
+            var detailToggle = Assert.Single(Descendants(layout).OfType<System.Windows.Controls.Primitives.ToggleButton>(),
+                toggle => AutomationProperties.GetName(toggle) == UiText.Get("VideoEditorUx_DetailTimeline"));
+            detailToggle.IsChecked = true;
+            window.UpdateLayout();
             var connector = Assert.Single(Descendants(layout).OfType<TimelineRenderSurface>(), surface => !surface.IsHitTestVisible);
+            Assert.True(connector.IsVisible, "Opening the detailed timeline must show its connector hint");
             Assert.True(connector.ActualHeight >= 18, "Connector hint must reserve a complete text line");
+            detailToggle.IsChecked = false;
+            window.UpdateLayout();
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
-            foreach (string caption in new[] { "Add layer", UiText.Get("Workspace.EditProperties"), "Save edits", "Export · MP4 / GIF" })
+            foreach (string caption in new[] { "Add layer", UiText.Get("Workspace.EditProperties"), "Save to library", "Export · MP4 / GIF" })
             {
                 Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);

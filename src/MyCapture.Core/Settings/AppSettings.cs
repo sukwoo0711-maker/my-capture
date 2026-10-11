@@ -53,6 +53,12 @@ public sealed class AppSettings
     public StoreRatingState StoreRating { get; set => field = value ?? new(); } = new();
 }
 
+/// <summary>Global shortcuts, registered for as long as the app runs.</summary>
+/// <remarks>
+/// The initialisers are the chords earlier versions shipped with, which an older settings file
+/// without a property reads back. A new installation assigns only region capture and region
+/// recording (<see cref="NewInstallDefaults"/>).
+/// </remarks>
 public sealed class HotkeySettings
 {
     public Hotkey ScrollingCapture { get; set; } = Hotkey.None;
@@ -232,6 +238,13 @@ public sealed class CaptureSettings
 
     /// <summary>Number of previous selection regions kept for replay.</summary>
     public int RegionHistoryLimit { get; set; } = 20;
+
+    /// <summary>
+    /// How many times the capture selector has opened with its short start guide. The guide shows
+    /// while this is below <see cref="CaptureStartGuidePolicy.ShowCount"/>; the selector's help
+    /// button shows it again at any time. Bookkeeping only: the settings window never edits it.
+    /// </summary>
+    public int StartGuideShownCount { get; set; }
 }
 
 public sealed class PinSettings
@@ -334,6 +347,12 @@ public sealed class GeneralSettings
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ShowQuickAccess { get => null; set { } }
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.Editor;
+
+    /// <summary>Shows key captions under editor buttons. Tooltips always name the key.</summary>
+    /// <remarks>
+    /// True is the legacy value an older settings file reads back; a new installation starts
+    /// with false (<see cref="NewInstallDefaults"/>).
+    /// </remarks>
     public bool ShowShortcutHints { get; set; } = true;
     public bool LaunchAtLogin { get; set; } = true;
 

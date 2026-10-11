@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Recording;
 using Xunit;
@@ -62,7 +63,7 @@ public sealed class VideoCompositionIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ExportDialogDiscardsCancelledOrOutdatedCalculationAndCanRetry(bool close) => RunSta(() =>
+    public void ExportDialogCancelsWithoutResidueAndThenEncodesTheKeptRangeOnceToTheChosenFile(bool close) => RunSta(() =>
     {
         string root = NewRoot();
         VideoExportDialog? dialog = null;
@@ -73,20 +74,55 @@ public sealed class VideoCompositionIntegrationTests
             byte[] originalHash = SHA256.HashData(File.ReadAllBytes(source));
             Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
-            dialog = new VideoExportDialog(recording, VideoEditDocument.CreateFor(320, 180, recording.DurationMs), NullLoggerFactory.Instance, false);
-            Assert.False(dialog.CanExport);
-            Task pending = dialog.CalculateAsync();
-            Assert.True(dialog.CalculateAsync().IsCompleted, "A second request must not start another calculation");
+            var document = VideoEditDocument.CreateFor(320, 180, recording.DurationMs);
+            document.TrimInMs = 200;
+            document.TrimOutMs = 800;
+            string destination = Path.Combine(root, VideoExportDialog.DefaultExportName(source, ".mp4"));
+            dialog = new VideoExportDialog(recording, document, NullLoggerFactory.Instance, false)
+            {
+                DestinationChooserForTest = () => destination,
+            };
+            // One-step flow: 내보내기 is available at once; nothing is encoded until it is pressed.
+            Assert.True(dialog.CanExport);
+            Assert.False(dialog.IsProgressVisible);
+            Assert.Equal([source], Directory.GetFiles(root, "*.mp4"));
+            Task pending = dialog.ExportAsync();
+            Assert.True(dialog.IsExporting && dialog.IsProgressVisible && !dialog.CanExport, "An export shows progress and blocks a second one");
+            Assert.True(dialog.ExportAsync().IsCompleted, "A second request must not start another export");
             if (close) dialog.Close();
-            else dialog.TargetReductionPercent = 50;
+            else dialog.CancelExport();
             PumpTask(pending);
-            Assert.False(dialog.CanExport, "Cancelled or stale output must not become saveable");
+            Assert.False(File.Exists(destination), "A cancelled export must not leave the destination behind");
+            Assert.Empty(Directory.GetFiles(root, ".export-*"));
             if (!close)
             {
-                PumpTask(dialog.CalculateAsync());
-                Assert.True(dialog.CanExport, "The current settings must be calculable after cancellation");
-                dialog.TargetReductionPercent = 75;
-                Assert.False(dialog.CanExport, "Changing settings invalidates the previous measured result immediately");
+                Assert.False(dialog.IsProgressVisible);
+                Assert.True(dialog.CanExport, "The dialog must be ready to export again after cancellation");
+                Assert.Equal(UiText.Get("MediaExport_Cancelled"), dialog.StatusText);
+                dialog.SizePresetIndex = 1;
+                Assert.Equal(VideoExportDialog.SizePresets[1], dialog.TargetReductionPercent);
+                PumpTask(dialog.ExportAsync());
+                Assert.True(File.Exists(destination), dialog.StatusText);
+                Assert.Equal(destination, dialog.SavedPath);
+                Assert.Equal(UiText.Format("MediaExport_Saved", Path.GetFileName(destination)), dialog.StatusText);
+                Assert.Empty(Directory.GetFiles(root, ".export-*"));
+                VideoMediaInfo info = VideoFrameRenderPipeline.Probe(destination);
+                Assert.Equal((320, 180), (info.Width, info.Height));
+                Assert.InRange(info.DurationMs, 599, 601);
+                Assert.Equal(2, NearestIndexedColor(VideoFrameRenderPipeline.RenderSingleFrame(destination, 50, 320, 180), 160, 90));
+
+                // Exporting again to the same name replaces it in place, still through one temporary sibling.
+                dialog.SizePresetIndex = 0;
+                PumpTask(dialog.ExportAsync());
+                Assert.True(File.Exists(destination), dialog.StatusText);
+                Assert.Empty(Directory.GetFiles(root, ".export-*"));
+                Assert.InRange(VideoFrameRenderPipeline.Probe(destination).DurationMs, 599, 601);
+
+                // The library file itself is never a destination.
+                dialog.DestinationChooserForTest = () => source;
+                PumpTask(dialog.ExportAsync());
+                Assert.Equal(UiText.Format("MediaExport_Error", UiText.Get("MediaExport_SourceProtected")), dialog.StatusText);
+                Assert.True(dialog.CanExport);
             }
             Assert.Equal(originalHash, SHA256.HashData(File.ReadAllBytes(source)));
         }

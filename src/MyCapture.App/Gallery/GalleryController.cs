@@ -52,13 +52,22 @@ public sealed class GalleryController
     /// by calendar day relative to <paramref name="now"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Search and grouping are one operation because the gallery always shows grouped,
     /// filtered results: doing them together keeps a single ordering (newest-first within a
     /// day, newest day first) and avoids the caller re-sorting.
+    /// </para>
+    /// <para>
+    /// With <paramref name="includeFolders"/>, a group also carries the folders a user can open
+    /// from that view: root folders on their creation day, or a folder's direct children. A
+    /// group can then hold folders only, so an empty new folder is still visible.
+    /// </para>
     /// </remarks>
     public IReadOnlyList<GalleryGroupedRecords> BuildGroups(string? query, DateTimeOffset now,
-        CaptureFolderScope scope = default, GallerySortOrder sort = GallerySortOrder.Newest)
+        CaptureFolderScope scope = default, GallerySortOrder sort = GallerySortOrder.Newest,
+        bool includeFolders = false)
     {
+        CaptureFolder[] folders = includeFolders ? FolderCardsInScope(scope) : [];
         IEnumerable<CaptureRecord> matches = _queue.RecordsInScope(scope);
         string? trimmed = query?.Trim();
         if (!string.IsNullOrEmpty(trimmed))
@@ -73,17 +82,29 @@ public sealed class GalleryController
         }).ToArray();
         if (!scope.IsAll || sort != GallerySortOrder.Newest)
         {
-            if (ordered.Length == 0) return [];
+            if (ordered.Length == 0 && folders.Length == 0) return [];
             string heading = scope.FolderId is { } folderId ? _queue.GetFolderDisplayPath(folderId)
                 : scope.Date?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
                     ?? UiText.Get("Folder410.TreeAll");
             return [new GalleryGroupedRecords(new GalleryDateGroup(
-                scope.Date ?? DateOnly.FromDateTime(now.DateTime), heading), ordered)];
+                scope.Date ?? DateOnly.FromDateTime(now.DateTime), heading), ordered) { Folders = folders }];
         }
-        return ordered.GroupBy(record => GalleryDateGrouping.Resolve(record.CreatedAt, now))
-            .OrderByDescending(group => group.Key.SortKey)
-            .Select(group => new GalleryGroupedRecords(group.Key, group.ToArray())).ToArray();
+        ILookup<GalleryDateGroup, CaptureRecord> recordsByDay =
+            ordered.ToLookup(record => GalleryDateGrouping.Resolve(record.CreatedAt, now));
+        ILookup<GalleryDateGroup, CaptureFolder> foldersByDay =
+            folders.ToLookup(folder => GalleryDateGrouping.Resolve(folder.CreatedAt, now));
+        return recordsByDay.Select(group => group.Key).Union(foldersByDay.Select(group => group.Key))
+            .OrderByDescending(day => day.SortKey)
+            .Select(day => new GalleryGroupedRecords(day, recordsByDay[day].ToArray()) { Folders = foldersByDay[day].ToArray() })
+            .ToArray();
     }
+
+    /// <summary>Folders opened from the library body: roots for All or a date, children for a folder.</summary>
+    private CaptureFolder[] FolderCardsInScope(CaptureFolderScope scope) => _queue.Folders
+        .Where(folder => scope.FolderId is { } parent ? folder.ParentId == parent
+            : folder.ParentId is null && (scope.Date is not { } date || folder.CreatedDate == date))
+        .OrderBy(folder => folder.Name, StringComparer.CurrentCultureIgnoreCase)
+        .ToArray();
 
     /// <summary>
     /// Toggles the pin on <paramref name="id"/> and persists the change immediately so a pin
@@ -276,6 +297,10 @@ public sealed class GalleryController
 }
 
 /// <summary>
-/// A date group paired with the records that fall inside it, newest-first.
+/// A date group paired with the records that fall inside it, newest-first, and the folders
+/// shown ahead of them in name order.
 /// </summary>
-public sealed record GalleryGroupedRecords(GalleryDateGroup Group, IReadOnlyList<CaptureRecord> Records);
+public sealed record GalleryGroupedRecords(GalleryDateGroup Group, IReadOnlyList<CaptureRecord> Records)
+{
+    public IReadOnlyList<CaptureFolder> Folders { get; init; } = [];
+}

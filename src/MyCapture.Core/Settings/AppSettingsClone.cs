@@ -92,6 +92,7 @@ public static class AppSettingsClone
         DelaySeconds = s.DelaySeconds,
         AbortOnFocusLoss = s.AbortOnFocusLoss,
         RegionHistoryLimit = s.RegionHistoryLimit,
+        StartGuideShownCount = s.StartGuideShownCount,
     };
 
     private static Recording.RecordingSettings Clone(Recording.RecordingSettings s) => new()
@@ -155,9 +156,13 @@ public static class AppSettingsClone
         IsFirstRun = s.IsFirstRun,
     };
 
+    // The token is copied in memory like every other value. Leaving it out made the settings
+    // window start from an empty token and write that back on Apply (or a tray language
+    // change), silently deleting the saved token. Exports still omit it (SettingsStore.ExportTo).
     private static GitHubSettings Clone(GitHubSettings s) => new()
     {
         IssueUrl = s.IssueUrl,
+        Token = s.Token,
     };
 
     private static StoreRatingState Clone(StoreRatingState s) => new()

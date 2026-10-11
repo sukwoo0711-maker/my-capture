@@ -31,19 +31,9 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         var hint = Hint(scope, command);
         hint.FontSize = corner ? 10 : scope is ShortcutScope.Annotation or ShortcutScope.Crop ? 11 : 9;
         hint.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
-        // Neutral disabled colours remove the action accent without fading small
-        // shortcuts below 3:1. Keep the shared template's opacity from fading them again.
-        if (scope is ShortcutScope.Annotation or ShortcutScope.Crop)
-        {
-            button.Opacity = 1;
-            var style = new Style(button.GetType(), button.Style);
-            var disabled = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
-            disabled.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("Text.Disabled")));
-            disabled.Setters.Add(new Setter(Control.BackgroundProperty, new DynamicResourceExtension("Surface.Sunken")));
-            disabled.Setters.Add(new Setter(Control.BorderBrushProperty, new DynamicResourceExtension("Border.Subtle")));
-            style.Triggers.Add(disabled);
-            button.Style = style;
-        }
+        // A disabled button keeps its tier's shape: the shared template only fades it by
+        // Button.DisabledOpacity. Adding a sunken fill and a border here used to turn a
+        // borderless tool button into a bordered one the moment it was disabled.
         if (corner)
         {
             var grid = new Grid { Width = 32, Height = 32 };

@@ -85,7 +85,8 @@ public sealed class Ux402InteractionTests
         {
             window.Show(); window.UpdateLayout();
             var tools = Descendants(window).OfType<ToggleButton>().Where(button => AutomationProperties.GetAcceleratorKey(button).Length > 0).ToArray();
-            Assert.Equal(12, tools.Length);
+            // Every tool but Crop, whose single entry point is now the command bar.
+            Assert.Equal(Enum.GetValues<EditorTool>().Length - 1, tools.Length);
             foreach (var button in tools)
             {
                 Rect bounds = button.TransformToAncestor(window).TransformBounds(new Rect(button.RenderSize));

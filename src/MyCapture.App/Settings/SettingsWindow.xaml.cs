@@ -18,10 +18,14 @@ namespace MyCapture.App.Settings;
 /// </summary>
 /// <remarks>
 /// <para>
-/// One instance, opened from the tray's <c>SettingsRequested</c>. A normal close (the X or
-/// Cancel) hides it back to the tray and discards edits by reloading the draft from the live
-/// settings; only an explicit application exit closes it for real. This mirrors the gallery's
+/// One instance, opened from the tray's <c>SettingsRequested</c>. A normal close hides it back
+/// to the tray; only an explicit application exit closes it for real. This mirrors the gallery's
 /// lifecycle, which the process's <c>OnExplicitShutdown</c> mode depends on.
+/// </para>
+/// <para>
+/// Cancel discards the edits deliberately. The title bar close, Alt+F4 and Esc first ask
+/// [Apply and close][Don't apply][Cancel] when the draft holds unapplied changes, and close at
+/// once when it does not. Only "Don't apply" (or Cancel) restores the saved theme.
 /// </para>
 /// <para>
 /// The window binds to a <see cref="SettingsDraft"/> — a deep copy of the live settings — so
@@ -70,40 +74,53 @@ internal sealed partial class SettingsWindow : Window
 
         _draft = new SettingsDraft(_currentSettings());
         AttachDraftEvents();
-        _settingsEdited = false;
         DataContext = _draft;
 
-        // ApplyCommand / CancelCommand back the Ctrl+S and Esc key bindings. They are added in
+        // ApplyCommand / CloseCommand back the Ctrl+S and Esc key bindings. They are added in
         // code-behind (not XAML) because these RoutedUICommand fields are internal, which the
         // XAML x:Static resolver cannot reach at runtime; the DataContext is the SettingsDraft,
         // which intentionally exposes no commands. This mirrors GalleryWindow's approach.
+        // Esc behaves like the title bar close (it asks about unapplied changes); the Cancel
+        // button alone discards without asking.
         CommandBindings.Add(new CommandBinding(ApplyCommand, (_, _) => Apply()));
         CommandBindings.Add(new CommandBinding(CancelCommand, (_, _) => CancelToTray()));
+        CommandBindings.Add(new CommandBinding(CloseCommand, (_, _) => RequestClose()));
         InputBindings.Add(new KeyBinding(ApplyCommand, Key.S, ModifierKeys.Control));
-        InputBindings.Add(new KeyBinding(CancelCommand, Key.Escape, ModifierKeys.None));
+        InputBindings.Add(new KeyBinding(CloseCommand, Key.Escape, ModifierKeys.None));
+        ConfirmUnappliedChanges = () => UnappliedChangesDialog.Ask(this);
 
         RefreshErrorSummary();
+        SyncGitHubTokenBox();
+        RefreshRetentionSummary();
     }
 
     internal static readonly RoutedUICommand ApplyCommand =
         new(UiText.Get("Text_6A1C963D5BC5"), nameof(ApplyCommand), typeof(SettingsWindow));
 
+    /// <summary>Discards the edits and hides the window: the Cancel button.</summary>
     internal static readonly RoutedUICommand CancelCommand =
         new(UiText.Get("Text_BE876433993A"), nameof(CancelCommand), typeof(SettingsWindow));
+
+    /// <summary>Closes like the title bar button, asking first about unapplied changes: Esc.</summary>
+    internal static readonly RoutedUICommand CloseCommand =
+        new(UiText.Get("Dialog.Close"), nameof(CloseCommand), typeof(SettingsWindow));
+
+    /// <summary>Asks what to do with unapplied changes on close. Tests replace the dialog.</summary>
+    internal Func<SettingsCloseChoice> ConfirmUnappliedChanges { get; set; }
 
     /// <summary>Raised after a successful apply, so the shell can react (e.g. refresh state).</summary>
     internal event EventHandler<SettingsApplyResult>? Applied;
 
     /// <summary>
-    /// Shows the window, rebuilding the draft from the live settings so a value changed
-    /// elsewhere (or a discarded prior edit) is reflected on reopen.
+    /// Shows the window. A hidden window rebuilds its draft from the live settings so a value
+    /// changed elsewhere is reflected on reopen; a window that is already open only comes to
+    /// the front, keeping the edits the user has not applied yet.
     /// </summary>
     internal void ShowSettings()
     {
-        ReloadDraft();
-
         if (!IsVisible)
         {
+            ReloadDraft();
             Show();
         }
 
@@ -133,20 +150,18 @@ internal sealed partial class SettingsWindow : Window
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
     internal void CloseForExit()
     {
-        ++_updateProgressGeneration;
-        _updates.Cancel();
-        if (!_installingUpdate) _stagedUpdate?.Cleanup();
         _allowClose = true;
         Close();
     }
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // A normal close returns to the tray and discards edits; only an explicit exit closes.
+        // A normal close (title bar, Alt+F4) returns to the tray after asking about unapplied
+        // changes; only an explicit exit closes the window for real.
         if (!_allowClose)
         {
             e.Cancel = true;
-            CancelToTray();
+            RequestClose();
             return;
         }
 
@@ -167,11 +182,12 @@ internal sealed partial class SettingsWindow : Window
         DetachDraftEvents();
         _draft = new SettingsDraft(settings);
         AttachDraftEvents();
-        _settingsEdited = false;
         DataContext = _draft;
         ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
         SetStatusMessage(string.Empty);
         RefreshErrorSummary();
+        SyncGitHubTokenBox();
+        RefreshRetentionSummary();
     }
 
     private void AttachDraftEvents()
@@ -190,11 +206,13 @@ internal sealed partial class SettingsWindow : Window
 
     private void OnDraftPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        _settingsEdited = true;
         // ResetToDefaults raises a whole-draft notification instead of one for Theme.
-        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName is nameof(SettingsDraft.Theme)
+        bool all = string.IsNullOrEmpty(e.PropertyName);
+        if (all || e.PropertyName is nameof(SettingsDraft.Theme)
             or nameof(SettingsDraft.CaptureGuideColorMode) or nameof(SettingsDraft.CaptureGuideColorHex))
             ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
+        if (all || e.PropertyName == nameof(SettingsDraft.GitHubToken)) SyncGitHubTokenBox();
+        if (all || e.PropertyName == nameof(SettingsDraft.ImageRetentionHours)) RefreshRetentionSummary();
     }
 
     /// <summary>Reports settings file operations independently of the selected category.</summary>
@@ -284,12 +302,10 @@ internal sealed partial class SettingsWindow : Window
         try
         {
             AppSettings imported = _settingsStore().ImportFrom(path);
-            ReloadDraftFrom(imported);
             // Exports never carry the GitHub PAT, so the import must not wipe the live one.
-            _draft.GitHubToken = _currentSettings().GitHub.Token;
-            // Import replaces the entire draft; an empty saved token may not raise any
-            // property change. Keep update/restart blocked until Apply or discard.
-            _settingsEdited = true;
+            imported.GitHub.Token = _currentSettings().GitHub.Token;
+            // The import replaces the values but stays an unapplied change until Apply.
+            _draft.ReplaceValues(imported);
             SetStatusMessage(UiText.Get("Settings_ImportDone"));
             RefreshErrorSummary();
         }
@@ -348,8 +364,6 @@ internal sealed partial class SettingsWindow : Window
 
     private void CancelToTray()
     {
-        ++_updateProgressGeneration;
-        _updates.Cancel();
         // Discard edits by dropping the draft, then hide.
         if (_draft is not null)
         {
@@ -357,6 +371,57 @@ internal sealed partial class SettingsWindow : Window
         }
         Hide();
     }
+
+    /// <summary>
+    /// The title bar close, Alt+F4 and Esc. Closes at once when nothing is unapplied; otherwise
+    /// asks first. Apply closes only when it applies cleanly; Cancel keeps every edit, including
+    /// a previewed theme.
+    /// </summary>
+    internal void RequestClose()
+    {
+        if (_draft.HasUnappliedChanges)
+        {
+            switch (ConfirmUnappliedChanges())
+            {
+                case SettingsCloseChoice.Apply:
+                    Apply();
+                    return;
+                case SettingsCloseChoice.Discard:
+                    break;
+                default:
+                    return;
+            }
+        }
+
+        CancelToTray();
+    }
+
+    // ---- GitHub token ---------------------------------------------------------------
+
+    private bool _syncingGitHubToken;
+
+    /// <summary>
+    /// Mirrors the draft token into the PasswordBox, which cannot bind. The value is copied in
+    /// memory only; it is never logged or exposed as an automation name.
+    /// </summary>
+    private void SyncGitHubTokenBox()
+    {
+        if (string.Equals(GitHubTokenBox.Password.Trim(), _draft.GitHubToken, StringComparison.Ordinal)) return;
+        _syncingGitHubToken = true;
+        try { GitHubTokenBox.Password = _draft.GitHubToken; }
+        finally { _syncingGitHubToken = false; }
+    }
+
+    private void OnGitHubTokenChanged(object sender, RoutedEventArgs e)
+    {
+        if (_syncingGitHubToken) return;
+        _draft.GitHubToken = GitHubTokenBox.Password;
+    }
+
+    // ---- Retention summary ----------------------------------------------------------
+
+    private void RefreshRetentionSummary() =>
+        RetentionSummary.Text = SettingsUxText.RetentionSummary(_draft.ImageRetentionHours);
 
     // ---- Folder browse -------------------------------------------------------------
 

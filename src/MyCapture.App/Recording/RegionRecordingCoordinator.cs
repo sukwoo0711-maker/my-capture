@@ -195,7 +195,11 @@ internal sealed class RegionRecordingCoordinator
         try
         {
             overlay = new CaptureOverlayWindow(SelectionDesktopBounds(), abortOnFocusLoss: false, showMagnifier: true,
-                showSelectionGrid: ShowSelectionGrid());
+                showSelectionGrid: ShowSelectionGrid())
+            {
+                // Says "record" and takes the recording colour, so it never reads as a screenshot.
+                RecordingSelection = true,
+            };
             // A configured preset fixes the recording's size; the drag only positions it.
             if (_settings().PresetWidth is { } w && w > 0
                 && _settings().PresetHeight is { } h && h > 0)

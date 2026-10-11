@@ -11,11 +11,33 @@ public sealed partial class CaptureQueue
     private readonly SemaphoreSlim _folderMutationGate = new(1, 1);
     private readonly HashSet<Guid> _deletingFolders = [];
     private bool _folderStateActivated;
+    // Boxed Guid: a recording can add its record from a worker thread while the library
+    // changes the folder it is showing. Session-only, never written to the index.
+    private object? _browsingCaptureFolder;
     private string FolderRecoveryFile => Path.Combine(_paths.DataRoot, "library-folders.json");
 
     public IReadOnlyList<CaptureFolder> Folders => _folders.AsReadOnly();
     public Guid? DefaultCaptureFolderId => _limits.DefaultCaptureFolderId;
     public bool UseCurrentFolderForNewCaptures => _limits.UseCurrentFolderForNewCaptures;
+
+    /// <summary>The folder the open library is showing, which new captures join first.</summary>
+    public Guid? BrowsingCaptureFolderId => Volatile.Read(ref _browsingCaptureFolder) is Guid id ? id : null;
+
+    public void SetBrowsingCaptureFolder(Guid? id) =>
+        Volatile.Write(ref _browsingCaptureFolder, id is { } value ? value : null);
+
+    /// <summary>
+    /// Destination for a new capture: the folder the open library shows, then the saved
+    /// "keep after closing" folder, otherwise <see langword="null"/> (the date library).
+    /// </summary>
+    public Guid? ResolveNewCaptureFolderId()
+    {
+        if (BrowsingCaptureFolderId is { } browsing && IsAvailableDestination(browsing)) return browsing;
+        return _limits.UseCurrentFolderForNewCaptures && _limits.DefaultCaptureFolderId is { } saved
+            && IsAvailableDestination(saved) ? saved : null;
+    }
+
+    private bool IsAvailableDestination(Guid id) => !_deletingFolders.Contains(id) && FindFolder(id) is not null;
     public string FolderFilePrefix => _limits.FolderFilePrefix;
     public CaptureFolder? FindFolder(Guid id) => _folders.FirstOrDefault(folder => folder.Id == id);
 
@@ -210,8 +232,7 @@ public sealed partial class CaptureQueue
             }
             ClearFolderAssignment(record);
         }
-        if (!record.FolderDestinationResolved && _limits.UseCurrentFolderForNewCaptures
-            && _limits.DefaultCaptureFolderId is { } destination && !_deletingFolders.Contains(destination)
+        if (!record.FolderDestinationResolved && ResolveNewCaptureFolderId() is { } destination
             && FindFolder(destination) is { } folder)
             AssignToFolder(record, folder);
         record.FolderDestinationResolved = true;

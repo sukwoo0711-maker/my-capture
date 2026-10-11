@@ -174,13 +174,23 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
     public int VisibleCount => _groups.Sum(group => group.Items.Count);
     public string ResultCountText => UiText.Format("Library.Search.Count", VisibleCount, _controller.Count);
-    public string EmptyStateTitle => UiText.Get(HasFolderScope && string.IsNullOrWhiteSpace(SearchQuery) && Filter == GalleryFilter.All
+    public string EmptyStateTitle => UiText.Get(IsBrowsingFolderWithoutQuery
         ? "Folder410.EmptyFolder" : QueueIsEmpty ? "Library.Empty.Start" : "Library.Empty.NoResults");
+
+    /// <summary>
+    /// True when the empty state comes from a search or filter that resetting can clear; an
+    /// empty folder viewed without either has nothing to reset.
+    /// </summary>
+    public bool CanResetEmptySearch => !QueueIsEmpty && !IsBrowsingFolderWithoutQuery;
+
+    private bool IsBrowsingFolderWithoutQuery =>
+        HasFolderScope && string.IsNullOrWhiteSpace(SearchQuery) && Filter == GalleryFilter.All;
 
     /// <summary>Empty-state message, tailored to whether a search is active.</summary>
     public string EmptyStateText =>
-        HasFolderScope && string.IsNullOrWhiteSpace(SearchQuery) && Filter == GalleryFilter.All
-            ? UiText.Get("Folder410.EmptyFolderHint")
+        IsBrowsingFolderWithoutQuery
+            ? UiText.Get(NewCaptureFolderId is { } destination && destination == _scope.FolderId
+                ? "LibraryFolder_EmptyFolderSavesHere" : "Folder410.EmptyFolderHint")
             : QueueIsEmpty
             ? UiText.Get("Text_1FC9ECE11C93")
             : UiText.Get("Text_58726BF27E70");
@@ -210,9 +220,15 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         IsRefreshingFolderTree = true;
         try { RefreshFolderTree(); }
         finally { IsRefreshingFolderTree = false; }
-        IReadOnlyList<GalleryGroupedRecords> grouped = _controller.BuildGroups(_searchQuery, _clock(), _scope, _sortOrder);
+        // Folder cards belong to browsing, like the empty-folder state: a search or media filter
+        // shows matching captures only.
+        bool showFolders = string.IsNullOrWhiteSpace(_searchQuery) && _filter == GalleryFilter.All;
+        IReadOnlyList<GalleryGroupedRecords> grouped = _controller.BuildGroups(_searchQuery, _clock(), _scope, _sortOrder,
+            showFolders);
 
         var seenTiles = new HashSet<Guid>();
+        var seenFolders = new HashSet<Guid>();
+        FolderCardIndex? folderIndex = null;
 
         _groups.Clear();
         foreach (GalleryGroupedRecords group in grouped)
@@ -227,8 +243,14 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
                 seenTiles.Add(record.Id);
             }
 
-            if (tiles.Count > 0) _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles));
+            GalleryFolderCardViewModel[] cards = group.Folders.Count == 0 ? []
+                : group.Folders.Select(folder => GetOrUpdateFolderCard(folder,
+                    folderIndex ??= new FolderCardIndex(_controller.Queue), seenFolders)).ToArray();
+            if (tiles.Count > 0 || cards.Length > 0) _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles, cards));
         }
+
+        foreach (Guid stale in _folderCards.Keys.Where(id => !seenFolders.Contains(id)).ToList())
+            _folderCards.Remove(stale);
 
         // Drop cached tiles for records that no longer exist so decoded bitmaps are released.
         HashSet<Guid>? retainedIds = null;
@@ -255,9 +277,11 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         Raise(nameof(QueueIsEmpty));
         Raise(nameof(EmptyStateText));
         Raise(nameof(EmptyStateTitle));
+        Raise(nameof(CanResetEmptySearch));
         Raise(nameof(VisibleCount));
         Raise(nameof(ResultCountText));
         Raise(nameof(SummaryText));
+        RefreshNavigation();
     }
 
     /// <summary>
@@ -289,6 +313,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             (pair.First, pair.Second) switch
             {
                 (GalleryHeaderRow a, GalleryHeaderRow b) => a.Heading == b.Heading,
+                (GalleryFolderRow a, GalleryFolderRow b) => a.Folders.SequenceEqual(b.Folders),
                 (GalleryTileRow a, GalleryTileRow b) => a.Tiles.SequenceEqual(b.Tiles),
                 _ => false,
             })) return;
@@ -346,18 +371,28 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-/// <summary>A date group with its heading and tiles, for the grouped item control.</summary>
+/// <summary>A date group with its heading, folder cards and tiles, for the grouped item control.</summary>
 public sealed class GalleryGroupViewModel
 {
     public GalleryGroupViewModel(string heading, IReadOnlyList<GalleryItemViewModel> items)
+        : this(heading, items, [])
+    {
+    }
+
+    public GalleryGroupViewModel(string heading, IReadOnlyList<GalleryItemViewModel> items,
+        IReadOnlyList<GalleryFolderCardViewModel> folders)
     {
         Heading = heading;
         Items = items;
+        Folders = folders;
     }
 
     public string Heading { get; }
 
     public IReadOnlyList<GalleryItemViewModel> Items { get; }
+
+    /// <summary>Folders shown above <see cref="Items"/>, in name order.</summary>
+    public IReadOnlyList<GalleryFolderCardViewModel> Folders { get; }
 }
 
 public enum GalleryFilter { All, Images, Videos, Pinned }

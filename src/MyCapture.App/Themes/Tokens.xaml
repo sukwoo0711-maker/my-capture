@@ -133,6 +133,10 @@
     <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Yellow300}" />
     <SolidColorBrush x:Key="Border.Accent" Color="{StaticResource Primitive.Yellow500}" />
     <SolidColorBrush x:Key="Border.Badge" Color="#66F6F8FC" />
+    <!-- Library folder cards: warm surface, outline and glyph (ThemeService recolours all six palettes). -->
+    <SolidColorBrush x:Key="Surface.Folder" Color="#FF2A2213" />
+    <SolidColorBrush x:Key="Border.Folder" Color="#FF8A6A2E" />
+    <SolidColorBrush x:Key="Accent.Folder" Color="#FFF0B44C" />
 
     <!-- Video timeline semantics: layer identity, playhead, and destructive trim. -->
     <SolidColorBrush x:Key="Timeline.Background" Color="{StaticResource Primitive.Graphite950}" />
@@ -167,6 +171,8 @@
     <SolidColorBrush x:Key="CaptureGuide.MagnifierBorder" Color="#FF9789FF" />
     <SolidColorBrush x:Key="CaptureGuide.MagnifierGrid" Color="#32000000" />
     <SolidColorBrush x:Key="CaptureGuide.Dimmer" Color="#8C080C12" />
+    <!-- Text on accent-filled guide labels: black or white by WCAG contrast with the accent. -->
+    <SolidColorBrush x:Key="CaptureGuide.AccentText" Color="#FF000000" />
 
     <SolidColorBrush x:Key="Overlay.HandleFill" Color="{StaticResource Primitive.Warm100}" />
     <SolidColorBrush x:Key="Overlay.HandleStroke" Color="{StaticResource Primitive.Yellow600}" />

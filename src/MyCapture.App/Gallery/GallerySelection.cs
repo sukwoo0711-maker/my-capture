@@ -36,6 +36,12 @@ public sealed class GallerySelection
         _anchor = id;
     }
 
+    public void Clear()
+    {
+        _selected.Clear();
+        _anchor = null;
+    }
+
     public void SelectGroup(IEnumerable<Guid> ids, bool control, bool toggle = false)
     {
         Guid[] group = ids.Where(_visibleIds.Contains).Distinct().ToArray();

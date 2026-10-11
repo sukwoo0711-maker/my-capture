@@ -59,6 +59,25 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Reads Capture.AutoDetectWindows when each selector opens. Off unless the app wires it.</summary>
     internal Func<bool> AutoDetectWindows { get; set; } = () => false;
 
+    /// <summary>Reads General.ShowShortcutHints when each selector opens; off hides only the key badges.</summary>
+    internal Func<bool> ShowShortcutHints { get; set; } = () => true;
+
+    /// <summary>
+    /// Asked once per selector whether it opens with the short start guide. The owner counts the
+    /// showings and persists them (Capture.StartGuideShownCount); off unless the app wires it.
+    /// </summary>
+    internal Func<bool> ClaimStartGuide { get; set; } = () => false;
+
+    /// <summary>
+    /// Runs the existing command for the bar's record switch and ⋯ menu (recording selector, delayed
+    /// or scrolling capture, previous region) once the selector has closed and the session has ended.
+    /// Null hides the switch and the menu.
+    /// </summary>
+    internal Action<CaptureSelectorRequest>? SelectorActionRequested { get; set; }
+
+    /// <summary>Whether a previous region exists, for the ⋯ menu's previous-region entry.</summary>
+    internal Func<bool> CanRepeatLastRegion { get; set; } = () => true;
+
     /// <summary>Copies the overlay's sampled colour (C key). Null leaves the key unbound.</summary>
     internal Func<string, Task<bool>>? CopyColorText { get; set; }
 
@@ -105,13 +124,18 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal bool CanRetake => !_disposed && _activeEditor is not null && !_activeEditor.Editor.IsCommitInProgress &&
         _preparation is null && !_isOpeningEditor;
 
-    /// <summary>Closes only the capture-owned draft editor before replacing the selection.</summary>
+    /// <summary>
+    /// Closes only the capture-owned draft editor before replacing the selection, the way the
+    /// user's own close does: unsaved annotations are confirmed first. When the user keeps the
+    /// editor (Cancel) or saves first, the editor is still open afterwards and the caller's
+    /// guard abandons the retake instead of discarding the drawing.
+    /// </summary>
     internal void CloseEditorForRetake()
     {
         VerifyDispatcherAccess();
         if (!CanRetake) return;
         _openingEditorCts?.Cancel();
-        _activeEditor?.Close();
+        _activeEditor?.RequestClose();
     }
 
     /// <summary>Used only by the explicit advanced “capture window” command.</summary>
@@ -284,11 +308,18 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         _activeOverlay = overlay;
         overlay.SourceWindows = _preparation?.SourceWindows ?? [];
         overlay.DetectWindows = AutoDetectWindows();
+        overlay.ShowShortcutHints = ShowShortcutHints();
         overlay.CopyColorText = CopyColorText;
         overlay.ReadColorFormat = ReadColorFormat;
         overlay.TextCaptureAvailable = TextCaptureRequested is not null;
         overlay.TextCaptureMode = _preparation?.TextCapture == true;
+        // The screenshot selector always offers its modes as a bar; recording keeps the plain selector.
+        overlay.ShowModeBar = true;
+        overlay.CanRepeatLastRegion = CanRepeatLastRegion;
+        overlay.OffersOtherActions = SelectorActionRequested is not null;
+        overlay.ShowStartGuide = ClaimStartGuide();
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
+        overlay.ActionRequested += OnOverlayActionRequested;
         overlay.Closed += OnOverlayClosed;
         overlay.ContentRendered += OnFirstRendered;
         void OnFirstRendered(object? sender, EventArgs args)
@@ -565,11 +596,14 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private void OnEditorCancelled(object? sender, EventArgs e) =>
         _log.LogInformation("Standalone capture editor cancelled");
 
+    private void OnOverlayActionRequested(object? sender, CaptureSelectorRequest request) => _pendingSelectorAction = request;
+
     private void OnOverlayClosed(object? sender, EventArgs e)
     {
         if (sender is CaptureOverlayWindow overlay)
         {
             overlay.SelectionCompleted -= OnOverlaySelectionCompleted;
+            overlay.ActionRequested -= OnOverlayActionRequested;
             overlay.Closed -= OnOverlayClosed;
             if (ReferenceEquals(_activeOverlay, overlay))
             {
@@ -578,7 +612,19 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         }
 
         EndSessionIfIdle();
+        // The chosen command starts on a later turn, after the session has ended: the app's own
+        // guards then see no active selector, and its frame waits out this dismissal.
+        if (_pendingSelectorAction is { } request)
+        {
+            _pendingSelectorAction = null;
+            if (!_disposed && SelectorActionRequested is { } run)
+                LastSelectorActionForTest = _dispatcher.InvokeAsync(() => run(request), DispatcherPriority.Normal).Task;
+        }
     }
+
+    private CaptureSelectorRequest? _pendingSelectorAction;
+
+    internal Task LastSelectorActionForTest { get; private set; } = Task.CompletedTask;
 
     private void OnEditorClosed(object? sender, EventArgs e)
     {

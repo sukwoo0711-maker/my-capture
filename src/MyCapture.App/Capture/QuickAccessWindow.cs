@@ -54,7 +54,8 @@ internal sealed class QuickAccessWindow : Window
         RectD? capturedRegion = null, MonitorInfo? targetMonitor = null)
     {
         Title = UiText.Get("QuickAccess.Title");
-        Width = 296;
+        // Wide enough for an icon with its short name on each of the four actions.
+        Width = 344;
         _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
@@ -75,9 +76,9 @@ internal sealed class QuickAccessWindow : Window
         panel.Children.Add(close);
         var row = new DockPanel { LastChildFill = true };
         _keep = new ToggleButton { Content = Glyph("Icon.Unlock"), Width = 24, Height = 30, MinWidth = 0, MinHeight = 0,
-            Padding = new Thickness(2), Focusable = false, ToolTip = UiText.Get("QuickAccess.Keep") };
+            Padding = new Thickness(2), Focusable = false, ToolTip = UiText.Get("Onboard_QuickKeep") };
         _keyboardTargets.Add(_keep);
-        AutomationProperties.SetName(_keep, UiText.Get("QuickAccess.Keep"));
+        AutomationProperties.SetName(_keep, UiText.Get("Onboard_QuickKeep"));
         ShortToolTip(_keep);
         DockPanel.SetDock(_keep, Dock.Right); row.Children.Add(_keep);
         var preview = _preview = new Image { Source = bitmap, Width = 52, Height = 48, Stretch = Stretch.Uniform,
@@ -111,9 +112,17 @@ internal sealed class QuickAccessWindow : Window
         foreach (string action in new[] { "Copy", "Edit", "Pin", "Save" })
         {
             Button button = Button("QuickAccess." + action, _actions[action]);
-            button.Content = Glyph("Icon." + action);
-            button.MinWidth = 0; button.MinHeight = 0; button.Height = 42; button.Padding = new Thickness(1); button.Margin = new Thickness(1);
-            ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action, corner: true);
+            // An icon over its short name; the key stays in the tooltip and the accelerator key.
+            var face = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            face.Children.Add(Glyph("Icon." + action));
+            face.Children.Add(new TextBlock
+            {
+                Text = AutomationProperties.GetName(button), FontSize = 11, Margin = new Thickness(0, 3, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+            });
+            button.Content = face;
+            button.MinWidth = 0; button.MinHeight = 46; button.Padding = new Thickness(1, 4, 1, 3); button.Margin = new Thickness(1);
+            ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action);
             ShortToolTip(button);
             actions.Children.Add(button);
         }
@@ -135,7 +144,7 @@ internal sealed class QuickAccessWindow : Window
         surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         surface.SetResourceReference(EffectProperty, "Shadow.Card");
         Content = surface;
-        ToolTip = UiText.Get("QuickAccess.KeyboardHint");
+        ToolTip = UiText.Get("Onboard_QuickCardTip");
         SourceInitialized += (_, _) =>
         {
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
@@ -236,7 +245,7 @@ internal sealed class QuickAccessWindow : Window
         ShortcutDefinition activation = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Activate");
         _activationRegistered = _activationKey.TryRegister(ActivationKeyId,
             new Hotkey((HotkeyModifiers)activation.Modifiers, (uint)KeyInterop.VirtualKeyFromKey(activation.Key)), out _, out _);
-        ToolTip = UiText.Get(_activationRegistered ? "QuickAccess.KeyboardHint" : "QuickAccess.ActivationUnavailable");
+        ToolTip = UiText.Get(_activationRegistered ? "Onboard_QuickCardTip" : "Onboard_QuickCardTipNoHotkey");
     }
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers) => ShortcutCatalog.Execute(ShortcutScope.QuickAccess, key, modifiers, _actions);

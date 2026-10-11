@@ -58,6 +58,7 @@ internal sealed class CaptureOverlayWindow : Window
 
         _view.SelectionConfirmed += OnSelectionConfirmed;
         _view.CancelRequested += OnCancelRequested;
+        _view.ActionRequested += OnActionRequested;
         SourceInitialized += OnSourceInitialized;
         ContentRendered += OnContentRendered;
         DpiChanged += OnDpiChanged;
@@ -105,7 +106,8 @@ internal sealed class CaptureOverlayWindow : Window
             RegionSelectionEventArgs? details = _pendingSelectionDetails;
             _pendingSelection = null;
             _pendingSelectionDetails = null;
-            CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true);
+            CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true,
+                details?.WholeMonitor == true);
         }
     }
 
@@ -165,6 +167,57 @@ internal sealed class CaptureOverlayWindow : Window
     {
         get => _view.TextCaptureMode;
         set => _view.TextCaptureMode = value;
+    }
+
+    /// <summary>Shows the key badges in the mode bar; the status and target tab always show.</summary>
+    internal bool ShowShortcutHints
+    {
+        get => _view.ShowShortcutHints;
+        set => _view.ShowShortcutHints = value;
+    }
+
+    /// <summary>The screenshot selector's mode bar at the top of the pointer's monitor.</summary>
+    internal bool ShowModeBar
+    {
+        get => _view.ShowModeBar;
+        set => _view.ShowModeBar = value;
+    }
+
+    /// <summary>The short start guide in the middle of the bar's monitor.</summary>
+    internal bool ShowStartGuide
+    {
+        get => _view.ShowStartGuide;
+        set => _view.ShowStartGuide = value;
+    }
+
+    /// <summary>The bar's capture/record switch and ⋯ menu; the owner runs <see cref="ActionRequested"/>.</summary>
+    internal bool OffersOtherActions
+    {
+        get => _view.OffersOtherActions;
+        set => _view.OffersOtherActions = value;
+    }
+
+    internal Func<bool> CanRepeatLastRegion
+    {
+        get => _view.CanRepeatLastRegion;
+        set => _view.CanRepeatLastRegion = value ?? (() => true);
+    }
+
+    /// <summary>
+    /// Raised when the record switch or a ⋯ command was chosen. The selector then closes without a
+    /// capture, like a cancel, and the owner starts the command once it is gone.
+    /// </summary>
+    internal event EventHandler<CaptureSelectorRequest>? ActionRequested;
+
+    /// <summary>The recording region selector's wording and colour.</summary>
+    internal bool RecordingSelection
+    {
+        get => _view.RecordingSelection;
+        set
+        {
+            _view.RecordingSelection = value;
+            Title = UiText.Get(value ? "Onboard_RecordSelectTitle" : "Text_3816B940D53C");
+        }
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -232,12 +285,13 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
 
-        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture);
+        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture, e.WholeMonitor);
     }
 
     internal void CompleteSelection(RectD bitmapRegion) => CompleteSelection(bitmapRegion, null, false);
 
-    internal void CompleteSelection(RectD bitmapRegion, WindowCandidate? detectedWindow, bool textCapture)
+    internal void CompleteSelection(RectD bitmapRegion, WindowCandidate? detectedWindow, bool textCapture,
+        bool wholeMonitor = false)
     {
         if (_completed)
         {
@@ -261,7 +315,13 @@ internal sealed class CaptureOverlayWindow : Window
             bitmapRegion.Width, bitmapRegion.Height);
         string sourceTitle = WindowCandidateService.ResolveSourceTitle(SourceWindows, selectedScreenRegion);
         string sourcePageUrl = WindowCandidateService.ResolveSourcePageUrl(SourceWindows, selectedScreenRegion);
-        if (detectedWindow is not null)
+        if (wholeMonitor)
+        {
+            // The full-screen button, like a desktop click, captures a monitor rather than a window.
+            sourceTitle = string.Empty;
+            sourcePageUrl = string.Empty;
+        }
+        else if (detectedWindow is not null)
         {
             // A clicked window is the source even when another window overlaps its centre.
             // Prefer the latest candidate snapshot, which may carry a page URL read after the freeze.
@@ -302,6 +362,15 @@ internal sealed class CaptureOverlayWindow : Window
 
     private void OnCancelRequested(object? sender, EventArgs e) => Cancel();
 
+    private void OnActionRequested(object? sender, CaptureSelectorRequest request)
+    {
+        if (_completed) return;
+        _completed = true;
+        Hide();
+        try { ActionRequested?.Invoke(this, request); }
+        finally { Close(); }
+    }
+
     private void OnDeactivated(object? sender, EventArgs e)
     {
         _view.EndPointerInteraction();
@@ -335,6 +404,7 @@ internal sealed class CaptureOverlayWindow : Window
         SourceWindows = [];
         _view.SelectionConfirmed -= OnSelectionConfirmed;
         _view.CancelRequested -= OnCancelRequested;
+        _view.ActionRequested -= OnActionRequested;
         SourceInitialized -= OnSourceInitialized;
         ContentRendered -= OnContentRendered;
         Deactivated -= OnDeactivated;

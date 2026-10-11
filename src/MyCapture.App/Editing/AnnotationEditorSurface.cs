@@ -315,14 +315,27 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             return;
         }
 
+        int index = 0;
         foreach (Point center in HandleCenters(inflated))
         {
+            // Same order as HandleCenters; a caption offers no top/bottom handles.
+            if (AnnotationEditorController.UsableHandle(selected, HandleOrder[index++]) == ResizeHandle.None)
+            {
+                continue;
+            }
+
             dc.DrawRectangle(
                 _handleFillBrush,
                 _handlePen,
                 new Rect(center.X - (HandlePixels / 2), center.Y - (HandlePixels / 2), HandlePixels, HandlePixels));
         }
     }
+
+    private static readonly ResizeHandle[] HandleOrder =
+    [
+        ResizeHandle.TopLeft, ResizeHandle.TopCenter, ResizeHandle.TopRight, ResizeHandle.MiddleRight,
+        ResizeHandle.BottomRight, ResizeHandle.BottomCenter, ResizeHandle.BottomLeft, ResizeHandle.MiddleLeft,
+    ];
 
     private static IEnumerable<Point> HandleCenters(Rect rect)
     {

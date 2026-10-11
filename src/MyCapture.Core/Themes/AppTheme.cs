@@ -133,6 +133,10 @@ public static class ThemeCatalog
         ["Overlay.SelectionBorder"] = ThemeColor.Rgb(0x97, 0x89, 0xFF),
         ["Overlay.HandleFill"] = ThemeColor.Rgb(0xF6, 0xF8, 0xFC),
         ["Overlay.HandleStroke"] = ThemeColor.Rgb(0x5A, 0x48, 0xE0),
+        // Library folder cards: a warm surface, outline and glyph keep folders apart from captures.
+        ["Surface.Folder"] = ThemeColor.Rgb(0x2A, 0x22, 0x13),
+        ["Border.Folder"] = ThemeColor.Rgb(0x8A, 0x6A, 0x2E),
+        ["Accent.Folder"] = ThemeColor.Rgb(0xF0, 0xB4, 0x4C),
     };
 
     internal static readonly Dictionary<string, ThemeColor> DaylightColors = new(StringComparer.Ordinal)
@@ -181,6 +185,9 @@ public static class ThemeCatalog
         ["Overlay.SelectionBorder"] = ThemeColor.Rgb(0x5A, 0x48, 0xE0),
         ["Overlay.HandleFill"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
         ["Overlay.HandleStroke"] = ThemeColor.Rgb(0x4B, 0x3C, 0xC0),
+        ["Surface.Folder"] = ThemeColor.Rgb(0xFF, 0xF3, 0xD6),
+        ["Border.Folder"] = ThemeColor.Rgb(0xC9, 0x95, 0x38),
+        ["Accent.Folder"] = ThemeColor.Rgb(0x9A, 0x62, 0x00),
     };
 
     internal static readonly Dictionary<string, ThemeColor> HighContrastColors = new(StringComparer.Ordinal)
@@ -229,6 +236,9 @@ public static class ThemeCatalog
         ["Overlay.SelectionBorder"] = ThemeColor.Rgb(0xFF, 0xD0, 0x00),
         ["Overlay.HandleFill"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
         ["Overlay.HandleStroke"] = ThemeColor.Rgb(0xFF, 0xD0, 0x00),
+        ["Surface.Folder"] = ThemeColor.Rgb(0x00, 0x00, 0x00),
+        ["Border.Folder"] = ThemeColor.Rgb(0x80, 0xC0, 0xFF),
+        ["Accent.Folder"] = ThemeColor.Rgb(0x80, 0xC0, 0xFF),
     };
     internal static readonly Dictionary<string, ThemeColor> WorkspaceColors = new(MidnightColors, StringComparer.Ordinal)
     {
@@ -277,6 +287,8 @@ public static class ThemeCatalog
         ["Border.Strong"] = ThemeColor.Argb(0xCC, 0xC6, 0xD0, 0xDF),
         ["Timeline.Background"] = ThemeColor.Argb(0xF4, 0x12, 0x14, 0x1A),
         ["Timeline.Track"] = ThemeColor.Argb(0xF2, 0x24, 0x28, 0x32),
+        ["Surface.Folder"] = ThemeColor.Argb(0xF2, 0x36, 0x2C, 0x18),
+        ["Border.Folder"] = ThemeColor.Argb(0xCC, 0xF0, 0xB4, 0x4C),
     };
 
     internal static readonly Dictionary<string, ThemeColor> GlassLightColors = new(DaylightColors, StringComparer.Ordinal)
@@ -295,5 +307,7 @@ public static class ThemeCatalog
         ["Border.Subtle"] = ThemeColor.Argb(0xB3, 0x8A, 0x98, 0xAA),
         ["Timeline.Background"] = ThemeColor.Argb(0xF6, 0xF4, 0xF6, 0xF9),
         ["Timeline.Track"] = ThemeColor.Argb(0xF6, 0xE4, 0xEA, 0xF0),
+        ["Surface.Folder"] = ThemeColor.Argb(0xF6, 0xFF, 0xF1, 0xD0),
+        ["Border.Folder"] = ThemeColor.Argb(0xCC, 0xC0, 0x8A, 0x2C),
     };
 }

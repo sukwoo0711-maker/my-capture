@@ -99,7 +99,9 @@ internal static class HotfixUxSelfTest
             report.AppendLine(card.TimeoutStateForTest);
             Check("passive receipt closes on its real dispatcher timer", !card.IsVisible);
             Check("editor Esc command accepted", editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
-            Pump(50); Check("Esc closes editor", !editor.IsVisible);
+            // Esc steps back inside the editor (selection, tool) and never closes it.
+            Pump(50); Check("Esc keeps editor open", editor.IsVisible);
+            editor.Close(); Pump(50); Check("editor closes from code", !editor.IsVisible);
 
             // A separate application/process owns the input. It has no capture-card code,
             // global shortcuts, user document, or profile. Its paste/drop handlers
@@ -266,11 +268,12 @@ internal static class HotfixUxSelfTest
                 var grid = ((StackPanel)((Border)receipt.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
                 foreach (Button button in grid.Children.OfType<Button>())
                 {
-                    var content = (Grid)button.Content;
-                    var hint = content.Children.OfType<TextBlock>().Single();
-                    Check($"{language}/{theme}/{hint.Text}: icon and shortcut fit the action",
-                        content.ActualWidth <= button.ActualWidth && content.ActualHeight <= button.ActualHeight
-                        && hint.ActualWidth <= content.ActualWidth && hint.ActualHeight <= content.ActualHeight);
+                    // Each action shows an icon, its name and (when hints are on) its shortcut.
+                    var content = (FrameworkElement)button.Content;
+                    var texts = Ux402VisualMetrics.Descendants(content).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
+                    Check($"{language}/{theme}/{AutomationProperties.GetName(button)}: icon, name and shortcut fit the action",
+                        texts.Length > 0 && content.ActualWidth <= button.ActualWidth && content.ActualHeight <= button.ActualHeight
+                        && texts.All(text => text.ActualWidth <= content.ActualWidth + 0.5 && text.ActualHeight <= content.ActualHeight + 0.5));
                 }
                 foreach (int dpi in new[] { 96, 144, 192 }) Render(receipt, Path.Combine(output, $"card-{language}-{theme}-{dpi}.png"), dpi);
                 receipt.Close();
@@ -558,15 +561,19 @@ internal static class HotfixUxSelfTest
         var window = new AnnotationEditorWindow(new FrozenFrame(sample, rect, null, 0), rect, sample);
         owned.Add(window); window.Show(); Pump(150); window.Activate(); window.Editor.Focus();
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
+        // The visible command for a key: the crop bar replaces the top commands while cropping.
         ButtonBase Button(string key) => Ux402VisualMetrics.Descendants(window).OfType<ButtonBase>()
-            .Single(b => AutomationProperties.GetAcceleratorKey(b) == key && (key != "X" || b is ToggleButton));
+            .Single(b => AutomationProperties.GetAcceleratorKey(b) == key && b.IsVisible);
         Click(hwnd, Button("A"));
         check("mouse rail click returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
-        foreach (var (key, hint) in new[] { ((byte)0x52, "R"), ((byte)0x45, "E"), ((byte)0x58, "X") })
+        foreach (var (key, hint) in new[] { ((byte)0x52, "R"), ((byte)0x45, "E") })
         {
             SendKey(hwnd, key); Pump(60);
             check($"native rail click then {hint} selects tool", ((ToggleButton)Button(hint)).IsChecked == true);
         }
+        // Crop is an image command at the top, not a rail tool: X opens the crop frame.
+        SendKey(hwnd, 0x58); Pump(60);
+        check("native rail click then X opens crop", window.Editor.PendingCrop is not null);
         SendKey(hwnd, 0x1B); Pump(50);
         check("native Esc cancels pending crop", window.Editor.PendingCrop is null && window.IsVisible);
         Click(hwnd, Button("R"));
@@ -594,8 +601,9 @@ internal static class HotfixUxSelfTest
         Click(hwnd, heightInput); heightInput.Text = "100"; SendKey(hwnd, 0x0D); Pump(50);
         check("native height Enter remains editable after width Enter", window.Editor.PendingCrop?.Region.Height == 100 && ReferenceEquals(Keyboard.FocusedElement, heightInput));
         Click(hwnd, widthInput); widthInput.Text = "abc"; SendKey(hwnd, 0x0D); Pump(50);
-        Click(hwnd, Button("Ctrl+Enter"));
-        check("native Done blocks invalid input and preserves text/error", window.IsVisible && window.Editor.PendingCrop is not null
+        // While cropping, the crop bar's Apply replaces Done.
+        Click(hwnd, Ux402VisualMetrics.Descendants(window).OfType<Button>().Single(b => AutomationProperties.GetAutomationId(b) == "EditorFlowCropApply"));
+        check("native crop Apply blocks invalid input and preserves text/error", window.IsVisible && window.Editor.PendingCrop is not null
             && widthInput.Text == "abc" && !string.IsNullOrEmpty(AutomationProperties.GetHelpText(widthInput)));
         SendKey(hwnd, 0x1B); Pump(50);
         var topCrop = Ux402VisualMetrics.Descendants(window).OfType<Button>()
@@ -607,10 +615,13 @@ internal static class HotfixUxSelfTest
         check("native crop button click then Esc cancels", window.Editor.PendingCrop is null && window.IsVisible);
         window.Editor.Focus(); SendKey(hwnd, 0x09); Pump(50);
         check("native Tab retains button keyboard navigation", Keyboard.FocusedElement is ButtonBase);
-        Click(hwnd, Button("W"));
+        // Rotation now lives in the crop bar; Undo is the top command left after cropping.
+        Click(hwnd, Button("Ctrl+Z"));
         check("mouse top command returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
         SendKey(hwnd, 0x1B); Pump(80);
-        check("native top button click then Esc closes editor", !window.IsVisible);
+        // Esc only steps back (text, selection, tool); it never closes the editor and its edits.
+        check("native top button click then Esc keeps the editor open", window.IsVisible);
+        window.Close();
     }
     private static void InjectKey(IntPtr target, byte key, uint flags)
     {

@@ -163,14 +163,14 @@ internal static class UxReviewSelfTest
             var hotkeySettings = new SettingsWindow(() => settings,
                 _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance);
             hotkeySettings.CategoryTabs.SelectedItem = hotkeySettings.CategoryTabs.Items.OfType<TabItem>()
-                .Single(tab => Equals(tab.Header, UiText.Get("Text_086F41200B47")));
+                .Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabShortcuts")));
             windows.Add(("hotkeys", hotkeySettings));
             windows.Add(("quick-access", new QuickAccessWindow(sample, () => { receiptCopies++; return Task.FromResult(true); }, () => { },
                 () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("fixture.png")) { IsKept = true }));
             windows.Add(("error", new ThemedDialog(UiText.Get("Dialog.Storage"), UiText.Get("Dialog.AppFailure"),
                 MessageBoxButton.OK, MessageBoxResult.OK, "Synthetic diagnostic details — 0x80070070")));
             windows.Add(("shortcuts", new ShortcutHelpWindow()));
-            windows.Add(("onboarding", new ShortcutHelpWindow(onboarding: true)));
+            windows.Add(("onboarding", new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor)));
             var region = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
             var annotations = MyCapture.Core.Annotations.AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight);
             var annotationController = new AnnotationEditorController(annotations, new MyCapture.Core.Undo.UndoStack());
@@ -444,7 +444,7 @@ internal static class UxReviewSelfTest
                     if (name == "hotkeys")
                     {
                         var preferences = (SettingsWindow)window;
-                        preferences.CategoryTabs.SelectedItem = preferences.CategoryTabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Text_086F41200B47")));
+                        preferences.CategoryTabs.SelectedItem = preferences.CategoryTabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabShortcuts")));
                         window.UpdateLayout();
                         HotkeyRecorder recorder = Descendants(window).OfType<HotkeyRecorder>().Single(control =>
                             control.GetBindingExpression(HotkeyRecorder.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.CaptureHotkey));

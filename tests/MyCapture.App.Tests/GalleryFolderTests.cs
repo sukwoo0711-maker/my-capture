@@ -76,6 +76,15 @@ public sealed class GalleryFolderTests
         vm.SearchQuery = "does not exist";
         Assert.True(vm.IsEmpty);
         Assert.False(vm.QueueIsEmpty);
+        Assert.True(vm.CanResetEmptySearch);
+
+        // An empty folder viewed without a search or filter has nothing to reset.
+        var empty = await f.Queue.CreateFolderAsync("Empty", createdAt: date);
+        vm.SearchQuery = string.Empty;
+        vm.Filter = GalleryFilter.All;
+        vm.SelectScope(CaptureFolderScope.ForFolder(empty.Id));
+        Assert.True(vm.IsEmpty);
+        Assert.False(vm.CanResetEmptySearch);
     }
 
     [Fact]
