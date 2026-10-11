@@ -2100,7 +2100,7 @@ internal sealed class VideoEditorWindow : Window
         DockPanel.SetDock(symbol, Dock.Left); row.Children.Add(symbol);
         var caption = new StackPanel();
         caption.Children.Add(new TextBlock { Text = title, TextTrimming = TextTrimming.CharacterEllipsis });
-        // The visible interval on one line: the times read as a range without 시작/끝 rows.
+        // The visible interval on one line: the times read as a range without start and end rows.
         var timing = new TextBlock
         {
             Text = UiText.Format("VideoEditorUx_LayerInterval", FormatMs(start), FormatMs(end)),

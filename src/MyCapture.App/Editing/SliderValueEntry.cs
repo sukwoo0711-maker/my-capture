@@ -94,9 +94,6 @@ internal sealed class SliderValueEntry
     /// <summary>Raised when a typed value was outside the range and the nearest limit was applied.</summary>
     internal event EventHandler<double>? Clamped;
 
-    /// <summary>The unit shown after the box.</summary>
-    internal string Unit => _unit;
-
     /// <summary>Shows a value the way the box does: whole numbers plainly, otherwise one decimal.</summary>
     internal static string Format(double value) => value.ToString("0.#", CultureInfo.CurrentCulture);
 
