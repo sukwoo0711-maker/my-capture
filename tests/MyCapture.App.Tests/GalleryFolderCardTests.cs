@@ -52,6 +52,8 @@ public sealed class GalleryFolderCardTests
         Assert.Equal(3, vm.ReachableCount);
         Assert.False(vm.ShowResultCount);
 
+        // Two full cards per row, so both folder cards share the first folder row.
+        vm.SetColumnCountForWidth(2 * GalleryRowBuilder.TileTrackWidth);
         Assert.IsType<GalleryHeaderRow>(vm.Rows[0]);
         Assert.Equal(today.Folders, Assert.IsType<GalleryFolderRow>(vm.Rows[1]).Folders);
         Assert.Equal(loose.Id, Assert.Single(Assert.IsType<GalleryTileRow>(vm.Rows[2]).Tiles).Id);
@@ -94,6 +96,8 @@ public sealed class GalleryFolderCardTests
         await f.Queue.MoveCapturesAsync([deep.Id], nested.Id);
         var vm = f.ViewModel();
         vm.SelectScope(CaptureFolderScope.ForFolder(root.Id));
+        // Room for both subfolder cards in one compact row.
+        vm.SetColumnCountForWidth(2 * GalleryRowBuilder.CompactTileTrackWidth);
         foreach (GallerySortOrder sort in new[] { GallerySortOrder.Oldest, GallerySortOrder.Name, GallerySortOrder.Newest })
         {
             vm.SortIndex = (int)sort;
