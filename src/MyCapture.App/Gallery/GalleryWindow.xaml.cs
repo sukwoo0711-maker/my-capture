@@ -336,11 +336,9 @@ internal sealed partial class GalleryWindow : Window
             return;
         }
 
-        // Subtract the vertical scrollbar's width so a row's tiles never overflow into the
-        // scrollbar track. The view model only rebuilds rows when the resulting column count
-        // actually changes, so this fires cheaply on every resize.
-        double available = e.NewSize.Width - SystemParameters.VerticalScrollBarWidth;
-        _ = _viewModel.SetColumnCountForWidth(available);
+        // The view model only rebuilds rows when the resulting column count actually changes,
+        // so this fires cheaply on every resize.
+        _ = _viewModel.SetColumnCountForWidth(RowsContentWidth(e.NewSize.Width));
     }
 
     // ---- Tile selection / keyboard -------------------------------------------------

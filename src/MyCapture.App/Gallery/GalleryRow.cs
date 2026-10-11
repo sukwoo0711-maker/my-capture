@@ -4,7 +4,7 @@ namespace MyCapture.App.Gallery;
 
 /// <summary>
 /// One realised row in the gallery's flat, virtualized list: either a date header or a strip
-/// of 2-4 capture tiles.
+/// of capture tiles, as many as the gallery width fits (see <see cref="GalleryRowBuilder"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -41,8 +41,8 @@ public sealed class GalleryHeaderRow : GalleryRow
 }
 
 /// <summary>
-/// A strip of 2-4 tiles from one date group. Because a row holds only a handful of items, its
-/// panel can be a non-virtual horizontal stack without cost — the virtualization that matters
+/// A strip of tiles from one date group, one up to the column count. Because a row holds only a
+/// handful of items, its panel can be a non-virtual horizontal stack without cost — the virtualization that matters
 /// happens at the row level, in the outer list.
 /// </summary>
 public sealed class GalleryTileRow : GalleryRow
@@ -54,7 +54,7 @@ public sealed class GalleryTileRow : GalleryRow
         IsCompact = compact;
     }
 
-    /// <summary>The 2-4 tiles laid out left-to-right in this row.</summary>
+    /// <summary>The tiles laid out left-to-right in this row.</summary>
     public ReadOnlyObservableCollection<GalleryItemViewModel> Tiles { get; }
 }
 

@@ -133,9 +133,9 @@
         </DataTemplate>
 
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
-            <!-- A 244px tile plus 6px margins occupies a 256px track, matching
-                 GalleryRowBuilder.TileTrackWidth. Four cards now fill the default window
-                 without shrinking the image or reducing the accessible action targets. -->
+            <!-- A 244px tile plus 6px margins and the item's 2px selection outline occupies the
+                 260px track of GalleryRowBuilder.TileTrackWidth. A narrow window shows fewer
+                 cards per row, down to one, instead of shrinking the image or its action targets. -->
             <Border Width="244" Height="292" Margin="6"
                     Background="{DynamicResource Surface.Raised}"
                     BorderBrush="{DynamicResource Border.Subtle}"
