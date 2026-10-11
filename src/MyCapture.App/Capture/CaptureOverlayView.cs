@@ -193,8 +193,16 @@ internal sealed class CaptureOverlayView : FrameworkElement
     internal bool PointerOverModeBarForTest => _pointerOverBar;
     internal double GuideScaleForTest => _guideScale;
 
-    /// <summary>How long the in-overlay copy confirmation stays visible.</summary>
-    internal static readonly TimeSpan ToastDuration = TimeSpan.FromMilliseconds(1600);
+    /// <summary>
+    /// How long the in-overlay copy message stays. The chip follows the pointer the user is aiming
+    /// with, so it uses the over-content confirmation time. A failed copy is a warning rather than a
+    /// message that stays: a click there starts a selection and Esc cancels the capture, so the
+    /// chip could not offer its own close, and pressing the copy key again is the retry.
+    /// </summary>
+    internal static TimeSpan ToastDuration(bool copied) =>
+        FeedbackTiming.DisplayTime(copied ? FeedbackKind.Confirmation : FeedbackKind.Warning, overContent: true)!.Value;
+
+    internal TimeSpan? ToastIntervalForTest => _toastTimer?.IsEnabled == true ? _toastTimer.Interval : null;
 
     /// <summary>How long the start guide stays when the pointer does not move away.</summary>
     internal static readonly TimeSpan StartGuideDuration = TimeSpan.FromSeconds(8);
@@ -1811,8 +1819,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
 
         string message = copied ? UiText.Format("Tools_ColorCopied", value) : UiText.Get("ColorPick_CopyFailed");
-        if (Dispatcher.CheckAccess()) ShowToast(message);
-        else _ = Dispatcher.BeginInvoke(new Action(() => ShowToast(message)));
+        if (Dispatcher.CheckAccess()) ShowToast(message, copied);
+        else _ = Dispatcher.BeginInvoke(new Action(() => ShowToast(message, copied)));
         return copied ? value : null;
     }
 
@@ -1842,19 +1850,21 @@ internal sealed class CaptureOverlayView : FrameworkElement
         return true;
     }
 
-    private void ShowToast(string message)
+    private void ShowToast(string message, bool copied)
     {
         if (_released || _ended) return;
         _toastMessage = message;
         _toastTimer ??= CreateToastTimer();
         _toastTimer.Stop();
+        _toastTimer.Interval = ToastDuration(copied);
         _toastTimer.Start();
         QueueFeedback();
+        FeedbackTiming.Announce(this, message, copied ? FeedbackKind.Confirmation : FeedbackKind.Warning, "MyCapture.Capture.ColorCopy");
     }
 
     private DispatcherTimer CreateToastTimer()
     {
-        var timer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher) { Interval = ToastDuration };
+        var timer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher);
         timer.Tick += (_, _) =>
         {
             timer.Stop();

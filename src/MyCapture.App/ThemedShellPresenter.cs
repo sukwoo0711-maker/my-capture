@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
-using System.Windows.Threading;
 using MyCapture.App.Capture;
 using MyCapture.App.Themes;
 using MyCapture.Platform.Shell;
@@ -19,7 +18,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     /// so a capture starting immediately afterwards can wait out the dismissal.</summary>
     internal event Action? ForegroundDismissed;
     private ContextMenu? _menu;
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(5) };
+    private FeedbackCountdown? _countdown;
 
     /// <summary>
     /// A command or a submenu branch in the tray tree. A null Action marks a branch. A command
@@ -56,14 +55,44 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
             window.Left = Math.Max(work.Left, work.Right - window.ActualWidth - 16);
             window.Top = Math.Max(work.Top, work.Bottom - window.ActualHeight - 16);
         };
-        _toast = window;
-        _timer.Tick -= OnTimeout;
-        _timer.Tick += OnTimeout;
-        window.Show();
-        _timer.Start();
+        // An error stays until closed; information and warnings leave after the result time.
+        Present(window, kind switch
+        {
+            TrayBalloonKind.Error => FeedbackKind.ActionRequired,
+            TrayBalloonKind.Warning => FeedbackKind.Warning,
+            _ => FeedbackKind.Result,
+        }, title + " " + message);
     }
 
-    private void OnTimeout(object? sender, EventArgs e) => Dismiss();
+    /// <summary>
+    /// Shows a notification window for its kind's display time from <see cref="FeedbackTiming"/>.
+    /// Pointing at it or keyboard focus inside it pauses the countdown, and Esc closes it.
+    /// </summary>
+    private void Present(Window window, FeedbackKind kind, string announcement)
+    {
+        window.KeyDown += (_, e) =>
+        {
+            if (e.Key != System.Windows.Input.Key.Escape || !ReferenceEquals(_toast, window)) return;
+            Dismiss();
+            e.Handled = true;
+        };
+        _toast = window;
+        _countdown ??= new FeedbackCountdown(window.Dispatcher,
+            () => _toast is { } toast && (toast.IsMouseOver || toast.IsKeyboardFocusWithin), Dismiss);
+        _toastKind = kind;
+        window.Show();
+        _countdown.Start(FeedbackTiming.DisplayTime(kind));
+        if (window.Content is UIElement content) FeedbackTiming.Announce(content, announcement, kind, "MyCapture.Shell.Notification");
+    }
+
+    private FeedbackKind _toastKind;
+
+    /// <summary>Test hook: the open notification's kind and the display time it has left.</summary>
+    internal (bool Open, FeedbackKind Kind, TimeSpan? Remaining) NotificationForTest =>
+        (_toast?.IsVisible == true, _toastKind, _countdown?.Remaining);
+
+    /// <summary>Test hook: spends display time as the countdown's clock would.</summary>
+    internal void AdvanceNotificationForTest(TimeSpan elapsed) => _countdown?.Advance(elapsed);
 
     internal void ShowCaptureReceipt(string message, Action openLibrary)
     {
@@ -88,8 +117,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
             MyCapture.Platform.Display.PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new System.Windows.Interop.WindowInteropHelper(window).Handle,
                 new MyCapture.Core.Primitives.RectD(position.X * monitor.ScaleFactor, position.Y * monitor.ScaleFactor, position.Width * monitor.ScaleFactor, position.Height * monitor.ScaleFactor));
         };
-        _toast = window; _timer.Tick -= OnTimeout; _timer.Tick += OnTimeout;
-        window.Show(); _timer.Start();
+        Present(window, FeedbackKind.Confirmation, message);
     }
 
     /// <summary>
@@ -208,7 +236,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
 
     internal void Dismiss()
     {
-        _timer.Stop();
+        _countdown?.Stop();
         _toast?.Close();
         _toast = null;
         if (_menu is not null) _menu.IsOpen = false;
@@ -221,11 +249,11 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         Dismiss();
         if (ShortcutHelpWindow.DismissForCapture() || visible) ForegroundDismissed?.Invoke();
     }
-    public void Dispose() { DismissForCapture(); _timer.Tick -= OnTimeout; }
+    public void Dispose() => DismissForCapture();
 
     /// <summary>
     /// The bounded notification with one follow-up command beside Close. Pointing at it pauses
-    /// the dismissal timer so the command can be reached before the card disappears.
+    /// the dismissal countdown so the command can be reached before the card disappears.
     /// </summary>
     internal void ShowActionNotification(string title, string message, string actionLabel, Action action)
     {
@@ -258,12 +286,6 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
             window.Left = Math.Max(work.Left, work.Right - window.ActualWidth - 16);
             window.Top = Math.Max(work.Top, work.Bottom - window.ActualHeight - 16);
         };
-        window.MouseEnter += (_, _) => { if (ReferenceEquals(_toast, window)) _timer.Stop(); };
-        window.MouseLeave += (_, _) => { if (ReferenceEquals(_toast, window)) _timer.Start(); };
-        _toast = window;
-        _timer.Tick -= OnTimeout;
-        _timer.Tick += OnTimeout;
-        window.Show();
-        _timer.Start();
+        Present(window, FeedbackKind.Result, title + " " + message);
     }
 }

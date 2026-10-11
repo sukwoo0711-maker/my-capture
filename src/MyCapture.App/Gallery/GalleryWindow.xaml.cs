@@ -828,37 +828,140 @@ internal sealed partial class GalleryWindow : Window
 
     private static readonly System.ComponentModel.DependencyPropertyDescriptor StatusTextDescriptor =
         System.ComponentModel.DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock));
-    private DispatcherTimer? _statusTimer;
+    private MyCapture.App.Themes.FeedbackCountdown? _statusCountdown;
+    private Button? _statusDismiss;
+    private MyCapture.App.Themes.FeedbackKind _statusKind;
 
-    /// <summary>How long an action result stays in the status line before it clears itself.</summary>
-    internal static readonly TimeSpan ActionStatusDuration = TimeSpan.FromSeconds(8);
+    // Status lines the command handlers write that the user has to act on; an export failure
+    // starts with Folder410.ExportFailed and adds the cause.
+    private static readonly string[] ActionRequiredStatusKeys =
+    [
+        "Folder410.OperationFailed", "Folder410.DeleteChanged", "Library.Archive.Failed",
+        "Library.SourcePage.OpenFailed", "Library.SourcePage.CopyFailed",
+        "Library.Source.OpenFolderFailed", "Library.Source.CopyPathFailed",
+    ];
+
+    // Plain confirmations; every other line carries a count, a hint or a cause to read.
+    private static readonly string[] ConfirmationStatusKeys = ["Library.SourcePage.Copied", "Library.Source.PathCopied"];
+
+    // Export lines that the outcome replaces.
+    private static readonly string[] ProgressStatusKeys =
+    [
+        "Library.Archive.Preparing", "Library.Archive.Progress", "Folder410.ExportPreparing", "Folder410.ExportProgress",
+    ];
 
     private void InitializeActionStatus()
     {
-        var timer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = ActionStatusDuration };
-        timer.Tick += (_, _) => ExpireActionStatus();
-        _statusTimer = timer;
+        // Pointing at the status line or focusing its close button pauses the countdown.
+        _statusCountdown = new MyCapture.App.Themes.FeedbackCountdown(Dispatcher,
+            () => LibraryStatusBar.IsMouseOver || LibraryStatusBar.IsKeyboardFocusWithin, ExpireActionStatus);
+        // A failure stays until closed, so it gets a close button beside it (column 2, which the
+        // archive Cancel button only uses while an export is still running).
+        var glyph = new System.Windows.Shapes.Path
+        {
+            Data = TryFindResource("Icon.Close") as Geometry ?? Geometry.Parse("M5,5 L15,15 M15,5 L5,15"),
+            Stretch = Stretch.Uniform, Width = 10, Height = 10, StrokeThickness = 1.6,
+        };
+        glyph.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Text.Secondary");
+        _statusDismiss = new Button
+        {
+            Content = glyph, Margin = new Thickness(8, 0, 0, 0), Visibility = Visibility.Collapsed,
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = UiText.Get("Feedback.Dismiss"),
+        };
+        _statusDismiss.SetResourceReference(StyleProperty, "Button.GhostCompact");
+        System.Windows.Automation.AutomationProperties.SetName(_statusDismiss, UiText.Get("Feedback.Dismiss"));
+        _statusDismiss.Click += (_, _) => DismissActionStatus();
+        Grid.SetColumn(_statusDismiss, 2);
+        LibraryStatusBar.Children.Add(_statusDismiss);
+        // After the selection handler, so Esc still clears a selection first.
+        KeyDown += (_, e) =>
+        {
+            if (e.Handled || e.Key != Key.Escape || Keyboard.Modifiers != ModifierKeys.None || e.OriginalSource is TextBox) return;
+            e.Handled = DismissActionStatus();
+        };
         StatusTextDescriptor.AddValueChanged(LibraryActionStatus, OnActionStatusChanged);
         Closed += (_, _) =>
         {
             StatusTextDescriptor.RemoveValueChanged(LibraryActionStatus, OnActionStatusChanged);
-            timer.Stop();
+            _statusCountdown.Stop();
         };
     }
 
-    // Every result restarts the clock, so the latest one stays readable for the full interval.
+    /// <summary>Which <see cref="MyCapture.App.Themes.FeedbackTiming"/> kind a status line follows.</summary>
+    internal static MyCapture.App.Themes.FeedbackKind ClassifyActionStatus(string text)
+    {
+        if (ActionRequiredStatusKeys.Any(key => text == UiText.Get(key))
+            || text.StartsWith(UiText.Get("Folder410.ExportFailed"), StringComparison.Ordinal))
+        {
+            return MyCapture.App.Themes.FeedbackKind.ActionRequired;
+        }
+
+        if (ProgressStatusKeys.Any(key => MatchesFormat(text, key))) return MyCapture.App.Themes.FeedbackKind.Progress;
+        return ConfirmationStatusKeys.Any(key => text == UiText.Get(key))
+            ? MyCapture.App.Themes.FeedbackKind.Confirmation
+            : MyCapture.App.Themes.FeedbackKind.Result;
+    }
+
+    private static bool MatchesFormat(string text, string key) => System.Text.RegularExpressions.Regex.IsMatch(text,
+        "^" + string.Join(".+", System.Text.RegularExpressions.Regex.Split(UiText.Get(key), @"\{\d+[^}]*\}")
+            .Select(System.Text.RegularExpressions.Regex.Escape)) + "$",
+        System.Text.RegularExpressions.RegexOptions.Singleline);
+
+    internal MyCapture.App.Themes.FeedbackKind ActionStatusKindForTest => _statusKind;
+
+    internal TimeSpan? ActionStatusRemainingForTest => _statusCountdown?.Remaining;
+
+    internal bool IsActionStatusDismissibleForTest => _statusDismiss?.Visibility == Visibility.Visible;
+
+    /// <summary>Spends status display time as the countdown's clock would.</summary>
+    internal void AdvanceActionStatusForTest(TimeSpan elapsed) => _statusCountdown?.Advance(elapsed);
+
+    // Every result restarts the clock, so the latest one stays readable for its full time.
     private void OnActionStatusChanged(object? sender, EventArgs e)
     {
-        _statusTimer?.Stop();
-        if (!string.IsNullOrEmpty(LibraryActionStatus.Text)) _statusTimer?.Start();
+        string text = LibraryActionStatus.Text;
+        MyCapture.App.Themes.FeedbackKind previous = _statusKind;
+        _statusKind = string.IsNullOrEmpty(text) ? MyCapture.App.Themes.FeedbackKind.Echo : ClassifyActionStatus(text);
+        bool dismissible = !string.IsNullOrEmpty(text) && MyCapture.App.Themes.FeedbackTiming.StaysUntilDismissed(_statusKind);
+        LibraryActionStatus.SetResourceReference(TextBlock.ForegroundProperty, dismissible ? "State.Danger" : "Text.Secondary");
+        if (_statusDismiss is not null) _statusDismiss.Visibility = dismissible ? Visibility.Visible : Visibility.Collapsed;
+        if (string.IsNullOrEmpty(text))
+        {
+            _statusCountdown?.Stop();
+            return;
+        }
+
+        _statusCountdown?.Start(MyCapture.App.Themes.FeedbackTiming.DisplayTime(_statusKind));
+        // Export counts change quickly; only the start of the export and its outcome are read out.
+        if (_statusKind != MyCapture.App.Themes.FeedbackKind.Progress || previous != MyCapture.App.Themes.FeedbackKind.Progress)
+        {
+            MyCapture.App.Themes.FeedbackTiming.Announce(LibraryActionStatus, text, _statusKind, "MyCapture.Library.Status");
+        }
     }
 
     /// <summary>Clears a finished action's result; a running export keeps its progress line.</summary>
     internal void ExpireActionStatus()
     {
-        if (_archiveCancellation is not null) return;
-        _statusTimer?.Stop();
+        if (_archiveCancellation is not null)
+        {
+            _statusCountdown?.Start(MyCapture.App.Themes.FeedbackTiming.Result);
+            return;
+        }
+
+        _statusCountdown?.Stop();
         LibraryActionStatus.Text = string.Empty;
+    }
+
+    /// <summary>Closes a failure line that stays until dismissed; false when none is showing.</summary>
+    private bool DismissActionStatus()
+    {
+        if (string.IsNullOrEmpty(LibraryActionStatus.Text)
+            || !MyCapture.App.Themes.FeedbackTiming.StaysUntilDismissed(_statusKind)) return false;
+        bool refocus = _statusDismiss?.IsKeyboardFocused == true;
+        LibraryActionStatus.Text = string.Empty;
+        if (refocus) MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        return true;
     }
 
     /// <summary>Header toolbar: start a region capture, mirroring the tray command.</summary>

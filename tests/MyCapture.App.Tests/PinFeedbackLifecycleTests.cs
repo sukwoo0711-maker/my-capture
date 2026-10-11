@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Pinning;
+using MyCapture.App.Themes;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Settings;
 using Xunit;
@@ -23,14 +24,14 @@ public sealed class PinFeedbackLifecycleTests
         image.Freeze();
         var pin = new PinWindow(PinContent.FromImage(image), new PinViewState(16, 16, 1, 1, 0.1),
             0, 0, () => new PinSettings());
-        var timer = (DispatcherTimer)typeof(PinWindow).GetField("_feedbackTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pin)!;
+        var timer = (FeedbackCountdown)typeof(PinWindow).GetField("_feedbackCountdown", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pin)!;
         try
         {
             var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             Task feedback = CompleteLaterAsync();
             pin.Close();
             Assert.True(pin.IsClosed);
-            Assert.False(timer.IsEnabled);
+            Assert.False(timer.IsRunning);
             completed.SetResult(true);
             long started = Stopwatch.GetTimestamp();
             while (!feedback.IsCompleted)
@@ -41,7 +42,7 @@ public sealed class PinFeedbackLifecycleTests
                 Dispatcher.PushFrame(frame);
             }
             feedback.GetAwaiter().GetResult();
-            Assert.False(timer.IsEnabled);
+            Assert.False(timer.IsRunning);
 
             async Task CompleteLaterAsync()
             {

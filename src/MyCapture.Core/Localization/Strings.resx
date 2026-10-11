@@ -3227,6 +3227,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Dialog.AppFailure" xml:space="preserve"><value>작업을 완료할 수 없습니다</value></data>
   <data name="Dialog.Cancel" xml:space="preserve"><value>취소</value></data>
   <data name="Dialog.Close" xml:space="preserve"><value>닫기</value></data>
+  <data name="Feedback.Dismiss" xml:space="preserve"><value>알림 닫기</value></data>
   <data name="Dialog.Details" xml:space="preserve"><value>자세히</value></data>
   <data name="Dialog.No" xml:space="preserve"><value>아니요</value></data>
   <data name="Dialog.OK" xml:space="preserve"><value>확인</value></data>

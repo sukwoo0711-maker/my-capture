@@ -3227,6 +3227,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Dialog.AppFailure" xml:space="preserve"><value>Unable to complete the action</value></data>
   <data name="Dialog.Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="Dialog.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Feedback.Dismiss" xml:space="preserve"><value>Dismiss message</value></data>
   <data name="Dialog.Details" xml:space="preserve"><value>Details</value></data>
   <data name="Dialog.No" xml:space="preserve"><value>No</value></data>
   <data name="Dialog.OK" xml:space="preserve"><value>OK</value></data>
