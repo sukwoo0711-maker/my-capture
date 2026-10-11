@@ -333,6 +333,12 @@ public sealed class GallerySourceDetailTests
         using Stream gallery = typeof(GallerySourceDetailTests).Assembly.GetManifestResourceStream("GalleryFixture.Window.xaml")!;
         XElement product = XDocument.Load(gallery).Root!;
         CopyNamespaces(product, combined);
+        // The inline detail action template uses the library's local hover wash.
+        // Keep the product style and its shared StateLayer.Hover base in this fixture.
+        XElement hoverWash = Assert.Single(product.Element(p + "Window.Resources")!
+            .Element(p + "ResourceDictionary")!.Elements(), element =>
+            (string?)element.Attribute(x + "Key") == "LibraryUx.HoverWash");
+        combined.Add(new XElement(hoverWash));
         combined.Add(new XElement(XName.Get("BoolToVisibilityConverter", "clr-namespace:MyCapture.App.Gallery;assembly=MyCapture"),
             new XAttribute(x + "Key", "BoolToVisibility")));
         XElement sourcePanel = Assert.Single(product.Descendants(p + "StackPanel"), element =>
