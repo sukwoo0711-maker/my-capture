@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -33,6 +34,7 @@ public static class ModernWindowChrome
     private const int DwmsbtNone = 1;
     private const int DwmWcpRound = 2;
     private const int DwmColorDefault = unchecked((int)0xFFFFFFFF);
+    private const int WmSysColorChange = 0x0015;
 
     // WPF clears every HWND to opaque black before drawing the window background (the
     // HwndSource composition target defaults to black), so a translucent glass Surface.Base
@@ -40,6 +42,7 @@ public static class ModernWindowChrome
     private static readonly ThemeColor ClientClearColor = ThemeColor.Rgb(0, 0, 0);
 
     private static readonly List<WeakReference<Window>> Tracked = [];
+    private static readonly ConditionalWeakTable<HwndSource, object> Hooked = new();
 
     public static readonly DependencyProperty EnabledProperty = DependencyProperty.RegisterAttached(
         "Enabled",
@@ -204,7 +207,7 @@ public static class ModernWindowChrome
         WindowIdentity.Attach(window);
         AppTheme theme = ThemeService.Current;
         WorkspaceRole role = GetWorkspaceRole(window);
-        WindowChromePlan plan = ResolveChrome(theme, role, SystemParameters.HighContrast);
+        WindowChromePlan plan = ResolveChrome(theme, role, ThemeService.IsSystemHighContrast);
 
         // Every palette paints its base surface, glass included. A transparent window would
         // show WPF's black clear colour, which no longer matched the Mica caption above it.
@@ -223,6 +226,14 @@ public static class ModernWindowChrome
         if (handle == IntPtr.Zero)
         {
             return;
+        }
+
+        // Switching between two contrast themes changes the system colours without toggling
+        // SystemParameters.HighContrast; the broadcast reaches every top-level window.
+        if (HwndSource.FromHwnd(handle) is { } source && !Hooked.TryGetValue(source, out _))
+        {
+            Hooked.Add(source, new object());
+            source.AddHook(OnWindowMessage);
         }
 
         int dark = plan.DarkMode ? 1 : 0;
@@ -251,6 +262,16 @@ public static class ModernWindowChrome
 
         int rounded = DwmWcpRound;
         _ = DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref rounded, sizeof(int));
+    }
+
+    private static IntPtr OnWindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == WmSysColorChange)
+        {
+            ThemeService.QueueSystemRefresh();
+        }
+
+        return IntPtr.Zero;
     }
 
     [StructLayout(LayoutKind.Sequential)]

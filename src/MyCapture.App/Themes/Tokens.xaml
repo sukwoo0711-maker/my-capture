@@ -24,7 +24,8 @@
     <Color x:Key="Primitive.Warm850">#FF151E2B</Color> <!-- controls / overlay -->
     <Color x:Key="Primitive.Warm800">#FF1B2636</Color> <!-- hover / floating -->
     <Color x:Key="Primitive.Warm700">#FF243246</Color> <!-- pressed -->
-    <Color x:Key="Primitive.Warm600">#FF475973</Color> <!-- strong boundary -->
+    <Color x:Key="Primitive.Warm600">#FF6A7B94</Color> <!-- strong boundary: hover, floating -->
+    <Color x:Key="Primitive.Warm550">#FF56677F</Color> <!-- control boundary -->
     <Color x:Key="Primitive.Warm500">#FF2B3A50</Color> <!-- subtle divider -->
     <Color x:Key="Primitive.Warm400">#FF8E9CAF</Color> <!-- muted text -->
     <Color x:Key="Primitive.Warm300">#FFC6D0DF</Color> <!-- secondary text -->
@@ -52,7 +53,7 @@
     <Color x:Key="Primitive.Graphite850">#FF151E2B</Color>
     <Color x:Key="Primitive.Graphite800">#FF1B2636</Color>
     <Color x:Key="Primitive.Graphite700">#FF243246</Color>
-    <Color x:Key="Primitive.Graphite600">#FF475973</Color>
+    <Color x:Key="Primitive.Graphite600">#FF6A7B94</Color>
     <Color x:Key="Primitive.Graphite500">#FF2B3A50</Color>
     <Color x:Key="Primitive.Graphite400">#FF8E9CAF</Color>
     <Color x:Key="Primitive.Graphite300">#FFC6D0DF</Color>
@@ -63,7 +64,7 @@
     <Color x:Key="Primitive.Slate850">#FF101722</Color>
     <Color x:Key="Primitive.Slate800">#FF151E2B</Color>
     <Color x:Key="Primitive.Slate700">#FF2B3A50</Color>
-    <Color x:Key="Primitive.Slate600">#FF475973</Color>
+    <Color x:Key="Primitive.Slate600">#FF6A7B94</Color>
     <Color x:Key="Primitive.Slate400">#FF8E9CAF</Color>
     <Color x:Key="Primitive.Slate300">#FFC6D0DF</Color>
     <Color x:Key="Primitive.Slate100">#FFF6F8FC</Color>
@@ -127,10 +128,22 @@
 
     <!-- ============================================================= -->
     <!-- Borders and focus                                             -->
+    <!--   Subtle   decorative panel, card and separator lines.         -->
+    <!--   Control  the rest outline of inputs and bordered buttons     -->
+    <!--            (3:1 on the panel surface where the palette allows).-->
+    <!--   Strong   hover and floating-surface boundary, >= Control.    -->
+    <!--   Hover    outline a hover layer adds; transparent except under -->
+    <!--            Windows contrast themes, where hover cannot recolour.-->
     <!-- ============================================================= -->
     <SolidColorBrush x:Key="Border.Subtle" Color="{StaticResource Primitive.Warm500}" />
+    <SolidColorBrush x:Key="Border.Control" Color="{StaticResource Primitive.Warm550}" />
     <SolidColorBrush x:Key="Border.Strong" Color="{StaticResource Primitive.Warm600}" />
+    <SolidColorBrush x:Key="Border.Hover" Color="Transparent" />
     <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Yellow300}" />
+    <!-- Focus ring weight; ThemeService doubles it for contrast themes. Rings are overlays, so
+         the weight never moves layout. -->
+    <Thickness x:Key="Focus.RingThickness">1</Thickness>
+    <sys:Double x:Key="Focus.RingWidth">1</sys:Double>
     <SolidColorBrush x:Key="Border.Accent" Color="{StaticResource Primitive.Yellow500}" />
     <SolidColorBrush x:Key="Border.Badge" Color="#66F6F8FC" />
     <!-- Library folder cards: warm surface, outline and glyph (ThemeService recolours all six palettes). -->

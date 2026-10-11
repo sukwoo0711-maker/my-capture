@@ -18,7 +18,7 @@ public sealed class ThemeOpacityTests
         surface.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "Crop.Scrim");
         bool highContrast = false, colorsUpdated = false, read = false;
         var dispatcher = Dispatcher.CurrentDispatcher;
-        var operation = ThemeService.ScheduleCropResourceRefresh(dispatcher, resources, () =>
+        var operation = ThemeService.ScheduleSystemThemeRefresh(dispatcher, resources, () =>
         {
             Assert.True(colorsUpdated); read = true; return highContrast;
         });

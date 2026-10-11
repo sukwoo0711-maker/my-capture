@@ -38,7 +38,7 @@ public sealed class Capture410AppTests
             StaTestHost.Run(() =>
             {
                 var dispatcher = Dispatcher.CurrentDispatcher;
-                var refresh = ThemeService.ScheduleCropResourceRefresh(dispatcher, new ResourceDictionary(), () => false);
+                var refresh = ThemeService.ScheduleSystemThemeRefresh(dispatcher, new ResourceDictionary(), () => false);
                 dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(() => { }));
                 Assert.Equal(DispatcherOperationStatus.Completed, refresh.Status);
             });
