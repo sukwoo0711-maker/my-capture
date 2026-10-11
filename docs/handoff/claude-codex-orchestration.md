@@ -171,6 +171,8 @@ R5 항목: 폴더 저장 스위치 슬라이드 애니메이션(803d727), 동영
 - 2026-10-12 Claude: 사용량 한도로 ⑫ 아이콘, ⑩ 라이브러리 페이드 하위 작업을 중단하고 WIP 커밋(qa6-icons 67377db, qa6-library-motion d7cd854).
 - 2026-10-12 Claude: 이 인계 문서를 작성하고, 오케스트레이터를 Codex로 넘김. Codex 작업 공간 `C:\GitRepositories\my-capture-codex`를 만들고 Codex 대화형 세션을 시작함.
 
+- 2026-10-12 Codex: 인계받음. HEAD `434ee12`, 통합 worktree `C:\GitRepositories\my-capture-codex`의 clean 상태와 WIP 두 worktree를 확인함. `git rev-parse`, `git status`, `git worktree list`, `git log origin/main..fix/realdevice-qa-round4` 확인 완료(exit 0); `Get-Process MyCapture`에서 실행 중인 MyCapture 없음. §4.1부터 아이콘·라이브러리 모션 WIP 완성, 통합 검증, 별도 Release 실기 빌드 순서로 진행함.
+
 ## 9. 인계 체크리스트
 
 **넘기는 쪽 (현재 오케스트레이터)**
