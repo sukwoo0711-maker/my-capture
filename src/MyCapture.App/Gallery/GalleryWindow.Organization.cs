@@ -4,6 +4,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
+using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
 
 namespace MyCapture.App.Gallery;
@@ -87,6 +88,8 @@ internal sealed class GalleryOrganizationDialog : Window
 {
     internal TextBox TitleInput { get; }
     internal TextBox TagsInput { get; }
+    internal Button SaveButton { get; }
+    internal Button CancelButton { get; }
     private bool _saving;
 
     internal GalleryOrganizationDialog(CaptureRecord record, Func<string, string, Task<bool>> save)
@@ -111,14 +114,15 @@ internal sealed class GalleryOrganizationDialog : Window
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
         AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Polite);
         content.Children.Add(error);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(24, 12, 24, 20) };
-        var cancel = new Button { Content = UiText.Get("Library.Action.Cancel"), IsCancel = true, MinWidth = 84,
-            Margin = new Thickness(0, 0, 8, 0) };
-        cancel.SetResourceReference(StyleProperty, "Button.Secondary");
-        var apply = new Button { Content = UiText.Get("Library.Action.Save"), IsDefault = true, MinWidth = 84 };
-        apply.SetResourceReference(StyleProperty, "Button.Primary");
-        buttons.Children.Add(cancel); buttons.Children.Add(apply);
+        // Save first, then cancel, like every other dialog in the app.
+        var apply = ThemedDialog.CreateActionButton(UiText.Get("Library.Action.Save"), primary: true);
+        apply.IsDefault = true;
+        var cancel = ThemedDialog.CreateActionButton(UiText.Get("Library.Action.Cancel"), primary: false);
+        cancel.IsCancel = true;
+        SaveButton = apply;
+        CancelButton = cancel;
+        WrapPanel buttons = ThemedDialog.CreateActionRow(apply, cancel);
+        buttons.Margin = new Thickness(24, 8, 24, 20);
         var shell = new DockPanel();
         DockPanel.SetDock(buttons, Dock.Bottom);
         shell.Children.Add(buttons);
