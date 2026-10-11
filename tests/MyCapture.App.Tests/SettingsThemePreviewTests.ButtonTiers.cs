@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -41,14 +41,15 @@ public sealed partial class SettingsThemePreviewTests
         {
             ShortcutPresentation.ReadEnabled = () => settings.General.ShowShortcutHints;
             ShortcutPresentation.Refresh();
-            var button = new Button { Content = "Undo", ToolTip = "Undo the last change" };
-            ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "Undo");
+            // A single-key command: key combinations such as Ctrl+Z are never printed, only shown in the tooltip.
+            var button = new Button { Content = "Rotate", ToolTip = "Rotate left" };
+            ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "RotateLeft");
             TextBlock caption = Assert.IsType<StackPanel>(button.Content).Children.OfType<TextBlock>().Last();
-            Assert.Equal("Ctrl+Z", caption.Text);
+            Assert.Equal("Q", caption.Text);
             Assert.Equal(expected, caption.Visibility);
             // The key stays discoverable either way: tooltip and accelerator property.
-            Assert.Equal("Undo the last change (Ctrl+Z)", button.ToolTip);
-            Assert.Equal("Ctrl+Z", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(button));
+            Assert.Equal("Rotate left (Q)", button.ToolTip);
+            Assert.Equal("Q", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(button));
         }
         ShortcutPresentation.ReadEnabled = null;
     }
@@ -68,10 +69,11 @@ public sealed partial class SettingsThemePreviewTests
                 ("Button.GhostCompact", ButtonTier.Borderless, null),
                 ("Button.Danger", ButtonTier.Borderless, null),
                 ("Button.Icon", ButtonTier.Borderless, null),
-                // Editor buttons that carry a key caption keep the same rule.
-                ("Button.Ghost", ButtonTier.Borderless, "Redo"),
-                ("Button.Secondary", ButtonTier.Bordered, "Privacy"),
-                ("Button.Primary", ButtonTier.Filled, "Done"),
+                // Editor buttons that carry a key caption keep the same rule. Only single keys are
+                // printed under a command, so the samples use Q, W and Del.
+                ("Button.Ghost", ButtonTier.Borderless, "RotateLeft"),
+                ("Button.Secondary", ButtonTier.Bordered, "RotateRight"),
+                ("Button.Primary", ButtonTier.Filled, "Delete"),
             };
 
             foreach (AppTheme theme in SettingsUxEvidenceThemes)

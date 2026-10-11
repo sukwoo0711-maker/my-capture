@@ -15,8 +15,8 @@ using static MyCapture.App.Tests.VideoEditorUxTrimTests;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Always-visible key captions read at the caption size (12), long key combinations live in
-/// the tooltip only, and the larger captions still fit the video editor's command rows and
+/// Always-visible key captions read at the caption size (12), key combinations live in the
+/// tooltip only, and the larger captions still fit the video editor's command rows and
 /// the quick access card.
 /// </summary>
 public sealed class ShortcutCaptionTests
@@ -33,13 +33,15 @@ public sealed class ShortcutCaptionTests
     }
 
     [Theory]
-    [InlineData("Annotation", "Undo", true)]
-    [InlineData("Annotation", "Copy", true)]
+    [InlineData("Annotation", "Undo", false)]
+    [InlineData("Annotation", "Copy", false)]
     [InlineData("Annotation", "Rectangle", true)]
     [InlineData("Annotation", "Done", false)]
     [InlineData("Annotation", "Privacy", false)]
     [InlineData("Video", "Play", true)]
-    [InlineData("Video", "AddText", true)]
+    [InlineData("Video", "PreviousFrame", true)]
+    [InlineData("Video", "Undo", false)]
+    [InlineData("Video", "AddText", false)]
     [InlineData("Video", "ZoomIn", false)]
     [InlineData("Video", "ZoomOut", false)]
     [InlineData("QuickAccess", "Copy", true)]
@@ -138,6 +140,8 @@ public sealed class ShortcutCaptionTests
             }
 
             Assert.True(captions >= 8, $"{captions} captions");
+            // The larger captions never cost the bar its trim and add-text tools.
+            Assert.True(editor.CommandBarLevelForTest <= 3, $"{language} {width}: bar level {editor.CommandBarLevelForTest}");
             // The frame steps say what they do, and keep their keys in the tooltip.
             foreach (var (nameKey, labelKey, key) in new[]
             {

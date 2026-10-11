@@ -23,16 +23,15 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
     internal static void Refresh() => Current.PropertyChanged?.Invoke(Current, new(nameof(HintVisibility)));
 
     /// <summary>
-    /// Whether a key is short enough to print under its command at all times: one key, or one
-    /// modifier with a letter or digit (Ctrl+Z). Longer combinations such as Ctrl+Enter or
-    /// Ctrl+Shift+R stay in the tooltip and the accelerator key, where they can be read.
+    /// Whether a key is printed under its command at all times: only a single key (V, X,
+    /// Space, Home). Key combinations stay in the tooltip and the accelerator key. Ctrl+Z or
+    /// Ctrl+C are the same in every program, and at a readable 12 px even the short ones
+    /// widened the video editor's bar until its trim and text tools no longer fit at 760 DIP.
     /// </summary>
     internal static bool ShowsCaption(ShortcutDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        int modifiers = System.Numerics.BitOperations.PopCount((uint)definition.Modifiers);
-        return modifiers == 0
-            || (modifiers == 1 && definition.Key is >= Key.A and <= Key.Z or >= Key.D0 and <= Key.D9);
+        return definition.Modifiers == ModifierKeys.None;
     }
 
     internal static TextBlock Hint(ShortcutScope scope, string command)
