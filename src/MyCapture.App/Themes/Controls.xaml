@@ -1121,11 +1121,41 @@
     </Style>
 
     <!-- ============================================================= -->
-    <!-- Reusable icon glyph styles (consume Symbols.xaml geometries)   -->
-    <!--   Outlined 20x20 family, stroked with a consistent ~1.6px weight.-->
-    <!--   Usage: <Path Style="{StaticResource Icon.Glyph}"             -->
-    <!--               Data="{StaticResource Icon.Save}"/>              -->
+    <!-- Reusable icon styles (consume Symbols.xaml geometries)          -->
+    <!--   themes:SymbolIcon draws the 20x20 grid scaled as a whole, so   -->
+    <!--   every glyph keeps its proportions and one size has one stroke. -->
+    <!--   Sizes: 16 menus/inline, 20 commands, 12-14 only for badges.    -->
+    <!--   Usage: <themes:SymbolIcon Style="{StaticResource Icon.Symbol}" -->
+    <!--               Data="{StaticResource Icon.Save}" Size="20"/>       -->
+    <!--   Without a style the stroke follows the control's Foreground.   -->
     <!-- ============================================================= -->
+    <Style x:Key="Icon.Symbol" TargetType="themes:SymbolIcon">
+        <Setter Property="Size" Value="20" />
+        <Setter Property="Stroke" Value="{DynamicResource Text.Secondary}" />
+    </Style>
+    <Style x:Key="Icon.Symbol.Primary" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
+        <Setter Property="Stroke" Value="{DynamicResource Text.Primary}" />
+    </Style>
+    <Style x:Key="Icon.Symbol.Muted" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
+        <Setter Property="Stroke" Value="{DynamicResource Text.Muted}" />
+    </Style>
+    <Style x:Key="Icon.Symbol.Accent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
+        <Setter Property="Stroke" Value="{DynamicResource Accent.Default}" />
+    </Style>
+    <Style x:Key="Icon.Symbol.OnAccent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
+        <Setter Property="Stroke" Value="{DynamicResource Text.OnAccent}" />
+    </Style>
+    <Style x:Key="Icon.Symbol.Danger" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
+        <Setter Property="Stroke" Value="{DynamicResource State.DangerHover}" />
+    </Style>
+    <Style x:Key="Icon.Symbol.Filled" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
+        <Setter Property="Fill" Value="{DynamicResource Text.Secondary}" />
+        <Setter Property="StrokeThickness" Value="0.6" />
+    </Style>
+
+    <!-- Legacy Path glyph styles. Stretch="Uniform" fits each glyph's own bounds, so
+         narrow and wide symbols render at different sizes and weights; new code uses the
+         Icon.Symbol styles above. Kept only until the remaining Path consumers move over. -->
     <Style x:Key="Icon.Glyph" TargetType="Path">
         <Setter Property="Width" Value="20" />
         <Setter Property="Height" Value="20" />
@@ -1173,7 +1203,7 @@
     </Style>
 
     <!-- Icon-only button: square hit target, transparent chrome, glyph inherits colour.
-         Consumers set Content to a Path using an Icon.Glyph* style and MUST supply
+         Consumers set Content to a themes:SymbolIcon (stroke follows Foreground) and MUST supply
          AutomationProperties.Name + ToolTip for accessibility. -->
     <Style x:Key="Button.Icon" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
         <Setter Property="MinWidth" Value="{DynamicResource Size.HitTarget}" />

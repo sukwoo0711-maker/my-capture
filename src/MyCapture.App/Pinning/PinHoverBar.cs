@@ -221,12 +221,13 @@ internal sealed class PinHoverBar : Window
         };
         button.SetResourceReference(StyleProperty, "Button.Ghost");
         var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        Path path = Glyph(glyph, 16);
-        path.SetBinding(Shape.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = button });
-        content.Children.Add(path);
+        SymbolIcon icon = Glyph(glyph, SymbolIcon.InlineSize);
+        icon.SetBinding(SymbolIcon.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = button });
+        content.Children.Add(icon);
         if (showLabel)
         {
-            var label = new TextBlock { Text = name, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            // The glyph's inset on its 20x20 grid is part of the gap to the name.
+            var label = new TextBlock { Text = name, Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             _labels.Add(label);
             content.Children.Add(label);
         }
@@ -239,16 +240,12 @@ internal sealed class PinHoverBar : Window
         return button;
     }
 
-    private static Path Glyph(Geometry geometry, double size)
+    private static SymbolIcon Glyph(Geometry geometry, double size)
     {
-        var path = new Path
-        {
-            Data = geometry, Width = size, Height = size, Stretch = Stretch.Uniform, StrokeThickness = 1.6,
-            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        path.SetResourceReference(Shape.StrokeProperty, "Text.Primary");
-        return path;
+        SymbolIcon icon = SymbolIcon.Create(geometry, size);
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        icon.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Primary");
+        return icon;
     }
 
     private static Geometry SymbolGeometry(string key) =>

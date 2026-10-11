@@ -28,10 +28,11 @@ internal sealed class QuickAccessWindow : Window
         TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
         LineStackingStrategy = LineStackingStrategy.BlockLineHeight, LineHeight = StatusLineHeight, MaxHeight = StatusLineHeight * 2,
     };
-    private readonly System.Windows.Shapes.Path _statusGlyph = new()
+    // Inline with the status text, on the shared 20x20 grid at its inline size. The glyph's own
+    // inset on the grid is part of the gap, so the margin is smaller than a filled box needs.
+    private readonly SymbolIcon _statusGlyph = new()
     {
-        Width = 14, Height = 14, Stretch = Stretch.Uniform, StrokeThickness = 1.6, Margin = new Thickness(0, 1, 6, 0),
-        VerticalAlignment = VerticalAlignment.Center, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+        Size = SymbolIcon.InlineSize, Margin = new Thickness(0, 1, 3, 0), VerticalAlignment = VerticalAlignment.Center,
     };
     private readonly DockPanel _statusRow = new() { Margin = new Thickness(2, 0, 8, 0), Visibility = Visibility.Collapsed };
     private readonly DispatcherTimer _progressReveal = new() { Interval = FeedbackTiming.ProgressRevealDelay };
@@ -99,7 +100,7 @@ internal sealed class QuickAccessWindow : Window
         var close = Button("Dialog.Close", Close);
         close.Content = Glyph("Icon.Close");
         close.Width = 26; close.Height = 26; close.MinHeight = 0; close.MinWidth = 0;
-        close.Padding = new Thickness(4); close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.Padding = new Thickness(3); close.HorizontalAlignment = HorizontalAlignment.Right;
         close.VerticalAlignment = VerticalAlignment.Top;
         close.SetResourceReference(StyleProperty, "Button.Ghost");
         // The status shares the close button's row, so a one-line message never moves the actions.
@@ -161,7 +162,8 @@ internal sealed class QuickAccessWindow : Window
             // Names use the caption size, so the always-visible key letter is never larger than the name.
             var name = new TextBlock
             {
-                Text = AutomationProperties.GetName(button), Margin = new Thickness(0, 3, 0, 0),
+                // The 20 grid already leaves room under the glyph; the face keeps its old height.
+                Text = AutomationProperties.GetName(button), Margin = new Thickness(0, 1, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
             };
             name.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
@@ -301,12 +303,13 @@ internal sealed class QuickAccessWindow : Window
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers) => ShortcutCatalog.Execute(ShortcutScope.QuickAccess, key, modifiers, _actions);
 
-    private FrameworkElement Glyph(string key)
+    /// <summary>A command glyph on the shared 20x20 grid: close, keep and the four actions.</summary>
+    private SymbolIcon Glyph(string key)
     {
         Geometry geometry = TryFindResource(key) as Geometry ?? Geometry.Parse("M4,4 H16 V16 H4 Z");
-        var path = new System.Windows.Shapes.Path { Data = geometry, StrokeThickness = 1.6, Stretch = Stretch.Uniform, Width = 18, Height = 18 };
-        path.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Text.Primary");
-        return path;
+        SymbolIcon icon = SymbolIcon.Create(geometry, SymbolIcon.CommandSize);
+        icon.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Primary");
+        return icon;
     }
 
     private IntPtr NoActivateHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -460,7 +463,7 @@ internal sealed class QuickAccessWindow : Window
             FeedbackKind.ActionRequired => FailureGlyph,
             _ => null,
         };
-        _statusGlyph.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, failed ? "State.Danger" : "State.Success");
+        _statusGlyph.SetResourceReference(SymbolIcon.StrokeProperty, failed ? "State.Danger" : "State.Success");
         _statusGlyph.Visibility = _statusGlyph.Data is null ? Visibility.Collapsed : Visibility.Visible;
         _statusRow.Visibility = Visibility.Visible;
         if (kind != FeedbackKind.Progress)
