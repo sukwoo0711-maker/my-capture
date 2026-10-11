@@ -279,21 +279,6 @@ public sealed partial class SettingsThemePreviewTests
         Assert.True(condition(), "timed out");
     }
 
-    private static BitmapSource RenderAtDpi(Window window, int dpi)
-    {
-        Drain(window);
-        double scale = dpi / 96.0;
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth * scale), (int)Math.Ceiling(window.ActualHeight * scale),
-            dpi, dpi, PixelFormats.Pbgra32);
-        var backdrop = new DrawingVisual();
-        using (DrawingContext context = backdrop.RenderOpen())
-            context.DrawRectangle((Brush)window.FindResource("Surface.Base"), null, new Rect(0, 0, window.ActualWidth, window.ActualHeight));
-        bitmap.Render(backdrop);
-        bitmap.Render(window);
-        bitmap.Freeze();
-        return bitmap;
-    }
-
     private static void Qa6Pump(TimeSpan duration)
     {
         var frame = new System.Windows.Threading.DispatcherFrame();
