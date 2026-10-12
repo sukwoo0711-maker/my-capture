@@ -1186,20 +1186,12 @@ internal sealed class AnnotationEditorControl : Grid
         // rotated bitmap; the untouched selection would yield the wrong region (or read
         // past its bounds, because the clamp above uses the rotated canvas size).
         BitmapSource cropBase = _surface.Frame.Bitmap;
-        int stride = cropBase.PixelWidth * 4;
-        byte[] source = new byte[stride * cropBase.PixelHeight];
-        cropBase.CopyPixels(source, stride, 0);
-
         int x = (int)Math.Floor(normalized.X);
         int y = (int)Math.Floor(normalized.Y);
         int width = (int)Math.Ceiling(normalized.Width);
         int height = (int)Math.Ceiling(normalized.Height);
         int cropStride = width * 4;
-        byte[] crop = new byte[cropStride * height];
-        for (int row = 0; row < height; row++)
-        {
-            Buffer.BlockCopy(source, ((y + row) * stride) + (x * 4), crop, row * cropStride, width * 4);
-        }
+        byte[] crop = ReadCropPixels(cropBase, x, y, width, height);
 
         var cropped = BitmapSource.Create(
             width,
@@ -2660,10 +2652,6 @@ internal sealed class AnnotationEditorControl : Grid
     private void ApplyCropFromOriginal(int width, int height, BitmapSource baseBitmap)
     {
         PointD origin = _controller.CropOrigin;
-        int stride = baseBitmap.PixelWidth * 4;
-        byte[] source = new byte[stride * baseBitmap.PixelHeight];
-        baseBitmap.CopyPixels(source, stride, 0);
-
         int x = Math.Clamp((int)Math.Round(origin.X), 0, baseBitmap.PixelWidth - 1);
         int y = Math.Clamp((int)Math.Round(origin.Y), 0, baseBitmap.PixelHeight - 1);
         width = Math.Min(width, baseBitmap.PixelWidth - x);
@@ -2674,11 +2662,7 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         int cropStride = width * 4;
-        byte[] crop = new byte[cropStride * height];
-        for (int row = 0; row < height; row++)
-        {
-            Buffer.BlockCopy(source, ((y + row) * stride) + (x * 4), crop, row * cropStride, width * 4);
-        }
+        byte[] crop = ReadCropPixels(baseBitmap, x, y, width, height);
 
         var cropped = BitmapSource.Create(
             width,
@@ -2691,6 +2675,29 @@ internal sealed class AnnotationEditorControl : Grid
             cropStride);
         cropped.Freeze();
         SwapBaseBitmap(cropped, new RectD(0, 0, width, height));
+    }
+
+    private static byte[] ReadCropPixels(BitmapSource bitmap, int x, int y, int width, int height)
+    {
+        int cropStride = width * 4;
+        byte[] crop = new byte[cropStride * height];
+        if (bitmap.Format.BitsPerPixel == 32)
+        {
+            // Read only the selected pixels, including on history restoration. Keep the
+            // raw channel bytes: the crop's existing output format and DPI stay unchanged.
+            bitmap.CopyPixels(new Int32Rect(x, y, width, height), crop, cropStride, 0);
+        }
+        else
+        {
+            // Preserve the existing four-byte addressing for other source formats. A
+            // format correction would change pixels and is separate from this optimization.
+            int stride = bitmap.PixelWidth * 4;
+            byte[] source = new byte[stride * bitmap.PixelHeight];
+            bitmap.CopyPixels(source, stride, 0);
+            for (int row = 0; row < height; row++)
+                Buffer.BlockCopy(source, ((y + row) * stride) + (x * 4), crop, row * cropStride, cropStride);
+        }
+        return crop;
     }
 
     private void RefreshHistoryButtons()
