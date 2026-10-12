@@ -288,17 +288,22 @@ public sealed partial class SettingsThemePreviewTests
                 var dialog = NewLegacyWindow(LegacyOperations(service, (_, _, _) => Task.FromResult(new LegacyMigrationResult(LegacyMigrationStatus.Completed))));
                 dialog.Width = 420;
                 dialog.Show(); Drain(dialog);
-                foreach (Button button in Descendants(dialog).OfType<Button>())
+                foreach (int height in new[] { 500, 430 })
                 {
-                    Rect bounds = button.TransformToAncestor(dialog).TransformBounds(new Rect(button.RenderSize));
-                    Assert.True(bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= dialog.ActualWidth
-                        && bounds.Bottom <= dialog.ActualHeight, $"Import button outside dialog: {bounds}");
+                    dialog.Height = height; Drain(dialog);
+                    foreach (Button button in Descendants(dialog).OfType<Button>())
+                    {
+                        Rect bounds = button.TransformToAncestor(dialog).TransformBounds(new Rect(button.RenderSize));
+                        Assert.True(bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= dialog.ActualWidth
+                            && bounds.Bottom <= dialog.ActualHeight, $"Import button outside dialog: {bounds}");
+                    }
+                    TextBlock status = LegacyField<TextBlock>(dialog, "_status");
+                    Rect statusBounds = status.TransformToAncestor(dialog).TransformBounds(new Rect(status.RenderSize));
+                    Assert.True(statusBounds.Top >= 0 && statusBounds.Bottom < dialog.ActualHeight);
+                    Assert.NotEmpty(status.Text);
+                    Assert.DoesNotContain(status, Descendants(Descendants(dialog).OfType<ScrollViewer>().Single()));
+                    SaveStoreUpdateEvidence(dialog, $"legacy-dialog-{locale}-{theme}-420x{height}.png");
                 }
-                TextBlock status = LegacyField<TextBlock>(dialog, "_status");
-                Rect statusBounds = status.TransformToAncestor(dialog).TransformBounds(new Rect(status.RenderSize));
-                Assert.True(statusBounds.Top >= 0 && statusBounds.Bottom < dialog.ActualHeight);
-                Assert.NotEmpty(status.Text);
-                SaveStoreUpdateEvidence(dialog, $"legacy-dialog-{locale}-{theme}-420x500.png");
                 dialog.Close();
             }
         }
