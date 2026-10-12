@@ -100,6 +100,12 @@ public sealed record VideoEncoderOptions(
     public int? ConstantQuality { get; init; }
 
     /// <summary>
+    /// Encoder effort for <see cref="ConstantQuality"/> from 0 (fastest) to 100 (best); null keeps
+    /// the encoder's default. A higher value also clears faint residue where content disappears.
+    /// </summary>
+    public int? QualityVsSpeed { get; init; }
+
+    /// <summary>
     /// A frame-size- and rate-aware default bitrate when none is specified.
     /// </summary>
     /// <remarks>

@@ -50,6 +50,7 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     private static readonly Guid MF_MT_MPEG2_PROFILE = new("ad76a80b-2d5c-4e0b-b375-64e520137036");
     private static readonly Guid CODECAPI_AVEncCommonRateControlMode = new("1c0608e9-370c-4710-8a58-cb6181c42423");
     private static readonly Guid CODECAPI_AVEncCommonQuality = new("fcbf57a3-7ea5-4b0c-9644-69b40c39c391");
+    private static readonly Guid CODECAPI_AVEncCommonQualityVsSpeed = new("98332df8-03cd-476b-89fa-3f9e442dec9f");
 
     private const uint MFVideoInterlace_Progressive = 2;
     private const uint eAVEncCommonRateControlMode_Quality = 3;
@@ -185,6 +186,11 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             Guid level = CODECAPI_AVEncCommonQuality;
             Check(parameters.SetUINT32(ref mode, eAVEncCommonRateControlMode_Quality), "IMFAttributes.SetUINT32(rate control)");
             Check(parameters.SetUINT32(ref level, (uint)Math.Clamp(quality, 1, 100)), "IMFAttributes.SetUINT32(quality)");
+            if (_options.QualityVsSpeed is { } effort)
+            {
+                Guid speed = CODECAPI_AVEncCommonQualityVsSpeed;
+                Check(parameters.SetUINT32(ref speed, (uint)Math.Clamp(effort, 0, 100)), "IMFAttributes.SetUINT32(quality vs speed)");
+            }
             pointer = Marshal.GetComInterfaceForObject(parameters, typeof(IMFAttributes));
             Check(_writer!.SetInputMediaType(_streamIndex, inType, pointer), nameof(IMFSinkWriter.SetInputMediaType));
         }
