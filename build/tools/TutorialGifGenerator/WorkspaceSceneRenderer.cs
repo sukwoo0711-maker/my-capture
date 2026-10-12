@@ -63,11 +63,11 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
         _menuTarget = Add(menuPoint, _menuRect.Location);
         _pin = WindowContent(pin, _pinImage.PixelWidth, _pinImage.PixelHeight);
         double pinHeight = Math.Min(98, 310d * _pin.PixelHeight / _pin.PixelWidth);
-        _pinRect = new Rect(175, 141, 310, pinHeight);
+        _pinRect = new Rect(175, Id == "pin-copy" ? 104 : 141, 310, pinHeight);
         var bar = new PinHoverBar();
         FrameworkElement barRoot = (FrameworkElement)bar.Content;
         _bar = Snapshot(barRoot, 335);
-        _barRect = new Rect(158, 78, 335, _bar.PixelHeight);
+        _barRect = new Rect(158, Id == "pin-copy" ? Math.Max(4, _pinRect.Top - _bar.PixelHeight - 6) : 78, 335, _bar.PixelHeight);
         _barSave = Add(Center(bar.SaveButton, barRoot), _barRect.Location);
         bar.Content = null; bar.Close();
         var quick = new QuickAccessWindow(_pinImage, () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
@@ -220,10 +220,11 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
                 Move("restore-tray", "핀 다시 열기 항목으로 이동", "Point to Reopen pin", Start, _trayTarget); Click("restore-tray", "핀 다시 열기 선택", "Click Reopen pin", _trayTarget);
                 Finish("pin", "닫은 핀이 같은 내용과 위치로 복원됨", "The same pin returns to its previous position", _trayTarget); break;
             case "pin-copy":
+                PointD copyTarget = new(_pinRect.X + _pinRect.Width / 3, _pinRect.Y + _pinRect.Height / 2);
                 Hold("pin", "복사할 핀 선택", "Select the pin to copy", 90, Start);
-                Move("pin", "핀으로 이동", "Point to the pin", Start, new(265, 180)); Click("pin", "핀 선택", "Focus the pin", new(265, 180));
-                Hold("pin-copied", "Ctrl+C로 핀 이미지 복사", "Press Ctrl+C to copy the pin image", 120, new(265, 180), "Ctrl+C");
-                Move("paste-ready", "붙여 넣을 메모로 이동", "Move to the destination note", new(265, 180), PinNote); Click("paste-ready", "메모 입력 영역 선택", "Click the note input area", PinNote);
+                Move("pin", "핀으로 이동", "Point to the pin", Start, copyTarget); Click("pin", "핀 선택", "Focus the pin", copyTarget);
+                Hold("pin-copied", "Ctrl+C로 핀 이미지 복사", "Press Ctrl+C to copy the pin image", 120, copyTarget, "Ctrl+C");
+                Move("paste-ready", "붙여 넣을 메모로 이동", "Move to the destination note", copyTarget, PinNote); Click("paste-ready", "메모 입력 영역 선택", "Click the note input area", PinNote);
                 Hold("pasted", "Ctrl+V로 이미지 붙여넣기", "Press Ctrl+V to paste the image", 100, PinNote, "Ctrl+V");
                 Finish("pasted", "핀 이미지를 메모에 붙여넣음 · 핀 유지", "The pin image is pasted; the pin stays open", PinNote); break;
             case "pin-save":
@@ -343,7 +344,7 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
         }
         if (state == "pin-menu") dc.DrawImage(_pinMenu, _menuRect);
         if (state is "pin-copied" or "pin-saving") Status(dc, L(_ko, state == "pin-copied" ? "이미지 복사됨" : "이미지 저장 중", state == "pin-copied" ? "Image copied" : "Saving image"));
-        if (state is "paste-ready" or "pasted") DrawNote(dc, state == "pasted", new Rect(42, 233, 552, 70));
+        if (state is "paste-ready" or "pasted") DrawNote(dc, state == "pasted", new Rect(42, 207, 552, 96));
         if (state == "pin-saved")
         {
             dc.DrawRoundedRectangle(Brush("Surface.Floating"), new Pen(Brush("Border.Control"), 1), new Rect(42, 238, 552, 66), 7, 7);
@@ -357,7 +358,13 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
     {
         dc.DrawRoundedRectangle(Brush("Surface.Floating"), new Pen(Brush("Border.Control"), 1), bounds, 7, 7);
         Text(dc, L(_ko, "메모", "Note"), bounds.X + 14, bounds.Y + 8, 14, Brush("Text.Secondary"));
-        if (pasted) dc.DrawImage(_pinImage, new Rect(bounds.X + 16, bounds.Y + 28, Math.Min(310, bounds.Width - 32), Math.Min(82, bounds.Height - 34)));
+        if (pasted)
+        {
+            double scale = Math.Min(Math.Min(310, bounds.Width - 32) / _pinImage.PixelWidth,
+                (bounds.Height - 34) / _pinImage.PixelHeight);
+            dc.DrawImage(_pinImage, new Rect(bounds.X + 16, bounds.Y + 28,
+                _pinImage.PixelWidth * scale, _pinImage.PixelHeight * scale));
+        }
         else dc.DrawLine(new Pen(Brush("Text.Primary"), 1.5), new Point(bounds.X + 16, bounds.Y + 32), new Point(bounds.X + 16, bounds.Y + 49));
     }
     private BitmapSource Library(bool newFolder = false, bool renamed = false, bool moved = false, bool removed = false, bool selected = false, bool selectedFolder = false, bool movedAway = false) => DrawScene(dc =>
