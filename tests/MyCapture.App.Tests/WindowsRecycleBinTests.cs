@@ -8,6 +8,24 @@ namespace MyCapture.App.Tests;
 
 public sealed class WindowsRecycleBinTests
 {
+    [Fact]
+    public void ShellComFailure_PreservesNativeCauseWithinIOExceptionContract()
+    {
+        var native = new System.Runtime.InteropServices.COMException("Locked recycle target", unchecked((int)0x80270027));
+        var error = Assert.Throws<IOException>(() => WindowsRecycleBin.RunShellOperation<int>(() => throw native));
+        Assert.Same(native, error.InnerException);
+        Assert.Equal(unchecked((int)0x80270027), error.InnerException!.HResult);
+    }
+
+    [Fact]
+    public void ExistingFilesystemAndTimeoutFailures_PreserveTheirOriginalContract()
+    {
+        var io = new IOException("Retain recovery journal");
+        Assert.Same(io, Assert.Throws<IOException>(() => WindowsRecycleBin.RunShellOperation<int>(() => throw io)));
+        var timeout = new TimeoutException("Bounded lookup deadline");
+        Assert.Same(timeout, Assert.Throws<TimeoutException>(() => WindowsRecycleBin.RunShellOperation<int>(() => throw timeout)));
+    }
+
     [RecycleBinCanaryFact]
     public void OwnedDirectory_RoundTrip_ConflictsDoNotOverwrite_AndRestoredShellItemIsUnavailable()
     {

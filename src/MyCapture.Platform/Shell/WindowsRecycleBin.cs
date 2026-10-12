@@ -241,9 +241,21 @@ public sealed class WindowsRecycleBin : IRecoverableTrash
     }
 
     private static bool Exists(string path) => File.Exists(path) || Directory.Exists(path);
+    internal static T RunShellOperation<T>(Func<T> run)
+    {
+        try { return run(); }
+        catch (COMException error)
+        {
+            // Shell failures (including locked targets) are filesystem operation failures.
+            // Keep the native HRESULT/cause for diagnostics while callers retain their
+            // existing IOException-based preservation and recovery-journal contract.
+            throw new IOException("The Windows Shell could not complete the recoverable filesystem operation.", error);
+        }
+    }
+
     private static T OnSta<T>(Func<T> run)
     {
-        if (_insideShellThread) return run();
+        if (_insideShellThread) return RunShellOperation(run);
         lock (ShellGate)
         {
             T result = default!;
@@ -251,7 +263,7 @@ public sealed class WindowsRecycleBin : IRecoverableTrash
             var thread = new Thread(() =>
             {
                 _insideShellThread = true;
-                try { result = run(); } catch (Exception ex) { failure = ExceptionDispatchInfo.Capture(ex); }
+                try { result = RunShellOperation(run); } catch (Exception ex) { failure = ExceptionDispatchInfo.Capture(ex); }
                 finally { _insideShellThread = false; }
             });
             thread.SetApartmentState(ApartmentState.STA);
