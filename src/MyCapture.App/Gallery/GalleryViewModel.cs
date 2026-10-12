@@ -126,6 +126,16 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         PublishSelection();
     }
 
+    /// <summary>Selects the displayed captures without rebuilding their unchanged library view.</summary>
+    public void SelectAllVisible()
+    {
+        Selection.SelectGroup(_groups.SelectMany(g => g.Items).Select(t => t.Id), control: false);
+        // Keep the visibility/anchor normalization formerly performed by Refresh,
+        // including when a caller has changed the public Selection's visible list.
+        Selection.SetVisible(_groups.SelectMany(g => g.Items).Select(t => t.Id));
+        PublishSelection();
+    }
+
     private void PublishSelection()
     {
         foreach (GalleryItemViewModel tile in _tileCache.Values) tile.IsSelected = Selection.Contains(tile.Id);

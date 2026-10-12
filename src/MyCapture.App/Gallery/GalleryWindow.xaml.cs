@@ -499,8 +499,7 @@ internal sealed partial class GalleryWindow : Window
         switch (e.Key)
         {
             case Key.A when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
-                _viewModel.Selection.SelectGroup(_viewModel.Groups.SelectMany(g => g.Items).Select(t => t.Id), false);
-                _viewModel.Refresh();
+                _viewModel.SelectAllVisible();
                 e.Handled = true;
                 break;
             // Plain Up/Down can leave the tiles for the folder cards above them; range
