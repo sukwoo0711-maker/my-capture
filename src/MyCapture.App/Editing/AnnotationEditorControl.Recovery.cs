@@ -9,6 +9,7 @@ namespace MyCapture.App.Editing;
 
 internal sealed partial class AnnotationEditorControl
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<BitmapSource, Lazy<byte[]>> DraftPngCache = new();
     internal event EventHandler? DraftChanged;
     internal Task<DraftSnapshot?> CaptureDraftAsync()
     {
@@ -33,7 +34,7 @@ internal sealed partial class AnnotationEditorControl
         }
         return Threading.StaThreadTask.RunAsync<DraftSnapshot?>(() =>
         {
-            var files = bitmaps.ToDictionary(x => x.Key, x => EncodeDraftBitmap(x.Value));
+            var files = bitmaps.ToDictionary(x => x.Key, x => EncodeCachedDraftBitmap(x.Value));
             return new DraftSnapshot("image", json, metadata, files);
         }, "MyCapture image draft encoder");
     }
@@ -47,6 +48,9 @@ internal sealed partial class AnnotationEditorControl
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using var stream = new MemoryStream(); encoder.Save(stream); return stream.ToArray();
     }
+    internal static byte[] EncodeCachedDraftBitmap(BitmapSource bitmap) => bitmap.IsFrozen
+        ? DraftPngCache.GetValue(bitmap, image => new Lazy<byte[]>(() => EncodeDraftBitmap(image))).Value
+        : EncodeDraftBitmap(bitmap);
     internal void RestorePendingDraftCrop(string json)
     {
         _crop = new CropSelection(_canvasWidth, _canvasHeight);

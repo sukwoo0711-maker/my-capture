@@ -110,12 +110,14 @@ public partial class App
     }
     private void OpenRecoveredImage(EditDraft draft, string directory)
     {
-        var bitmap = LoadDraftBitmap(Path.Combine(directory, "base.png"));
-        var original = LoadDraftBitmap(Path.Combine(directory, "original.png"));
+        string basePath = DraftStore!.ResolveFile(draft, "base.png");
+        string originalPath = DraftStore.ResolveFile(draft, "original.png");
+        var bitmap = LoadDraftBitmap(basePath);
+        var original = string.Equals(basePath, originalPath, StringComparison.OrdinalIgnoreCase) ? bitmap : LoadDraftBitmap(originalPath);
         AnnotationDocument document = AnnotationDocument.TryFromJson(draft.Document) ?? throw new IOException("Invalid draft document.");
         var assets = draft.Metadata.Where(x => x.Key.StartsWith("asset:", StringComparison.Ordinal))
             .ToDictionary(x => x.Key[6..], x => draft.Files.ContainsKey(x.Value)
-                ? LoadDraftBitmap(Path.Combine(directory, x.Value)) : throw new IOException("Invalid draft asset reference."));
+                ? LoadDraftBitmap(DraftStore.ResolveFile(draft, x.Value)) : throw new IOException("Invalid draft asset reference."));
         var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
         var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, original,
             initialDocument: document, initialAssets: assets, sourceWindowTitle: draft.Metadata.GetValueOrDefault("title"));

@@ -72,3 +72,25 @@ dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Debug --filt
 ```
 
 PASS, exit 0, chunk `9e31a0`, 14 PASS / 0 FAIL / 0 skip. 최종 source의 집중 검사 결과입니다.
+
+## 반복 주석 편집의 초안 IO 보강
+
+root 검토에서 매 revision의 PNG 재쓰기와 이전 revision 휴지통 이동이 확인되어 후속으로 보강했습니다. 이제 session 내부 `blobs/<SHA256>.blob`에 같은 내용은 한 번만 durable 저장하고 revision에는 ready 문서만 씁니다. 작은 revision marker는 session 폐기 때 함께 휴지통으로 이동하므로 debounce마다 shell 삭제 작업을 하지 않습니다. 복구 시 최신 revision부터 검사하고 첫 유효 revision을 선택합니다. 안전한 `ResolveFile`이 문서에 포함된 파일명과 64자리 hash·session 내부 경로·링크 제외를 확인합니다. 같은 hash를 가리키는 original/base는 복구 integrity 검사를 한 번만 하고 같은 bitmap으로 읽습니다.
+
+이미지 초안 PNG는 frozen BitmapSource별 weak cache를 이용해 같은 bitmap을 다시 인코딩하지 않습니다. 회전/crop으로 새 bitmap이 생기면 별도 내용으로 저장합니다. 활성 session의 기존 blob은 제거하지 않으며 최종 retired session만 실제 휴지통으로 이동합니다.
+
+아래 실제 명령 cwd는 동일합니다.
+
+```text
+dotnet test tests/MyCapture.Core.Tests/MyCapture.Core.Tests.csproj -c Debug --filter FullyQualifiedName~EditDraftStoreTests --logger 'trx;LogFileName=edit-drafts-core-blobs-receipt.trx' --results-directory C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/core-blobs-receipt -v quiet -nologo
+```
+
+PASS exit 0, chunk `f25807`, Core 8/8. 기존 6건과 반복 내용 blob 재사용/변경된 pixels의 별도 blob 및 원본 유지 2건입니다. 실제 TRX를 읽은 명령 `[xml]$result = Get-Content -Encoding UTF8 artifacts/edit-recovery/core-blobs-receipt/edit-drafts-core-blobs-receipt.trx; $result.TestRun.Results.UnitTestResult | Where-Object testName -like '*AnnotationOnlyRevisions*' | ForEach-Object { $_.outcome; $_.Output.StdOut }` exit 0(chunk `165a4d`)에서 `Revisions=20; BlobFiles=2; BlobBytes=1025; RecycleCallsBeforeRetire=0; OriginalLastWriteUtcUnchanged=True`를 확인했습니다. 작은 fixture의 실제 파일 수/크기 근거이며 제품 실기 시간 측정은 아닙니다.
+
+```text
+dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Debug --filter FullyQualifiedName~EditRecoveryTests --logger 'trx;LogFileName=edit-recovery-unit-blobs.trx' --results-directory C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/unit-blobs -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/compile-shared-trash.targets -v quiet -nologo
+```
+
+PASS exit 0, chunk `b8ac69`, App 15/15. 새 검사에서 주석 문서가 변경돼도 original/base PNG byte[]가 같은 캐시 객체인 것을 확인했습니다. 이전 14건도 유지합니다.
+
+최종 후속 App 빌드 실제 명령 `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Debug -nologo -v quiet -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/compile-shared-trash.targets -o C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/build-blobs`: PASS exit 0, chunk `dde2af`, 경고 0 / 오류 0.

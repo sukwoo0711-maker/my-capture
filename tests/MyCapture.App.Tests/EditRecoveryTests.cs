@@ -215,4 +215,17 @@ public sealed class EditRecoveryTests
         snapshot.SetResult(null); Assert.False(Await(exit)); Assert.True(window.IsEnabled);
         window.Close();
     });
+
+    [Fact]
+    public void AnnotationOnlyChanges_ReuseTheEncodedFrozenOriginalAndBase() => StaTestHost.Run(() =>
+    {
+        var window = Create();
+        var first = Await(window.Editor.CaptureDraftAsync())!;
+        Edit(window);
+        var second = Await(window.Editor.CaptureDraftAsync())!;
+        Assert.NotEqual(first.Document, second.Document);
+        Assert.Same(first.Files["original.png"], second.Files["original.png"]);
+        Assert.Same(first.Files["base.png"], second.Files["base.png"]);
+        window.Close();
+    });
 }

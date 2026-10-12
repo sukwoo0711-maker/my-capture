@@ -28,12 +28,22 @@ public sealed class EditDraftStore
         if (File.Exists(Path.Combine(parent, "retired"))) return;
         string directory = Path.Combine(parent, $"{revision:D20}-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
+        string blobs = Path.Combine(parent, "blobs");
+        AssertNoLinks(blobs);
+        Directory.CreateDirectory(blobs);
         var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (name, bytes) in files)
         {
             ValidateName(name);
-            await DurableWriteAsync(Path.Combine(directory, name), bytes, token).ConfigureAwait(false);
-            hashes[name] = Convert.ToHexString(SHA256.HashData(bytes));
+            string hash = Convert.ToHexString(SHA256.HashData(bytes));
+            string destination = Path.Combine(blobs, hash + ".blob");
+            if (!File.Exists(destination))
+            {
+                string pending = Path.Combine(blobs, Guid.NewGuid().ToString("N") + ".pending");
+                await DurableWriteAsync(pending, bytes, token).ConfigureAwait(false);
+                File.Move(pending, destination);
+            }
+            hashes[name] = hash;
         }
         var draft = new EditDraft(session, revision, kind, document, metadata, hashes, DateTimeOffset.UtcNow);
         await DurableWriteAsync(Path.Combine(directory, "ready.pending"),
@@ -44,12 +54,8 @@ public sealed class EditDraftStore
             if (!isCurrent() || File.Exists(Path.Combine(parent, "retired"))) return;
             File.Move(Path.Combine(directory, "ready.pending"), Path.Combine(directory, "ready.json"));
         }
-        foreach (string old in Directory.EnumerateDirectories(parent))
-        {
-            if (old == directory) continue;
-            try { AssertNoLinks(old); _recycleDirectory(old); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* Preserve on failure. */ }
-        }
+        // Small revision markers stay until this session is retired. This avoids one shell
+        // recycle operation per debounce; immutable pixel blobs are stored only once.
     }
 
     public IReadOnlyList<(EditDraft Draft, string Directory)> ReadAvailable()
@@ -64,7 +70,8 @@ public sealed class EditDraftStore
             if (!Guid.TryParseExact(Path.GetFileName(sessionPath), "N", out Guid session)
                 || File.Exists(Path.Combine(sessionPath, "retired"))) continue;
             (EditDraft Draft, string Directory)? newest = null;
-            foreach (string directory in Directory.EnumerateDirectories(sessionPath))
+            foreach (string directory in Directory.EnumerateDirectories(sessionPath)
+                .OrderByDescending(Path.GetFileName, StringComparer.Ordinal))
             {
                 try
                 {
@@ -75,14 +82,17 @@ public sealed class EditDraftStore
                     if (draft is null || draft.SessionId != session || draft.Revision < 0
                         || draft.Kind is not ("image" or "video") || draft.Files is null || draft.Metadata is null
                         || string.IsNullOrWhiteSpace(draft.Document)) continue;
+                    var verified = new HashSet<string>(StringComparer.Ordinal);
                     foreach (var (name, hash) in draft.Files)
                     {
                         ValidateName(name);
-                        string file = Path.Combine(directory, name);
-                        if (Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))) != hash)
+                        string file = ResolveFile(draft, name);
+                        if (verified.Add(hash) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))) != hash)
                             throw new IOException("Draft content does not match its durable marker.");
                     }
-                    if (newest is null || draft.Revision > newest.Value.Draft.Revision) newest = (draft, directory);
+                    if (!Path.GetFileName(directory).StartsWith($"{draft.Revision:D20}-", StringComparison.Ordinal)) continue;
+                    newest = (draft, directory);
+                    break;
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException) { }
             }
@@ -124,6 +134,18 @@ public sealed class EditDraftStore
     }
 
     public bool IsRetired(Guid session) => File.Exists(Path.Combine(SessionPath(session), "retired"));
+
+    public string ResolveFile(EditDraft draft, string name)
+    {
+        ValidateName(name);
+        if (!draft.Files.TryGetValue(name, out string? hash) || string.IsNullOrEmpty(hash) || hash.Length != 64
+            || hash.Any(c => !char.IsAsciiHexDigit(c))) throw new IOException("Invalid draft blob reference.");
+        string path = Path.Combine(SessionPath(draft.SessionId), "blobs", hash + ".blob");
+        AssertNoLinks(Path.GetDirectoryName(path)!);
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("Draft blobs cannot be links.");
+        return path;
+    }
 
     private string SessionPath(Guid session) => Path.Combine(_root, session.ToString("N"));
     private static void ValidateName(string name)
