@@ -7,9 +7,11 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
+using MyCapture.App.Editing;
 using MyCapture.App.Themes;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
 using Xunit;
 
@@ -121,6 +123,78 @@ public sealed class ShellRetakeWindowTests
             Assert.False(coordinator.IsActive);
         }
         finally { coordinator.Cancel(); }
+    });
+
+    [Fact]
+    public void Retake_WithRealDraftSession_WaitsForRetirementAndStartsAfterDiscard() => StaTestHost.Run(() =>
+    {
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        Window? editor = null;
+        int acquired = 0, retireCalls = 0;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-retake-draft-").FullName;
+        var store = new EditDraftStore(root, _ =>
+        {
+            if (Interlocked.Increment(ref retireCalls) == 1)
+            {
+                entered.TrySetResult();
+                release.Task.WaitAsync(TimeSpan.FromSeconds(30)).GetAwaiter().GetResult();
+            }
+        }); // Preserve this fixture; no Shell operation is performed.
+        using var coordinator = Create(() => { acquired++; return Frame(); });
+        coordinator.RequiresCaptureExclusion = () => true;
+        coordinator.ApplyCaptureExclusion = window => { editor ??= window; return true; };
+        try
+        {
+            coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8));
+            PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+            var annotation = Assert.IsType<AnnotationEditorWindow>(editor);
+            Guid draftId = Guid.NewGuid();
+            annotation.AdoptRecoveredDraft(store, draftId, 1);
+            annotation.ConfirmClose = () => EditorCloseChoice.Cancel;
+            Task<bool> canceled = PrepareAndStartAsync();
+            PumpUntil(() => canceled.IsCompleted);
+            Assert.False(canceled.GetAwaiter().GetResult());
+            Assert.True(annotation.IsVisible);
+            Assert.Equal(0, retireCalls);
+
+            annotation.ConfirmClose = () => EditorCloseChoice.DontSave;
+            Task<bool> retake = PrepareAndStartAsync();
+            PumpUntil(() => entered.Task.IsCompleted);
+            Assert.False(retake.IsCompleted);
+            Assert.True(annotation.IsVisible);
+            Assert.False(annotation.IsEnabled);
+            Assert.False(coordinator.CanRetake);
+            Assert.Equal(0, acquired);
+            bool responsive = false;
+            annotation.Dispatcher.BeginInvoke(new Action(() => responsive = true));
+            PumpUntil(() => responsive);
+            release.TrySetResult();
+            PumpUntil(() => retake.IsCompleted);
+            Assert.True(retake.GetAwaiter().GetResult());
+            Assert.False(annotation.IsVisible);
+            Assert.True(store.IsRetired(draftId));
+            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+            Assert.Equal(1, acquired);
+            Assert.True(coordinator.IsActive);
+        }
+        finally
+        {
+            release.TrySetResult();
+            coordinator.Cancel();
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        async Task<bool> PrepareAndStartAsync()
+        {
+            bool ready = await App.TryPrepareCaptureAsync(coordinator.CanRetake,
+                allowRetake => !coordinator.IsActive || allowRetake && coordinator.CanRetake,
+                coordinator.CloseEditorForRetakeAsync);
+            if (ready) coordinator.Start(false, false, false);
+            return ready;
+        }
     });
 
     [Fact]

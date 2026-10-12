@@ -131,7 +131,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick)
             ? Task.Delay(100) : Task.CompletedTask;
 
-    internal bool CanRetake => !_disposed && _activeEditor is not null && !_activeEditor.Editor.IsCommitInProgress &&
+    internal bool CanRetake => !_disposed && _activeEditor is not null && !_activeEditor.Editor.IsCommitInProgress && !_activeEditor.IsCloseInProgress &&
         _preparation is null && !_isOpeningEditor;
 
     /// <summary>
@@ -146,6 +146,16 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         if (!CanRetake) return;
         _openingEditorCts?.Cancel();
         _activeEditor?.RequestClose();
+    }
+
+    internal async Task<bool> CloseEditorForRetakeAsync()
+    {
+        VerifyDispatcherAccess();
+        if (!CanRetake) return false;
+        _openingEditorCts?.Cancel();
+        AnnotationEditorWindow editor = _activeEditor!;
+        bool closed = await editor.RequestCloseAsync();
+        return closed && !_disposed && _activeEditor is null;
     }
 
     /// <summary>Used only by the explicit advanced “capture window” command.</summary>

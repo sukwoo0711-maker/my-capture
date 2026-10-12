@@ -120,6 +120,14 @@ internal partial class AnnotationEditorWindow : Window
         Close();
     }
 
+    internal Task<bool> RequestCloseAsync()
+    {
+        if (IsCloseInProgress) return Task.FromResult(false);
+        _discardCloseTask = null;
+        RequestClose();
+        return _discardCloseTask ?? CompleteRequestedCloseAsync();
+    }
+
     private bool _closeAsked;
     private bool _cancelRaised;
 
@@ -144,7 +152,7 @@ internal partial class AnnotationEditorWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (_editor.IsEditingOperationInProgress || _retiringDraft)
+        if (_editor.IsEditingOperationInProgress || (IsCloseInProgress && !_discardedDraft))
         {
             e.Cancel = true;
             _closeAsked = false;
@@ -166,13 +174,13 @@ internal partial class AnnotationEditorWindow : Window
                     _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, _editor.SaveAndClose);
                     return;
                 case EditorCloseChoice.DontSave:
-                    e.Cancel = true;
-                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(async () =>
+                    if (_draftSession is null)
                     {
-                        if (!await RetireDraftBeforeCloseAsync()) return;
                         _discardedDraft = true;
-                        Close();
-                    }));
+                        break;
+                    }
+                    e.Cancel = true;
+                    _discardCloseTask = DiscardAndCloseAsync();
                     return;
                 default:
                     e.Cancel = true;

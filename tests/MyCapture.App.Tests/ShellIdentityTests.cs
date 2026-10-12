@@ -66,6 +66,30 @@ public sealed class ShellIdentityTests
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public async Task AsyncRetake_WaitsForCloseAndRechecksNewBlockers(bool closeAllowed, bool blockerArrives)
+    {
+        Assert.False(await App.TryPrepareCaptureAsync(true, _ => false,
+            () => throw new InvalidOperationException("Blocked capture must not close its editor.")));
+        var retired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var arguments = new List<bool>();
+        bool blocked = false;
+        Task<bool> preparation = App.TryPrepareCaptureAsync(true, allowRetake =>
+        {
+            arguments.Add(allowRetake);
+            return !blocked;
+        }, () => retired.Task);
+        Assert.False(preparation.IsCompleted);
+        Assert.Equal(new[] { true }, arguments);
+        blocked = blockerArrives;
+        retired.SetResult(closeAllowed);
+        Assert.Equal(closeAllowed && !blockerArrives, await preparation);
+        Assert.Equal(closeAllowed ? new[] { true, false } : new[] { true }, arguments);
+    }
+
+    [Theory]
     [InlineData("ko", "설정")]
     [InlineData("en", "Settings")]
     public void ShippedSettingsTitle_ReplacesOnlyLegacyProductPrefix(string language, string context)

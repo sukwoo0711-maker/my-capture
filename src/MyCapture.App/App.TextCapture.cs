@@ -57,7 +57,7 @@ public partial class App
     /// Opens the region selector directly in text capture mode. Uses the same guards as region
     /// capture, so it never interrupts a recording, countdown or scrolling capture.
     /// </summary>
-    private void HandleCaptureTextRequested()
+    private async void HandleCaptureTextRequested()
     {
         DismissQuickAccessForCapture();
         _log?.LogInformation("Text capture requested");
@@ -68,9 +68,9 @@ public partial class App
 
         try
         {
-            if (!TryPrepareCapture(_overlay.CanRetake,
+            if (!await TryPrepareCaptureAsync(_overlay.CanRetake,
                 allowRetake => GuardStillCapture(UiText.Get("TextCapture_Title"), allowRetake),
-                _overlay.CloseEditorForRetake)) return;
+                _overlay.CloseEditorForRetakeAsync)) return;
             _tray?.SetState(TrayIconState.Capturing);
             // The pointer would only add noise to recognition, so text capture never draws it.
             _overlay.Start(

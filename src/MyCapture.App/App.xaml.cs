@@ -736,7 +736,7 @@ public partial class App : Application
         catch (Exception ex) { _log?.LogWarning(ex, "Could not save editor preferences"); }
     }
 
-    private void HandleCaptureRequested()
+    private async void HandleCaptureRequested()
     {
         DismissQuickAccessForCapture();
         _log?.LogInformation("Region capture requested");
@@ -747,9 +747,9 @@ public partial class App : Application
 
         try
         {
-            if (!TryPrepareCapture(_overlay.CanRetake,
+            if (!await TryPrepareCaptureAsync(_overlay.CanRetake,
                 allowRetake => GuardStillCapture(UiText.Get("Text_096A13A757DB"), allowRetake),
-                _overlay.CloseEditorForRetake)) return;
+                _overlay.CloseEditorForRetakeAsync)) return;
             _tray?.SetState(TrayIconState.Capturing);
             // Start reserves the session immediately; full-desktop acquisition runs off the UI
             // thread and reports asynchronous failures through TransitionFailed on this dispatcher.
@@ -992,6 +992,15 @@ public partial class App : Application
         if (!guard(canRetake)) return false;
         if (!canRetake) return true;
         closeEditor();
+        return guard(false);
+    }
+
+    internal static async Task<bool> TryPrepareCaptureAsync(bool canRetake, Func<bool, bool> guard,
+        Func<Task<bool>> closeEditor)
+    {
+        if (!guard(canRetake)) return false;
+        if (!canRetake) return true;
+        if (!await closeEditor()) return false;
         return guard(false);
     }
 

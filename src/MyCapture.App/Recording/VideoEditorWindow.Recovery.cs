@@ -13,6 +13,7 @@ internal sealed partial class VideoEditorWindow
     private bool _recoveredDraft;
     private bool _discardedDraft;
     private bool _closedForRecovery;
+    private Task<bool>? _discardCloseTask;
     private string? _draftVideoSourceHash;
     private void InitializeDraftRecovery()
     {
@@ -47,6 +48,22 @@ internal sealed partial class VideoEditorWindow
         _draftSession = MakeDraftSession(store, id, revision);
     }
     internal Task FlushDraftAsync() => _draftSession?.FlushAsync() ?? Task.CompletedTask;
+    private async Task<bool> DiscardAndCloseAsync()
+    {
+        bool enabled = IsEnabled;
+        IsEnabled = false;
+        try
+        {
+            // Let the canceled Closing event unwind before closing again.
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Input);
+            if (!await RetireDraftBeforeCloseAsync()) return false;
+            _discardedDraft = true;
+            Close();
+            await _draftFinalization;
+            return _closedForRecovery;
+        }
+        finally { IsEnabled = enabled; }
+    }
     private async Task<bool> RetireDraftBeforeCloseAsync()
     {
         bool running = _operationRunning;
@@ -65,6 +82,9 @@ internal sealed partial class VideoEditorWindow
     }
     internal async Task<bool> PrepareForAppExitAsync()
     {
+        // The discard operation owns its disabled state until it restores the window.
+        if (_discardCloseTask is { IsCompleted: false } pendingDiscard)
+            return await pendingDiscard;
         bool enabled = IsEnabled; IsEnabled = false;
         try { return await PrepareProtectedExitAsync(); }
         finally { IsEnabled = enabled; }

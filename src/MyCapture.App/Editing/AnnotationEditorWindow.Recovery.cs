@@ -32,6 +32,29 @@ internal partial class AnnotationEditorWindow
     }
     internal Task FlushDraftAsync() => _draftSession?.FlushAsync() ?? Task.CompletedTask;
     private bool _retiringDraft;
+    private Task<bool>? _discardCloseTask;
+    internal bool IsCloseInProgress => _retiringDraft || _discardCloseTask is { IsCompleted: false };
+    private async Task<bool> CompleteRequestedCloseAsync()
+    {
+        if (!_closedForRecovery) return false;
+        await _draftFinalization;
+        return true;
+    }
+    private async Task<bool> DiscardAndCloseAsync()
+    {
+        bool enabled = IsEnabled; IsEnabled = false;
+        try
+        {
+            // The first Closing callback must unwind before WPF can accept another Close.
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Input);
+            if (!await RetireDraftBeforeCloseAsync()) return false;
+            _discardedDraft = true;
+            Close();
+            await _draftFinalization;
+            return _closedForRecovery;
+        }
+        finally { IsEnabled = enabled; }
+    }
     private async Task<bool> RetireDraftBeforeCloseAsync()
     {
         if (_retiringDraft) return false;
@@ -52,6 +75,9 @@ internal partial class AnnotationEditorWindow
     }
     internal async Task<bool> PrepareForAppExitAsync()
     {
+        // The discard operation owns its disabled state until it restores the window.
+        if (_discardCloseTask is { IsCompleted: false } pendingDiscard)
+            return await pendingDiscard;
         bool enabled = IsEnabled; IsEnabled = false;
         try { return await PrepareProtectedExitAsync(); }
         finally { IsEnabled = enabled; }
@@ -60,8 +86,8 @@ internal partial class AnnotationEditorWindow
     {
         if (_closedForRecovery) { await _draftFinalization; return true; }
         var deadline = DateTime.UtcNow.AddSeconds(60);
-        while ((_editor.IsEditingOperationInProgress || _retiringDraft) && DateTime.UtcNow < deadline) await Task.Delay(50);
-        if (_editor.IsEditingOperationInProgress || _retiringDraft) return false;
+        while ((_editor.IsEditingOperationInProgress || IsCloseInProgress) && DateTime.UtcNow < deadline) await Task.Delay(50);
+        if (_editor.IsEditingOperationInProgress || IsCloseInProgress) return false;
         await FlushDraftAsync();
         if (_closedForRecovery) { await _draftFinalization; return true; }
         if (!_committed && NeedsUnsavedProtection)

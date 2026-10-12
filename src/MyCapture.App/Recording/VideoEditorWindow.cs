@@ -2789,6 +2789,11 @@ internal sealed partial class VideoEditorWindow : Window
     {
         bool userClose = _userRequestedClose;
         _userRequestedClose = false;
+        if (_discardCloseTask is { IsCompleted: false } && !_discardedDraft)
+        {
+            e.Cancel = true;
+            return;
+        }
         if (userClose && !_operationRunning && HasUnsavedEdits())
         {
             // Closing from the title bar with edits: save to the library, drop them, or stay.
@@ -2806,13 +2811,13 @@ internal sealed partial class VideoEditorWindow : Window
                 CommitTrim();
                 return;
             }
-            e.Cancel = true;
-            _ = Dispatcher.BeginInvoke(new Action(async () =>
+            if (_draftSession is null)
             {
-                if (!await RetireDraftBeforeCloseAsync()) return;
                 _discardedDraft = true;
-                Close();
-            }));
+                return;
+            }
+            e.Cancel = true;
+            _discardCloseTask = DiscardAndCloseAsync();
             return;
         }
 
