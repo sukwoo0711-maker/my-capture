@@ -198,6 +198,7 @@ public sealed partial class CaptureQueue
     /// </summary>
     public void Load()
     {
+        EnsureMigrationCanLoad();
         _paths.EnsureCreated();
         AtomicFile.CleanUpTemp(_paths.IndexFile);
 
@@ -268,6 +269,7 @@ public sealed partial class CaptureQueue
         }
 
         RecalculateTotalBytes();
+        ResumeAfterMigrationLoad();
         EnforceLimits();
 
         _log.LogInformation(
@@ -545,6 +547,7 @@ public sealed partial class CaptureQueue
     private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, string Content)[] files,
         Action? afterDurableWrite = null)
     {
+        if (_migrationPublicationBlocked) throw new IOException("Complete migration recovery before saving the library.");
         // Synchronous owner saves bypass the async pool: slots can belong to awaiters whose
         // continuations still need that owner thread. Waiting for those slots here deadlocks.
         reservation?.Accept(_publicationSlots);
