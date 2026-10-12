@@ -94,10 +94,17 @@ internal static class Program
 
     private static string? s_workFolder;
 
+    /// <summary>
+    /// The run's output folder. Scenes that need files (for example a fixture library under a
+    /// temporary AppPaths) create them below it, never in the user's profile.
+    /// </summary>
+    internal static string OutputFolder { get; private set; } = string.Empty;
+
     private static int Run(Options options)
     {
         Directory.CreateDirectory(options.Output);
         s_workFolder = Path.Combine(options.Output, "work");
+        OutputFolder = options.Output;
         var receipts = new List<ClipReceipt>();
         var failures = new List<string>();
         var total = Stopwatch.StartNew();

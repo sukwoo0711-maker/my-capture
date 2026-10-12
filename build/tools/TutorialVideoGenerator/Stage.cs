@@ -85,9 +85,11 @@ internal static class Stage
 
     /// <summary>
     /// Draws a window frame the way Windows 11 does for MyCapture: the caption takes the window's
-    /// own base colour (ModernWindowChrome), with the title and the caption buttons.
+    /// own base colour (ModernWindowChrome), with the title and the caption buttons. A dialog
+    /// that cannot be resized (<paramref name="closeOnly"/>) has only the close button.
     /// </summary>
-    internal static Rect DrawWindowFrame(DrawingContext dc, Rect client, string title, bool shadow = true, bool caption = true)
+    internal static Rect DrawWindowFrame(DrawingContext dc, Rect client, string title, bool shadow = true, bool caption = true,
+        bool closeOnly = false)
     {
         Rect outer = caption ? new Rect(client.X, client.Y - TitleBarHeight, client.Width, client.Height + TitleBarHeight) : client;
         if (shadow)
@@ -107,7 +109,7 @@ internal static class Stage
             Text(dc, title, outer.X + 14, outer.Y + 8, 12, Res("Text.Primary"));
             var glyphs = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets");
             string[] buttons = ["", "", ""];
-            for (int i = 0; i < buttons.Length; i++)
+            for (int i = closeOnly ? buttons.Length - 1 : 0; i < buttons.Length; i++)
             {
                 var glyph = new FormattedText(buttons[i], CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
                     new Typeface(glyphs, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), 10, Res("Text.Primary"), Scale);
@@ -122,10 +124,11 @@ internal static class Stage
     }
 
     /// <summary>Draws a client-area snapshot inside its frame.</summary>
-    internal static void DrawWindow(DrawingContext dc, BitmapSource client, Point clientOrigin, string title, double scale = 1, bool caption = true)
+    internal static void DrawWindow(DrawingContext dc, BitmapSource client, Point clientOrigin, string title, double scale = 1, bool caption = true,
+        bool closeOnly = false)
     {
         var bounds = new Rect(clientOrigin, new Size(client.PixelWidth / Scale * scale, client.PixelHeight / Scale * scale));
-        DrawWindowFrame(dc, bounds, title, caption: caption);
+        DrawWindowFrame(dc, bounds, title, caption: caption, closeOnly: closeOnly);
         dc.PushClip(new RectangleGeometry(new Rect(bounds.X, bounds.Y, bounds.Width, bounds.Height), caption ? 0 : 8, caption ? 0 : 8));
         dc.DrawImage(client, bounds);
         dc.Pop();
