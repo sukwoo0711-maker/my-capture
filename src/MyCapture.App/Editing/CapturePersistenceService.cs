@@ -159,8 +159,17 @@ internal sealed class CapturePersistenceService
 
     internal IDisposable AcquireEditLease(Guid recordId)
     {
-        _activeEditSessions.AddOrUpdate(recordId, 1, static (_, count) => checked(count + 1));
-        return new EditLease(this, recordId, _queue.AcquireEvictionLease(recordId));
+        IDisposable evictionLease = _queue.AcquireEvictionLease(recordId);
+        try
+        {
+            _activeEditSessions.AddOrUpdate(recordId, 1, static (_, count) => checked(count + 1));
+            return new EditLease(this, recordId, evictionLease);
+        }
+        catch
+        {
+            evictionLease.Dispose();
+            throw;
+        }
     }
 
     private void ReleaseEditLease(Guid recordId, IDisposable evictionLease)
