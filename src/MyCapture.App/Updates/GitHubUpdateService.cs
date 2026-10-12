@@ -760,7 +760,7 @@ public sealed class GitHubUpdateService : IUpdateService
                         continue;
                     }
 
-                    File.Delete(filePath);
+                    _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(filePath);
                 }
                 catch
                 {
@@ -769,7 +769,8 @@ public sealed class GitHubUpdateService : IUpdateService
 
             try
             {
-                Directory.Delete(sessionDirectory, recursive: false);
+                if (!Directory.EnumerateFileSystemEntries(sessionDirectory).Any())
+                    _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleDirectory(sessionDirectory);
             }
             catch
             {

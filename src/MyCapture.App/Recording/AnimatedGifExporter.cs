@@ -185,7 +185,7 @@ internal static class AnimatedGifExporter
                     if (File.Exists(temporary))
                     {
                         // codeql[cs/path-injection]
-                        File.Delete(temporary);
+                        _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(temporary);
                     }
                 }
                 catch (IOException)

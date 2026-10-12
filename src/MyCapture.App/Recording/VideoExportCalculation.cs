@@ -155,7 +155,7 @@ internal sealed class VideoExportCalculation : IDisposable
         }
         finally
         {
-            if (File.Exists(temporary)) File.Delete(temporary);
+            if (File.Exists(temporary)) _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(temporary);
         }
     }
 
@@ -163,9 +163,12 @@ internal sealed class VideoExportCalculation : IDisposable
     {
         try
         {
-            File.Delete(OwnedPath("standard"));
-            File.Delete(OwnedPath("reduced"));
-            _directory.Delete(); // Never recursively remove unexpected files.
+            string standard = OwnedPath("standard");
+            if (File.Exists(standard)) _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(standard);
+            string reduced = OwnedPath("reduced");
+            if (File.Exists(reduced)) _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(reduced);
+            if (Directory.Exists(_directory.FullName) && !Directory.EnumerateFileSystemEntries(_directory.FullName).Any())
+                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleDirectory(_directory.FullName);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
