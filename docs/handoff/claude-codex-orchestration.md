@@ -9,7 +9,8 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `release/store-4.1.2` (다음 배포본 준비·완성 파일 실기 성능 검증 진행) |
+| 현재 기록 브랜치 | `release/store-4.1.2` (4.1.2 배포 후보 작성·완성 파일 실기 성능 검증 완료) |
+| 4.1.2 배포 후보 소스 | `release/store-4.1.2-source` / `61e19e3e287c41abca92b70332c6ceb1413339bf`, 로컬 검증·MSIX 생성 완료, Store 미제출 |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -47,6 +48,21 @@
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
+
+### 다음 배포 4.1.2 — 작성·필수 검사·완성 파일 실기 성능 검사 완료
+
+- 사용자 요청: 다음 배포 버전을 작성하고 완료된 파일로 반드시 실기 성능 검사를 진행합니다. 버전은 **4.1.2 / Store 4.1.2.0**이며 QA14의 38기능·한영76GIF, QA11 작업 보호·복구·평가·업데이트 안내 및 QA12 최적화를 포함합니다. 변경 내역은 `docs/releases/4.1.2-release-notes.md`입니다. Store 업로드·심사 제출은 이번 요청에서 수행하지 않았습니다.
+- 제품 소스는 **`61e19e3e287c41abca92b70332c6ceb1413339bf`**, 보존 브랜치는 `release/store-4.1.2-source`입니다. 기록 브랜치의 이후 문서 커밋과 배포 소스를 구분합니다. 메타데이터는 `a053f8b`, 진단 개선은 `de5d777`·`7bd4026`·`f8f5977`·`61e19e3`입니다. 합성 입력 창의 IME/응답 관측, 제한된 전경 대기 및 영상 입력/릴리스 프레임 측정 범위를 보완했으며 제품 UI와 기존 검사 기대값·임계값은 유지했습니다. 독립 소스 검토 완료.
+- Debug 빌드 `5c62d4` exit0 경고0/오류0. 메타데이터 통합 `a053f8b`의 전체 회귀는 **Core1116 PASS**, **App2375 PASS/실패0/기존 조건부11 skip**(`1b7f22`·`5292ec` exit0)입니다. 그 뒤 진단 변경은 통합 빌드와 최종 실제 패키지8종으로 검증했습니다. TRX 결과별 집계 `be2916` exit0입니다.
+- `build/package.ps1 -Version 4.1.2 -StoreOnly` session86222/`77a218` exit0, **8/8 PASS**, publish357파일. 최종 실행은 `artifacts/store-publish/4.1.2/packaged-self-tests/20261012T142357Z-6152f3d64c4e419ebe67d497ca397416/`입니다. 앞선 전경 획득·합성 영문·영상302프레임·외부 붙여넣기 실패4회는 `4.1.2-attempt1-*`~`attempt4-*`에 모두 보존했습니다. 최종 외부 Ctrl+V에서 Control=True, ContainsImage=True, GetImage320×180 및 드롭까지 확인했습니다. 앞선 간헐 실패의 정확한 원인은 확정되지 않았습니다.
+- **실기 실행 파일:** `C:/GitRepositories/my-capture-codex/artifacts/store-publish/4.1.2/publish-win-x64/MyCapture.exe`. self-contained x64/R2R·Core/Desktop10.0.11, DLL SHA256 **`7CA62B8EF5C5FEEEBA389B80FB5E082AFE8930ED4A6D2D6D815F5533A7841F51`**. 테스트에는 폴더 전체가 필요합니다. **Store 후보:** `artifacts/store/4.1.2/sukwoo0711.MyCapture_4.1.2.0_x64.msix`, 236214038B, SHA256 **`1BD2D2B22D15416105EB05F06903B2487A162F65D6BCEB1BF124034725B12644`**. 생성 session38119/`29cbf6` exit0. Store 서명 전의 업로드용 파일이며 로컬 설치는 수행하지 않았습니다.
+- 독립 artifact 검사 `cd30dc` exit0: exact clean source/버전/제품4DLL R2R, publish357파일 bytes·SHA, deps263/누락0, GIF76파일 원본·receipt·배포 SHA와 개별3MiB 예산, 8종 report/result SHA, MSIX418entry/내부publish357파일·identity·minOS·startup disabled 확인. 실기 검사 후 전체 publish/MSIX 재대조 `0ab088` exit0. 근거는 `artifacts/release-4.1.2/independent-artifact-review.md`와 `performance-summary.json`입니다.
+- **완성 파일 실기 측정:** Ryzen7 9800X3D/메모리61.6GiB/Windows11 10.0.26200, .NET/WPF10.0.11에서 직렬 실행했습니다. root matrix session66405/`d84bbf` exit0(10개 명령), 별도 Search CPU `de55e8`·실제 Gallery session94643/`7e1cbd` exit0, 실제 캡처 coordinator host session98691/PID27048/`5b239c` exit0입니다. 모든 측정은 위 최종 DLL SHA를 사용했습니다.
+- 실제 화면에서 Sky 입력→선택 화면→편집기→취소를3회 완료했습니다. 선택 화면 표시 **366.65/273.64/300.85ms**, 선택 후 첫 편집기 표시 **244.70/133.30/113.22ms**입니다. 회차당 native mouse3개/drag1개이며 자동 인식된 창 범위2566×1016이 편집기에 표시됐습니다. 작은 드래그 영역의 정확성·연속 물리 마우스 지연은 이 입력 표본으로 확인되지 않았습니다. 계측 host는 App 시작/전역 단축키/저장/클립보드/트레이를 제외하며 캡처 픽셀·창 제목·URL을 파일에 저장하지 않았습니다.
+- **성능 잔존 한계:** 10만 자 여러 줄은 첫 layout576.13ms/선택 안정화2287.71ms, 긴 한 줄은1023.82/1329.10ms. 100만 자 여러 줄은 전체29.87초에 내용·undo/redo·commit 보존까지 완료됐지만 선택 안정화에 **20.87초**, 그 단계 누적 managed allocation4.4135GB가 필요했습니다(peak private258MB와 별개). 이전60초guard는 이번에 재현되지 않았으며 긴 지연은 남았습니다. OCR100만 자 여러 줄의 첫 결과 적용3653.11ms, 후속 전체 선택·안정화 약6.08ms입니다.
+- 8K entropy 이미지·1000주석/10만 ink points의 편집·undo/redo 묶음 최대135.87ms, heartbeat최대339.76ms, 원본/복구pixel SHA동일. 4K·1만 주석은 편집 묶음 최대291.67ms/heartbeat최대657.93ms입니다. 이 editor fixture는 HWND를 표시하지 않는 실제 제품 경로의 viewport 작업입니다. 실제 Gallery1만 항목/항목당OCR16384자 검색은 needle handler/render callback 중앙76.41/192.25ms, 정렬 callback최대865.91ms였습니다. 정확성 통과와 응답 시간의 평가는 구분합니다.
+- 영역 선택 synthetic desktop/HWND 부하에서 일반240개·burst7680개 입력 모두 유효한 최종 상태를 유지했습니다. 4.1.1과4.1.2의 일반 drag handler P95는0.0785/0.0747ms, dispatcher queue P95는0.1713/0.2142ms입니다. 큰 회귀는 이 한 쌍의 workload에서 재현되지 않았고 물리 표시 지연과는 다릅니다. 텍스트 복사 GIF40초 실제 decoder/player: decode143.05ms, 움직임callback 중앙45.13/P95 51.36ms, skipped43, 종료 후 player정지/image해제. 모든 프레임의40ms 표시를 의미하지 않습니다.
+- 정확한 명령·cwd·종료코드·실패·receipt는 root `artifacts/release-4.1.2/development-log.txt`, 검색은 기존 `C:/GitRepositories/my-capture-edit-recovery/artifacts/release-4.1.2/search-probe/verification-log.md`입니다. 기존 산출물·임시 자료·작업 사본과 사용자 프로세스를 보존했습니다. 측정용 소유 창은 모두 종료했습니다.
 
 ### 부드러운 GIF·기능별 사용법 — QA14 구현·검증·전달 완료
 
@@ -213,11 +229,11 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 상태:** 부드러운 기능별 GIF38개(한영76파일), F1/설정 연결, 지연 로딩·취소·메모리 해제와 QA14 실기 빌드 전달을 완료했습니다. 다음 접점은 사용자의 QA14 실기 피드백입니다. 과부하 개선 QA12의 후속 한계와 이전 QA13은 §3에 보존합니다.
+**현재 상태:** 4.1.2 배포 후보 작성, 전체 회귀, 최종 패키지8종, MSIX·독립 무결성 검증 및 완성 파일의 실기 성능 검사를 완료했습니다. 정확한 소스·실행 파일·측정 결과는 §3 첫 항목입니다. Store 업로드와 심사 제출은 아직 진행하지 않았습니다. 다음 우선순위는 사용자 실기 피드백과 아래 대량 처리의 잔존 지연입니다.
 
 1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1116 PASS, App2375 PASS/실패0/기존 조건부11 skip. 최종 제품소스0fef3b3의 기능별 사용법과 기존 성능 개선을 함께 검사했습니다. 지원 문구 검사 오탐 수정은638836f입니다.
 2. **완료 — QA14 실기 빌드·전달:** `artifacts/qa14-feature-tutorials/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. F1 해당 기능 → 사용법 보기 또는 설정 → 단축키의 사용법 보기에서 엽니다. 사용법 창 상단에38개 기능 선택이 있습니다. UX 자체 검사·최종GIF 실제재생/정지/다시보기/기능전환/종료·AS-IS/TO-BE·폴더 열기 완료.
-3. **후속 우선순위:** 편집100만 자 여러 줄의 전체 선택60초guard, OCR100만 자 첫 표시7.37초, 전체 Gallery 갱신과 물리 화면 지연을 별도 개선 대상으로 유지합니다. QA12 사용자 실기 피드백을 함께 반영합니다. 다음 Store 배포 시 새 버전·필수 패키지 검사·실제 업데이트 교체 검증이 필요합니다.
+3. **후속 우선순위:** 최종4.1.2에서100만 자 편집은60초guard 없이 전체29.87초에 완료됐지만 전체 선택 안정화20.87초가 남았습니다. 10만 자 선택 안정화1.33~2.29초, OCR100만 자 여러 줄 첫 결과 적용3.65초, Gallery1만 항목 정렬 callback최대0.87초 및 연속 물리 드래그 검증을 후속 대상으로 유지합니다. 사용자 피드백을 함께 반영합니다. 다음 실제 Store 배포에서는 보존된4.1.2 후보 소스·MSIX 무결성 및 Store 설치·업데이트 교체를 확인합니다.
 
 **이전 작업 완료 이력:** 평가·업데이트·지원, 휴지통 삭제·복원, 종료 보호·편집 복구는 QA11에서 검증했습니다. 실제 Store 설치·교체·재실행 검증은 다음 패키지 배포 단계입니다. 아래 이전 배포 작업과4.1.1 제출 산출물은 보존합니다.
 
@@ -434,6 +450,12 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: QA14 `dotnet publish ... -p:SourceRevisionId=0fef3b302dea6ff2e09aa923165731fe52a3325f -o artifacts/qa14-feature-tutorials` session37348/3d46e6 exit0. 독립 source/runtime353files/deps263/GIF76검사4ee5a1 및 x64/R2R2d0d26 exit0 PASS, DLL EB14DB0701149FB09C78174E57C621C41F23E610DF77F387FC13FCBA98A90D6D. `run-owned-check.ps1 -Payload .../qa14-feature-tutorials -Mode ux` session29554/78aa0f exit0·RESULTPASS. 최종실제UI helper session37840/b2040b exit0 CLOSED, Sky로5기능재생·정지·다시보기·전환·재열기·닫기, 최종프레임/타이머해제dac119 exit0. Explorer443353524에QA14경로열기확인. 사용자앱·프로필·클립보드와기존산출물/작업사본보존, 원격변경/삭제없음. QA14요청범위완료.
 
 - 2026-10-12 Codex: 다음 배포본 작성·완료 후 실기 성능 검사 요청 인수. clean221328e/root/common-dir/remote 확인 f59cbc exit0, release/store-4.1.2 분기 b94964 exit0. 4.1.2 메타데이터·필수8종패키지검사·MSIX준비 후 동일완성payload의 영역선택/대량텍스트/8K저장/검색/사용법재생 성능을 직렬 실행합니다. WebGPT register2f81f0 exit1 tunnel_unavailable, 소유터널 LastTaskResult1. native오프라인검사0f88f7 exit1은 로컬비표준endpoint확인요구이며3a1608 exit0에서 model_provider=openai/Codexon--upstreamchatgpt를 확인했습니다. 기존작업사본 재사용, 사용자앱 종료·원격변경·삭제 없음. 결과는 artifacts/release-4.1.2/development-log.txt에 기록합니다.
+
+- 2026-10-12 Codex: 4.1.2 메타데이터·사용자 변경 내역3313271→a053f8b 통합. `dotnet build MyCapture.slnx -c Debug -v q -nologo` f70905 exit0, `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --logger trx;LogFileName=release-core.trx --results-directory artifacts/release-4.1.2/test-results` session36926/1b7f22 exit0 Core1116 PASS. App 대응 명령 session85058/5292ec exit0 2375 PASS/0 FAIL/기존11 skip. 실제 TRX 결과별 집계be2916 exit0. cwd는root이며 정확한 인수·명령·실패는 개발LOG에 보존합니다.
+- 2026-10-12 Codex: 패키지검사 초기4회 실패를 보존하고 진단 범위만 개선(de5d777/7bd4026/f8f5977/61e19e3). 실제 전경 안전 조건·키 재전송 없음·기존68assertion/영상임계값 유지, 합성fixture IME와 수신/클립보드 관측·WM_GETTEXT 제한, 영상필름스트립 준비와 입력/릴리스frame범위 분리. root직접diff+workers교차검토 완료. 통합 `dotnet build MyCapture.slnx -c Debug -v q -nologo` 5c62d4 exit0 경고0/오류0. 기존폴더·stdout는 경계 검증 후rename으로 보존(3b6f30/592ce9 exit0), 삭제없음.
+- 2026-10-12 Codex: 정확한clean소스61e19e3에서 `build/package.ps1 -Version 4.1.2 -StoreOnly` session86222/77a218 exit0 8/8 PASS357files. `build/package-store.ps1 -Version 4.1.2 -PublishDir .../publish-win-x64 -OutputRoot .../store/4.1.2` 및 기존Storeidentity로MSIX생성 session38119/29cbf6 exit0. MSIX236214038B/SHA1BD2D2B22D15416105EB05F06903B2487A162F65D6BCEB1BF124034725B12644, finalDLL7CA62B8EF5C5FEEEBA389B80FB5E082AFE8930ED4A6D2D6D815F5533A7841F51. 독립python검사cd30dc exit0:357inventory·76GIF·8reports·418MSIXentry·source/runtime/deps 전체 일치. 원격업로드·설치없음.
+- 2026-10-12 Codex: 완성된동일payload에서 `powershell.exe -NoProfile -NonInteractive -File artifacts/release-4.1.2/run-final-performance.ps1` session66405/d84bbf exit0,10개명령전부exit0. 100k lines layout576.13ms/selectionsettle2.2877s,1m lines whole29.8667s/selectionsettle20.8703s,내용/undo/redo보존. OCR1mlines첫적용3.6531s. 8K1k주석편집묶음최대135.87ms/heartbeat339.76ms,4K10k주석291.67/657.93ms,복구pixelSHA동일. 실제GIF40초decoder/player재생후정지/해제. Search CPUde55e8·Gallerysession94643/7e1cbd exit0,1만항목OCR검색callback중앙192.25ms/정렬최대865.91ms. 독립결과검토09bfdd/433edd/63038d/fa5aa6/d4ced6 완료, 정확성통과와잔존병목을구분했습니다.
+- 2026-10-12 Codex: `run-field-measurement.ps1` session98691/PID27048/5b239c exit0. Sky 실제화면3회coordinator획득·selector→editor→취소완료; 표시366.65/273.64/300.85ms,전환244.70/133.30/113.22ms. 실제3mouse/1drag씩이며 자동창2566×1016선택으로관측되어 연속물리드래그·작은영역정확성은별도미확인입니다. host종료와failure없음독립1d7d41/0e515e exit0. `python artifacts/release-4.1.2/finalize-evidence.py` 0ab088 exit0,성능검사후357파일·MSIX재대조완료. source보존branch release/store-4.1.2-source 생성4198ad exit0. Explorer443353524에서최종publish-win-x64폴더열기직접확인. 전체근거는 `artifacts/release-4.1.2/performance-summary.json`과개발LOG이며 기존자료/작업사본/사용자프로세스를보존했습니다.
 
 ## 9. 인계 체크리스트
 
