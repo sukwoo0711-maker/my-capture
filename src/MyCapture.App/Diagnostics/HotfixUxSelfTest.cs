@@ -106,7 +106,7 @@ internal static class HotfixUxSelfTest
             // A separate application/process owns the input. It has no capture-card code,
             // global shortcuts, user document, or profile. Its paste/drop handlers
             // accept only the synthetic data supplied by this diagnostic.
-            using (var external = ExternalInputFixture.Start())
+            using (var external = ExternalInputFixture.Start(output))
             {
                 IntPtr inputHandle = external.Handle;
                 Check($"external text fixture PID={external.Id}, HWND={inputHandle}; separate process", external.Id != Environment.ProcessId);
@@ -159,6 +159,24 @@ internal static class HotfixUxSelfTest
                     Check("copy click preserves external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && copies == 1);
                     Check("card writes actual Windows image clipboard", lastCopy is not null && Await(lastCopy));
                     InjectKey(inputHandle, 0x11, 0); SendKey(inputHandle, 0x56); InjectKey(inputHandle, 0x11, 2); Pump(200);
+                    // Observe delivery of this one chord; never resend it or change the expected image.
+                    var pasteAcknowledgement = Stopwatch.StartNew();
+                    string pasteText = "No text acknowledgement received.";
+                    while (pasteAcknowledgement.Elapsed < TimeSpan.FromSeconds(1))
+                    {
+                        if (external.TryReadText(50, out string received))
+                        {
+                            pasteText = received;
+                            if (received.EndsWith("[image:320x180]", StringComparison.Ordinal)) break;
+                        }
+                        Pump(20);
+                    }
+                    string pasteObservation = $"External image paste acknowledgement: elapsed={pasteAcknowledgement.Elapsed.TotalMilliseconds:0.000}ms; foreground={GetForegroundWindow()}; actual text={pasteText}";
+                    report.AppendLine(pasteObservation);
+                    Console.WriteLine(pasteObservation);
+                    string inputTrace = external.ReadInputTrace();
+                    report.AppendLine("External fixture input trace:\n" + inputTrace);
+                    Console.WriteLine("External fixture input trace:\n" + inputTrace);
                     Check("Ctrl+V pastes image in external app without refocusing", external.Text.EndsWith("[image:320x180]", StringComparison.Ordinal));
                     Click(inputHandle, mouseActions[2]); Click(inputHandle, mouseActions[3]);
                     Check("pin/save clicks preserve external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && saves == 1);
@@ -665,23 +683,32 @@ internal static class HotfixUxSelfTest
     private sealed class ExternalInputFixture : IDisposable
     {
         private readonly Process _process;
+        private readonly string _inputTracePath;
         internal IntPtr Handle { get; }
         internal int Id => _process.Id;
         internal string StartupObservation { get; }
-        private ExternalInputFixture(Process process, IntPtr handle, string startupObservation)
-        { _process = process; Handle = handle; StartupObservation = startupObservation; }
-        internal static ExternalInputFixture Start()
+        private ExternalInputFixture(Process process, IntPtr handle, string startupObservation, string inputTracePath)
+        { _process = process; Handle = handle; StartupObservation = startupObservation; _inputTracePath = inputTracePath; }
+        internal static ExternalInputFixture Start(string output)
         {
+            string inputTracePath = ValidatedFilePaths.FileWithinRoot(output, "external-input-events.txt", ".txt");
             var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"))
                 { UseShellExecute = false, CreateNoWindow = true };
             start.ArgumentList.Add("-NoProfile"); start.ArgumentList.Add("-STA"); start.ArgumentList.Add("-Command");
             start.ArgumentList.Add("Add-Type -AssemblyName System.Windows.Forms; " +
+                "$script:inputTracePath='" + inputTracePath.Replace("'", "''", StringComparison.Ordinal) + "'; " +
+                "function Write-InputTrace([string]$message){try{[System.IO.File]::AppendAllText($script:inputTracePath, [DateTimeOffset]::UtcNow.ToString('O')+'; PID='+$PID+'; '+$message+[Environment]::NewLine, (New-Object System.Text.UTF8Encoding($false)))}catch{[Console]::Error.WriteLine('Fixture trace write failed: '+$_.Exception.ToString())}}; " +
                 "$f=New-Object System.Windows.Forms.Form; $f.Text='MyCapture external input measurement'; " +
                 "$f.Width=340; $f.Height=160; $f.StartPosition='Manual'; $f.Left=40; $f.Top=40; " +
                 "$t=New-Object System.Windows.Forms.TextBox; $t.Multiline=$true; $t.Dock='Fill'; $t.ImeMode=[System.Windows.Forms.ImeMode]::Disable; $f.Controls.Add($t); " +
                 "$t.AllowDrop=$true; $t.Add_DragEnter({param($sender,$e) if($e.Data.GetDataPresent('FileDrop')){$e.Effect=[System.Windows.Forms.DragDropEffects]::Copy}}); " +
                 "$t.Add_DragDrop({param($sender,$e) $t.AppendText('[drop:'+($e.Data.GetData('FileDrop')[0])+']')}); " +
-                "$t.Add_KeyDown({param($sender,$e) if($e.Control -and $e.KeyCode -eq 'V' -and [System.Windows.Forms.Clipboard]::ContainsImage()){$img=[System.Windows.Forms.Clipboard]::GetImage(); $t.AppendText('[image:'+$img.Width+'x'+$img.Height+']'); $img.Dispose(); $e.SuppressKeyPress=$true}}); " +
+                "$t.Add_KeyDown({param($sender,$e) Write-InputTrace ('KeyDown key='+$e.KeyCode+'; modifiers='+$e.Modifiers+'; control='+$e.Control+'; focused='+$t.Focused+'; text='+$t.Text); " +
+                "if($e.Control -and $e.KeyCode -eq 'V'){$img=$null; try{$contains=[System.Windows.Forms.Clipboard]::ContainsImage(); Write-InputTrace ('Clipboard ContainsImage='+$contains); " +
+                "try{$data=[System.Windows.Forms.Clipboard]::GetDataObject(); if($null -eq $data){Write-InputTrace 'Clipboard data object=null'}else{Write-InputTrace ('Clipboard formats='+[string]::Join(',', $data.GetFormats()))}}catch{Write-InputTrace ('Clipboard format observation exception='+$_.Exception.ToString())}; " +
+                "if($contains){$img=[System.Windows.Forms.Clipboard]::GetImage(); if($null -eq $img){Write-InputTrace 'Clipboard GetImage=null'}else{Write-InputTrace ('Clipboard GetImage='+$img.Width+'x'+$img.Height)}; " +
+                "$t.AppendText('[image:'+$img.Width+'x'+$img.Height+']'); $e.SuppressKeyPress=$true; Write-InputTrace ('Paste completed; text='+$t.Text)}}catch{Write-InputTrace ('Paste exception='+$_.Exception.ToString()); throw}finally{if($null -ne $img){$img.Dispose()}}}}); " +
+                "$t.Add_KeyUp({param($sender,$e) Write-InputTrace ('KeyUp key='+$e.KeyCode+'; modifiers='+$e.Modifiers+'; control='+$e.Control+'; focused='+$t.Focused+'; text='+$t.Text)}); " +
                 "$f.Add_Shown({[System.Windows.Forms.InputLanguage]::CurrentInputLanguage=[System.Windows.Forms.InputLanguage]::FromCulture([System.Globalization.CultureInfo]::GetCultureInfo('en-US')); $f.Activate(); $t.Focus(); $f.Text='MyCapture external input measurement; focused='+$t.Focused+'; ime='+$t.ImeMode+'; language='+[System.Windows.Forms.InputLanguage]::CurrentInputLanguage.Culture.Name+'; layout='+[System.Windows.Forms.InputLanguage]::CurrentInputLanguage.LayoutName+' ready'}); " +
                 "[System.Windows.Forms.Application]::Run($f)");
             Process process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start external input fixture.");
@@ -698,7 +725,7 @@ internal static class HotfixUxSelfTest
                         _ = SendMessage(hwnd, 0x000D, new IntPtr(title.Capacity), title);
                         if (!title.ToString().EndsWith(" ready", StringComparison.Ordinal)) { Pump(50); continue; }
                         if (GetForegroundWindow() != hwnd) _ = SetForegroundWindow(hwnd);
-                        if (GetForegroundWindow() == hwnd) return new ExternalInputFixture(process, hwnd, title.ToString());
+                        if (GetForegroundWindow() == hwnd) return new ExternalInputFixture(process, hwnd, title.ToString(), inputTracePath);
                     }
                     Pump(50);
                 }
@@ -706,14 +733,29 @@ internal static class HotfixUxSelfTest
             }
             catch { if (!process.HasExited) process.Kill(); process.Dispose(); throw; }
         }
+        internal string ReadInputTrace()
+        {
+            try { return File.Exists(_inputTracePath) ? File.ReadAllText(_inputTracePath, Encoding.UTF8) : "No fixture key events were recorded."; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { return "Fixture input trace unavailable: " + error; }
+        }
         internal string Text
         {
             get
             {
-                var text = new StringBuilder(1024);
-                _ = SendMessage(GetWindow(Handle, 5 /* GW_CHILD */), 0x000D /* WM_GETTEXT */, new IntPtr(text.Capacity), text);
-                return text.ToString();
+                if (TryReadText(1000, out string text)) return text;
+                throw new TimeoutException($"External fixture PID={Id}, HWND={Handle} did not acknowledge WM_GETTEXT within 1000ms; foreground={GetForegroundWindow()}; input was not resent.");
             }
+        }
+        internal bool TryReadText(uint timeoutMilliseconds, out string text)
+        {
+            var buffer = new StringBuilder(1024);
+            // A blocked fixture must not block the parent's STA indefinitely while reading clipboard data.
+            bool acknowledged = SendMessageTimeout(GetWindow(Handle, 5 /* GW_CHILD */), 0x000D /* WM_GETTEXT */,
+                new IntPtr(buffer.Capacity), buffer, 0x0003 /* SMTO_BLOCK | SMTO_ABORTIFHUNG */,
+                timeoutMilliseconds, out _) != IntPtr.Zero;
+            text = acknowledged ? buffer.ToString() : string.Empty;
+            return acknowledged;
         }
         internal void Activate()
         {
@@ -730,6 +772,8 @@ internal static class HotfixUxSelfTest
         }
     }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr SendMessage(IntPtr hwnd, uint message, IntPtr wParam, StringBuilder text);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint message,
+        IntPtr wParam, StringBuilder text, uint flags, uint timeout, out UIntPtr result);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll", EntryPoint = "keybd_event")] private static extern void KeyEvent(byte key, byte scan, uint flags, UIntPtr extra);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetCursorPos(int x, int y);
