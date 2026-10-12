@@ -723,10 +723,10 @@ internal sealed class CaptureScene : TutorialScene
             "record-region" => s switch
             {
                 "record-overlay" or "approach" or "drag" => (L("녹화할 영역을 드래그", "Drag the area to record"), ""),
-                "ready" or "start-move" or "start" => (L("녹화 컨트롤에서 시작 선택", "Click Start in the recording controls"), ""),
+                "ready" or "start-move" or "start" => (L("녹화 컨트롤에서 녹화 시작 선택", "Click Start recording in the recording controls"), ""),
                 "recording" or "stop-move" => (L("녹화 중 · 화면을 조작", "Recording · work on the screen"), ""),
-                "stop" => (L("중지 선택", "Click Stop"), ""),
-                _ => (L("녹화 편집기에서 결과 확인", "Review it in the recording editor"), ""),
+                "stop" => (L("정지 선택", "Click Stop"), ""),
+                _ => (L("동영상 편집기에서 결과 확인", "Review it in the video editor"), ""),
             },
             _ => s switch
             {

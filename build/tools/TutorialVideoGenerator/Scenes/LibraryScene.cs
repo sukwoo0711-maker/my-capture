@@ -633,7 +633,7 @@ internal sealed class LibraryScene : TutorialScene
                     "key" or "dialog" => (L("Del: 삭제 확인 창 열기", "Del asks for confirmation"), "Del"),
                     "ok-move" or "ok" => (L("확인 창에서 확인 선택", "Click OK in the confirmation"), ""),
                     "removed" or "close-move" or "close" => (L("라이브러리에서 삭제됨", "Removed from the library"), ""),
-                    _ => (L("목록 확인 · 필요한 항목은 휴지통에서 복원", "Check the list · Restore from the Recycle Bin if needed"), ""),
+                    _ => (L("목록 확인 · 필요한 항목은 최근 삭제 복원으로 되돌림", "Check the list · Restore recently deleted brings items back"), ""),
                 };
         }
     }

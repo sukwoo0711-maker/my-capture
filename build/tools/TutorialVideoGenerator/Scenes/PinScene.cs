@@ -722,7 +722,7 @@ internal sealed class PinScene : TutorialScene
         {
             "open" or "to-text" or "select-text" or "selected" => (L("핀으로 띄울 텍스트 선택", "Select the text to pin"), ""),
             "copy" => (L("Ctrl+C로 클립보드에 복사", "Copy it to the clipboard with Ctrl+C"), "Ctrl+C"),
-            "shortcut" => (L("지정된 클립보드 핀 단축키 누름", "Press your Clipboard pin shortcut"), ""),
+            "shortcut" => (L("지정된 클립보드를 핀으로 띄우기 단축키 누름", "Press your Pin clipboard to screen shortcut"), ""),
             "pinned" => (L("클립보드 내용이 핀으로 화면에 표시됨", "The clipboard content appears as a pin"), ""),
             "drag" or "moved" => (L("핀을 드래그하여 원하는 위치로 이동", "Drag the pin where you need it"), ""),
             "esc" => (L("Esc로 핀 닫기", "Press Esc to close the pin"), "Esc"),
@@ -731,7 +731,7 @@ internal sealed class PinScene : TutorialScene
         "pin-hide-all" => segment switch
         {
             "pins" => (L("화면에 띄운 핀 두 개", "Two pins on the screen"), ""),
-            "hide" => (L("지정된 모든 핀 숨기기 단축키 누름", "Press your Hide all pins shortcut"), ""),
+            "hide" => (L("지정된 핀 모두 숨기기 단축키 누름", "Press your Hide all pins shortcut"), ""),
             "hidden" => (L("모든 핀이 숨겨져 아래 창이 보임", "All pins are hidden and the window below shows"), ""),
             "show" => (L("같은 단축키를 다시 누름", "Press the same shortcut again"), ""),
             "returned" => (L("핀이 같은 위치에 다시 표시됨", "The pins return to the same places"), ""),

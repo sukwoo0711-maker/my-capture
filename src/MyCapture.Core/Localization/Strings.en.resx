@@ -3916,15 +3916,15 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.AccessibleName" xml:space="preserve"><value>{0} tutorial</value></data>
   <data name="Tutorial.VideoName" xml:space="preserve"><value>{0} tutorial video</value></data>
   <data name="Tutorial.image-rotate.Title" xml:space="preserve"><value>Rotate image</value></data>
-  <data name="Tutorial.video-trim.Title" xml:space="preserve"><value>Trim recording</value></data>
+  <data name="Tutorial.video-trim.Title" xml:space="preserve"><value>Trim video</value></data>
   <data name="Tutorial.capture-region.Unassigned" xml:space="preserve"><value>Choose Region capture from the tray menu.</value></data>
   <data name="Tutorial.capture-region.Step1" xml:space="preserve"><value>1. Start a region capture.</value></data>
   <data name="Tutorial.capture-region.Step2" xml:space="preserve"><value>2. Drag to select the area to capture.</value></data>
   <data name="Tutorial.capture-region.Step3" xml:space="preserve"><value>3. Edit or save according to your after-capture setting.</value></data>
   <data name="Tutorial.record-region.Unassigned" xml:space="preserve"><value>Choose Screen recording from the tray menu.</value></data>
   <data name="Tutorial.record-region.Step1" xml:space="preserve"><value>1. Drag to select the recording area.</value></data>
-  <data name="Tutorial.record-region.Step2" xml:space="preserve"><value>2. Click Start in the recording controls and perform the action.</value></data>
-  <data name="Tutorial.record-region.Step3" xml:space="preserve"><value>3. Click Stop to review the result in the recording editor.</value></data>
+  <data name="Tutorial.record-region.Step2" xml:space="preserve"><value>2. Click Start recording in the recording controls and perform the action.</value></data>
+  <data name="Tutorial.record-region.Step3" xml:space="preserve"><value>3. Click Stop to review the result in the video editor.</value></data>
   <data name="Tutorial.record-pause.Unassigned" xml:space="preserve"><value>Use the Pause button in the recording controls.</value></data>
   <data name="Tutorial.record-pause.Step1" xml:space="preserve"><value>1. Start a region recording.</value></data>
   <data name="Tutorial.record-pause.Step2" xml:space="preserve"><value>2. Pause using the Pause button or your assigned shortcut.</value></data>
@@ -4005,22 +4005,22 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. Click Move to folder, then find the captures in that folder.</value></data>
   <data name="Tutorial.library-delete.Step1" xml:space="preserve"><value>1. Select an item to delete in the library.</value></data>
   <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Press Del and click OK in the confirmation dialog.</value></data>
-  <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. Review the list. Restore needed items from the recycle bin.</value></data>
+  <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. Review the list. Bring items back with Restore recently deleted in the library.</value></data>
   <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. Open a recording from the library.</value></data>
   <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. Press Space to play.</value></data>
   <data name="Tutorial.video-play.Step3" xml:space="preserve"><value>3. Press Space again to pause at the scene you want.</value></data>
-  <data name="Tutorial.video-frame-step.Step1" xml:space="preserve"><value>1. Pause playback in the recording editor.</value></data>
+  <data name="Tutorial.video-frame-step.Step1" xml:space="preserve"><value>1. Pause playback in the video editor.</value></data>
   <data name="Tutorial.video-frame-step.Step2" xml:space="preserve"><value>2. Press comma (,) for the previous frame or period (.) for the next.</value></data>
   <data name="Tutorial.video-frame-step.Step3" xml:space="preserve"><value>3. Start editing or trimming at the frame you need.</value></data>
-  <data name="Tutorial.video-trim.Step1" xml:space="preserve"><value>1. Move to the beginning of the range to keep and press I.</value></data>
+  <data name="Tutorial.video-trim.Step1" xml:space="preserve"><value>1. In the video editor, move to the beginning of the range to keep and press I.</value></data>
   <data name="Tutorial.video-trim.Step2" xml:space="preserve"><value>2. Move to its end and press O to set the range.</value></data>
   <data name="Tutorial.video-trim.Step3" xml:space="preserve"><value>3. Review the selected range and save the edits to the library.</value></data>
-  <data name="Tutorial.video-gif-export.Step1" xml:space="preserve"><value>1. Review the range to export in the recording editor.</value></data>
+  <data name="Tutorial.video-gif-export.Step1" xml:space="preserve"><value>1. Review the range to export in the video editor.</value></data>
   <data name="Tutorial.video-gif-export.Step2" xml:space="preserve"><value>2. Press G to open GIF export and review the options and preview.</value></data>
   <data name="Tutorial.video-gif-export.Step3" xml:space="preserve"><value>3. Click Export and choose the file destination.</value></data>
-  <data name="Tutorial.pin-clipboard.Unassigned" xml:space="preserve"><value>Assign the Clipboard pin shortcut in Settings &gt; Shortcuts before using it.</value></data>
+  <data name="Tutorial.pin-clipboard.Unassigned" xml:space="preserve"><value>Assign the Pin clipboard to screen shortcut in Settings &gt; Shortcuts before using it.</value></data>
   <data name="Tutorial.pin-clipboard.Step1" xml:space="preserve"><value>1. Copy an image or text to the clipboard.</value></data>
-  <data name="Tutorial.pin-clipboard.Step2" xml:space="preserve"><value>2. Press your Clipboard pin shortcut to place it on screen.</value></data>
+  <data name="Tutorial.pin-clipboard.Step2" xml:space="preserve"><value>2. Press your Pin clipboard to screen shortcut.</value></data>
   <data name="Tutorial.pin-clipboard.Step3" xml:space="preserve"><value>3. Drag the pin to move it. Press Esc to close it.</value></data>
   <data name="Tutorial.pin-hide-all.Unassigned" xml:space="preserve"><value>Assign the Hide all pins shortcut in Settings &gt; Shortcuts before using it.</value></data>
   <data name="Tutorial.pin-hide-all.Step1" xml:space="preserve"><value>1. Place pins on the screen.</value></data>
