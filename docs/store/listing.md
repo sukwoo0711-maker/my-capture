@@ -51,15 +51,11 @@ OCR로 이미지 속 글자를 텍스트로 복사하고, 표를 CSV·Markdown·
 - 키보드 조작과 스크린 리더 접근성
 - 계정, 광고, 캡처 횟수 제한 없음
 
-### 이 버전의 새로운 기능 (4.1.0)
+### 이 버전의 새로운 기능 (4.1.1)
 
-- 라이브러리의 날짜별 폴더와 하위 폴더로 캡처를 정리하고 폴더·ZIP으로 내보낼 수 있습니다.
-- 폴더에 보관한 캡처는 자동 정리에서 제외되며, 폴더에서 꺼내면 보관 기간이 다시 시작됩니다.
-- 선택 도구에서 이미지 가장자리·모서리를 끌어 자르기를 시작하고 여백을 자동으로 제거할 수 있습니다.
-- 자르기를 열지 않아도 편집기에서 이미지를 왼쪽·오른쪽으로 회전할 수 있습니다.
-- 표·코드·텍스트에 맞춘 추출 화면과 표의 CSV·Markdown·탭 구분 복사를 제공합니다.
-- 캡처 가이드 색을 설정할 수 있으며, 첫 실행 안내·단축키 모음·빠른 작업 카드를 다듬었습니다.
-- 좁은 창의 도구 배치, 핀과 주석 편집, 테마 전환 안정성을 개선했습니다.
+- 캡처 영역을 선택할 때 화면을 그리는 처리 비용을 줄였습니다.
+- 큰 이미지의 일부를 자르거나 다시 실행할 때 메모리 사용량을 줄였습니다.
+- 라이브러리에서 전체 선택과 선택 상태 확인에 필요한 작업을 줄였습니다.
 
 ### 검색어
 
@@ -101,15 +97,11 @@ MyCapture supports global shortcuts, a tray menu, Korean and English interfaces,
 - Keyboard and screen reader accessibility
 - No account, ads or capture limits
 
-### What's new in this version (4.1.0)
+### What's new in this version (4.1.1)
 
-- Organize captures in dated folders and subfolders, and export folders or ZIP archives.
-- Captures kept in folders are excluded from automatic cleanup. Their retention period restarts when moved out.
-- Start cropping by dragging an empty image edge or corner with the Select tool, or trim blank margins automatically.
-- Rotate images left or right from the editor without opening the Crop tool.
-- Extract tables, code and text in dedicated views, and copy tables as CSV, Markdown or tab-separated text.
-- Customize capture guide colors and use refined first-run guidance, keyboard shortcut help and quick action cards.
-- Improved tool layouts in narrow windows, pins, annotation editing and stability when switching themes.
+- Reduced drawing work while selecting a capture region.
+- Reduced memory use when cropping part of a large image or redoing a crop.
+- Reduced processing when selecting all captures and checking selections in the library.
 
 ### Search terms
 

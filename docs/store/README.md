@@ -51,9 +51,9 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 병합된 main의 깨끗한 작업 트리에서 실행합니다. `package-store.ps1`은 `package.ps1`이 만든 게시 폴더(`artifacts\release\<버전>\publish-win-x64`)를 그대로 사용합니다. 패키지 self-test 8종을 단독 실행하여 통과한 바이너리를 Store 패키지로 묶습니다.
 
 ```powershell
-.\build\package.ps1 -Version 4.1.0
-.\build\run-packaged-self-tests.ps1 -PublishRoot .\artifacts\release\4.1.0\publish-win-x64
-.\build\package-store.ps1 -Version 4.1.0 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
+.\build\package.ps1 -Version 4.1.1
+.\build\run-packaged-self-tests.ps1 -PublishRoot .\artifacts\release\4.1.1\publish-win-x64
+.\build\package-store.ps1 -Version 4.1.1 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
 ```
 
 - **결과물**: `artifacts\store\<버전>\` 아래에 다음 파일이 생깁니다.
@@ -66,6 +66,17 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 - **버전**: 패키지 버전은 `<버전>.0`입니다. 네 번째 자리는 Store가 예약한 자리라서 항상 0입니다. 새 제출은 이전 제출보다 버전이 높아야 합니다.
 - **서명**: 패키지는 서명하지 않은 채로 올립니다. Store가 인증 후 서명합니다.
 
+### Store 전용 게시 경로
+
+GitHub ZIP/설치 프로그램이 필요 없는 다음 Store 배포에는 `package.ps1 -StoreOnly`를 사용할 수 있습니다. 같은 self-contained 게시·법적 고지·파일 inventory 검사를 수행하고 필수 self-test 8종을 실행한 뒤 ZIP 압축과 IExpress 생성을 건너뜁니다. 실행 중인 MyCapture가 있으면 검사 gate가 중단됩니다. 기존 출력은 보존하므로 새 버전의 깨끗한 소스에서 실행합니다.
+
+```powershell
+.\build\package.ps1 -Version 4.1.1 -StoreOnly
+.\build\package-store.ps1 -Version 4.1.1 -PublishDir .\artifacts\store-publish\4.1.1\publish-win-x64 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
+```
+
+`package-store.ps1`은 두 게시 경로 모두에서 인접한 `release-manifest.json`의 clean source SHA·버전·x64 런타임·전체 파일 크기/해시를 확인합니다. Store 전용 경로는 저장된 8종 결과 JSON과 보고서 해시도 다시 확인합니다. 동일 버전이라도 소스나 게시 파일이 달라지면 패키징을 중단합니다. 기존 GitHub release 경로와 필수 installer 검사는 유지됩니다.
+
 ## 3. 제출 전 로컬 확인 (선택)
 
 로컬 테스트 ID로 같은 패키지를 만들고, 서명 없이 설치해 봅니다.
@@ -77,7 +88,7 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 관리자 권한 PowerShell에서 설치합니다. Windows 11은 서명 없는 패키지를 `-AllowUnsigned`로 설치할 수 있지만, 실행 파일이 든 패키지는 관리자 권한이 필요합니다.
 
 ```powershell
-Add-AppxPackage -Path .\artifacts\store\4.1.0-localtest\MyCapture.LocalTest_4.1.0.0_x64.msix -AllowUnsigned
+Add-AppxPackage -Path .\artifacts\store\4.1.1-localtest\MyCapture.LocalTest_4.1.1.0_x64.msix -AllowUnsigned
 ```
 
 다음 항목을 확인합니다.
@@ -115,8 +126,8 @@ Get-AppxPackage MyCapture.LocalTest | Remove-AppxPackage
 Store 목록용 스크린샷은 실제 MyCapture 창을 렌더링해 만듭니다. 화면에 들어가는 대시보드, 코드, 블로그 글, 고객 문의, 예산표는 모두 합성한 예시 데이터이고, 사용자 라이브러리·설정·화면·클립보드는 읽지 않습니다. Release 빌드의 실행 파일로 언어마다 한 번씩 실행합니다.
 
 ```powershell
-.\artifacts\release\4.1.0\publish-win-x64\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\4.1.0\ko ko
-.\artifacts\release\4.1.0\publish-win-x64\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\4.1.0\en en
+.\artifacts\release\4.1.1\publish-win-x64\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\4.1.1\ko ko
+.\artifacts\release\4.1.1\publish-win-x64\MyCapture.exe --selftest-store-shots .\artifacts\store\screenshots\4.1.1\en en
 ```
 
 - 결과는 2560×1440 PNG 10장(라이브러리, 주석, 빠른 가리기, 캡처 후 카드, 핀, 텍스트 인식, 영상 편집기, GIF 내보내기, 설정, 밝은 테마 라이브러리)과 `store-screenshots-report.txt`입니다.

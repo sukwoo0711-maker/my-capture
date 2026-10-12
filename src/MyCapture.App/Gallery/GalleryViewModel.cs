@@ -83,9 +83,27 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public GallerySelection Selection { get; } = new();
     public IReadOnlyList<GalleryItemViewModel> SelectedTiles => Selection.SelectedIds
         .Select(FindTile).OfType<GalleryItemViewModel>().ToArray();
-    public bool HasSelection => Selection.SelectedIds.Count > 0;
-    public string SelectionText => UiText.Format("LibrarySelection_Count", Selection.SelectedIds.Count);
-    public GalleryItemViewModel? SingleSelectedTile => SelectedTiles.Count == 1 ? SelectedTiles[0] : null;
+    public bool HasSelection => Selection.Count > 0;
+    public string SelectionText => UiText.Format("LibrarySelection_Count", Selection.Count);
+    public GalleryItemViewModel? SingleSelectedTile
+    {
+        get
+        {
+            if (Selection.SingleSelectedId is { } id) return FindTile(id);
+            if (Selection.Count == 0) return null;
+
+            // Preserve the projection's behavior if a selected id has no cached tile,
+            // but stop once two tiles establish that this is not a single selection.
+            GalleryItemViewModel? single = null;
+            foreach (Guid selected in Selection.EnumerateSelectedIds())
+            {
+                if (FindTile(selected) is not { } tile) continue;
+                if (single is not null) return null;
+                single = tile;
+            }
+            return single;
+        }
+    }
     private GalleryFilter _filter;
     public GalleryFilter Filter
     {
@@ -105,6 +123,16 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public void SelectDay(string heading, bool control)
     {
         Selection.SelectGroup(_groups.Where(g => g.Heading == heading).SelectMany(g => g.Items).Select(t => t.Id), control, toggle: true);
+        PublishSelection();
+    }
+
+    /// <summary>Selects the displayed captures without rebuilding their unchanged library view.</summary>
+    public void SelectAllVisible()
+    {
+        Selection.SelectGroup(_groups.SelectMany(g => g.Items).Select(t => t.Id), control: false);
+        // Keep the visibility/anchor normalization formerly performed by Refresh,
+        // including when a caller has changed the public Selection's visible list.
+        Selection.SetVisible(_groups.SelectMany(g => g.Items).Select(t => t.Id));
         PublishSelection();
     }
 

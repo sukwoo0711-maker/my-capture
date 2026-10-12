@@ -7,7 +7,21 @@ public sealed class GallerySelection
     private readonly HashSet<Guid> _visibleIds = [];
     private Guid? _anchor;
     private IReadOnlyList<Guid> _visible = [];
-    public IReadOnlyList<Guid> SelectedIds => _visible.Where(_selected.Contains).ToArray();
+    private bool _hasDuplicateVisibleIds;
+    public IReadOnlyList<Guid> SelectedIds => EnumerateSelectedIds().ToArray();
+    // All mutation paths keep _selected within _visibleIds. Normal gallery rows have
+    // unique ids; retain the old display-list count even for a duplicate input list.
+    internal int Count => _hasDuplicateVisibleIds ? _visible.Count(_selected.Contains) : _selected.Count;
+    internal Guid? SingleSelectedId
+    {
+        get
+        {
+            if (Count != 1) return null;
+            foreach (Guid id in _selected) return id;
+            return null;
+        }
+    }
+    internal IEnumerable<Guid> EnumerateSelectedIds() => _visible.Where(_selected.Contains);
     public Guid? Anchor => _anchor;
     public bool Contains(Guid id) => _selected.Contains(id);
 
@@ -16,6 +30,7 @@ public sealed class GallerySelection
         _visible = ids.ToArray();
         _visibleIds.Clear();
         _visibleIds.UnionWith(_visible);
+        _hasDuplicateVisibleIds = _visibleIds.Count != _visible.Count;
         _selected.IntersectWith(_visibleIds);
         if (_anchor is Guid anchor && !_visibleIds.Contains(anchor)) _anchor = null;
     }
