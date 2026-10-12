@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `feat/text-copy-tutorial` (텍스트 복사 GIF 사용법 구현 진행) |
+| 현재 기록 브랜치 | `feat/text-copy-tutorial` (텍스트 복사 GIF 사용법 QA13 검증·전달 완료) |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -48,12 +48,16 @@
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
 
-### 텍스트 복사 GIF 사용법 — 진행 중
+### 텍스트 복사 GIF 사용법 — QA13 구현·검증·전달 완료
 
 - 사용자 요청: 단축키의 텍스트 복사 같은 기능을 GIF로 쉽게 이해할 수 있게 만듭니다. 첫 적용은 텍스트 복사이며 설정 단축키와 F1 도움말의 해당 항목에서 엽니다.
-- 기준 `a8ef489`/제품 `33f6652`, root `feat/text-copy-tutorial`. 실제 흐름은 캡처 선택 중 T → 영역 드래그 → OCR 자동 복사 → Ctrl+V입니다. 별도 CaptureText 단축키는 기본 미지정이며 사용자 설정을 안내에 반영합니다.
-- GIF는 합성 예제와 실제 제품 UI 렌더를 사용한 한영 오프라인 자산으로 준비합니다. 열 때만 읽고 재생/일시정지/다시보기, 닫기·숨김 시 재생 정리 및 시스템 모션 설정을 적용합니다. 사용자 화면·클립보드를 녹화 자료로 사용하지 않습니다.
-- 기존 작업 사본 a491은 UI, edit-recovery는 GIF 생성 도구·자산으로 재사용합니다. source/generated asset 범위를 분리하고 root가 통합·독립 검토·native/전체 검증을 관리합니다. LOG/시각 비교/검증은 `artifacts/text-copy-tutorial/`에 보존합니다. Store 재배포는 포함하지 않습니다.
+- 기준 `a8ef489`/제품 `33f6652`, root `feat/text-copy-tutorial`, 최종 제품 소스 **`b4ae87e2fab277e6db9234c4fc7818153c8fbed6`**. UI `bc25638`, GIF `57ef460`, 일반 도움말 행 회귀 수정 `b4ae87e`를 통합했습니다. 실제 흐름은 캡처 선택 중 T → 영역 드래그 → 자동 인식·복사 → Ctrl+V입니다. 별도 CaptureText 단축키는 기본 미지정이며 현재 저장된 사용자 설정을 안내에 반영합니다.
+- 설정 → 단축키 → 텍스트 복사 옆 **사용법 보기**, F1 도움말의 텍스트 복사/선택 중 텍스트 복사 행과 검색 결과에서 같은 창을 엽니다. 한영 GIF는640×360/11프레임/11.2초, ko138,368B/en144,217B, 디코딩 프레임 저장2,534,400B입니다. 실제 제품 선택 화면과 합성 예제의 렌더이며 사용자 화면·클립보드를 녹화 자료로 사용하지 않았습니다. 생성기와 디코딩한 검토 이미지는 `build/tools/TutorialGifGenerator/`에 보존합니다.
+- GIF 읽기·해독은 열 때 background STA에서 수행합니다. 재생/일시정지/다시보기, 정적3단계, 누락·손상 fallback, 시스템 모션 설정에 따른 초기 정지·설정 변경 시 일시정지를 지원합니다. 비활성화·최소화에서 정지하고 닫기·숨김·캡처 시작에서 취소·타이머·프레임을 해제합니다. decode 중 닫기 경쟁도 검사했습니다.
+- 첫 전체 App은2358 PASS/5 FAIL/11skip였으며 원인은 일반 도움말 행을 불필요하게 감싼 구조 변경이었습니다. 일반행의 직접 TextBlock 구조를 복원하고 기존 assertions를 유지했습니다. 최종 Debug 경고0/오류0(`e211c7`), 확장 집중31/31(`9d6416`), Core전체1105/1105(`8dd028`) PASS. 최종 전체 App은session8096/`c2f014` exit0, **2363 PASS/0 FAIL/기존 조건부11 skip**입니다. UI 독립 읽기 검토와 수정 후 기존 행 계약 재검토 완료.
+- **QA13 실기 파일:** `C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial/MyCapture.exe`. self-contained win-x64/R2R·Core/Desktop10.0.11, 표시 버전 `4.1.1+b4ae87e2fab277e6db9234c4fc7818153c8fbed6`. publish `17e2ba` exit0, DLL SHA256 **`73916DA5553DBB7D3A857BEF99D7675C9519CFD6400DDF3929D655C645D69D72`**. 독립279파일/deps263누락0/source차이0/GIF두개원본SHA일치(`e6f499`), x64/R2R(`5c91b1`) PASS.
+- 실제 제품 창·자산을 사용하는 격리 WPF host에서 Computer Use로 두 도움말 진입점, 자동 재생, 일시정지·재생·처음으로 다시보기·Esc·닫기를 확인했습니다. session46730/PID62020/`5e4cdf` exit0, 최종 두 튜토리얼 객체 GC 수거·프레임/타이머 해제·프로세스 종료. 사용자의 클립보드·프로필과 앱은 조작하지 않았습니다. UX 자체 검사 session94042/`f859f0` exit0·RESULT PASS, 실제780×560 설정 AS-IS/TO-BE 및 밝은/어두운 테마 직접 확인. 근거는 `artifacts/text-copy-tutorial/`과 UX receipt `artifacts/next-product-readiness/ux-2e223c72/`입니다.
+- 기존 작업 사본 a491(UI)·edit-recovery(자산)를 재사용하고 모든 실패·시도·산출물을 보존했습니다. 초기 Pro tunnel_unavailable/Antigravity validation_failed 근거를 재사용해 허용된 native Sol worker로 진행했습니다. root가 최종 통합·검증·인계를 완료하고 기존 Explorer를 QA13 폴더로 이동해 실제 경로를 확인했습니다. Store 재배포·push·PR·병합·파일 삭제는 없습니다.
 
 ### 최악·과부하 조건 성능 개선 — QA12 검증·전달 완료
 
@@ -194,10 +198,10 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** 텍스트 복사 GIF 사용법을 구현·검증합니다. 실제 동작과 일치하는 한영 GIF, 설정/F1의 진입점, 재생 수명·모션 설정·현재 단축키 안내를 통합한 뒤 새 실기 빌드를 전달합니다. 과부하 개선 QA12의 완료 결과와 후속 한계는 §3을 유지합니다.
+**현재 요청 완료:** 텍스트 복사 GIF 사용법을 QA13에 구현·검증했습니다. 실제 동작과 일치하는 한영 GIF, 설정/F1의 진입점, 재생 수명·모션 설정·현재 단축키 안내와 새 실기 빌드를 전달했습니다. 과부하 개선 QA12의 완료 결과와 후속 한계는 §3을 유지합니다.
 
-1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1105 PASS, App2353 PASS/실패0/기존 조건부11 skip. 최종 제품33f6652 이후 제품 변경은 없습니다.
-2. **완료 — QA12 실기 빌드·전달:** `artifacts/qa12-extreme-load/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. UX 자체 검사·payload 스트레스·10만 자 실제 입력/Undo·정상 종료 확인 및 폴더 열기 완료. 실제 TSF 한글 조합은 미확인입니다.
+1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1105 PASS, App2363 PASS/실패0/기존 조건부11 skip. 최종 제품소스b4ae87e의 설정/F1/튜토리얼과 기존 성능 개선을 함께 검사했습니다.
+2. **완료 — QA13 실기 빌드·전달:** `artifacts/qa13-text-copy-tutorial/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. 설정 → 단축키 → 텍스트 복사 → 사용법 보기, F1의 해당 행·검색 결과에서 한영 GIF를 엽니다. UX 자체 검사·실제재생/정지/다시보기/종료·AS-IS/TO-BE·폴더 열기 완료. QA12와 기존 산출물은 보존했습니다.
 3. **후속 우선순위:** 편집100만 자 여러 줄의 전체 선택60초guard, OCR100만 자 첫 표시7.37초, 전체 Gallery 갱신과 물리 화면 지연을 별도 개선 대상으로 유지합니다. QA12 사용자 실기 피드백을 함께 반영합니다. 다음 Store 배포 시 새 버전·필수 패키지 검사·실제 업데이트 교체 검증이 필요합니다.
 
 **이전 작업 완료 이력:** 평가·업데이트·지원, 휴지통 삭제·복원, 종료 보호·편집 복구는 QA11에서 검증했습니다. 실제 Store 설치·교체·재실행 검증은 다음 패키지 배포 단계입니다. 아래 이전 배포 작업과4.1.1 제출 산출물은 보존합니다.
@@ -399,6 +403,11 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 재현 도구78e30d5→527f9bc,6e75dbb→d7b5ec7 통합 뒤 root finalpayload 빌드d02dab/938df7 exit0 및 actual8K PNG f1e9d9/OCR100k8e3be2 exit0 PASS. Computer Use로 실제 OCR→편집100k 입력·선택·Home/End·Undo, session93413/PID59528/7f0872 exit0 HOLD_CLOSED. 한글😀100004자→CtrlZ100000자/원본SHA동일, native-editor-home.json/native-editor-unicode-undo.json 보존. Hangul 키 미지원/IMEOff 유지로 실제 한글조합 미확인. root9b1d23 TRX/UX/ownedPID부재 exit0, 독립b31ad9/2ade73 exit0 수치/해석검토. Explorer QA12폴더 화면확인, 파일실행·Store·원격변경·삭제 없음. 남은100만다수줄60초guard/OCR초기7.37초 포함 §3/§4 최종 갱신. 첫 문서 갱신 bc0cea exit1은 PowerShell→Python pipe의 문자열 인코딩으로 substring 미일치, 파일 쓰기 전 실패; UTF8 파일로 재실행.
 
 - 2026-10-12 Codex: 사용자 GIF 사용법 요청 착수. root a8ef489/제품33f6652 기준 identity/status882c0a exit0, `git switch -c feat/text-copy-tutorial` 48b239 exit0. 설정/F1의 텍스트 복사 항목에서 한영 GIF를 열고 현재 단축키·T전환·자동 복사·붙여넣기를 안내하는 범위 확정. native `/root/tutorial_ui`와 `/root/tutorial_asset`를 기존 a491/edit-recovery 작업 사본에 분리 배정. 이전 Pro tunnel_unavailable/Agy validation_failed와 공식 native 경로 확인을 재사용했고 재호출·권한 확장은 하지 않음. actual QA12 AS-IS PNG 복사·직접 확인 f8b1f3 exit0. 구현·최종 검증은 진행 중이며 LOG는 `artifacts/text-copy-tutorial/development-log.txt`.
+
+- 2026-10-12 Codex: 텍스트 복사 사용법 UI968039d→bc25638(`ac478a` exit0), 한영 GIF/생성기5576070→57ef460(`897ada` exit0), 검토LOG81fde02→834d663를 통합했습니다. 첫 App전체 session75172/836c69 exit1(2358PASS/5FAIL/11skip)의 일반 도움말 행 구조 회귀를7cf376d→b4ae87e(`f732c8` exit0)로 수정하고 기존assertions를 유지했습니다. root `dotnet build MyCapture.slnx -c Debug -v q -nologo` e211c7 exit0 경고0/오류0, 확장집중31/31 9d6416 exit0, Core1105/1105 8dd028 exit0. 수정 후 독립 읽기검토 통과. 최초실패/TRX·exactcommands는 `artifacts/text-copy-tutorial/development-log.txt`에 보존합니다.
+- 2026-10-12 Codex: sourceb4ae87e의 QA13 publish session91978/17e2ba exit0, DLL73916DA5…69D72·runtime10.0.11·279파일·deps263누락0·x64/R2R·한영GIFSHA일치 e6f499/5c91b1 exit0. 격리 WPF host에서 실제 제품 튜토리얼의 두 검색진입점/재생/정지/다시보기/Esc/닫기를 Computer Use로 확인, session46730/PID62020/5e4cdf exit0 및 두창GC수거·프레임/타이머해제·정상종료. UX 자체검사 session94042/f859f0 exit0·RESULT PASS, 실제 설정AS-IS/TO-BE·밝은/어두운 PNG 직접확인 f4a7d7. 사용자 프로필·클립보드·앱조작과 파일삭제·원격변경 없음. 최종 App전체 session8096 진행 중.
+
+- 2026-10-12 Codex: 최종 root `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger 'trx;LogFileName=text-copy-app-final.trx' --results-directory artifacts/text-copy-tutorial/test-results` session8096/c2f014 exit0,2363PASS/0FAIL/11기존조건부skip(6분39초). Core1105PASS·집중31PASS·최종Debug/UX/native 결과를 확인하고 §0/§3/§4를 완료로 갱신했습니다. Computer Use에서 기존 Explorer443353524의 주소를 `C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial`로 이동하고 QA13 경로·폴더 화면을 확인했습니다. 실행파일은 사용자 테스트를 위해 전달하며 Store 상태는 유지합니다. 모든 실패와 산출물·작업 사본을 보존했습니다.
 
 ## 9. 인계 체크리스트
 
