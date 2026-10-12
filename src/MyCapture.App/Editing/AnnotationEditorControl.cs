@@ -1128,7 +1128,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         SetStatus(UiText.Get("Text_230D26DEB9AE"));
 
         textBox.TextChanged += OnLiveTextBoxTextChanged;
-        textBox.LostKeyboardFocus += (_, _) => CommitActiveText();
+        // A box placed by a simulated gesture lives in a window that never takes keyboard focus;
+        // it commits on the next canvas press instead.
+        bool simulated = _simulatingPointer;
+        textBox.LostKeyboardFocus += (_, _) => { if (!simulated) CommitActiveText(); };
         _ = textBox.Focus();
     }
 

@@ -260,6 +260,22 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         ArgumentNullException.ThrowIfNull(action);
         Dismiss();
         if (suppressNotification()) return;
+        Window window = CreateActionNotification(title, message, actionLabel, action);
+        window.Loaded += (_, _) =>
+        {
+            Rect work = SystemParameters.WorkArea;
+            window.Left = Math.Max(work.Left, work.Right - window.ActualWidth - 16);
+            window.Top = Math.Max(work.Top, work.Bottom - window.ActualHeight - 16);
+        };
+        Present(window, FeedbackKind.Result, title + " " + message);
+    }
+
+    /// <summary>
+    /// The card <see cref="ShowActionNotification"/> presents, before it is placed or shown. The
+    /// tutorial clip generator renders it offscreen.
+    /// </summary>
+    internal Window CreateActionNotification(string title, string message, string actionLabel, Action action)
+    {
         var content = new StackPanel();
         content.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         content.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) });
@@ -280,12 +296,6 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         window.WindowStyle = WindowStyle.None;
         window.SizeToContent = SizeToContent.Height;
         window.SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(window);
-        window.Loaded += (_, _) =>
-        {
-            Rect work = SystemParameters.WorkArea;
-            window.Left = Math.Max(work.Left, work.Right - window.ActualWidth - 16);
-            window.Top = Math.Max(work.Top, work.Bottom - window.ActualHeight - 16);
-        };
-        Present(window, FeedbackKind.Result, title + " " + message);
+        return window;
     }
 }
