@@ -22,6 +22,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="MyCapture.App.Tests" />
+    <!-- Renders the tutorial clips from this source (build/tools/TutorialVideoGenerator); never shipped. -->
+    <InternalsVisibleTo Include="MyCapture.TutorialGenerator" />
   </ItemGroup>
 
   <ItemGroup>

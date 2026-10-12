@@ -371,7 +371,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal bool IsCommitInProgress => _commitInProgress && !_completed;
     internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress;
 
-    internal bool CapturePointer() => _viewport.CaptureMouse();
+    internal bool CapturePointer() => !_simulatingPointer && _viewport.CaptureMouse();
 
     internal void ReleasePointer()
     {
@@ -598,59 +598,89 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void OnSurfaceMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_completed || _commitInProgress) return;
+        if (SurfacePointerDown(e.GetPosition(_surface), e.ClickCount)) e.Handled = true;
+    }
+
+    /// <summary>
+    /// Plays a canvas gesture from code, at <paramref name="viewportPoint"/> in
+    /// <see cref="PointerInputElement"/> coordinates, through the same handling as the mouse.
+    /// The tutorial clip generator uses it; the real mouse is never captured meanwhile.
+    /// </summary>
+    internal void SimulatePointerDown(Point viewportPoint, int clickCount = 1) =>
+        Simulate(() => SurfacePointerDown(_viewport.TranslatePoint(viewportPoint, _surface), clickCount));
+
+    /// <inheritdoc cref="SimulatePointerDown"/>
+    internal void SimulatePointerMove(Point viewportPoint, bool leftPressed) =>
+        Simulate(() => { SurfacePointerMove(_viewport.TranslatePoint(viewportPoint, _surface), leftPressed, shift: false); return true; });
+
+    /// <inheritdoc cref="SimulatePointerDown"/>
+    internal void SimulatePointerUp(Point viewportPoint) =>
+        Simulate(() => SurfacePointerUp(_viewport.TranslatePoint(viewportPoint, _surface), shift: false));
+
+    /// <summary>Where image pixel <paramref name="image"/> shows, in <see cref="PointerInputElement"/> coordinates.</summary>
+    internal Point ViewportPointOf(PointD image) => _surface.TranslatePoint(_surface.ToSurfacePoint(image), _viewport);
+
+    /// <summary>The rail button that selects <paramref name="tool"/>.</summary>
+    internal ToggleButton ToolButton(EditorTool tool) => _toolButtons[tool];
+
+    private void Simulate(Func<bool> gesture)
+    {
+        _simulatingPointer = true;
+        try { gesture(); }
+        finally { _simulatingPointer = false; }
+    }
+
+    private bool _simulatingPointer;
+
+    /// <summary>A left press on the canvas at <paramref name="dip"/> (surface coordinates); true when handled.</summary>
+    private bool SurfacePointerDown(Point dip, int clickCount)
+    {
+        if (_completed || _commitInProgress) return false;
         _autoTrimCts?.Cancel();
         if (_activeTextBox is not null)
         {
             CommitActiveText();
-            return;
+            return false;
         }
 
         Focus();
-        Point dip = e.GetPosition(_surface);
         PointD image = _surface.ToImagePoint(dip);
 
         if (TryBeginEdgeCrop(image))
         {
             CapturePointer();
-            e.Handled = true;
-            return;
+            return true;
         }
 
         switch (_controller.Tool)
         {
             case EditorTool.Text:
                 PlaceTextBox(image);
-                e.Handled = true;
-                return;
+                return true;
             case EditorTool.Image:
                 InsertImage(image);
-                e.Handled = true;
-                return;
+                return true;
             case EditorTool.Mosaic:
                 _mosaicDragging = true;
                 _mosaicStart = image;
                 CapturePointer();
-                e.Handled = true;
-                return;
+                return true;
             case EditorTool.Crop:
                 if (_crop is not null)
                 {
-                    if (e.ClickCount == 2 && _crop.Contains(image)) { ApplyPendingCrop(); e.Handled = true; return; }
+                    if (clickCount == 2 && _crop.Contains(image)) { ApplyPendingCrop(); return true; }
                     double scale = Math.Max(double.Epsilon, _surface.DipPerPixel);
                     _crop.Begin(image, 7 / scale, SystemParameters.MinimumHorizontalDragDistance / scale,
                         SystemParameters.MinimumVerticalDragDistance / scale);
                     RefreshCrop();
                     CapturePointer();
                 }
-                e.Handled = true;
-                return;
+                return true;
             default:
                 _controller.HitTolerance = 6 / Math.Max(double.Epsilon, _surface.DipPerPixel);
                 _controller.PointerDown(image);
                 CapturePointer();
-                e.Handled = true;
-                break;
+                return true;
         }
     }
 
@@ -859,33 +889,35 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
     }
 
-    private void OnSurfaceMouseMove(object sender, MouseEventArgs e)
+    private void OnSurfaceMouseMove(object sender, MouseEventArgs e) =>
+        SurfacePointerMove(e.GetPosition(_surface), e.LeftButton == MouseButtonState.Pressed, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+
+    private void SurfacePointerMove(Point dip, bool leftPressed, bool shift)
     {
         if (_activeTextBox is not null)
         {
             return;
         }
 
-        Point dip = e.GetPosition(_surface);
         PointD image = _surface.ToImagePoint(dip);
 
         if (_edgeCropStart is not null)
         {
-            if (e.LeftButton == MouseButtonState.Pressed) ContinueEdgeCrop(image, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            if (leftPressed) ContinueEdgeCrop(image, shift);
             else { _edgeCropStart = null; ReleasePointer(); }
             return;
         }
         if (_crop is not null)
         {
-            if (e.LeftButton == MouseButtonState.Pressed && _crop.IsDragging)
+            if (leftPressed && _crop.IsDragging)
             {
-                _crop.Drag(image, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+                _crop.Drag(image, shift);
                 RefreshCrop();
             }
             ApplyCursor(new EditorPointerTarget(CropGrip: _crop.HitTest(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel))));
             return;
         }
-        if (e.LeftButton == MouseButtonState.Pressed)
+        if (leftPressed)
         {
             _controller.PointerMove(image);
         }
@@ -905,41 +937,43 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void OnSurfaceMouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (SurfacePointerUp(e.GetPosition(_surface), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))) e.Handled = true;
+    }
+
+    /// <summary>A left release on the canvas at <paramref name="dip"/> (surface coordinates); true when handled.</summary>
+    private bool SurfacePointerUp(Point dip, bool shift)
+    {
         if (_activeTextBox is not null)
         {
-            return;
+            return false;
         }
 
         if (_edgeCropStart is not null)
         {
-            CompleteEdgeCropGesture(_surface.ToImagePoint(e.GetPosition(_surface)), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            CompleteEdgeCropGesture(_surface.ToImagePoint(dip), shift);
         }
 
         if (_mosaicDragging)
         {
             _mosaicDragging = false;
             ReleasePointer();
-            Point mosaicDip = e.GetPosition(_surface);
-            PointD mosaicEnd = _surface.ToImagePoint(mosaicDip);
+            PointD mosaicEnd = _surface.ToImagePoint(dip);
             ApplyMosaic(
                 new RectD(_mosaicStart.X, _mosaicStart.Y, mosaicEnd.X - _mosaicStart.X, mosaicEnd.Y - _mosaicStart.Y),
                 _mosaicBlockSize);
-            e.Handled = true;
-            return;
+            return true;
         }
 
         if (_crop is { IsDragging: true })
         {
-            _crop.Drag(_surface.ToImagePoint(e.GetPosition(_surface)), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            _crop.Drag(_surface.ToImagePoint(dip), shift);
             _crop.End(); ReleasePointer(); RefreshCrop();
-            e.Handled = true;
-            return;
+            return true;
         }
 
         EditorTool toolBeforeCommit = _controller.Tool;
         int itemsBefore = _controller.Document.Items.Count;
 
-        Point dip = e.GetPosition(_surface);
         PointD image = _surface.ToImagePoint(dip);
         _controller.PointerUp(image);
         ReleasePointer();
@@ -959,6 +993,8 @@ internal sealed partial class AnnotationEditorControl : Grid
                 SetStatus(UiText.Format("EditorFlow_Added", selected.DisplayName));
             }
         }
+
+        return false;
     }
 
     private void OnSurfaceRightDown(object sender, MouseButtonEventArgs e)

@@ -17,6 +17,7 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
     <InternalsVisibleTo Include="MyCapture.Core.Tests" />
     <InternalsVisibleTo Include="MyCapture.App.Tests" />
+    <InternalsVisibleTo Include="MyCapture.TutorialGenerator" />
   </ItemGroup>
 
 </Project>
