@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `perf/extreme-load` (최악·과부하 조건의 병목 측정 및 개선 진행) |
+| 현재 기록 브랜치 | `perf/extreme-load` (과부하 병목 개선·QA12 검증 및 전달 완료) |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -48,21 +48,22 @@
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
 
-### 최악·과부하 조건 성능 개선 — 진행 중
+### 최악·과부하 조건 성능 개선 — QA12 검증·전달 완료
 
-- 사용자 요청: 10만 자 이상의 텍스트 입력을 포함해 다양한 최악·과부하 조건을 실제로 시험하고 병목을 측정·개선합니다. 기준은 검증된 QA11 소스 `73e0293`(제품 `2fc7fa4`)과 기존 `artifacts/qa11-product-readiness`입니다.
-- 텍스트10만/100만 자·긴 한 줄/다수 줄, 대량 라이브러리·검색·선택, 4K/8K 이미지·다수 주석·초안, 영역 선택의 입력 폭주를 단계별로 조사합니다. 내용 정확성·저장/복구·기존 UX를 유지하며 같은 조건의 전후 시간·할당·메모리·응답성으로 검증합니다.
-- 기존 작업 사본3개를 재사용합니다: a491의 `perf/stress-text`, aeae의 `perf/stress-library`, edit-recovery의 `perf/stress-editor`. root는 선택 화면 측정·실행 슬롯·통합·독립 검토를 담당합니다. 부하 측정은 직렬로 실행하며 각 owned 프로세스에 timeout·메모리 상한을 적용합니다. 실제 사용자 프로필·클립보드·앱은 조작하지 않습니다.
-- 기존 WebGPT 터널 및 Antigravity 검증 실패, 공식 native provider 확인 근거를 재사용했습니다. 제품의 Store 배포는 이번 요청 범위에 포함하지 않습니다. 실제 명령·측정 원본·실패와 개선 결과는 `artifacts/extreme-load-20261012/` 및 각 작업자의 개발 LOG에 보존합니다.
-- 대량 검색 `6a29df9`를 root `0a697d8`로 통합했습니다. 동일 .NET10.0.11, OCR16,384자/항목의1만 항목·8연속검색3회 중앙값209.55→166.72ms, 제목 검색14.63→2.45ms입니다. 실제 GalleryWindow 검색 handler 합계도329.19→272.98ms였으나 전체 창 시험 시간은8.93→9.39초로 화면 갱신 개선은 미확정입니다. worker Core41/App69 집중 검사 PASS, root 전체 검증은 통합 후 수행합니다.
-- 텍스트 진단에서 live TextBox가70,061DIP 높이로 늘어나는 것을 확인했습니다. 입력 viewport만454DIP로 제한한 비교에서10만 자 다수 줄 배치3547→365ms, 누적 할당3.16GB→22.1MB, 전체 글자·문서Rect·undo 동일입니다. 제품 반영과 scrollbar 폭/resize 회귀 검사를 진행합니다. 기존 `scroll-end` 측정에는 전체 선택의 지연된 렌더링이 포함되어 있어 순수 스크롤 지연과 분리합니다.
-- 영역 선택은 독립 입력 producer로240배치×32=7,680입력/단계를 전달해 마지막 포인터 렌더 일치를 확인했습니다. hover/drag UI 전달 대기P95는0.298/0.145ms, 입력 handler P95는0.0055/0.0035ms입니다. 이전60/120feedback 관측은 Rendering callback 안에서 입력을 주입하던 측정의 결합이었으며, 새 검사에서는 약240회 갱신됐습니다. 물리 화면 표시/DWM 지연은 이 수치의 범위 밖입니다. 4K/8K 전체 software raster도 측정했고 root는 이 근거로 overlay 제품 코드를 변경하지 않았습니다.
-- dense ink 수정 `a2e3d60`을 root `1330fac`로 통합했습니다. 4K/8K × 주석1천/1만 개와펜10만좌표의 같은 viewport 렌더3회 중앙값은228→125,341→219,205→103,277→190ms입니다. 첫그림 pixel SHA가4조건 모두같고 원본·초안·undo·복구내용을 보존했습니다. 1천주석 렌더당누적할당32.8→5.2MB. 독립소스검토와 pixel oracle8개 PASS. 전체프로세스 메모리·모든 heartbeat·저장시간 개선으로 해석하지 않습니다.
-- 100만 자에서 더 큰 실패를 확인했습니다. 원본 긴한줄은 actual PID58812/WPF IME TextBoxView FailFast(0x80131623), 제한된viewport 수정본은전체기능27.53초 PASS입니다. 다수줄 원본은첫layout에서60초guard, 수정본은첫layout4.76초를완료했으나 편집burst후전체선택settle에서60초guard가남았습니다. 순수scroll은3–10ms이며 텍스트배치/선택비용과구분합니다. 내부viewport·편집settle·공개WPF compatibility경로를artifact에서만조사중입니다.
-- 압축이어려운8K이미지의약113MB PNG 초안에서도원본/복구/viewport pixel SHA가같고저장은성공했습니다. 양쪽제품에서동시편집중약2초UIstall이남아 frozen image를공유하는PNG encoder/render 경계를추가조사합니다. 재현도구 `build/tools/OverlayStressProbe`는 `b3878e2`로보존했으며새경로build/실제7,680입력 smoke1c3e69 exit0도완료했습니다.
-- 후속 원인 분리·수정 완료: text `5051d6e`→root `06e19ae`, PNG `e772117`→root `33f6652`를 통합했습니다. OCR 읽기 전용 TextBox에만 InputMethod 연동을 끊어 WPF TSF의 전체 선택 범위 재포맷을 줄였습니다. 기존 자동 선택·복사·UIA를 유지하고 편집 IME는 그대로입니다. 최종 OCR10만 자 전체 시나리오7.53→1.49초, 100만 자는60초guard→7.79초 PASS입니다. 초기100만 자 배치7.37초와 편집100만 다수 줄 전체 선택guard는 남아 있습니다.
-- PNG 인코더의 source.SyncObject 잠금이 WriteSource 전체 구간에 걸리는 WPF10.0.11 소스를 확인했고, background STA에서 독립 픽셀 backing을 만든 비교로 원인을 분리했습니다. 최종 제품8K entropy/1천 주석/펜10만 좌표에서 최악 편집2081→121ms, heartbeat최대2083→335ms, 원본·복구·PNG·viewport SHA 동일입니다.4K 단색 heartbeat나 PNG 전체 처리시간·메모리는 일관된 개선이 아닙니다. 새 이미지형식/alpha/palette/DPI/metadata/cache9개 포함 집중33/33 PASS입니다.
-- root 최종 통합 검증: source `33f6652a9a4f6cc63862bf06e846c438e942ab27`, Debug build `fd9311` exit0·경고0/오류0, Core session96382/`ad1e0a` exit0·1105/1105 PASS. App 전체 session55381 진행 중이며 아직 완료 판정 전입니다. 최종 QA12 publish·UX·OS 키보드 입력 검증은 이 검사 뒤 직렬 실행합니다.
+- 사용자 요청인 10만 자 이상 텍스트, 대량 검색, 4K/8K 이미지·밀집 주석·PNG 초안, 영역 선택 입력 폭주를 측정하고 병목5종을 수정했습니다. 기준 QA11 소스 `73e0293`(제품 `2fc7fa4`), 최종 제품 소스 **`33f6652a9a4f6cc63862bf06e846c438e942ab27`**. 이후 커밋은 재현 도구와 기록입니다. 기존 작업 사본3개를 재사용했고 사용자 앱·프로필·클립보드는 조작하지 않았습니다.
+- 같은 PC(Ryzen7 9800X3D, RAM 약61.6GiB), Core/Desktop10.0.11에서 부하를 직렬 실행했습니다. 텍스트·OCR·PNG는 각 한 쌍, 검색·viewport 렌더는3회 중앙값입니다. 원본/실패/환경/receipt와 최종 `performance-summary-final.json`은 `artifacts/extreme-load-20261012/` 및 worker LOG에 보존합니다. 이전 incomplete `performance-summary.json`은 집계 실패 자료입니다.
+- 긴 텍스트의 입력 TextBox가 약7만DIP로 커지던 것을 화면 안의 스크롤 viewport로 제한하고 scrollbar 폭을 보정했습니다. 10만 자 여러 줄 삽입 후 첫 WPF 배치 **4402.58→486.71ms**, UI 누적 할당 약3.43GB→42.75MB. 전체 내용·문서Rect·줄바꿈·Undo·resize 유지. `text-before-100k.png`/`text-after-100k.png` 직접 확인 완료.
+- 읽기 전용 OCR TextBox에만 InputMethod 연동을 끊어 WPF TSF의 전체 선택 범위 재포맷을 줄였습니다. 자동 전체 선택·복사·UIA 유지, 편집 IME는 그대로입니다. 10만 자 표시/선택/스크롤/재열기/닫기 전체 **7527.39→1493.06ms**, 100만 자 기준60초guard→7788.40ms PASS. **100만 자 초기 표시7.37초는 남습니다.**
+- 검색당 matcher를 한 번 준비하고 불필요한 필드 검색·결과 생성을 줄였습니다. 항목당 OCR16,384자의1만 항목·8연속검색 **209.55→166.72ms**, 제목 검색14.63→2.45ms. 실제 Gallery 검색 handler 합계329.19→272.98ms이나 전체 창 시험은8.93→9.39초였습니다.
+- 밀집 잉크의 점별 geometry 객체를 StreamGeometry로 바꿨습니다. 4K/8K × 주석1천/1만 개·펜10만 좌표를 동일1280×720 viewport에 그린 시간 **228→125, 341→219, 205→103, 277→190ms**. 첫그림 pixel SHA4조건 동일, 1천 주석 렌더당 누적 할당32.8→5.2MB. 원본·초안·Undo·복구와 stroke 모양 유지. 전체4K/8K export 시간 측정과는 다릅니다.
+- 큰 PNG 저장: WPF 인코더의 원본 이미지 공유 잠금을 background STA의 독립 픽셀 backing으로 분리했습니다. 압축하기 어려운8K 이미지의113,458,630B PNG 저장과 겹친10회 편집 중 최악 응답 **2081.12→120.93ms**, Dispatcher heartbeat 최대2083.44→334.99ms. 원본·복구·PNG·viewport SHA 동일, alpha/palette/DPI/metadata/cache 포함 집중33/33 PASS. PNG 인코딩 자체는 약2초이며 일부 메모리·저장 flush·heartbeat는 개선되지 않았습니다.
+- 영역 선택은 독립 producer240배치×32=7,680입력/단계와 마지막 포인터 렌더 일치 PASS. hover/drag 전달 대기P95 0.298/0.145ms, 입력 handler P95 0.0055/0.0035ms. 4K/8K software raster도 측정했으나 물리 DWM/input-to-photon은 미측정입니다. 이 근거로 overlay 제품 코드를 추가 변경하지 않았습니다.
+- 전체 검증: Debug `fd9311` exit0 경고0/오류0, Core session96382/`ad1e0a` exit0 **1105/1105 PASS**, App session55381/`da1d9c` exit0 **2353 PASS/0 FAIL/기존 조건부11 skip**. FDD App testhost는 설치된10.0.12, paired stress와 QA12는 명시한10.0.11입니다. 최종 TRX/UX/PID 부재 재확인 `9b1d23` exit0.
+- 최종 파일 **`C:/GitRepositories/my-capture-codex/artifacts/qa12-extreme-load/MyCapture.exe`**. self-contained win-x64/R2R·Core/Desktop10.0.11, 표시 버전 `4.1.1+33f6652a9a4f6cc63862bf06e846c438e942ab27`, publish `442fa8` exit0. DLL SHA256 **`2BF9DE6DD22F39D67BA78F26BF78739CD98142AF0F4603D877D7337C24EF81F5`**. 독립277파일/deps263누락0/source diff0/x64/R2R 확인 `d27b17`/`bcb276` exit0. UX session65934/`501f0f` exit0·RESULT PASS, 밝은/어두운 편집창 PNG 직접 확인. 실제 모니터 둘 다96DPI로 혼합 물리DPI 검사는 포함되지 않았습니다.
+- 최종 payload 재검사: tracked EditorStressProbe `f1e9d9` exit0,8K entropy 원본·PNG exact/최악 편집109.63ms/heartbeat최대302.04ms. tracked TextStressProbe OCR10만 `8e3be2` exit0 PASS. 재현 도구는 `build/tools/OverlayStressProbe`, `EditorStressProbe`, `TextStressProbe`에 보존했습니다.
+- Computer Use 실기: synthetic OCR10만 자 전체 선택·Esc 종료 후 새 편집창에서 Ctrl+End/Home, 영문·한글·이모지 입력과 Ctrl+Z를 확인했습니다. 한글·이모지 입력 후100004자→Undo100000자/원본SHA728912…DA01 동일. session93413/PID59528/`7f0872` exit0 HOLD_CLOSED, 최종 창0·프로세스 종료. Hangul keysym 미지원/Alt_R 뒤 IME Off 유지여서 **실제 TSF 한글 조합은 미확인**입니다. literal Unicode 입력과 조합 입력을 구분합니다.
+- **남은 한계:** 편집100만 자 여러 줄은 첫 배치4.76초까지 개선됐지만 편집 burst 후 전체 선택 settle에서60초guard가 남습니다. 원본100만 자 긴 한 줄의 WPF FailFast(0x80131623)는 수정본의 동일1회 시나리오에서27.53초로 전체 완료했습니다. 전체 메모리·저장시간·Gallery 창·물리 표시 지연의 일관된 개선은 확인하지 못했습니다.
+- Codex가 총괄을 유지하며 직접 소스/PNG/원본 검토 및 독립 검토를 완료했습니다. 마지막 수치·native 결과 감사 `/root/library_motion` b31ad9/2ade73 exit0 지적 없음. 기존 Explorer에서 QA12 폴더를 열고 화면을 확인했습니다. 모든 실패 자료·빌드·작업 사본을 보존했습니다. Store 재배포·push·PR·병합·파일 삭제 없음.
 
 ### 다음 버전 기본 동작 보강 — 구현·검증 완료, 드래그 지연 변동은 후속 조사 필요
 
@@ -186,11 +187,11 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** 사용자 최악·과부하 성능 시험 요청을 수행합니다. 대량 검색, 밀집 잉크, 긴 텍스트 viewport, 읽기 전용 OCR 선택, 큰 PNG 초안 저장의 개선을 `33f6652`까지 통합했습니다. 다음 순서로 마무리합니다.
+**현재 작업 결과:** 과부하 병목5종 개선, 전체 회귀 검사, QA12 실기 빌드와 실제 키보드 smoke를 완료했습니다. 실제 결과와 제한은 §3을 따릅니다.
 
-1. **진행 중 — 전체 회귀 검사:** Debug 빌드와 Core1105개 PASS. App 전체 session55381의 실제 종료 코드·TRX를 수집하고 실패가 있으면 원인과 수정 후 필요한 검사를 완료합니다.
-2. **대기 — QA12 실기 빌드:** 새 `artifacts/qa12-extreme-load`에 self-contained x64/R2R·Core/Desktop10.0.11로 게시한 뒤 격리된 짧은 프로필에서 UX 자체 검사와 실제 긴 텍스트 키보드/Undo·OCR→편집 포커스/IME를 확인합니다. 사용자 MyCapture는 종료하지 않습니다.
-3. **대기 — 전달과 기록:** 최종 산출물·측정 전후·남은100만 자 편집 전체 선택 한계와 초기 OCR 배치 비용을 보고하고 §3/§8에 근거를 남깁니다. 재현 probe와 모든 실패/중간 자료·기존 작업 사본을 보존합니다. Store 재배포는 이번 요청 범위에 포함하지 않습니다.
+1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1105 PASS, App2353 PASS/실패0/기존 조건부11 skip. 최종 제품33f6652 이후 제품 변경은 없습니다.
+2. **완료 — QA12 실기 빌드·전달:** `artifacts/qa12-extreme-load/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. UX 자체 검사·payload 스트레스·10만 자 실제 입력/Undo·정상 종료 확인 및 폴더 열기 완료. 실제 TSF 한글 조합은 미확인입니다.
+3. **후속 우선순위:** 편집100만 자 여러 줄의 전체 선택60초guard, OCR100만 자 첫 표시7.37초, 전체 Gallery 갱신과 물리 화면 지연을 별도 개선 대상으로 유지합니다. QA12 사용자 실기 피드백을 함께 반영합니다. 다음 Store 배포 시 새 버전·필수 패키지 검사·실제 업데이트 교체 검증이 필요합니다.
 
 **이전 작업 완료 이력:** 평가·업데이트·지원, 휴지통 삭제·복원, 종료 보호·편집 복구는 QA11에서 검증했습니다. 실제 Store 설치·교체·재실행 검증은 다음 패키지 배포 단계입니다. 아래 이전 배포 작업과4.1.1 제출 산출물은 보존합니다.
 
@@ -386,6 +387,9 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 잉크source/8pixeltests/4pair측정·독립검토를확인하고 `a2e3d60`→`1330fac` cherry-pick PASS4f0d1c exit0. 8K entropy초안2조건 worker36ea8a/1a1af2 exit0,113,458,630B blob·원본/복구SHA동일이나공유WIC/PNG동시렌더2초stall가설추가조사중입니다. 재현overlay도구 `b3878e2` build+nativeburst1c3e69 exit0(ownedPID59524정상종료),10.0.11·240배치/7,680입력/최종포인터PASS를1498b8로확인했습니다. 1m텍스트원본FailFast와before/after각guard를서로구분해LOG에보존하고불완전한case를PASS로처리하지않습니다.
 
 - 2026-10-12 Codex: text worker capacity 이후 root가 소유권을 인수해 readonly OCR TSF 최소 수정·UIA/전체 선택 회귀21/21 PASS(session98758/5410e5 exit0)를 완료하고5051d6e→06e19ae 통합81855e exit0. 실제10.0.11 OCR10만25950b/100만35b2e3 exit0·전체SHA동일·정상종료. PNG independent backing과9개형식검사를 직접/독립 검토한e772117→33f6652 통합5cda6c exit0; 실제entropy receipt/PID47704exit0와pixel/PNG동일을d4cc49로확인. root Debug fd9311 경고0/오류0, Core96382/ad1e0a 1105/1105 exit0. App전체55381 진행 중. actualcwd/commands/raw/한계는 development-log 및각 tracked maintenance LOG에보존.
+
+- 2026-10-12 Codex: root cwd `C:/GitRepositories/my-capture-codex`, 제품33f6652의 최종 App `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger "trx;LogFileName=extreme-app.trx" --results-directory artifacts/extreme-load-20261012 -v minimal` session55381/da1d9c exit0(2353PASS/0FAIL/11조건부skip), Core1105PASS. self-contained QA12 publish442fa8 exit0, UX `powershell.exe -NoProfile -NonInteractive -File artifacts/next-product-readiness/run-owned-check.ps1 -Payload C:/GitRepositories/my-capture-codex/artifacts/qa12-extreme-load -Mode ux` session65934/501f0f exit0·RESULT PASS·PNG직접확인. 독립d27b17/bcb276 exit0, DLL2BF9DE6D…81F5/277파일/deps263누락0/10.0.11/x64/R2R 확인. 정확한 publish 명령은 development-log에 보존.
+- 2026-10-12 Codex: 재현 도구78e30d5→527f9bc,6e75dbb→d7b5ec7 통합 뒤 root finalpayload 빌드d02dab/938df7 exit0 및 actual8K PNG f1e9d9/OCR100k8e3be2 exit0 PASS. Computer Use로 실제 OCR→편집100k 입력·선택·Home/End·Undo, session93413/PID59528/7f0872 exit0 HOLD_CLOSED. 한글😀100004자→CtrlZ100000자/원본SHA동일, native-editor-home.json/native-editor-unicode-undo.json 보존. Hangul 키 미지원/IMEOff 유지로 실제 한글조합 미확인. root9b1d23 TRX/UX/ownedPID부재 exit0, 독립b31ad9/2ade73 exit0 수치/해석검토. Explorer QA12폴더 화면확인, 파일실행·Store·원격변경·삭제 없음. 남은100만다수줄60초guard/OCR초기7.37초 포함 §3/§4 최종 갱신. 첫 문서 갱신 bc0cea exit1은 PowerShell→Python pipe의 문자열 인코딩으로 substring 미일치, 파일 쓰기 전 실패; UTF8 파일로 재실행.
 
 ## 9. 인계 체크리스트
 
