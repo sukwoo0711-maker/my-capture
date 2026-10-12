@@ -1,6 +1,6 @@
 # 기능별 사용법 영상 생성기
 
-F1 도움말과 설정의 **사용법 보기**가 재생하는 `src/MyCapture.App/Assets/Tutorials/{기능}.{ko|en}.mp4`를 현재 소스에서 다시 만듭니다. 기능 목록은 제품의 `TutorialCatalog`(38개)를 그대로 사용하므로 한국어와 영어 76개가 항상 카탈로그와 일치합니다.
+F1 도움말과 설정의 **사용법 보기**가 재생하는 `src/MyCapture.App/Assets/Tutorials/{기능}.{ko|en}.mp4`와 영상이 열리기 전에 표시하는 첫 프레임 정지 화면 `{기능}.{ko|en}.jpg`를 현재 소스에서 다시 만듭니다. 기능 목록은 제품의 `TutorialCatalog`(38개)를 그대로 사용하므로 한국어와 영어 76개가 항상 카탈로그와 일치합니다.
 
 ```powershell
 # 전체 76개를 artifacts/tutorials/<시각>에 만들고 검토용 시트를 함께 저장합니다.
@@ -9,7 +9,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release
 # 일부 기능과 언어만 만듭니다.
 dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features image-crop,pin-copy --languages ko
 
-# 결과를 제품 자산 폴더에 복사합니다.
+# 결과(영상과 정지 화면)를 제품 자산 폴더에 복사합니다.
 dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --install
 
 # 만든 영상의 특정 시점을 원본 크기 PNG로 꺼냅니다.
@@ -26,9 +26,13 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect ar
 | 해상도 | 960×540(`--width`로 변경). 사용법 창의 640×360 DIP 영역을 150% 배율에서 1:1로 채웁니다 |
 | 프레임 | 25fps, 클립당 약 11초 |
 | 화질 | Media Foundation 소프트웨어 H.264 인코더의 고정 품질 60(`--quality`)과 품질 우선 설정(QualityVsSpeed 100). GPU와 관계없이 같은 인코더를 씁니다. 품질 우선 설정은 키 표시가 사라진 자리에 남던 옅은 잔상도 없앱니다 |
+| 색 범위 | 전체 범위(0–255)로 인코딩하고 스트림에 표시합니다. 제품 플레이어인 WPF `MediaElement`는 디코딩한 값을 범위 확장 없이 표시하므로, 녹화와 같은 제한 범위(16–235)로 만들면 흰색이 235, 검은색이 16으로 흐리게 보입니다 |
+| 정지 화면 | 첫 렌더 프레임을 JPEG 품질 90으로 저장합니다. 사용법 창은 이 파일을 바로 표시하고 영상이 열리면 영상으로 넘어갑니다 |
 | 테마 | 기본 테마(Glass, 어두운 테마) |
 
 정지 구간은 움직임이 없어 거의 용량을 차지하지 않고, 첫 프레임은 키 프레임이라 애니메이션 줄이기 설정에서도 바로 보입니다.
+
+검토 시트와 `inspect`는 하드웨어 디코딩으로 읽습니다. 소프트웨어 디코딩 경로는 스트림의 전체 범위 표시를 무시해 어두운 색이 뭉개진 화면을 돌려주므로, 하드웨어 디코더가 없는 PC에서는 시트의 대비가 실제 재생보다 강하게 보입니다.
 
 ## 구성
 
@@ -36,7 +40,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect ar
 - `OffscreenWindow`: 실제 제품 창을 모든 모니터 밖에 띄워 로드·레이아웃·이벤트가 사용자 환경과 같게 실행되게 한 뒤 클라이언트 영역을 렌더합니다. 화면에 보이지 않고, 활성화되지 않으며, 작업 표시줄에도 나타나지 않습니다. 생성기 프로세스는 DPI를 인식하지 않으므로 창이 96 DPI로 배치되어 960×540 출력과 픽셀 단위로 맞습니다.
 - `TutorialStoryboard`: 정지(Hold)와 움직임(Motion·Move·Click) 계획입니다. 정지 구간은 한 번만 렌더하고 길이만큼 반복 기록합니다.
 - `Scenes/*`: 기능별 장면입니다. 생성자에서 제품 UI와 스토리보드를 만들고, `Draw`가 프레임마다 제품 상태를 바꾼 뒤(클릭, 단축키, 드래그) 화면을 그립니다. 제품 동작은 제품 코드가 수행합니다. 예를 들어 이미지 편집기는 `AnnotationEditorControl.SimulatePointerDown/Move/Up`과 실제 명령 버튼, `HandleShortcut`으로 조작합니다.
-- `ClipWriter`: 제품의 `MediaFoundationVideoEncoder`로 MP4를 기록합니다. `ClipReview`는 제품의 `MediaFoundationVideoFrameReader`로 완성된 MP4를 다시 읽어 검토 시트를 만듭니다.
+- `ClipWriter`: 제품의 `MediaFoundationVideoEncoder`로 MP4를 기록합니다(`FullRange`). `ClipReview`는 첫 프레임 정지 화면을 저장하고, 제품의 `MediaFoundationVideoFrameReader`로 완성된 MP4를 다시 읽어 검토 시트를 만듭니다.
 - `Fixtures`: 다른 회사 앱을 대신하는 합성 콘텐츠(체크리스트 페이지, 메모, 터미널)입니다. MyCapture 화면은 모두 제품 UI를 그대로 렌더합니다.
 
 ## 장면 작성 규칙
@@ -52,4 +56,4 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect ar
 
 ## 출력물
 
-출력 폴더에는 `{기능}.{언어}.mp4`, 주요 장면을 디코딩한 `{기능}.{언어}.sheet.png`, 전체 결과를 담은 `receipt.json`(제품 DLL SHA256, 설정, 클립별 크기·프레임·길이·SHA256·사용한 제품 UI 설명)이 생깁니다.
+출력 폴더에는 `{기능}.{언어}.mp4`, 첫 프레임 정지 화면 `{기능}.{언어}.jpg`, 주요 장면을 디코딩한 `{기능}.{언어}.sheet.png`, 전체 결과를 담은 `receipt.json`(제품 DLL SHA256, 설정, 클립과 정지 화면별 크기·SHA256, 프레임·길이, 사용한 제품 UI 설명)이 생깁니다.

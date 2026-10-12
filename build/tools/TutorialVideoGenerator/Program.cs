@@ -14,13 +14,13 @@ namespace MyCapture.TutorialGenerator;
 
 /// <summary>
 /// Renders every feature tutorial (TutorialCatalog × ko/en) from the current product source to
-/// H.264 MP4. Usage:
+/// H.264 MP4, plus the player's first-frame still (JPEG) for each clip. Usage:
 /// <code>
 /// dotnet run --project build/tools/TutorialVideoGenerator -c Release -- [--features id,id] [--languages ko,en]
 ///     [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high] [--install] [--no-sheets]
 /// </code>
 /// Output defaults to artifacts/tutorials/&lt;timestamp&gt; (Git ignores artifacts/). --install copies the
-/// clips to src/MyCapture.App/Assets/Tutorials.
+/// clips and their stills to src/MyCapture.App/Assets/Tutorials.
 /// </summary>
 internal static class Program
 {
@@ -32,7 +32,7 @@ internal static class Program
         if (args.Length >= 3 && args[0] == "inspect")
         {
             // inspect <clip.mp4> <ms>[,<ms>…]: full-size decoded frames next to the clip, for review.
-            using var reader = new MyCapture.Platform.Recording.MediaFoundationVideoFrameReader(args[1]);
+            using MyCapture.Platform.Recording.MediaFoundationVideoFrameReader reader = ClipReview.Open(args[1]);
             foreach (string ms in args[2].Split(','))
             {
                 double at = double.Parse(ms, CultureInfo.InvariantCulture);
@@ -134,23 +134,25 @@ internal static class Program
             Resolution = $"{Stage.PixelWidth}x{Stage.PixelHeight}",
             options.Bitrate, options.Quality, options.Profile,
             Fps = TutorialStoryboard.Fps,
-            Encoder = "Media Foundation H.264 (software MFT), MP4",
+            Encoder = "Media Foundation H.264 (software MFT), full range, MP4",
+            Poster = $"first rendered frame, JPEG quality {ClipReview.PosterQuality}",
             Clips = receipts.Count,
             Bytes = receipts.Sum(receipt => receipt.Bytes),
+            PosterBytes = receipts.Sum(receipt => receipt.PosterBytes),
             ElapsedSeconds = Math.Round(total.Elapsed.TotalSeconds, 1),
             Failures = failures,
             Receipts = receipts,
         };
         File.WriteAllText(Path.Combine(options.Output, "receipt.json"),
             JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
-        Console.WriteLine($"RESULT={(failures.Count == 0 ? "PASS" : "FAIL")} CLIPS={receipts.Count} BYTES={summary.Bytes} OUT={options.Output}");
+        Console.WriteLine($"RESULT={(failures.Count == 0 ? "PASS" : "FAIL")} CLIPS={receipts.Count} BYTES={summary.Bytes} POSTER_BYTES={summary.PosterBytes} OUT={options.Output}");
         if (failures.Count > 0) return 1;
         if (options.Install) Install(options);
         return 0;
     }
 
     private sealed record ClipReceipt(string Feature, string Language, long Bytes, int Frames, double Seconds, int UniquePictures,
-        long RenderMs, string Sha256, string Provenance);
+        long RenderMs, string Sha256, long PosterBytes, string PosterSha256, string Provenance);
 
     private static ClipReceipt Render(string feature, string language, Options options)
     {
@@ -162,6 +164,7 @@ internal static class Program
         if (story.DurationSeconds is < 7 or > 15)
             throw new InvalidDataException($"Clip length {story.DurationSeconds:0.0}s is outside 7–15 s.");
         string mp4 = Path.Combine(options.Output, $"{feature}.{language}.mp4");
+        string poster = Path.ChangeExtension(mp4, ".jpg");
         var keys = new List<(double Ms, string Label)>();
         int frame = 0;
         using (var writer = new ClipWriter(mp4, Stage.PixelWidth, Stage.PixelHeight, options.Bitrate, options.Quality, options.Profile))
@@ -170,6 +173,7 @@ internal static class Program
             foreach (TutorialFramePlan plan in story.Frames)
             {
                 BitmapSource picture = Stage.Render(dc => scene.Draw(dc, plan));
+                if (frame == 0) ClipReview.SavePoster(picture, poster);
                 writer.Write(picture, plan.Repeat);
                 if (plan.Repeat > 1 || (plan.IsLast && plan.Segment != previous))
                     keys.Add(((frame + plan.Repeat / 2.0) * 1000 / TutorialStoryboard.Fps, plan.Segment));
@@ -188,10 +192,11 @@ internal static class Program
             ClipReview.SaveSheet(mp4, chosen, Path.Combine(options.Output, $"{feature}.{language}.sheet.png"));
         }
 
-        long bytes = new FileInfo(mp4).Length;
-        Console.WriteLine($"CLIP=PASS ID={feature} LANGUAGE={language} FRAMES={frame} SECONDS={story.DurationSeconds:0.00} BYTES={bytes} MS={renderMs}");
+        long bytes = new FileInfo(mp4).Length, posterBytes = new FileInfo(poster).Length;
+        Console.WriteLine($"CLIP=PASS ID={feature} LANGUAGE={language} FRAMES={frame} SECONDS={story.DurationSeconds:0.00} BYTES={bytes} POSTER={posterBytes} MS={renderMs}");
         return new ClipReceipt(feature, language, bytes, frame, Math.Round(story.DurationSeconds, 2), story.Frames.Count, renderMs,
-            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(mp4))), scene.Provenance);
+            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(mp4))), posterBytes,
+            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(poster))), scene.Provenance);
     }
 
     private static void Install(Options options)
@@ -200,8 +205,9 @@ internal static class Program
         Directory.CreateDirectory(target);
         foreach (string feature in options.Features)
         foreach (string language in options.Languages)
+        foreach (string extension in new[] { "mp4", "jpg" })
         {
-            string name = $"{feature}.{language}.mp4";
+            string name = $"{feature}.{language}.{extension}";
             File.Copy(Path.Combine(options.Output, name), Path.Combine(target, name), overwrite: true);
         }
 
