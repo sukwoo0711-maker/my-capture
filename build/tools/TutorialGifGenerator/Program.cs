@@ -50,8 +50,7 @@ internal static class Program
         if (feature == "text-copy") return new TextCopySceneRenderer(language);
         if (CaptureSceneRenderer.Features.Contains(feature)) return new CaptureSceneRenderer(feature, language);
         if (WorkspaceSceneRenderer.Features.Contains(feature)) return new WorkspaceSceneRenderer(feature, language);
-        string type = ImageFeatures.Contains(feature) ? "EditorSceneRenderer" : "VideoSceneRenderer";
-        return (ITutorialSceneRenderer)Activator.CreateInstance(typeof(Program).Assembly.GetType(type, true)!, feature, language)!;
+        return ImageFeatures.Contains(feature) ? new EditorSceneRenderer(feature, language) : new VideoSceneRenderer(feature, language);
     }
     private static object ProcessAsset(string feature, string language, string payload, string output)
     {

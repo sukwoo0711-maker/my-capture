@@ -165,11 +165,10 @@ internal sealed class CaptureSceneRenderer : ITutorialSceneRenderer
     private BitmapSource CaptureResult(Rect crop) => DrawScene(dc =>
     {
         dc.DrawRectangle(Brush("Surface.Base"), null, new Rect(0, 0, Width, SceneHeight));
-        Text(dc, L(_ko, "이미지 편집", "Image editor"), 25, 15, 18, Brush("Text.Primary"));
+        Text(dc, L(_ko, "캡처 결과", "Captured image"), 25, 15, 18, Brush("Text.Primary"));
         RectD physical = new RectD(crop.X * SceneScale, crop.Y * SceneScale, crop.Width * SceneScale, crop.Height * SceneScale).ToPixelBounds();
         var source = new CroppedBitmap(_desktop, new Int32Rect((int)physical.X, (int)physical.Y, Math.Min(_desktop.PixelWidth - (int)physical.X, (int)physical.Width), Math.Min(_desktop.PixelHeight - (int)physical.Y, (int)physical.Height)));
         dc.DrawImage(source, new Rect(45, 75, 550, Math.Min(200, crop.Height / crop.Width * 550)));
-        Text(dc, $"{(int)physical.Width} × {(int)physical.Height}", 45, 282, 15, Brush("Text.Secondary"), true);
     });
     private BitmapSource RecordingScene(RecordingStripFixture strip, bool paused) => DrawScene(dc =>
     {
@@ -180,7 +179,7 @@ internal sealed class CaptureSceneRenderer : ITutorialSceneRenderer
     private BitmapSource VideoResult() => DrawScene(dc =>
     {
         dc.DrawRectangle(Brush("Surface.Base"), null, new Rect(0, 0, Width, SceneHeight));
-        Text(dc, L(_ko, "영상 편집", "Video editor"), 25, 15, 18, Brush("Text.Primary"));
+        Text(dc, L(_ko, "녹화 결과", "Recorded video"), 25, 15, 18, Brush("Text.Primary"));
         RectD physical = new RectD(SelectedRegion.X * SceneScale, SelectedRegion.Y * SceneScale, SelectedRegion.Width * SceneScale, SelectedRegion.Height * SceneScale).ToPixelBounds();
         var source = new CroppedBitmap(_desktop, new Int32Rect((int)physical.X, (int)physical.Y, (int)physical.Width, (int)physical.Height));
         dc.DrawImage(source, new Rect(45, 75, 550, SelectedRegion.Height / SelectedRegion.Width * 550));
