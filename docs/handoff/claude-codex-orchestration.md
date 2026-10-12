@@ -9,8 +9,8 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `perf/product-optimization` (영역 선택 합성 최적화 `ff7e46c`, QA8 실기 빌드 준비 완료) |
-| Store 소스 브랜치 | `release/store-4.1.0`, main과 같은 `39942191fbdc49d018ccfd01c975701f0d002532` |
+| 현재 기록 브랜치 | `release/store-4.1.1` (최적화 포함 Store 업데이트 준비) |
+| Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존, 4.1.1은 현재 기록 브랜치에서 준비 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
 | 이 문서 위치 | 현재 기록 브랜치의 `docs/handoff/claude-codex-orchestration.md` |
@@ -46,7 +46,14 @@
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12, Store 4.1.0 심사 제출 완료, 영역 선택 최적화 QA8 전달)
+## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 배포 준비)
+
+### Store 4.1.1 배포 요청
+
+- 사용자 요청: “4.1.1버전으로 배포해봐. 실조건에서 테스트할게.” 영역 선택·이미지 자르기·라이브러리 선택 최적화를 포함해 새 Store 업데이트를 준비합니다. 4.1.1/패키지4.1.1.0 버전과 한·영 변경 사항을 갱신했습니다. 기존 개발자를 위한 무료 캡처·핀 도구 설명은 유지합니다.
+- Partner Center를 새로 고쳐 Submission4의 **공개 완료**와 Start update 버튼을 확인했습니다. 4.1.0 심사 취소는 필요 없습니다. 공개4.1.0 소스·패키지를 보존하고 별도4.1.1을 검증해 제출합니다.
+- **다음 버전으로 유보:** Store 업데이트 중 앱 교체·설치 진행을 알 수 있는 화면. 사용자가 기존 앱 삭제 후 재설치로 느끼는 공백을 줄이는 것이 목적입니다. 실제 Store 업데이트 단계·앱 종료/재시작·데이터 보존과 앱이 관측할 수 있는 신호를 확인한 뒤 구현합니다. 4.1.1에는 포함하지 않습니다.
+- 현재 QA8 사용자 앱 PID64500이 실행 중이며, 8종 패키지 검사는 MyCapture 부재를 요구합니다. 종료 권한 없이 사용자 앱을 닫지 않습니다. 실제 명령·결과는 `artifacts/store-411-verification/`에 기록합니다.
 
 ### 영역 선택 지연과 로컬 업데이트 창
 
@@ -300,6 +307,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 작업자 overlay commit4b228141d00b6470fa262b291a031e447539ca43의2파일 diff/테스트/대표PNG를 직접 검토하고 root cwd `C:\GitRepositories\my-capture-codex`에서 `git cherry-pick 4b228141d00b6470fa262b291a031e447539ca43` PASS(exit0,chunkb79dc5), 통합ff7e46cb7e2a8e4ec9a7a796122b963f8fb59ae1. Bgr32 정수물리경계에서 desktop1회+선택영역밖dim, 나머지는 기존합성. worker집중73/73 exit0, root `dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release --filter <9개 overlay 관련 클래스 OR; 정확 filter 개발LOG> --logger trx;LogFileName=root-overlay-focused.trx --results-directory artifacts/selection-lag-investigation -v minimal` actualsession55245 PASS(exit0,최종chunk5aaa0b),73/73·0skip·테스트프로젝트빌드완료. 독립검토중대한지적없음.
 - 2026-10-12 Codex: 실제4208×1440 Bgr32 software paired hover42.73→33.35ms/drag25.86→19.04ms. Native같은120+120 workload 버전별3프로세스 session37606 exit0, 완료medianhover2312.8→2303.0ms/drag2048.9→2006.5ms 분포중첩. 별도interaction유효성pair session49763 exit0, Create유지/Endedfalse/최종selection동일. 사용자체감해결은미확정. 원본측정·초기fixture실패·한계·최종73TRX·probe소스·독립검토를 root `artifacts/selection-lag-investigation/overlay` 등에수집. 기존/수정대표PNG SHA256 F414CE2A209F09359628E8AB84EE983FCAE727BCEEA09543BFCC0230B2C3E476 일치재확인(exit0,chunke437ee). 삭제·사용자설정변경없음.
 - 2026-10-12 Codex: root sourceff7e46c clean에서 `dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:PublishProfile=win-x64-self-contained -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-codex/artifacts/latency-regression/pin-runtime-10.0.11.targets -o C:/GitRepositories/my-capture-codex/artifacts/qa8-selection-performance -p:SourceRevisionId=ff7e46cb7e2a8e4ec9a7a796122b963f8fb59ae1 -nologo` PASS(exit0,chunkd0cf87). 독립source/runtime10.0.11/R2R/deps263누락0 PASS(exit0), DLL SHA256 E1D9C2ABF2EEE45B3E60D3194BCC26AF87FD9ED99E70B803C75B103000BC100C. 최종DLL을외부OverlayProbe로로드한syntheticsnapshot PASS(exit0,chunkc24349),PNG기존쌍과hash일치(chunkbe235f). Computer Use의 기존Explorer87166948에서새폴더열기·MyCapture응용프로그램선택화면확인. 실행파일은§3경로,Store변경없음. 모든작업사본·산출물보존.
+
+- 2026-10-12 Codex: 사용자4.1.1 Store배포명시승인,업데이트중진행상태화면은다음버전으로유보. cwd `C:\GitRepositories\my-capture-codex`에서 fetch origin PASS(exit0),origin/main3994219확인, `git switch -c release/store-4.1.1` PASS(exit0). 기존ebd1107최적화포함4.1.1버전·manifest·계약·배포예시·한영What'snew수정. PartnerCenter브라우저2/tab977755822새로고침으로Submission4공개완료직접확인. 사용자QA8PID64500보호,패키지검사전종료조건은남아있음. 진행LOG `artifacts/store-411-verification/`.
 
 ## 9. 인계 체크리스트
 
