@@ -344,6 +344,49 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
     });
 
     [Fact]
+    public void ExportDialogHost_ReceivesTheGifExportDialogInsteadOfAModalShow() => RunSta(() =>
+    {
+        string dir = TestRecycleBin.CreateTempSubdirectory("mc-vew-host-").FullName;
+        try
+        {
+            byte[] pixels = new byte[320 * 240 * 4];
+            for (int i = 0; i < pixels.Length; i += 4) { pixels[i] = 0x50; pixels[i + 1] = 0x80; pixels[i + 2] = 0xC0; pixels[i + 3] = 0xFF; }
+            var image = System.Windows.Media.Imaging.BitmapSource.Create(320, 240, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, pixels, 320 * 4);
+            RecordingResult rec = UxReviewSelfTest.CreateFixtureVideo(Path.Combine(dir, "fixture.mp4"), image);
+            VideoExportDialog? hosted = null;
+            var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), NullLoggerFactory.Instance)
+            {
+                ExportDialogHostForTest = dialog => hosted = dialog,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -10000,
+                Top = -10000,
+                ShowActivated = false,
+                ShowInTaskbar = false,
+            };
+            editor.Show();
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (!editor.IsMediaReadyForTest && !editor.HasMediaFailedForTest && DateTime.UtcNow < deadline)
+            {
+                PumpFor(TimeSpan.FromMilliseconds(25));
+            }
+
+            Assert.True(editor.IsMediaReadyForTest, "editor did not become ready: " + editor.MediaFailureForTest);
+            Assert.True(editor.HandleShortcut(System.Windows.Input.Key.G, System.Windows.Input.ModifierKeys.None));
+            // G returned without a modal loop: the host received the GIF form, owned by the editor and not shown.
+            Assert.NotNull(hosted);
+            Assert.True(hosted.IsGif);
+            Assert.Same(editor, hosted.Owner);
+            Assert.False(hosted.IsVisible);
+            hosted.Close();
+            editor.Close();
+        }
+        finally
+        {
+            try { TestRecycleBin.DeleteDirectory(dir, true); } catch (IOException) { }
+        }
+    });
+
+    [Fact]
     public void LongClip_TimelineStartsWithOneCoarseInterval_AndShowsExplicitRange() => RunSta(() =>
     {
         var timeline = new TwoLineTimeline();

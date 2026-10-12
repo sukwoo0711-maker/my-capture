@@ -2545,6 +2545,13 @@ internal sealed partial class VideoEditorWindow : Window
 
     private VideoExportDialog? _exportDialog;
 
+    /// <summary>
+    /// Shows the export dialog instead of the modal <see cref="Window.ShowDialog"/>. Null in the
+    /// product, so the dialog always opens modally; the tutorial video generator sets it to host
+    /// the dialog offscreen, without activating it, while it records frames.
+    /// </summary>
+    internal Action<VideoExportDialog>? ExportDialogHostForTest { get; set; }
+
     private void OpenExport(bool gif = false)
     {
         if (_exportDialog is not null || !IsVisible || !_mediaReady || _operationRunning
@@ -2553,7 +2560,8 @@ internal sealed partial class VideoEditorWindow : Window
         try
         {
             _exportDialog = new VideoExportDialog(_recording, BuildCurrentDocument(), _loggerFactory, gif) { Owner = this };
-            _ = _exportDialog.ShowDialog();
+            if (ExportDialogHostForTest is { } host) host(_exportDialog);
+            else _ = _exportDialog.ShowDialog();
         }
         catch (Exception error)
         {
