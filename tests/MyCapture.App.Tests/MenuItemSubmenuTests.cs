@@ -17,6 +17,38 @@ namespace MyCapture.App.Tests;
 public sealed class MenuItemSubmenuTests
 {
     [Fact]
+    public void LooseMenuTemplateHostsSubmenuAndPreservesLeafGesture() => StaTestHost.Run(() =>
+    {
+        // Keep the existing source-XAML loader contract and the same fixed symbol grid.
+        var window = new Window();
+        Ocr410Fixture.LoadTheme(window);
+        var restore = new MenuItem
+        {
+            Header = "Restore", Resources = window.Resources,
+            Style = (Style)window.Resources[typeof(MenuItem)],
+        };
+        var child = new MenuItem { Header = "Empty", IsEnabled = false };
+        restore.Items.Add(child);
+        restore.ApplyTemplate();
+        Layout(restore);
+        Popup popup = Assert.IsType<Popup>(restore.Template.FindName("PART_Popup", restore));
+        Layout(Assert.IsAssignableFrom<FrameworkElement>(popup.Child));
+        Assert.Same(child, restore.ItemContainerGenerator.ContainerFromIndex(0));
+        Assert.True(child.ActualWidth > 0 && child.ActualHeight >= 34);
+        Border arrow = Assert.IsType<Border>(restore.Template.FindName("SubmenuArrow", restore));
+        Assert.Equal(Visibility.Visible, arrow.Visibility);
+        AssertArrowGrid(arrow);
+        TextBlock gesture = Assert.IsType<TextBlock>(restore.Template.FindName("GestureText", restore));
+        Assert.Equal(Visibility.Collapsed, gesture.Visibility);
+        restore.Items.Clear();
+        restore.InputGestureText = "Ctrl+A";
+        Assert.Equal(Visibility.Collapsed, arrow.Visibility);
+        Assert.Equal(Visibility.Visible, gesture.Visibility);
+        Assert.Equal("Ctrl+A", gesture.Text);
+        Assert.False(popup.IsOpen);
+    });
+
+    [Fact]
     public void RealMenuTemplateHostsLoadingEmptyAndRestorableItemsWithoutChangingLeafChrome() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
@@ -74,10 +106,9 @@ public sealed class MenuItemSubmenuTests
                     Assert.True(item.ActualWidth > 0 && item.ActualHeight >= 34);
                     Assert.Equal(header, item.Header);
                     Assert.Equal(enabled, item.IsEnabled);
-                    var arrow = Assert.IsType<SymbolIcon>(restore.Template.FindName("SubmenuArrow", restore));
+                    var arrow = Assert.IsType<Border>(restore.Template.FindName("SubmenuArrow", restore));
                     Assert.Equal(Visibility.Visible, arrow.Visibility);
-                    Assert.Equal(16, arrow.Size);
-                    Assert.NotNull(arrow.Data);
+                    AssertArrowGrid(arrow);
                     Assert.Equal(Visibility.Collapsed, Assert.IsType<TextBlock>(restore.Template.FindName("GestureText", restore)).Visibility);
                     restore.Focus();
                     KeyEventArgs right = KeyPress(restore, Key.Right);
@@ -101,17 +132,30 @@ public sealed class MenuItemSubmenuTests
                     restore.IsSubmenuOpen = false;
                 }
 
-                Assert.Equal(Visibility.Collapsed, Assert.IsType<SymbolIcon>(leaf.Template.FindName("SubmenuArrow", leaf)).Visibility);
+                Assert.Equal(Visibility.Collapsed, Assert.IsType<Border>(leaf.Template.FindName("SubmenuArrow", leaf)).Visibility);
                 TextBlock gesture = Assert.IsType<TextBlock>(leaf.Template.FindName("GestureText", leaf));
                 Assert.Equal(Visibility.Visible, gesture.Visibility);
                 Assert.Equal("Ctrl+A", gesture.Text);
                 Assert.False(Assert.IsType<Popup>(leaf.Template.FindName("PART_Popup", leaf)).IsOpen);
                 restore.Items.Clear();
-                Assert.Equal(Visibility.Collapsed, Assert.IsType<SymbolIcon>(restore.Template.FindName("SubmenuArrow", restore)).Visibility);
+                Assert.Equal(Visibility.Collapsed, Assert.IsType<Border>(restore.Template.FindName("SubmenuArrow", restore)).Visibility);
             }
             finally { menu.IsOpen = false; window.Close(); }
         }
     });
+
+    private static void AssertArrowGrid(Border arrow)
+    {
+        Viewbox scale = Assert.IsType<Viewbox>(arrow.Child);
+        Assert.Equal(16, scale.Width);
+        Assert.Equal(16, scale.Height);
+        Canvas grid = Assert.IsType<Canvas>(scale.Child);
+        Assert.Equal(20, grid.Width);
+        Assert.Equal(20, grid.Height);
+        var path = Assert.IsType<System.Windows.Shapes.Path>(Assert.Single(grid.Children.Cast<UIElement>()));
+        Assert.NotNull(path.Data);
+        Assert.Equal(1.6, path.StrokeThickness);
+    }
 
     private static KeyEventArgs KeyPress(Visual visual, Key key) =>
         new(Keyboard.PrimaryDevice, PresentationSource.FromVisual(visual), Environment.TickCount, key)
