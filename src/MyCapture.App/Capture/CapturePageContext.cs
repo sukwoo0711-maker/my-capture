@@ -16,6 +16,24 @@ internal static class CapturePageContext
         Func<IReadOnlyList<WindowCandidate>>? refreshCandidates = null,
         Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? readSources = null)
     {
+        (FrozenFrame frame, Task<IReadOnlyList<WindowCandidate>> windows) = await AcquireFrameAsync(
+            candidates, acquireFrame, read, refreshCandidates, readSources).ConfigureAwait(false);
+        return (frame, await windows.ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Returns as soon as the pixels exist. <c>Windows</c> completes once the second read has
+    /// confirmed which page and application details still describe those pixels; that read starts
+    /// right after the pixels, exactly as in <see cref="AcquireAsync"/>, but nothing on screen has
+    /// to wait for it. Each read walks every exposed browser window on every monitor, so it alone
+    /// can take longer than the screen grab.
+    /// </summary>
+    internal static async Task<(FrozenFrame Frame, Task<IReadOnlyList<WindowCandidate>> Windows)> AcquireFrameAsync(
+        IReadOnlyList<WindowCandidate> candidates, Func<FrozenFrame> acquireFrame,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> read,
+        Func<IReadOnlyList<WindowCandidate>>? refreshCandidates = null,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? readSources = null)
+    {
         WindowCandidate[] original = candidates.ToArray();
         WindowCandidate[] probeCandidates = GetUrlCandidates(original);
         Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> beforePages = ReadSafeAsync(read, probeCandidates);
@@ -37,6 +55,16 @@ internal static class CapturePageContext
                 && SameOrderedWindows(original, immediatelyAfter);
             return (acquired, stable);
         }).ConfigureAwait(false);
+        return (frame, ConfirmAfterPixelsAsync(original, probeCandidates, stableWindows, before, beforeSources, read, readSources));
+    }
+
+    private static async Task<IReadOnlyList<WindowCandidate>> ConfirmAfterPixelsAsync(
+        WindowCandidate[] original, WindowCandidate[] probeCandidates, bool stableWindows,
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> before,
+        IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> beforeSources,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> read,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? readSources)
+    {
         // Only a document seen before the pixels can pass StableUrl. Keep original
         // z-order here, while the topology checks above still inspect every window.
         WindowCandidate[] afterCandidates = stableWindows
@@ -54,13 +82,12 @@ internal static class CapturePageContext
         await Task.WhenAll(afterPages, afterSourcesRead).ConfigureAwait(false);
         IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> after = await afterPages.ConfigureAwait(false);
         IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> afterSources = await afterSourcesRead.ConfigureAwait(false);
-        WindowCandidate[] frozen = original.Select(candidate => candidate with
+        return original.Select(candidate => candidate with
         {
             SourcePageUrl = stableWindows ? StableUrl(candidate, before, after) : string.Empty,
             Source = readSources is null ? candidate.Source
                 : stableWindows ? StableSource(candidate, beforeSources, afterSources) : null,
         }).ToArray();
-        return (frame, frozen);
     }
 
     private static readonly IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> NoSources =

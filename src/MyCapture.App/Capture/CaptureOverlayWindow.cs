@@ -18,6 +18,7 @@ internal sealed class CaptureOverlayWindow : Window
     private readonly CaptureOverlayView _view;
     private readonly bool _abortOnFocusLoss;
     private bool _completed;
+    private bool _sourceDetailsPending;
     private bool _placingPhysicalBounds;
     private RectD? _pendingSelection;
     private RegionSelectionEventArgs? _pendingSelectionDetails;
@@ -102,14 +103,40 @@ internal sealed class CaptureOverlayWindow : Window
             PlacePhysicalBounds();
         }
 
-        if (_pendingSelection is RectD pending)
-        {
-            RegionSelectionEventArgs? details = _pendingSelectionDetails;
-            _pendingSelection = null;
-            _pendingSelectionDetails = null;
-            CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true,
-                details?.WholeMonitor == true);
-        }
+        CompletePendingSelection();
+    }
+
+    /// <summary>
+    /// The window list's geometry and z-order are final, but the page and application details the
+    /// selection is attributed with are still being confirmed. A selection confirmed meanwhile waits
+    /// for <see cref="ConfirmSourceDetails"/>, so it carries exactly the details it would have had
+    /// if the selector had appeared only after them.
+    /// </summary>
+    internal void AwaitSourceDetails()
+    {
+        if (!_completed) _sourceDetailsPending = true;
+    }
+
+    /// <summary>Replaces the window list with its confirmed details and completes a waiting selection.</summary>
+    internal void ConfirmSourceDetails(IReadOnlyList<WindowCandidate> windows)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+        if (_completed) return;
+        SourceWindows = windows;
+        _sourceDetailsPending = false;
+        CompletePendingSelection();
+    }
+
+    internal bool SourceDetailsPendingForTest => _sourceDetailsPending;
+
+    private void CompletePendingSelection()
+    {
+        if (_frame is null || _sourceDetailsPending || _pendingSelection is not RectD pending) return;
+        RegionSelectionEventArgs? details = _pendingSelectionDetails;
+        _pendingSelection = null;
+        _pendingSelectionDetails = null;
+        CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true,
+            details?.WholeMonitor == true);
     }
 
     /// <summary>Raised after a valid drag is cropped and the overlay has been hidden.</summary>
@@ -279,7 +306,7 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
 
-        if (_frame is null && GeometrySelectionCompleted is null)
+        if ((_frame is null || _sourceDetailsPending) && GeometrySelectionCompleted is null)
         {
             _pendingSelection = e.BitmapRegion;
             _pendingSelectionDetails = e;
@@ -296,6 +323,19 @@ internal sealed class CaptureOverlayWindow : Window
     {
         if (_completed)
         {
+            return;
+        }
+
+        if (_sourceDetailsPending && GeometrySelectionCompleted is null)
+        {
+            _view.EndPointerInteraction();
+            _pendingSelection = bitmapRegion;
+            _pendingSelectionDetails = new RegionSelectionEventArgs(bitmapRegion)
+            {
+                DetectedWindow = detectedWindow,
+                TextCapture = textCapture,
+                WholeMonitor = wholeMonitor,
+            };
             return;
         }
 

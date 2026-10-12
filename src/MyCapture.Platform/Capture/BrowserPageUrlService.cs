@@ -32,8 +32,9 @@ public sealed class BrowserPageUrlService
     /// tabs) took about 455 ms, and browser walks alone about 370 ms. A ceiling below that
     /// cancelled the batch and the capture stored no URL. The probe returns as soon as it
     /// finishes, so the ceiling is a bound for a provider that hangs, not the normal wait.
-    /// The selector overlay is shown before this read runs, so a longer ceiling does not
-    /// delay the capture UI.
+    /// The read before the pixels holds back the screen grab and therefore the selector for
+    /// its whole duration, up to this ceiling; only the confirming read after the pixels runs
+    /// while the selector is already shown (CapturePageContext.AcquireFrameAsync).
     /// </summary>
     internal static readonly TimeSpan DefaultBudget = TimeSpan.FromMilliseconds(900);
 

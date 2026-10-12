@@ -195,6 +195,92 @@ public sealed class CaptureOverlayCoordinatorTests
         Assert.Equal(1, closed);
     });
 
+    [Fact]
+    public void SelectorAppearsBeforeTheConfirmingPageReadAndASelectionWaitsForIt() => RunSta(() =>
+    {
+        const string url = "https://example.com/confirmed";
+        var confirming = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>? seen = null;
+        int reads = 0;
+        CaptureOverlayWindow? overlay = null;
+        CaptureSelectionCompletedEventArgs? persisted = null;
+        bool confirmedBeforeCompletion = false;
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadWindowSources = null;
+        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        coordinator.OpenEditorAfterCapture = () => false;
+        coordinator.SelectionPersistRequested = selection => { persisted = selection; return Task.CompletedTask; };
+        // Every exposed window reports one stable page, so the confirming read is always asked.
+        coordinator.ReadPageUrls = candidates =>
+        {
+            if (Interlocked.Increment(ref reads) > 1) return confirming.Task;
+            seen = candidates.ToDictionary(candidate => candidate.Handle,
+                candidate => new BrowserDocumentSnapshot(candidate.ProcessId, candidate.Title, "document", url));
+            return Task.FromResult(seen);
+        };
+
+        coordinator.Start(false, false, false);
+        PumpUntil(() => overlay?.IsVisible == true);
+        overlay!.SelectionCompleted += (_, _) =>
+            confirmedBeforeCompletion = overlay.SourceWindows.Any(window => window.SourcePageUrl == url);
+        Assert.Equal(2, reads); // The pixels exist and the confirming read is running.
+        Assert.False(coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(coordinator.IsActive);
+        Assert.True(overlay.SourceDetailsPendingForTest);
+
+        overlay.CompleteSelection(new RectD(4, 4, 16, 10));
+        bool dispatched = false;
+        _ = Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => dispatched = true));
+        PumpUntil(() => dispatched);
+        Assert.Null(persisted);
+        Assert.True(overlay.IsVisible);
+
+        confirming.SetResult(seen!);
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted && persisted is not null);
+        Assert.True(confirmedBeforeCompletion);
+        Assert.Equal(new RectD(4, 4, 16, 10), persisted!.BitmapRegion);
+        Assert.False(overlay.IsVisible);
+        Assert.False(coordinator.IsActive);
+    });
+
+    [Fact]
+    public void SelectorClosedWhileThePageReadIsConfirmingEndsTheSessionOnlyAfterTheRead() => RunSta(() =>
+    {
+        var confirming = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        int reads = 0;
+        int closed = 0;
+        CaptureOverlayWindow? overlay = null;
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadWindowSources = null;
+        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        coordinator.OverlayClosed += (_, _) => closed++;
+        coordinator.ReadPageUrls = candidates => Interlocked.Increment(ref reads) > 1
+            ? confirming.Task
+            : Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(candidates.ToDictionary(
+                candidate => candidate.Handle,
+                candidate => new BrowserDocumentSnapshot(candidate.ProcessId, candidate.Title, "document", "https://example.com/")));
+
+        coordinator.Start(false, false, false);
+        PumpUntil(() => overlay?.IsVisible == true);
+        Assert.Equal(2, reads);
+        overlay!.Close();
+        // The read still owns the only page-probe slot: the session is not over and a new capture waits.
+        Assert.Equal(0, closed);
+        Assert.True(coordinator.IsActive);
+        coordinator.Start(false, false, false);
+        Assert.Equal(2, reads);
+
+        confirming.SetResult(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        Assert.Equal(1, closed);
+        Assert.False(coordinator.IsActive);
+    });
+
     private static CaptureOverlayCoordinator Coordinator(Func<bool, FrozenFrame> acquire) => new(
         new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
         new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),

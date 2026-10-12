@@ -53,7 +53,13 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _dispatcher.ShutdownStarted += OnDispatcherShutdownStarted;
         ReadWindowSources = _windowSources.ReadAsync;
+        ReadPageUrls = _pageUrls.ReadAsync;
     }
+
+    /// <summary>
+    /// Reads each exposed browser window's page document around the frozen frame. Tests replace it.
+    /// </summary>
+    internal Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> ReadPageUrls { get; set; }
 
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
 
@@ -227,6 +233,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private async Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation)
     {
         FrozenFrame? frame = null;
+        Task<IReadOnlyList<WindowCandidate>>? confirmedWindows = null;
         Exception? failure = null;
         try
         {
@@ -238,18 +245,18 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 await Task.Delay(100).ConfigureAwait(false);
             }
 
-            (FrozenFrame capturedFrame, IReadOnlyList<WindowCandidate> sourceWindows) = await CapturePageContext.AcquireAsync(preparation.SourceWindows, () =>
+            (FrozenFrame capturedFrame, Task<IReadOnlyList<WindowCandidate>> sourceWindows) = await CapturePageContext.AcquireFrameAsync(preparation.SourceWindows, () =>
             {
                 if (preparation.Cancelled) throw new OperationCanceledException();
                 FrozenFrame acquired = _acquireFrame(includeCursor);
                 if (!acquired.Bitmap.IsFrozen)
                     throw new InvalidOperationException("Capture acquisition must return a frozen bitmap.");
                 return acquired;
-            }, _pageUrls.ReadAsync,
+            }, ReadPageUrls,
                 () => _windowCandidates.GetCandidates(preparation.DesktopBounds),
                 ReadWindowSources).ConfigureAwait(false);
             frame = capturedFrame;
-            preparation.SourceWindows = sourceWindows;
+            confirmedWindows = sourceWindows;
             _log.LogInformation("Capture frame acquired after {Elapsed:0.0}ms (acquisition {Acquisition:0.0}ms)",
                 preparation.Elapsed.Elapsed.TotalMilliseconds, frame.ElapsedMilliseconds);
         }
@@ -258,39 +265,75 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             failure = ex;
         }
 
-        // Explicit dispatch also covers native hotkey callbacks without SynchronizationContext.
-        // An aborted dispatcher operation is observed; shutdown never waits for native BitBlt.
-        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return;
+        // The selector appears as soon as its frozen pixels exist. The page and application
+        // details are confirmed by a second read that started right after the pixels; a browser
+        // on any monitor makes that read cost as much as the screen grab, so it must not hold
+        // back the selector. A selection confirmed before it ends waits for it (CaptureOverlayWindow).
+        if (!await DispatchAsync(() => ShowPreparedFrame(preparation, frame, failure)).ConfigureAwait(false)
+            || confirmedWindows is null) return;
+        IReadOnlyList<WindowCandidate>? windows = null;
+        Exception? confirmationFailure = null;
         try
         {
-            await _dispatcher.InvokeAsync(() =>
-                CompletePreparation(preparation, frame, failure)).Task.ConfigureAwait(false);
+            windows = await confirmedWindows.ConfigureAwait(false);
+            _log.LogInformation("Capture source details confirmed after {Elapsed:0.0}ms",
+                preparation.Elapsed.Elapsed.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            confirmationFailure = ex;
+        }
+
+        await DispatchAsync(() => FinishPreparation(preparation, windows, confirmationFailure)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs one preparation step on the owning dispatcher. Explicit dispatch also covers native
+    /// hotkey callbacks without SynchronizationContext. An aborted dispatcher operation is
+    /// observed; shutdown never waits for native BitBlt or accessibility reads.
+    /// </summary>
+    private async Task<bool> DispatchAsync(Func<bool> step)
+    {
+        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return false;
+        try
+        {
+            return await _dispatcher.InvokeAsync(step).Task.ConfigureAwait(false);
         }
         catch (TaskCanceledException) when (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
         {
             // Shutdown invalidates the preparation before any late window can be shown.
+            return false;
         }
         catch (Exception ex)
         {
             // A feedback subscriber must not turn a fire-and-observed transition into an
-            // unobserved task failure. Session cleanup runs in CompletePreparation's finally.
+            // unobserved task failure. Session cleanup runs in each step's finally.
             _log.LogError(ex, "Capture preparation dispatcher transition failed");
+            return false;
         }
     }
 
-    private void CompletePreparation(
+    /// <summary>
+    /// Shows the selector over its frozen frame. Returns true while the preparation still owns the
+    /// session and waits for <see cref="FinishPreparation"/>; otherwise the preparation has ended.
+    /// </summary>
+    private bool ShowPreparedFrame(
         CapturePreparation preparation, FrozenFrame? frame, Exception? failure)
     {
         VerifyDispatcherAccess();
-        if (!ReferenceEquals(_preparation, preparation)) return;
+        if (!ReferenceEquals(_preparation, preparation)) return false;
+        bool awaitingDetails = false;
         try
         {
-            if (_disposed || preparation.Cancelled) return;
+            if (_disposed || preparation.Cancelled) return false;
             if (failure is not null) throw failure;
             FrozenFrame acquired = frame ?? throw new InvalidOperationException("Capture acquisition returned no frame.");
             if (_activeOverlay is { } overlay)
             {
+                // Geometry and z-order are final; only page and application details are still read.
                 overlay.SourceWindows = preparation.SourceWindows;
+                overlay.AwaitSourceDetails();
+                awaitingDetails = true;
                 overlay.AttachFrame(acquired);
                 if (!overlay.IsVisible)
                 {
@@ -299,11 +342,51 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                     _ = overlay.Activate();
                 }
 
-                return;
+                return true;
             }
 
             ShowOverlay(acquired.ScreenBounds, abortOnFocusLoss: false, showMagnifier: false, preparation.Elapsed, acquired,
                 preparation.ShowSelectionGrid);
+            if (_activeOverlay is not { } shown) return false;
+            shown.AwaitSourceDetails();
+            awaitingDetails = true;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            awaitingDetails = false;
+            _log.LogError(ex, "Could not prepare the capture overlay");
+            _activeOverlay?.Close();
+            TransitionFailed?.Invoke(ex);
+            return false;
+        }
+        finally
+        {
+            if (!awaitingDetails)
+            {
+                _preparation = null;
+                EndSessionIfIdle();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Hands the confirmed page and application details to the selector, which completes a
+    /// selection that was waiting for them, and ends the preparation. Until then the session
+    /// stays reserved exactly as while the pixels were being read.
+    /// </summary>
+    private bool FinishPreparation(CapturePreparation preparation, IReadOnlyList<WindowCandidate>? windows,
+        Exception? failure)
+    {
+        VerifyDispatcherAccess();
+        if (!ReferenceEquals(_preparation, preparation)) return false;
+        try
+        {
+            if (_disposed || preparation.Cancelled) return true;
+            if (failure is not null) throw failure;
+            IReadOnlyList<WindowCandidate> confirmed = windows ?? throw new InvalidOperationException("Capture source details were not confirmed.");
+            preparation.SourceWindows = confirmed;
+            _activeOverlay?.ConfirmSourceDetails(confirmed);
         }
         catch (Exception ex)
         {
@@ -316,6 +399,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             _preparation = null;
             EndSessionIfIdle();
         }
+
+        return true;
     }
 
     private void ShowOverlay(
@@ -642,14 +727,6 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         }
 
         EndSessionIfIdle();
-        // The chosen command starts on a later turn, after the session has ended: the app's own
-        // guards then see no active selector, and its frame waits out this dismissal.
-        if (_pendingSelectorAction is { } request)
-        {
-            _pendingSelectorAction = null;
-            if (!_disposed && SelectorActionRequested is { } run)
-                LastSelectorActionForTest = _dispatcher.InvokeAsync(() => run(request), DispatcherPriority.Normal).Task;
-        }
     }
 
     private CaptureSelectorRequest? _pendingSelectorAction;
@@ -678,6 +755,15 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         {
             _lastPresentationDismissedTick = Environment.TickCount64;
             OverlayClosed?.Invoke(this, EventArgs.Empty);
+            // A command chosen on the selector starts on a later turn, after the session has ended
+            // (a selector can close while its source details are still being confirmed): the app's
+            // own guards then see no active selector, and its frame waits out this dismissal.
+            if (_pendingSelectorAction is { } request)
+            {
+                _pendingSelectorAction = null;
+                if (SelectorActionRequested is { } run)
+                    LastSelectorActionForTest = _dispatcher.InvokeAsync(() => run(request), DispatcherPriority.Normal).Task;
+            }
         }
     }
 }

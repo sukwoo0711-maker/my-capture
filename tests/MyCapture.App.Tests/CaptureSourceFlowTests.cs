@@ -137,6 +137,59 @@ public sealed class CaptureSourceFlowTests
         Assert.Empty(monitor.SourceTitle);
     });
 
+    [Fact]
+    public void SelectionMadeBeforeSourceDetailsAreConfirmedWaitsAndCarriesTheConfirmedDetails() => StaTestHost.Run(() =>
+    {
+        var page = new WindowCandidate(new IntPtr(21), new RectD(0, 0, 640, 360), "Docs", ProcessId: 42,
+            ClassName: "Chrome_WidgetWin_1");
+        var overlay = new CaptureOverlayWindow(WindowDetectOverlayTests.Frame(), abortOnFocusLoss: false)
+        { SourceWindows = [page] };
+        var selections = new List<CaptureSelectionCompletedEventArgs>();
+        overlay.SelectionCompleted += (_, e) => selections.Add(e);
+        overlay.AwaitSourceDetails();
+
+        overlay.CompleteSelection(new RectD(20, 20, 200, 120), page, textCapture: false);
+        Assert.Empty(selections);
+        Assert.True(overlay.SourceDetailsPendingForTest);
+
+        overlay.ConfirmSourceDetails([page with
+        {
+            SourcePageUrl = "https://example.com/doc",
+            Source = new CaptureSourceDetails("Microsoft Edge", @"C:\Edge\msedge.exe"),
+        }]);
+        CaptureSelectionCompletedEventArgs selection = Assert.Single(selections);
+        Assert.Equal(new RectD(20, 20, 200, 120), selection.BitmapRegion);
+        Assert.Equal("Docs", selection.SourceTitle);
+        Assert.Equal("https://example.com/doc", selection.SourcePageUrl);
+        Assert.Equal("Microsoft Edge", selection.SourceDetails.AppName);
+        Assert.False(overlay.SourceDetailsPendingForTest);
+    });
+
+    [Fact]
+    public void ClosingWhileSourceDetailsArePendingDropsTheWaitingSelection() => StaTestHost.Run(() =>
+    {
+        var overlay = new CaptureOverlayWindow(WindowDetectOverlayTests.Frame(), abortOnFocusLoss: false);
+        int completed = 0;
+        overlay.SelectionCompleted += (_, _) => completed++;
+        overlay.AwaitSourceDetails();
+        overlay.CompleteSelection(new RectD(4, 4, 32, 24));
+        overlay.Close();
+        overlay.ConfirmSourceDetails([]);
+        Assert.Equal(0, completed);
+    });
+
+    [Fact]
+    public void ConfirmedSourceDetailsLeaveLaterSelectionsImmediate() => StaTestHost.Run(() =>
+    {
+        var overlay = new CaptureOverlayWindow(WindowDetectOverlayTests.Frame(), abortOnFocusLoss: false);
+        int completed = 0;
+        overlay.SelectionCompleted += (_, _) => completed++;
+        overlay.AwaitSourceDetails();
+        overlay.ConfirmSourceDetails([]);
+        overlay.CompleteSelection(new RectD(4, 4, 32, 24));
+        Assert.Equal(1, completed);
+    });
+
     [Theory]
     [InlineData("window")]
     [InlineData("fixed")]

@@ -54,6 +54,35 @@ public sealed class CapturePageContextTests
     }
 
     [Fact]
+    public async Task FrameIsReturnedWhileTheConfirmingReadIsStillRunning()
+    {
+        var confirming = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var events = new List<string>();
+        FrozenFrame expected = Frame();
+        (FrozenFrame frame, Task<IReadOnlyList<WindowCandidate>> windows) = await CapturePageContext.AcquireFrameAsync(
+            [Browser], () =>
+            {
+                events.Add("pixels");
+                return expected;
+            }, _ =>
+            {
+                events.Add("document");
+                return events.Count == 1
+                    ? Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+                        new Dictionary<IntPtr, BrowserDocumentSnapshot> { [Browser.Handle] = Page })
+                    : confirming.Task;
+            }, () => [Browser]);
+
+        // The confirming read starts right after the pixels, as before; only the caller no longer waits for it.
+        Assert.Same(expected, frame);
+        Assert.Equal(new[] { "document", "pixels", "document" }, events);
+        Assert.False(windows.IsCompleted);
+        confirming.SetResult(new Dictionary<IntPtr, BrowserDocumentSnapshot> { [Browser.Handle] = Page });
+        Assert.Equal(Url, Assert.Single(await windows).SourcePageUrl);
+    }
+
+    [Fact]
     public async Task OptionalMetadataFailureDoesNotFailOrRepeatPixelAcquisition()
     {
         int acquisitions = 0;
