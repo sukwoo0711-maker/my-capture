@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `fix/store-update-continuity` (Store 업데이트 상태 보강·테스트 실행본 데이터 가져오기 구현 중) |
+| 현재 기록 브랜치 | `fix/store-update-continuity` (Store 업데이트 상태·테스트 데이터 가져오기 구현 및 QA15 로컬 검증 완료) |
 | 4.1.2 배포 후보 소스 | `release/store-4.1.2-source` / `61e19e3e287c41abca92b70332c6ceb1413339bf`, 로컬 검증·MSIX 생성 완료, Store 미제출 |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
@@ -49,7 +49,7 @@
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
 
-### 진행 중 — Store 교체 업데이트와 기존 테스트 데이터 보존 (2026-10-13)
+### 로컬 검증 완료 — Store 교체 업데이트와 기존 테스트 데이터 보존 (2026-10-13)
 
 - 사용자 답변으로 **Store 버전과 테스트 실행본 데이터 모두 보존**하는 범위를 확정했습니다. 같은 패키지의 업데이트는 제거 없이 새 버전으로 교체하며, 별도 `%APPDATA%/MyCapture`의 테스트 데이터는 복사·병합하는 경로를 추가합니다. 사용자 지정 테스트 데이터 루트는 직접 선택할 수 있도록 합니다.
 - 기존 검증된 4.1.2 소스·실행 파일·MSIX는 아래 경로에 그대로 보존하며, 새 변경은 아직 해당 바이너리에 포함되지 않았습니다. 기존 폴더를 Explorer에서 열고 경로를 확인했습니다. 설치된 Store 패키지의 실제 버전은 4.0.3.0/PFN `sukwoo0711.MyCapture_n98e1tgx2qxb2`입니다.
@@ -59,7 +59,10 @@
 - 이관 Core `ec76558`·`c170b08`·`35e0cee`, App/복구/설정 보호 `cfc19b8`·`900a2e8`·`90f35a9`·`309a445`·`701c9e7`, 보관 폴더 현지화 `6cff914`를 통합했습니다. 제품 소스 **`93000688503b4a5c07245e8b1dc28aee29100170`**, 전체 Debug 경고0/오류0, **Core1153 PASS/App2387 PASS/실패0/기존 조건부11 skip**입니다. 처음 게시 명령의 전역 RuntimeFrameworkVersion 옵션은 Windows SDK 중복 NU1505로 실패했고 기존 PublishProfile+KnownFrameworkReference pin으로 수정한 게시 명령은 exit0입니다. 원본 실패와 수정 명령을 보존했습니다.
 - **QA15 실행 파일:** `artifacts/qa15-store-update/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. DLL SHA256 **`955B98F7CFD40B01911BBA4EC8577378871077A041DF713B31DE38CAD293B963`**. 독립353파일/381166645B/deps263누락0/제품4DLL/GIF76개 SHA·receipt 대조 PASS입니다. UX 자체 검사 session14945/93f948 exit0 RESULT PASS, 한영3테마 최소창 최종 렌더 검사810788 exit0입니다.
 - 사용자가 기존 앱을 종료했고 재조회3a6230에서 프로세스 없음 확인했습니다. 물리 Escape로 이전 화면자동화가 중단된 뒤 사용자가 명시적으로 재허용했습니다. 실제 QA15 DLL을 로드한 격리 host로 사진10개+기존2개, 설정 초안→Apply, 원본/기존파일/현재Queue/자격증명/Store필드 보존을 확인했습니다(session24829/4ac051 exit0). 설정 적용 전 snapshot의 SHA는 원래 백업과 일치합니다. 64MiB 합성 payload의 활성시간 표본 범위438~591ms/경계 포함 heartbeat최대90.33ms입니다. 128MiB 두 번째 host는 같은 원본 재실행에서 Imported0/Skipped10/최종12개를 확인했고 session70892/af4720 exit0입니다. 취소 버튼 시도는 복사가 먼저 완료되어 실제 취소 검증으로 집계하지 않습니다.
-- **8종 gate는 아직 미통과:** 세 번 모두7/8이며 hotfix-ux만 실패했습니다. 첫 시도는 CapsLock ON 상태에서 고정 소문자 예상과 실제 대문자가 달랐습니다. CapsLock을 잠시 OFF로 만든 뒤 두 시도는 첫 클릭 내부에서 전경 HWND가0이 되어 기존 안전 조건에 따라 중단됐습니다. CapsLock은 원래 ON으로 복원했고161db0 exit0으로 확인했습니다. 진단의 실제 Caps 상태 관측·초기창 안정 확인·입력단계 기록을 icons가 기존 worktree에서 보완 중입니다. 사용자 입력 감지 이후 약2분간 조작을 멈출 수 있는지 비동기 답변을 기다립니다. 기존 자료·사용자 데이터·원본 패키지는 보존했습니다.
+- **최종 8종 gate 8/8 PASS:** 사용자 조작 중단 확인 뒤 진단 준비·CapsLock 관측을 `73099c8`, trace 읽기/쓰기 공유를 `b18a8c3`로 보완했습니다. root 통합 테스트 프로젝트 빌드 및 집중14/14 PASS(`e590e8` exit0), 독립 소스 검토 완료. 이전 고정 소문자·전경 상실·KeyDown P 기록 누락 실패는 보존했습니다. 읽기 공유가 기록 writer를 막는 경계는 회귀 검사로 재현했고, 이전 실패 당시의 stderr는 없어 해당 한 번의 예외 원인 자체는 미확인입니다. 입력 전경 안전 조건·정확한 키 순서·텍스트 검사는 유지했습니다. CapsLock은 원래 ON이며 변경하지 않았습니다.
+- **사용자 전달 최종 실행 파일:** `C:/GitRepositories/my-capture-codex/artifacts/qa15-store-update-ready/MyCapture.exe`. 제품 소스 **`b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6`**, DLL SHA256 **`0AD5DBAB85B0F0D5A2146D6AA12BD61407CC5FD8702DF232A7197E590ABF1592`**. fresh publish6833fd exit0, 독립 a6d141 exit0/353파일381178913B/deps263누락0/제품4DLL x64R2R/Core·Desktop10.0.11/GIF76 일치. 전체 회귀·실기 이관을 한9300068 이후 차이는 진단·전용검사·인계 문서만입니다.
+- 최종 native 실제 session40894/`3286d2` exit0, **8/8 PASS**. 출력은 `%LOCALAPPDATA%/Temp/mcux/q15-a074c144/checks/20261012T172001Z-6573b90fbb964a0bb222a65c8579f542`, receipt는 `artifacts/store-update-continuity/q15-a074c144-native-receipt.json`입니다. 실제 실행64초, 캡처·셸·고급 캡처·설정·OCR·녹화·동영상 편집·hotfix UX 모두 통과했습니다. 탐색기87166948에서 최종 폴더를 열고 MyCapture 응용 프로그램을 선택한 화면을 확인했습니다. 기존 산출물·작업 사본은 보존합니다.
+- 현재 완료 범위는 로컬 실행본 구현·검증·전달입니다. 새 변경을 포함한 Store MSIX 업로드·심사 제출·실제 Store 설치 교체는 아직 수행하지 않았습니다. Store에서 시작한 설치 진행은 Store가 표시하고, 앱에서 시작한 업데이트는 앱 종료 전까지 진행 상태를 표시합니다. 실제 사용자 Store·테스트 데이터에 이관을 실행하지 않았으며 격리 합성 데이터로 보존을 검증했습니다.
 
 ### 다음 배포 4.1.2 — 작성·필수 검사·완성 파일 실기 성능 검사 완료
 
@@ -241,7 +244,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선순위:** §3의 Store 업데이트·기존 테스트 데이터 보존 변경을 통합했습니다. 전체 Debug/Core/App 검사 → 새 `artifacts/qa15-store-update` 게시본 → 사용자 앱 종료 확인 후 8종 네이티브·가져오기 실기 검사 → 새 실행 파일 폴더 전달 순서로 진행합니다. 앞서 완료한 4.1.2 후보의 검증 결과·MSIX는 보존하며 새 변경의 검사 결과와 구분합니다. Store 업로드·심사 제출은 아직 진행하지 않았습니다. 아래 대량 처리의 잔존 지연도 유지합니다.
+**현재 우선순위:** §3의 Store 업데이트·기존 테스트 데이터 보존 구현, 전체 Debug/Core/App 회귀, 실기 이관·설정 초안/적용·중복 방지, 최종 QA15 8종 네이티브8/8, 실행 파일 폴더 전달을 완료했습니다. 사용자 테스트는 `artifacts/qa15-store-update-ready/MyCapture.exe`입니다. 다음 실제 Store 배포에서는 이 변경을 포함한 새 패키지를 생성·검증·제출하고 Store 설치 교체를 확인해야 합니다. 앞서 완료한4.1.2 MSIX는 보존하며 QA15 변경이 없는 이전 후보입니다. 아래 대량 처리 잔존 지연도 유지합니다.
 
 1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1116 PASS, App2375 PASS/실패0/기존 조건부11 skip. 최종 제품소스0fef3b3의 기능별 사용법과 기존 성능 개선을 함께 검사했습니다. 지원 문구 검사 오탐 수정은638836f입니다.
 2. **완료 — QA14 실기 빌드·전달:** `artifacts/qa14-feature-tutorials/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. F1 해당 기능 → 사용법 보기 또는 설정 → 단축키의 사용법 보기에서 엽니다. 사용법 창 상단에38개 기능 선택이 있습니다. UX 자체 검사·최종GIF 실제재생/정지/다시보기/기능전환/종료·AS-IS/TO-BE·폴더 열기 완료.
@@ -476,6 +479,10 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-13 Codex: Core `ec76558`·`c170b08`·`35e0cee` 통합 cd9f27 exit0, worker 실제 Core37/37 TRX를 직접·독립 확인했습니다. UI97b2e97/36b30fc/a064b17/a5271a8/451a0c5와 Core5b4e1f0를 순서대로 `cfc19b8`~`6cff914`로 통합 d921be exit0. 최종 Refresh 예외/설정 오류 후 보존 3경계 독립 소스 검토에 추가 blocker 없음. 451 이후 전체 검사는 아직 미실행이며 새 QA15 빌드에서 확인합니다. 기존 사용자 PID59568 재확인53c806 exit0, 종료하지 않고 사용자 종료 확인을 기다립니다. 기록·실패·전후 PNG는 `artifacts/store-update-continuity/`와 `artifacts/legacy-import/`에 보존합니다.
 
 - 2026-10-13 Codex: source9300068 전체 검증 session38759 Debug/Core/App 각각exit0(Core1153/App2387+11skip), publish만NU1505로래퍼exit1(b18185). 수정게시 bc79ab exit0, independent034867/87ceb1/root3a6230 PASS. 사용자 종료·화면자동화 재승인 확인. nativegate session13874/4d2f66,21384/d77602,37627/31f18c 모두exit1/7of8; 첫CapsLock가정, 이후초기클릭전경0. 원래CapsLock ON복원161db0 exit0. 격리migration 실기24829/4ac051 및70892/af4720 exit0, UX14945/93f948 exit0, 최소창렌더810788 exit0. 실제경로·명령·SHA·원본실패는 `artifacts/store-update-continuity/development-log.txt`, independentartifact 및 native 각디렉터리에 보존합니다. Sky Explorer443353524에서QA15폴더열기확인, 제품실행은하지않았습니다. 최종8종과진단보완은진행중입니다.
+
+- 2026-10-13 Codex: 사용자 화면 자동화 재허용·조작 중단 확인을 받아 진단04bf389→73099c8, b9126b6→b18a8c3 통합. root `dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Debug --filter FullyQualifiedName~HotfixExternalInputObservationTests`(TRX/logger/result 인수는 development-log) 실제940962/session22940/e590e8 exit0,14/14 PASS. 원본 공유 충돌 회귀 및 gate 보존을 독립 검토함.
+- 2026-10-13 Codex: exact clean b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6에서 `powershell.exe -NoProfile -NonInteractive -File artifacts/store-update-continuity/publish-qa15-final.ps1 -ExpectedSource b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6 -PayloadName qa15-store-update-ready -EvidenceName ready-diagnostic` 6833fd exit0. 독립 verifier a6d141 exit0,353파일·runtime10.0.11·R2R·deps·GIF·receipt 일치. 앞선951b15f/final 산출물과 실패근거 보존.
+- 2026-10-13 Codex: `powershell.exe -NoProfile -NonInteractive -File artifacts/store-update-continuity/run-qa15-native-gate.ps1 -PublishRoot C:/GitRepositories/my-capture-codex/artifacts/qa15-store-update-ready` session40894/3286d2 exit0 **SELF_TESTS=PASS PASSES=8/8**,64초. root a7dbbe에서 최종receipt/report 재확인. Sky로 Explorer87166948에 최종 폴더를 열고 MyCapture 응용 프로그램 선택 확인. 사용자 앱 종료 명령·사용자 데이터 이관·Store 업로드/설치·파일 삭제는 수행하지 않음.
 
 ## 9. 인계 체크리스트
 
