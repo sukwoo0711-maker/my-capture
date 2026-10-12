@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `perf/product-optimization` (제품 최적화 1차 완료, 이전 버전 대비 체감 속도 저하 조사) |
+| 현재 기록 브랜치 | `perf/product-optimization` (영역 선택 합성 최적화 `ff7e46c`, QA8 실기 빌드 준비 완료) |
 | Store 소스 브랜치 | `release/store-4.1.0`, main과 같은 `39942191fbdc49d018ccfd01c975701f0d002532` |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -46,11 +46,21 @@
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12, Store 4.1.0 심사 제출 완료, 체감 속도 저하 원인 조사)
+## 3. 현재 상태 (2026-10-12, Store 4.1.0 심사 제출 완료, 영역 선택 최적화 QA8 전달)
+
+### 영역 선택 지연과 로컬 업데이트 창
+
+- 사용자 추가 설명: “캡처하려고 영역선택할때 느려. 그리고 내 화면에 지금 mycapture을 업데이트 하시겠습니까? 가 떠있는데 에러가 발생한것같아”. 영역 선택 중 포인터 피드백 경로에 집중했습니다. 선택 화면 진입·드래그 추적·선택 완료 중 더 세부적인 구간을 묻는 선택형 질문은 응답 대기이며, 현재 검증은 hover/drag에 해당합니다.
+- **업데이트 창 처리 완료:** 실제 Windows App Installer 화면에서 직접 연 Store 제출용 unsigned MSIX4.1.0.0과 인증서 체인 오류 **0x800B010A**, 비활성 업데이트 버튼을 확인했습니다. 원본 파일 SHA256은 제출 파일과 일치하고 AppxSignature.p7x가 없습니다. Store의 서명을 받기 전 제출 파일을 직접 설치하려다 막힌 경우입니다. 취소 후 창·프로세스 종료를 확인했으며 설치된 Store4.0.2.0은 그대로입니다. 인증서·보안 설정·제출 상태 변경 없이 해결했습니다.
+- **확인한 렌더링 비용과 수정:** 현재 창 자동 감지의 큰 밝은 영역과 조밀한 점선 가이드가 소프트웨어 렌더링 비용을 늘립니다. 입력 처리·drawing command 생성은 약0.1ms 이하로 큰 비용이 아니었습니다. 실제 desktop 캡처인 Bgr32에서 물리 픽셀 경계가 맞으면 화면을 한 번 그리고 선택 영역 밖만 어둡게 하도록 수정했습니다. alpha/비32bpp/null/소수 픽셀 경계는 기존 합성을 유지합니다. 작업자 `4b22814`를 검토 후 root **`ff7e46cb7e2a8e4ec9a7a796122b963f8fb59ae1`**로 통합했습니다.
+- **측정 범위:** 현재 화면과 같은4208×1440·확대경 켬의 synthetic Bgr32 소프트웨어 raster는 hover42.73→33.35ms(22.0% 감소), drag25.86→19.04ms(26.4% 감소)입니다. 실제 제품 HWND/Tier2에서 같은120개 hover+120개 drag를 버전별3프로세스로 비교한 완료 중앙값은 hover2312.8→2303.0ms, drag2048.9→2006.5ms이며 분포가 겹칩니다. 큰 native 개선·회귀는 확인되지 않았고, 사용자가 느낀 전체 지연의 해결 여부는 실기 확인이 남아 있습니다. 모니터120Hz+60Hz,96DPI, 설정 변경 없음. 실제 하드웨어 입력부터 표시까지의 지연은 이 probe의 측정 범위 밖입니다.
+- **검증 완료:** worker73/73 및 통합 root73/73 집중검사 PASS,0skip. root actual session55245 exit0에서 테스트 프로젝트 빌드까지 완료했습니다. 기존 합성 기준과100/150/200%DPI·경계·상태 전환 픽셀 검사를 포함합니다. 대표 기존/수정/최종 게시본 PNG3개 모두 SHA256 `F414CE2A209F09359628E8AB84EE983FCAE727BCEEA09543BFCC0230B2C3E476`로 일치합니다. root와 별도 작업자의 독립 소스 검토에 중대한 지적이 없습니다. 기존 raw-delete capture-performance CLI는 휴지통 정책상 NOT RUN이며 외부 no-persistence probe를 사용했습니다.
+- **사용자 실행 파일:** `C:\GitRepositories\my-capture-codex\artifacts\qa8-selection-performance\MyCapture.exe`. runtime10.0.11을 포함하는 self-contained/R2R 게시본입니다. 실제 publish chunkd0cf87 exit0, 독립 PE/source/runtime/deps263건 누락0 검사 PASS. 게시본 DLL을 외부 probe에서 직접 로드한 snapshot도 exit0/PASS입니다. 탐색기 창87166948에서 이 폴더를 열고 MyCapture 응용 프로그램을 선택한 화면을 확인했습니다. 테스트에는 폴더 전체가 필요합니다. MSIX 설치 없이 이 exe를 실행합니다. 이번 제품 변경은 Store에 재제출하지 않았습니다.
+- 실제 명령·종료 코드·실패 기록·비교 raw JSON·TRX·PNG·probe 소스·독립 검토는 **`artifacts/selection-lag-investigation/`**에 모았습니다. 기존 작업 사본·원본·산출물을 모두 보존했습니다.
 
 ### 이전 버전 대비 속도 저하 조사
 
-- 사용자 질문: “속도가 이전버전대비 많이 느린것같은데 원인을찾았니?” 기존 최적화는 자르기·전체 선택의 할당 감소이며 전체 응답 속도 저하의 원인을 확인한 결과가 아닙니다. 현재 큰 체감 저하의 주원인은 미확정입니다. 느린 동작과 비교 버전에 관한 선택형 질문은 아직 응답 대기입니다.
+- 사용자 질문: “속도가 이전버전대비 많이 느린것같은데 원인을찾았니?” 이후 느린 동작을 영역 선택으로 특정했습니다(위 최신 상태). 기존 자르기·전체 선택의 할당 감소와 영역 선택 지연을 구분하며, 큰 체감 저하의 전체 원인은 아직 미확정입니다. 아래는 그 이전에 수행한 범위별 비교 기록입니다.
 - 실제 설치된 이전 Store 앱은 **4.0.2.0 / source `c52a1bbf3e5f44de85cab6161223ff336b0132a1`**입니다. 태그나 중간 개발 커밋을 이전 앱으로 대신하지 않았습니다. 조사 대상 제품 소스는 `09cb3d8`(직전 개발 빌드 `caee5b8`와 제품 파일 동일)입니다.
 - **조건부 캡처 지연 경로 확인:** 새 앱·탐색기 폴더 출처를 pixels 전후에 기다립니다. 실제 production timeout 경로에 응답하지 않는 Explorer provider를 연결한 검사에서 최초 703.55ms 대기가 재현됐습니다. 다음 조회는 busy gate로 0.046ms에 끝나며 항상 두 번 700ms를 기다리는 것은 아닙니다. 현재 desktop의 고정 후보 목록·synthetic pixels 비교는 기존 page 조회 평균112.62ms, page+source126.98ms로 **추가14.36ms**입니다. 큰 실기 지연을 이 환경에서는 재현하지 못했습니다. 고급 캡처의 동기 source 조회도 UI 대기 후보이며 실제 명령 전체 시간은 아직 측정하지 않았습니다.
 - **편집기 자체의 큰 회귀 미재현:** 같은 .NET/WPF10.0.11, 실제 old/current DLL, 같은 640×480 이미지·Midnight·1000×620 창을 외부 STA host에서 비교했습니다. 버전별 별도 프로세스3개, 프로세스마다 첫 editor1회·반복4회입니다. constructor부터 첫 WPF Rendering까지 중앙값은 이전383.51ms / 기존 개발 빌드385.96ms / R2R 비교 빌드376.99ms, 반복 중앙값94.21 /81.77 /96.55ms입니다. App startup·캡처 단축키·저장·DWM presentation·입장 애니메이션 완료는 이 측정에 포함되지 않습니다. 최종9개 프로세스 모두 exit0, 총45개 editor sample, old lazy dependency copy0 확인. 파일 읽기만 가능한 WindowsApps DLL은 해시가 동일한 소유 복사본으로 비교했으며 ACL은 변경하지 않았습니다.
@@ -134,7 +144,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** 사용자가 느낀 이전 버전 대비 속도 저하의 동작·조건을 특정하고 실제 해당 경로를 재현합니다. 출처 조회의 조건부 대기는 확인했지만 현재 desktop과 편집기 비교에서는 큰 회귀가 재현되지 않았습니다(§3). 사용자에게 가장 느린 동작을 질문한 상태이며 응답 뒤 해당 경로에 집중합니다. 제품 최적화 1차(자르기/redo·전체 선택)는 구현·검증 완료입니다. mosaic 영역 읽기·비디오 이미지 레이어 복사 제거는 이번 증상과 연결된 근거가 없어 아직 변경하지 않았습니다. 아래는 이전 배포 작업의 완료 이력입니다.
+**현재 우선 작업:** QA8 `artifacts/qa8-selection-performance/MyCapture.exe`에서 실제 캡처 영역 선택의 추적 지연을 확인합니다. 중복 합성 제거와73개 집중검사·게시본 검증·파일 위치 열기는 완료했습니다(§3). 사용자 피드백이 계속되면 선택 화면 진입/드래그/선택 완료 중 구간과 해당 빌드를 확인하고 실제 하드웨어 입력·프레임 표시 경로를 추적합니다. 소프트웨어 raster 감소만으로 체감 지연 해결을 확정하지 않습니다. 제품 최적화 1차(자르기/redo·전체 선택)도 완료입니다. mosaic 영역 읽기·비디오 이미지 레이어 복사 제거는 이번 증상과 연결된 근거가 없어 아직 변경하지 않았습니다. 아래는 이전 배포 작업의 완료 이력입니다.
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
 2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
@@ -285,6 +295,11 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 사용자 체감 속도 저하 질문으로 조사 범위 전환. 제품 source09cb3d8/직전 개발caee5b8, 실제 설치 Store4.0.2.0/sourcec52a1bb 확인. 현재 desktop의 production page/source 비교 및 의미 검증45/45 PASS(exit0, chunk7a7b33), default700ms hung Explorer·기존 source 의미45/45 PASS(exit0, chunk0d67ae); 큰 실desktop 지연은 미재현. Gallery 실제 이전 모델 비교2/2 PASS(exit0, session99431). 작업자별 명령·cwd·원본JSON·TRX를 `artifacts/latency-regression/capture`와 `gallery`에 수집. 이전 메모리 할당 최적화를 이 체감 지연의 원인 해결로 보고하지 않도록 §3 정정.
 - 2026-10-12 Codex: cwd `C:\GitRepositories\my-capture-codex`, 동일 현재 제품의 기존 profile publish PASS(exit0, runtime10.0.12). global RuntimeFrameworkVersion10.0.11 재시도 FAIL(exit1, NU1505 WindowsSDKRef 중복), private KnownFrameworkReference runtime metadata만 고정하는 방식으로 원인 해결. `dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:PublishProfile=win-x64-self-contained -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-codex/artifacts/latency-regression/pin-runtime-10.0.11.targets -o C:/GitRepositories/my-capture-codex/artifacts/next-version-product-opt-r2r-10.0.11 -p:SourceRevisionId=09cb3d806e555798d380d2c0a8cbf67f0607221f -nologo` PASS(exit0, session97091). 실제runtime10.0.11/WindowsSDK10.0.22000.57/R2R PE signature/deps 누락0 독립 확인 PASS. DLL SHA25649164BC4953D30B702C8E09B5643AA4EB95312333AEA16159BE6A3DE405F89A3. 원 실패·명령·private targets·검증 결과는 `artifacts/latency-regression` 보존.
 - 2026-10-12 Codex: 외부 STA host에서 actual old/FDD/R2R product editor 비교 최종9개 프로세스 exit0/45samples, 각 Core/WPF10.0.11 및 old dependency 복사0 확인. 첫 editor constructor→WPF Rendering 중앙값383.51/385.96/376.99ms, 반복94.21/81.77/96.55ms로 큰 편집기 회귀 미재현. 원본 WindowsApps mapping 및 host ResourceAssembly bootstrap 실패는 별도 보존 후 원인 수정, 제품DLL·ACL 변경 없음. 동일한 제품코드/다른source metadata는 caee5b8→09cb3d8 문서만 변경임을 독립 확인. 소스·측정해석 독립 검토 완료, Opacity 필드는 가시성 판정에서 제외. App startup/실 hotkey/저장은 측정 범위 밖이고 체감 저하의 전체 원인은 미확정. 현재 느린 동작에 관한 사용자 응답 대기, 제품 변경·원격 변경·파일 삭제 없음.
+
+- 2026-10-12 Codex: 사용자가 느린 동작을 캡처 영역 선택으로 특정하여 hover/drag 조사로 좁힘. Computer Use로 actual AppInstaller 창124914308의 unsigned Store MSIX4.1.0.0/0x800B010A/업데이트 비활성 확인. 독립 파일·프로세스 진단 exit0 및 제출hash일치, 설치 Store4.0.2.0 유지 확인. 관측한 취소 버튼 클릭 뒤 새 창 목록과 독립 프로세스 조회로 종료 확인. 앱 내부 오류와 구분했고 인증서·보안 설정·Store 제출 변경 없음. 근거 `artifacts/selection-lag-investigation/update-diagnostics/`.
+- 2026-10-12 Codex: 작업자 overlay commit4b228141d00b6470fa262b291a031e447539ca43의2파일 diff/테스트/대표PNG를 직접 검토하고 root cwd `C:\GitRepositories\my-capture-codex`에서 `git cherry-pick 4b228141d00b6470fa262b291a031e447539ca43` PASS(exit0,chunkb79dc5), 통합ff7e46cb7e2a8e4ec9a7a796122b963f8fb59ae1. Bgr32 정수물리경계에서 desktop1회+선택영역밖dim, 나머지는 기존합성. worker집중73/73 exit0, root `dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release --filter <9개 overlay 관련 클래스 OR; 정확 filter 개발LOG> --logger trx;LogFileName=root-overlay-focused.trx --results-directory artifacts/selection-lag-investigation -v minimal` actualsession55245 PASS(exit0,최종chunk5aaa0b),73/73·0skip·테스트프로젝트빌드완료. 독립검토중대한지적없음.
+- 2026-10-12 Codex: 실제4208×1440 Bgr32 software paired hover42.73→33.35ms/drag25.86→19.04ms. Native같은120+120 workload 버전별3프로세스 session37606 exit0, 완료medianhover2312.8→2303.0ms/drag2048.9→2006.5ms 분포중첩. 별도interaction유효성pair session49763 exit0, Create유지/Endedfalse/최종selection동일. 사용자체감해결은미확정. 원본측정·초기fixture실패·한계·최종73TRX·probe소스·독립검토를 root `artifacts/selection-lag-investigation/overlay` 등에수집. 기존/수정대표PNG SHA256 F414CE2A209F09359628E8AB84EE983FCAE727BCEEA09543BFCC0230B2C3E476 일치재확인(exit0,chunke437ee). 삭제·사용자설정변경없음.
+- 2026-10-12 Codex: root sourceff7e46c clean에서 `dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:PublishProfile=win-x64-self-contained -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-codex/artifacts/latency-regression/pin-runtime-10.0.11.targets -o C:/GitRepositories/my-capture-codex/artifacts/qa8-selection-performance -p:SourceRevisionId=ff7e46cb7e2a8e4ec9a7a796122b963f8fb59ae1 -nologo` PASS(exit0,chunkd0cf87). 독립source/runtime10.0.11/R2R/deps263누락0 PASS(exit0), DLL SHA256 E1D9C2ABF2EEE45B3E60D3194BCC26AF87FD9ED99E70B803C75B103000BC100C. 최종DLL을외부OverlayProbe로로드한syntheticsnapshot PASS(exit0,chunkc24349),PNG기존쌍과hash일치(chunkbe235f). Computer Use의 기존Explorer87166948에서새폴더열기·MyCapture응용프로그램선택화면확인. 실행파일은§3경로,Store변경없음. 모든작업사본·산출물보존.
 
 ## 9. 인계 체크리스트
 
