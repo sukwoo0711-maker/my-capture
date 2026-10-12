@@ -55,13 +55,13 @@ internal sealed class VideoSceneRenderer : ITutorialSceneRenderer
                     .Motion("set-out", 8, tail, tail, pressed: true).Hold("trim-result", 160, tail);
                 PointD save = new(535, 40);
                 story.Motion("library-save-approach", 25, tail, save).Motion("library-save", 8, save, save, pressed: true)
-                    .Hold("library-saved", 120, save); tail = save; break;
+                    .Hold("library-saved", 100, save); tail = save; break;
             case "gif-export":
                 tail = new PointD(503, 231);
-                story.Hold("export-dialog", 200, first).Motion("export-approach", 25, first, tail)
-                    .Motion("export", 8, tail, tail, pressed: true).Hold("file-dialog", 140, tail)
+                story.Hold("export-dialog", 160, first).Motion("export-approach", 25, first, tail)
+                    .Motion("export", 8, tail, tail, pressed: true).Hold("file-dialog", 100, tail)
                     .Motion("file-save", 8, tail, tail, pressed: true).Motion("exporting", 30, tail, tail)
-                    .Hold("exported", 180, tail); break;
+                    .Hold("exported", 140, tail); break;
         }
         story.Hold("complete", Math.Max(100, (11000 - story.DurationMs) / 10), tail);
         Storyboard = story;
