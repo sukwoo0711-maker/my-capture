@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `feat/text-copy-tutorial` (텍스트 복사 GIF 사용법 QA13 검증·전달 완료) |
+| 현재 기록 브랜치 | `feat/feature-tutorials` (부드러운 GIF·기능별 튜토리얼 확장 진행) |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -47,6 +47,13 @@
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
+
+### 부드러운 GIF·기능별 사용법 — 진행 중
+
+- 사용자 피드백: GIF의 움직임을 부드럽게 하고 기능마다 별도 튜토리얼을 만듭니다. 기준2bb6cd6/제품b4ae87e/QA13, root `feat/feature-tutorials`. 기존11프레임 한영 GIF와 설정/도움말 화면을 `artifacts/feature-tutorials/`에 AS-IS로 복사했습니다.
+- 움직임은25fps(4cs)와 가감속 cursor/drag, 읽기 구간은 hold로 구성합니다. 먼저 텍스트 복사 pilot으로 화질·연속성·파일/프레임 메모리·실제 재생을 검토한 뒤 기능별로 확장합니다. 사용법 창의 지연 로딩·취소·모션 설정·정적 안내는 유지합니다.
+- 기능별 범위에 대해 주요 사용 흐름별 또는 도움말의 모든 단축키 동작별인지 비동기 질문을 보냈습니다. 독립적인 motion 개선과 실제 기능/키/진입점 조사는 진행합니다. 전역 단축키를 GIF에 고정하지 않고 사용자 현재 설정을 표시합니다.
+- 기존 edit-recovery 작업 사본은 animation generator와 자산, a491은 기능·진입점 조사를 담당합니다. 파일 소유권을 나누고 CPU/native 실행은 직렬로 관리합니다. 기존 실패한 Pro/Antigravity 경로는 반복하지 않고 동일한 공식 native 경로를 재사용합니다. 원격 배포·삭제는 범위에 없습니다.
 
 ### 텍스트 복사 GIF 사용법 — QA13 구현·검증·전달 완료
 
@@ -198,7 +205,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 요청 완료:** 텍스트 복사 GIF 사용법을 QA13에 구현·검증했습니다. 실제 동작과 일치하는 한영 GIF, 설정/F1의 진입점, 재생 수명·모션 설정·현재 단축키 안내와 새 실기 빌드를 전달했습니다. 과부하 개선 QA12의 완료 결과와 후속 한계는 §3을 유지합니다.
+**현재 우선 작업:** QA13 GIF의 동작 구간을25fps로 부드럽게 개선하고, 실제 제품의 기능별로 독립된 사용법 GIF와 진입점을 확장합니다. 파일/프레임 메모리·지연 로딩·취소를 검사하고 새 실기 빌드를 전달합니다. QA13과 과부하 개선 QA12의 완료 결과와 후속 한계는 §3을 유지합니다.
 
 1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1105 PASS, App2363 PASS/실패0/기존 조건부11 skip. 최종 제품소스b4ae87e의 설정/F1/튜토리얼과 기존 성능 개선을 함께 검사했습니다.
 2. **완료 — QA13 실기 빌드·전달:** `artifacts/qa13-text-copy-tutorial/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. 설정 → 단축키 → 텍스트 복사 → 사용법 보기, F1의 해당 행·검색 결과에서 한영 GIF를 엽니다. UX 자체 검사·실제재생/정지/다시보기/종료·AS-IS/TO-BE·폴더 열기 완료. QA12와 기존 산출물은 보존했습니다.
@@ -408,6 +415,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: sourceb4ae87e의 QA13 publish session91978/17e2ba exit0, DLL73916DA5…69D72·runtime10.0.11·279파일·deps263누락0·x64/R2R·한영GIFSHA일치 e6f499/5c91b1 exit0. 격리 WPF host에서 실제 제품 튜토리얼의 두 검색진입점/재생/정지/다시보기/Esc/닫기를 Computer Use로 확인, session46730/PID62020/5e4cdf exit0 및 두창GC수거·프레임/타이머해제·정상종료. UX 자체검사 session94042/f859f0 exit0·RESULT PASS, 실제 설정AS-IS/TO-BE·밝은/어두운 PNG 직접확인 f4a7d7. 사용자 프로필·클립보드·앱조작과 파일삭제·원격변경 없음. 최종 App전체 session8096 진행 중.
 
 - 2026-10-12 Codex: 최종 root `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger 'trx;LogFileName=text-copy-app-final.trx' --results-directory artifacts/text-copy-tutorial/test-results` session8096/c2f014 exit0,2363PASS/0FAIL/11기존조건부skip(6분39초). Core1105PASS·집중31PASS·최종Debug/UX/native 결과를 확인하고 §0/§3/§4를 완료로 갱신했습니다. Computer Use에서 기존 Explorer443353524의 주소를 `C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial`로 이동하고 QA13 경로·폴더 화면을 확인했습니다. 실행파일은 사용자 테스트를 위해 전달하며 Store 상태는 유지합니다. 모든 실패와 산출물·작업 사본을 보존했습니다.
+
+- 2026-10-12 Codex: 사용자 부드러운 GIF·기능별 독립 튜토리얼 요청 인수. root2bb6cd6/common-dir/remote/clean 확인0d905e(프로세스부재 Get-Process만exit1), `git switch -c feat/feature-tutorials`와 AS-IS 한영GIF/화면복사631cfc exit0. Windows/개발·창의성/웹쫀쿠·위임/조립·표면/worker routing/Antigravity 정본을 읽고 공식openai provider를 확인했습니다. 기존두작업자를 재사용해motionpilot과기능조사를 분리했습니다. 기능별 범위 비동기질문을 보내고 독립 작업을 진행합니다. 이 단계는 착수이며 새 구현·검증 완료가 아닙니다.
 
 ## 9. 인계 체크리스트
 
