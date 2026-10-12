@@ -330,6 +330,7 @@ public partial class App : Application
             _pendingRecord = null;
             RestoreTrayAfterCapture();
             _storeRating?.NotifyFlowEnded();
+            RequestLibraryMaintenance();
         };
         _overlay.CommitRequested = HandleCommitAsync;
         // The selector's record switch and ⋯ menu run the same commands as the tray and the hotkeys.
@@ -404,7 +405,9 @@ public partial class App : Application
         InitializeStoreRating();
         PrepareCapturePersistenceForExitAsync = PreparePendingCaptureForExitAsync;
         PrepareStoreUpdateProtection = PrepareAndHoldStoreUpdateAsync;
+        _initialLibraryRecoveryTask = RecoverLibraryStateAsync();
         _initialEditRecoveryTask = InitializeEditRecoveryAsync();
+        _ = ResumeMaintenanceAfterInitialRecoveryAsync();
         SessionEnding += async (_, _) =>
         {
             try { await FlushEditingDraftsAsync(); }
@@ -1075,9 +1078,11 @@ public partial class App : Application
     private async Task<bool> PreparePendingCaptureForExitAsync()
     {
         await _initialEditRecoveryTask;
+        await _initialLibraryRecoveryTask;
         if (_overlay?.IsSelecting == true || _activeCountdown is not null || _scrollCancellation is not null
             || _preparingAdvancedCapture || _pasteToScreenInFlight || _gitHubUploadInFlight) return false;
         await _capturePersistenceTask;
+        if (_libraryRecovery is not null) await _libraryRecovery.WaitForPendingOperationsAsync();
         // Let the coordinator finish its awaited selection transition before enumerating editors.
         await Dispatcher.Yield(DispatcherPriority.Background);
         return true;
@@ -1529,9 +1534,14 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<CaptureQueue>>());
         using IDisposable startupEviction = queue.SuspendEviction();
 
-        // Deleting evicted directories is the shell's job: the queue stays a pure index so a
-        // deletion failure can never desynchronise it from the filesystem.
-        queue.Evicted += OnCaptureEvicted;
+        _libraryRecovery = new RecoverableLibraryService(queue, paths, new WindowsRecycleBin(),
+            _services.GetRequiredService<ILogger<RecoverableLibraryService>>());
+        _libraryRecovery.ConnectAutomaticMaintenance(CanAutomaticallyRemoveCapture, result =>
+        {
+            if (result.RemovedCount <= 0) return;
+            _galleryWindow?.RefreshFromQueue();
+            if (_tray?.IsInitialized == true) _tray.SetCaptureCount(queue.Count);
+        });
         queue.Load();
 
         _queue = queue;
@@ -1562,57 +1572,17 @@ public partial class App : Application
 
         _galleryController = new GalleryController(
             queue,
-            _services.GetRequiredService<ILogger<GalleryController>>());
+            _services.GetRequiredService<ILogger<GalleryController>>()) { Recovery = _libraryRecovery };
         _reeditLoader = new GalleryReeditLoader(
             queue,
             _services.GetRequiredService<ILogger<GalleryReeditLoader>>());
-    }
-
-    private void OnCaptureEvicted(object? sender, CaptureEvictedEventArgs e)
-    {
-        if (_queue is null)
-        {
-            return;
-        }
-
-        string directory = _queue.GetDirectory(e.Record);
-        try
-        {
-            if (Directory.Exists(directory))
-            {
-                Directory.Delete(directory, recursive: true);
-                _log?.LogInformation(
-                    "Deleted evicted capture directory {Directory} ({Reason})",
-                    LogText.SingleLine(directory),
-                    e.Reason);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Losing the index entry is what enforces the cap; reclaiming the bytes can wait.
-            // The orphaned directory is harmless — it is not re-indexed on a normal load — and
-            // can be cleaned up by a later maintenance pass.
-            _log?.LogWarning(
-                ex,
-                "Could not delete evicted capture directory {Directory}",
-                LogText.SingleLine(directory));
-        }
     }
 
     private void MaintainHistory()
     {
         try
         {
-            if (_queue?.ExpireHistory(DateTimeOffset.UtcNow) > 0)
-            {
-                _galleryWindow?.RefreshFromQueue();
-                // Startup expires history before the tray icon exists; InitializeShell sets the
-                // count right after adding the icon.
-                if (_tray?.IsInitialized == true)
-                {
-                    _tray.SetCaptureCount(_queue.Count);
-                }
-            }
+            _queue?.RequestAutomaticMaintenance();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

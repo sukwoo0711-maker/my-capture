@@ -93,5 +93,6 @@ public partial class App
     {
         _storeInstallationPending = false;
         if (_galleryWindow is not null) _galleryWindow.IsEnabled = _galleryEnabledBeforeUpdate;
+        RequestLibraryMaintenance();
     }
 }

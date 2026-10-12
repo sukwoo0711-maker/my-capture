@@ -265,7 +265,7 @@ internal sealed class OcrModelStore
         {
             if (File.Exists(path))
             {
-                File.Delete(path);
+                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(path);
             }
         }
         catch (IOException)
