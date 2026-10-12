@@ -485,6 +485,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-13 Codex: exact clean b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6에서 `powershell.exe -NoProfile -NonInteractive -File artifacts/store-update-continuity/publish-qa15-final.ps1 -ExpectedSource b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6 -PayloadName qa15-store-update-ready -EvidenceName ready-diagnostic` 6833fd exit0. 독립 verifier a6d141 exit0,353파일·runtime10.0.11·R2R·deps·GIF·receipt 일치. 앞선951b15f/final 산출물과 실패근거 보존.
 - 2026-10-13 Codex: `powershell.exe -NoProfile -NonInteractive -File artifacts/store-update-continuity/run-qa15-native-gate.ps1 -PublishRoot C:/GitRepositories/my-capture-codex/artifacts/qa15-store-update-ready` session40894/3286d2 exit0 **SELF_TESTS=PASS PASSES=8/8**,64초. root a7dbbe에서 최종receipt/report 재확인. Sky로 Explorer87166948에 최종 폴더를 열고 MyCapture 응용 프로그램 선택 확인. 사용자 앱 종료 명령·사용자 데이터 이관·Store 업로드/설치·파일 삭제는 수행하지 않음.
 - 2026-10-13 Claude: 사용자 지시("codex에서 작업하던 세션을 네가 이제 이어서 오케스트레이션해. 코덱스가 한 작업내역을 리뷰해봐")로 오케스트레이션을 넘겨받음. Codex 대화형 세션(Claude 앱 터미널 탭 c2)은 QA15 전달 후 입력 대기 상태였고, 작업 공간은 깨끗함(HEAD 6f33333). origin/main(9a35763, 4.1.1) 대비 미병합 176커밋. Codex 작업 전체 리뷰 착수.
+- 2026-10-13 Claude: Codex 작업 리뷰 완료(5개 영역 병렬, 주요 지적 직접 재확인, 데이터 이관 4건 시험 재현). 결과는 `docs/handoff/review-2026-10-13-codex-work.md`. 4.1.2 후보 MSIX는 제출 보류 권고(휴지통 설계, 데이터 이관 P1 5건, GIF 130MB·모형 화면, 자체 검사 판정 완화). 출시분 회귀는 고대비 라이브러리 호버 1건.
 
 ## 9. 인계 체크리스트
 
