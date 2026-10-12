@@ -408,11 +408,7 @@ public partial class App : Application
         _initialLibraryRecoveryTask = RecoverLibraryStateAsync();
         _initialEditRecoveryTask = InitializeEditRecoveryAsync();
         _ = ResumeMaintenanceAfterInitialRecoveryAsync();
-        SessionEnding += async (_, _) =>
-        {
-            try { await FlushEditingDraftsAsync(); }
-            catch (Exception error) { _log?.LogError(error, "Could not flush drafts on session ending"); }
-        };
+        SessionEnding += (_, _) => { _ = PreserveDraftsForSessionEnding(); };
 
         if (_hotkeys.Failures.Count > 0)
         {
@@ -1757,6 +1753,7 @@ public partial class App : Application
 
     private void HandleSettingsRequested()
     {
+        if (_preparingExit || _storeInstallationPending) return;
         _log?.LogInformation("Settings window requested");
 
         SettingsWindow? window = EnsureSettingsWindow();

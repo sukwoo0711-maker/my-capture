@@ -99,6 +99,7 @@ public partial class App
             foreach (var (settings, settingsEnabled) in settingsStates) settings.IsEnabled = settingsEnabled;
             if (_galleryWindow is not null && galleryEnabled is { } enabled) _galleryWindow.IsEnabled = enabled;
             _preparingExit = false;
+            RequestLibraryMaintenance();
         }
     }
     /// <summary>No user prompts on Windows session ending; keep the last durable revisions.</summary>
