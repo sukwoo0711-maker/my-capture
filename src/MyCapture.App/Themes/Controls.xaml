@@ -763,15 +763,43 @@
                                               ContentSource="Header"
                                               RecognizesAccessKey="True"
                                               VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2"
+                            <TextBlock x:Name="GestureText" Grid.Column="2"
                                        Text="{TemplateBinding InputGestureText}"
                                        Foreground="{DynamicResource Text.Muted}"
                                        FontFamily="{DynamicResource Font.Mono}"
                                        FontSize="{DynamicResource FontSize.Caption}"
                                        VerticalAlignment="Center" />
+                            <themes:SymbolIcon x:Name="SubmenuArrow" Grid.Column="2" Size="16"
+                                               Data="{DynamicResource Icon.ChevronDown}"
+                                               Foreground="{TemplateBinding Foreground}"
+                                               VerticalAlignment="Center" Visibility="Collapsed">
+                                <themes:SymbolIcon.LayoutTransform>
+                                    <RotateTransform Angle="-90" />
+                                </themes:SymbolIcon.LayoutTransform>
+                            </themes:SymbolIcon>
                         </Grid>
+                        <!-- Native MenuItem owns pointer/keyboard opening and screen-edge placement. -->
+                        <Popup x:Name="PART_Popup" Placement="Right" AllowsTransparency="True"
+                               Focusable="False" IsOpen="{TemplateBinding IsSubmenuOpen}"
+                               PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
+                            <Border Background="{DynamicResource Surface.Floating}"
+                                    BorderBrush="{DynamicResource Border.Strong}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.Md}" Padding="5"
+                                    SnapsToDevicePixels="True"
+                                    MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}">
+                                <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"
+                                                    KeyboardNavigation.TabNavigation="Cycle" />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="HasItems" Value="True">
+                            <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="GestureText" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
