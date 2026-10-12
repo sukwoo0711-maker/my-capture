@@ -25,6 +25,12 @@ public static class AtomicFile
     private const string TempSuffix = ".tmp";
     public const string BackupSuffix = ".bak";
 
+    /// <summary>
+    /// The host supplies a recoverable operating-system trash operation for temporary files.
+    /// An unconfigured or failed operation leaves the file in place for a later attempt.
+    /// </summary>
+    public static Action<string>? RecycleTemporaryFile { get; set; }
+
     public static void WriteAllBytes(string path, ReadOnlySpan<byte> contents) =>
         WriteAllBytesCore(path, contents, keepRecoveryBackup: true);
 
@@ -140,8 +146,8 @@ public static class AtomicFile
         }
         finally
         {
-            // A denied destination or failed volume swap must not leave an opaque .tmp beside
-            // the user's chosen file. Settings recovery still uses the separate .bak path.
+            // A failed write is recoverably recycled when the host supports it. Settings
+            // recovery still uses the separate .bak path.
             TryDelete(tempPath);
         }
     }
@@ -251,13 +257,15 @@ public static class AtomicFile
         }
     }
 
-    private static void TryDelete(string path)
+    private static void TryDelete(string path) => TryRecycleTemporaryFile(path, RecycleTemporaryFile);
+
+    internal static void TryRecycleTemporaryFile(string path, Action<string>? recycle)
     {
         try
         {
             if (File.Exists(path))
             {
-                File.Delete(path);
+                recycle?.Invoke(Path.GetFullPath(path));
             }
         }
         catch (IOException)

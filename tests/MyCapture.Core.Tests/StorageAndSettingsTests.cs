@@ -40,6 +40,30 @@ internal sealed class TempWorkspace : IDisposable
 public sealed class AtomicFileTests
 {
     [Fact]
+    public void TemporaryCleanup_WithoutRecoverableHost_PreservesContents()
+    {
+        using var workspace = new TempWorkspace();
+        string path = Path.Combine(workspace.Root, "interrupted.tmp");
+        File.WriteAllText(path, "recoverable content");
+
+        AtomicFile.TryRecycleTemporaryFile(path, null);
+
+        Assert.Equal("recoverable content", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void TemporaryCleanup_WhenRecycleFails_PreservesContents()
+    {
+        using var workspace = new TempWorkspace();
+        string path = Path.Combine(workspace.Root, "interrupted.tmp");
+        File.WriteAllText(path, "recoverable content");
+
+        AtomicFile.TryRecycleTemporaryFile(path, _ => throw new IOException("Recycle Bin unavailable"));
+
+        Assert.Equal("recoverable content", File.ReadAllText(path));
+    }
+
+    [Fact]
     public void WriteAllText_CreatesFileAndParentDirectory()
     {
         using var workspace = new TempWorkspace();

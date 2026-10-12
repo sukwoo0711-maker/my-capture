@@ -9,6 +9,10 @@ namespace MyCapture.Tests;
 /// <summary>Recycles only fixtures allocated by this test process. Never permanently deletes.</summary>
 internal static class TestRecycleBin
 {
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void ConfigureAtomicCleanup() =>
+        MyCapture.Core.Storage.AtomicFile.RecycleTemporaryFile = DeleteFile;
+
     private static readonly ConcurrentDictionary<string, byte> Roots = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object ShellLock = new();
 
