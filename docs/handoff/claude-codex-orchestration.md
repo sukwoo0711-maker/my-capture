@@ -56,8 +56,10 @@
 - 업데이트 진행 콜백 격리·예외 복구·접근성 도움말 수정은 `9305935`로 통합했습니다. worker 집중 App12/12·Localization13/13 PASS, 직접 diff/전후 PNG 및 독립 검토 완료. 같은 LocalState 기본/외부 captures 보존 회귀는 `8ae4956`, worker Core2/2 PASS입니다. 전체 통합 검증은 최종 이관 코드 뒤에 실행합니다.
 - 이관 계약 `b3bc471`: 원본 읽기 전용, 파일 복사·해시 검증, 기존 Store 항목 보존, 중복·충돌·중단 복구, 사진/영상/주석/폴더 보존. Core는 현재 설정을 저장하지 않으며 이전 설정 백업 경로만 반환합니다. 선택한 설정은 UI의 적용 전 초안으로 불러오고 기존 적용 절차를 사용합니다. Store 저장 위치·현재 라이브러리 정책·Store 관측·자격 증명은 유지합니다.
 - Core/API·회귀는 기존 icons worktree, App/설정/이관 화면·실기 호스트는 기존 tutorial_ui worktree, 독립 검토는 tutorial_asset에 배정했습니다. CPU/native 검사는 직렬입니다. 실제 명령·결과·승인 범위는 `artifacts/store-update-continuity/development-log.txt`에 기록합니다. 현재 Store 업로드·설치/제거는 수행하지 않았습니다.
-- 이관 Core `ec76558`·`c170b08`·`35e0cee`, App/복구/설정 보호 `cfc19b8`·`900a2e8`·`90f35a9`·`309a445`·`701c9e7`, 보관 폴더 현지화 `6cff914`를 통합했습니다. Core worker 37/37 PASS(실제 TRX 확인), 화면 갱신 실패의 재시도 보호와 잘못된 단축키 수정 후에도 현재 저장 정책을 유지하는 마지막 수정은 독립 소스 검토를 마쳤습니다. 마지막 수정까지 포함한 전체 검사·새 QA15 게시본 생성은 다음 단계입니다.
-- 사용자가 실행한 기존 4.1.2 PID59568은 종료하지 않았습니다. 사용자에게 트레이 종료 확인을 요청했고 응답을 기다립니다. 새 게시본의 8종 네이티브 검사·실제 가져오기 화면 검사는 앱 종료 확인 후 진행합니다. 기존 배포 후보와 새 QA15 결과를 구분합니다.
+- 이관 Core `ec76558`·`c170b08`·`35e0cee`, App/복구/설정 보호 `cfc19b8`·`900a2e8`·`90f35a9`·`309a445`·`701c9e7`, 보관 폴더 현지화 `6cff914`를 통합했습니다. 제품 소스 **`93000688503b4a5c07245e8b1dc28aee29100170`**, 전체 Debug 경고0/오류0, **Core1153 PASS/App2387 PASS/실패0/기존 조건부11 skip**입니다. 처음 게시 명령의 전역 RuntimeFrameworkVersion 옵션은 Windows SDK 중복 NU1505로 실패했고 기존 PublishProfile+KnownFrameworkReference pin으로 수정한 게시 명령은 exit0입니다. 원본 실패와 수정 명령을 보존했습니다.
+- **QA15 실행 파일:** `artifacts/qa15-store-update/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. DLL SHA256 **`955B98F7CFD40B01911BBA4EC8577378871077A041DF713B31DE38CAD293B963`**. 독립353파일/381166645B/deps263누락0/제품4DLL/GIF76개 SHA·receipt 대조 PASS입니다. UX 자체 검사 session14945/93f948 exit0 RESULT PASS, 한영3테마 최소창 최종 렌더 검사810788 exit0입니다.
+- 사용자가 기존 앱을 종료했고 재조회3a6230에서 프로세스 없음 확인했습니다. 물리 Escape로 이전 화면자동화가 중단된 뒤 사용자가 명시적으로 재허용했습니다. 실제 QA15 DLL을 로드한 격리 host로 사진10개+기존2개, 설정 초안→Apply, 원본/기존파일/현재Queue/자격증명/Store필드 보존을 확인했습니다(session24829/4ac051 exit0). 설정 적용 전 snapshot의 SHA는 원래 백업과 일치합니다. 64MiB 합성 payload의 활성시간 표본 범위438~591ms/경계 포함 heartbeat최대90.33ms입니다. 128MiB 두 번째 host는 같은 원본 재실행에서 Imported0/Skipped10/최종12개를 확인했고 session70892/af4720 exit0입니다. 취소 버튼 시도는 복사가 먼저 완료되어 실제 취소 검증으로 집계하지 않습니다.
+- **8종 gate는 아직 미통과:** 세 번 모두7/8이며 hotfix-ux만 실패했습니다. 첫 시도는 CapsLock ON 상태에서 고정 소문자 예상과 실제 대문자가 달랐습니다. CapsLock을 잠시 OFF로 만든 뒤 두 시도는 첫 클릭 내부에서 전경 HWND가0이 되어 기존 안전 조건에 따라 중단됐습니다. CapsLock은 원래 ON으로 복원했고161db0 exit0으로 확인했습니다. 진단의 실제 Caps 상태 관측·초기창 안정 확인·입력단계 기록을 icons가 기존 worktree에서 보완 중입니다. 사용자 입력 감지 이후 약2분간 조작을 멈출 수 있는지 비동기 답변을 기다립니다. 기존 자료·사용자 데이터·원본 패키지는 보존했습니다.
 
 ### 다음 배포 4.1.2 — 작성·필수 검사·완성 파일 실기 성능 검사 완료
 
@@ -472,6 +474,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-13 Codex: 사용자가 Store·테스트 실행본 데이터를 모두 유지한다고 답변했습니다. `d68a580`을 `9305935`, 보존 검사 `852b3b8`을 `8ae4956`으로 통합(`7a21a5` exit0), 이관 API `cac9d1a`를 `b3bc471`로 통합(`402d13` exit0)했습니다. App 상태 worker baseline1/1·after12/12·Localization13/13 및 Core 보존2/2는 실제 exit0이며, 직접/독립 코드·전후 PNG 검토를 마쳤습니다. 이관은 원본 복사·병합과 중단 복구를 Core에서, 선택적 설정 초안·진행 UI·시작 연결을 App에서 맡습니다. 기존 후보 바이너리와 사용자 데이터는 보존하며 최종 이관·전체 검증은 진행 중입니다.
 
 - 2026-10-13 Codex: Core `ec76558`·`c170b08`·`35e0cee` 통합 cd9f27 exit0, worker 실제 Core37/37 TRX를 직접·독립 확인했습니다. UI97b2e97/36b30fc/a064b17/a5271a8/451a0c5와 Core5b4e1f0를 순서대로 `cfc19b8`~`6cff914`로 통합 d921be exit0. 최종 Refresh 예외/설정 오류 후 보존 3경계 독립 소스 검토에 추가 blocker 없음. 451 이후 전체 검사는 아직 미실행이며 새 QA15 빌드에서 확인합니다. 기존 사용자 PID59568 재확인53c806 exit0, 종료하지 않고 사용자 종료 확인을 기다립니다. 기록·실패·전후 PNG는 `artifacts/store-update-continuity/`와 `artifacts/legacy-import/`에 보존합니다.
+
+- 2026-10-13 Codex: source9300068 전체 검증 session38759 Debug/Core/App 각각exit0(Core1153/App2387+11skip), publish만NU1505로래퍼exit1(b18185). 수정게시 bc79ab exit0, independent034867/87ceb1/root3a6230 PASS. 사용자 종료·화면자동화 재승인 확인. nativegate session13874/4d2f66,21384/d77602,37627/31f18c 모두exit1/7of8; 첫CapsLock가정, 이후초기클릭전경0. 원래CapsLock ON복원161db0 exit0. 격리migration 실기24829/4ac051 및70892/af4720 exit0, UX14945/93f948 exit0, 최소창렌더810788 exit0. 실제경로·명령·SHA·원본실패는 `artifacts/store-update-continuity/development-log.txt`, independentartifact 및 native 각디렉터리에 보존합니다. Sky Explorer443353524에서QA15폴더열기확인, 제품실행은하지않았습니다. 최종8종과진단보완은진행중입니다.
 
 ## 9. 인계 체크리스트
 
