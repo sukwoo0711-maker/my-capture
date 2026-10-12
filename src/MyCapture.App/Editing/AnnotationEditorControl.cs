@@ -144,6 +144,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private TextAnnotation? _editingText;
     // Distance from the live box's outer edge to its first glyph (see PlaceTextBox).
     private Point _liveTextInset;
+    private double _liveTextWidth;
     private bool _completed;
     private bool _commitInProgress;
     private bool _redactionInProgress;
@@ -1033,6 +1034,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             BorderThickness = new Thickness(1),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Padding = new Thickness(4, 2, 4, 2),
         };
         // The committed caption is drawn with ideal glyph metrics (FormattedText). The editor
@@ -1048,7 +1050,39 @@ internal sealed partial class AnnotationEditorControl : Grid
             textBox.BorderThickness.Top + textBox.Padding.Top);
         _overlayCanvas.Children.Add(textBox);
         _activeTextBox = textBox;
+        SizeChangedEventHandler resize = (_, _) => UpdateLiveTextViewport(textBox);
+        ScrollChangedEventHandler scroll = (_, e) =>
+        {
+            if (e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0 || e.ViewportWidthChange != 0)
+                UpdateLiveTextViewport(textBox);
+        };
+        ScrollViewer? contentHost = null;
+        bool connected = false;
+        void ConnectViewport()
+        {
+            if (connected) return;
+            connected = true;
+            _overlayCanvas.SizeChanged += resize;
+            textBox.ApplyTemplate();
+            contentHost = textBox.Template.FindName("PART_ContentHost", textBox) as ScrollViewer;
+            if (contentHost is not null)
+            {
+                contentHost.ApplyTemplate();
+                contentHost.ScrollChanged += scroll;
+            }
+            UpdateLiveTextViewport(textBox);
+        }
+        textBox.Loaded += (_, _) => ConnectViewport();
+        textBox.Unloaded += (_, _) =>
+        {
+            if (!connected) return;
+            connected = false;
+            _overlayCanvas.SizeChanged -= resize;
+            if (contentHost is not null) contentHost.ScrollChanged -= scroll;
+            contentHost = null;
+        };
         LayoutLiveTextBox(textBox);
+        ConnectViewport();
         MeasureLiveTextInset(textBox);
         SetStatus(UiText.Get("Text_230D26DEB9AE"));
 
@@ -1109,16 +1143,43 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             box.TextWrapping = TextWrapping.NoWrap;
             // Room for the caret after the last glyph, so the line never scrolls sideways.
-            box.Width = target.Width + chrome + 2;
+            _liveTextWidth = target.Width + chrome + 2;
         }
         else
         {
             box.TextWrapping = TextWrapping.Wrap;
-            box.Width = target.Width + chrome;
+            _liveTextWidth = target.Width + chrome;
         }
 
         Canvas.SetLeft(box, target.Left - _liveTextInset.X);
         Canvas.SetTop(box, target.Top - _liveTextInset.Y);
+        UpdateLiveTextViewport(box);
+    }
+
+    private void UpdateLiveTextViewport(TextBox box)
+    {
+        if (!ReferenceEquals(_activeTextBox, box)) return;
+        // Canvas measures its children with infinite height. Keep the editing viewport inside
+        // the visible canvas so TextBoxView formats and draws visible lines, while FitText and
+        // the committed annotation continue to measure and retain the complete document.
+        double height = _overlayCanvas.ActualHeight;
+        if (height > 0)
+        {
+            double minimum = box.FontSize * 1.4 + box.Padding.Top + box.Padding.Bottom
+                + box.BorderThickness.Top + box.BorderThickness.Bottom;
+            box.MaxHeight = Math.Max(minimum, height - Canvas.GetTop(box));
+        }
+        var host = box.Template?.FindName("PART_ContentHost", box) as ScrollViewer;
+        double scrollWidth = 0;
+        if (host?.ComputedVerticalScrollBarVisibility == Visibility.Visible
+            && host.Template?.FindName("PART_VerticalScrollBar", host) is ScrollBar bar)
+        {
+            scrollWidth = bar.ActualWidth > 0 ? bar.ActualWidth
+                : double.IsFinite(bar.Width) ? bar.Width : SystemParameters.VerticalScrollBarWidth;
+        }
+        // The scrollbar occupies chrome, not the caption's wrapping width. Keep the same
+        // text viewport width as FitText so scrolling cannot change the saved line breaks.
+        box.Width = _liveTextWidth + scrollWidth;
     }
 
     internal AnnotationDocument CreateCurrentImageSnapshot()

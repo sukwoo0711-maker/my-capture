@@ -116,6 +116,9 @@ internal sealed partial class OcrResultWindow : Window
             Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x08, 0x0C, 0x12))),
             BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
         };
+        // Recognition results are read-only. Avoid TSF querying and formatting every selected
+        // line; the native TextBox still provides selection, copying and UI Automation.
+        InputMethod.SetIsInputMethodEnabled(_textBox, false);
         _textBox.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");
         _textBox.SetResourceReference(Control.BorderBrushProperty, "Border.Subtle");
         AutomationProperties.SetName(_textBox, UiText.Get("Text_B75AA3DC8AFB"));
