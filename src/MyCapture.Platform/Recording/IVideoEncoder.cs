@@ -81,6 +81,25 @@ public sealed record VideoEncoderOptions(
     public VideoEncoderInputFormat InputFormat { get; init; }
 
     /// <summary>
+    /// Lets Media Foundation pick a GPU H.264 encoder when one is present (the default). The
+    /// tutorial clip generator turns it off so every machine produces the software encoder's
+    /// output for the same frames.
+    /// </summary>
+    public bool AllowHardwareEncoder { get; init; } = true;
+
+    /// <summary>
+    /// The H.264 profile to request (Media Foundation eAVEncH264VProfile, for example 100 for
+    /// High); null keeps the encoder's default.
+    /// </summary>
+    public int? H264Profile { get; init; }
+
+    /// <summary>
+    /// Constant-quality rate control from 1 to 100 instead of the average bitrate; null keeps the
+    /// bitrate mode recordings use. Static screen content then costs almost nothing.
+    /// </summary>
+    public int? ConstantQuality { get; init; }
+
+    /// <summary>
     /// A frame-size- and rate-aware default bitrate when none is specified.
     /// </summary>
     /// <remarks>
