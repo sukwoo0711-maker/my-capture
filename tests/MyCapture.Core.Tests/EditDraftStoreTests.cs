@@ -38,9 +38,34 @@ public sealed class EditDraftStoreTests
         Assert.Empty(store.ReadAvailable());
     }
     [Fact]
-    public async Task Retire_TombstonePreventsRecoveryEvenWhenTrashFails()
+    public async Task Retire_DeletesTheSessionFromDiskByDefault()
     {
-        var store = new EditDraftStore(Root(), _ => throw new IOException("Recycle unavailable")); Guid id = Guid.NewGuid();
+        string root = Root(); var store = new EditDraftStore(root); Guid id = Guid.NewGuid();
+        await store.WriteAsync(id, 1, "image", "edit", [], new Dictionary<string, byte[]> { ["base.png"] = [1, 2] }, () => true);
+        Assert.Single(store.ReadAvailable());
+        await store.RetireAsync(id);
+        // Drafts are app-owned: the retired session leaves the disk, it is not moved anywhere.
+        Assert.False(Directory.Exists(Path.Combine(root, id.ToString("N"))));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(root));
+        Assert.Empty(store.ReadAvailable());
+    }
+    [Fact]
+    public async Task Retire_InterruptedDeletionKeepsTheTombstoneSoNothingReappears()
+    {
+        string root = Root(); var store = new EditDraftStore(root); Guid id = Guid.NewGuid();
+        await store.WriteAsync(id, 1, "image", "edit", [], new Dictionary<string, byte[]> { ["base.png"] = [3] }, () => true);
+        string blob = store.ResolveFile(Assert.Single(store.ReadAvailable()).Draft, "base.png");
+        using (new FileStream(blob, FileMode.Open, FileAccess.Read, FileShare.None))
+            await Assert.ThrowsAnyAsync<IOException>(() => store.RetireAsync(id));
+        Assert.True(store.IsRetired(id));
+        Assert.Empty(store.ReadAvailable());
+        await store.RetireAsync(id); // a later retry finishes the deletion
+        Assert.False(Directory.Exists(Path.Combine(root, id.ToString("N"))));
+    }
+    [Fact]
+    public async Task Retire_TombstonePreventsRecoveryEvenWhenDeletionFails()
+    {
+        var store = new EditDraftStore(Root(), _ => throw new IOException("Deletion unavailable")); Guid id = Guid.NewGuid();
         await store.WriteAsync(id, 1, "image", "edit", [], new Dictionary<string, byte[]>(), () => true);
         string directory = Assert.Single(store.ReadAvailable()).Directory;
         await Assert.ThrowsAsync<IOException>(() => store.RetireAsync(id));
@@ -57,19 +82,26 @@ public sealed class EditDraftStoreTests
         Assert.False(File.Exists(Path.Combine(root, "escape")));
     }
     [Fact]
-    public async Task VideoSource_IsCopiedOnceAndOriginalRemainsUnchanged()
+    public async Task VideoDraft_ReferencesTheLibraryOriginalByHashWithoutCopyingIt()
     {
-        string root = Root(); string source = Path.Combine(root, "fixture.mp4"); File.WriteAllBytes(source, [1, 2, 3, 4]);
-        var store = new EditDraftStore(Path.Combine(root, "drafts"), _ => { }); Guid id = Guid.NewGuid();
-        string copy = await store.EnsureVideoSourceAsync(id, source);
-        Assert.Equal(copy, await store.EnsureVideoSourceAsync(id, source));
-        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(copy)); Assert.True(File.Exists(source));
+        string root = Root(); string source = Path.Combine(root, "library-original.mp4");
+        byte[] video = new byte[256 * 1024]; new Random(3).NextBytes(video); File.WriteAllBytes(source, video);
+        string drafts = Path.Combine(root, "drafts"); var store = new EditDraftStore(drafts); Guid id = Guid.NewGuid();
+        string hash = EditDraftStore.HashFile(source);
+        Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(video)), hash);
+        await store.WriteAsync(id, 1, "video", "document", new Dictionary<string, string> { ["source"] = source, ["sourceHash"] = hash },
+            new Dictionary<string, byte[]>(), () => true);
+        var draft = Assert.Single(store.ReadAvailable()).Draft;
+        Assert.Equal(source, draft.Metadata["source"]);
+        long draftBytes = Directory.EnumerateFiles(drafts, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
+        Assert.True(draftBytes < video.Length / 16, $"Draft holds {draftBytes} bytes; the video must not be copied.");
+        Assert.Equal(video, File.ReadAllBytes(source));
     }
 
     [Fact]
-    public async Task AnnotationOnlyRevisions_ReuseImmutableBlobsWithoutRepeatedRecycleOperations()
+    public async Task AnnotationOnlyRevisions_ReuseImmutableBlobsWithoutRepeatedDeletes()
     {
-        string root = Root(); int recycled = 0; var store = new EditDraftStore(root, _ => recycled++); Guid id = Guid.NewGuid();
+        string root = Root(); int deletes = 0; var store = new EditDraftStore(root, _ => deletes++); Guid id = Guid.NewGuid();
         byte[] pixels = new byte[1024]; pixels[16] = 42;
         var files = new Dictionary<string, byte[]> { ["original.png"] = pixels, ["base.png"] = pixels, ["asset.png"] = [7] };
         await store.WriteAsync(id, 1, "image", "first", [], files, () => true);
@@ -82,9 +114,9 @@ public sealed class EditDraftStoreTests
         Assert.Equal(written, File.GetLastWriteTimeUtc(original));
         string[] blobs = Directory.GetFiles(Path.Combine(root, id.ToString("N"), "blobs"));
         Assert.Equal(2, blobs.Length); Assert.Equal(1025, blobs.Sum(path => new FileInfo(path).Length));
-        Assert.Equal(0, recycled);
-        _output.WriteLine($"Revisions=20; BlobFiles={blobs.Length}; BlobBytes={blobs.Sum(path => new FileInfo(path).Length)}; RecycleCallsBeforeRetire={recycled}; OriginalLastWriteUtcUnchanged={written == File.GetLastWriteTimeUtc(original)}");
-        await store.RetireAsync(id); Assert.Equal(1, recycled); Assert.Empty(store.ReadAvailable());
+        Assert.Equal(0, deletes);
+        _output.WriteLine($"Revisions=20; BlobFiles={blobs.Length}; BlobBytes={blobs.Sum(path => new FileInfo(path).Length)}; DeletesBeforeRetire={deletes}; OriginalLastWriteUtcUnchanged={written == File.GetLastWriteTimeUtc(original)}");
+        await store.RetireAsync(id); Assert.Equal(1, deletes); Assert.Empty(store.ReadAvailable());
     }
 
     [Fact]

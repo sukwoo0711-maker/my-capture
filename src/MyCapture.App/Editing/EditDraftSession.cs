@@ -25,6 +25,7 @@ internal sealed class EditDraftSession
     private readonly object _publicationGate = new();
     private long _revision;
     private bool _retired;
+    private bool _retiredDurably;
     internal Guid Id { get; }
     internal Task LastWrite { get; private set; } = Task.CompletedTask;
     internal EditDraftSession(EditDraftStore store, Dispatcher dispatcher, Func<Task<DraftSnapshot?>> snapshot,
@@ -73,7 +74,10 @@ internal sealed class EditDraftSession
         lock (_publicationGate) _retired = true;
         _timer.Stop();
         await _writer.WaitAsync();
-        try { await Task.Run(() => _store.RetireAsync(Id)); return true; }
+        // A save retires before closing and the close retires again; the second call must not
+        // recreate and delete the session directory a second time.
+        if (_retiredDurably) { _writer.Release(); return true; }
+        try { await Task.Run(() => _store.RetireAsync(Id)); _retiredDurably = true; return true; }
         catch (Exception error)
         {
             await _dispatcher.InvokeAsync(() => _failed(error));

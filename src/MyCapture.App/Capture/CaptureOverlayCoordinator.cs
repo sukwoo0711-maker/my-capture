@@ -66,6 +66,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal Func<bool> OpenEditorAfterCapture { get; set; } = () => true;
     internal Func<bool> OriginalNeedsRecovery { get; set; } = () => false;
 
+    /// <summary>The persisted capture the editor saves to; its drafts recover onto that capture.</summary>
+    internal Func<(Guid Id, long ContentRevision)?>? DraftRecord { get; set; }
+
     /// <summary>Reads Capture.AutoDetectWindows when each selector opens. Off unless the app wires it.</summary>
     internal Func<bool> AutoDetectWindows { get; set; } = () => false;
 
@@ -564,6 +567,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 privacyRedactionService: PrivacyRedactionService,
                 sourceWindowTitle: selection.SourceTitle);
             _activeEditor = editor;
+            editor.DraftRecordSource = DraftRecord;
             if (OriginalNeedsRecovery()) editor.MarkUnpersistedCapture();
             editor.CommitRequested = CommitRequested;
             editor.Committed += OnEditorCommitted;

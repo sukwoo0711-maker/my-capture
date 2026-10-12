@@ -323,6 +323,8 @@ public partial class App : Application
         _overlay.SelectionPersistRequested = e => _capturePersistenceTask = OnCaptureSelectionCompletedAsync(e);
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
         _overlay.OriginalNeedsRecovery = () => _currentRecord is null && _pendingRecord is not null;
+        _overlay.DraftRecord = () => _currentRecord is { } record && _currentEditSession is { } session
+            && session.RecordId == record.Id ? (record.Id, session.ExpectedContentRevision) : null;
         _overlay.EditingCompleted += OnAnnotationEditingCompleted;
         _overlay.OverlayClosed += (_, _) =>
         {

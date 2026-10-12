@@ -7,15 +7,23 @@ namespace MyCapture.Core.Storage;
 public sealed record EditDraft(Guid SessionId, long Revision, string Kind, string Document,
     Dictionary<string, string> Metadata, Dictionary<string, string> Files, DateTimeOffset SavedUtc);
 
-/// <summary>Immutable revisions become recoverable only after their durable ready marker exists.</summary>
+/// <summary>
+/// Immutable revisions become recoverable only after their durable ready marker exists.
+/// Drafts are app-owned working copies: a retired session is deleted from disk, never moved to
+/// the user's Recycle Bin. A video draft references its immutable library original by path and
+/// hash instead of copying it.
+/// </summary>
 public sealed class EditDraftStore
 {
     private readonly string _root;
-    private readonly Action<string> _recycleDirectory;
-    public EditDraftStore(string root, Action<string> recycleDirectory)
+    private readonly Action<string> _deleteSessionDirectory;
+
+    /// <param name="deleteSessionDirectory">Test seam that replaces the direct deletion of a
+    /// retired session directory. Production omits it.</param>
+    public EditDraftStore(string root, Action<string>? deleteSessionDirectory = null)
     {
         _root = Path.GetFullPath(root);
-        _recycleDirectory = recycleDirectory;
+        _deleteSessionDirectory = deleteSessionDirectory ?? DeleteSessionDirectory;
     }
 
     public async Task WriteAsync(Guid session, long revision, string kind, string document,
@@ -54,8 +62,8 @@ public sealed class EditDraftStore
             if (!isCurrent() || File.Exists(Path.Combine(parent, "retired"))) return;
             File.Move(Path.Combine(directory, "ready.pending"), Path.Combine(directory, "ready.json"));
         }
-        // Small revision markers stay until this session is retired. This avoids one shell
-        // recycle operation per debounce; immutable pixel blobs are stored only once.
+        // Small revision markers stay until this session is retired. This avoids one delete
+        // per debounce; immutable pixel blobs are stored only once.
     }
 
     public IReadOnlyList<(EditDraft Draft, string Directory)> ReadAvailable()
@@ -101,24 +109,12 @@ public sealed class EditDraftStore
         return result;
     }
 
-    public async Task<string> EnsureVideoSourceAsync(Guid session, string source)
+    /// <summary>SHA-256 of a referenced file, read once without copying it.</summary>
+    public static string HashFile(string path)
     {
-        string parent = SessionPath(session);
-        AssertNoLinks(parent);
-        Directory.CreateDirectory(parent);
-        string destination = Path.Combine(parent, "original-video.mp4");
-        if (File.Exists(destination)) return destination;
-        string pending = destination + "." + Guid.NewGuid().ToString("N") + ".pending";
-        await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, true))
-        await using (var output = new FileStream(pending, FileMode.CreateNew, FileAccess.Write, FileShare.None,
-            65536, FileOptions.Asynchronous | FileOptions.WriteThrough))
-        {
-            await input.CopyToAsync(output).ConfigureAwait(false);
-            await output.FlushAsync().ConfigureAwait(false);
-            output.Flush(true);
-        }
-        File.Move(pending, destination);
-        return destination;
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20,
+            FileOptions.SequentialScan);
+        return Convert.ToHexString(SHA256.HashData(stream));
     }
 
     public async Task RetireAsync(Guid session)
@@ -128,9 +124,30 @@ public sealed class EditDraftStore
         Directory.CreateDirectory(directory);
         string marker = Path.Combine(directory, "retired");
         if (!File.Exists(marker)) await DurableWriteAsync(marker, [1], CancellationToken.None).ConfigureAwait(false);
-        // A failed recycle leaves the durable tombstone: completed work cannot reappear.
+        // A failed deletion leaves the durable tombstone: completed work cannot reappear.
         AssertNoLinks(directory);
-        _recycleDirectory(directory);
+        _deleteSessionDirectory(directory);
+    }
+
+    /// <summary>
+    /// Deletes a retired session. Revisions and blobs go first and the tombstone last, so an
+    /// interrupted deletion can never make a retired revision recoverable again. A link inside
+    /// the session is removed itself; its target is never entered.
+    /// </summary>
+    private static void DeleteSessionDirectory(string directory)
+    {
+        string tombstone = Path.Combine(directory, "retired");
+        foreach (string child in Directory.GetDirectories(directory))
+        {
+            if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) Directory.Delete(child);
+            else Directory.Delete(child, recursive: true);
+        }
+        foreach (string file in Directory.GetFiles(directory))
+        {
+            if (!string.Equals(file, tombstone, StringComparison.OrdinalIgnoreCase)) File.Delete(file);
+        }
+        File.Delete(tombstone);
+        Directory.Delete(directory);
     }
 
     public bool IsRetired(Guid session) => File.Exists(Path.Combine(SessionPath(session), "retired"));

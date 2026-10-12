@@ -26,16 +26,14 @@ internal sealed partial class VideoEditorWindow
             if (!_mediaReady || _committed) return null;
             string json = JsonSerializer.Serialize(BuildCurrentDocument(), JsonDefaults.Compact);
             var recording = _recording;
-            string source = await Task.Run(() => store.EnsureVideoSourceAsync(_draftSession!.Id, recording.OutputPath));
+            // The editor always opens an immutable library original. The draft references it by
+            // path and hash (hashed once per editor) and never copies the video.
+            string source = System.IO.Path.GetFullPath(recording.OutputPath);
             return new DraftSnapshot("video", json, new Dictionary<string, string>
             {
                 ["recording"] = JsonSerializer.Serialize(recording, JsonDefaults.Compact),
                 ["source"] = source,
-                ["sourceHash"] = _draftVideoSourceHash ??= await Task.Run(() =>
-                {
-                    using var stream = System.IO.File.OpenRead(source);
-                    return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
-                }),
+                ["sourceHash"] = _draftVideoSourceHash ??= await Task.Run(() => EditDraftStore.HashFile(source)),
             }, new Dictionary<string, byte[]>());
         }, error =>
         {

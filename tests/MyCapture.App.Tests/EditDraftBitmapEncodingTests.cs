@@ -55,6 +55,33 @@ public sealed class EditDraftBitmapEncodingTests
     });
 
     [Fact]
+    public void FailedEncodeIsNotCached_SoTheNextRevisionRetries() => StaTestHost.Run(() =>
+    {
+        BitmapSource source = Source("Bgra32");
+        int attempts = 0;
+        byte[] Encode(BitmapSource bitmap)
+        {
+            if (++attempts == 1) throw new IOException("Synthetic transient encoder failure");
+            return AnnotationEditorControl.EncodeDraftBitmap(bitmap);
+        }
+        Assert.Throws<IOException>(() => AnnotationEditorControl.EncodeCachedDraftBitmap(source, Encode));
+        byte[] retried = AnnotationEditorControl.EncodeCachedDraftBitmap(source, Encode);
+        Assert.Equal(EncodePrevious(source), retried);
+        Assert.Same(retried, AnnotationEditorControl.EncodeCachedDraftBitmap(source, Encode)); // success is cached
+        Assert.Equal(2, attempts);
+    });
+
+    [Fact]
+    public void UnfrozenLiveBitmap_IsDetachedOnceAndEncodesIdentically() => StaTestHost.Run(() =>
+    {
+        var live = new WriteableBitmap(Source("Pbgra32"));
+        var detached = new WriteableBitmap(live);
+        detached.Freeze();
+        live.WritePixels(new Int32Rect(0, 0, 1, 1), new byte[] { 9, 9, 9, 255 }, 4, 0); // later edits do not leak in
+        Assert.Equal(EncodePrevious(Source("Pbgra32")), AnnotationEditorControl.EncodeDraftBitmap(detached));
+    });
+
+    [Fact]
     public void MutablePixelsAreEncodedAgainAfterChanges() => StaTestHost.Run(() =>
     {
         var source = new WriteableBitmap(Source("Bgra32"));

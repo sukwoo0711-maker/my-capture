@@ -20,50 +20,65 @@ internal sealed partial class AnnotationEditorControl
         metadata["turns"] = _controller.RotationTurns.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["origin"] = JsonSerializer.Serialize(_controller.CropOrigin, JsonDefaults.Compact);
         if (_crop is not null) metadata["crop"] = JsonSerializer.Serialize(_crop.Region, JsonDefaults.Compact);
-        var bitmaps = new Dictionary<string, BitmapSource>
+        // Frozen bitmaps are shared and copied once on the encoder thread (and their PNG is
+        // cached). A live, mutable bitmap must be read here, so its one copy is made now and
+        // that independent copy is encoded as is.
+        var bitmaps = new Dictionary<string, (BitmapSource Bitmap, bool Detached)>
         {
-            ["base.png"] = FreezeForDraft(_surface.Frame.Bitmap),
-            ["original.png"] = FreezeForDraft(_selectedBitmap),
+            ["base.png"] = PrepareForDraft(_surface.Frame.Bitmap),
+            ["original.png"] = PrepareForDraft(_selectedBitmap),
         };
         int index = 0;
         foreach (var (name, bitmap) in _imageStore.DecodedFor(document.Items.OfType<ImageAnnotation>().Select(x => x.AssetFileName)))
         {
             string file = $"asset-{index++:D4}.png";
             metadata["asset:" + name] = file;
-            bitmaps[file] = FreezeForDraft(bitmap);
+            bitmaps[file] = PrepareForDraft(bitmap);
         }
         return Threading.StaThreadTask.RunAsync<DraftSnapshot?>(() =>
         {
-            var files = bitmaps.ToDictionary(x => x.Key, x => EncodeCachedDraftBitmap(x.Value));
+            var files = bitmaps.ToDictionary(x => x.Key, x => x.Value.Detached
+                ? EncodeIndependentDraftBitmap(x.Value.Bitmap, x.Value.Bitmap)
+                : EncodeCachedDraftBitmap(x.Value.Bitmap));
             return new DraftSnapshot("image", json, metadata, files);
         }, "MyCapture image draft encoder");
     }
-    private static BitmapSource FreezeForDraft(BitmapSource bitmap)
+    private static (BitmapSource Bitmap, bool Detached) PrepareForDraft(BitmapSource bitmap)
     {
-        if (bitmap.IsFrozen) return bitmap;
-        var copy = (BitmapSource)bitmap.Clone(); copy.Freeze(); return copy;
+        if (bitmap.IsFrozen) return (bitmap, false);
+        var copy = new WriteableBitmap(bitmap); copy.Freeze(); return (copy, true);
     }
+    /// <summary>
+    /// Encodes a draft PNG from one native copy of <paramref name="bitmap"/>. The encoder runs
+    /// on its background STA; a frozen source still shares its WIC lock with the live surface and
+    /// PNG WriteSource holds that lock for the whole encode, so the lock is held only while
+    /// <see cref="WriteableBitmap"/> copies the pixels, never during compression.
+    /// </summary>
     internal static byte[] EncodeDraftBitmap(BitmapSource bitmap)
     {
-        // The draft encoder runs on its background STA. A frozen source still shares
-        // its WIC lock with the live surface, and PNG WriteSource holds that lock for
-        // the entire encode. Copy only while holding the original lock, then encode
-        // independent pixel backing so the full PNG encode no longer holds the live lock.
-        BitmapFrame contract = BitmapFrame.Create(bitmap);
-        int stride = checked((bitmap.PixelWidth * bitmap.Format.BitsPerPixel + 7) / 8);
-        byte[] pixels = new byte[checked(stride * bitmap.PixelHeight)];
-        bitmap.CopyPixels(pixels, stride, 0);
-        BitmapSource independent = BitmapSource.Create(bitmap.PixelWidth, bitmap.PixelHeight,
-            bitmap.DpiX, bitmap.DpiY, bitmap.Format, bitmap.Palette, pixels, stride);
+        var independent = new WriteableBitmap(bitmap);
         independent.Freeze();
+        return EncodeIndependentDraftBitmap(independent, bitmap);
+    }
+    private static byte[] EncodeIndependentDraftBitmap(BitmapSource independent, BitmapSource source)
+    {
+        // Metadata and colour contexts come from the source frame, as before (a wrapper only;
+        // BitmapFrame.Create does not copy pixels).
+        BitmapFrame contract = BitmapFrame.Create(source);
         var frame = BitmapFrame.Create(independent, contract.Thumbnail,
             contract.Metadata as BitmapMetadata, contract.ColorContexts);
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(frame);
         using var stream = new MemoryStream(); encoder.Save(stream); return stream.ToArray();
     }
-    internal static byte[] EncodeCachedDraftBitmap(BitmapSource bitmap) => bitmap.IsFrozen
-        ? DraftPngCache.GetValue(bitmap, image => new Lazy<byte[]>(() => EncodeDraftBitmap(image))).Value
-        : EncodeDraftBitmap(bitmap);
+    /// <summary>
+    /// A frozen bitmap's PNG is reused across revisions. PublicationOnly never caches an
+    /// exception, so one failed encode does not disable draft saving for the session.
+    /// </summary>
+    internal static byte[] EncodeCachedDraftBitmap(BitmapSource bitmap) => EncodeCachedDraftBitmap(bitmap, EncodeDraftBitmap);
+    internal static byte[] EncodeCachedDraftBitmap(BitmapSource bitmap, Func<BitmapSource, byte[]> encode) => bitmap.IsFrozen
+        ? DraftPngCache.GetValue(bitmap, image => new Lazy<byte[]>(() => encode(image),
+            LazyThreadSafetyMode.PublicationOnly)).Value
+        : encode(bitmap);
     internal void RestorePendingDraftCrop(string json)
     {
         _crop = new CropSelection(_canvasWidth, _canvasHeight);

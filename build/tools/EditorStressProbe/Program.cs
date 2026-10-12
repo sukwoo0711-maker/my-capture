@@ -12,7 +12,6 @@ using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
-using MyCapture.Platform.Shell;
 
 internal static class Bootstrap
 {
@@ -180,7 +179,7 @@ internal static class StressCase
         var sessionCtor = sessionType.GetConstructors(Members).Single();
         var snapshot = editorType.GetMethod("CaptureDraftAsync", Members)!.CreateDelegate(sessionCtor.GetParameters()[2].ParameterType, editor);
         var failures = new List<string>();
-        var store = new EditDraftStore(Path.Combine(_root, "drafts"), path => { _ = new WindowsRecycleBin().RecycleDirectory(path); });
+        var store = new EditDraftStore(Path.Combine(_root, "drafts")); // production: retired drafts are deleted
         var session = sessionCtor.Invoke([store, app.Dispatcher, snapshot, (Action<Exception>)(error => failures.Add(error.ToString())), null, 0L]);
         var changed = sessionType.GetMethod("Changed", Members)!;
         editorType.GetEvent("DraftChanged", Members)!.GetAddMethod(true)!.Invoke(editor, [(EventHandler)((_, _) => changed.Invoke(session, null))]);

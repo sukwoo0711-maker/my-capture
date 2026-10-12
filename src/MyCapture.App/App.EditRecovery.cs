@@ -1,5 +1,4 @@
 using System.IO;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media.Imaging;
@@ -9,6 +8,7 @@ using MyCapture.App.Editing;
 using MyCapture.App.Recording;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Queue;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Serialization;
 using MyCapture.Core.Storage;
@@ -29,9 +29,8 @@ public partial class App
     internal async Task InitializeEditRecoveryAsync()
     {
         if (DraftStore is not null || _services is null) return;
-        var trash = new WindowsRecycleBin();
-        DraftStore = new EditDraftStore(Path.Combine(_services.GetRequiredService<AppPaths>().DataRoot, "edit-drafts"),
-            path => { _ = trash.RecycleDirectory(path); });
+        // Drafts are app-owned working copies; retired sessions are deleted, not recycled.
+        DraftStore = new EditDraftStore(Path.Combine(_services.GetRequiredService<AppPaths>().DataRoot, "edit-drafts"));
         IReadOnlyList<(EditDraft Draft, string Directory)> available;
         try { available = await Task.Run(DraftStore.ReadAvailable); }
         catch (Exception error) { _log?.LogError(error, "Could not enumerate editing drafts"); return; }
@@ -145,37 +144,80 @@ public partial class App
             initialDocument: document, initialAssets: assets, sourceWindowTitle: draft.Metadata.GetValueOrDefault("title"));
         window.Editor.RestoreDraftGeometry(bitmap, int.Parse(draft.Metadata.GetValueOrDefault("turns", "0"),
             System.Globalization.CultureInfo.InvariantCulture), draft.Metadata.GetValueOrDefault("origin", "{\"x\":0,\"y\":0}"));
-        var commit = CreateRecordedFrameCommitHandler();
-        window.CommitRequested = commit.CommitAsync;
-        window.Closed += (_, _) => commit.Dispose();
+        if (FindDraftRecord(draft) is { } record && _commit is { } commitService)
+        {
+            // The draft was editing a library capture that still exists unchanged: save back
+            // onto it, exactly like the editor it came from, instead of creating a new capture.
+            CaptureEditSession editSession = commitService.BeginEditSession(record);
+            window.CommitRequested = result => CommitRecoveredDraftAsync(record, result, editSession);
+            window.DraftRecordSource = () => (record.Id, editSession.ExpectedContentRevision);
+            window.Closed += (_, _) => editSession.Dispose();
+        }
+        else
+        {
+            var commit = CreateRecordedFrameCommitHandler();
+            window.CommitRequested = commit.CommitAsync;
+            window.Closed += (_, _) => commit.Dispose();
+        }
         window.AdoptRecoveredDraft(DraftStore!, draft.SessionId, draft.Revision);
         if (draft.Metadata.TryGetValue("crop", out string? crop)) window.Editor.RestorePendingDraftCrop(crop);
         window.Show();
     }
+    /// <summary>
+    /// The library image an image draft was editing, when it still exists at the content
+    /// revision the draft started from. Otherwise the draft becomes a new capture, so newer
+    /// saved content is never overwritten.
+    /// </summary>
+    internal CaptureRecord? FindDraftRecord(EditDraft draft) =>
+        _queue is not null ? FindDraftRecord(_queue, draft) : null;
+
+    internal static CaptureRecord? FindDraftRecord(CaptureQueue queue, EditDraft draft)
+    {
+        if (!draft.Metadata.TryGetValue(AnnotationEditorWindow.DraftRecordIdKey, out string? idText)
+            || !Guid.TryParseExact(idText, "N", out Guid id)
+            || !long.TryParse(draft.Metadata.GetValueOrDefault(AnnotationEditorWindow.DraftRecordRevisionKey),
+                System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long revision))
+            return null;
+        return queue.Find(id) is { IsImage: true } record && record.ContentRevision == revision
+            && File.Exists(queue.GetFilePath(record, CaptureFileNames.Original)) ? record : null;
+    }
+
+    private async Task<bool> CommitRecoveredDraftAsync(CaptureRecord record, AnnotationEditingResult result,
+        CaptureEditSession editSession)
+    {
+        try
+        {
+            bool close = await _commit!.CommitAsync(record, result, editSession);
+            if (close)
+            {
+                _galleryWindow?.RefreshFromQueue();
+                _tray?.SetCaptureCount(_queue?.Count ?? 0);
+            }
+            return close;
+        }
+        catch (Exception error)
+        {
+            _log?.LogError(error, "Could not save the recovered draft to capture {Id}", record.Id);
+            _tray?.ShowBalloon(UiText.Get("Text_C1A40373A077"), Themes.ThemedDialog.RecoveryMessage(error),
+                TrayBalloonKind.Error);
+            return false; // The editor stays open with the recovered edits.
+        }
+    }
+
     private async Task OpenRecoveredVideoAsync(EditDraft draft)
     {
         if (_videoLibrary is null || _queue is null || _services is null) throw new IOException("Video library is unavailable.");
         var original = JsonSerializer.Deserialize<RecordingResult>(draft.Metadata["recording"], JsonDefaults.Compact)
             ?? throw new IOException("Invalid recording draft.");
+        // The draft references the immutable library original (path + hash); it holds no copy.
         string source = Path.GetFullPath(draft.Metadata["source"]);
-        string expected = Path.Combine(_services.GetRequiredService<AppPaths>().DataRoot, "edit-drafts", draft.SessionId.ToString("N"), "original-video.mp4");
-        if (!string.Equals(source, expected, StringComparison.OrdinalIgnoreCase)) throw new IOException("Invalid draft source location.");
-        string sourceHash = await Task.Run(() =>
-        {
-            using var stream = File.OpenRead(source);
-            return Convert.ToHexString(SHA256.HashData(stream));
-        });
+        var record = _queue.Records.FirstOrDefault(x => x.IsVideo
+                && string.Equals(Path.GetFullPath(_videoLibrary.SourcePath(x)), source, StringComparison.OrdinalIgnoreCase))
+            ?? throw new IOException("The draft's library video is no longer available.");
+        string sourceHash = await Task.Run(() => EditDraftStore.HashFile(source));
         if (sourceHash != draft.Metadata["sourceHash"]) throw new IOException("Draft recording changed.");
         var document = JsonSerializer.Deserialize<VideoEditDocument>(draft.Document, JsonDefaults.Compact)
             ?? throw new IOException("Invalid video edit document.");
-        var record = _queue.Records.FirstOrDefault(x => x.IsVideo && string.Equals(_videoLibrary.SourcePath(x), original.OutputPath, StringComparison.OrdinalIgnoreCase));
-        if (record is null)
-        {
-            using var capture = _videoLibrary.BeginCapture(original.Fps);
-            await Task.Run(() => File.Copy(source, capture.StagingOutputPath, overwrite: false));
-            var item = await _videoLibrary.CompleteCaptureAsync(capture, original with { OutputPath = capture.StagingOutputPath });
-            record = item.Record;
-        }
         var editSession = _videoLibrary.BeginEdit(record);
         var editor = new VideoEditorWindow(original with { OutputPath = source }, _services.GetRequiredService<AppPaths>(),
             _services.GetRequiredService<ILoggerFactory>(), document)

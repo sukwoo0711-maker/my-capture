@@ -5,16 +5,37 @@ namespace MyCapture.App.Editing;
 
 internal partial class AnnotationEditorWindow
 {
+    internal const string DraftRecordIdKey = "recordId";
+    internal const string DraftRecordRevisionKey = "recordRevision";
     private EditDraftSession? _draftSession;
     private bool _recoveredDraft;
     private bool _unpersistedCapture;
     private bool _discardedDraft;
     private bool _closedForRecovery;
+
+    /// <summary>
+    /// The library capture (and the content revision it was opened at) that this editor saves
+    /// to, when one exists. Its draft records both, so recovery commits back onto that capture
+    /// instead of creating a new one. Evaluated on the dispatcher for every draft snapshot.
+    /// </summary>
+    internal Func<(Guid Id, long ContentRevision)?>? DraftRecordSource { get; set; }
+
     private void InitializeDraftRecovery()
     {
         if (Application.Current is not App { DraftStore: { } store }) return;
-        _draftSession = new EditDraftSession(store, Dispatcher, _editor.CaptureDraftAsync, _ => _editor.ReportDraftFailure());
+        _draftSession = new EditDraftSession(store, Dispatcher, CaptureDraftSnapshotAsync, _ => _editor.ReportDraftFailure());
         _editor.DraftChanged += OnDraftChanged;
+    }
+
+    internal async Task<DraftSnapshot?> CaptureDraftSnapshotAsync()
+    {
+        (Guid Id, long ContentRevision)? record = DraftRecordSource?.Invoke();
+        DraftSnapshot? snapshot = await _editor.CaptureDraftAsync();
+        if (snapshot is null || record is not { } target) return snapshot;
+        snapshot.Metadata[DraftRecordIdKey] = target.Id.ToString("N");
+        snapshot.Metadata[DraftRecordRevisionKey] =
+            target.ContentRevision.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return snapshot;
     }
     private void OnDraftChanged(object? sender, EventArgs e) => _draftSession?.Changed();
     internal void MarkUnpersistedCapture()
@@ -26,7 +47,7 @@ internal partial class AnnotationEditorWindow
     internal void AdoptRecoveredDraft(EditDraftStore store, Guid id, long revision)
     {
         _recoveredDraft = true;
-        _draftSession = new EditDraftSession(store, Dispatcher, _editor.CaptureDraftAsync, _ => _editor.ReportDraftFailure(), id, revision);
+        _draftSession = new EditDraftSession(store, Dispatcher, CaptureDraftSnapshotAsync, _ => _editor.ReportDraftFailure(), id, revision);
         _editor.DraftChanged -= OnDraftChanged;
         _editor.DraftChanged += OnDraftChanged;
     }

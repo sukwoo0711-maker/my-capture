@@ -99,10 +99,10 @@ public sealed class EditRecoveryTests
     });
 
     [Fact]
-    public void DiscardWithUnavailableRecycleBin_PreservesFilesAndCannotRecoverAgain() => StaTestHost.Run(() =>
+    public void DiscardWithFailedDraftDeletion_PreservesFilesAndCannotRecoverAgain() => StaTestHost.Run(() =>
     {
-        string root = TestRecycleBin.CreateTempSubdirectory("MyCapture-draft-trash-").FullName;
-        var store = new EditDraftStore(root, _ => throw new System.IO.IOException("Recycle unavailable"));
+        string root = TestRecycleBin.CreateTempSubdirectory("MyCapture-draft-delete-").FullName;
+        var store = new EditDraftStore(root, _ => throw new System.IO.IOException("Deletion unavailable"));
         var window = Create(); Edit(window); Guid id = Guid.NewGuid(); window.AdoptRecoveredDraft(store, id, 1);
         window.ConfirmClose = () => EditorCloseChoice.DontSave;
         Assert.True(Await(window.PrepareForAppExitAsync()));
@@ -295,6 +295,94 @@ public sealed class EditRecoveryTests
         Assert.Single(decoded.Document.Items);
         Assert.Equal(snapshot.Files["base.png"], AnnotationEditorControl.EncodeDraftBitmap(decoded.Current));
         window.Close();
+    });
+
+    [Fact]
+    public void SaveThenClose_DeletesTheDraftSessionOnlyOnce() => StaTestHost.Run(() =>
+    {
+        var window = Create(); Edit(window);
+        string root = TestRecycleBin.CreateTempSubdirectory("MyCapture-retire-once-").FullName;
+        int deletes = 0; var store = new EditDraftStore(root, _ => deletes++);
+        var session = new EditDraftSession(store, window.Dispatcher, window.Editor.CaptureDraftAsync, _ => { });
+        Assert.True(Await(session.RetireAsync())); // the save
+        Assert.True(Await(session.RetireAsync())); // the close that follows it
+        Assert.Equal(1, deletes);
+        window.Close();
+    });
+
+    [Fact]
+    public void RecordBoundEditorDraft_RecordsItsCaptureAndContentRevision() => StaTestHost.Run(() =>
+    {
+        var window = Create(); Edit(window); Guid id = Guid.NewGuid();
+        Assert.False(Await(window.CaptureDraftSnapshotAsync())!.Metadata.ContainsKey(AnnotationEditorWindow.DraftRecordIdKey));
+        window.DraftRecordSource = () => (id, 7);
+        var snapshot = Await(window.CaptureDraftSnapshotAsync())!;
+        Assert.Equal(id.ToString("N"), snapshot.Metadata[AnnotationEditorWindow.DraftRecordIdKey]);
+        Assert.Equal("7", snapshot.Metadata[AnnotationEditorWindow.DraftRecordRevisionKey]);
+        window.Close();
+    });
+
+    [Fact]
+    public void ImageDraftRecovery_SavesBackOntoTheOriginalCaptureWhileItIsUnchanged() => StaTestHost.Run(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        string root = TestRecycleBin.CreateTempSubdirectory("MyCapture-draft-record-").FullName;
+        AppPaths paths = AppPaths.CreateForRoot(root);
+        var settings = new MyCapture.Core.Settings.AppSettings();
+        var queue = new MyCapture.Core.Queue.CaptureQueue(paths, settings.Queue,
+            NullLogger<MyCapture.Core.Queue.CaptureQueue>.Instance);
+        var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue,
+            NullLogger<CapturePersistenceService>.Instance);
+        var commits = new CaptureCommitService(persistence, () => settings, () => paths,
+            NullLogger<CaptureCommitService>.Instance, (_, _) => Task.FromResult(true));
+        var record = persistence.PersistOriginal(Solid(64, 48, 0x30), 1.0, string.Empty, string.Empty);
+        EditDraft Draft(Guid id, long revision) => new(Guid.NewGuid(), 1, "image", "{}", new Dictionary<string, string>
+        {
+            [AnnotationEditorWindow.DraftRecordIdKey] = id.ToString("N"),
+            [AnnotationEditorWindow.DraftRecordRevisionKey] = revision.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        }, [], DateTimeOffset.UtcNow);
+
+        Assert.Same(record, App.FindDraftRecord(queue, Draft(record.Id, record.ContentRevision)));
+        Assert.Null(App.FindDraftRecord(queue, Draft(Guid.NewGuid(), 0)));
+        Assert.Null(App.FindDraftRecord(queue, new EditDraft(Guid.NewGuid(), 1, "image", "{}", [], [], DateTimeOffset.UtcNow)));
+
+        // Saving the recovered editor targets that capture: no second capture appears.
+        var window = Create(); Edit(window);
+        using CaptureEditSession session = commits.BeginEditSession(record);
+        window.CommitRequested = result => commits.CommitAsync(record, result, session);
+        typeof(AnnotationEditorControl).GetMethod("Commit", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(window.Editor, [EditorCommitAction.Done, false]);
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!window.WasCommitted && DateTime.UtcNow < deadline) Await(Task.Delay(20).ContinueWith(_ => true));
+        Assert.True(window.WasCommitted);
+        Assert.Equal(record.Id, Assert.Single(queue.Records).Id);
+        Assert.True(record.HasAnnotations);
+        // Content saved after the draft was taken is never overwritten by that draft.
+        Assert.Null(App.FindDraftRecord(queue, Draft(record.Id, record.ContentRevision - 1)));
+    });
+
+    [Fact]
+    public void VideoDraft_ReferencesTheLibraryOriginalWithoutCopyingIt() => StaTestHost.Run(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        string root = TestRecycleBin.CreateTempSubdirectory("MyCapture-video-reference-").FullName;
+        string source = System.IO.Path.Combine(root, "library-original.mp4");
+        byte[] video = new byte[512 * 1024]; new Random(5).NextBytes(video); System.IO.File.WriteAllBytes(source, video);
+        string drafts = System.IO.Path.Combine(root, "drafts");
+        var store = new EditDraftStore(drafts); Guid id = Guid.NewGuid();
+        var editor = new VideoEditorWindow(new RecordingResult(source, 3000, 15, 45, 640, 360),
+            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+        typeof(VideoEditorWindow).GetField("_mediaReady", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(editor, true);
+        editor.AdoptRecoveredDraft(store, id, 1);
+        Await(editor.FlushDraftAsync().ContinueWith(_ => true));
+        var draft = Assert.Single(store.ReadAvailable()).Draft;
+        Assert.Equal(source, draft.Metadata["source"]);
+        Assert.Equal(EditDraftStore.HashFile(source), draft.Metadata["sourceHash"]);
+        long draftBytes = System.IO.Directory.EnumerateFiles(drafts, "*", System.IO.SearchOption.AllDirectories)
+            .Sum(file => new System.IO.FileInfo(file).Length);
+        Assert.True(draftBytes < video.Length / 16, $"Draft holds {draftBytes} bytes; the video must not be copied.");
+        editor.Close();
     });
 
     [Fact]

@@ -1216,6 +1216,7 @@ internal sealed partial class GalleryWindow : Window
 
             var editor = new GalleryEditorWindow(context, _privacyRedactionService, record, () => _viewModel.FindTile(record.Id)?.RetentionHours() ?? CaptureRetention.DefaultImageRetentionHours) { Owner = this };
             editor.CommitRequested = result => CommitReeditAsync(record, result, editSession);
+            editor.DraftRecordSource = () => (record.Id, editSession.ExpectedContentRevision);
             editor.Committed += (_, _) => OnReeditCommitted(tile.Id);
             _ = editor.ShowDialog();
         }
