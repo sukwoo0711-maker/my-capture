@@ -54,7 +54,8 @@
 - 움직임은25fps(4cs)와 가감속 cursor/drag, 읽기 구간은 hold로 구성합니다. 먼저 텍스트 복사 pilot으로 화질·연속성·파일/프레임 메모리·실제 재생을 검토한 뒤 기능별로 확장합니다. 사용법 창의 지연 로딩·취소·모션 설정·정적 안내는 유지합니다.
 - 선택 질문에 추가 답변이 없어 기능별 사용 흐름을 기본으로 진행합니다. 현재 F1의42개 행을38개 기능별 GIF(한영76파일)로 연결합니다. 텍스트 복사의 두 진입, Q/W회전, I/O트림은 각각 같은 기능으로 묶고 핀 닫기는 기본 핀 사용법에 포함합니다. 전역 단축키는 현재 설정값을 표시합니다. 새 설치의 선택 단축키 미지정과 이미지 편집기 Ctrl+C의 완료 동작을 확인했습니다.
 - 텍스트 복사 pilot은156프레임/11.2초, ko1,908,377B/en1,986,202B, 디코딩 프레임35,942,400B입니다. root가 실제 QA13 decoder/player로40초 재생하고 화면을 확인했습니다. session6229/`851d95` exit0, callback 중앙41.06ms/P95 54.29ms, 닫기 후 player정지/image해제. GIF 모션 구간25fps이며 측정값은 물리 표시 지연이 아닙니다. 한영 디코딩 contact sheet 직접 검토 완료, 기존 QA13 payload는 보존했습니다.
-- 공통 renderer API `67f956e`를 `a606a69`로 통합했습니다. 기존 edit-recovery는 공통 생성기·캡처/라이브러리/핀21개, a491은 공통 사용법 창·기능 선택·F1/설정 연결, aeae는 이미지/영상17개 기능을 담당합니다. 파일 소유권을 나누고 CPU/native 실행은 직렬로 관리합니다. 기존 실패한 Pro/Antigravity 경로는 반복하지 않고 동일한 공식 native 경로를 재사용합니다. 원격 배포·삭제는 범위에 없습니다.
+- 공통 renderer API `67f956e`를 `a606a69`로 통합했습니다. 기존 edit-recovery는 공통 생성기·캡처9개, a491은 공통 사용법 창·기능 선택·F1/설정 연결과 라이브러리/핀12개, aeae는 이미지/영상17개 기능을 담당합니다. 파일 소유권을 나누고 CPU/native 실행은 직렬로 관리합니다. 기존 실패한 Pro/Antigravity 경로는 반복하지 않고 동일한 공식 native 경로를 재사용합니다. 원격 배포·삭제는 범위에 없습니다.
+- 공통 UI를 `2e29e86`~`18dfe9f`로 통합했습니다. 38개 기능 선택, F1 42행·설정 단축키의 사용법 진입, 현재 키 설정, 한영 단계 설명을 제공합니다. 독립 검토에서 찾은 동시 디코더·소유 창 이관·핀 클릭 통과 해제 안내를 수정했습니다. 전역 gate가 실제 디코드를 한 개씩 실행하고 취소된 대기는 건너뜁니다. worker의 집중 App43/43·현지화13/13 PASS, 독립 재검토 완료. root의 실제 UI 예비 검토 session13337/`860b26` exit0 CLOSED, 검색·기능 전환·누락 자산 안내·닫기/프레임 해제 확인. 이 예비 실행은 이전 QA13 GIF로 레이아웃을 검사했으며 최종76개 자산 검증은 진행 중입니다.
 
 ### 텍스트 복사 GIF 사용법 — QA13 구현·검증·전달 완료
 
@@ -420,6 +421,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 사용자 부드러운 GIF·기능별 독립 튜토리얼 요청 인수. root2bb6cd6/common-dir/remote/clean 확인0d905e(프로세스부재 Get-Process만exit1), `git switch -c feat/feature-tutorials`와 AS-IS 한영GIF/화면복사631cfc exit0. Windows/개발·창의성/웹쫀쿠·위임/조립·표면/worker routing/Antigravity 정본을 읽고 공식openai provider를 확인했습니다. 기존두작업자를 재사용해motionpilot과기능조사를 분리했습니다. 기능별 범위 비동기질문을 보내고 독립 작업을 진행합니다. 이 단계는 착수이며 새 구현·검증 완료가 아닙니다.
 
 - 2026-10-12 Codex: smooth pilot 공통API67f956e→a606a69(`60426d` exit0) 통합. generator build830def/renderd4aab1 exit0, root nativeprobe build0eeb83 exit0·실제 QA13 decoder/player 재생 session6229/851d95 exit0(156프레임/11.2초, callback P50 41.06/P95 54.29ms, 종료해제). Sky 실제창과 한영 decodedcontact sheet 검토 완료. 현재 F1 42행→38기능/한영76자산 범위로 UI·capture/library/pin·image/video 소유를 나누고 기존 a491/edit-recovery/aeae 작업 사본을 재사용합니다. 모든 원본·시도 보존, 실제 명령과 실패는 `artifacts/feature-tutorials/development-log.txt`에 기록합니다. 최종 기능별 구현·QA14 검증은 진행 중.
+
+- 2026-10-12 Codex: 공통 UI ade7334/8d0ab86/8178359/6ca410d/4734041→2e29e86/9637396/754f76b/e0a1084/a2add60 통합(`7ad7e3` exit0), resx 인접 정렬2e492c3→18dfe9f(`911f43` exit0). 독립 읽기 검토16f6dc에서 동시 디코더·Owner·핀 해제 안내 수정 확인. root 실제 UI 예비 검사 session13337/860b26 exit0 CLOSED, F1 검색→텍스트 복사→기능 목록→블러 누락 안내→닫기 확인. ui-layout-native-1.json 최종 visible/frames/loading/playing 모두false, 실패없음(c67d94 exit0). 최종 GIF 생성은 asset26기능과 UI의 Workspace12기능으로 분담 조정, 최종 전체 검증은 미완료입니다.
 
 ## 9. 인계 체크리스트
 
