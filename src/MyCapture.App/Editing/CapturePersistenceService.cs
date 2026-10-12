@@ -733,7 +733,7 @@ internal sealed class CapturePersistenceService
                 {
                     if (File.Exists(file.TargetPath))
                     {
-                        File.Delete(file.TargetPath);
+                        _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(Path.GetFullPath(file.TargetPath));
                     }
 
                     continue;
@@ -1499,7 +1499,7 @@ internal sealed class CapturePersistenceService
         {
             if (Directory.Exists(directory))
             {
-                Directory.Delete(directory, recursive: true);
+                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleDirectory(Path.GetFullPath(directory));
             }
         }
         catch (IOException)
@@ -1516,7 +1516,7 @@ internal sealed class CapturePersistenceService
         {
             if (File.Exists(path))
             {
-                File.Delete(path);
+                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(Path.GetFullPath(path));
             }
         }
         catch (IOException)
