@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `perf/product-optimization` (다음 버전 제품 최적화 1차 구현·통합 검증 완료) |
+| 현재 기록 브랜치 | `perf/product-optimization` (제품 최적화 1차 완료, 이전 버전 대비 체감 속도 저하 조사) |
 | Store 소스 브랜치 | `release/store-4.1.0`, main과 같은 `39942191fbdc49d018ccfd01c975701f0d002532` |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -46,7 +46,17 @@
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12, Store 4.1.0 심사 제출 완료, 다음 버전 제품 최적화 1차 완료)
+## 3. 현재 상태 (2026-10-12, Store 4.1.0 심사 제출 완료, 체감 속도 저하 원인 조사)
+
+### 이전 버전 대비 속도 저하 조사
+
+- 사용자 질문: “속도가 이전버전대비 많이 느린것같은데 원인을찾았니?” 기존 최적화는 자르기·전체 선택의 할당 감소이며 전체 응답 속도 저하의 원인을 확인한 결과가 아닙니다. 현재 큰 체감 저하의 주원인은 미확정입니다. 느린 동작과 비교 버전에 관한 선택형 질문은 아직 응답 대기입니다.
+- 실제 설치된 이전 Store 앱은 **4.0.2.0 / source `c52a1bbf3e5f44de85cab6161223ff336b0132a1`**입니다. 태그나 중간 개발 커밋을 이전 앱으로 대신하지 않았습니다. 조사 대상 제품 소스는 `09cb3d8`(직전 개발 빌드 `caee5b8`와 제품 파일 동일)입니다.
+- **조건부 캡처 지연 경로 확인:** 새 앱·탐색기 폴더 출처를 pixels 전후에 기다립니다. 실제 production timeout 경로에 응답하지 않는 Explorer provider를 연결한 검사에서 최초 703.55ms 대기가 재현됐습니다. 다음 조회는 busy gate로 0.046ms에 끝나며 항상 두 번 700ms를 기다리는 것은 아닙니다. 현재 desktop의 고정 후보 목록·synthetic pixels 비교는 기존 page 조회 평균112.62ms, page+source126.98ms로 **추가14.36ms**입니다. 큰 실기 지연을 이 환경에서는 재현하지 못했습니다. 고급 캡처의 동기 source 조회도 UI 대기 후보이며 실제 명령 전체 시간은 아직 측정하지 않았습니다.
+- **편집기 자체의 큰 회귀 미재현:** 같은 .NET/WPF10.0.11, 실제 old/current DLL, 같은 640×480 이미지·Midnight·1000×620 창을 외부 STA host에서 비교했습니다. 버전별 별도 프로세스3개, 프로세스마다 첫 editor1회·반복4회입니다. constructor부터 첫 WPF Rendering까지 중앙값은 이전383.51ms / 기존 개발 빌드385.96ms / R2R 비교 빌드376.99ms, 반복 중앙값94.21 /81.77 /96.55ms입니다. App startup·캡처 단축키·저장·DWM presentation·입장 애니메이션 완료는 이 측정에 포함되지 않습니다. 최종9개 프로세스 모두 exit0, 총45개 editor sample, old lazy dependency copy0 확인. 파일 읽기만 가능한 WindowsApps DLL은 해시가 동일한 소유 복사본으로 비교했으며 ACL은 변경하지 않았습니다.
+- **라이브러리 반복 작업 증가 확인:** 실제 이전 Gallery 소스와 현재 모델을 같은 runtime/Core에서 비교하면 1000개 Refresh 추가0.385ms, 검색 추가0.199ms입니다. 캐시된 타일마다 metadata 알림25개가 추가된 원인을 찾았지만 바인딩 없는 모델 측정만으로 큰 체감 저하의 원인으로 확정하지 않습니다. 긴 상세 URL 전체 텍스트 측정은8192자에서4.63ms/회이며 일반 짧은 문자열·다른 앱 동작으로 일반화하지 않습니다. 가상화와 기존 창 표시 애니메이션은 유지됐습니다.
+- **비교용 배포 조건 정렬:** 앞서 전달한 일반 Release 개발 빌드는 FDD/noR2R이고 이전 Store 앱은 self-contained/R2R입니다. 같은 현재 제품을 기존 publish profile로 새 `artifacts/next-version-product-opt-r2r-10.0.11/`에 빌드했습니다. 별도 private targets로 NETCore/WPF runtime10.0.11만 고정하고 WindowsSDK10.0.22000.57을 유지했습니다. actual publish session97091 exit0, 독립 PE/hash/runtime/deps 검사 PASS입니다. compiler/targeting/crossgen은10.0.12여서 도구 전체가 과거와 동일하지는 않습니다. 이 빌드 방식 차이로 편집기가 크게 느려진 결과는 재현되지 않았습니다. Store 재제출은 하지 않았습니다.
+- 검증·소스 manifest·측정 원본·한계·실패 기록은 `artifacts/latency-regression/`입니다. source semantics 집중45/45 및 metadata 전후 집중45/45 통과(일부 기존 검사 중복), Gallery 진단2/2 통과. 기존 capture-performance CLI는 정상 처리 중 raw File.Delete/Directory.Delete를 사용하여 휴지통 정책상 미실행이며, 별도의 no-persistence editor probe를 사용했습니다. 이번 조사에서 제품 코드를 추측으로 변경하지 않았고 사용자 앱·기존 파일·작업 사본을 보존했습니다.
 
 ### 다음 버전 제품 최적화
 
@@ -124,7 +134,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 작업 완료:** 다음 버전 제품 최적화 1차 — 자르기/redo의 전체 캔버스 복사와 전체 선택의 라이브러리 재구성을 제거했습니다. 전후 측정, 경계·회귀 테스트, 독립 검토, 전체 Release 빌드·Core/App 및 UX 검증, 실기 확인용 개발 빌드 준비를 마쳤습니다(§3). 후속 후보는 mosaic 영역 읽기와 비디오 이미지 레이어 base64 중간 복사 제거이며 아직 변경하지 않았습니다. 아래는 이전 배포 작업의 완료 이력입니다.
+**현재 우선 작업:** 사용자가 느낀 이전 버전 대비 속도 저하의 동작·조건을 특정하고 실제 해당 경로를 재현합니다. 출처 조회의 조건부 대기는 확인했지만 현재 desktop과 편집기 비교에서는 큰 회귀가 재현되지 않았습니다(§3). 사용자에게 가장 느린 동작을 질문한 상태이며 응답 뒤 해당 경로에 집중합니다. 제품 최적화 1차(자르기/redo·전체 선택)는 구현·검증 완료입니다. mosaic 영역 읽기·비디오 이미지 레이어 복사 제거는 이번 증상과 연결된 근거가 없어 아직 변경하지 않았습니다. 아래는 이전 배포 작업의 완료 이력입니다.
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
 2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
@@ -271,6 +281,10 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 작업자 `6a6de2a`(image), `9f4226a`(library) diff·실제 JSON/TRX·PNG 비교·독립 검토를 확인하고 root cwd에서 cherry-pick PASS(exit0), 통합 `0519a41`, `caee5b8`. 각 작업 사본 clean·기존 브랜치 보존. root `powershell.exe -NoProfile -NonInteractive -File build/build.ps1 -Configuration Release -Test` actual session `16420`: build 경고0·오류0 PASS, 전체 tests 실행 중. 상세 LOG와 근거는 `artifacts/product-optimization/`.
 
 - 2026-10-12 Codex: 통합 `caee5b8`의 전체 Release 명령 actual session `16420` PASS(exit0), build 경고0·오류0, Core1066/App2262 통과·기존9skip. `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release --no-restore -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\next-version-product-opt-build-1` PASS(exit0). 새 `%LOCALAPPDATA%\Temp\mcux\popt1`로 `MyCapture.exe --selftest-ux-review x` 실행 후 initial GUI launch wrapper와 실제 process 종료를 구분해 기록; owned PID66652 handle/WaitForExit actual session `60013` PASS(exit0), report `RESULT: PASS`. 대표 PNG3장 직접 확인, 파일·source hash는 `artifacts/product-optimization/development-build-evidence.json`. 제품 최적화 1차 완료, Store 변경·사용자 앱 종료·파일 삭제 없이 모든 작업 사본과 근거를 보존함.
+
+- 2026-10-12 Codex: 사용자 체감 속도 저하 질문으로 조사 범위 전환. 제품 source09cb3d8/직전 개발caee5b8, 실제 설치 Store4.0.2.0/sourcec52a1bb 확인. 현재 desktop의 production page/source 비교 및 의미 검증45/45 PASS(exit0, chunk7a7b33), default700ms hung Explorer·기존 source 의미45/45 PASS(exit0, chunk0d67ae); 큰 실desktop 지연은 미재현. Gallery 실제 이전 모델 비교2/2 PASS(exit0, session99431). 작업자별 명령·cwd·원본JSON·TRX를 `artifacts/latency-regression/capture`와 `gallery`에 수집. 이전 메모리 할당 최적화를 이 체감 지연의 원인 해결로 보고하지 않도록 §3 정정.
+- 2026-10-12 Codex: cwd `C:\GitRepositories\my-capture-codex`, 동일 현재 제품의 기존 profile publish PASS(exit0, runtime10.0.12). global RuntimeFrameworkVersion10.0.11 재시도 FAIL(exit1, NU1505 WindowsSDKRef 중복), private KnownFrameworkReference runtime metadata만 고정하는 방식으로 원인 해결. `dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:PublishProfile=win-x64-self-contained -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-codex/artifacts/latency-regression/pin-runtime-10.0.11.targets -o C:/GitRepositories/my-capture-codex/artifacts/next-version-product-opt-r2r-10.0.11 -p:SourceRevisionId=09cb3d806e555798d380d2c0a8cbf67f0607221f -nologo` PASS(exit0, session97091). 실제runtime10.0.11/WindowsSDK10.0.22000.57/R2R PE signature/deps 누락0 독립 확인 PASS. DLL SHA25649164BC4953D30B702C8E09B5643AA4EB95312333AEA16159BE6A3DE405F89A3. 원 실패·명령·private targets·검증 결과는 `artifacts/latency-regression` 보존.
+- 2026-10-12 Codex: 외부 STA host에서 actual old/FDD/R2R product editor 비교 최종9개 프로세스 exit0/45samples, 각 Core/WPF10.0.11 및 old dependency 복사0 확인. 첫 editor constructor→WPF Rendering 중앙값383.51/385.96/376.99ms, 반복94.21/81.77/96.55ms로 큰 편집기 회귀 미재현. 원본 WindowsApps mapping 및 host ResourceAssembly bootstrap 실패는 별도 보존 후 원인 수정, 제품DLL·ACL 변경 없음. 동일한 제품코드/다른source metadata는 caee5b8→09cb3d8 문서만 변경임을 독립 확인. 소스·측정해석 독립 검토 완료, Opacity 필드는 가시성 판정에서 제외. App startup/실 hotkey/저장은 측정 범위 밖이고 체감 저하의 전체 원인은 미확정. 현재 느린 동작에 관한 사용자 응답 대기, 제품 변경·원격 변경·파일 삭제 없음.
 
 ## 9. 인계 체크리스트
 
