@@ -26,7 +26,12 @@ internal sealed class CaptureIndexFile
 /// </summary>
 public sealed record CaptureEvictedEventArgs(CaptureRecord Record, string Reason);
 
-public sealed record CaptureBatchRemovalResult(int RemovedCount, int CleanupPendingCount);
+public sealed record CaptureBatchRemovalResult(int RemovedCount, int CleanupPendingCount)
+{
+    /// <summary>Captures kept because Windows could not move them to the Recycle Bin.
+    /// They are removed only by a separately confirmed permanent deletion.</summary>
+    public IReadOnlyList<Guid> RecycleUnavailableIds { get; init; } = [];
+}
 
 /// <summary>
 /// The persistent capture queue.

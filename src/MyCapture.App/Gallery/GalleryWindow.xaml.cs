@@ -992,10 +992,17 @@ internal sealed partial class GalleryWindow : Window
                 MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
             CloseInlinePlayer(); // MediaElement must release its source before directory cleanup.
             foreach (Guid id in targets) _viewModel.FindTile(id)?.SetThumbnailLoadingEnabled(false);
-            CaptureBatchRemovalResult result = await _queue.RemoveManyAsync(targets,
-                id => !_commitService.IsRecordBusy(id) && !_videoLibrary.IsBusy(id));
-            string status = UiText.Format("LibrarySelection_Removed", result.RemovedCount, targets.Length - result.RemovedCount);
-            if (result.CleanupPendingCount > 0) status += "\n" + UiText.Format("LibrarySelection_CleanupPending", result.CleanupPendingCount);
+            Func<Guid, bool> canRemove = id => !_commitService.IsRecordBusy(id) && !_videoLibrary.IsBusy(id);
+            CaptureBatchRemovalResult result = await _queue.RemoveManyAsync(targets, canRemove);
+            IReadOnlyList<Guid> unavailable = result.RecycleUnavailableIds;
+            CaptureBatchRemovalResult? permanent = await LibraryPermanentDeletion.ResolveAsync(unavailable,
+                count => LibraryPermanentDeletion.Confirm(this, count),
+                ids => _queue.RemoveManyPermanentlyAsync(ids, canRemove));
+            int removed = result.RemovedCount + (permanent?.RemovedCount ?? 0);
+            int cleanupPending = result.CleanupPendingCount + (permanent?.CleanupPendingCount ?? 0);
+            string status = UiText.Format("LibrarySelection_Removed", removed, targets.Length - removed);
+            if (cleanupPending > 0) status += "\n" + UiText.Format("LibrarySelection_CleanupPending", cleanupPending);
+            if (unavailable.Count > 0 && permanent is null) status += "\n" + LibraryPermanentDeletion.KeptStatus(unavailable.Count);
             ShowStatus(status);
         }
         catch (Exception ex)

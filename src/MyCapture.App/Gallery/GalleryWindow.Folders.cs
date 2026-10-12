@@ -292,13 +292,20 @@ internal sealed partial class GalleryWindow
         {
             CloseInlinePlayer();
             foreach (Guid captureId in captureIds) _viewModel.FindTile(captureId)?.SetThumbnailLoadingEnabled(false);
-            CaptureFolderDeletionResult result = await _queue.DeleteFolderScopeAsync(scope,
-                captureId => !_commitService.IsRecordBusy(captureId) && !_videoLibrary.IsBusy(captureId),
+            Func<Guid, bool> canRemove = captureId => !_commitService.IsRecordBusy(captureId) && !_videoLibrary.IsBusy(captureId);
+            CaptureFolderDeletionResult result = await _queue.DeleteFolderScopeAsync(scope, canRemove,
                 expectedCaptureIds: captureIds, expectedFolderIds: folderIds);
-            string status = UiText.Format("Folder410.DeleteResult", result.RemovedFolders,
-                result.RemovedCaptures, result.RemainingCaptures);
-            if (result.CleanupPendingCount > 0)
-                status += "\n" + UiText.Format("LibrarySelection_CleanupPending", result.CleanupPendingCount);
+            IReadOnlyList<Guid> unavailable = result.RecycleUnavailableIds;
+            CaptureFolderDeletionResult? permanent = await LibraryPermanentDeletion.ResolveAsync(unavailable,
+                count => LibraryPermanentDeletion.Confirm(this, count),
+                ids => _queue.DeleteFolderScopeAsync(scope, captureId => ids.Contains(captureId) && canRemove(captureId),
+                    permanent: true));
+            int cleanupPending = result.CleanupPendingCount + (permanent?.CleanupPendingCount ?? 0);
+            string status = UiText.Format("Folder410.DeleteResult", result.RemovedFolders + (permanent?.RemovedFolders ?? 0),
+                result.RemovedCaptures + (permanent?.RemovedCaptures ?? 0), permanent?.RemainingCaptures ?? result.RemainingCaptures);
+            if (cleanupPending > 0)
+                status += "\n" + UiText.Format("LibrarySelection_CleanupPending", cleanupPending);
+            if (unavailable.Count > 0 && permanent is null) status += "\n" + LibraryPermanentDeletion.KeptStatus(unavailable.Count);
             LibraryActionStatus.Text = status;
         }
         catch (CaptureFolderChangedException)

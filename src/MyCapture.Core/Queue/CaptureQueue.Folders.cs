@@ -258,9 +258,12 @@ public sealed partial class CaptureQueue
         record.FolderSequence = sequence;
     }
 
+    /// <param name="permanent">Deletes the captures from disk instead of moving them to the
+    /// Recycle Bin. Only an explicit, confirmed user request after a Recycle Bin refusal sets it.</param>
     public async Task<CaptureFolderDeletionResult> DeleteFolderScopeAsync(CaptureFolderScope scope,
         Func<Guid, bool>? canRemove = null, CancellationToken cancellationToken = default,
-        IReadOnlyCollection<Guid>? expectedCaptureIds = null, IReadOnlyCollection<Guid>? expectedFolderIds = null)
+        IReadOnlyCollection<Guid>? expectedCaptureIds = null, IReadOnlyCollection<Guid>? expectedFolderIds = null,
+        bool permanent = false)
     {
         await _folderMutationGate.WaitAsync(cancellationToken);
         HashSet<Guid> folders = FolderIdsInScope(scope);
@@ -271,7 +274,9 @@ public sealed partial class CaptureQueue
                 throw new CaptureFolderChangedException();
             _deletingFolders.UnionWith(folders);
             Guid[] targets = RecordsInScope(scope).Select(record => record.Id).ToArray();
-            CaptureBatchRemovalResult result = await RemoveManyAsync(targets, canRemove, cancellationToken);
+            CaptureBatchRemovalResult result = permanent
+                ? await RemoveManyPermanentlyAsync(targets, canRemove, cancellationToken)
+                : await RemoveManyAsync(targets, canRemove, cancellationToken);
             int remaining = RecordsInScope(scope).Count;
             int removedFolders = 0;
             if (remaining == 0 && folders.Count > 0)
@@ -289,7 +294,10 @@ public sealed partial class CaptureQueue
                     return removed;
                 }, CancellationToken.None);
             }
-            return new(removedFolders, result.RemovedCount, remaining, result.CleanupPendingCount);
+            return new(removedFolders, result.RemovedCount, remaining, result.CleanupPendingCount)
+            {
+                RecycleUnavailableIds = result.RecycleUnavailableIds,
+            };
         }
         finally
         {

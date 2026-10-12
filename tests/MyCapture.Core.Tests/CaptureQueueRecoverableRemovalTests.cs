@@ -50,6 +50,50 @@ public sealed class CaptureQueueRecoverableRemovalTests
         Assert.Equal(20, queue.TotalBytes);
     }
 
+    [Theory]
+    [InlineData("capacity", true)]
+    [InlineData("retention-age", true)]
+    [InlineData("item-limit", true)]
+    [InlineData("byte-limit", true)]
+    [InlineData(CaptureQueue.ManualPermanentReason, true)]
+    [InlineData("manual", false)]
+    [InlineData("manual-batch", false)]
+    public void OnlyEvictionAndConfirmedPermanentDeletionSkipTheRecycleBin(string reason, bool permanent) =>
+        Assert.Equal(permanent, CaptureQueue.IsPermanentRemovalReason(reason));
+
+    [Fact]
+    public async Task PermanentRemoval_CompletesOnlyAfterTheIndexStopsNamingTheCapture()
+    {
+        var queue = CreateQueue(); var record = Record(1); queue.Add(record); queue.Save();
+        var transaction = new Transaction();
+        string? reason = null;
+        queue.PrepareRemoval = (_, removalReason) => { reason = removalReason; return transaction; };
+        bool indexDroppedFirst = false;
+        transaction.OnComplete = () => indexDroppedFirst = queue.Find(record.Id) is null;
+        var result = await queue.RemoveManyPermanentlyAsync([record.Id]);
+        Assert.Equal(CaptureQueue.ManualPermanentReason, reason);
+        Assert.Equal(1, result.RemovedCount);
+        Assert.Equal(0, result.CleanupPendingCount);
+        Assert.Equal(1, transaction.Completions);
+        Assert.True(indexDroppedFirst);
+        transaction.CompleteResult = false;
+        var second = Record(2); queue.Add(second);
+        Assert.Equal(1, (await queue.RemoveManyPermanentlyAsync([second.Id])).CleanupPendingCount);
+    }
+
+    [Fact]
+    public async Task RecycleUnavailable_KeepsTheRecordAndReportsItsId()
+    {
+        var queue = CreateQueue(); var kept = Record(1); var moved = Record(2);
+        queue.Add(kept); queue.Add(moved);
+        queue.PrepareRemoval = (record, _) => record.Id == kept.Id ? throw new RecycleBinUnavailableException() : new Transaction();
+        var result = await queue.RemoveManyAsync([kept.Id, moved.Id]);
+        Assert.Equal(1, result.RemovedCount);
+        Assert.Equal(kept.Id, Assert.Single(result.RecycleUnavailableIds));
+        Assert.Same(kept, queue.Find(kept.Id));
+        Assert.Null(queue.Find(moved.Id));
+    }
+
     [Fact]
     public async Task Batch_PartialMoveSuccess_RemovesOnlyAcknowledgedRecords()
     {
@@ -182,6 +226,10 @@ public sealed class CaptureQueueRecoverableRemovalTests
     private sealed class Transaction(bool success = true) : ICaptureRemovalTransaction
     {
         public int Rollbacks { get; private set; }
+        public int Completions { get; private set; }
+        public bool CompleteResult { get; set; } = true;
+        public Action? OnComplete { get; set; }
         public bool Rollback() { Rollbacks++; return success; }
+        public bool Complete() { Completions++; OnComplete?.Invoke(); return CompleteResult; }
     }
 }

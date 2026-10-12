@@ -9,7 +9,7 @@ internal sealed class ThemedDialog : Window
 {
     internal MessageBoxResult Result { get; private set; } = MessageBoxResult.Cancel;
     internal ThemedDialog(string text, string title, MessageBoxButton buttons, MessageBoxResult defaultResult,
-        string? details = null, Action? recovery = null, string? recoveryLabel = null)
+        string? details = null, Action? recovery = null, string? recoveryLabel = null, string? okLabel = null)
     {
         Title = MyCapture.Core.Platform.AppIdentity.WindowLabel;
         Width = 500;
@@ -59,7 +59,7 @@ internal sealed class ThemedDialog : Window
         };
         if (defaultResult == MessageBoxResult.None) defaultResult = choices[0].Result;
         foreach (var choice in choices)
-            actions.Children.Add(MakeButton(UiText.Get(choice.Key), choice.Result,
+            actions.Children.Add(MakeButton(choice.Key == "Dialog.OK" && okLabel is not null ? okLabel : UiText.Get(choice.Key), choice.Result,
                 recovery is null && choice.Result == defaultResult, choice.Result is MessageBoxResult.Cancel || choices.Length == 1));
         panel.Children.Add(actions);
         Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -168,9 +168,9 @@ internal sealed class ThemedDialog : Window
 
     internal static MessageBoxResult Show(Window? owner, string text, string title, MessageBoxButton buttons = MessageBoxButton.OK,
         MessageBoxImage icon = MessageBoxImage.Information, MessageBoxResult defaultResult = MessageBoxResult.None,
-        string? details = null, Action? recovery = null, string? recoveryLabel = null)
+        string? details = null, Action? recovery = null, string? recoveryLabel = null, string? okLabel = null)
     {
-        var dialog = new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel);
+        var dialog = new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel, okLabel);
         owner = owner?.IsVisible == true ? owner : Application.Current?.Windows.OfType<Window>()
             .FirstOrDefault(window => window.IsActive && IsSuitableOwner(window));
         if (owner is not null) { dialog.Owner = owner; dialog.ShowInTaskbar = false; }

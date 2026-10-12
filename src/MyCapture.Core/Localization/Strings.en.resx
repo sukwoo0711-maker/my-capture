@@ -3014,6 +3014,10 @@ Actual reduction {2}% · {3}</value></data>
   <data name="LibrarySelection_Removed" xml:space="preserve"><value>Removed {0} items from the library; {1} unavailable or in-use items retained</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>Could not save the deletion. Check the library and try again.</value></data>
   <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>{0} removed items still have files awaiting cleanup. No disk space recovery is confirmed for those items.</value></data>
+  <data name="LibrarySelection_RecycleUnavailableTitle" xml:space="preserve"><value>Recycle Bin unavailable</value></data>
+  <data name="LibrarySelection_RecycleUnavailableMessage" xml:space="preserve"><value>{0} items cannot be moved to the Recycle Bin. The Recycle Bin may be turned off, or the items may be on a removable or network drive or larger than the Recycle Bin. Delete these items permanently? Permanently deleted items cannot be restored.</value></data>
+  <data name="LibrarySelection_PermanentDelete" xml:space="preserve"><value>Delete permanently</value></data>
+  <data name="LibrarySelection_RecycleUnavailableKept" xml:space="preserve"><value>{0} items that cannot be moved to the Recycle Bin were not deleted.</value></data>
   <data name="MediaExport_SourceProtected" xml:space="preserve"><value>Choose another file name to preserve the original video.</value></data>
   <data name="MediaExport_Extension" xml:space="preserve"><value>Use the {0} file extension.</value></data>
   <data name="MediaExport_Title" xml:space="preserve"><value>Export video</value></data>

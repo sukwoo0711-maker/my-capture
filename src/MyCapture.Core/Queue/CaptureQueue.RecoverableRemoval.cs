@@ -1,16 +1,41 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using MyCapture.Core.Storage;
 
 namespace MyCapture.Core.Queue;
 
-/// <summary>A successfully recycled capture. Rollback restores its exact original directory.</summary>
+/// <summary>
+/// A removal prepared before the index changes. A user deletion has already moved the capture
+/// to the Recycle Bin, and <see cref="Rollback"/> restores its exact original directory. A
+/// permanent removal (automatic eviction, or a confirmed permanent deletion) changes nothing
+/// until <see cref="Complete"/>, which runs only after the index stops naming the capture.
+/// </summary>
 public interface ICaptureRemovalTransaction
 {
     bool Rollback();
+
+    /// <summary>Runs off the queue owner after the index publication is durable.</summary>
+    /// <returns><see langword="false"/> when the files could not be removed yet.</returns>
+    bool Complete() => true;
 }
 
 public sealed partial class CaptureQueue
 {
+    /// <summary>A confirmed permanent deletion after Windows refused a Recycle Bin move.</summary>
+    public const string ManualPermanentReason = "manual-permanent";
+
+    /// <summary>Capacity and retention eviction run without a user request.</summary>
+    public static bool IsAutomaticRemovalReason(string reason) =>
+        reason is "capacity" or "retention-age" or "item-limit" or "byte-limit";
+
+    /// <summary>
+    /// Automatic eviction exists to free disk space, and a confirmed permanent deletion is
+    /// the user's explicit choice; both delete files. Every other removal is a user deletion
+    /// that goes to the Recycle Bin.
+    /// </summary>
+    public static bool IsPermanentRemovalReason(string reason) =>
+        IsAutomaticRemovalReason(reason) || reason == ManualPermanentReason;
+
     private readonly HashSet<Guid> _removalReservations = [];
     private int _automaticLeaseReleaseDepth;
     private readonly object _removalOperationGate = new();
@@ -113,8 +138,20 @@ public sealed partial class CaptureQueue
         }
         UpdatePinPressureFlag();
         Evicted?.Invoke(this, new CaptureEvictedEventArgs(record, reason));
+        TryComplete(transaction, record);
         return true;
     }
+
+    /// <summary>
+    /// Deletes the captures from disk after the user explicitly confirmed it for items Windows
+    /// could not move to the Recycle Bin. Without a connected removal service this is the
+    /// standalone index removal, whose <see cref="Evicted"/> handler owns the files.
+    /// </summary>
+    public Task<CaptureBatchRemovalResult> RemoveManyPermanentlyAsync(IEnumerable<Guid> ids,
+        Func<Guid, bool>? canRemove = null, CancellationToken cancellationToken = default) =>
+        PrepareRemoval is null
+            ? RemoveManyAsync(ids, canRemove, cancellationToken)
+            : RemoveManyRecoverablyAsync(ids, canRemove, cancellationToken, ManualPermanentReason);
 
     private Task<CaptureBatchRemovalResult> RemoveManyRecoverablyAsync(IEnumerable<Guid> ids,
         Func<Guid, bool>? canRemove, CancellationToken cancellationToken, string reason = "manual-batch")
@@ -122,6 +159,17 @@ public sealed partial class CaptureQueue
         Task<CaptureBatchRemovalResult> operation = RemoveManyRecoverablyCoreAsync(ids, canRemove, cancellationToken, reason);
         lock (_removalOperationGate) _pendingRemovalOperations.Add(operation);
         return ObserveRemovalAsync(operation);
+    }
+
+    private bool TryComplete(ICaptureRemovalTransaction transaction, CaptureRecord record)
+    {
+        try { return transaction.Complete(); }
+        catch (Exception ex)
+        {
+            // The index no longer names the capture; leftover bytes are an orphan, not data loss.
+            _log.LogWarning(ex, "Could not remove the files of evicted capture {Id}", record.Id);
+            return false;
+        }
     }
 
     private async Task<CaptureBatchRemovalResult> ObserveRemovalAsync(Task<CaptureBatchRemovalResult> operation)
@@ -133,6 +181,19 @@ public sealed partial class CaptureQueue
     private async Task<CaptureBatchRemovalResult> RemoveManyRecoverablyCoreAsync(IEnumerable<Guid> ids,
         Func<Guid, bool>? canRemove, CancellationToken cancellationToken, string reason)
     {
+        var completions = new List<(CaptureRecord Record, ICaptureRemovalTransaction Transaction)>();
+        CaptureBatchRemovalResult result = await RemoveFromIndexAsync(ids, canRemove, cancellationToken, reason, completions);
+        if (completions.Count == 0) return result;
+        // File deletion for permanent removals runs after the publication slot is released and
+        // off the owner thread, so eviction never delays a capture save or the UI.
+        int pending = await Task.Run(() => completions.Count(item => !TryComplete(item.Transaction, item.Record)));
+        return pending == 0 ? result : result with { CleanupPendingCount = result.CleanupPendingCount + pending };
+    }
+
+    private async Task<CaptureBatchRemovalResult> RemoveFromIndexAsync(IEnumerable<Guid> ids,
+        Func<Guid, bool>? canRemove, CancellationToken cancellationToken, string reason,
+        List<(CaptureRecord Record, ICaptureRemovalTransaction Transaction)> completions)
+    {
         HashSet<Guid> requested = ids.ToHashSet();
         using CaptureWriteReservation reservation = await ReservePublicationAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
@@ -142,6 +203,7 @@ public sealed partial class CaptureQueue
         if (admissions.Count == 0) return new(0, 0);
         CaptureRecord[] candidates = admissions.Select(item => item.Record).ToArray();
         IDisposable[] leases = admissions.Select(item => item.Lease).ToArray();
+        var unavailable = new List<Guid>();
         try
         {
             // Shell IO is serialized away from the UI owner. Lease each candidate until the
@@ -155,11 +217,18 @@ public sealed partial class CaptureQueue
                     {
                         if (PrepareRemoval!(record, reason) is { } transaction) result.Add((record, transaction));
                     }
+                    catch (RecycleBinUnavailableException ex)
+                    {
+                        // Nothing moved or deleted. The caller may ask the user about a
+                        // permanent deletion; it never happens implicitly.
+                        _log.LogWarning(ex, "Capture {Id} cannot be moved to the Recycle Bin; keeping it", record.Id);
+                        unavailable.Add(record.Id);
+                    }
                     catch (Exception ex) { _log.LogWarning(ex, "Recycle admission failed for capture {Id}", record.Id); }
                 }
                 return result;
             });
-            if (prepared.Count == 0) return new(0, 0);
+            if (prepared.Count == 0) return new(0, 0) { RecycleUnavailableIds = unavailable };
             CaptureRecord[] removed = prepared.Select(item => item.Record).ToArray();
             _records.ReplaceWith(_records.Except(removed).ToArray());
             _totalBytes = Math.Max(0, _totalBytes - removed.Sum(record => record.TotalBytes));
@@ -179,13 +248,15 @@ public sealed partial class CaptureQueue
                 throw;
             }
             foreach (CaptureRecord record in removed) Evicted?.Invoke(this, new CaptureEvictedEventArgs(record, reason));
-            return new(removed.Length, 0);
+            completions.AddRange(prepared);
+            return new(removed.Length, 0) { RecycleUnavailableIds = unavailable };
         }
         finally
         {
-            if (reason != "manual-batch") _automaticLeaseReleaseDepth++;
+            bool automatic = IsAutomaticRemovalReason(reason);
+            if (automatic) _automaticLeaseReleaseDepth++;
             try { foreach (IDisposable lease in leases) lease.Dispose(); }
-            finally { if (reason != "manual-batch") _automaticLeaseReleaseDepth--; }
+            finally { if (automatic) _automaticLeaseReleaseDepth--; }
         }
     }
 
@@ -193,7 +264,7 @@ public sealed partial class CaptureQueue
     {
         bool Available(CaptureRecord record) => requested.Contains(record.Id) && !IsEvictionLeased(record.Id)
             && (canRemove?.Invoke(record.Id) ?? true);
-        if (reason == "manual-batch") return _records.Where(Available).ToArray();
+        if (!IsAutomaticRemovalReason(reason)) return _records.Where(Available).ToArray();
         if (Volatile.Read(ref _evictionSuspensionCount) > 0) return [];
         if (reason == "retention-age")
         {

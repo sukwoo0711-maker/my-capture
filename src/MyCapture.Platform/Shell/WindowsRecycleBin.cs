@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
+using MyCapture.Core.Storage;
 
 namespace MyCapture.Platform.Shell;
 
@@ -17,13 +18,37 @@ public interface IRecoverableTrash
     RecycledPathReceipt? FindRecycledDirectory(string originalPath, string identity);
 }
 
-/// <summary>Windows Shell recycling with no permanent-delete fallback and identity-bound restoration.</summary>
+/// <summary>
+/// Windows Shell recycling for captures the user deletes from the library, with no
+/// permanent-delete fallback and identity-bound restoration. App-owned files never come here.
+/// </summary>
 public sealed class WindowsRecycleBin : IRecoverableTrash
 {
     private static readonly object ShellGate = new();
     [ThreadStatic] private static bool _insideShellThread;
-    private const uint RecycleFlags = 0x00080000 | 0x00100000 | 0x00000400 | 0x00004000 | 0x00000010 | 0x00000004;
+
+    /// <summary>
+    /// FOFX_RECYCLEONDELETE | FOFX_EARLYFAILURE | FOF_NOERRORUI | FOF_NOCONFIRMATION | FOF_SILENT.
+    /// FOF_WANTNUKEWARNING is deliberately absent: it shows an ownerless "permanently delete?"
+    /// prompt that can block the caller. With it absent, NOCONFIRMATION would silently delete an
+    /// item that cannot be recycled, so <see cref="PreDeleteDecision"/> cancels that delete.
+    /// </summary>
+    internal const uint RecycleFlags = 0x00080000 | 0x00100000 | 0x00000400 | 0x00000010 | 0x00000004;
+
+    /// <summary>TSF_DELETE_RECYCLE_IF_POSSIBLE: the Shell will recycle, not destroy, this item.</summary>
+    internal const uint RecycleIfPossible = 0x00000080;
+
+    /// <summary>HRESULT_FROM_WIN32(ERROR_CANCELLED).</summary>
+    internal const int Cancelled = unchecked((int)0x800704C7);
+
     internal Action<string>? DiagnosticStageForTest { get; set; }
+
+    /// <summary>
+    /// IFileOperationProgressSink.PreDeleteItem result: allow only a delete the Shell will
+    /// recycle. Anything else (bin turned off, removable or network volume, item larger than
+    /// the bin) is cancelled, so nothing is destroyed and no prompt appears.
+    /// </summary>
+    internal static int PreDeleteDecision(uint flags) => (flags & RecycleIfPossible) != 0 ? 0 : Cancelled;
 
     public string GetIdentity(string path)
     {
@@ -59,9 +84,15 @@ public sealed class WindowsRecycleBin : IRecoverableTrash
                 item = ItemFromPath(path);
                 var sink = new ProgressSink();
                 operation.DeleteItem(item, sink);
-                operation.PerformOperations();
+                try { operation.PerformOperations(); }
+                catch (COMException error) when (sink.RefusedPermanentDelete)
+                {
+                    throw new RecycleBinUnavailableException(
+                        "Windows cannot move this item to the Recycle Bin; it was left in place.", error);
+                }
                 DiagnosticStageForTest?.Invoke("recycle:performed");
                 operation.GetAnyOperationsAborted(out bool aborted);
+                if (sink.RefusedPermanentDelete) throw new RecycleBinUnavailableException();
                 if (aborted || sink.Result < 0 || sink.RecycledPath is null || sink.IdList is null)
                     throw new IOException("The Shell did not confirm a recoverable Recycle Bin move.");
                 var receipt = new RecycledPathReceipt(path, sink.RecycledPath, identity, sink.IdList, directory);
@@ -327,7 +358,13 @@ public sealed class WindowsRecycleBin : IRecoverableTrash
             { Result = result; return 0; }
         public int PreCopyItem(uint flags, IShellItem item, IShellItem destination, string name) => 0;
         public int PostCopyItem(uint flags, IShellItem item, IShellItem destination, string name, int result, IShellItem? created) => 0;
-        public int PreDeleteItem(uint flags, IShellItem item) => 0;
+        public bool RefusedPermanentDelete { get; private set; }
+        public int PreDeleteItem(uint flags, IShellItem item)
+        {
+            int decision = PreDeleteDecision(flags);
+            if (decision != 0) RefusedPermanentDelete = true;
+            return decision;
+        }
         public int PostDeleteItem(uint flags, IShellItem item, int result, IShellItem? created)
         {
             Result = result;

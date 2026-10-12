@@ -42,7 +42,11 @@ public sealed record CaptureFolderDeletionPreview(
 }
 
 public sealed record CaptureFolderDeletionResult(
-    int RemovedFolders, int RemovedCaptures, int RemainingCaptures, int CleanupPendingCount);
+    int RemovedFolders, int RemovedCaptures, int RemainingCaptures, int CleanupPendingCount)
+{
+    /// <summary>Captures kept because Windows could not move them to the Recycle Bin.</summary>
+    public IReadOnlyList<Guid> RecycleUnavailableIds { get; init; } = [];
+}
 
 internal sealed class CaptureFolderState
 {
