@@ -9,12 +9,14 @@ namespace MyCapture.App.Tests;
 public sealed class WindowsRecycleBinTests
 {
     [RecycleBinCanaryFact]
-    public void OwnedDirectory_RoundTrip_ConflictsDoNotOverwrite_AndShellMetadataDisappears()
+    public void OwnedDirectory_RoundTrip_ConflictsDoNotOverwrite_AndRestoredShellItemIsUnavailable()
     {
         string root = TestRecycleBin.CreateTempSubdirectory("mc-trash-canary-").FullName;
         string original = Path.Combine(root, "capture");
         Directory.CreateDirectory(original);
         File.WriteAllText(Path.Combine(original, "canary.txt"), "recoverable capture canary");
+        string originalSha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(original, "canary.txt"))));
+        File.WriteAllText(Path.Combine(root, "original-sha256.txt"), originalSha);
         var trash = new WindowsRecycleBin();
         trash.DiagnosticStageForTest = stage => File.AppendAllText(Path.Combine(root, "stages.txt"), $"{DateTimeOffset.UtcNow:O} {stage}\n");
         RecycledPathReceipt receipt = trash.RecycleDirectory(original);
@@ -33,10 +35,13 @@ public sealed class WindowsRecycleBinTests
         Directory.Move(original, Path.Combine(root, "conflict-preserved"));
         trash.RestoreDirectory(receipt);
         Assert.Equal("recoverable capture canary", File.ReadAllText(Path.Combine(original, "canary.txt")));
-        File.WriteAllText(Path.Combine(root, "restored-sha256.txt"), Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(original, "canary.txt")))));
+        string restoredSha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(original, "canary.txt"))));
+        File.WriteAllText(Path.Combine(root, "restored-sha256.txt"), restoredSha);
+        Assert.Equal(originalSha, restoredSha);
         Assert.Equal(receipt.Identity, trash.GetIdentity(original));
         Assert.False(Directory.Exists(receipt.RecycledPath));
-        Assert.False(File.Exists(shellMetadata));
+        Assert.Contains("restore:namespace-unavailable", File.ReadAllText(Path.Combine(root, "stages.txt")));
+        File.WriteAllText(Path.Combine(root, "shell-final-state.json"), JsonSerializer.Serialize(new { MetadataExists = File.Exists(shellMetadata), PayloadExists = Directory.Exists(receipt.RecycledPath) }));
     }
 
     [RecycleBinCanaryFact]
@@ -46,6 +51,8 @@ public sealed class WindowsRecycleBinTests
         string original = Path.Combine(root, "canary.txt");
         byte[] bytes = [0, 1, 2, 128, 255];
         File.WriteAllBytes(original, bytes);
+        string originalSha = Convert.ToHexString(SHA256.HashData(bytes));
+        File.WriteAllText(Path.Combine(root, "original-sha256.txt"), originalSha);
         var trash = new WindowsRecycleBin();
         trash.DiagnosticStageForTest = stage => File.AppendAllText(Path.Combine(root, "stages.txt"), $"{DateTimeOffset.UtcNow:O} {stage}\n");
         RecycledPathReceipt receipt = trash.RecycleFile(original);
@@ -53,9 +60,14 @@ public sealed class WindowsRecycleBinTests
         Assert.False(File.Exists(original));
         trash.RestoreFile(receipt);
         Assert.Equal(bytes, File.ReadAllBytes(original));
-        File.WriteAllText(Path.Combine(root, "restored-sha256.txt"), Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(original))));
+        string restoredSha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(original)));
+        File.WriteAllText(Path.Combine(root, "restored-sha256.txt"), restoredSha);
+        Assert.Equal(originalSha, restoredSha);
         Assert.Equal(receipt.Identity, trash.GetIdentity(original));
         Assert.False(File.Exists(receipt.RecycledPath));
+        Assert.Contains("restore:namespace-unavailable", File.ReadAllText(Path.Combine(root, "stages.txt")));
+        string metadata = Path.Combine(Path.GetDirectoryName(receipt.RecycledPath)!, "$I" + Path.GetFileName(receipt.RecycledPath)[2..]);
+        File.WriteAllText(Path.Combine(root, "shell-final-state.json"), JsonSerializer.Serialize(new { MetadataExists = File.Exists(metadata), PayloadExists = File.Exists(receipt.RecycledPath) }));
     }
 }
 

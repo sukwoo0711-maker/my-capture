@@ -129,11 +129,23 @@ public sealed class WindowsRecycleBin : IRecoverableTrash
                 DiagnosticStageForTest?.Invoke("restore:undelete-start");
                 Marshal.ThrowExceptionForHR(context.InvokeCommand(ref command));
                 DiagnosticStageForTest?.Invoke("restore:undelete-end");
-                string recycledName = Path.GetFileName(receipt.RecycledPath);
-                string metadata = Path.Combine(Path.GetDirectoryName(receipt.RecycledPath)!, "$I" + recycledName[2..]);
-                if (!Exists(original) || GetIdentity(original) != receipt.Identity || Exists(receipt.RecycledPath)
-                    || !recycledName.StartsWith("$R", StringComparison.Ordinal) || File.Exists(metadata))
+                // Explorer's own canonical restore can retain $I metadata after the $R
+                // payload disappears. The restored exact object and unavailable payload
+                // define completion; metadata is never manually removed here.
+                if (!Exists(original) || GetIdentity(original) != receipt.Identity || Exists(receipt.RecycledPath))
                     throw new IOException("The Shell could not restore the exact recorded item.");
+                if (DiagnosticStageForTest is not null)
+                {
+                    try
+                    {
+                        item.GetAttributes(0x61000000, out _); // SFGAO_VALIDATE + FILESYSTEM + FOLDER
+                        DiagnosticStageForTest("restore:namespace-availability-unconfirmed");
+                    }
+                    catch (COMException)
+                    {
+                        DiagnosticStageForTest("restore:namespace-unavailable");
+                    }
+                }
                 return true;
             }
             finally
