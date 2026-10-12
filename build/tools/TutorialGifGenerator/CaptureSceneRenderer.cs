@@ -18,6 +18,7 @@ internal sealed class CaptureSceneRenderer : ITutorialSceneRenderer
     private readonly CaptureOverlayView _overlay;
     private readonly BitmapSource _desktop, _tray;
     private readonly RecordingStripFixture _ready, _recording, _paused, _resumed;
+    private readonly RecordingStripFixture[] _recordingSeconds;
     private readonly PointD _target, _end;
     private PointD _cursor;
     private string? _copiedColor;
@@ -30,6 +31,7 @@ internal sealed class CaptureSceneRenderer : ITutorialSceneRenderer
     {
         Id = featureId; _ko = language == "ko"; _desktop = Desktop(_ko);
         _ready = new("ready", "00:00"); _recording = new("recording", "00:03"); _paused = new("paused", "00:03"); _resumed = new("recording", "00:04");
+        _recordingSeconds = Enumerable.Range(0, 4).Select(second => new RecordingStripFixture("recording", $"00:{second:00}")).ToArray();
         _target = featureId switch { "color-copy" => new(552, 249), "record-pause" => _recording.PauseCenter, "capture-window" => new(220, 159), "capture-fullscreen" => new(145, 123), _ => new(52, 126) };
         _end = new(402, 215);
         (Storyboard, KeyFrames) = BuildStory();
@@ -39,7 +41,7 @@ internal sealed class CaptureSceneRenderer : ITutorialSceneRenderer
         _overlay = new CaptureOverlayView(new FrozenFrame(_desktop, bounds, monitor, 0), false, false)
         {
             ReadCursor = () => _cursor, ReadMonitors = () => [monitor], TextCaptureAvailable = true,
-            CopyColorText = value => { _copiedColor = value; return Task.FromResult(true); }, OffersOtherActions = true, ShowModeBar = true,
+            CopyColorText = value => { _copiedColor = value; return Task.FromResult(true); }, OffersOtherActions = featureId != "record-region", ShowModeBar = featureId != "record-region",
             DetectWindows = featureId == "capture-window", RecordingSelection = featureId == "record-region",
         };
         _overlay.WindowCandidates = [new WindowCandidate(new IntPtr(1), new RectD(42 * SceneScale, 72 * SceneScale, 552 * SceneScale, 216 * SceneScale), L(_ko, "개발 기록", "Development notes"))];
@@ -58,10 +60,10 @@ internal sealed class CaptureSceneRenderer : ITutorialSceneRenderer
         if (Id == "record-region")
         {
             PointD start = _ready.PrimaryCenter, stop = _recording.PrimaryCenter, status = new(430, 266);
-            return (new TutorialStoryboard().Hold("open", 60, initial).Motion("approach", 25, initial, _target).Motion("press", 8, _target, _target, true)
-                .Motion("drag", 35, _target, _end, true).Motion("release", 8, _end, _end).Hold("ready", 80, _end)
-                .Motion("start-approach", 20, _end, start).Motion("start", 8, start, start, true).Hold("recording", 120, start)
-                .Motion("recording-pointer", 20, start, status).Motion("stop-approach", 20, status, stop).Motion("stop", 8, stop, stop, true).Hold("done", 252, stop), [0, 68, 77, 106, 148, 155]);
+            return (new TutorialStoryboard().Hold("open", 60, initial).Motion("approach", 32, initial, _target).Motion("press", 6, _target, _target, true)
+                .Motion("drag", 28, _target, _end, true).Motion("release", 6, _end, _end).Hold("ready", 80, _end)
+                .Motion("start-approach", 20, _end, start).Motion("start", 6, start, start, true).Hold("recording", 120, start)
+                .Motion("recording-pointer", 22, start, status).Motion("stop-approach", 22, status, stop).Motion("stop", 6, stop, stop, true).Hold("done", 268, stop), [0, 66, 73, 100, 145, 151]);
         }
         if (Id == "record-pause")
         {
@@ -77,9 +79,9 @@ internal sealed class CaptureSceneRenderer : ITutorialSceneRenderer
                 .Motion("follow", 25, _end, new(530, 272)).Motion("finish", 8, new(530, 272), new(560, 272)).Hold("done", 84, new(560, 272)), [0, 34, 36, 101, 110, 144]);
         if (Id is "capture-window" or "capture-fullscreen")
             return (new TutorialStoryboard().Hold("open", 100, initial).Motion("approach", 35, initial, _target).Motion("click", 8, _target, _target, true).Hold("result", 200, _target)
-                .Motion("follow", 50, _target, new(520, 250)).Hold("done", 448, new(520, 250)), [0, 35, 36, 44, 95, 96]);
+                .Motion("follow", 50, _target, new(520, 250)).Hold("done", 448, new(520, 250)), [0, 35, 36, 44, 94, 95]);
         if (Id == "color-copy")
-            return (new TutorialStoryboard().Hold("open", 100, initial).Motion("approach", 35, initial, _target).Hold("pixel", 150, _target).Motion("copy", 8, _target, _target)
+            return (new TutorialStoryboard().Hold("open", 100, new(420, 165)).Motion("approach", 35, new(420, 165), _target).Hold("pixel", 150, _target).Motion("copy", 8, _target, _target)
                 .Hold("copied", 200, _target).Motion("follow", 50, _target, new(500, 240)).Hold("done", 298, new(500, 240)), [0, 35, 36, 37, 45, 96]);
         return (new TutorialStoryboard().Hold("open", 100, initial).Motion("approach", 35, initial, _target).Motion("press", 8, _target, _target, true).Hold("input", 100, _target)
             .Motion(Id == "capture-scroll" ? "scroll" : "drag", 50, _target, _end, true).Motion("release", 8, _end, _end).Hold("result", 100, _end)
@@ -98,8 +100,11 @@ internal sealed class CaptureSceneRenderer : ITutorialSceneRenderer
         }
         else if (Id == "record-region" && frame.Segment is "release" or "ready" or "start-approach" or "start" or "recording" or "recording-pointer" or "stop-approach" or "stop" or "done")
         {
-            bool ready = frame.Segment is "release" or "ready" or "start-approach", finished = frame.Segment is "stop" or "done";
-            scene = finished ? VideoResult() : RecordingScene(ready ? _ready : _recording, false);
+            bool ready = frame.Segment is "release" or "ready" or "start-approach" or "start", finished = frame.Segment == "done";
+            int currentIndex = Storyboard.Frames.ToList().IndexOf(frame);
+            int startIndex = Storyboard.Frames.ToList().FindIndex(item => item.Segment == "recording");
+            int elapsedSeconds = ready ? 0 : Math.Clamp(Storyboard.Frames.Skip(startIndex).Take(Math.Max(0, currentIndex - startIndex)).Sum(item => item.DelayCentiseconds) / 100, 0, 3);
+            scene = finished ? VideoResult() : RecordingScene(ready ? _ready : _recordingSeconds[elapsedSeconds], false);
             caption = finished ? L(_ko, "녹화 중지 후 영상 확인", "Stop recording and review the video") : ready ? L(_ko, "선택한 영역에서 녹화 시작 버튼 선택", "Choose Start recording for the selected region") : L(_ko, "선택한 영역 녹화 중", "Recording the selected region");
         }
         else if (Id == "color-copy")
@@ -168,7 +173,9 @@ internal sealed class CaptureSceneRenderer : ITutorialSceneRenderer
         Text(dc, L(_ko, "캡처 결과", "Captured image"), 25, 15, 18, Brush("Text.Primary"));
         RectD physical = new RectD(crop.X * SceneScale, crop.Y * SceneScale, crop.Width * SceneScale, crop.Height * SceneScale).ToPixelBounds();
         var source = new CroppedBitmap(_desktop, new Int32Rect((int)physical.X, (int)physical.Y, Math.Min(_desktop.PixelWidth - (int)physical.X, (int)physical.Width), Math.Min(_desktop.PixelHeight - (int)physical.Y, (int)physical.Height)));
-        dc.DrawImage(source, new Rect(45, 75, 550, Math.Min(200, crop.Height / crop.Width * 550)));
+        double width = 550, height = crop.Height / crop.Width * width;
+        if (height > 200) { height = 200; width = height * crop.Width / crop.Height; }
+        dc.DrawImage(source, new Rect((Width - width) / 2, 75, width, height));
     });
     private BitmapSource RecordingScene(RecordingStripFixture strip, bool paused) => DrawScene(dc =>
     {

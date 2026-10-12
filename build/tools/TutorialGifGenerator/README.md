@@ -1,28 +1,40 @@
-# 텍스트 복사 튜토리얼 GIF 생성기
+﻿# 기능별 사용법 GIF 생성기
 
-`CaptureOverlayView`와 `CaptureModeBar`, 제품 Midnight 테마를 오프스크린으로 렌더링합니다. 합성 터미널과 메모에 `npm run build` / `Build completed` 두 줄을 표시합니다. `T` 키 안내 뒤 텍스트 모드, 드래그 선택, 자동 인식·복사 알림, `Ctrl+V` 붙여넣기 결과를 보여 줍니다. 캡처 시작 단축키는 변경할 수 있으므로 GIF에 넣지 않습니다. 현재 설정 값은 튜토리얼 UI에서 별도로 표시합니다.
+38개 기능을 한국어와 영어로 각각 제작합니다. 각 자산은 640×360, 10–12초이며 움직임 구간은 4cs(25fps), 읽기 구간은 단일 프레임의 긴 지연입니다. 포인터는 smoothstep으로 가감속하고 클릭·드래그·키 입력·기능 결과를 별도로 표시합니다. 전역 단축키는 사용자 설정에 따라 달라지므로 자산에 넣지 않으며 제품의 튜토리얼 창에서 현재 값을 표시합니다. `T`, `C`, `Ctrl+V`, 편집기의 고정 키 등 해당 화면의 제품 고정 입력만 GIF에 표시합니다.
 
-제품 렌더러는 864×421 선택 화면을 그린 뒤 640×312로 축소합니다. 합성 샘플 본문은 최종 GIF에서 약 22px이며 아래 48px 영역에 단계 문구와 고정 키를 표시합니다. 현재 smooth pilot는 640×360, 156프레임, 11.2초, 무한 반복, 전체 불투명 프레임입니다. 150개 동작 프레임은 4cs(25fps)로 가감속 포인터 이동, 클릭 press/release 링과 장면 전환을 그립니다. 6개 읽기 hold는 단일 프레임의 긴 지연입니다. 한·영 자산은 같은 샘플, 같은 선택 경로, 같은 지연을 사용합니다.
+`ITutorialSceneRenderer`는 기능별 장면과 `TutorialStoryboard`의 좌표·진행률·지연 계획을 제공합니다. 공통 signature와 작성 경계는 [RENDERER-API.md](RENDERER-API.md)에 있습니다. renderer가 반환한 프레임을 즉시 quantize/encode하며 프레임 비트맵 목록을 미리 쌓지 않습니다. 완성된 GIF 하나만 제품 `GifSampleDecoder`로 읽고 검증·PNG 생성 후 해제한 다음 자산으로 넘어갑니다.
 
-`ITutorialSceneRenderer.Render`가 프레임을 하나씩 반환하고 `TutorialGifPipeline`이 즉시 quantize/encode합니다. 렌더링된 비트맵 목록을 미리 누적하지 않습니다. `TutorialStoryboard`는 작은 진행률·좌표·지연 계획만 보관합니다. 다른 기능은 전용 renderer 파일로 추가합니다. 공통 signature와 작성자 파일 경계는 [RENDERER-API.md](RENDERER-API.md)에 있습니다.
+기능 목록:
 
-색상은 프레임별 정확한 RGB 빈도 상위 256색 팔레트와 가장 가까운 RGB로 Indexed8 변환합니다. 디더링 없이 정적 배경을 유지한 뒤 제품 `AnimatedGifWriter`의 `AddEncodedFrame` 경로와 WPF GIF 인코더를 사용합니다. 검증·미리보기는 최종 GIF를 제품 `GifSampleDecoder`로 다시 읽습니다.
+| Renderer | 기능 ID |
+| --- | --- |
+| TextCopy | `text-copy` |
+| Capture | `capture-region`, `record-region`, `record-pause`, `capture-window`, `capture-fullscreen`, `capture-scroll`, `capture-delay`, `color-copy` |
+| Workspace | `library-open`, `quick-access`, `folder-create`, `folder-rename`, `library-move`, `library-delete`, `pin-clipboard`, `pin-hide-all`, `pin-click-through`, `pin-restore`, `pin-copy`, `pin-save` |
+| Editor | `image-rectangle`, `image-ellipse`, `image-arrow`, `image-pen`, `image-highlighter`, `image-text`, `image-step-number`, `image-mosaic`, `image-blur`, `image-crop`, `image-rotate`, `image-save`, `image-copy` |
+| Video | `video-play`, `video-frame-step`, `video-trim`, `video-gif-export` |
 
-이 자료는 사용법을 설명하기 위한 합성 fixture입니다. OS 화면 녹화, 실제 OCR 수행 또는 실제 클립보드 트랜잭션의 증거가 아닙니다. `App.Run`/`Window.Show`, 사용자 프로필, 화면 획득, 실제 입력, 클립보드를 사용하지 않습니다. OCR 성공과 붙여넣기는 제품의 실제 지원 흐름을 설명하는 연출입니다. 알림은 `ThemedShellPresenter.ShowActionNotification`과 같은 제품 문자열, 여백, 기본/강조 버튼 스타일로 그리며 선택적인 고급 인식 버튼을 누르지 않습니다.
+제품 Midnight 테마, 실제 `CaptureOverlayView`/선택 표시, `CountdownWindow.Content`, `PinWindow.Content`/`PinHoverBar.Content`, `QuickAccessWindow.Content`, `GalleryFolderEditDialog.Content`, `AnnotationRenderer`, `TwoLineTimeline`, 제품 프레임 이동 계산과 GIF encoder/decoder/player를 사용합니다. 주변 데스크톱·터미널·메모·축약 보관함·녹화 제어 바·샘플 영상과 거래 결과는 안전한 합성 fixture입니다. 각 receipt에 사용한 실제 제품 UI와 합성 부분을 기록합니다. `Window.Show`/`App.Run`, 화면 획득, 실제 입력/클립보드/사용자 프로필/영속화/실제 파일 삭제를 수행하지 않습니다.
 
-`T`의 오프스크린 전환은 제품 `SelectMode(Text)` 호출을 사용합니다. 드래그는 제품 `OnMouseMove`와 합성 포인터/앵커를 사용합니다. 제품의 `CountCharacters`는 공백과 줄바꿈을 제외한 문자 수를 반환하므로 길이 29인 샘플의 제품 알림은 25자입니다. `Sample` 상수와 `CountCharacters(Sample)`를 함께 사용합니다.
+텍스트 샘플은 `npm run build\nBuild completed`입니다. 실제 제품 문자수 함수는 공백과 줄바꿈을 제외하여 25자를 반환합니다. 선택 박스는 두 번째 줄의 실제 글자 높이와 4px 여백을 포함합니다. 녹화 선택은 제품의 plain recording instruction을 사용하며 시작/중지 버튼의 클릭 구간이 끝난 뒤 다음 상태로 전환합니다. 모자이크는 제품 `ApplyMosaic`와 같은 14px 블록 평균/블록 복제 계산을 사용합니다. 회전 결과는 회전각의 외곽 크기를 기준으로 viewport에 균일 비율로 맞춥니다.
 
-기준: `2bb6cd6`, 제품 `b4ae87e`, QA13 published payload. friend assembly `MyCapture.App.Tests` 이름은 기존 내부 렌더러와 GIF API 접근에만 사용합니다. 기존 11frame AS-IS와 모든 실패/완료 시도는 `review/`, ignored attempt 폴더와 Git 이전 커밋에 보존합니다.
+프레임별 RGB 빈도 상위 256색과 가장 가까운 RGB로 디더링 없이 전체 불투명 Indexed8 프레임을 만들고 제품 `AnimatedGifWriter.AddEncodedFrame`과 WPF GIF encoder로 저장합니다. 실제 최종 디코딩 검사: 정확한 크기·지연·무한 반복 NETSCAPE 메타데이터·전체 프레임/오프셋0·disposal1·모든 알파255·≤160프레임·≤3MiB 자산·≤40MiB decoded Indexed8 payload·모션 구간의 실제 프레임 변화 및 ≤25px 최대 포인터 간격·제품 타임라인 경계/반복·제품 플레이어 탐색/재생/정지. preflight는 프레임 수/총시간/좌표 간격/키프레임 인덱스를 먼저 확인하며 실제 decode 검사를 대신하지 않습니다.
 
-PowerShell 작업 위치 `C:/GitRepositories/my-capture-edit-recovery`:
+기준은 `2bb6cd6`/제품 `b4ae87e`/QA13 payload입니다. `MyCapture.App.Tests` assembly 이름은 기존 friend 접근 계약에 사용합니다. 작업 위치는 `C:/GitRepositories/my-capture-edit-recovery`입니다.
 
 ```powershell
 dotnet build build/tools/TutorialGifGenerator/TutorialGifGenerator.csproj -c Release -v q -nologo -p:AppPayload=C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial
-dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconfig.json build/tools/TutorialGifGenerator/bin/Release/net10.0-windows10.0.22000.0/MyCapture.App.Tests.dll C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial C:/GitRepositories/my-capture-edit-recovery/build/tools/TutorialGifGenerator/review-attempt-smooth-2
+
+# 전체 계획 검사. 출력 폴더는 매번 새 경로를 사용합니다.
+dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconfig.json build/tools/TutorialGifGenerator/bin/Release/net10.0-windows10.0.22000.0/MyCapture.App.Tests.dll C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial C:/GitRepositories/my-capture-edit-recovery/build/tools/TutorialGifGenerator/review-attempt-preflight-new preflight:all
+
+# 전체 76개 생성. 마지막 인수를 생략하거나 all로 지정합니다.
+dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconfig.json build/tools/TutorialGifGenerator/bin/Release/net10.0-windows10.0.22000.0/MyCapture.App.Tests.dll C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial C:/GitRepositories/my-capture-edit-recovery/build/tools/TutorialGifGenerator/review-attempt-all-new all
+
+# 지정 기능만 두 언어로 생성합니다.
+dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconfig.json build/tools/TutorialGifGenerator/bin/Release/net10.0-windows10.0.22000.0/MyCapture.App.Tests.dll C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial C:/GitRepositories/my-capture-edit-recovery/build/tools/TutorialGifGenerator/review-attempt-subset-new record-region,image-mosaic,video-trim
 ```
 
-`fixture.runtimeconfig.json`은 설치된 .NET Core/WindowsDesktop 10.0.11 양쪽과 `rollForward: Disable`을 지정합니다. `RuntimeFrameworkVersion` MSBuild 속성은 Windows SDK 참조 버전과 충돌하므로 사용하지 않습니다. published payload 자체는 self-contained 설정이므로 실행 호스트 설정으로 사용하지 않습니다.
+위 `new` 명령은 재현용 예시이며 실행 기록은 [smooth-development-log.md](smooth-development-log.md)에 있습니다. CLI는 `payload output [all|ID,ID|preflight:all|preflight:ID,ID]`를 받습니다. 이미 존재하는 출력 폴더는 모든 시도를 보존하기 위해 거부합니다. `fixture.runtimeconfig.json`은 설치된 .NET Core/WindowsDesktop 10.0.11 양쪽과 `rollForward: Disable`을 지정합니다. self-contained payload의 runtimeconfig나 전역 `RuntimeFrameworkVersion`은 실행 설정으로 사용하지 않습니다.
 
-출력 폴더가 이미 있으면 실행을 거부합니다. 모든 시도, 출력, 작업 사본을 보존하며 파일 정리·삭제를 수행하지 않습니다. 출력에는 실제 GIF에서 디코딩한 단계 키프레임 6장/컨택트 시트, 동작 키프레임 9장/3×3 시트, SHA256·프레임·지연·메모리·진행률·포인터·런타임 영수증을 보관합니다. 제품에는 `Assets/Tutorials/*.gif`만 포함합니다.
-
-검증 항목: 640×360, ≤160프레임, 10–12초, ≤3MiB, 정확한 지연과 동작구간25fps, 무한 반복 NETSCAPE 메타데이터, 전체 크기/오프셋 0, disposal 1, 모든 알파 255, ≤40MiB 디코딩 메모리, 모든 동작 구간의 실제 프레임 변화/최대 포인터 간격, 제품 타임라인의 모든 경계 및 반복, 제품 플레이어의 모든 프레임 탐색·재생·정지. 실제 animated native pilot 검토와 제품 전체 OCR·UI·실기 검증은 통합 작업에서 수행합니다.
+출력에는 자산별 storyboard, SHA256/전체 frameSHA/지연/동작/메모리/런타임/timing receipt, 실제 GIF의 decoded keyframe PNG와 contact/motion sheet가 있습니다. 실패 시 가능한 raw decode metrics와 failure receipt를 남깁니다. 기존 11frame AS-IS 및 모든 실패/완료 attempt와 작업 사본을 보존합니다. 제품에는 `Assets/Tutorials/*.gif`를 포함하고 개발 자료는 generator의 LOG/review에 보관합니다. 최종 selected-source manifest는 76개 원본 경로·receipt·SHA·bytes·frames·duration·decoded bytes와 제품에 복사한 hash를 연결합니다.

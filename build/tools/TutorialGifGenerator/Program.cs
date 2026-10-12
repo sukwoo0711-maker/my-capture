@@ -1,4 +1,5 @@
 using System.IO;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -22,7 +23,9 @@ internal static class Program
     {
         string output = Path.GetFullPath(args[1]);
         if (Directory.Exists(output)) throw new IOException("Use a new output folder to preserve every authoring attempt.");
-        string[] features = args.Length > 2 ? args[2].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : AllFeatures;
+        bool preflight = args.Length > 2 && args[2].StartsWith("preflight:", StringComparison.Ordinal);
+        string requested = args.Length > 2 ? preflight ? args[2][10..] : args[2] : "all";
+        string[] features = requested == "all" ? AllFeatures : requested.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (features.Length == 0 || features.Distinct().Count() != features.Length || features.Except(AllFeatures).Any()) throw new ArgumentException("Unknown or duplicate feature ID.");
         Directory.CreateDirectory(output);
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -32,15 +35,33 @@ internal static class Program
                 app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{resource}.xaml") });
             ThemeService.Apply(AppTheme.Midnight);
             var receipts = new List<object>();
+            var preflightFailures = new List<string>();
             foreach (string feature in features)
                 foreach (string language in new[] { "ko", "en" })
                 {
-                    receipts.Add(ProcessAsset(feature, language, args[0], output));
+                    if (preflight)
+                    {
+                        using var languageScope = UiText.UseLanguage(language);
+                        using var renderer = CreateRenderer(feature, language);
+                        var budget = TutorialGifPipeline.Preflight(renderer.Storyboard);
+                        File.WriteAllText(Path.Combine(output, $"{feature}.{language}.preflight.json"), JsonSerializer.Serialize(budget, JsonOptions), new UTF8Encoding(false));
+                        string? failure = null;
+                        try
+                        {
+                            TutorialGifPipeline.RequirePreflight(renderer.Storyboard);
+                            if (renderer.KeyFrames.Any(index => index < 0 || index >= renderer.Storyboard.Frames.Count)) throw new InvalidDataException("Review keyframe outside storyboard");
+                        }
+                        catch (InvalidDataException error) { failure = error.Message; preflightFailures.Add($"{feature}.{language}: {failure}"); }
+                        receipts.Add(new { Feature = feature, Language = language, Budget = budget, Failure = failure });
+                        Console.WriteLine($"PREFLIGHT={(failure is null ? "PASS" : "FAIL")} ID={feature} LANGUAGE={language} FRAMES={renderer.Storyboard.Frames.Count} DURATION_MS={renderer.Storyboard.DurationMs} {failure}");
+                    }
+                    else receipts.Add(ProcessAsset(feature, language, args[0], output));
                     // No decoded asset or renderer survives this boundary. A catalog does not preload GIFs.
                     GC.Collect(); GC.WaitForPendingFinalizers();
                 }
-            File.WriteAllText(Path.Combine(output, "receipt.json"), JsonSerializer.Serialize(new { SourceRevision = "2bb6cd6 (product b4ae87e, QA13)", Payload = Path.GetFullPath(args[0]), PayloadSha256 = Hash(Path.Combine(args[0], "MyCapture.dll")), Framework = RuntimeInformation.FrameworkDescription, Features = features, Count = receipts.Count, Receipts = receipts }, JsonOptions), new UTF8Encoding(false));
-            Console.WriteLine($"RESULT=PASS FEATURES={features.Length} LANGUAGES=2 ASSETS={receipts.Count} SIZE={Width}x{Height}");
+            File.WriteAllText(Path.Combine(output, "receipt.json"), JsonSerializer.Serialize(new { SourceRevision = "2bb6cd6 (product b4ae87e, QA13)", Payload = Path.GetFullPath(args[0]), PayloadSha256 = Hash(Path.Combine(args[0], "MyCapture.dll")), Framework = RuntimeInformation.FrameworkDescription, Features = features, Count = receipts.Count, PreflightFailures = preflightFailures, Receipts = receipts }, JsonOptions), new UTF8Encoding(false));
+            if (preflightFailures.Count > 0) return 1;
+            Console.WriteLine($"RESULT=PASS MODE={(preflight ? "PREFLIGHT" : "RENDER")} FEATURES={features.Length} LANGUAGES=2 ASSETS={receipts.Count} SIZE={Width}x{Height}");
             return 0;
         }
         finally { app.Shutdown(); }
@@ -58,8 +79,21 @@ internal static class Program
         using var renderer = CreateRenderer(feature, language);
         if (renderer.Id != feature) throw new InvalidDataException("Renderer identity");
         string gif = Path.Combine(output, $"{feature}.{language}.gif");
+        DateTimeOffset started = DateTimeOffset.UtcNow;
+        File.WriteAllText(Path.Combine(output, $"{feature}.{language}.storyboard.json"), JsonSerializer.Serialize(new { Feature = feature, Language = language, StartedUtc = started, WorkingDirectory = Directory.GetCurrentDirectory(), Command = Environment.GetCommandLineArgs(), Budget = TutorialGifPipeline.Preflight(renderer.Storyboard), Frames = renderer.Storyboard.Frames }, JsonOptions), new UTF8Encoding(false));
+        TutorialGifPipeline.RequirePreflight(renderer.Storyboard);
+        var stopwatch = Stopwatch.StartNew();
         TutorialGifPipeline.Generate(renderer, gif);
-        object validation = TutorialGifPipeline.Validate(gif, language, renderer.Storyboard, out GifSampleFrames preview);
+        long generatedMs = stopwatch.ElapsedMilliseconds;
+        object validation;
+        GifSampleFrames preview;
+        try { validation = TutorialGifPipeline.Validate(gif, language, renderer.Storyboard, out preview); }
+        catch (Exception failure)
+        {
+            File.WriteAllText(Path.Combine(output, $"{feature}.{language}.failure.json"), JsonSerializer.Serialize(new { Feature = feature, Language = language, Failure = failure.ToString(), Bytes = new FileInfo(gif).Length, Sha256 = Hash(gif), GeneratedMs = generatedMs, StartedUtc = started, WorkingDirectory = Directory.GetCurrentDirectory(), Command = Environment.GetCommandLineArgs() }, JsonOptions), new UTF8Encoding(false));
+            throw;
+        }
+        long validatedMs = stopwatch.ElapsedMilliseconds - generatedMs;
         int[] keys = renderer.KeyFrames.Distinct().ToArray();
         foreach (int i in keys) SavePng(preview.Frames[i], Path.Combine(output, $"{feature}.{language}.frame-{i:000}.png"));
         SaveSheet(preview.Frames, keys, 2, Path.Combine(output, $"{feature}.{language}.contact-sheet.png"));
@@ -68,6 +102,7 @@ internal static class Program
         var receipt = new
         {
             Feature = feature, Language = language, Validation = validation,
+            StartedUtc = started, CompletedUtc = DateTimeOffset.UtcNow, GenerateMs = generatedMs, ValidateMs = validatedMs, WorkingDirectory = Directory.GetCurrentDirectory(), Command = Environment.GetCommandLineArgs(),
             Payload = Path.GetFullPath(payload), PayloadSha256 = Hash(Path.Combine(payload, "MyCapture.dll")), Framework = RuntimeInformation.FrameworkDescription,
             Provenance = feature == "text-copy" ? "Actual CaptureOverlayView + CaptureModeBar + product notification content/styles; synthetic terminal and note." : CaptureSceneRenderer.Features.Contains(feature) ? "Actual CaptureOverlayView/ModeBar/selection cues where applicable; product CountdownWindow.Content and paused-frame brush; synthetic desktop, recording strip/result viewer and scrolling document." : WorkspaceSceneRenderer.Features.Contains(feature) ? "Actual PinWindow.Content, PinHoverBar.Content, ClipboardTextRenderer, QuickAccessWindow.Content and GalleryFolderEditDialog.Content; product themed controls; condensed library fixture follows GalleryWindow.xaml header/folder rail/cards, transaction results illustrated." : "Feature renderer uses product drawing/annotation/video UI resources over synthetic media; see renderer source and development LOG.",
             Fixture = "Offscreen illustrative tutorial; no Window.Show/App.Run, native input/desktop acquisition, OCR/clipboard transaction, user profile/persistence or actual file removal. UI state and results are scripted fixture data. Captions contain usage instructions only.",

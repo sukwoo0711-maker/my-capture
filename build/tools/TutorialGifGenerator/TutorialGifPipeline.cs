@@ -25,6 +25,25 @@ using static TutorialDrawing;
 
 internal static class TutorialGifPipeline
 {
+    internal static object Preflight(TutorialStoryboard story) => new
+    {
+        Frames = story.Frames.Count, story.DurationMs, MotionFrames = story.Frames.Count(frame => frame.DelayCentiseconds == 4),
+        MotionSegments = story.Frames.Select((frame, index) => (frame, index)).Where(item => item.frame.DelayCentiseconds == 4)
+            .GroupBy(item => item.frame.Segment).Select(group => new
+            {
+                Segment = group.Key, Frames = group.Count(), Start = group.First().index, End = group.Last().index,
+                MaximumCursorStep = group.Zip(group.Skip(1), (a, b) => Math.Sqrt(Math.Pow(a.frame.Cursor.X - b.frame.Cursor.X, 2) + Math.Pow(a.frame.Cursor.Y - b.frame.Cursor.Y, 2))).DefaultIfEmpty().Max(),
+            }),
+    };
+    internal static void RequirePreflight(TutorialStoryboard story)
+    {
+        Require(story.Frames.Count <= 160 && story.DurationMs is >= 10000 and <= 12000, "Storyboard frame/duration budget");
+        foreach (var group in story.Frames.Where(frame => frame.DelayCentiseconds == 4).GroupBy(frame => frame.Segment))
+        {
+            double maximum = group.Zip(group.Skip(1), (a, b) => Math.Sqrt(Math.Pow(a.Cursor.X - b.Cursor.X, 2) + Math.Pow(a.Cursor.Y - b.Cursor.Y, 2))).DefaultIfEmpty().Max();
+            Require(maximum <= 25, $"Storyboard continuous path: {group.Key} maximum {maximum:F4}px");
+        }
+    }
     internal static void Generate(ITutorialSceneRenderer renderer, string path)
     {
         using var stream = new FileStream(path, FileMode.CreateNew);
@@ -115,9 +134,10 @@ internal static class TutorialGifPipeline
                 Count = group.Count(), DurationMs = group.Count() * 40,
                 MaximumCursorStep = group.Zip(group.Skip(1), (a, b) => Math.Sqrt(Math.Pow(a.frame.Cursor.X - b.frame.Cursor.X, 2) + Math.Pow(a.frame.Cursor.Y - b.frame.Cursor.Y, 2))).DefaultIfEmpty().Max(),
                 DistinctFrames = group.Select(item => hashes[item.index]).Distinct().Count(),
-            }).ToArray();
+        }).ToArray();
+        File.WriteAllText(Path.ChangeExtension(path, "decode-metrics.json"), JsonSerializer.Serialize(new { Frames = decoded.Frames.Count, memory, DurationMs = decoded.Timeline.TotalMs, MotionSegments = motionSegments, FrameSha256 = hashes }, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
         Require(motionSegments.All(segment => segment.Count >= 1 && segment.MaximumCursorStep <= 25), "Continuous eased paths");
-        Require(motionSegments.All(segment => segment.DistinctFrames >= Math.Max(1, segment.Count - 2)), "Continuous decoded cursor motion");
+        Require(motionSegments.All(segment => segment.DistinctFrames >= Math.Max(1, segment.Count - 2)), "Continuous decoded cursor motion: " + string.Join(", ", motionSegments.Where(segment => segment.DistinctFrames < Math.Max(1, segment.Count - 2)).Select(segment => $"{segment.Segment} {segment.DistinctFrames}/{segment.Count}")));
         Require(decoded.Timeline.IndexAt(decoded.Timeline.TotalMs) == 0, "Timeline loops");
         var player = new GifSamplePlayer(System.Windows.Threading.Dispatcher.CurrentDispatcher);
         player.Load(decoded.Timeline);

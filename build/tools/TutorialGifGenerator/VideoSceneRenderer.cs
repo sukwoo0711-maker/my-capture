@@ -34,9 +34,9 @@ internal sealed class VideoSceneRenderer : ITutorialSceneRenderer
             "gif-export" => new(320, 140), "frame-step" => new(108, 201),
             "trim" => new(24 + _timeline.OverviewPxForTest(3000), 251), _ => new(72, 201)
         };
-        var story = new TutorialStoryboard().Hold("ready", 120, initial).Motion("approach", 25, initial, first);
+        var story = new TutorialStoryboard().Hold("ready", 120, initial).Motion("approach", _feature == "trim" ? 20 : 25, initial, first);
         if (_feature == "gif-export") story.Hold("press", 32, first);
-        else story.Motion("press", 8, first, first, pressed: true);
+        else story.Motion("press", _feature == "trim" ? 6 : 8, first, first, pressed: true);
         PointD tail = first;
         switch (_feature)
         {
@@ -50,11 +50,11 @@ internal sealed class VideoSceneRenderer : ITutorialSceneRenderer
             case "trim":
                 PointD inPoint = new(24 + _timeline.OverviewPxForTest(2000), 251);
                 tail = new PointD(24 + _timeline.OverviewPxForTest(6000), 251);
-                story.Motion("seek-in", 25, first, inPoint).Motion("set-in", 8, inPoint, inPoint, pressed: true)
-                    .Hold("in-result", 160, inPoint).Motion("seek-out", 30, inPoint, tail)
-                    .Motion("set-out", 8, tail, tail, pressed: true).Hold("trim-result", 160, tail);
+                story.Motion("seek-in", 20, first, inPoint).Motion("set-in", 6, inPoint, inPoint, pressed: true)
+                    .Hold("in-result", 160, inPoint).Motion("seek-out", 25, inPoint, tail)
+                    .Motion("set-out", 6, tail, tail, pressed: true).Hold("trim-result", 160, tail);
                 PointD save = new(535, 40);
-                story.Motion("library-save-approach", 25, tail, save).Motion("library-save", 8, save, save, pressed: true)
+                story.Motion("library-save-approach", 20, tail, save).Motion("library-save", 6, save, save, pressed: true)
                     .Hold("library-saved", 100, save); tail = save; break;
             case "gif-export":
                 tail = new PointD(503, 231);

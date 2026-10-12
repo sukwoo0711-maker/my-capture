@@ -17,6 +17,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
     private readonly string _mosaicAsset;
     private static readonly ColorRgba Accent = ColorRgba.FromRgb(239, 68, 68);
     private static readonly PointD Origin = new(170, 110), End = new(440, 218);
+    private static readonly RectD RedactionBounds = new(110, 132, 280, 38);
     public string Id => "image-" + _feature;
     public TutorialStoryboard Storyboard { get; }
     public IReadOnlyList<int> KeyFrames => [0, Math.Min(34, Storyboard.Frames.Count - 1), Storyboard.Frames.Count - 2, Storyboard.Frames.Count - 1];
@@ -39,7 +40,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
         if (_feature == "pen") { start = new(170, 170); finish = new(440, 170); }
         if (_feature == "highlighter") { start = new(170, 152); finish = new(440, 152); }
         if (_feature == "step-number") { start = new(198, 141); finish = new(423, 201); }
-        if (_feature is "mosaic" or "blur") { start = new(182, 182); finish = new(462, 220); }
+        if (_feature is "mosaic" or "blur") { start = new(72 + RedactionBounds.X, 65 + RedactionBounds.Y); finish = new(start.X + RedactionBounds.Width, start.Y + RedactionBounds.Height); }
         if (_feature == "crop") { start = new(142, 92); finish = new(482, 242); }
         if (_feature == "rotate") { tool = new(320, 160); start = tool; finish = tool; }
         if (_feature is "save" or "copy") { tool = new(_feature == "save" ? 305 : 481, 40); start = tool; finish = tool; }
@@ -124,13 +125,19 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
                     "left-result" or "right-approach" or "right-press" => -90,
                     "turn-right" => -90 + 90 * TutorialStoryboard.SmoothStep(frame.Progress), _ => 0
                 };
+                double radians = angle * Math.PI / 180;
+                double rotatedWidth = 500 * Math.Abs(Math.Cos(radians)) + 205 * Math.Abs(Math.Sin(radians));
+                double rotatedHeight = 500 * Math.Abs(Math.Sin(radians)) + 205 * Math.Abs(Math.Cos(radians));
+                double fit = Math.Min(500 / rotatedWidth, 205 / rotatedHeight);
+                dc.PushTransform(new ScaleTransform(fit, fit, 250, 102.5));
                 dc.PushTransform(new RotateTransform(angle, 250, 102.5));
                 dc.DrawImage(_sample, new Rect(0, 0, 500, 205));
+                dc.Pop();
                 dc.Pop();
             }
             else dc.DrawImage(_sample, new Rect(0, 0, 500, 205));
             var document = BuildDocument(progress);
-            if (_feature == "mosaic" && progress > 0) dc.PushClip(new RectangleGeometry(new Rect(110, 117, Math.Max(1, 280 * progress), Math.Max(1, 38 * progress))));
+            if (_feature == "mosaic" && progress > 0) dc.PushClip(new RectangleGeometry(new Rect(RedactionBounds.X, RedactionBounds.Y, Math.Max(1, RedactionBounds.Width * progress), Math.Max(1, RedactionBounds.Height * progress))));
             _renderer.Render(dc, document, 1, blurSource: _sample);
             if (_feature == "mosaic" && progress > 0) dc.Pop();
             dc.Pop(); dc.Pop();
@@ -194,8 +201,8 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
             case "step-number":
                 int count = p < .5 ? 1 : 2;
                 for (int i = 0; i < count; i++) document.Add(new TextAnnotation { IsStepNumber = true, Text = (i + 1).ToString(), Rect = new RectD(110 + i * 225, 60 + i * 60, 32, 32), FontSize = 22, Foreground = ColorRgba.White, Background = Accent, HasOutline = false }); break;
-            case "blur": document.Add(new BlurAnnotation { Rect = new RectD(110, 117, Math.Max(1, 280 * p), Math.Max(1, 38 * p)), Radius = 12 }); break;
-            case "mosaic": document.Add(new ImageAnnotation { Rect = new RectD(110, 117, 280, 38), SourceWidth = _mosaic.PixelWidth, SourceHeight = _mosaic.PixelHeight, AssetFileName = _mosaicAsset }); break;
+            case "blur": document.Add(new BlurAnnotation { Rect = new RectD(RedactionBounds.X, RedactionBounds.Y, Math.Max(1, RedactionBounds.Width * p), Math.Max(1, RedactionBounds.Height * p)), Radius = 12 }); break;
+            case "mosaic": document.Add(new ImageAnnotation { Rect = RedactionBounds, SourceWidth = _mosaic.PixelWidth, SourceHeight = _mosaic.PixelHeight, AssetFileName = _mosaicAsset }); break;
             case "save":
             case "copy": document.Add(new RectangleAnnotation { Rect = new RectD(98, 45, 270, 108), Stroke = Accent, StrokeThickness = 4 }); break;
         }
@@ -284,12 +291,47 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
 
     private static BitmapSource MakeMosaic(BitmapSource source)
     {
-        // Baked image asset follows the product mosaic model. Sampling is confined to the selected rectangle.
-        var patch = new CroppedBitmap(source, new Int32Rect(110, 117, 280, 38));
-        var reduced = new TransformedBitmap(patch, new ScaleTransform(1d / 14, 1d / 14));
-        var visual = new DrawingVisual(); RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.NearestNeighbor);
-        using (var dc = visual.RenderOpen()) dc.DrawImage(reduced, new Rect(0, 0, 280, 38));
-        var result = new RenderTargetBitmap(280, 38, 96, 96, PixelFormats.Pbgra32); result.Render(visual); result.Freeze(); return result;
+        // Same box-average and block fill as AnnotationEditorControl.ApplyMosaic.
+        // No transformed-bitmap resampling can blur the 14-pixel block boundaries.
+        const int step = 14;
+        int x = (int)RedactionBounds.X, y = (int)RedactionBounds.Y;
+        int width = (int)RedactionBounds.Width, height = (int)RedactionBounds.Height;
+        int stride = source.PixelWidth * 4, patchStride = width * 4;
+        byte[] input = new byte[stride * source.PixelHeight], patch = new byte[patchStride * height];
+        source.CopyPixels(input, stride, 0);
+        for (int by = 0; by < height; by += step)
+        {
+            int blockH = Math.Min(step, height - by);
+            for (int bx = 0; bx < width; bx += step)
+            {
+                int blockW = Math.Min(step, width - bx);
+                long sumB = 0, sumG = 0, sumR = 0, count = 0;
+                for (int py = 0; py < blockH; py++)
+                    for (int px = 0; px < blockW; px++)
+                    {
+                        int i = (y + by + py) * stride + (x + bx + px) * 4;
+                        if (input[i + 3] == 0) continue;
+                        sumB += input[i]; sumG += input[i + 1]; sumR += input[i + 2]; count++;
+                    }
+                if (count == 0) continue;
+                byte b = (byte)(sumB / count), g = (byte)(sumG / count), r = (byte)(sumR / count);
+                for (int py = 0; py < blockH; py++)
+                    for (int px = 0; px < blockW; px++)
+                    {
+                        int i = (by + py) * patchStride + (bx + px) * 4;
+                        patch[i] = b; patch[i + 1] = g; patch[i + 2] = r; patch[i + 3] = 255;
+                    }
+                for (int py = 0; py < blockH; py++)
+                    for (int px = 0; px < blockW; px++)
+                    {
+                        int i = (by + py) * patchStride + (bx + px) * 4;
+                        if (patch[i] != b || patch[i + 1] != g || patch[i + 2] != r || patch[i + 3] != 255)
+                            throw new InvalidOperationException("Opaque constant mosaic block");
+                    }
+            }
+        }
+        var result = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, patch, patchStride);
+        result.Freeze(); return result;
     }
     private string L(string ko, string en) => _ko ? ko : en;
     private string ToolName() => _feature switch
