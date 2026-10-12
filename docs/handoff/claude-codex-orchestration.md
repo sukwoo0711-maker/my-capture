@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `release/store-4.1.2` (4.1.2 배포 후보 작성·완성 파일 실기 성능 검증 완료) |
+| 현재 기록 브랜치 | `fix/store-update-continuity` (Store 업데이트 상태 보강·테스트 실행본 데이터 가져오기 구현 중) |
 | 4.1.2 배포 후보 소스 | `release/store-4.1.2-source` / `61e19e3e287c41abca92b70332c6ceb1413339bf`, 로컬 검증·MSIX 생성 완료, Store 미제출 |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
@@ -48,6 +48,14 @@
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
+
+### 진행 중 — Store 교체 업데이트와 기존 테스트 데이터 보존 (2026-10-13)
+
+- 사용자 답변으로 **Store 버전과 테스트 실행본 데이터 모두 보존**하는 범위를 확정했습니다. 같은 패키지의 업데이트는 제거 없이 새 버전으로 교체하며, 별도 `%APPDATA%/MyCapture`의 테스트 데이터는 복사·병합하는 경로를 추가합니다. 사용자 지정 테스트 데이터 루트는 직접 선택할 수 있도록 합니다.
+- 기존 검증된 4.1.2 소스·실행 파일·MSIX는 아래 경로에 그대로 보존하며, 새 변경은 아직 해당 바이너리에 포함되지 않았습니다. 기존 폴더를 Explorer에서 열고 경로를 확인했습니다. 설치된 Store 패키지의 실제 버전은 4.0.3.0/PFN `sukwoo0711.MyCapture_n98e1tgx2qxb2`입니다.
+- 업데이트 진행 콜백 격리·예외 복구·접근성 도움말 수정은 `9305935`로 통합했습니다. worker 집중 App12/12·Localization13/13 PASS, 직접 diff/전후 PNG 및 독립 검토 완료. 같은 LocalState 기본/외부 captures 보존 회귀는 `8ae4956`, worker Core2/2 PASS입니다. 전체 통합 검증은 최종 이관 코드 뒤에 실행합니다.
+- 이관 계약 `b3bc471`: 원본 읽기 전용, 파일 복사·해시 검증, 기존 Store 항목 보존, 중복·충돌·중단 복구, 사진/영상/주석/폴더 보존. Core는 현재 설정을 저장하지 않으며 이전 설정 백업 경로만 반환합니다. 선택한 설정은 UI의 적용 전 초안으로 불러오고 기존 적용 절차를 사용합니다. Store 저장 위치·현재 라이브러리 정책·Store 관측·자격 증명은 유지합니다.
+- Core/API·회귀는 기존 icons worktree, App/설정/이관 화면·실기 호스트는 기존 tutorial_ui worktree, 독립 검토는 tutorial_asset에 배정했습니다. CPU/native 검사는 직렬입니다. 실제 명령·결과·승인 범위는 `artifacts/store-update-continuity/development-log.txt`에 기록합니다. 현재 Store 업로드·설치/제거는 수행하지 않았습니다.
 
 ### 다음 배포 4.1.2 — 작성·필수 검사·완성 파일 실기 성능 검사 완료
 
@@ -456,6 +464,10 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 정확한clean소스61e19e3에서 `build/package.ps1 -Version 4.1.2 -StoreOnly` session86222/77a218 exit0 8/8 PASS357files. `build/package-store.ps1 -Version 4.1.2 -PublishDir .../publish-win-x64 -OutputRoot .../store/4.1.2` 및 기존Storeidentity로MSIX생성 session38119/29cbf6 exit0. MSIX236214038B/SHA1BD2D2B22D15416105EB05F06903B2487A162F65D6BCEB1BF124034725B12644, finalDLL7CA62B8EF5C5FEEEBA389B80FB5E082AFE8930ED4A6D2D6D815F5533A7841F51. 독립python검사cd30dc exit0:357inventory·76GIF·8reports·418MSIXentry·source/runtime/deps 전체 일치. 원격업로드·설치없음.
 - 2026-10-12 Codex: 완성된동일payload에서 `powershell.exe -NoProfile -NonInteractive -File artifacts/release-4.1.2/run-final-performance.ps1` session66405/d84bbf exit0,10개명령전부exit0. 100k lines layout576.13ms/selectionsettle2.2877s,1m lines whole29.8667s/selectionsettle20.8703s,내용/undo/redo보존. OCR1mlines첫적용3.6531s. 8K1k주석편집묶음최대135.87ms/heartbeat339.76ms,4K10k주석291.67/657.93ms,복구pixelSHA동일. 실제GIF40초decoder/player재생후정지/해제. Search CPUde55e8·Gallerysession94643/7e1cbd exit0,1만항목OCR검색callback중앙192.25ms/정렬최대865.91ms. 독립결과검토09bfdd/433edd/63038d/fa5aa6/d4ced6 완료, 정확성통과와잔존병목을구분했습니다.
 - 2026-10-12 Codex: `run-field-measurement.ps1` session98691/PID27048/5b239c exit0. Sky 실제화면3회coordinator획득·selector→editor→취소완료; 표시366.65/273.64/300.85ms,전환244.70/133.30/113.22ms. 실제3mouse/1drag씩이며 자동창2566×1016선택으로관측되어 연속물리드래그·작은영역정확성은별도미확인입니다. host종료와failure없음독립1d7d41/0e515e exit0. `python artifacts/release-4.1.2/finalize-evidence.py` 0ab088 exit0,성능검사후357파일·MSIX재대조완료. source보존branch release/store-4.1.2-source 생성4198ad exit0. Explorer443353524에서최종publish-win-x64폴더열기직접확인. 전체근거는 `artifacts/release-4.1.2/performance-summary.json`과개발LOG이며 기존자료/작업사본/사용자프로세스를보존했습니다.
+
+- 2026-10-13 Codex: 사용자의 실기 프로그램 위치 열기·Store 교체 업데이트·설치 상태 표시·사진/라이브러리/설정 보존 요청을 인수했습니다. 기존 검증된 4.1.2 폴더를 Sky로 활성화해 실제 경로를 확인했습니다. root/common-dir/HEAD `aa26eee`와 clean 상태를 확인한 뒤 `fix/store-update-continuity`로 분기했습니다(`696c3e`, branch 생성 성공). 설치된 Store 패키지는 `sukwoo0711.MyCapture` 4.0.3.0, PFN `sukwoo0711.MyCapture_n98e1tgx2qxb2`, Status Ok입니다(`48beaa`, exit 0). 기존 Store 상태/데이터 경로의 독립 조사를 시작했고 업데이트 예외·오래된 진행 콜백 문제의 수정은 기존 UI worker에 분리했습니다. 기존 후보·사용자 데이터·프로세스를 보존합니다.
+
+- 2026-10-13 Codex: 사용자가 Store·테스트 실행본 데이터를 모두 유지한다고 답변했습니다. `d68a580`을 `9305935`, 보존 검사 `852b3b8`을 `8ae4956`으로 통합(`7a21a5` exit0), 이관 API `cac9d1a`를 `b3bc471`로 통합(`402d13` exit0)했습니다. App 상태 worker baseline1/1·after12/12·Localization13/13 및 Core 보존2/2는 실제 exit0이며, 직접/독립 코드·전후 PNG 검토를 마쳤습니다. 이관은 원본 복사·병합과 중단 복구를 Core에서, 선택적 설정 초안·진행 UI·시작 연결을 App에서 맡습니다. 기존 후보 바이너리와 사용자 데이터는 보존하며 최종 이관·전체 검증은 진행 중입니다.
 
 ## 9. 인계 체크리스트
 
