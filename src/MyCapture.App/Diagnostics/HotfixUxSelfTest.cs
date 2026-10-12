@@ -110,6 +110,9 @@ internal static class HotfixUxSelfTest
             {
                 IntPtr inputHandle = external.Handle;
                 Check($"external text fixture PID={external.Id}, HWND={inputHandle}; separate process", external.Id != Environment.ProcessId);
+                string startupObservation = $"External input startup: {external.StartupObservation}";
+                report.AppendLine(startupObservation);
+                Console.WriteLine(startupObservation);
                 int copies = 0, saves = 0;
                 Task<bool>? lastCopy = null;
                 string dragPath = ValidatedFilePaths.FileWithinRoot(output, "native-card-drag.png", ".png");
@@ -134,6 +137,12 @@ internal static class HotfixUxSelfTest
                             string before = external.Text;
                             foreach (byte key in new byte[] { 0x43, 0x45, 0x50, 0x53 }) { SendKey(inputHandle, key); Pump(50); }
                             SendKey(inputHandle, 0x1B); Pump(50);
+                            // Read the separate process's actual text acknowledgement without resending keys.
+                            var acknowledgement = Stopwatch.StartNew();
+                            while (external.Text != before + "ceps" && acknowledgement.Elapsed < TimeSpan.FromSeconds(1)) Pump(20);
+                            string inputObservation = $"External input acknowledgement: kept={kept}; hover={hover}; elapsed={acknowledgement.Elapsed.TotalMilliseconds:0.000}ms; expected={before + "ceps"}; actual={external.Text}";
+                            report.AppendLine(inputObservation);
+                            Console.WriteLine(inputObservation);
                             Check($"kept={kept}/hover={hover}: external C/E/P/S unchanged; text={external.Text}", external.Text == before + "ceps");
                             Check($"kept={kept}/hover={hover}: no card action or Esc dismissal", copies == 0 && saves == 0 && keyboardCard.IsVisible);
                         }
@@ -658,7 +667,9 @@ internal static class HotfixUxSelfTest
         private readonly Process _process;
         internal IntPtr Handle { get; }
         internal int Id => _process.Id;
-        private ExternalInputFixture(Process process, IntPtr handle) { _process = process; Handle = handle; }
+        internal string StartupObservation { get; }
+        private ExternalInputFixture(Process process, IntPtr handle, string startupObservation)
+        { _process = process; Handle = handle; StartupObservation = startupObservation; }
         internal static ExternalInputFixture Start()
         {
             var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"))
@@ -667,11 +678,11 @@ internal static class HotfixUxSelfTest
             start.ArgumentList.Add("Add-Type -AssemblyName System.Windows.Forms; " +
                 "$f=New-Object System.Windows.Forms.Form; $f.Text='MyCapture external input measurement'; " +
                 "$f.Width=340; $f.Height=160; $f.StartPosition='Manual'; $f.Left=40; $f.Top=40; " +
-                "$t=New-Object System.Windows.Forms.TextBox; $t.Multiline=$true; $t.Dock='Fill'; $f.Controls.Add($t); " +
+                "$t=New-Object System.Windows.Forms.TextBox; $t.Multiline=$true; $t.Dock='Fill'; $t.ImeMode=[System.Windows.Forms.ImeMode]::Disable; $f.Controls.Add($t); " +
                 "$t.AllowDrop=$true; $t.Add_DragEnter({param($sender,$e) if($e.Data.GetDataPresent('FileDrop')){$e.Effect=[System.Windows.Forms.DragDropEffects]::Copy}}); " +
                 "$t.Add_DragDrop({param($sender,$e) $t.AppendText('[drop:'+($e.Data.GetData('FileDrop')[0])+']')}); " +
                 "$t.Add_KeyDown({param($sender,$e) if($e.Control -and $e.KeyCode -eq 'V' -and [System.Windows.Forms.Clipboard]::ContainsImage()){$img=[System.Windows.Forms.Clipboard]::GetImage(); $t.AppendText('[image:'+$img.Width+'x'+$img.Height+']'); $img.Dispose(); $e.SuppressKeyPress=$true}}); " +
-                "$f.Add_Shown({[System.Windows.Forms.InputLanguage]::CurrentInputLanguage=[System.Windows.Forms.InputLanguage]::FromCulture([System.Globalization.CultureInfo]::GetCultureInfo('en-US')); $f.Activate(); $t.Focus(); $f.Text='MyCapture external input measurement ready'}); " +
+                "$f.Add_Shown({[System.Windows.Forms.InputLanguage]::CurrentInputLanguage=[System.Windows.Forms.InputLanguage]::FromCulture([System.Globalization.CultureInfo]::GetCultureInfo('en-US')); $f.Activate(); $t.Focus(); $f.Text='MyCapture external input measurement; focused='+$t.Focused+'; ime='+$t.ImeMode+'; language='+[System.Windows.Forms.InputLanguage]::CurrentInputLanguage.Culture.Name+'; layout='+[System.Windows.Forms.InputLanguage]::CurrentInputLanguage.LayoutName+' ready'}); " +
                 "[System.Windows.Forms.Application]::Run($f)");
             Process process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start external input fixture.");
             try
@@ -683,11 +694,11 @@ internal static class HotfixUxSelfTest
                     if (process.HasExited) throw new InvalidOperationException("External fixture exited before showing its window.");
                     if (process.MainWindowHandle is var hwnd && hwnd != IntPtr.Zero)
                     {
-                        var title = new StringBuilder(128);
+                        var title = new StringBuilder(256);
                         _ = SendMessage(hwnd, 0x000D, new IntPtr(title.Capacity), title);
                         if (!title.ToString().EndsWith(" ready", StringComparison.Ordinal)) { Pump(50); continue; }
                         if (GetForegroundWindow() != hwnd) _ = SetForegroundWindow(hwnd);
-                        if (GetForegroundWindow() == hwnd) return new ExternalInputFixture(process, hwnd);
+                        if (GetForegroundWindow() == hwnd) return new ExternalInputFixture(process, hwnd, title.ToString());
                     }
                     Pump(50);
                 }
