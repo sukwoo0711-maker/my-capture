@@ -8,7 +8,7 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 
 | 항목 | 개발 빌드(비패키지)와 기존 GitHub 설치본 | Store 빌드 |
 |---|---|---|
-| 업데이트 | 앱 안의 업데이트 확인·다운로드 없음. 업데이트 탭에 Store 버전 설치 안내와 "Microsoft Store에서 열기" 버튼 | Microsoft Store가 업데이트. 업데이트 탭의 "Microsoft Store에서 업데이트 확인" 버튼으로 Store 앱의 MyCapture 페이지 열기 |
+| 업데이트 | 앱 안의 업데이트 확인·설치 없음. 정보 탭의 "Microsoft Store에서 열기" 버튼으로 Store 설치 페이지 열기 | Store API로 업데이트 확인·설치 요청. 앱에서 시작한 요청의 다운로드·설치 상태를 정보 탭에 표시 |
 | 로그인 시 자동 시작 | HKCU `Run` 키, 기본 켜짐 | 매니페스트 시작 작업(`MyCaptureStartup`), 기본 꺼짐 |
 | 설정·라이브러리 | `%APPDATA%\MyCapture` | `%LOCALAPPDATA%\Packages\<패키지 패밀리 이름>\LocalState` |
 | OCR 모델 | `%LOCALAPPDATA%\MyCapture\ocr-models` | 같은 패키지 폴더의 `LocalCache\ocr-models` |
@@ -16,7 +16,8 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | 빠른 저장 | `사진\Captures` | 같음 |
 | 평가 요청 | 없음 | 성공한 캡처 10회와 최초 실행 후 3일이 지나면 Microsoft Store 평가 창을 한 번만 표시. 설정 > 업데이트 탭에 "Microsoft Store에서 평가" 버튼 |
 
-- **업데이트**: 어느 빌드도 앱 안에서 업데이트를 확인하거나 내려받지 않으며, 업데이트를 위해 앱이 직접 보내는 네트워크 요청은 없습니다. 업데이트 탭의 버튼은 Microsoft Store 앱의 MyCapture 페이지(`ms-windows-store://pdp/?productid=9PB33MC095VR`)를 열고, 열 수 없으면 브라우저에서 https://apps.microsoft.com/detail/9PB33MC095VR 를 엽니다. 둘 다 열 수 없으면 설정 창 아래 상태 줄에 주소를 표시합니다. GitHub 업데이트 코드는 소스에 남아 있지만 화면에 연결하지 않습니다.
+- **업데이트**: Store 설치본은 `Windows.Services.Store` API로 업데이트를 확인하고 사용자 요청에 따라 설치합니다. Microsoft Store/Windows가 다운로드·패키지 교체와 설치 동의를 처리합니다. 앱에서 시작한 요청은 정보 탭에서 다운로드·설치 상태를 확인할 수 있습니다. 설치 중 MyCapture가 종료될 수 있으며 다음 실행에서 실제 버전 상승을 확인한 뒤 완료를 안내합니다. Microsoft Store에서 직접 시작한 업데이트의 진행 상태는 Store 화면에서 확인합니다. 같은 패키지 패밀리의 업데이트는 LocalState를 유지하므로 기존 앱을 먼저 제거하지 않습니다. 비패키지 실행본의 버튼은 Store 설치 페이지(`ms-windows-store://pdp/?productid=9PB33MC095VR`)를 열고, 실패하면 웹 주소 https://apps.microsoft.com/detail/9PB33MC095VR 를 엽니다. 두 경로 모두 실패하면 설정 창에 주소를 표시합니다. GitHub 업데이트 코드는 화면에 연결하지 않습니다.
+- **기존 데이터 가져오기**: Store 설치본의 설정 > 정보에서 이전 실행본의 사진·영상·주석·폴더를 현재 라이브러리로 복사합니다. 기본 위치는 `%APPDATA%\MyCapture`이며, `MYCAPTURE_DATA_ROOT`로 따로 지정했던 테스트 데이터 폴더도 직접 선택할 수 있습니다. 원본과 현재 라이브러리의 기존 항목은 보존합니다. **설정도 불러오기**를 선택하면 설정을 초안으로 불러오며, **적용**을 눌러 저장합니다. 현재 저장 위치·라이브러리 보존 정책·계정 인증 정보·자동 시작 선택은 유지합니다.
 - **평가 요청**: 요청 시점을 정하려고 성공한 캡처 수(최대 10), 최초 실행 시각, 직전 캡처 실패 여부, 요청 시각을 `settings.json`의 `storeRating`에만 저장하며 어디에도 전송하지 않습니다. 요청은 오버레이·편집기·녹화·빠른 작업 카드가 모두 닫힌 뒤 비차단으로 한 번만 시도하고, 결과와 관계없이 다시 묻지 않습니다. 평가 창과 평가 내용은 Microsoft Store가 처리합니다.
 - **PrintScreen 안내**: 단축키에 PrintScreen을 지정하면 `HKCU\Control Panel\Keyboard`의 `PrintScreenKeyForSnippingEnabled` 값을 읽기만 해서, Windows가 PrtSc로 캡처 도구를 여는 상태인지 판단합니다. 값이 없으면 빌드 22621 이상에서 켜짐으로 봅니다. 값을 바꾸지 않고 Windows 설정 바로 가기만 제공합니다.
 - **자동 시작**: 패키지 앱이 `Run` 키에 쓴 값은 가상화되어 로그인할 때 실행되지 않습니다. Store 정책 10.2.8은 Windows 시작 동작을 바꾸기 전에 사용자 동의를 요구합니다. 그래서 시작 작업은 꺼진 상태로 배포됩니다. 사용자가 MyCapture 설정이나 Windows 설정 > 앱 > 시작 프로그램에서 직접 켭니다. 앱 설정의 체크 상태는 Windows의 실제 상태를 따릅니다.
