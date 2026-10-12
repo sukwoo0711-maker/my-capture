@@ -39,10 +39,10 @@ dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconf
 
 출력에는 자산별 storyboard, SHA256/전체 frameSHA/지연/동작/메모리/런타임/timing receipt, 실제 GIF의 decoded keyframe PNG와 contact/motion sheet가 있습니다. 실패 시 가능한 raw decode metrics와 failure receipt를 남깁니다. 기존 11frame AS-IS 및 모든 실패/완료 attempt와 작업 사본을 보존합니다. 제품에는 `Assets/Tutorials/*.gif`를 포함하고 개발 자료는 generator의 LOG/review에 보관합니다. 최종 selected-source manifest는 76개 원본 경로·receipt·SHA·bytes·frames·duration·decoded bytes와 제품에 복사한 hash를 연결합니다.
 
-最終選択と製品配置は `AssembleManifest.ps1` で再現できます。各生成時の実際のdecode検査receiptを照合し、76assetのhash/予算/payloadを確認してからコピーします。output folderは新しい絶対pathを指定します。既存product text2GIFは内容更新前にoutputの`as-is`へコピー保存します。
+최종 선택과 제품 배치는 `AssembleManifest.ps1`로 재현할 수 있습니다. 각 생성 시 수행한 실제 디코딩 검사 영수증을 대조하고 76개 자산의 hash·예산·payload를 확인한 뒤 복사합니다. 출력 폴더는 새 절대 경로를 지정합니다. 기존 제품 text GIF 2개는 내용 갱신 전에 출력의 `as-is`로 복사 보존합니다.
 
 ```powershell
 & ./build/tools/TutorialGifGenerator/AssembleManifest.ps1 -OutputDirectory C:/GitRepositories/my-capture-edit-recovery/build/tools/TutorialGifGenerator/review-final-new -CopyAssets
 ```
 
-最終集計: 76 GIF、129,867,958B、7,080frames。最大1GIFは3,014,188B/156frames/35,942,400B decoded payloadです。`review-smooth-final/selected-source-manifest.json` とCSVで実際に採用したbatch2/3/4/5/6/7/8のoriginal GIF/receipt path、destinationhashを確認できます。元の11frame text GIFも同directoryの`as-is`に物理保存しています。
+최종 집계: 76 GIF, 129,867,958B, 7,080프레임. 최대 1GIF는 3,014,188B/156프레임/35,942,400B decoded payload입니다. `review-smooth-final/selected-source-manifest.json`과 CSV에서 실제 채택한 batch2/3/4/5/6/7/8의 원본 GIF·receipt 경로와 destination hash를 확인할 수 있습니다. 기존 11프레임 text GIF도 같은 폴더의 `as-is`에 물리 보존했습니다.
