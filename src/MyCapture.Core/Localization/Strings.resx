@@ -3557,6 +3557,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="StoreUpdate_Check" xml:space="preserve"><value>업데이트 확인</value></data>
   <data name="StoreUpdate_CheckHelp" xml:space="preserve"><value>Microsoft Store에서 이 앱의 업데이트를 확인합니다.</value></data>
   <data name="StoreUpdate_Install" xml:space="preserve"><value>업데이트 설치</value></data>
+  <data name="StoreUpdate_InstallHelp" xml:space="preserve"><value>작업을 저장한 뒤 Microsoft Store를 통해 업데이트를 설치합니다.</value></data>
   <data name="StoreUpdate_CompletedVersion" xml:space="preserve"><value>{0} 버전으로 업데이트됨</value></data>
   <data name="StoreUpdate_StateIdle" xml:space="preserve"><value>업데이트 미확인</value></data>
   <data name="StoreUpdate_StateChecking" xml:space="preserve"><value>업데이트 확인 중</value></data>

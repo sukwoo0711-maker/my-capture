@@ -25,6 +25,10 @@ public sealed partial class SettingsThemePreviewTests
         RunIsolated(nameof(UpdateTab_OpensTheMicrosoftStoreListing_InEveryBuild), VerifyStoreUpdateTab);
 
     [Fact]
+    public Task StoreUpdate_RejectsPreviousProgressAndResetsFailedAttempts() =>
+        RunIsolated(nameof(StoreUpdate_RejectsPreviousProgressAndResetsFailedAttempts), VerifyStoreUpdateOperationBoundaries);
+
+    [Fact]
     public Task EngagementNotice_IsInlineDismissibleAndOnlyChosenReviewRequests() =>
         RunIsolated(nameof(EngagementNotice_IsInlineDismissibleAndOnlyChosenReviewRequests), VerifyEngagementNotice);
 
@@ -197,13 +201,122 @@ public sealed partial class SettingsThemePreviewTests
         public bool Available;
         public IProgress<StoreUpdateSnapshot>? Progress;
         public TaskCompletionSource<StoreUpdatePhase>? Completion;
-        public Task<bool> CheckAsync() { Checks++; return Task.FromResult(Available); }
+        public TaskCompletionSource<bool>? CheckCompletion;
+        public Task<bool> CheckAsync()
+        {
+            Checks++;
+            return CheckCompletion?.Task ?? Task.FromResult(Available);
+        }
         public Task<StoreUpdatePhase> InstallAsync(IProgress<StoreUpdateSnapshot> progress)
         {
             Installs++; Progress = progress;
             Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
             return Completion.Task;
         }
+    }
+
+    private static void VerifyStoreUpdateOperationBoundaries()
+    {
+        Application application = CreateThemedApplication();
+        AppPackage.IsPackagedOverride = true;
+        try
+        {
+            foreach (string locale in new[] { "ko-KR", "en-US" })
+            {
+                using var language = UiText.UseLanguage(locale);
+                var settings = new AppSettings();
+                SettingsWindow window = CreateOffscreenSettingsWindow(settings);
+                SynchronizationContext? previous = SynchronizationContext.Current;
+                SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(window.Dispatcher));
+                try
+                {
+                    window.Show();
+                    var state = (TextBlock)window.FindName("UpdateObservedStatus");
+                    var action = (Button)window.FindName("UpdateAction");
+                    var progress = (ProgressBar)window.FindName("UpdateProgress");
+                    var fake = new ObservableStoreUpdates { Available = true };
+                    window.StoreUpdates = fake;
+                    int persisted = 0, released = 0;
+                    window.PrepareStoreUpdate = () => Task.FromResult(true);
+                    window.FinishStoreUpdate = () => released++;
+                    window.PersistStoreUpdateForTest = () => persisted++;
+                    Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+                    Assert.Equal(UiText.Get("StoreUpdate_InstallHelp"), AutomationProperties.GetHelpText(action));
+
+                    Task failed = window.RunStoreUpdateActionAsync();
+                    IProgress<StoreUpdateSnapshot> failedObserver = fake.Progress!;
+                    Assert.NotNull(settings.StoreUpdate.PendingFromVersion);
+                    fake.Completion!.SetException(new IOException("Store transport failure"));
+                    PumpUntil(window, failed);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
+                    Assert.Null(settings.StoreUpdate.PendingFromVersion);
+                    Assert.Equal(2, persisted);
+                    Assert.Equal(1, released);
+                    Assert.True(window.IsEnabled);
+                    Assert.Equal(UiText.Get("StoreUpdate_Check"), action.Content);
+                    Assert.Equal(UiText.Get("StoreUpdate_CheckHelp"), AutomationProperties.GetHelpText(action));
+
+                    // A prior observer must not overwrite the next asynchronous check, even when busy.
+                    fake.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    Task check = window.RunStoreUpdateActionAsync();
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
+                    failedObserver.Report(new(StoreUpdatePhase.Installing));
+                    Task.Run(() => failedObserver.Report(new(StoreUpdatePhase.Downloading, .91))).GetAwaiter().GetResult();
+                    Drain(window);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
+                    fake.CheckCompletion.SetResult(true);
+                    PumpUntil(window, check);
+                    Assert.Equal(2, fake.Checks); // Failure resets availability, so retry checks again.
+                    Assert.Equal(UiText.Get("StoreUpdate_InstallHelp"), AutomationProperties.GetHelpText(action));
+
+                    Task install = window.RunStoreUpdateActionAsync();
+                    IProgress<StoreUpdateSnapshot> completedObserver = fake.Progress!;
+                    completedObserver.Report(new(StoreUpdatePhase.Downloading, .21));
+                    Task.Run(() => failedObserver.Report(new(StoreUpdatePhase.Downloading, .99))).GetAwaiter().GetResult();
+                    Drain(window);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateDownloading"), state.Text);
+                    Assert.Equal(21, progress.Value);
+                    fake.Completion!.SetResult(StoreUpdatePhase.RestartRequired);
+                    PumpUntil(window, install);
+                    string? successfulPending = settings.StoreUpdate.PendingFromVersion;
+                    Assert.NotNull(successfulPending);
+                    completedObserver.Report(new(StoreUpdatePhase.Installing));
+                    Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), state.Text);
+
+                    // Completion's observer is also invalid during a new check, not merely on failure.
+                    fake.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    check = window.RunStoreUpdateActionAsync();
+                    Task.Run(() => completedObserver.Report(new(StoreUpdatePhase.Installing))).GetAwaiter().GetResult();
+                    Drain(window);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
+                    fake.CheckCompletion.SetException(new IOException("Check unavailable after successful deployment"));
+                    PumpUntil(window, check);
+                    Assert.Equal(successfulPending, settings.StoreUpdate.PendingFromVersion);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
+                    Assert.Equal(UiText.Get("StoreUpdate_Check"), action.Content);
+                    Assert.Equal(2, released);
+
+                    // An observation-save failure never starts deployment; cleanup-save failure stays failed.
+                    fake.CheckCompletion = null;
+                    Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+                    int attemptedSaves = 0;
+                    window.PersistStoreUpdateForTest = () => { attemptedSaves++; throw new IOException("Observation storage unavailable"); };
+                    Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+                    Assert.Equal(2, attemptedSaves);
+                    Assert.Equal(2, fake.Installs);
+                    Assert.Null(settings.StoreUpdate.PendingFromVersion);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
+                    Assert.True(window.IsEnabled && action.IsEnabled);
+                    Assert.Equal(3, released);
+                }
+                finally
+                {
+                    window.CloseForExit();
+                    SynchronizationContext.SetSynchronizationContext(previous);
+                }
+            }
+        }
+        finally { application.Shutdown(); AppPackage.IsPackagedOverride = null; }
     }
 
     private static void VerifyObservedStoreDeployment(SettingsWindow window, ObservableStoreUpdates fake, string locale)

@@ -3557,6 +3557,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="StoreUpdate_Check" xml:space="preserve"><value>Check for updates</value></data>
   <data name="StoreUpdate_CheckHelp" xml:space="preserve"><value>Checks Microsoft Store for updates to this app.</value></data>
   <data name="StoreUpdate_Install" xml:space="preserve"><value>Install update</value></data>
+  <data name="StoreUpdate_InstallHelp" xml:space="preserve"><value>Save your work, then install the update through Microsoft Store.</value></data>
   <data name="StoreUpdate_CompletedVersion" xml:space="preserve"><value>Updated to version {0}</value></data>
   <data name="StoreUpdate_StateIdle" xml:space="preserve"><value>Updates not checked</value></data>
   <data name="StoreUpdate_StateChecking" xml:space="preserve"><value>Checking for updates</value></data>

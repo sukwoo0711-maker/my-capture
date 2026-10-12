@@ -23,6 +23,8 @@ internal sealed partial class SettingsWindow
     internal bool StoreUpdatePackaged { get; set; } = AppPackage.IsPackaged;
     private bool _storeUpdateBusy;
     private bool _storeUpdateAvailable;
+    private long _storeUpdateOperation;
+    private bool _storeUpdateProgressActive;
 
     private static UpdateVersion CurrentUpdateVersion => UpdateVersion.FromVersion(
         Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0));
@@ -36,8 +38,7 @@ internal sealed partial class SettingsWindow
         {
             // The Store owns consent, downloading and deployment.
             UpdateDescription.Text = UiText.Get("StoreUpdate_ObservedDescription");
-            UpdateAction.Content = UiText.Get("StoreUpdate_Check");
-            AutomationProperties.SetHelpText(UpdateAction, UiText.Get("StoreUpdate_CheckHelp"));
+            SetStoreUpdateAction(false);
         }
         else
         {
@@ -68,10 +69,13 @@ internal sealed partial class SettingsWindow
     internal async Task RunStoreUpdateActionAsync()
     {
         if (_storeUpdateBusy || !StoreUpdatePackaged) return;
+        long operation = ++_storeUpdateOperation;
         _storeUpdateBusy = true; UpdateAction.IsEnabled = false;
         SetStatusMessage(string.Empty);
         bool protectionAcquired = false;
         bool enabledBeforeInstallation = IsEnabled;
+        bool installationAttempted = false;
+        bool installationCompleted = false;
         try
         {
             StoreUpdates ??= new StorePackageUpdateService(this);
@@ -80,7 +84,7 @@ internal sealed partial class SettingsWindow
                 ShowStoreUpdate(new(StoreUpdatePhase.Checking));
                 _storeUpdateAvailable = await StoreUpdates.CheckAsync();
                 ShowStoreUpdate(new(_storeUpdateAvailable ? StoreUpdatePhase.Available : StoreUpdatePhase.Current));
-                UpdateAction.Content = UiText.Get(_storeUpdateAvailable ? "StoreUpdate_Install" : "StoreUpdate_Check");
+                SetStoreUpdateAction(_storeUpdateAvailable);
             }
             else
             {
@@ -88,27 +92,44 @@ internal sealed partial class SettingsWindow
                 protectionAcquired = true;
                 enabledBeforeInstallation = IsEnabled;
                 IsEnabled = false;
+                installationAttempted = true;
                 _currentSettings().StoreUpdate.PendingFromVersion = CurrentUpdateVersion.ToString();
                 PersistUpdateObservation();
                 ShowStoreUpdate(new(StoreUpdatePhase.AwaitingConsent));
-                StoreUpdatePhase result = await StoreUpdates.InstallAsync(new UpdateProgressObserver(this));
+                _storeUpdateProgressActive = true;
+                StoreUpdatePhase result = await StoreUpdates.InstallAsync(new UpdateProgressObserver(this, operation));
+                _storeUpdateProgressActive = false;
+                installationCompleted = result == StoreUpdatePhase.RestartRequired;
                 if (result != StoreUpdatePhase.RestartRequired)
                 {
                     _currentSettings().StoreUpdate.PendingFromVersion = null;
                     PersistUpdateObservation();
                 }
                 _storeUpdateAvailable = false;
-                UpdateAction.Content = UiText.Get("StoreUpdate_Check");
+                SetStoreUpdateAction(false);
                 ShowStoreUpdate(new(result));
             }
         }
         catch (Exception error)
         {
+            _storeUpdateProgressActive = false;
+            _storeUpdateAvailable = false;
+            SetStoreUpdateAction(false);
+            // A failed attempt cannot retain a pending deployment. A later failed check
+            // must retain the successful deployment's observation until the next launch.
+            if (installationAttempted && !installationCompleted)
+            {
+                _currentSettings().StoreUpdate.PendingFromVersion = null;
+                try { PersistUpdateObservation(); }
+                catch (Exception persistenceError)
+                { _log.LogError(persistenceError, "Could not persist failed Store update observation"); }
+            }
             _log.LogError(error, "Store update operation failed");
             ShowStoreUpdate(new(StoreUpdatePhase.Failed));
         }
         finally
         {
+            _storeUpdateProgressActive = false;
             try { if (protectionAcquired) FinishStoreUpdate(); }
             finally
             {
@@ -119,11 +140,22 @@ internal sealed partial class SettingsWindow
         }
     }
 
-    private sealed class UpdateProgressObserver(SettingsWindow owner) : IProgress<StoreUpdateSnapshot>
+    private void SetStoreUpdateAction(bool install)
+    {
+        UpdateAction.Content = UiText.Get(install ? "StoreUpdate_Install" : "StoreUpdate_Check");
+        AutomationProperties.SetName(UpdateAction, (string)UpdateAction.Content);
+        AutomationProperties.SetHelpText(UpdateAction, UiText.Get(install ? "StoreUpdate_InstallHelp" : "StoreUpdate_CheckHelp"));
+    }
+
+    private sealed class UpdateProgressObserver(SettingsWindow owner, long operation) : IProgress<StoreUpdateSnapshot>
     {
         public void Report(StoreUpdateSnapshot snapshot)
         {
-            void Apply() { if (owner._storeUpdateBusy) owner.ShowStoreUpdate(snapshot); }
+            void Apply()
+            {
+                if (owner._storeUpdateProgressActive && owner._storeUpdateOperation == operation)
+                    owner.ShowStoreUpdate(snapshot);
+            }
             if (owner.Dispatcher.CheckAccess()) Apply();
             else owner.Dispatcher.BeginInvoke((Action)Apply);
         }
