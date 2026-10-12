@@ -29,7 +29,11 @@ internal sealed class VideoSceneRenderer : ITutorialSceneRenderer
         _timeline.Width = 592; _timeline.Height = 58;
         _timeline.Measure(new Size(592, 58)); _timeline.Arrange(new Rect(0, 0, 592, 58)); _timeline.UpdateLayout();
         var initial = new PointD(92, 282);
-        PointD first = _feature == "gif-export" ? new(548, 39) : new(72, 201);
+        PointD first = _feature switch
+        {
+            "gif-export" => new(548, 39), "frame-step" => new(108, 201),
+            "trim" => new(24 + _timeline.OverviewPxForTest(3000), 251), _ => new(72, 201)
+        };
         var story = new TutorialStoryboard().Hold("ready", 120, initial).Motion("approach", 25, initial, first)
             .Motion("press", 8, first, first, pressed: true);
         PointD tail = first;
@@ -43,9 +47,10 @@ internal sealed class VideoSceneRenderer : ITutorialSceneRenderer
                 tail = new PointD(124, 201);
                 story.Motion("next-frame", 8, tail, tail, pressed: true).Hold("stepped", 200, tail); break;
             case "trim":
-                tail = new PointD(460, 251);
-                story.Motion("seek-in", 25, first, new PointD(172, 251)).Motion("set-in", 8, new PointD(172, 251), new PointD(172, 251), pressed: true)
-                    .Hold("in-result", 160, new PointD(172, 251)).Motion("seek-out", 30, new PointD(172, 251), tail)
+                PointD inPoint = new(24 + _timeline.OverviewPxForTest(2000), 251);
+                tail = new PointD(24 + _timeline.OverviewPxForTest(6000), 251);
+                story.Motion("seek-in", 25, first, inPoint).Motion("set-in", 8, inPoint, inPoint, pressed: true)
+                    .Hold("in-result", 160, inPoint).Motion("seek-out", 30, inPoint, tail)
                     .Motion("set-out", 8, tail, tail, pressed: true).Hold("trim-result", 160, tail); break;
             case "gif-export":
                 tail = new PointD(503, 231);
