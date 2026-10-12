@@ -40,8 +40,8 @@
     <None Update="Assets\tray-capturing.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\tray-busy.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\tray-error.ico" CopyToOutputDirectory="PreserveNewest" />
-    <!-- Feature tutorials (TutorialCatalog × ko/en), rendered by build/tools/TutorialVideoGenerator. -->
-    <None Update="Assets\Tutorials\*.mp4" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Feature tutorials (TutorialCatalog × ko/en) and their first-frame stills, rendered by build/tools/TutorialVideoGenerator. -->
+    <None Update="Assets\Tutorials\*.mp4;Assets\Tutorials\*.jpg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup><EmbeddedResource Include="Updates\UpdateHelper.ps1" LogicalName="MyCapture.UpdateHelper.ps1" /></ItemGroup>
