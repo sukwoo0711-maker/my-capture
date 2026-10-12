@@ -5,7 +5,7 @@
     <AssemblyName>MyCapture.App.Tests</AssemblyName>
     <StartupObject>Bootstrap</StartupObject>
     <RollForward>Disable</RollForward>
-    <AppPayload Condition="'$(AppPayload)' == ''">C:/GitRepositories/my-capture-codex/artifacts/qa12-extreme-load</AppPayload>
+    <AppPayload Condition="'$(AppPayload)' == ''">C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial</AppPayload>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="MyCapture"><HintPath>$(AppPayload)/MyCapture.dll</HintPath><Private>false</Private></Reference>
