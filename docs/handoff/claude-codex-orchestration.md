@@ -6,7 +6,8 @@
 
 | 항목 | 값 |
 |---|---|
-| **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
+| **현재 오케스트레이터** | **Claude** (Claude Code, Opus 5.5, 2026-10-13부터 다시 맡음) |
+| 직전 오케스트레이터 | Codex (모델 `gpt-6-astra`), 2026-10-12 ~ 2026-10-13 |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
 | 현재 기록 브랜치 | `fix/store-update-continuity` (Store 업데이트 상태·테스트 데이터 가져오기 구현 및 QA15 로컬 검증 완료) |
@@ -483,6 +484,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-13 Codex: 사용자 화면 자동화 재허용·조작 중단 확인을 받아 진단04bf389→73099c8, b9126b6→b18a8c3 통합. root `dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Debug --filter FullyQualifiedName~HotfixExternalInputObservationTests`(TRX/logger/result 인수는 development-log) 실제940962/session22940/e590e8 exit0,14/14 PASS. 원본 공유 충돌 회귀 및 gate 보존을 독립 검토함.
 - 2026-10-13 Codex: exact clean b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6에서 `powershell.exe -NoProfile -NonInteractive -File artifacts/store-update-continuity/publish-qa15-final.ps1 -ExpectedSource b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6 -PayloadName qa15-store-update-ready -EvidenceName ready-diagnostic` 6833fd exit0. 독립 verifier a6d141 exit0,353파일·runtime10.0.11·R2R·deps·GIF·receipt 일치. 앞선951b15f/final 산출물과 실패근거 보존.
 - 2026-10-13 Codex: `powershell.exe -NoProfile -NonInteractive -File artifacts/store-update-continuity/run-qa15-native-gate.ps1 -PublishRoot C:/GitRepositories/my-capture-codex/artifacts/qa15-store-update-ready` session40894/3286d2 exit0 **SELF_TESTS=PASS PASSES=8/8**,64초. root a7dbbe에서 최종receipt/report 재확인. Sky로 Explorer87166948에 최종 폴더를 열고 MyCapture 응용 프로그램 선택 확인. 사용자 앱 종료 명령·사용자 데이터 이관·Store 업로드/설치·파일 삭제는 수행하지 않음.
+- 2026-10-13 Claude: 사용자 지시("codex에서 작업하던 세션을 네가 이제 이어서 오케스트레이션해. 코덱스가 한 작업내역을 리뷰해봐")로 오케스트레이션을 넘겨받음. Codex 대화형 세션(Claude 앱 터미널 탭 c2)은 QA15 전달 후 입력 대기 상태였고, 작업 공간은 깨끗함(HEAD 6f33333). origin/main(9a35763, 4.1.1) 대비 미병합 176커밋. Codex 작업 전체 리뷰 착수.
 
 ## 9. 인계 체크리스트
 
