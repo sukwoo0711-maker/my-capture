@@ -15,7 +15,7 @@ using Xunit;
 
 namespace MyCapture.Core.Tests;
 
-public sealed class LegacyLibraryMigrationTests
+public sealed partial class LegacyLibraryMigrationTests
 {
     [Theory]
     [InlineData(false)]
@@ -89,7 +89,7 @@ public sealed class LegacyLibraryMigrationTests
     }
 
     [Fact]
-    public async Task IdCollisionWithSamePixelsButDifferentMetadata_PreservesBothVersionsAndRetryIsIdempotent()
+    public async Task IdCollisionWithStoreItem_ImportsOneMappedCopyAndLaterLegacyEditsAreReportedAsAlreadyImported()
     {
         using var fixture = new Fixture();
         CaptureRecord source = fixture.AddSourceImage("Different OCR and title", fixture.Existing.Id);
@@ -105,12 +105,14 @@ public sealed class LegacyLibraryMigrationTests
         LegacyMigrationResult retry = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
         Assert.Equal(0, retry.ImportedCount); Assert.Equal(1, retry.SkippedCount);
         Assert.Equal(2, fixture.TargetQueue.Count);
+        // Documented choice: a legacy capture is imported once. Later legacy edits do not add copies.
         source.Title = "Changed after previous import"; fixture.SaveSource();
+        File.AppendAllText(fixture.SourceQueue.GetFilePath(source, CaptureFileNames.Rendered), "re-rendered");
         LegacyMigrationResult changed = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
-        Assert.Equal(1, changed.ImportedCount);
-        Assert.Equal(3, fixture.TargetQueue.Count);
-        Assert.Contains(fixture.TargetQueue.Records, record => record.Title == imported.Title);
-        Assert.Contains(fixture.TargetQueue.Records, record => record.Title == source.Title);
+        Assert.Equal(LegacyMigrationStatus.Completed, changed.Status);
+        Assert.Equal(0, changed.ImportedCount); Assert.Equal(1, changed.SkippedCount);
+        Assert.Equal(2, fixture.TargetQueue.Count);
+        Assert.Equal("Different OCR and title", fixture.TargetQueue.Find(imported.Id)!.Title);
     }
 
     [Fact]
@@ -123,7 +125,7 @@ public sealed class LegacyLibraryMigrationTests
         fixture.SaveSource();
         CaptureFolder existing = await fixture.TargetQueue.CreateFolderAsync("보관", createdAt: fixture.Created);
         // Force the exact first deterministic candidate into a preexisting Store folder.
-        existing.Id = MappedFolder(fixture.SourcePaths.DataRoot, sourceFolder.Id);
+        existing.Id = MappedFolder(sourceFolder.Id);
         fixture.TargetQueue.Save();
         var service = new LegacyLibraryMigrationService();
         LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
@@ -139,7 +141,7 @@ public sealed class LegacyLibraryMigrationTests
     }
 
     [Fact]
-    public async Task SameRecordInDifferentLibraries_PreservesBothFolderAssignmentsAndSourceMoves()
+    public async Task SameRecordInDifferentLibraries_PreservesBothFolderAssignmentsAndLaterLegacyMovesAreAlreadyImported()
     {
         using var fixture = new Fixture();
         CaptureFolder storeFolder = await fixture.TargetQueue.CreateFolderAsync("Store A", createdAt: fixture.Created);
@@ -161,12 +163,12 @@ public sealed class LegacyLibraryMigrationTests
         Assert.Equal(0, retry.ImportedCount); Assert.Equal(1, retry.SkippedCount);
         await fixture.SourceQueue.MoveCapturesAsync([source.Id], legacyC.Id);
         source.UpdatedAt = fixture.Existing.UpdatedAt; fixture.SaveSource();
+        // A later legacy move is not a new capture: the earlier copy stays where the user keeps it.
         LegacyMigrationResult moved = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
-        Assert.Equal(LegacyMigrationStatus.Completed, moved.Status); Assert.Equal(1, moved.ImportedCount);
-        Assert.Equal(3, fixture.TargetQueue.Count);
+        Assert.Equal(LegacyMigrationStatus.Completed, moved.Status);
+        Assert.Equal(0, moved.ImportedCount); Assert.Equal(1, moved.SkippedCount);
+        Assert.Equal(2, fixture.TargetQueue.Count);
         Assert.Equal(importedB.FolderId, fixture.TargetQueue.Find(importedB.Id)!.FolderId);
-        Assert.Contains(fixture.TargetQueue.Records, record => fixture.TargetQueue.Folders
-            .Any(folder => folder.Id == record.FolderId && folder.Name == "Legacy C"));
     }
 
     [Fact]
@@ -200,6 +202,7 @@ public sealed class LegacyLibraryMigrationTests
         Assert.Equal(LegacyMigrationStatus.Failed, result.Status); Assert.Equal("SourceChanged", result.ErrorCode);
         Assert.Equal(indexHash, Hash(fixture.TargetPaths.IndexFile)); Assert.Equal(settingsHash, Hash(fixture.TargetPaths.SettingsFile));
         Assert.Equal(1, fixture.TargetQueue.Count);
+        AssertNoImportLeftovers(fixture);
     }
 
     [Theory]
@@ -221,6 +224,8 @@ public sealed class LegacyLibraryMigrationTests
         Assert.Equal(cancellation ? LegacyMigrationStatus.Canceled : LegacyMigrationStatus.Failed, result.Status);
         Assert.Equal(indexHash, Hash(fixture.TargetPaths.IndexFile)); Assert.Equal(settingsHash, Hash(fixture.TargetPaths.SettingsFile));
         Assert.Equal(source.OrderBy(pair => pair.Key), TreeHashes(fixture.SourcePaths.DataRoot).OrderBy(pair => pair.Key));
+        AssertNoImportLeftovers(fixture);
+        fixture.TargetQueue.Save(); // A canceled or failed import never leaves the live library blocked.
         await new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.TargetPaths);
         Assert.Equal(1, fixture.ReopenTarget().Count);
     }
@@ -242,6 +247,7 @@ public sealed class LegacyLibraryMigrationTests
         Assert.Equal(LegacyMigrationStatus.Failed, result.Status);
         Assert.True(fixture.Existing.IsPinned); Assert.True(fixture.ReopenTarget().Find(fixture.Existing.Id)!.IsPinned);
         Assert.Equal(1, fixture.TargetQueue.Count);
+        AssertNoImportLeftovers(fixture);
     }
 
     [Fact]
@@ -260,6 +266,7 @@ public sealed class LegacyLibraryMigrationTests
         Assert.Equal(LegacyMigrationStatus.Failed, result.Status); Assert.Equal("TargetChanged", result.ErrorCode);
         Assert.Equal(changedIndex, File.ReadAllText(fixture.TargetPaths.IndexFile));
         fixture.TargetQueue.Load(); Assert.Equal("External Store edit", fixture.TargetQueue.Find(fixture.Existing.Id)!.Title);
+        AssertNoImportLeftovers(fixture);
     }
 
     [Fact]
@@ -280,7 +287,7 @@ public sealed class LegacyLibraryMigrationTests
     }
 
     [Fact]
-    public async Task LockedIndexAfterCommit_ReturnsRecoveryRequiredWithoutEscapingClassificationException()
+    public async Task LockedIndexAfterCommit_KeepsTheCommittedImportAndNeverBlocksTheLibrary()
     {
         using var fixture = new Fixture(); fixture.AddSourceImage("Committed"); fixture.SaveSource();
         FileStream? blocker = null;
@@ -288,16 +295,18 @@ public sealed class LegacyLibraryMigrationTests
         {
             if (phase != "AfterIndexPublication") return;
             blocker = new FileStream(fixture.TargetPaths.IndexFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-            throw new IOException("Injected postcommit error while index cannot be classified");
+            throw new IOException("Injected postcommit error while the index is locked");
         } };
         try
         {
+            // The index write is the commit; whatever fails afterwards cannot undo or hide it.
             LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
-            Assert.Equal(LegacyMigrationStatus.Failed, result.Status); Assert.Equal("RecoveryRequired", result.ErrorCode);
-            Assert.Throws<IOException>(() => fixture.TargetQueue.Save());
+            Assert.Equal(LegacyMigrationStatus.Completed, result.Status); Assert.Equal(1, result.ImportedCount);
+            Assert.Equal(2, fixture.TargetQueue.Count);
         }
         finally { blocker?.Dispose(); }
-        await new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths);
+        fixture.TargetQueue.Save();
+        Assert.Equal(LegacyRecoveryStatus.Clean, (await new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths)).Status);
         fixture.TargetQueue.Load(); Assert.Equal(2, fixture.TargetQueue.Count);
     }
 
@@ -329,7 +338,7 @@ public sealed class LegacyLibraryMigrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PersistentFinalizationFailure_KeepsCommittedOwnerStateAndRecoversOnNextProcess(bool blockReceipt)
+    public async Task PersistentFinalizationFailure_KeepsCommittedLibraryUsableAndFinishesTheReceiptLater(bool blockReceipt)
     {
         using var fixture = new Fixture(true); fixture.AddSourceImage("Durable"); fixture.SaveSource();
         FileStream? blocker = null;
@@ -341,51 +350,72 @@ public sealed class LegacyLibraryMigrationTests
                 : Path.Combine(fixture.TargetPaths.DataRoot, "library-folders.json");
             blocker = new FileStream(file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         } };
-        LegacyMigrationResult result;
         try
         {
-            result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
-            Assert.Equal(LegacyMigrationStatus.Failed, result.Status); Assert.Equal("RecoveryRequired", result.ErrorCode);
+            LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
+            Assert.Equal(LegacyMigrationStatus.Completed, result.Status); Assert.Equal(1, result.ImportedCount);
             Assert.Equal(2, fixture.TargetQueue.Count);
-            Assert.Throws<IOException>(() => fixture.TargetQueue.Save());
-            Assert.Throws<IOException>(() => fixture.TargetQueue.Load());
+            if (blockReceipt) fixture.TargetQueue.Save(); // Not blocked: the index already commits the import.
+            // Until the receipt exists, a retry still recognizes the committed copy.
+            LegacyMigrationResult retry = await new LegacyLibraryMigrationService().ImportAsync(fixture.SourcePaths.DataRoot,
+                fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
+            Assert.Equal(0, retry.ImportedCount); Assert.Equal(1, retry.SkippedCount);
         }
         finally { blocker?.Dispose(); }
-        await new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths);
+        Assert.Equal(LegacyRecoveryStatus.Clean, (await new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths)).Status);
         fixture.TargetQueue.Load();
         Assert.Equal(2, fixture.ReopenTarget().Count);
         fixture.TargetQueue.Save(); Assert.Equal(2, fixture.ReopenTarget().Count);
+        Assert.All(Directory.EnumerateFiles(Path.Combine(fixture.TargetPaths.DataRoot, "library-migration"), "journal.json", SearchOption.AllDirectories),
+            path => Assert.Equal("Completed", JsonNode.Parse(File.ReadAllText(path))!["phase"]!.GetValue<string>()));
     }
 
     [Theory]
-    [InlineData("missing")]
-    [InlineData("escape")]
-    [InlineData("corrupt-index")]
-    [InlineData("null-queue")]
-    [InlineData("corrupt-layers")]
-    public async Task InvalidSource_IsVisibleFailureWithNoTargetPublication(string kind)
+    [InlineData("missing-directory", 0, 1)]
+    [InlineData("corrupt-layers", 0, 1)]
+    [InlineData("escape-in-torn-index", 1, 0)]
+    [InlineData("torn-index-without-backup", 1, 0)]
+    [InlineData("settings-without-queue", 1, 0)]
+    public async Task DamagedSource_IsSkippedOrRecoveredWithoutChangingTheLegacyFolder(string kind, int imported, int unusable)
     {
-        using var fixture = new Fixture(); CaptureRecord record = fixture.AddSourceImage("Invalid"); fixture.SaveSource();
+        using var fixture = new Fixture(); CaptureRecord record = fixture.AddSourceImage("Damaged"); fixture.SaveSource();
         switch (kind)
         {
-            case "missing":
+            case "missing-directory":
                 JsonObject missing = JsonNode.Parse(File.ReadAllText(fixture.SourcePaths.IndexFile))!.AsObject();
                 missing["records"]![0]!["relativeDirectory"] = "absent";
                 File.WriteAllText(fixture.SourcePaths.IndexFile, missing.ToJsonString()); break;
-            case "escape":
+            case "escape-in-torn-index":
+                // The index is rejected, so the capture is found from its own meta.json instead.
                 JsonObject escaped = JsonNode.Parse(File.ReadAllText(fixture.SourcePaths.IndexFile))!.AsObject();
                 escaped["records"]![0]!["relativeDirectory"] = "../outside";
                 File.WriteAllText(fixture.SourcePaths.IndexFile, escaped.ToJsonString()); break;
-            case "corrupt-index": File.WriteAllText(fixture.SourcePaths.IndexFile, "{broken"); break;
-            case "null-queue": File.WriteAllText(fixture.SourcePaths.SettingsFile, "{\"queue\":null}"); break;
+            case "torn-index-without-backup": File.WriteAllText(fixture.SourcePaths.IndexFile, "{broken"); break;
+            case "settings-without-queue": File.WriteAllText(fixture.SourcePaths.SettingsFile, "{\"queue\":null}"); break;
             case "corrupt-layers": File.WriteAllText(fixture.SourceQueue.GetFilePath(record, CaptureFileNames.Layers), "{broken"); break;
         }
-        string indexHash = Hash(fixture.TargetPaths.IndexFile);
+        Dictionary<string, string> legacy = TreeHashes(fixture.SourcePaths.DataRoot);
         var service = new LegacyLibraryMigrationService();
-        Assert.Equal(LegacyMigrationScanStatus.Failed, (await service.ScanAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths)).Status);
-        Assert.Equal(LegacyMigrationStatus.Failed, (await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths,
-            fixture.TargetQueue, fixture.TargetSettings)).Status);
-        Assert.Equal(indexHash, Hash(fixture.TargetPaths.IndexFile)); Assert.Equal(1, fixture.TargetQueue.Count);
+        LegacyMigrationScan scan = await service.ScanAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths);
+        Assert.Equal(unusable, scan.UnusableCount); Assert.Equal(imported, scan.ImageCount);
+        Assert.Equal(kind == "settings-without-queue", scan.SettingsUnreadable);
+        Assert.Equal(kind != "settings-without-queue", scan.HasSettings);
+        LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths,
+            fixture.TargetQueue, fixture.TargetSettings);
+        Assert.Equal(LegacyMigrationStatus.Completed, result.Status);
+        Assert.Equal(imported, result.ImportedCount); Assert.Equal(unusable, result.UnusableCount);
+        Assert.Equal(1 + imported, fixture.TargetQueue.Count);
+        Assert.Equal(legacy.OrderBy(pair => pair.Key), TreeHashes(fixture.SourcePaths.DataRoot).OrderBy(pair => pair.Key));
+    }
+
+    [Fact]
+    public async Task UnrecognizedCaptureFolderWithoutAnyIndex_ReportsMissingIndex()
+    {
+        using var fixture = new Fixture(); CaptureRecord record = fixture.AddSourceImage("No sidecar"); fixture.SaveSource();
+        File.Delete(fixture.SourcePaths.IndexFile);
+        File.Delete(fixture.SourceQueue.GetFilePath(record, CaptureFileNames.Meta));
+        LegacyMigrationScan scan = await new LegacyLibraryMigrationService().ScanAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths);
+        Assert.Equal(LegacyMigrationScanStatus.Failed, scan.Status); Assert.Equal("MissingIndex", scan.ErrorCode);
     }
 
     [Fact]
@@ -437,8 +467,8 @@ public sealed class LegacyLibraryMigrationTests
 
     [Theory]
     [InlineData("path")]
-    [InlineData("null-copies")]
-    public async Task MalformedRecoveryJournal_CannotTouchAnOutsideFile(string kind)
+    [InlineData("null-records")]
+    public async Task MalformedRecoveryJournal_CannotTouchAnOutsideFileOrBlockStartup(string kind)
     {
         using var fixture = new Fixture(); fixture.AddSourceImage("Owned"); fixture.SaveSource();
         var service = new LegacyLibraryMigrationService { CheckpointForTest = phase =>
@@ -450,18 +480,24 @@ public sealed class LegacyLibraryMigrationTests
         string journalPath = Directory.EnumerateFiles(Path.Combine(fixture.TargetPaths.DataRoot, "library-migration"),
             "journal.json", SearchOption.AllDirectories).Single();
         JsonObject journal = JsonNode.Parse(File.ReadAllText(journalPath))!.AsObject();
-        if (kind == "path") journal["copies"]![0]!["targetRelative"] = "../outside.png";
-        else journal["copies"] = null;
+        if (kind == "path") journal["records"]![0]!["files"]![0]!["name"] = "..\\..\\..\\outside.png";
+        else journal["records"] = null;
         File.WriteAllText(journalPath, journal.ToJsonString());
         string index = Hash(fixture.TargetPaths.IndexFile);
-        IOException error = await Assert.ThrowsAnyAsync<IOException>(() => new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths));
-        Assert.Equal("InvalidJournal", error.Message);
+        LegacyRecoveryResult recovery = await new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths);
+        // A tampered plan is never replayed; an unreadable one is left alone. Neither stops the launch.
+        Assert.Equal(kind == "path" ? LegacyRecoveryStatus.DecisionRequired : LegacyRecoveryStatus.Clean, recovery.Status);
+        if (kind == "path") Assert.Equal("InvalidJournal", recovery.ErrorCode);
+        Assert.Equal(index, Hash(fixture.TargetPaths.IndexFile));
+        await new LegacyLibraryMigrationService().AbandonPendingAsync(fixture.BaseTargetPaths);
         Assert.Equal(index, Hash(fixture.TargetPaths.IndexFile));
         Assert.False(File.Exists(Path.Combine(fixture.TargetPaths.DataRoot, "outside.png")));
+        Assert.False(File.Exists(Path.Combine(fixture.TargetPaths.CapturesRoot, "outside.png")));
+        Assert.Equal(1, fixture.ReopenTarget().Count);
     }
 
     [Fact]
-    public async Task CaseVariantSourceRetry_DoesNotConflatePotentialCaseSensitiveDirectories()
+    public async Task CaseVariantSourceRoot_RecognizesItemsAlreadyImported()
     {
         using var fixture = new Fixture(); fixture.AddSourceImage("Case"); fixture.SaveSource();
         var service = new LegacyLibraryMigrationService();
@@ -469,9 +505,11 @@ public sealed class LegacyLibraryMigrationTests
             fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings)).Status);
         Guid folder = fixture.TargetQueue.Records.Single(record => record.Id != fixture.Existing.Id).FolderId!.Value;
         if (!OperatingSystem.IsWindows()) return;
+        // Capture ids, not path spelling, identify what was imported.
         LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot.ToUpperInvariant(),
             fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
-        Assert.Equal(LegacyMigrationStatus.Failed, result.Status); Assert.Equal("SourceRootCaseMismatch", result.ErrorCode);
+        Assert.Equal(LegacyMigrationStatus.Completed, result.Status);
+        Assert.Equal(0, result.ImportedCount); Assert.Equal(1, result.SkippedCount);
         Assert.Single(fixture.TargetQueue.Folders); Assert.Equal(folder, fixture.TargetQueue.Folders.Single().Id);
     }
 
@@ -544,8 +582,17 @@ public sealed class LegacyLibraryMigrationTests
         public void Report(LegacyMigrationProgress value) { lock (Values) Values.Add(value); }
     }
 
-    private static Guid MappedFolder(string source, Guid original) => new(SHA256.HashData(Encoding.UTF8.GetBytes(
-        source + "\nfolder\n" + original.ToString("N"))).AsSpan(0, 16));
+    private static Guid MappedFolder(Guid original) => new(SHA256.HashData(Encoding.UTF8.GetBytes(
+        "mycapture-legacy-import\nfolder\n" + original.ToString("N"))).AsSpan(0, 16));
+
+    /// <summary>No staging, partial copy or operation directory remains after a canceled or failed import.</summary>
+    private static void AssertNoImportLeftovers(Fixture fixture)
+    {
+        Assert.Empty(Directory.EnumerateDirectories(fixture.TargetPaths.CapturesRoot, "import-*"));
+        Assert.Empty(Directory.EnumerateFiles(fixture.TargetPaths.CapturesRoot, "*.import-part", SearchOption.AllDirectories));
+        string operations = Path.Combine(fixture.TargetPaths.DataRoot, "library-migration");
+        if (Directory.Exists(operations)) Assert.Empty(Directory.EnumerateFileSystemEntries(operations));
+    }
     private static string Hash(string path) { using var file = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(file)); }
     private static Dictionary<string, string> TreeHashes(string root) => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => Path.GetRelativePath(root, path), Hash);

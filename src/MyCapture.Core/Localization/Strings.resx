@@ -3605,10 +3605,31 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="LegacyImport.SettingsFailed" xml:space="preserve"><value>라이브러리는 가져왔지만 설정을 불러올 수 없습니다. {0}</value></data>
   <data name="LegacyImport.OverlappingRoots" xml:space="preserve"><value>현재 저장 위치와 다른 기존 데이터 폴더를 선택하십시오.</value></data>
   <data name="LegacyImport.TargetChanged" xml:space="preserve"><value>현재 라이브러리가 변경되었습니다. 가져오기를 다시 시도하십시오.</value></data>
-  <data name="LegacyImport.RecoveryRequired" xml:space="preserve"><value>데이터 복구가 필요합니다. 복구 다시 시도를 눌러 계속하십시오.</value></data>
+  <data name="LegacyImport.RecoveryRequired" xml:space="preserve"><value>가져오기를 마무리하지 못했습니다. 복구 다시 시도를 누르거나 MyCapture를 다시 시작하십시오.</value></data>
   <data name="LegacyImport.RetryRecovery" xml:space="preserve"><value>복구 다시 시도</value></data>
   <data name="LegacyImport.Recovered" xml:space="preserve"><value>데이터 복구를 완료했습니다. 가져오기를 다시 시도하여 결과를 확인하십시오.</value></data>
   <data name="LegacyImport.HistoryFolder" xml:space="preserve"><value>이전 MyCapture</value></data>
+  <data name="LegacyImport.ProgressName" xml:space="preserve"><value>가져오기 진행률</value></data>
+  <data name="LegacyImport.ScanProgress" xml:space="preserve"><value>기존 데이터 확인 중 · {0}/{1}개</value></data>
+  <data name="LegacyImport.PublishingNoCancel" xml:space="preserve"><value>라이브러리에 추가 중 · 이 단계는 끝날 때까지 취소할 수 없습니다.</value></data>
+  <data name="LegacyImport.PublishingAfterCancel" xml:space="preserve"><value>라이브러리에 추가 중 · 이미 시작되어 취소할 수 없습니다. 끝나면 창을 닫습니다.</value></data>
+  <data name="LegacyImport.CompletedBeforeCancel" xml:space="preserve"><value>취소하기 전에 가져오기가 끝났습니다. 설정은 불러오지 않았습니다.</value></data>
+  <data name="LegacyImport.CompletedWithUnusable" xml:space="preserve"><value>{0}개 가져옴 · 이미 가져온 항목 {1}개 · 가져올 수 없는 항목 {2}개</value></data>
+  <data name="LegacyImport.Unusable" xml:space="preserve"><value>파일이 없거나 손상된 항목 {0}개는 가져오지 않고 기존 데이터 폴더에 그대로 둡니다.</value></data>
+  <data name="LegacyImport.SettingsUnreadable" xml:space="preserve"><value>기존 설정 파일을 읽을 수 없어 설정은 가져올 수 없습니다.</value></data>
+  <data name="LegacyImport.MissingIndex" xml:space="preserve"><value>기존 데이터 폴더에서 라이브러리 목록을 찾을 수 없습니다. 이전 MyCapture의 데이터 폴더를 선택하십시오.</value></data>
+  <data name="LegacyImport.InsufficientSpace" xml:space="preserve"><value>저장 공간이 부족합니다. 여유 공간을 확보한 뒤 다시 시도하십시오.</value></data>
+  <data name="LegacyImport.InsufficientSpaceAmount" xml:space="preserve"><value>저장 공간이 부족합니다. 여유 공간을 {0} 더 확보한 뒤 다시 시도하십시오.</value></data>
+  <data name="LegacyImport.TargetUnreadable" xml:space="preserve"><value>현재 라이브러리 목록을 읽을 수 없습니다. MyCapture를 다시 시작한 뒤 다시 시도하십시오.</value></data>
+  <data name="LegacyImport.InvalidJournal" xml:space="preserve"><value>이전 가져오기 기록이 손상되었습니다. MyCapture를 다시 시작하여 가져오기를 취소한 뒤 다시 시도하십시오.</value></data>
+  <data name="LegacyImport.RecordingMessage" xml:space="preserve"><value>녹화를 완료한 뒤 기존 데이터 가져오기를 시작하시겠습니까?</value></data>
+  <data name="LegacyImport.Retry" xml:space="preserve"><value>다시 시도</value></data>
+  <data name="LegacyImport.Abandon" xml:space="preserve"><value>가져오기 취소</value></data>
+  <data name="LegacyImport.StartupFailed" xml:space="preserve"><value>지난번 기존 데이터 가져오기를 마무리하지 못했습니다.</value></data>
+  <data name="LegacyImport.StartupReasonSpace" xml:space="preserve"><value>저장 공간이 부족합니다. 공간을 확보한 뒤 다시 시도하십시오.</value></data>
+  <data name="LegacyImport.StartupReasonDamaged" xml:space="preserve"><value>가져오던 파일이나 기록 일부가 손상되었습니다.</value></data>
+  <data name="LegacyImport.StartupReasonAccess" xml:space="preserve"><value>라이브러리 파일에 접근할 수 없습니다. 잠시 후 다시 시도하십시오.</value></data>
+  <data name="LegacyImport.StartupChoice" xml:space="preserve"><value>가져오기를 취소하면 현재 라이브러리와 기존 데이터 폴더를 그대로 두고 MyCapture를 시작합니다.</value></data>
   <data name="Support_Heading" xml:space="preserve"><value>문제 신고</value></data>
   <data name="Support_Report" xml:space="preserve"><value>문제 신고 페이지 열기</value></data>
   <data name="Support_Preview" xml:space="preserve"><value>진단 정보 미리보기</value></data>

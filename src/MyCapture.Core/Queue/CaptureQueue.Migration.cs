@@ -33,6 +33,19 @@ public sealed partial class CaptureQueue
         return ParseMigrationIndex(JsonSerializer.Serialize(snapshot, SerializerOptions));
     }
 
+    /// <summary>A legacy index whose folder hierarchy is damaged still lists its captures.</summary>
+    internal static bool TryParseMigrationSource(string json, out CaptureIndexFile? index)
+    {
+        if (!TryParseIndex(json, out index) || index is null) return false;
+        if (index.FolderState is not null && !IsValidFolderState(index.FolderState)) index.FolderState = null;
+        return true;
+    }
+
+    internal static bool TryParseMigrationFolderState(string json, out CaptureFolderState? state) =>
+        TryParseFolderState(json, out state);
+
+    internal static bool IsValidMigrationRecord(CaptureRecord record) => IsValidIndexedRecord(record);
+
     internal static CaptureIndexFile ParseMigrationIndex(string json)
     {
         if (!TryParseIndex(json, out CaptureIndexFile? index) || index is null
@@ -46,7 +59,7 @@ public sealed partial class CaptureQueue
         lock (_writeGate) return _publicationTail;
     }
 
-    internal void AdoptMigrationSnapshot(string json, bool completed = true)
+    internal void AdoptMigrationSnapshot(string json)
     {
         CaptureIndexFile index = ParseMigrationIndex(json);
         var existing = _records.ToDictionary(record => record.Id);
@@ -58,7 +71,7 @@ public sealed partial class CaptureQueue
         foreach (CaptureRecord record in records) _records.Add(record);
         RecalculateTotalBytes();
         UpdatePinPressureFlag();
-        if (completed) ResumeAfterMigrationLoad();
+        ResumeAfterMigrationLoad();
     }
 
     // The caller prepares immutable data on the owner. Disk publication joins the same

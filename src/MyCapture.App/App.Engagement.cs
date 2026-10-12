@@ -74,7 +74,13 @@ public partial class App
     private bool _storeInstallationPending;
     private bool _galleryEnabledBeforeUpdate;
 
-    private async Task<bool> PrepareAndHoldStoreUpdateAsync()
+    private Task<bool> PrepareAndHoldStoreUpdateAsync() => PrepareAndHoldAsync(PrepareForStoreUpdateAsync);
+
+    /// <summary>The import holds the same protection, but asks with its own wording.</summary>
+    private Task<bool> PrepareAndHoldForLegacyImportAsync() =>
+        PrepareAndHoldAsync(() => PrepareForAppExitAsync(AppExitReason.LegacyImport));
+
+    private async Task<bool> PrepareAndHoldAsync(Func<Task<bool>> prepare)
     {
         if (_storeInstallationPending) return false;
         _storeInstallationPending = true;
@@ -82,7 +88,7 @@ public partial class App
         if (_galleryWindow is not null) _galleryWindow.IsEnabled = false;
         try
         {
-            if (await PrepareForStoreUpdateAsync()) return true;
+            if (await prepare()) return true;
             ReleaseStoreUpdateProtection();
             return false;
         }

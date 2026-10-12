@@ -18,7 +18,7 @@ using MyCapture.Platform.Shell;
 
 namespace MyCapture.App;
 
-internal enum AppExitReason { Explicit, StoreUpdate }
+internal enum AppExitReason { Explicit, StoreUpdate, LegacyImport }
 
 public partial class App
 {
@@ -59,6 +59,7 @@ public partial class App
     internal Task<bool> PrepareForStoreUpdateAsync() => PrepareForAppExitAsync(AppExitReason.StoreUpdate);
     internal async Task<bool> RequestSafeShutdownAsync()
     {
+        await StopLegacyImportForExitAsync();
         if (_storeInstallationPending) return false;
         if (!await PrepareForAppExitAsync(AppExitReason.Explicit)) return false;
         Shutdown(0); return true;
@@ -74,13 +75,13 @@ public partial class App
         try
         {
             if (_recorder?.RequiresCaptureExclusion == true
-                && Themes.ThemedDialog.Show(UiText.Get("EditRecovery_RecordingMessage"), UiText.Get("EditRecovery_RecordingTitle"),
+                && Themes.ThemedDialog.Show(UiText.Get(reason == AppExitReason.LegacyImport ? "LegacyImport.RecordingMessage" : "EditRecovery_RecordingMessage"), UiText.Get("EditRecovery_RecordingTitle"),
                     MessageBoxButton.OKCancel, defaultResult: MessageBoxResult.Cancel) != MessageBoxResult.OK) return false;
             if (_recorder is not null && !await _recorder.PrepareForAppExitAsync()) return false;
             if (PrepareCapturePersistenceForExitAsync is { } prepareCapture && !await prepareCapture()) return false;
             foreach (var settings in Windows.Cast<Window>().OfType<Settings.SettingsWindow>().ToArray())
             {
-                if (!settings.PrepareForAppExit(reason == AppExitReason.StoreUpdate)) return false;
+                if (!settings.PrepareForAppExit(reason != AppExitReason.Explicit)) return false;
                 settingsStates.Add((settings, settings.IsEnabled));
                 settings.IsEnabled = false;
             }

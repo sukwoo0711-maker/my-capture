@@ -3605,10 +3605,31 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LegacyImport.SettingsFailed" xml:space="preserve"><value>The library was imported, but settings could not be loaded. {0}</value></data>
   <data name="LegacyImport.OverlappingRoots" xml:space="preserve"><value>Choose an existing data folder separate from the current storage location.</value></data>
   <data name="LegacyImport.TargetChanged" xml:space="preserve"><value>The current library changed. Try importing again.</value></data>
-  <data name="LegacyImport.RecoveryRequired" xml:space="preserve"><value>Data recovery is required. Choose Retry recovery to continue.</value></data>
+  <data name="LegacyImport.RecoveryRequired" xml:space="preserve"><value>The import could not be finished. Choose Retry recovery or restart MyCapture.</value></data>
   <data name="LegacyImport.RetryRecovery" xml:space="preserve"><value>Retry recovery</value></data>
   <data name="LegacyImport.Recovered" xml:space="preserve"><value>Data recovery completed. Import again to check the result.</value></data>
   <data name="LegacyImport.HistoryFolder" xml:space="preserve"><value>Previous MyCapture</value></data>
+  <data name="LegacyImport.ProgressName" xml:space="preserve"><value>Import progress</value></data>
+  <data name="LegacyImport.ScanProgress" xml:space="preserve"><value>Checking existing data · {0}/{1} items</value></data>
+  <data name="LegacyImport.PublishingNoCancel" xml:space="preserve"><value>Adding to library · This step cannot be canceled until it finishes.</value></data>
+  <data name="LegacyImport.PublishingAfterCancel" xml:space="preserve"><value>Adding to library · This step already started and cannot be canceled. The window closes when it finishes.</value></data>
+  <data name="LegacyImport.CompletedBeforeCancel" xml:space="preserve"><value>The import finished before it could be canceled. Settings were not loaded.</value></data>
+  <data name="LegacyImport.CompletedWithUnusable" xml:space="preserve"><value>{0} items imported · {1} previously imported items · {2} items could not be imported</value></data>
+  <data name="LegacyImport.Unusable" xml:space="preserve"><value>{0} items with missing or damaged files are left in the existing data folder and not imported.</value></data>
+  <data name="LegacyImport.SettingsUnreadable" xml:space="preserve"><value>The existing settings file cannot be read, so settings cannot be imported.</value></data>
+  <data name="LegacyImport.MissingIndex" xml:space="preserve"><value>No library list was found in the existing data folder. Choose the data folder from your previous MyCapture.</value></data>
+  <data name="LegacyImport.InsufficientSpace" xml:space="preserve"><value>Not enough storage space. Free up space and try again.</value></data>
+  <data name="LegacyImport.InsufficientSpaceAmount" xml:space="preserve"><value>Not enough storage space. Free up {0} more and try again.</value></data>
+  <data name="LegacyImport.TargetUnreadable" xml:space="preserve"><value>The current library list cannot be read. Restart MyCapture and try again.</value></data>
+  <data name="LegacyImport.InvalidJournal" xml:space="preserve"><value>The previous import record is damaged. Restart MyCapture, cancel the import, and try again.</value></data>
+  <data name="LegacyImport.RecordingMessage" xml:space="preserve"><value>Finish the recording and then start importing existing data?</value></data>
+  <data name="LegacyImport.Retry" xml:space="preserve"><value>Try again</value></data>
+  <data name="LegacyImport.Abandon" xml:space="preserve"><value>Cancel import</value></data>
+  <data name="LegacyImport.StartupFailed" xml:space="preserve"><value>The last import of existing data could not be finished.</value></data>
+  <data name="LegacyImport.StartupReasonSpace" xml:space="preserve"><value>Storage is full. Free up space and try again.</value></data>
+  <data name="LegacyImport.StartupReasonDamaged" xml:space="preserve"><value>Some of the files or records being imported are damaged.</value></data>
+  <data name="LegacyImport.StartupReasonAccess" xml:space="preserve"><value>The library files cannot be accessed. Try again in a moment.</value></data>
+  <data name="LegacyImport.StartupChoice" xml:space="preserve"><value>If you cancel the import, MyCapture starts with the current library and the existing data folder unchanged.</value></data>
   <data name="Support_Heading" xml:space="preserve"><value>Report a problem</value></data>
   <data name="Support_Report" xml:space="preserve"><value>Open issue page</value></data>
   <data name="Support_Preview" xml:space="preserve"><value>Preview diagnostics</value></data>

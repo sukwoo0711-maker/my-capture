@@ -2,7 +2,9 @@ using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,12 +25,24 @@ public sealed partial class SettingsThemePreviewTests
         RunIsolated(nameof(LegacyImport_PreservesTargetSettingsUntilApplyAndFailedApplyRetainsDraft), VerifyLegacyDraft);
 
     [Fact]
-    public Task LegacyImport_RecoveryFailureHoldsProtectionAndBlocksCloseUntilSuccessfulRetry() =>
-        RunIsolated(nameof(LegacyImport_RecoveryFailureHoldsProtectionAndBlocksCloseUntilSuccessfulRetry), VerifyLegacyRecovery);
+    public Task LegacyImport_RecoveryFailureNeverTrapsTheWindowAndReleasesProtectionOnClose() =>
+        RunIsolated(nameof(LegacyImport_RecoveryFailureNeverTrapsTheWindowAndReleasesProtectionOnClose), VerifyLegacyRecovery);
 
     [Fact]
-    public Task LegacyImport_RefreshFailureLeavesRecoveryRetryAvailableAndProtectionHeld() =>
-        RunIsolated(nameof(LegacyImport_RefreshFailureLeavesRecoveryRetryAvailableAndProtectionHeld), VerifyLegacyRefreshFailure);
+    public Task LegacyImport_RefreshFailureLeavesRecoveryRetryAvailableWithoutBlockingClose() =>
+        RunIsolated(nameof(LegacyImport_RefreshFailureLeavesRecoveryRetryAvailableWithoutBlockingClose), VerifyLegacyRefreshFailure);
+
+    [Fact]
+    public Task LegacyImport_PublicationCannotBeCanceledAndALateCancelWithholdsTheSettingsDraft() =>
+        RunIsolated(nameof(LegacyImport_PublicationCannotBeCanceledAndALateCancelWithholdsTheSettingsDraft), VerifyLegacyPublicationCancel);
+
+    [Fact]
+    public Task LegacyImport_AppExitCancelsACopyAndClosesTheDialog() =>
+        RunIsolated(nameof(LegacyImport_AppExitCancelsACopyAndClosesTheDialog), VerifyLegacyExit);
+
+    [Fact]
+    public Task LegacyImport_StartupDecisionOffersRetryAndCancelAndNeverBlocksTheLaunch() =>
+        RunIsolated(nameof(LegacyImport_StartupDecisionOffersRetryAndCancelAndNeverBlocksTheLaunch), VerifyLegacyStartupDecision);
 
     private static void VerifyLegacyRefreshFailure()
     {
@@ -50,10 +64,10 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(window.IsRecoveryRequired); Assert.Null(window.Selection); Assert.Equal(0, releases);
                 Button retry = LegacyField<Button>(window, "_copy");
                 Assert.True(retry.IsVisible && retry.IsEnabled);
-                window.Close(); Assert.True(window.IsVisible);
+                Assert.True(LegacyField<Button>(window, "_cancel").IsEnabled);
                 CompleteLegacyTask(window.RetryRecoveryAsync());
                 Assert.False(window.IsRecoveryRequired); Assert.Equal(1, releases);
-                window.Close(); Assert.False(window.IsVisible);
+                window.Close(); Assert.False(window.IsVisible); Assert.Equal(1, releases);
             }
         }
         finally { application.Shutdown(); }
@@ -68,8 +82,8 @@ public sealed partial class SettingsThemePreviewTests
         RunIsolated(nameof(LegacyImport_EntryAndDialogFitBothLanguagesAcrossThemes), VerifyLegacyEvidence);
 
     [Fact]
-    public Task LegacyImport_StartupRecoveryDefersTheSpinnerAndPropagatesFailureBeforeLoading() =>
-        RunIsolated(nameof(LegacyImport_StartupRecoveryDefersTheSpinnerAndPropagatesFailureBeforeLoading), VerifyLegacyStartupRecovery);
+    public Task LegacyImport_StartupRecoveryDefersTheSpinnerAndTurnsFailureIntoAChoice() =>
+        RunIsolated(nameof(LegacyImport_StartupRecoveryDefersTheSpinnerAndTurnsFailureIntoAChoice), VerifyLegacyStartupRecovery);
 
     [Fact]
     public Task LegacyImport_QuietOrPreviouslyOfferedLaunchDoesNotScanTheLegacyProfile() =>
@@ -103,19 +117,75 @@ public sealed partial class SettingsThemePreviewTests
 
     private static void VerifyLegacyStartupRecovery()
     {
-        int delays = 0, windows = 0, loads = 0;
-        CompleteLegacyTask(LegacyMigrationRecoveryWindow.AwaitAsync(Task.CompletedTask,
+        Application application = CreateThemedApplication();
+        try { VerifyLegacyStartupRecoveryCore(); }
+        finally { application.Shutdown(); }
+    }
+
+    private static void VerifyLegacyStartupRecoveryCore()
+    {
+        int delays = 0, windows = 0;
+        LegacyRecoveryResult clean = new(LegacyRecoveryStatus.Clean);
+        CompleteLegacyTask(LegacyMigrationRecoveryWindow.RunAsync(() => Task.FromResult(clean),
+            () => throw new InvalidOperationException("Clean recovery never abandons"),
             () => { delays++; return Task.CompletedTask; }, _ => windows++));
         Assert.Equal(0, delays); Assert.Equal(0, windows);
-        Task faulted = LegacyMigrationRecoveryWindow.AwaitAsync(Task.FromException(new IOException("fixture recovery failure")),
-            () => Task.CompletedTask, _ => windows++);
-        Assert.Throws<IOException>(() => CompleteLegacyTask(faulted));
-        if (faulted.IsCompletedSuccessfully) loads++;
-        Assert.Equal(0, loads); Assert.Equal(0, windows);
-        var recovery = new TaskCompletionSource();
-        CompleteLegacyTask(LegacyMigrationRecoveryWindow.AwaitAsync(recovery.Task, () => Task.CompletedTask,
-            task => { windows++; Assert.False(task.IsCompleted); recovery.SetResult(); }));
+        // A recovery that throws does not escape into a startup failure; it becomes the choice.
+        LegacyMigrationRecoveryWindow? shown = null;
+        CompleteLegacyTask(LegacyMigrationRecoveryWindow.RunAsync(
+            () => Task.FromException<LegacyRecoveryResult>(new IOException("fixture recovery failure")),
+            () => Task.FromResult(clean), () => Task.CompletedTask, window => shown = window));
+        Assert.NotNull(shown);
+        // A slow recovery shows its window only after the grace delay, while it is still running.
+        var slow = new TaskCompletionSource<LegacyRecoveryResult>();
+        CompleteLegacyTask(LegacyMigrationRecoveryWindow.RunAsync(() => slow.Task, () => Task.FromResult(clean),
+            () => Task.CompletedTask, _ => { windows++; Assert.False(slow.Task.IsCompleted); slow.SetResult(clean); }));
         Assert.Equal(1, windows);
+    }
+
+    private static void VerifyLegacyStartupDecision()
+    {
+        Application application = CreateThemedApplication();
+        try
+        {
+            foreach (bool closeFromTitleBar in new[] { false, true })
+            {
+                int recoveries = 0, abandons = 0;
+                var window = new LegacyMigrationRecoveryWindow(
+                    Task.FromResult(new LegacyRecoveryResult(LegacyRecoveryStatus.DecisionRequired, "InsufficientSpace")),
+                    () => { recoveries++; return Task.FromResult(new LegacyRecoveryResult(LegacyRecoveryStatus.DecisionRequired, "InsufficientSpace")); },
+                    () => { abandons++; return Task.FromResult(new LegacyRecoveryResult(LegacyRecoveryStatus.Clean, RolledBackCount: 1)); })
+                { Left = -10000, Top = -10000, WindowStartupLocation = WindowStartupLocation.Manual, ShowActivated = false, ShowInTaskbar = false };
+                window.Show(); Drain(window);
+                Assert.True(window.IsAskingForDecision);
+                TextBlock message = Descendants(window).OfType<TextBlock>().Single(text => text.Text.Contains(UiText.Get("LegacyImport.StartupReasonSpace")));
+                Assert.Contains(UiText.Get("LegacyImport.StartupChoice"), message.Text);
+                Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(message));
+                Button[] buttons = Descendants(window).OfType<Button>().ToArray();
+                Assert.Contains(buttons, button => button.IsDefault && (string)button.Content == UiText.Get("LegacyImport.Retry"));
+                Assert.Contains(buttons, button => button.IsCancel && (string)button.Content == UiText.Get("LegacyImport.Abandon"));
+                CompleteLegacyTask(window.RetryAsync());
+                Assert.Equal(1, recoveries); Assert.True(window.IsAskingForDecision); Assert.True(window.IsVisible);
+                if (closeFromTitleBar) window.Close(); // Closing means Cancel import, never an open decision.
+                else CompleteLegacyTask(window.AbandonAsync());
+                DateTime end = DateTime.UtcNow.AddSeconds(5);
+                while (window.IsVisible && DateTime.UtcNow < end) Drain(window);
+                Assert.False(window.IsVisible); Assert.Equal(1, abandons);
+                Assert.Equal(1, window.Outcome!.RolledBackCount);
+            }
+            // A retry that succeeds closes without abandoning anything.
+            int abandoned = 0;
+            var recovered = new LegacyMigrationRecoveryWindow(
+                Task.FromResult(new LegacyRecoveryResult(LegacyRecoveryStatus.DecisionRequired, "IoFailure")),
+                () => Task.FromResult(new LegacyRecoveryResult(LegacyRecoveryStatus.Clean, CompletedCount: 1)),
+                () => { abandoned++; return Task.FromResult(new LegacyRecoveryResult(LegacyRecoveryStatus.Clean)); })
+            { Left = -10000, Top = -10000, WindowStartupLocation = WindowStartupLocation.Manual, ShowActivated = false, ShowInTaskbar = false };
+            recovered.Show(); Drain(recovered);
+            Assert.Contains(Descendants(recovered).OfType<TextBlock>(), text => text.Text.Contains(UiText.Get("LegacyImport.StartupReasonAccess")));
+            CompleteLegacyTask(recovered.RetryAsync());
+            Assert.False(recovered.IsVisible); Assert.Equal(0, abandoned);
+        }
+        finally { application.Shutdown(); }
     }
 
     private static void VerifyLegacyDraft()
@@ -133,14 +203,15 @@ public sealed partial class SettingsThemePreviewTests
                     FolderFilePrefix = "retained", UseCurrentFolderForNewCaptures = true, DefaultCaptureFolderId = Guid.NewGuid(),
                     ThumbnailLongEdge = 384, ImageRetentionHours = 720 },
                 Export = { QuickSaveDirectoryOverride = Path.Combine(root, "store-exports") },
-                GitHub = { Token = "fixture-store-credential" }, Capture = { StartGuideShownCount = 2 },
-                StoreRating = { SuccessfulCaptureCount = 17 }, StoreUpdate = { PendingFromVersion = "4.1.1.0" },
+                GitHub = { Token = "fixture-store-credential", IssueUrl = "https://github.com/store-owner/store-repo/issues/7" },
+                Capture = { StartGuideShownCount = 2 },
+                StoreRating = { SuccessfulCaptureCount = 17 }, StoreUpdate = { CompletionNoticeVersion = "4.1.2.0" },
             };
             store.Save(current);
             byte[] before = File.ReadAllBytes(paths.SettingsFile);
             string oldSettings = Path.Combine(root, "legacy-settings.json");
             store.ExportTo(new AppSettings { General = { Theme = AppThemeNames.Daylight }, Queue = { MaxItems = 12 },
-                GitHub = { Token = "fixture-legacy-credential" } }, oldSettings);
+                GitHub = { Token = "fixture-legacy-credential", IssueUrl = "https://github.com/legacy-owner/legacy-repo/issues/3" } }, oldSettings);
             int applies = 0;
             var window = new SettingsWindow(() => current, _ =>
             {
@@ -158,6 +229,9 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Equal(JsonSerializer.Serialize(current.Queue), JsonSerializer.Serialize(candidate.Queue));
                 Assert.Equal(current.Export.QuickSaveDirectoryOverride, candidate.Export.QuickSaveDirectoryOverride);
                 Assert.Equal(current.GitHub.Token, candidate.GitHub.Token);
+                // The upload target stays paired with the kept token.
+                Assert.Equal(current.GitHub.IssueUrl, draft.GitHubIssueUrl);
+                Assert.Equal(current.GitHub.IssueUrl, candidate.GitHub.IssueUrl);
                 Assert.Equal(current.General.IsFirstRun, candidate.General.IsFirstRun);
                 Assert.Equal(current.General.LaunchAtLogin, candidate.General.LaunchAtLogin);
                 Assert.Equal(current.Capture.StartGuideShownCount, candidate.Capture.StartGuideShownCount);
@@ -169,16 +243,18 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Same(draft, window.DataContext);
                 Assert.True(draft.HasUnappliedChanges);
                 Assert.Equal(before, File.ReadAllBytes(paths.SettingsFile));
-                Assert.Equal("4.1.1.0", current.StoreUpdate.PendingFromVersion);
+                Assert.Equal("4.1.2.0", current.StoreUpdate.CompletionNoticeVersion);
                 draft.MaxItems = "888";
                 draft.QuickSaveDirectoryOverride = Path.Combine(root, "chosen-exports");
                 draft.GitHubToken = "fixture-user-edited-credential";
+                draft.GitHubIssueUrl = "https://github.com/chosen-owner/chosen-repo/issues/9";
                 draft.LaunchAtLogin = false;
                 candidate = window.LegacyApplyCandidate(draft.ToAppSettings());
                 Assert.Equal(888, candidate.Queue.MaxItems);
                 Assert.Equal(current.Queue.MaxBytes, candidate.Queue.MaxBytes);
                 Assert.Equal(draft.QuickSaveDirectoryOverride, candidate.Export.QuickSaveDirectoryOverride);
                 Assert.Equal(draft.GitHubToken, candidate.GitHub.Token);
+                Assert.Equal("https://github.com/chosen-owner/chosen-repo/issues/9", candidate.GitHub.IssueUrl);
                 Assert.False(candidate.General.LaunchAtLogin);
                 SettingsWindow.ApplyCommand.Execute(null, window);
                 Assert.Equal(2, applies); Assert.Same(draft, window.DataContext);
@@ -194,6 +270,7 @@ public sealed partial class SettingsThemePreviewTests
                 candidate = window.LegacyApplyCandidate(draft.ToAppSettings());
                 Assert.Equal(current.Queue.MaxBytes, candidate.Queue.MaxBytes);
                 Assert.Equal(JsonSerializer.Serialize(current.Queue), JsonSerializer.Serialize(candidate.Queue));
+                Assert.Equal(current.GitHub.IssueUrl, candidate.GitHub.IssueUrl);
             }
             finally { window.CloseForExit(); }
         }
@@ -234,35 +311,122 @@ public sealed partial class SettingsThemePreviewTests
         Application application = CreateThemedApplication();
         try
         {
-            int releases = 0, recoveryAttempts = 0;
+            // Closing during a copy cancels it and closes as soon as it stops, even if it then
+            // reports a recovery problem; closing returns the protected windows and exit.
+            int releases = 0;
             var service = new LegacyFixtureService();
             var import = new TaskCompletionSource<LegacyMigrationResult>();
-            var recovery = new TaskCompletionSource();
-            var window = NewLegacyWindow(LegacyOperations(service, (_, _, _) => import.Task, () => releases++, () =>
-            {
-                recoveryAttempts++;
-                return recoveryAttempts == 1 ? Task.FromException(new IOException("fixture recovery unavailable")) : recovery.Task;
-            }));
+            CancellationToken observed = default;
+            var window = NewLegacyWindow(LegacyOperations(service, (_, _, token) => { observed = token; return import.Task; }, () => releases++));
             window.Show(); Drain(window);
             Task copying = window.ImportAsync();
-            window.Close(); // Requests cancellation; completion is still protected.
-            Assert.True(window.IsVisible);
+            window.Close();
+            Assert.True(window.IsVisible); Assert.True(observed.IsCancellationRequested);
+            Assert.Equal(UiText.Get("LegacyImport.Canceling"), LegacyField<TextBlock>(window, "_status").Text);
             Assert.Equal(0, releases);
             import.SetResult(new(LegacyMigrationStatus.Failed, ErrorCode: "RecoveryRequired"));
             CompleteLegacyTask(copying);
-            Assert.True(window.IsRecoveryRequired);
-            Assert.Equal(0, releases);
-            window.Close(); Assert.True(window.IsVisible);
-            Assert.False(LegacyField<Button>(window, "_cancel").IsEnabled);
-            CompleteLegacyTask(window.RetryRecoveryAsync());
-            Assert.True(window.IsRecoveryRequired); Assert.Equal(0, releases);
-            Task retry = window.RetryRecoveryAsync();
-            Assert.True(window.IsWorking); Assert.Equal(0, releases);
-            window.Close(); Assert.True(window.IsVisible);
+            Assert.False(window.IsVisible); Assert.Equal(1, releases);
+
+            // Pending recovery offers a retry but never disables Close or Esc.
+            int secondReleases = 0, recoveryAttempts = 0;
+            var recovery = new TaskCompletionSource();
+            var second = NewLegacyWindow(LegacyOperations(service,
+                (_, _, _) => Task.FromResult(new LegacyMigrationResult(LegacyMigrationStatus.Failed, ErrorCode: "RecoveryRequired")),
+                () => secondReleases++, () =>
+                {
+                    recoveryAttempts++;
+                    return recoveryAttempts == 1 ? Task.FromException(new IOException("fixture recovery unavailable")) : recovery.Task;
+                }));
+            second.Show(); Drain(second);
+            CompleteLegacyTask(second.ImportAsync());
+            Assert.True(second.IsRecoveryRequired); Assert.Equal(0, secondReleases);
+            Button close = LegacyField<Button>(second, "_cancel");
+            Assert.True(close.IsEnabled && close.IsCancel);
+            Assert.Equal(UiText.Get("LegacyImport.RecoveryRequired"), LegacyField<TextBlock>(second, "_status").Text);
+            CompleteLegacyTask(second.RetryRecoveryAsync());
+            Assert.True(second.IsRecoveryRequired); Assert.Equal(0, secondReleases); Assert.True(close.IsEnabled);
+            Task retry = second.RetryRecoveryAsync();
+            Assert.True(second.IsWorking);
+            second.Close(); Assert.True(second.IsVisible); // Only the running recovery write defers closing.
             recovery.SetResult(); CompleteLegacyTask(retry);
-            Assert.False(window.IsRecoveryRequired); Assert.Equal(1, releases);
-            Assert.Null(window.Selection); // Recovery alone does not invent an import completion.
-            window.Close(); Assert.False(window.IsVisible);
+            Assert.False(second.IsRecoveryRequired); Assert.Equal(1, secondReleases);
+            Assert.Null(second.Selection); // Recovery alone does not invent an import completion.
+            Assert.False(second.IsVisible);
+
+            // Closing while recovery is still pending releases protection at once.
+            int thirdReleases = 0;
+            var third = NewLegacyWindow(LegacyOperations(service,
+                (_, _, _) => Task.FromResult(new LegacyMigrationResult(LegacyMigrationStatus.Failed, ErrorCode: "RecoveryRequired")),
+                () => thirdReleases++, () => Task.FromException(new IOException("still unavailable"))));
+            third.Show(); Drain(third);
+            CompleteLegacyTask(third.ImportAsync());
+            Assert.True(third.IsRecoveryRequired);
+            third.Close();
+            Assert.False(third.IsVisible); Assert.Equal(1, thirdReleases);
+        }
+        finally { application.Shutdown(); }
+    }
+
+    private static void VerifyLegacyPublicationCancel()
+    {
+        Application application = CreateThemedApplication();
+        try
+        {
+            using var language = UiText.UseLanguage("ko-KR");
+            var service = new LegacyFixtureService();
+            // Publication started: Cancel is disabled with honest text, and Close waits for it.
+            var import = new TaskCompletionSource<LegacyMigrationResult>();
+            IProgress<LegacyMigrationProgress>? observer = null;
+            var window = NewLegacyWindow(LegacyOperations(service, (_, progress, _) => { observer = progress; return import.Task; }));
+            window.Show(); Drain(window);
+            LegacyField<CheckBox>(window, "_includeSettings").IsChecked = true;
+            Task publishing = window.ImportAsync();
+            observer!.Report(new(LegacyMigrationStage.Publishing, 2, 2, 10, 10)); Drain(window);
+            Button cancel = LegacyField<Button>(window, "_cancel");
+            Assert.False(cancel.IsEnabled);
+            Assert.Equal(UiText.Get("LegacyImport.PublishingNoCancel"), LegacyField<TextBlock>(window, "_status").Text);
+            window.Close(); Assert.True(window.IsVisible);
+            import.SetResult(new(LegacyMigrationStatus.Completed, 2, 0, "C:\\Fixture\\legacy-settings.json"));
+            CompleteLegacyTask(publishing);
+            Assert.False(window.IsVisible);
+            Assert.True(window.Selection!.IncludeSettings); Assert.False(window.Selection.CompletedAfterCancel);
+
+            // Cancel requested during the copy, but the import committed first: no settings draft.
+            var late = new TaskCompletionSource<LegacyMigrationResult>();
+            var raced = NewLegacyWindow(LegacyOperations(service, (_, _, _) => late.Task));
+            raced.Show(); Drain(raced);
+            LegacyField<CheckBox>(raced, "_includeSettings").IsChecked = true;
+            Task copying = raced.ImportAsync();
+            LegacyField<Button>(raced, "_cancel").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            late.SetResult(new(LegacyMigrationStatus.Completed, 1, 0, "C:\\Fixture\\legacy-settings.json"));
+            CompleteLegacyTask(copying);
+            Assert.False(raced.IsVisible);
+            Assert.False(raced.Selection!.IncludeSettings); Assert.True(raced.Selection.CompletedAfterCancel);
+            Assert.StartsWith(UiText.Get("LegacyImport.CompletedBeforeCancel"), LegacyField<TextBlock>(raced, "_status").Text);
+        }
+        finally { application.Shutdown(); }
+    }
+
+    private static void VerifyLegacyExit()
+    {
+        Application application = CreateThemedApplication();
+        try
+        {
+            int releases = 0;
+            var window = NewLegacyWindow(LegacyOperations(new LegacyFixtureService(), (_, _, token) =>
+            {
+                // Like the service: cancellation during the copy returns Canceled after rolling back.
+                var canceled = new TaskCompletionSource<LegacyMigrationResult>();
+                token.Register(() => canceled.TrySetResult(new(LegacyMigrationStatus.Canceled)));
+                return canceled.Task;
+            }, () => releases++));
+            window.Show(); Drain(window);
+            Task copying = window.ImportAsync();
+            Assert.True(window.IsWorking);
+            CompleteLegacyTask(window.StopForExitAsync());
+            Assert.True(copying.IsCompleted);
+            Assert.False(window.IsVisible); Assert.Equal(1, releases); Assert.Null(window.Selection);
         }
         finally { application.Shutdown(); }
     }
@@ -279,26 +443,50 @@ public sealed partial class SettingsThemePreviewTests
             int releases = 0;
             var window = NewLegacyWindow(LegacyOperations(service, (_, progress, _) => { observer = progress; return import.Task; }, () => releases++));
             window.Show(); Drain(window);
-            service.Scan = (_, _, _) => Task.FromResult(new LegacyMigrationScan(LegacyMigrationScanStatus.Ready, 3, 1, 2, 200, true));
+            service.Scan = (_, _, _) => Task.FromResult(new LegacyMigrationScan(LegacyMigrationScanStatus.Ready, 3, 1, 2, 200, true,
+                UnusableCount: 2, SettingsUnreadable: false));
             CompleteLegacyTask(window.ScanAsync());
             firstScan.SetResult(new(LegacyMigrationScanStatus.Failed, ErrorCode: "InvalidSource")); Drain(window);
             Assert.Equal(UiText.Get("LegacyImport.Ready"), LegacyField<TextBlock>(window, "_status").Text);
-            Assert.True(LegacyField<Button>(window, "_copy").IsEnabled);
+            Assert.Contains(UiText.Format("LegacyImport.Unusable", 2), LegacyField<TextBlock>(window, "_summary").Text);
+            Button copy = LegacyField<Button>(window, "_copy"), cancel = LegacyField<Button>(window, "_cancel");
+            Assert.True(copy.IsEnabled && copy.IsDefault); Assert.True(cancel.IsCancel);
             Assert.False(LegacyField<CheckBox>(window, "_includeSettings").IsChecked);
+            ProgressBar bar = LegacyField<ProgressBar>(window, "_progress");
+            Assert.Equal(UiText.Get("LegacyImport.ProgressName"), AutomationProperties.GetName(bar));
+            FocusManager.SetFocusedElement(window, copy);
             Task copying = window.ImportAsync();
-            observer!.Report(new(LegacyMigrationStage.Copying, 1, 4, 50, 200)); Drain(window);
-            Assert.False(LegacyField<ProgressBar>(window, "_progress").IsIndeterminate);
-            Assert.Equal(25, LegacyField<ProgressBar>(window, "_progress").Value);
+            observer!.Report(new(LegacyMigrationStage.Scanning, 2, 4, 0, 0)); Drain(window);
+            Assert.False(bar.IsIndeterminate); Assert.Equal(50, bar.Value);
+            Assert.Equal(UiText.Format("LegacyImport.ScanProgress", 2, 4), LegacyField<TextBlock>(window, "_status").Text);
+            observer.Report(new(LegacyMigrationStage.Copying, 1, 4, 50, 200)); Drain(window);
+            int announcements = window.AnnouncementCountForTest;
+            observer.Report(new(LegacyMigrationStage.Copying, 2, 4, 100, 200)); Drain(window);
+            Assert.Equal(announcements, window.AnnouncementCountForTest); // Ticks are not re-announced.
+            Assert.False(bar.IsIndeterminate);
+            Assert.Equal(50, bar.Value);
+            Assert.True(cancel.IsEnabled);
             observer.Report(new(LegacyMigrationStage.Publishing, 4, 4, 200, 200)); Drain(window);
-            Assert.True(LegacyField<ProgressBar>(window, "_progress").IsIndeterminate);
-            import.SetResult(new(LegacyMigrationStatus.Completed, 4, 0)); CompleteLegacyTask(copying);
+            Assert.True(bar.IsIndeterminate); Assert.False(cancel.IsEnabled);
+            Assert.Equal(announcements + 1, window.AnnouncementCountForTest);
+            import.SetResult(new(LegacyMigrationStatus.Completed, 4, 0, UnusableCount: 2)); CompleteLegacyTask(copying);
             string completed = LegacyField<TextBlock>(window, "_status").Text;
+            Assert.Equal(UiText.Format("LegacyImport.CompletedWithUnusable", 4, 0, 2), completed);
             observer.Report(new(LegacyMigrationStage.Copying, 0, 4, 0, 200)); Drain(window);
             Assert.Equal(completed, LegacyField<TextBlock>(window, "_status").Text);
             Assert.Equal(1, releases); Assert.NotNull(window.Selection);
+            // The finished action leaves; focus and Enter move to the remaining Close button.
+            Assert.Equal(Visibility.Collapsed, copy.Visibility);
+            Assert.True(cancel.IsEnabled && cancel.IsDefault);
+            Assert.Same(cancel, FocusManager.GetFocusedElement(window));
             window.Close();
-            Assert.NotEqual(LegacyDataImportWindow.ErrorText("OverlappingRoots"), LegacyDataImportWindow.ErrorText(null));
-            Assert.NotEqual(LegacyDataImportWindow.ErrorText("TargetChanged"), LegacyDataImportWindow.ErrorText(null));
+            string generic = LegacyDataImportWindow.ErrorText((string?)null);
+            foreach (string code in new[] { "OverlappingRoots", "TargetChanged", "MissingIndex", "InsufficientSpace", "TargetUnreadable", "InvalidJournal" })
+                Assert.NotEqual(generic, LegacyDataImportWindow.ErrorText(code));
+            string space = LegacyDataImportWindow.ErrorText(new LegacyMigrationResult(LegacyMigrationStatus.Failed,
+                ErrorCode: "InsufficientSpace", RequiredBytes: 3L * 1024 * 1024 * 1024, AvailableBytes: 1024L * 1024 * 1024));
+            Assert.Equal(UiText.Format("LegacyImport.InsufficientSpaceAmount", LegacyDataImportWindow.FormatBytes(2L * 1024 * 1024 * 1024)), space);
+            Assert.Contains("2", LegacyDataImportWindow.FormatBytes(2L * 1024 * 1024 * 1024));
         }
         finally { application.Shutdown(); }
     }
@@ -330,10 +518,15 @@ public sealed partial class SettingsThemePreviewTests
                     settings.LegacyImportPackaged = false; Assert.Equal(Visibility.Collapsed, entry.Visibility);
                 }
                 finally { settings.CloseForExit(); }
-                var service = new LegacyFixtureService();
+                var service = new LegacyFixtureService
+                {
+                    Scan = (_, _, _) => Task.FromResult(new LegacyMigrationScan(LegacyMigrationScanStatus.Ready, 12, 3, 4, 150000, false,
+                        UnusableCount: 2, SettingsUnreadable: true)),
+                };
                 var dialog = NewLegacyWindow(LegacyOperations(service, (_, _, _) => Task.FromResult(new LegacyMigrationResult(LegacyMigrationStatus.Completed))));
                 dialog.Width = 420;
                 dialog.Show(); Drain(dialog);
+                Assert.True(LegacyField<TextBlock>(dialog, "_settingsNote").IsVisible);
                 foreach (int height in new[] { 500, 430 })
                 {
                     dialog.Height = height; Drain(dialog);
@@ -368,6 +561,9 @@ public sealed partial class SettingsThemePreviewTests
         public Task<LegacyMigrationScan> ScanAsync(string sourceDataRoot, AppPaths targetPaths, CancellationToken cancellationToken = default) => Scan(sourceDataRoot, targetPaths, cancellationToken);
         public Task<LegacyMigrationResult> ImportAsync(string sourceDataRoot, AppPaths targetPaths, MyCapture.Core.Queue.CaptureQueue quiescedTargetQueue,
             AppSettings currentSettings, IProgress<LegacyMigrationProgress>? progress = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task RecoverPendingAsync(AppPaths targetPaths, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<LegacyRecoveryResult> RecoverPendingAsync(AppPaths targetPaths, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new LegacyRecoveryResult(LegacyRecoveryStatus.Clean));
+        public Task<LegacyRecoveryResult> AbandonPendingAsync(AppPaths targetPaths, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new LegacyRecoveryResult(LegacyRecoveryStatus.Clean));
     }
 }

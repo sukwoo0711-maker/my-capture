@@ -18,17 +18,31 @@ public partial class App
     private bool _legacySharedProtectionHeld;
     private List<(Window Window, bool Enabled)>? _legacyImportWindowStates;
 
-    private Task RecoverLegacyImportBeforeLoadAsync()
+    /// <summary>
+    /// Finishes or rolls back an interrupted import before the library loads. It never stops the
+    /// launch: an import that still cannot finish is offered for retry or cancellation.
+    /// </summary>
+    private async Task RecoverLegacyImportBeforeLoadAsync()
     {
         if (_services is null) throw new InvalidOperationException("Application services are unavailable.");
         AppPaths paths = _services.GetRequiredService<AppPaths>();
-        Task recovery = _services.GetRequiredService<ILegacyLibraryMigrationService>().RecoverPendingAsync(paths);
-        return LegacyMigrationRecoveryWindow.AwaitAsync(recovery, () => Task.Delay(150), task =>
+        ILegacyLibraryMigrationService service = _services.GetRequiredService<ILegacyLibraryMigrationService>();
+        try
         {
-            var progress = new LegacyMigrationRecoveryWindow(task);
-            _ = progress.ShowDialog();
-        });
+            await LegacyMigrationRecoveryWindow.RunAsync(() => service.RecoverPendingAsync(paths),
+                () => service.AbandonPendingAsync(paths), () => Task.Delay(150), window =>
+                {
+                    _ = window.ShowDialog();
+                    if (window.Failure is { } failure) _log?.LogWarning(failure, "Legacy import recovery reported a failure");
+                    if (window.Outcome is { Status: LegacyRecoveryStatus.DecisionRequired } outcome)
+                        _log?.LogWarning("Legacy import recovery deferred: {Code}", outcome.ErrorCode);
+                });
+        }
+        catch (Exception error) { _log?.LogError(error, "Legacy import recovery failed; startup continues"); }
     }
+
+    /// <summary>App exit stops a running import first: a copy is canceled, a publication finishes.</summary>
+    private Task StopLegacyImportForExitAsync() => _legacyImportWindow?.StopForExitAsync() ?? Task.CompletedTask;
 
     internal static string DefaultLegacyDataRoot => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppPaths.AppFolderName);
@@ -63,7 +77,7 @@ public partial class App
         {
             // Initial recovery can itself publish metadata; finish it before acquiring protection.
             await Task.WhenAll(_initialLibraryRecoveryTask, _initialEditRecoveryTask).WaitAsync(token);
-            if (!await PrepareAndHoldStoreUpdateAsync()) { _legacyImportPreparing = false; return false; }
+            if (!await PrepareAndHoldForLegacyImportAsync()) { _legacyImportPreparing = false; return false; }
             _legacySharedProtectionHeld = true;
             _legacyImportWindowStates = Windows.Cast<Window>().Where(window => !ReferenceEquals(window, _legacyImportWindow))
                 .Select(window => (window, window.IsEnabled)).ToList();
@@ -96,8 +110,10 @@ public partial class App
     {
         if (!_legacySharedProtectionHeld || _services is null || _queue is null || _capturePaths is null)
             throw new InvalidOperationException("Legacy import protection is unavailable.");
-        await _services.GetRequiredService<ILegacyLibraryMigrationService>()
+        LegacyRecoveryResult result = await _services.GetRequiredService<ILegacyLibraryMigrationService>()
             .RecoverPendingAsync(_capturePaths, CancellationToken.None);
+        if (result.Status == LegacyRecoveryStatus.DecisionRequired)
+            throw Themes.UserFacingError.Mark(new IOException(LegacyMigrationRecoveryWindow.ReasonText(result.ErrorCode)));
         using (_queue.SuspendEviction()) _queue.Load();
     }
 
