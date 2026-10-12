@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `perf/product-optimization` (사용자 지시에 따라 다음 버전 제품 최적화 진행) |
+| 현재 기록 브랜치 | `perf/product-optimization` (다음 버전 제품 최적화 1차 구현·통합 검증 완료) |
 | Store 소스 브랜치 | `release/store-4.1.0`, main과 같은 `39942191fbdc49d018ccfd01c975701f0d002532` |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -46,13 +46,18 @@
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12, Store 4.1.0 심사 제출 완료, 다음 버전 제품 최적화 진행)
+## 3. 현재 상태 (2026-10-12, Store 4.1.0 심사 제출 완료, 다음 버전 제품 최적화 1차 완료)
 
 ### 다음 버전 제품 최적화
 
 - 사용자 요청: “이제 다음버전을 개발해야한다. 먼저 제품최적화 부터 진행한다”. 현재 제출한 4.1.0을 보존하고 앱 실행 중의 라이브러리·이미지 처리 비용을 조사해 개선합니다.
 - 통합 기준은 `968b7c7`입니다. 기존 선택 getter·Store 전용 패키징 최적화 `5e463c9`를 최신 인계 기록 `7668af3`에 병합했습니다. 이번 작업의 새 성과는 이 기준 이후 변경과 측정으로 구분합니다.
-- 조사: `/root/icons` 라이브러리·썸네일, `/root/library_motion` 이미지 편집·녹화 경로. 아직 제품 코드 수정이나 새 성능 측정 결과는 없습니다.
+- 제품 변경은 `0519a41`(자르기 영역 읽기), `caee5b8`(라이브러리 전체 선택)로 통합했습니다. 화면·문구·파일 형식 변경 없이 실제 중복 작업을 제거했습니다. 통합 Release 빌드 경고·오류 0, 전체 Core 1066·App 2262 통과(기존 조건부 9개 건너뜀), actual session `16420` exit0입니다.
+- 3840×2160 Bgra32에서 640×480 영역을 5회 처리한 실제 editor 경로: 자르기 할당 344,083,912→12,303,376 bytes, redo 172,043,680→6,155,560 bytes(각 약96.4% 감소). 회전·DPI·alpha·clipping·중첩 crop·undo/redo와 non32 fallback 검사 통과, 실제 결과 PNG 28쌍 bytes 동일. 비32bpp는 기존 처리 경로를 유지합니다.
+- 라이브러리 Ctrl+A는 기존 ID 선택·visible/anchor 정리·선택 알림을 유지하면서 폴더/검색/정렬/그룹 재구성을 제거했습니다. 100회 paired 측정: 300개 항목 40,564,000→3,275,200 bytes(91.9% 감소), 1000개 138,080,216→13,505,600 bytes(90.2% 감소). 메타데이터 알림 750,000/2,500,000→0, 그룹 변경 400→0. 필요한 첫 선택 알림 300/1000개는 유지하고, Rows 이벤트는 전후 모두 0입니다.
+- 집중 검증은 이미지 16/16, 라이브러리 신규12+기존22 =34/34 PASS. 독립 native 검토에서 수정 지적 없음. DeepSeek 추가 검토 1회는 출력 한도 소진(`length`, exit1)으로 공개 답변 없이 끝났으며, 완료된 검토로 집계하지 않았습니다. 통합 전체 회귀 검사와 개발 빌드의 UX 자체검사도 완료했습니다.
+- 전후 측정·TRX·PNG·독립 검토 근거는 `artifacts/product-optimization/`에 수집했습니다. 측정 대상은 정해진 호출의 관리 메모리 할당이며 전체 앱 메모리 사용량·응답 속도가 아닙니다. 시간 원본도 보존했으나 동시 offscreen 작업의 CPU 경합 가능성이 있어 속도 배수로 사용하지 않습니다.
+- 실기 확인용 개발 빌드: `artifacts/next-version-product-opt-build-1/MyCapture.exe`. 별도 Release 빌드 exit0, 경고·오류0. 짧은 새 profile `%LOCALAPPDATA%/Temp/mcux/popt1`에서 `--selftest-ux-review x` 실행, owned PID66652의 실제 종료코드0을 session `60013`에서 수집하고 `RESULT: PASS`를 확인했습니다. 라이브러리·이미지 편집기·고대비 대표 PNG 3장 직접 확인. 물리 mixed-DPI 테스트는 이번 fixture 검증에 포함되지 않습니다. 버전 메타데이터는 현재 개발 기준을 유지하며 다음 실제 배포 단계에서 갱신합니다. 이 개발 빌드는 Store에 제출하지 않았습니다.
 
 ### 3.0 Store 4.1.0 및 다음 배포 준비
 
@@ -119,7 +124,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** 다음 버전 제품 최적화 — 실제 중복 연산·디코딩·할당을 확인하고, 화면·파일·편집 결과를 유지하는 개선을 구현합니다. 전후 측정, 경계·회귀 테스트, 독립 검토, 전체 빌드·검증을 마친 뒤 이 문서에 결과를 기록합니다. 아래는 이전 배포 작업의 완료 이력입니다.
+**현재 작업 완료:** 다음 버전 제품 최적화 1차 — 자르기/redo의 전체 캔버스 복사와 전체 선택의 라이브러리 재구성을 제거했습니다. 전후 측정, 경계·회귀 테스트, 독립 검토, 전체 Release 빌드·Core/App 및 UX 검증, 실기 확인용 개발 빌드 준비를 마쳤습니다(§3). 후속 후보는 mosaic 영역 읽기와 비디오 이미지 레이어 base64 중간 복사 제거이며 아직 변경하지 않았습니다. 아래는 이전 배포 작업의 완료 이력입니다.
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
 2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
@@ -262,6 +267,10 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 08:50 KST(UTC2026-10-11T23:50경) Submit for certification 클릭 후 `Update in certification` 및 `Product update: In certification (Submission4)`를 직접확인. Submission Complete / Pre-processing In progress / Certification·Publishing Not started. `Your product will start publishing as soon as it passes certification` 확인. 선택적만족도설문은 Close로닫고응답전송없음. 결과화면을 markDeliverable, `artifacts/store-410-verification/store-certification-submitted.jpg` 저장. 현재공개4.0.3.0,새4.1.0.0은심사접수완료/공개대기. 사용자추가설정요청해소, 다음배포최적화실행검증도이미완료. 파일·기존패키지·작업사본·근거자료삭제없음.
 
 - 2026-10-12 Codex: 다음 버전 제품 최적화 착수. cwd `C:\GitRepositories\my-capture-codex`; `git switch -c perf/product-optimization`, `git merge --no-edit perf/next-release-optimization` PASS(exit0), 기준 `968b7c7`. WebGPT `node C:\Users\sukwo\.codex\skills\webgpt\scripts\client.mjs register --cwd C:\GitRepositories\my-capture-codex` FAIL(exit1, `tunnel_unavailable`, 과업 미등록·미전송). `/root/delegation_recovery`에 owned service 읽기 전용 점검, 기존 native 작업자 2명에 서로 다른 앱 경로 조사를 배정함. 기존 작업 사본·현재 Store 제출·사용자 메인 체크아웃을 보존함.
+
+- 2026-10-12 Codex: 작업자 `6a6de2a`(image), `9f4226a`(library) diff·실제 JSON/TRX·PNG 비교·독립 검토를 확인하고 root cwd에서 cherry-pick PASS(exit0), 통합 `0519a41`, `caee5b8`. 각 작업 사본 clean·기존 브랜치 보존. root `powershell.exe -NoProfile -NonInteractive -File build/build.ps1 -Configuration Release -Test` actual session `16420`: build 경고0·오류0 PASS, 전체 tests 실행 중. 상세 LOG와 근거는 `artifacts/product-optimization/`.
+
+- 2026-10-12 Codex: 통합 `caee5b8`의 전체 Release 명령 actual session `16420` PASS(exit0), build 경고0·오류0, Core1066/App2262 통과·기존9skip. `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release --no-restore -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\next-version-product-opt-build-1` PASS(exit0). 새 `%LOCALAPPDATA%\Temp\mcux\popt1`로 `MyCapture.exe --selftest-ux-review x` 실행 후 initial GUI launch wrapper와 실제 process 종료를 구분해 기록; owned PID66652 handle/WaitForExit actual session `60013` PASS(exit0), report `RESULT: PASS`. 대표 PNG3장 직접 확인, 파일·source hash는 `artifacts/product-optimization/development-build-evidence.json`. 제품 최적화 1차 완료, Store 변경·사용자 앱 종료·파일 삭제 없이 모든 작업 사본과 근거를 보존함.
 
 ## 9. 인계 체크리스트
 
