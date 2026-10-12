@@ -3913,6 +3913,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="CopyTerms_SizeKb" xml:space="preserve"><value>{0:N0} KB</value></data>
   <data name="Tutorial.Select" xml:space="preserve"><value>Choose a feature</value></data>
   <data name="Tutorial.CurrentKey" xml:space="preserve"><value>Shortcut: {0}</value></data>
+  <data name="Tutorial.AccessibleName" xml:space="preserve"><value>{0} tutorial</value></data>
+  <data name="Tutorial.VideoName" xml:space="preserve"><value>{0} tutorial video</value></data>
   <data name="Tutorial.image-rotate.Title" xml:space="preserve"><value>Rotate image</value></data>
   <data name="Tutorial.video-trim.Title" xml:space="preserve"><value>Trim recording</value></data>
   <data name="Tutorial.capture-region.Unassigned" xml:space="preserve"><value>Choose Region capture from the tray menu.</value></data>

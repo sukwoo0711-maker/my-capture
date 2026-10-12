@@ -882,7 +882,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Text_096A13A757DB}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-region}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="capture-region" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_096A13A757DB}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -891,7 +891,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Text_75306DAE2E60}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName record-region}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="record-region" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_75306DAE2E60}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -904,7 +904,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button x:Name="TextCopyTutorialButton" Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text TextCapture_TutorialTitle}"
+                                <Button x:Name="TextCopyTutorialButton" Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName text-copy}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Click="OnTextCopyTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text TextCapture_Title}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -914,7 +914,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Text_36458FABBDBB}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-window}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="capture-window" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_36458FABBDBB}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -923,7 +923,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Text_254C836B9ED2}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-fullscreen}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="capture-fullscreen" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_254C836B9ED2}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -937,7 +937,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Hotkey.Scroll}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-scroll}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="capture-scroll" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Scroll}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -946,7 +946,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Hotkey.Delay}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-delay}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="capture-delay" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Delay}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -955,7 +955,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text RecordingPauseHotkey_Command}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName record-pause}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="record-pause" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingPauseHotkey_Command}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -965,7 +965,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Text_66BA5DCDA810}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName library-open}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="library-open" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_66BA5DCDA810}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -974,7 +974,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Text_1FBCF51E2FF5}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName pin-clipboard}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="pin-clipboard" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_1FBCF51E2FF5}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -983,7 +983,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Text_4FED89116C1F}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName pin-hide-all}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="pin-hide-all" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_4FED89116C1F}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -992,7 +992,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text Text_67FE4AF7D334}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName pin-click-through}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="pin-click-through" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_67FE4AF7D334}" VerticalAlignment="Center" />
                             </DockPanel>
@@ -1001,7 +1001,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text PinRestore_Command}"
+                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName pin-restore}"
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Tag="pin-restore" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_Command}" VerticalAlignment="Center" />
                             </DockPanel>

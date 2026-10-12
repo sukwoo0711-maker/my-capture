@@ -3913,6 +3913,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="CopyTerms_SizeKb" xml:space="preserve"><value>{0:N0}KB</value></data>
   <data name="Tutorial.Select" xml:space="preserve"><value>기능 선택</value></data>
   <data name="Tutorial.CurrentKey" xml:space="preserve"><value>단축키: {0}</value></data>
+  <data name="Tutorial.AccessibleName" xml:space="preserve"><value>{0} 사용법</value></data>
+  <data name="Tutorial.VideoName" xml:space="preserve"><value>{0} 사용법 영상</value></data>
   <data name="Tutorial.image-rotate.Title" xml:space="preserve"><value>이미지 회전</value></data>
   <data name="Tutorial.video-trim.Title" xml:space="preserve"><value>녹화 트림</value></data>
   <data name="Tutorial.capture-region.Unassigned" xml:space="preserve"><value>트레이 메뉴에서 영역 캡처를 선택합니다.</value></data>

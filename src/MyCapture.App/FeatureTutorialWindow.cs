@@ -164,8 +164,18 @@ internal class FeatureTutorialWindow : Window
         $"{_feature.Id}.{(UiText.Culture.TwoLetterISOLanguageName == "ko" ? "ko" : "en")}.mp4");
 
     internal string SelectedFeatureId => _feature.Id;
-    internal static string TutorialTitle(FeatureTutorial feature) => feature.Id == "text-copy"
-        ? UiText.Get("TextCapture_TutorialTitle") : feature.DisplayName;
+    /// <summary>
+    /// "{feature} tutorial": the window title and the accessible name of every button that opens
+    /// it, so a screen reader never hears a bare feature name that sounds like the feature itself.
+    /// </summary>
+    internal static string TutorialTitle(FeatureTutorial feature) => UiText.Format("Tutorial.AccessibleName", TutorialSubject(feature));
+
+    /// <summary>The feature's own title, or its category-qualified name when another tutorial shares that title.</summary>
+    internal static string TutorialSubject(FeatureTutorial feature)
+    {
+        string title = UiText.Get(feature.TitleKey);
+        return TutorialCatalog.All.Count(other => UiText.Get(other.TitleKey) == title) > 1 ? feature.DisplayName : title;
+    }
 
     internal static void ShowTutorial(Window owner, HotkeySettings hotkeys, string featureId) =>
         ShowTutorial(owner, () => hotkeys, featureId);
@@ -251,7 +261,7 @@ internal class FeatureTutorialWindow : Window
         _steps.Children.Clear();
         foreach (string step in _feature.StepsFor(keys)) _steps.Children.Add(Paragraph(step));
         AutomationProperties.SetName(_media.View, _feature.Id == "text-copy"
-            ? UiText.Get("TextCapture_TutorialAnimation") : _feature.DisplayName);
+            ? UiText.Get("TextCapture_TutorialAnimation") : UiText.Format("Tutorial.VideoName", TutorialSubject(_feature)));
     }
 
     private void OnOwnerVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)

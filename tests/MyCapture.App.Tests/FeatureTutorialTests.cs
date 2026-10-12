@@ -58,9 +58,12 @@ public sealed class FeatureTutorialTests
         Assert.NotEqual(TutorialCatalog.Get("image-blur").Id, TutorialCatalog.Get("image-mosaic").Id);
     });
 
-    [Fact]
-    public void EveryTabRowKeepsDirectTextAndKeycapsAndHasItsOwnTutorialButton() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void EveryTabRowKeepsDirectTextAndKeycapsAndHasItsOwnNamedTutorialButton(string language) => StaTestHost.Run(() =>
     {
+        using var locale = UiText.UseLanguage(language);
         var help = new ShortcutHelpWindow();
         try
         {
@@ -73,12 +76,46 @@ public sealed class FeatureTutorialTests
                 Assert.Single(row.Children.OfType<TextBlock>());
                 WrapPanel keycaps = Assert.Single(row.Children.OfType<WrapPanel>());
                 Button tutorial = Assert.Single(keycaps.Children.OfType<Button>());
-                Assert.Contains(TutorialCatalog.All, feature => feature.Id == Assert.IsType<string>(tutorial.Tag));
+                FeatureTutorial feature = TutorialCatalog.Get(Assert.IsType<string>(tutorial.Tag));
                 Assert.True(tutorial.IsTabStop && tutorial.Focusable);
-                Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(tutorial)));
+                Assert.Equal(UiText.Get("TextCapture_TutorialOpen"), tutorial.Content);
+                Assert.Equal(FeatureTutorialWindow.TutorialTitle(feature), AutomationProperties.GetName(tutorial));
+                Assert.NotEqual(UiText.Get(feature.TitleKey), AutomationProperties.GetName(tutorial));
             }
+            // The search results carry their own copy of every tutorial button.
+            Button[] results = FirstRunWelcomeTests.Descendants(help).OfType<Button>()
+                .Where(button => button.Tag is string && !rows.Any(row => FirstRunWelcomeTests.Descendants(row).Contains(button))).ToArray();
+            Assert.Equal(42, results.Length);
+            Assert.All(results, button => Assert.Equal(
+                FeatureTutorialWindow.TutorialTitle(TutorialCatalog.Get((string)button.Tag)), AutomationProperties.GetName(button)));
         }
         finally { help.Close(); }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", "영역 캡처 사용법", "이미지 편집기 · 복사 사용법", "핀 · 저장 사용법", "텍스트 복사 사용법", "블러 사용법 영상")]
+    [InlineData("en-US", "Region capture tutorial", "Image editor · Copy tutorial", "Pins · Save tutorial", "Copy text tutorial", "Blur tutorial video")]
+    public void TutorialNamesSayWhichFeatureTheyTeachAndQualifySharedTitles(string language, string region, string imageCopy,
+        string pinSave, string textCopy, string blurVideo) => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage(language);
+        Assert.Equal(region, FeatureTutorialWindow.TutorialTitle(TutorialCatalog.Get("capture-region")));
+        Assert.Equal(imageCopy, FeatureTutorialWindow.TutorialTitle(TutorialCatalog.Get("image-copy")));
+        Assert.Equal(pinSave, FeatureTutorialWindow.TutorialTitle(TutorialCatalog.Get("pin-save")));
+        Assert.Equal(textCopy, FeatureTutorialWindow.TutorialTitle(TutorialCatalog.Get("text-copy")));
+        Assert.Equal(TutorialCatalog.All.Count, TutorialCatalog.All.Select(FeatureTutorialWindow.TutorialTitle).Distinct().Count());
+
+        var media = new FakeTutorialMedia();
+        FeatureTutorialWindow window = Offscreen("image-blur", media, TutorialTestAssets.Create("image-blur", "text-copy"));
+        try
+        {
+            Assert.Equal(FeatureTutorialWindow.TutorialTitle(TutorialCatalog.Get("image-blur")), window.Title);
+            Assert.Equal(blurVideo, AutomationProperties.GetName(media.View));
+            window.SelectFeature("text-copy");
+            Assert.Equal(textCopy, window.Title);
+            Assert.Equal(UiText.Get("TextCapture_TutorialAnimation"), AutomationProperties.GetName(media.View));
+        }
+        finally { window.Close(); }
     });
 
     [Theory]
