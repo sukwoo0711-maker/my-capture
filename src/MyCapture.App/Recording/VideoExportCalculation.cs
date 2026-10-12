@@ -111,9 +111,8 @@ internal sealed class VideoExportCalculation : IDisposable
         if (!string.Equals(Path.GetExtension(selected), _extension, StringComparison.OrdinalIgnoreCase))
             throw new IOException(UiText.Format("MediaExport_Extension", _extension));
         string parent = Path.GetDirectoryName(selected) ?? throw new IOException("Missing export directory.");
-        // Resolve a user-selected junction before creating the owned sibling. The
-        // Recycle Bin deliberately rejects linked ancestors, so staging through the
-        // alias would leave that sibling behind if the protected-source commit fails.
+        // Resolve a user-selected junction before creating the owned sibling, so the
+        // staged copy and its cleanup always address the real directory.
         parent = ResolveExportDirectory(parent);
         selected = Path.Combine(parent, Path.GetFileName(selected));
         // Hold the immutable source against writes/deletion until the atomic commit is
@@ -160,7 +159,8 @@ internal sealed class VideoExportCalculation : IDisposable
         }
         finally
         {
-            if (File.Exists(temporary)) _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(temporary);
+            // The staged sibling is this export's own partial copy, never the user's file.
+            if (File.Exists(temporary)) File.Delete(temporary);
         }
     }
 
@@ -180,14 +180,12 @@ internal sealed class VideoExportCalculation : IDisposable
 
     public void Dispose()
     {
+        // Size-calculation renders are app-owned scratch files: delete them, do not recycle.
         try
         {
-            string standard = OwnedPath("standard");
-            if (File.Exists(standard)) _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(standard);
-            string reduced = OwnedPath("reduced");
-            if (File.Exists(reduced)) _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(reduced);
-            if (Directory.Exists(_directory.FullName) && !Directory.EnumerateFileSystemEntries(_directory.FullName).Any())
-                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleDirectory(_directory.FullName);
+            File.Delete(OwnedPath("standard"));
+            File.Delete(OwnedPath("reduced"));
+            _directory.Delete(); // Never recursively remove unexpected files.
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

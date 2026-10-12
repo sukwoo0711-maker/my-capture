@@ -40,27 +40,41 @@ internal sealed class TempWorkspace : IDisposable
 public sealed class AtomicFileTests
 {
     [Fact]
-    public void TemporaryCleanup_WithoutRecoverableHost_PreservesContents()
+    public void TemporaryCleanup_DeletesOnlyOwnedWriteTempsDirectly()
     {
         using var workspace = new TempWorkspace();
-        string path = Path.Combine(workspace.Root, "interrupted.tmp");
-        File.WriteAllText(path, "recoverable content");
+        string target = Path.Combine(workspace.Root, "index.json");
+        File.WriteAllText(target, "current");
+        string owned = $"{target}.{Guid.NewGuid():N}.tmp";
+        string legacy = target + ".tmp";
+        string foreign = target + ".user-notes.tmp";
+        File.WriteAllText(owned, "interrupted write");
+        File.WriteAllText(legacy, "interrupted legacy write");
+        File.WriteAllText(foreign, "not an atomic-write temp");
 
-        AtomicFile.TryRecycleTemporaryFile(path, null);
+        AtomicFile.CleanUpTemp(target);
 
-        Assert.Equal("recoverable content", File.ReadAllText(path));
+        // App-owned temps are removed from disk, not moved anywhere recoverable.
+        Assert.False(File.Exists(owned));
+        Assert.False(File.Exists(legacy));
+        Assert.Equal("not an atomic-write temp", File.ReadAllText(foreign));
+        Assert.Equal("current", File.ReadAllText(target));
     }
 
     [Fact]
-    public void TemporaryCleanup_WhenRecycleFails_PreservesContents()
+    public void FailedReplace_DeletesItsOwnTempWithoutTouchingTheDestination()
     {
         using var workspace = new TempWorkspace();
-        string path = Path.Combine(workspace.Root, "interrupted.tmp");
-        File.WriteAllText(path, "recoverable content");
+        string target = Path.Combine(workspace.Root, "export.png");
+        File.WriteAllText(target, "existing");
+        using (new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.ThrowsAny<IOException>(() => AtomicFile.WriteExportBytes(target, [1, 2, 3]));
+        }
 
-        AtomicFile.TryRecycleTemporaryFile(path, _ => throw new IOException("Recycle Bin unavailable"));
-
-        Assert.Equal("recoverable content", File.ReadAllText(path));
+        Assert.Equal("existing", File.ReadAllText(target));
+        Assert.Equal(new[] { Path.GetFileName(target) },
+            Directory.GetFiles(workspace.Root).Select(file => Path.GetFileName(file)).ToArray());
     }
 
     [Fact]

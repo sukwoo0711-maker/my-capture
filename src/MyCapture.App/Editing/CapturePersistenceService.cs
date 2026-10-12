@@ -742,7 +742,8 @@ internal sealed class CapturePersistenceService
                 {
                     if (File.Exists(file.TargetPath))
                     {
-                        _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(Path.GetFullPath(file.TargetPath));
+                        // This transaction created the file; rolling it back removes it.
+                        File.Delete(file.TargetPath);
                     }
 
                     continue;
@@ -1502,13 +1503,20 @@ internal sealed class CapturePersistenceService
         return true;
     }
 
+    /// <summary>
+    /// Removes an app-owned transaction directory (.cleanup-*, retired stage) from disk. These
+    /// hold superseded copies the transaction already replaced, never the user's capture, so
+    /// they are deleted directly instead of filling the user's Recycle Bin on every save.
+    /// .NET's recursive delete removes a nested link itself and never descends into its target.
+    /// </summary>
     private static void TryDeleteDirectory(string directory)
     {
         try
         {
-            if (Directory.Exists(directory))
+            if (Directory.Exists(directory)
+                && (File.GetAttributes(directory) & FileAttributes.ReparsePoint) == 0)
             {
-                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleDirectory(Path.GetFullPath(directory));
+                Directory.Delete(directory, recursive: true);
             }
         }
         catch (IOException)
@@ -1523,9 +1531,11 @@ internal sealed class CapturePersistenceService
     {
         try
         {
+            // App-owned markers and backups (.original-pending.json, *.bak) hold window
+            // titles and URLs; they are deleted, not kept recoverable in the Recycle Bin.
             if (File.Exists(path))
             {
-                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(Path.GetFullPath(path));
+                File.Delete(path);
             }
         }
         catch (IOException)

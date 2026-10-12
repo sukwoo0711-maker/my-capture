@@ -81,8 +81,8 @@ public sealed class VerifiedUpdatePackage
 
     /// <summary>
     /// Safely cleans up the staged directory and its downloaded installer and checksum files.
-    /// Recycles only the exact generated files owned by this verified session.
-    /// Rejects reparse directories and preserves unexpected caller files.
+    /// Deletes only the exact generated files owned by this verified session.
+    /// Rejects reparse directories and never enumerates or deletes arbitrary caller folders.
     /// </summary>
     public void Cleanup()
     {
@@ -122,7 +122,7 @@ public sealed class VerifiedUpdatePackage
                         continue;
                     }
 
-                    _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(filePath);
+                    File.Delete(filePath);
                 }
                 catch
                 {
@@ -130,11 +130,10 @@ public sealed class VerifiedUpdatePackage
                 }
             }
 
-            // Recycle the staging session directory only after confirming it is empty.
+            // Remove the staging session directory only if empty (non-recursive)
             try
             {
-                if (!Directory.EnumerateFileSystemEntries(StagingDirectory).Any())
-                    _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleDirectory(StagingDirectory);
+                Directory.Delete(StagingDirectory, recursive: false);
             }
             catch
             {

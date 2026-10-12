@@ -806,7 +806,7 @@ internal static class RecordingBackendBenchmarkSelfTest
     {
         try
         {
-            if (File.Exists(path)) _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(System.IO.Path.GetFullPath(path));
+            File.Delete(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

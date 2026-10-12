@@ -2641,7 +2641,7 @@ internal sealed partial class VideoEditorWindow : Window
 
             if (File.Exists(fullPath))
             {
-                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(fullPath);
+                File.Delete(fullPath);
             }
         }
         catch (IOException)

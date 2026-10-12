@@ -54,7 +54,7 @@ internal static class GalleryArchiveExporter
         {
             if (ownsStage)
             {
-                try { if (File.Exists(stage)) _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(stage); }
+                try { File.Delete(stage); }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
             }

@@ -86,7 +86,6 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        AtomicFile.RecycleTemporaryFile = path => { _ = new WindowsRecycleBin().RecycleFile(path); };
         UiText.Configure(null);
 
         // Windows 11 is the supported baseline. The installer refuses older hosts, but the

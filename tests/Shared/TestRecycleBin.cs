@@ -1,20 +1,17 @@
 using System.Collections.Concurrent;
 using System.IO;
-using System.Runtime.ExceptionServices;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace MyCapture.Tests;
 
-/// <summary>Recycles only fixtures allocated by this test process. Never permanently deletes.</summary>
+/// <summary>
+/// Deletes only fixtures allocated by this test process, after confining the path to an owned
+/// temporary root and refusing links. (Historical name: tests never use the real Recycle Bin;
+/// only the opt-in MYCAPTURE_RECYCLE_CANARY tests exercise it.)
+/// </summary>
 internal static class TestRecycleBin
 {
-    [System.Runtime.CompilerServices.ModuleInitializer]
-    internal static void ConfigureAtomicCleanup() =>
-        MyCapture.Core.Storage.AtomicFile.RecycleTemporaryFile = DeleteFile;
-
     private static readonly ConcurrentDictionary<string, byte> Roots = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly object ShellLock = new();
 
     internal static DirectoryInfo CreateTempSubdirectory(string prefix)
         => TrackNewDirectory(() => Directory.CreateTempSubdirectory(prefix));
@@ -39,7 +36,7 @@ internal static class TestRecycleBin
         if (!File.Exists(canonical)) return;
         var file = new FileInfo(canonical);
         Dictionary<string, string>? target = SnapshotLinkTarget(file);
-        Recycle(canonical);
+        Remove(canonical, directory: false, link: target is not null, recursive: false);
         VerifyRemoved(canonical, file, target);
     }
 
@@ -53,26 +50,26 @@ internal static class TestRecycleBin
         {
             AssertNoLinks(directory);
             if (!recursive && directory.EnumerateFileSystemInfos().Any())
-                throw new IOException("Refusing to recycle a nonempty directory without recursive consent.");
+                throw new IOException("Refusing to delete a nonempty directory without recursive consent.");
         }
-        Recycle(canonical);
+        Remove(canonical, directory: true, link: target is not null, recursive);
         VerifyRemoved(canonical, directory, target);
     }
 
     private static string ValidateOwnedPath(string path)
     {
         if (!Path.IsPathFullyQualified(path))
-            throw new IOException("Test recycling requires an absolute path.");
+            throw new IOException("Test fixture deletion requires an absolute path.");
         string canonical = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         string temp = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath()));
         if (!canonical.StartsWith(temp + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             || !Roots.Keys.Any(root => canonical.Equals(root, StringComparison.OrdinalIgnoreCase)
                 || canonical.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
-            throw new IOException("Refusing to recycle content outside a fixture created by this test process.");
+            throw new IOException("Refusing to delete content outside a fixture created by this test process.");
         for (DirectoryInfo? parent = Directory.GetParent(canonical); parent is not null; parent = parent.Parent)
         {
             if ((parent.Attributes & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("Refusing to recycle through a linked ancestor.");
+                throw new IOException("Refusing to delete through a linked ancestor.");
             if (parent.FullName.Equals(temp, StringComparison.OrdinalIgnoreCase)) break;
         }
         return canonical;
@@ -85,7 +82,7 @@ internal static class TestRecycleBin
         foreach (FileSystemInfo entry in directory.EnumerateFileSystemInfos())
         {
             if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("Refusing to recycle a fixture containing links; recycle the link itself first.");
+                throw new IOException("Refusing to delete a fixture containing links; delete the link itself first.");
             if (entry is DirectoryInfo child) AssertNoLinks(child);
         }
     }
@@ -122,90 +119,20 @@ internal static class TestRecycleBin
     {
         entry.Refresh();
         if (entry.Exists || File.Exists(path) || Directory.Exists(path))
-            throw new IOException("The fixture was not moved to the Recycle Bin.");
+            throw new IOException("The fixture was not deleted.");
         if (target is null) return;
         string root = target.Keys.MinBy(value => value.Length)!;
         var actual = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         Snapshot(target[root] == "directory" ? new DirectoryInfo(root) : new FileInfo(root), actual);
         if (actual.Count != target.Count || target.Any(pair => !actual.TryGetValue(pair.Key, out string? value) || value != pair.Value))
-            throw new IOException("The fixture link target changed during recycling.");
+            throw new IOException("The fixture link target changed during deletion.");
     }
 
-    private static void Recycle(string path)
+    private static void Remove(string path, bool directory, bool link, bool recursive)
     {
-        // FOF_ALLOWUNDO / VisualBasic's SendToRecycleBin can fall back to permanent
-        // deletion. Windows 8+ RECYCLEONDELETE explicitly requires the Recycle Bin.
-        // NOERRORUI + EARLYFAILURE returns an error instead of asking to destroy data.
-        const uint flags = 0x00080000 | 0x00100000 | 0x00000400 | 0x00000010 | 0x00000004;
-        lock (ShellLock)
-        {
-            ExceptionDispatchInfo? failure = null;
-            var thread = new Thread(() =>
-            {
-                IFileOperation? operation = null;
-                IShellItem? item = null;
-                try
-                {
-                    operation = (IFileOperation)new FileOperation();
-                    operation.SetOperationFlags(flags);
-                    Guid shellItemId = typeof(IShellItem).GUID;
-                    Marshal.ThrowExceptionForHR(SHCreateItemFromParsingName(path, 0, ref shellItemId, out item));
-                    operation.DeleteItem(item, 0);
-                    operation.PerformOperations();
-                    operation.GetAnyOperationsAborted(out bool aborted);
-                    if (aborted) throw new IOException("Test recycling was aborted; no permanent deletion fallback is allowed.");
-                }
-                catch (Exception error)
-                {
-                    failure = ExceptionDispatchInfo.Capture(error is IOException ? error
-                        : new IOException("Could not recycle test content; preserving it without a permanent deletion fallback.", error));
-                }
-                finally
-                {
-                    if (item is not null) Marshal.FinalReleaseComObject(item);
-                    if (operation is not null) Marshal.FinalReleaseComObject(operation);
-                }
-            });
-            thread.SetApartmentState(ApartmentState.STA);
-            thread.Start();
-            thread.Join();
-            failure?.Throw();
-        }
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
-    private static extern int SHCreateItemFromParsingName(string path, nint bindingContext,
-        ref Guid interfaceId, [MarshalAs(UnmanagedType.Interface)] out IShellItem item);
-
-    [ComImport, Guid("3AD05575-8857-4850-9277-11B85BDB8E09")]
-    private class FileOperation { }
-
-    [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IShellItem { }
-
-    [ComImport, Guid("947AAB5F-0A5C-4C13-B4D6-4BF7836FC9F8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IFileOperation
-    {
-        void Advise(nint sink, out uint cookie);
-        void Unadvise(uint cookie);
-        void SetOperationFlags(uint flags);
-        void SetProgressMessage([MarshalAs(UnmanagedType.LPWStr)] string message);
-        void SetProgressDialog(nint dialog);
-        void SetProperties(nint changes);
-        void SetOwnerWindow(nint owner);
-        void ApplyPropertiesToItem(IShellItem item);
-        void ApplyPropertiesToItems(nint items);
-        void RenameItem(IShellItem item, [MarshalAs(UnmanagedType.LPWStr)] string name, nint sink);
-        void RenameItems(nint items, [MarshalAs(UnmanagedType.LPWStr)] string name);
-        void MoveItem(IShellItem item, IShellItem destination, [MarshalAs(UnmanagedType.LPWStr)] string name, nint sink);
-        void MoveItems(nint items, IShellItem destination);
-        void CopyItem(IShellItem item, IShellItem destination, [MarshalAs(UnmanagedType.LPWStr)] string name, nint sink);
-        void CopyItems(nint items, IShellItem destination);
-        void DeleteItem(IShellItem item, nint sink);
-        void DeleteItems(nint items);
-        void NewItem(IShellItem destination, uint attributes, [MarshalAs(UnmanagedType.LPWStr)] string name,
-            [MarshalAs(UnmanagedType.LPWStr)] string templateName, nint sink);
-        void PerformOperations();
-        void GetAnyOperationsAborted([MarshalAs(UnmanagedType.Bool)] out bool aborted);
+        // Fixtures are this process's own scratch files: they are deleted, never sent to the
+        // user's Recycle Bin. A link is removed itself (non-recursively); its target is untouched.
+        if (!directory) File.Delete(path);
+        else Directory.Delete(path, recursive: recursive && !link);
     }
 }
