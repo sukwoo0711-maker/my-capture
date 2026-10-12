@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `chore/store-4.1.0-handoff` (Store 4.1.0 심사 제출 완료, 사전 처리 중) |
+| 현재 기록 브랜치 | `perf/product-optimization` (사용자 지시에 따라 다음 버전 제품 최적화 진행) |
 | Store 소스 브랜치 | `release/store-4.1.0`, main과 같은 `39942191fbdc49d018ccfd01c975701f0d002532` |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -46,7 +46,13 @@
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12 08:50 KST, Store 4.1.0 심사 제출 완료, 다음 배포 최적화 검증 완료)
+## 3. 현재 상태 (2026-10-12, Store 4.1.0 심사 제출 완료, 다음 버전 제품 최적화 진행)
+
+### 다음 버전 제품 최적화
+
+- 사용자 요청: “이제 다음버전을 개발해야한다. 먼저 제품최적화 부터 진행한다”. 현재 제출한 4.1.0을 보존하고 앱 실행 중의 라이브러리·이미지 처리 비용을 조사해 개선합니다.
+- 통합 기준은 `968b7c7`입니다. 기존 선택 getter·Store 전용 패키징 최적화 `5e463c9`를 최신 인계 기록 `7668af3`에 병합했습니다. 이번 작업의 새 성과는 이 기준 이후 변경과 측정으로 구분합니다.
+- 조사: `/root/icons` 라이브러리·썸네일, `/root/library_motion` 이미지 편집·녹화 경로. 아직 제품 코드 수정이나 새 성능 측정 결과는 없습니다.
 
 ### 3.0 Store 4.1.0 및 다음 배포 준비
 
@@ -112,6 +118,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
    - 패턴 참고: `Controls.xaml`의 `StateLayer*` 스타일, 87fa325의 설정 메뉴·모드 바 변환.
 
 ## 4. 앞으로 할 일 (우선순위 순)
+
+**현재 우선 작업:** 다음 버전 제품 최적화 — 실제 중복 연산·디코딩·할당을 확인하고, 화면·파일·편집 결과를 유지하는 개선을 구현합니다. 전후 측정, 경계·회귀 테스트, 독립 검토, 전체 빌드·검증을 마친 뒤 이 문서에 결과를 기록합니다. 아래는 이전 배포 작업의 완료 이력입니다.
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
 2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
@@ -252,6 +260,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 - 2026-10-12 Codex: 사용자 “완료” 응답 후 기존 Edge2/PartnerCenter977755822에서 업로드된4.1.0.0/x64/101.1MB, minWindows22000, ko-kr/en-us 확인. 기존4.0.3 자동제거제안은 Don't remove this package로 해제하고 보존, 새4.1.0 rank1로 Save. Overview의4.1.0 Validated와 Packages/Storelistings Updated 확인. `/root/delegation_recovery`가 실제제출MSIX106019168bytes/SHA25689d6e223117163966c074d66060463a53e7c3ba889162635c8d4c37e185c2a7a,source3994219/clean근거,최종8/8를 읽기전용 재대조 PASS(exit0)하여 기존독립LOG에추가함. 브라우저내부설정 변경은 수행하지 않음.
 - 2026-10-12 Codex: 08:50 KST(UTC2026-10-11T23:50경) Submit for certification 클릭 후 `Update in certification` 및 `Product update: In certification (Submission4)`를 직접확인. Submission Complete / Pre-processing In progress / Certification·Publishing Not started. `Your product will start publishing as soon as it passes certification` 확인. 선택적만족도설문은 Close로닫고응답전송없음. 결과화면을 markDeliverable, `artifacts/store-410-verification/store-certification-submitted.jpg` 저장. 현재공개4.0.3.0,새4.1.0.0은심사접수완료/공개대기. 사용자추가설정요청해소, 다음배포최적화실행검증도이미완료. 파일·기존패키지·작업사본·근거자료삭제없음.
+
+- 2026-10-12 Codex: 다음 버전 제품 최적화 착수. cwd `C:\GitRepositories\my-capture-codex`; `git switch -c perf/product-optimization`, `git merge --no-edit perf/next-release-optimization` PASS(exit0), 기준 `968b7c7`. WebGPT `node C:\Users\sukwo\.codex\skills\webgpt\scripts\client.mjs register --cwd C:\GitRepositories\my-capture-codex` FAIL(exit1, `tunnel_unavailable`, 과업 미등록·미전송). `/root/delegation_recovery`에 owned service 읽기 전용 점검, 기존 native 작업자 2명에 서로 다른 앱 경로 조사를 배정함. 기존 작업 사본·현재 Store 제출·사용자 메인 체크아웃을 보존함.
 
 ## 9. 인계 체크리스트
 
