@@ -138,6 +138,37 @@ public sealed class LegacyLibraryMigrationTests
     }
 
     [Fact]
+    public async Task SameRecordInDifferentLibraries_PreservesBothFolderAssignmentsAndSourceMoves()
+    {
+        using var fixture = new Fixture();
+        CaptureFolder storeFolder = await fixture.TargetQueue.CreateFolderAsync("Store A", createdAt: fixture.Created);
+        await fixture.TargetQueue.MoveCapturesAsync([fixture.Existing.Id], storeFolder.Id);
+        CaptureRecord source = fixture.AddSourceImage(fixture.Existing.Title, fixture.Existing.Id);
+        CaptureFolder legacyB = await fixture.SourceQueue.CreateFolderAsync("Legacy B", createdAt: fixture.Created);
+        CaptureFolder legacyC = await fixture.SourceQueue.CreateFolderAsync("Legacy C", createdAt: fixture.Created);
+        await fixture.SourceQueue.MoveCapturesAsync([source.Id], legacyB.Id);
+        // Make all non-location metadata exactly equal; location itself is the collision.
+        source.UpdatedAt = fixture.Existing.UpdatedAt;
+        fixture.SaveSource(); fixture.TargetQueue.Save();
+        var service = new LegacyLibraryMigrationService();
+        LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
+        Assert.Equal(LegacyMigrationStatus.Completed, result.Status); Assert.Equal(1, result.ImportedCount);
+        Assert.Equal(storeFolder.Id, fixture.TargetQueue.Find(fixture.Existing.Id)!.FolderId);
+        CaptureRecord importedB = fixture.TargetQueue.Records.Single(record => record.Id != fixture.Existing.Id);
+        Assert.Equal("Legacy B", fixture.TargetQueue.Folders.Single(folder => folder.Id == importedB.FolderId).Name);
+        LegacyMigrationResult retry = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
+        Assert.Equal(0, retry.ImportedCount); Assert.Equal(1, retry.SkippedCount);
+        await fixture.SourceQueue.MoveCapturesAsync([source.Id], legacyC.Id);
+        source.UpdatedAt = fixture.Existing.UpdatedAt; fixture.SaveSource();
+        LegacyMigrationResult moved = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
+        Assert.Equal(LegacyMigrationStatus.Completed, moved.Status); Assert.Equal(1, moved.ImportedCount);
+        Assert.Equal(3, fixture.TargetQueue.Count);
+        Assert.Equal(importedB.FolderId, fixture.TargetQueue.Find(importedB.Id)!.FolderId);
+        Assert.Contains(fixture.TargetQueue.Records, record => fixture.TargetQueue.Folders
+            .Any(folder => folder.Id == record.FolderId && folder.Name == "Legacy C"));
+    }
+
+    [Fact]
     public async Task ImportedHistoryAboveLimit_DoesNotEvictExistingStoreHistory()
     {
         using var fixture = new Fixture();
@@ -212,6 +243,63 @@ public sealed class LegacyLibraryMigrationTests
         Assert.Equal(1, fixture.TargetQueue.Count);
     }
 
+    [Fact]
+    public async Task TargetDiskChangeBeforeCopy_IsDetectedAgainstInitialIndexNotLateSnapshot()
+    {
+        using var fixture = new Fixture(); fixture.AddSourceImage("Source"); fixture.SaveSource();
+        string? changedIndex = null;
+        var service = new LegacyLibraryMigrationService { CheckpointForTest = phase =>
+        {
+            if (phase != "AfterSourceSnapshot") return;
+            JsonObject index = JsonNode.Parse(File.ReadAllText(fixture.TargetPaths.IndexFile))!.AsObject();
+            index["records"]![0]!["title"] = "External Store edit";
+            changedIndex = index.ToJsonString(); File.WriteAllText(fixture.TargetPaths.IndexFile, changedIndex);
+        } };
+        LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
+        Assert.Equal(LegacyMigrationStatus.Failed, result.Status); Assert.Equal("TargetChanged", result.ErrorCode);
+        Assert.Equal(changedIndex, File.ReadAllText(fixture.TargetPaths.IndexFile));
+        fixture.TargetQueue.Load(); Assert.Equal("External Store edit", fixture.TargetQueue.Find(fixture.Existing.Id)!.Title);
+    }
+
+    [Fact]
+    public async Task NewQueueWriterAdmissionIsRejectedDuringPublishingAndResumedAfterCompletion()
+    {
+        using var fixture = new Fixture(); fixture.AddSourceImage("Protected"); fixture.SaveSource();
+        bool rejected = false;
+        var service = new LegacyLibraryMigrationService { CheckpointForTest = phase =>
+        {
+            if (phase == "AfterPayloadPublication")
+            {
+                Assert.Throws<IOException>(() => fixture.TargetQueue.Save()); rejected = true;
+            }
+        } };
+        LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
+        Assert.True(rejected); Assert.Equal(LegacyMigrationStatus.Completed, result.Status);
+        fixture.TargetQueue.Save(); Assert.Equal(2, fixture.ReopenTarget().Count);
+    }
+
+    [Fact]
+    public async Task LockedIndexAfterCommit_ReturnsRecoveryRequiredWithoutEscapingClassificationException()
+    {
+        using var fixture = new Fixture(); fixture.AddSourceImage("Committed"); fixture.SaveSource();
+        FileStream? blocker = null;
+        var service = new LegacyLibraryMigrationService { CheckpointForTest = phase =>
+        {
+            if (phase != "AfterIndexPublication") return;
+            blocker = new FileStream(fixture.TargetPaths.IndexFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            throw new IOException("Injected postcommit error while index cannot be classified");
+        } };
+        try
+        {
+            LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
+            Assert.Equal(LegacyMigrationStatus.Failed, result.Status); Assert.Equal("RecoveryRequired", result.ErrorCode);
+            Assert.Throws<IOException>(() => fixture.TargetQueue.Save());
+        }
+        finally { blocker?.Dispose(); }
+        await new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths);
+        fixture.TargetQueue.Load(); Assert.Equal(2, fixture.TargetQueue.Count);
+    }
+
     [Theory]
     [InlineData("AfterPayloadPublication")]
     [InlineData("AfterIndexPublication")]
@@ -226,12 +314,15 @@ public sealed class LegacyLibraryMigrationTests
         } };
         LegacyMigrationResult result = await service.ImportAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
         Assert.Equal(LegacyMigrationStatus.Completed, result.Status); Assert.Equal(2, fixture.TargetQueue.Count);
+        // Retry immediately, without Save/Load masking a faulted prior publication tail.
+        service.CheckpointForTest = null;
+        LegacyMigrationResult retry = await service.ImportAsync(fixture.SourcePaths.DataRoot,
+            fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
+        Assert.Equal(LegacyMigrationStatus.Completed, retry.Status);
+        Assert.Equal(0, retry.ImportedCount); Assert.Equal(1, retry.SkippedCount);
         fixture.TargetQueue.Save(); // The live owner must already contain the committed import.
         await new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths);
         Assert.Equal(2, fixture.ReopenTarget().Count); Assert.Equal(preferences, Hash(fixture.TargetPaths.SettingsFile));
-        LegacyMigrationResult retry = await new LegacyLibraryMigrationService().ImportAsync(fixture.SourcePaths.DataRoot,
-            fixture.TargetPaths, fixture.TargetQueue, fixture.TargetSettings);
-        Assert.Equal(0, retry.ImportedCount); Assert.Equal(1, retry.SkippedCount);
     }
 
     [Theory]
@@ -362,7 +453,8 @@ public sealed class LegacyLibraryMigrationTests
         else journal["copies"] = null;
         File.WriteAllText(journalPath, journal.ToJsonString());
         string index = Hash(fixture.TargetPaths.IndexFile);
-        await Assert.ThrowsAsync<IOException>(() => new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths));
+        IOException error = await Assert.ThrowsAnyAsync<IOException>(() => new LegacyLibraryMigrationService().RecoverPendingAsync(fixture.BaseTargetPaths));
+        Assert.Equal("InvalidJournal", error.Message);
         Assert.Equal(index, Hash(fixture.TargetPaths.IndexFile));
         Assert.False(File.Exists(Path.Combine(fixture.TargetPaths.DataRoot, "outside.png")));
     }
@@ -389,15 +481,21 @@ public sealed class LegacyLibraryMigrationTests
         CaptureRecord source = fixture.AddSourceImage("Linked"); fixture.SaveSource();
         string link = Path.Combine(fixture.SourcePaths.CapturesRoot, "linked");
         try { Directory.CreateSymbolicLink(link, fixture.TargetQueue.GetDirectory(fixture.Existing)); }
-        catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows())
+        catch (Exception error) when (OperatingSystem.IsWindows() && error is UnauthorizedAccessException or IOException)
         {
-            using var command = Process.Start(new ProcessStartInfo("cmd.exe")
+            var start = new ProcessStartInfo("powershell.exe")
             {
-                UseShellExecute = false, CreateNoWindow = true,
-                ArgumentList = { "/d", "/c", "mklink", "/J", link, fixture.TargetQueue.GetDirectory(fixture.Existing) }
-            })!;
-            Assert.True(command.WaitForExit(5000)); Assert.Equal(0, command.ExitCode);
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+                ArgumentList = { "-NoProfile", "-NonInteractive", "-Command",
+                    "New-Item -ItemType Junction -Path $env:MYCAPTURE_MIGRATION_TEST_LINK -Target $env:MYCAPTURE_MIGRATION_TEST_TARGET | Out-Null" }
+            };
+            start.Environment["MYCAPTURE_MIGRATION_TEST_LINK"] = link;
+            start.Environment["MYCAPTURE_MIGRATION_TEST_TARGET"] = fixture.TargetQueue.GetDirectory(fixture.Existing);
+            using var command = Process.Start(start)!;
+            Assert.True(command.WaitForExit(5000));
+            Assert.True(command.ExitCode == 0, command.StandardOutput.ReadToEnd() + command.StandardError.ReadToEnd());
         }
+        Assert.NotEqual(0, (int)(File.GetAttributes(link) & FileAttributes.ReparsePoint));
         JsonObject index = JsonNode.Parse(File.ReadAllText(fixture.SourcePaths.IndexFile))!.AsObject();
         index["records"]![0]!["relativeDirectory"] = "linked";
         File.WriteAllText(fixture.SourcePaths.IndexFile, index.ToJsonString());

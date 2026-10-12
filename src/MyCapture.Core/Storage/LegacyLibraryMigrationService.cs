@@ -49,8 +49,10 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
             CaptureIndexFile target = quiescedTargetQueue.SnapshotForMigration();
             string targetSnapshot = Serialize(target);
             resolvedTarget = ResolveTarget(targetPaths, currentSettings);
+            string expectedIndexHash = OptionalHash(resolvedTarget.IndexFile);
             progress?.Report(new(LegacyMigrationStage.Scanning, 0, 0, 0, 0));
-            (operation, journal) = await Task.Run(() => Prepare(sourceDataRoot, resolvedTarget, target, progress, cancellationToken), cancellationToken);
+            (operation, journal) = await Task.Run(() => Prepare(sourceDataRoot, resolvedTarget, target, expectedIndexHash,
+                progress, cancellationToken), cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (Serialize(quiescedTargetQueue.SnapshotForMigration()) != targetSnapshot)
                 throw new MigrationFault("TargetChanged");
@@ -90,8 +92,13 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
             {
                 // The durable index is the commit decision, not the in-memory phase: writing
                 // the completed receipt may itself fail. Never return with an old live queue.
-                if (OptionalHash(resolvedTarget.IndexFile) == journal.IndexHash)
-                    quiescedTargetQueue.AdoptMigrationSnapshot(journal.IndexJson, completed: false);
+                try
+                {
+                    if (OptionalHash(resolvedTarget.IndexFile) == journal.IndexHash)
+                        quiescedTargetQueue.AdoptMigrationSnapshot(journal.IndexJson, completed: false);
+                }
+                catch (Exception classificationError) when (IsExpected(classificationError))
+                { return new(LegacyMigrationStatus.Failed, ErrorCode: "RecoveryRequired"); }
                 try
                 {
                     await Task.Run(() =>
@@ -106,8 +113,12 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
                 }
                 catch (Exception recoveryError) when (IsExpected(recoveryError))
                 {
-                    if (OptionalHash(resolvedTarget.IndexFile) == journal.IndexHash)
-                        quiescedTargetQueue.AdoptMigrationSnapshot(journal.IndexJson, completed: false);
+                    try
+                    {
+                        if (OptionalHash(resolvedTarget.IndexFile) == journal.IndexHash)
+                            quiescedTargetQueue.AdoptMigrationSnapshot(journal.IndexJson, completed: false);
+                    }
+                    catch (Exception classificationError) when (IsExpected(classificationError)) { }
                     return new(LegacyMigrationStatus.Failed, ErrorCode: "RecoveryRequired");
                 }
             }
@@ -155,7 +166,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
         return false;
     }
 
-    private (string Operation, Journal Journal) Prepare(string sourceRoot, AppPaths targetPaths, CaptureIndexFile target,
+    private (string Operation, Journal Journal) Prepare(string sourceRoot, AppPaths targetPaths, CaptureIndexFile target, string expectedIndexHash,
         IProgress<LegacyMigrationProgress>? progress, CancellationToken cancellationToken)
     {
         SourceSnapshot source = ReadSource(sourceRoot, targetPaths, cancellationToken);
@@ -166,7 +177,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
         Directory.CreateDirectory(operation);
         string stage = ValidatedFilePaths.CreateDirectory(Path.Combine(operation, "staging"));
         var journal = new Journal { SourceRoot = source.Root, TargetRoot = targetPaths.DataRoot, CapturesRoot = targetPaths.CapturesRoot,
-            BeforeIndexHash = OptionalHash(targetPaths.IndexFile), Phase = "Prepared" };
+            BeforeIndexHash = expectedIndexHash, Phase = "Prepared" };
         BackupIfPresent(targetPaths.SettingsFile, Path.Combine(operation, "store-settings-before.json"));
         if (source.Settings is not null)
         {
@@ -178,7 +189,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
 
         CaptureFolderState state = target.FolderState ?? new();
         target.FolderState = state;
-        Dictionary<Guid, Guid> previousMap = ReadCompletedFolderMap(operations, source.Root, targetPaths);
+        (Dictionary<Guid, Guid> previousMap, Dictionary<Guid, string> previousRecords) = ReadCompletedMappings(operations, source.Root, targetPaths);
         var folderMap = new Dictionary<Guid, Guid>();
         var usedIds = state.Folders.Select(folder => folder.Id).ToHashSet();
         var foldersById = state.Folders.ToDictionary(folder => folder.Id);
@@ -211,14 +222,20 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
             cancellationToken.ThrowIfCancellationRequested();
             List<SourceFile> files = filesByRecord[record.Id];
             string payloadKey = string.Join("\n", files.Where(file => file.Name != CaptureFileNames.Meta)
-                .OrderBy(file => file.Name).Select(file => file.Name + ":" + file.Hash)) + SemanticRecord(record);
+                .OrderBy(file => file.Name).Select(file => file.Name + ":" + file.Hash)) + SemanticRecord(record)
+                + "\nfolder:" + record.FolderId + ":" + record.FolderSequence;
+            string sourceIdentity = TextHash(payloadKey);
+            Guid desiredFolder = record.FolderId is { } sourceFolder ? folderMap[sourceFolder] : historyId;
             recordsById.TryGetValue(record.Id, out CaptureRecord? same);
-            Guid id = same is null ? record.Id : SamePayload(same, record, files, targetPaths)
+            Guid id = same is null ? record.Id : WasImported(same, sourceIdentity, previousRecords)
+                && SamePayload(same, record, files, targetPaths, desiredFolder)
                 ? same.Id : MappedId(source.Root, "capture", record.Id.ToString("N") + payloadKey);
             recordsById.TryGetValue(id, out CaptureRecord? mapped);
             if (mapped is not null)
             {
-                if (!SamePayload(mapped, record, files, targetPaths)) throw new MigrationFault("IdConflict");
+                if (!WasImported(mapped, sourceIdentity, previousRecords)
+                    || !SamePayload(mapped, record, files, targetPaths, desiredFolder)) throw new MigrationFault("IdConflict");
+                journal.RecordSources[id] = sourceIdentity;
                 journal.SkippedCount++; completed++; continue;
             }
             CaptureRecord imported = JsonSerializer.Deserialize<CaptureRecord>(Serialize(record), Json)!;
@@ -226,7 +243,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
             imported.RelativeDirectory = Path.Combine("import-" + Path.GetFileName(operation), id.ToString("N"));
             imported.FolderPinBeforeAssignment ??= imported.IsPinned;
             imported.IsPinned = true;
-            imported.FolderId = record.FolderId is { } oldFolder ? folderMap[oldFolder] : historyId;
+            imported.FolderId = desiredFolder;
             if (imported.FolderId == historyId && !foldersById.ContainsKey(historyId))
             {
                 var history = new CaptureFolder { Id = historyId, Name = "이전 MyCapture", CreatedAt = record.CreatedAt };
@@ -265,11 +282,13 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
                 TargetRelative = Path.Combine(imported.RelativeDirectory, CaptureFileNames.Meta), Hash = Hash(meta), Length = new FileInfo(meta).Length });
             target.Records.Add(imported);
             recordsById.Add(imported.Id, imported);
+            journal.RecordSources[imported.Id] = sourceIdentity;
             state.Assignments.Add(new() { CaptureId = id, FolderId = imported.FolderId.Value,
                 Sequence = imported.FolderSequence, WasPinned = imported.FolderPinBeforeAssignment ?? false });
             journal.ImportedCount++; completed++;
         }
         target.Records = target.Records.OrderByDescending(record => record.CreatedAt).ToList();
+        if (!foldersById.ContainsKey(historyId)) journal.FolderMap.Remove(Guid.Empty);
         // Existing Store destination choices remain in the target folder state.
         journal.IndexJson = Serialize(target);
         _ = CaptureQueue.ParseMigrationIndex(journal.IndexJson);
@@ -327,7 +346,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
 
     private static void ValidateJournal(string operation, Journal journal, AppPaths paths)
     {
-        if (journal.Copies is null || journal.FolderMap is null || journal.IndexJson is null || journal.FoldersJson is null
+        if (journal.Copies is null || journal.FolderMap is null || journal.RecordSources is null || journal.IndexJson is null || journal.FoldersJson is null
             || journal.IndexHash is null || journal.BeforeIndexHash is null || journal.SourceRoot is null
             || journal.Version != 1 || journal.TargetRoot != paths.DataRoot || journal.CapturesRoot != paths.CapturesRoot
             || journal.Phase is not ("Prepared" or "Publishing" or "Completed" or "Canceled")
@@ -448,9 +467,12 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
         or CaptureFileNames.VideoSource or CaptureFileNames.VideoRendered or CaptureFileNames.VideoEdits
         || CaptureFileNames.IsSafeAssetFileName(name);
 
-    private static bool SamePayload(CaptureRecord target, CaptureRecord original, List<SourceFile> source, AppPaths paths)
+    private static bool WasImported(CaptureRecord target, string identity, Dictionary<Guid, string> receipts) =>
+        receipts.TryGetValue(target.Id, out string? previous) && previous == identity;
+
+    private static bool SamePayload(CaptureRecord target, CaptureRecord original, List<SourceFile> source, AppPaths paths, Guid desiredFolder)
     {
-        if (SemanticRecord(target) != SemanticRecord(original)) return false;
+        if (target.FolderId != desiredFolder || SemanticRecord(target) != SemanticRecord(original)) return false;
         string directory = ValidatedFilePaths.DirectoryWithinRoot(paths.CapturesRoot, target.RelativeDirectory);
         string[] targetNames = Directory.EnumerateFileSystemEntries(directory).Select(Path.GetFileName)
             .Where(name => name is not null && name != CaptureFileNames.Meta && IsPayloadName(name)).Select(name => name!).Order().ToArray();
@@ -468,9 +490,10 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
         return Serialize(normalized);
     }
 
-    private static Dictionary<Guid, Guid> ReadCompletedFolderMap(string operations, string sourceRoot, AppPaths paths)
+    private static (Dictionary<Guid, Guid> Folders, Dictionary<Guid, string> Records) ReadCompletedMappings(string operations, string sourceRoot, AppPaths paths)
     {
         var result = new Dictionary<Guid, Guid>();
+        var records = new Dictionary<Guid, string>();
         foreach (string candidate in Directory.EnumerateDirectories(operations))
         {
             string operation = ValidatedFilePaths.DirectoryWithinRoot(operations, candidate);
@@ -485,8 +508,9 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
             if (previous.SourceRoot != sourceRoot) continue;
             ValidateJournal(operation, previous, paths);
             foreach ((Guid original, Guid mapped) in previous.FolderMap) result[original] = mapped;
+            foreach ((Guid id, string identity) in previous.RecordSources) records[id] = identity;
         }
-        return result;
+        return (result, records);
     }
 
     private static Guid AllocateFolderId(string source, string value, Dictionary<Guid, Guid> previous,
@@ -598,6 +622,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
         public string Phase { get; set; } = "Prepared";
         public string SourceRoot { get; set; } = "";
         public Dictionary<Guid, Guid> FolderMap { get; set; } = [];
+        public Dictionary<Guid, string> RecordSources { get; set; } = [];
         public string TargetRoot { get; set; } = "";
         public string CapturesRoot { get; set; } = "";
         public string BeforeIndexHash { get; set; } = "";

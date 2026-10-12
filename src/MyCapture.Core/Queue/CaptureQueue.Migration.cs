@@ -14,11 +14,24 @@ public sealed partial class CaptureQueue
                 throw new IOException("Complete migration recovery before reloading the library.");
     }
 
-    private void ResumeAfterMigrationLoad() { lock (_writeGate) _migrationPublicationBlocked = false; }
+    private void ResumeAfterMigrationLoad()
+    {
+        lock (_writeGate)
+        {
+            if (!_migrationPublicationBlocked) return;
+            if (!_publicationTail.IsCompleted) throw new IOException("Migration publication is still running.");
+            _publicationTail = Task.CompletedTask;
+            _migrationPublicationBlocked = false;
+        }
+    }
     internal void CancelMigrationAdmission() => ResumeAfterMigrationLoad();
 
-    internal CaptureIndexFile SnapshotForMigration() => ParseMigrationIndex(
-        JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions));
+    internal CaptureIndexFile SnapshotForMigration()
+    {
+        CaptureIndexFile snapshot = CreateIndexSnapshot();
+        snapshot.FolderState ??= CreateFolderState();
+        return ParseMigrationIndex(JsonSerializer.Serialize(snapshot, SerializerOptions));
+    }
 
     internal static CaptureIndexFile ParseMigrationIndex(string json)
     {
