@@ -300,8 +300,9 @@ internal static class VideoEditorResponsivenessSelfTest
                 "intent loop caused zero Gen2 collections",
                 $"intent loop caused {gen2Collections} Gen2 collection(s)");
 
-            // Filmstrip publications request legitimate static redraws independently of pointer input.
-            // Await the real decoder and drain its queued publication callbacks before counting input frames.
+            // Filmstrip publications request legitimate static redraws independently of pointer input:
+            // each decoded batch must appear, so a batch landing between two scrub frames costs one
+            // extra composition frame. Measure and gate that phase on its own, then count the scrub.
             long preparationFramesBefore = timeline.RenderFrameCountForTest;
             editor.UpdateLayout();
             bool filmstripCompleted = PumpUntil(
@@ -314,9 +315,16 @@ internal static class VideoEditorResponsivenessSelfTest
             Gate(filmstripCompleted && publicationDrainCompleted && timeline.FilmstripForTest?.IsCompleted == true,
                 "filmstrip decoder and queued publications completed before scrub measurement",
                 "filmstrip preparation did not complete within its bounded readiness budget");
+            int tiles = timeline.FilmstripForTest?.Layout.TileCount ?? 0;
+            int publicationBatches = (tiles + TimelineFilmstrip.PublishBatchSize - 1) / TimelineFilmstrip.PublishBatchSize;
+            long preparationFrames = timeline.RenderFrameCountForTest - preparationFramesBefore;
             Line($"Composition preparation: decoder-completed={filmstripCompleted}; publications-drained={publicationDrainCompleted}; " +
-                $"published={timeline.FilmstripForTest?.PublishedCount}; tiles={timeline.FilmstripForTest?.Layout.TileCount}; " +
-                $"render-frames={timeline.RenderFrameCountForTest - preparationFramesBefore}");
+                $"published={timeline.FilmstripForTest?.PublishedCount}; tiles={tiles}; batches={publicationBatches}; " +
+                $"render-frames={preparationFrames}");
+            // At most one coalesced frame per published batch, plus the layout pass that started it.
+            Gate(preparationFrames <= publicationBatches + 1,
+                $"filmstrip preparation drew {preparationFrames} <= {publicationBatches} batch(es) + 1 frames",
+                $"filmstrip preparation drew {preparationFrames} frames for {publicationBatches} publication batch(es)");
 
             // Five seconds at approximately 60 input samples/sec. SeekFromOverview exercises
             // the real event wiring and worst-case detail-follow path, not a private shortcut.
@@ -355,11 +363,13 @@ internal static class VideoEditorResponsivenessSelfTest
             double maxCycle = cycleTimes.Max();
             long framesAfterRelease = timeline.RenderFrameCountForTest;
             long renderedFrames = framesAfterInput - framesBefore;
+            long releaseFrames = framesAfterRelease - framesAfterInput;
+            long totalFrames = framesAfterRelease - framesBefore;
             long issuedSeeks = coordinator.IssuedSeekCountForTest - seeksBefore;
             Line(string.Create(CultureInfo.InvariantCulture,
                 $"Composition scopes: start={framesBefore}, input-end={framesAfterInput}, release-end={framesAfterRelease}; " +
-                $"input-frames={renderedFrames}, release-frames={framesAfterRelease - framesAfterInput}, " +
-                $"total-frames={framesAfterRelease - framesBefore}; release-exact-wait={releaseWatch.Elapsed.TotalMilliseconds:0.000}ms"));
+                $"input-frames={renderedFrames}, release-frames={releaseFrames}, " +
+                $"total-frames={totalFrames}; release-exact-wait={releaseWatch.Elapsed.TotalMilliseconds:0.000}ms"));
             Line(string.Create(
                 CultureInfo.InvariantCulture,
                 $"5s real scrub: samples={DragSamples}, pointer p95={pointerP95:0.000}ms, " +
@@ -382,9 +392,21 @@ internal static class VideoEditorResponsivenessSelfTest
             Gate(maxCycle <= 150.0,
                 $"maximum observed UI cycle {maxCycle:0.000}ms <= 150ms freeze ceiling",
                 $"maximum observed UI cycle {maxCycle:0.000}ms exceeded the 150ms freeze ceiling");
+            // Each phase is gated on its own and together, so frames cannot move between scopes
+            // unnoticed. Input: at most one coalesced frame per pointer sample, with the original
+            // one-frame tolerance. Release: the exact seek presents through the preview, not the
+            // timeline, so the only legitimate timeline frame is the last sample's invalidation when
+            // it has not reached a composition tick by input end. Total: the original
+            // scrub-through-release budget, which the two phase limits alone would exceed by one.
             Gate(renderedFrames <= DragSamples + 1,
-                $"composition draws {renderedFrames} <= one per sampled frame",
-                $"composition drew {renderedFrames} frames for {DragSamples} samples");
+                $"input phase draws {renderedFrames} <= {DragSamples} samples + 1",
+                $"input phase drew {renderedFrames} frames for {DragSamples} samples");
+            Gate(releaseFrames <= 1,
+                $"release phase draws {releaseFrames} <= 1 trailing frame",
+                $"release phase drew {releaseFrames} frames; the exact seek must not redraw the timeline");
+            Gate(totalFrames <= DragSamples + 1,
+                $"scrub and release draw {totalFrames} <= {DragSamples} samples + 1",
+                $"scrub and release drew {totalFrames} frames for {DragSamples} samples");
             Gate(coordinator.MaxObservedInFlightForTest <= 1,
                 "decoder had at most one seek in flight",
                 $"decoder max in-flight was {coordinator.MaxObservedInFlightForTest}");
