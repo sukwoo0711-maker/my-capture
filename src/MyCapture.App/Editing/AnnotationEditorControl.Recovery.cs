@@ -45,7 +45,20 @@ internal sealed partial class AnnotationEditorControl
     }
     internal static byte[] EncodeDraftBitmap(BitmapSource bitmap)
     {
-        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        // The draft encoder runs on its background STA. A frozen source still shares
+        // its WIC lock with the live surface, and PNG WriteSource holds that lock for
+        // the entire encode. Copy only while holding the original lock, then encode
+        // independent pixel backing so the full PNG encode no longer holds the live lock.
+        BitmapFrame contract = BitmapFrame.Create(bitmap);
+        int stride = checked((bitmap.PixelWidth * bitmap.Format.BitsPerPixel + 7) / 8);
+        byte[] pixels = new byte[checked(stride * bitmap.PixelHeight)];
+        bitmap.CopyPixels(pixels, stride, 0);
+        BitmapSource independent = BitmapSource.Create(bitmap.PixelWidth, bitmap.PixelHeight,
+            bitmap.DpiX, bitmap.DpiY, bitmap.Format, bitmap.Palette, pixels, stride);
+        independent.Freeze();
+        var frame = BitmapFrame.Create(independent, contract.Thumbnail,
+            contract.Metadata as BitmapMetadata, contract.ColorContexts);
+        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(frame);
         using var stream = new MemoryStream(); encoder.Save(stream); return stream.ToArray();
     }
     internal static byte[] EncodeCachedDraftBitmap(BitmapSource bitmap) => bitmap.IsFrozen

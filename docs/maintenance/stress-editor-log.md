@@ -70,3 +70,69 @@ focused test session69981 finalc92f1d exit0: 8통과/0실패/0skip, TRX artifact
 확정 효과는 매render의 point별 mutableFreezable 제거와 rendering시간/할당량 감소입니다. draft latestflush는 4K1k52.58→87.56ms,4K10k90.99→91.01,8K1k97.04→86.62,8K10k92.58→94.03로 일관된 개선이 아닙니다. peakprivate도443→449/803→778/567→606/672→804MB로 일관된 개선이 없으며8K10kheartbeatp95는 악화했습니다. 단회/3render median이고 heartbeat는 렌더와 autosave가 겹친 process 관측입니다. 전체메모리/초안성능 개선으로 보고하지 않습니다.
 
 추가 진단 준비: root 요청으로 PixelPattern entropy 옵션(고정xorshift32 seed/불투명alpha)을 준비했습니다. 기존 solid 산출물은 그대로 보존합니다. 제품 추가 변경 없이 원본/복구 PNG pixelSHA 및 크기 검증을 heartbeat 밖에 추가했습니다. 준비 후 build/8K1kentropy baseline/after는 다음root단독슬롯 대기이며 이 시점 NOT RUN입니다.
+
+## High-entropy 원본 진단 완료
+
+먼저 검증된 제품/8tests/LOG를 a2e3d60afb0e2bc78a318d9c4b311c8773db2540으로 커밋했습니다(e2bcc4 exit0). root 단독 슬롯을 다시 승인받아 아래 명령을 위와 동일한 cwd에서 실행했습니다.
+
+```powershell
+dotnet build build/tools/EditorStressProbe/EditorStress.csproj -c Release -p:AppPayload=C:/GitRepositories/my-capture-codex/artifacts/qa11-product-readiness -o artifacts/stress-editor/harness-build -nologo -v quiet
+& ./build/tools/EditorStressProbe/run-editor-stress.ps1 -Payload C:/GitRepositories/my-capture-codex/artifacts/qa11-product-readiness -Width 7680 -Items 1000 -StrokePoints 5000 -Label baseline -PixelPattern entropy
+& ./build/tools/EditorStressProbe/run-editor-stress.ps1 -Payload C:/GitRepositories/my-capture-edit-recovery/artifacts/stress-editor/after-publish -Width 7680 -Items 1000 -StrokePoints 5000 -Label after -PixelPattern entropy
+```
+
+Probe build6337be exit0 경고0/오류0. baseline36ea8a exit0/PID36428, after1a1af2 exit0/PID6116 종료. 각각 약6.8/5.8초,60초/2GiB guard 도달 없음. result 경로 artifacts/stress-editor/baseline-entropy-7680-1000-20261012T084240Z-b2bbf50b 및 after-entropy-7680-1000-20261012T084258Z-9cc627bf. receipt에 실제 cmd/args/cwd/exit/PID/hash, rawstdout/stderr 보존. runtime/WPF10.0.11 일치. 실제 pair검증1ee5f4 exit0.
+
+원본과 복구 Bgra32pixelSHA 모두 FB7AD9FCFC48693E49C48C3CA78EC72ECB749E96B66D96946D9FF7E0C838196F, 초기viewportSHA 양쪽798619CD0277D33ACAF7EEB6A467AEABEF93F18574FA407BB7000E8C87D06DF9, actual base/original PNGblobSHA 모두 A1B3B6E3C798841CEF4A3B9C2E293FCC670DB8F7F0231A083E1C3633598F1C60. 각각 blob1/113458630bytes,1010items/100000points/기존ID/최신복구문서 completeness PASS. NoInlining창 weakref2회0/0 유지.
+
+viewport3pass median216.72→96.06ms, 해당passallocation32.81→5.22MB. 반면 최초PNG인코딩과 동시의 add-undo-redo1은2031.01→2026.60ms, 전체processallocation528→501MB, heartbeatmax2032.26→2073.78ms로 큰 지연이 유지됐습니다. p95231.09→152.46ms, latestflush247.79→220.61ms,peakprivate1012224000→1188237312bytes입니다. 최초 encode/동시 렌더의 stall을 전체 초안 기능 개선으로 해석하지 않습니다.
+
+source 읽기1c004a exit0에서 StaThreadTask가 실제 별도STA thread임을 확인했습니다. CaptureDraftAsync의 frozen 원본BitmapSource를 encoder와 live surface가 공유하므로 WIC backingbitmap 접근 직렬화가 가능한 가설입니다. 이 가설은 stack/독립bitmap 대조 없이는 원인 확정 근거가 아니며 이번 제품fix 범위를 확대하지 않았습니다. root에 공유했고 entropy 완료 즉시 heavy슬롯을 반환했습니다. 후속 실제 HWND/native 열기·재열기 및 전체검사는 root 직렬 통합검사 소유입니다.
+
+library_motion의 독립 source 리뷰는 materialfinding 없음이며 source-only임을 유지합니다. root ignored evidence artifacts/stress-library/editor-geometry-independent-review.md(리뷰workerWT)에 보존되었습니다. 재현probe·LOG만 추적하고 rawPNG/JSON/publish/build/fixture는 ignored artifacts에 보존합니다. 어떤 생성물도 삭제·정리하지 않았습니다.
+
+## PNG 공유 backing 원인 분리 준비
+
+entropy의2초stall은 root가 이번 최악조건 최적화 범위로 추가 지정했습니다. 제품source는 아직 a2e3d60의 geometryfix 이후 변경하지 않았습니다. probe에 diagnostic EncoderMode independent를 추가하여 ownedsynthetic bitmap의 실제 DraftPngCache Lazy만 바꿉니다. Lazy는 실제 CaptureDraftAsync backgroundSTA에서 호출하며 UI 접근이면실패합니다. CopyPixels→같은format/palette/DPI의 BitmapSource.Create/Freeze로 pixelbacking을 독립시키고 기존 BitmapFrame.Create(source)의 metadata/thumbnail/ColorContexts contract를 새frame에전달합니다. sourceFrame.ColorContexts를 새로상속하지 않습니다. CopyMs/TotalMs/bytes/STAthread/OffDispatcher를 기록합니다. 기존 product mode와4Ksolid/8Kentropy 두조건을 비교하는4case는 root슬롯 대기이며 이 시점 NOT RUN입니다.
+
+library_motion의 WPF10.0.11 source 조사(자체read-only근거): `C:/GitRepositories/my-capture/.claude/worktrees/agent-aeae29401bfb142cf/artifacts/stress-library/wpf-png-backing-review-20261012.md`, worker근거160e34 exit0. 공개 source에서 [BitmapEncoder.SaveFrame](https://github.com/dotnet/wpf/blob/v10.0.11/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapEncoder.cs#L687)의 frame.SyncObject lock 안에서 WriteSourceL747을 호출하며 [BitmapFrameEncode](https://github.com/dotnet/wpf/blob/v10.0.11/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapFrameEncode.cs#L23)는 source.WicSourceHandle 및 source.SyncObject를 공유합니다. [BitmapFrame.Create](https://github.com/dotnet/wpf/blob/v10.0.11/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapFrame.cs#L215) onearg경로는 metadata.Clone/thumbnailnull/ColorContextsnull입니다. 이는 동일frozen bitmap의 PNG encode와 live rendering이 직렬화될 수 있는 구체적인 source 근거이며 효과판정은 paired실측을 기다립니다.
+
+독립encoder 대조는 이후 root 단독슬롯에서 실제 완료했습니다. 동일 cwd에서 위 probe build를 재실행(b56d61 exit0/경고0/오류0)한 뒤 아래 명령의 Width/PixelPattern을 3840/solid와7680/entropy,EncoderMode를product→independent순으로 실행했습니다.
+
+```powershell
+& ./build/tools/EditorStressProbe/run-editor-stress.ps1 -Payload C:/GitRepositories/my-capture-edit-recovery/artifacts/stress-editor/after-publish -Width 3840 -Items 1000 -StrokePoints 5000 -Label backing -PixelPattern solid -EncoderMode product
+```
+
+|조건|product chunk/PID/exit|independent chunk/PID/exit|maxheartbeat ms|worstgesture ms|p95 ms|peakprivate bytes|
+|---|---|---|---|---|---|---|
+|4Ksolid|f5a28e/56204/0|380961/58224/0|344.97→340.31|152.61→121.47|164.13→172.61|409563136→444403712|
+|8Kentropy|f25073/10404/0|6df13a/36416/0|2083.44→289.81|2081.12→114.02|151.61→114.05|1295138816→1193885696|
+
+actual backing pair 비교88c861 exit0: 4case source/recovered/viewport/PNGblobSHA exact동일,1010items/100000points/최신draft completeness PASS,blob1(37515/113458630bytes)유지. runtime10.0.11,guard미도달. independent encoder실제STA/OffDispatchertrue,Copy7.72/35.32ms,total63.49/2061.38ms,독립pixelbuffer33177600/132710400bytes. 큰PNG 처리 자체는 여전히2초이지만 UI의 같은bitmaplock 대기를 분리했습니다. 4Ksolid p95는 개선되지 않았고,latestflush8K232.37→375.63ms이므로 모든지표가 개선된 결과는 아닙니다. rawresult/receipt는 artifacts/stress-editor/backing-{solid|entropy}-{product|independent}-* 에 보존하며 슬롯을 즉시 반환했습니다.
+
+이 결과와 root승인으로 EncodeDraftBitmap만 같은background independentcopy로 최소 변경했습니다. 기존cache/debounce/store/revision/retirement 계약은 동일합니다. 새8검사는 legacyPNG byteexact/Bgra32/Pbgra32/Bgr24/Indexed1/Indexed8/oddstride/alpha/palette/120×144DPI,metadata·기존ColorContext계약,frozencachereuse,mutablepixelchange를 준비했습니다. productfix 집중검사/publish/productmode재측정은 다음rootslot 대기중NOT RUN입니다.
+
+## 최종 제품 PNG 경로 검증
+
+root 슬롯에서 첫8신규+24기존Recovery검사 session1794 final0c6c23 exit0/32PASS를 완료했습니다. 독립 source reviewer의 지적대로 comment를 전체encode lock 분리로 정확하게 바꾸고 실제GDI경로의 Bgr32 case를 추가했습니다. 동일 cwd에서 아래 최종검사를 실행했습니다.
+
+```powershell
+dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release --filter 'FullyQualifiedName~EditDraftBitmapEncodingTests|FullyQualifiedName~EditRecoveryTests' --logger 'trx;LogFileName=png-recovery-final.trx' --results-directory artifacts/stress-editor/png-final-tests -nologo -v quiet
+dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:PublishProfile=win-x64-self-contained -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-codex/artifacts/latency-regression/pin-runtime-10.0.11.targets -o C:/GitRepositories/my-capture-edit-recovery/artifacts/stress-editor/after-png-publish -nologo -v quiet
+dotnet build build/tools/EditorStressProbe/EditorStress.csproj -c Release -p:AppPayload=C:/GitRepositories/my-capture-codex/artifacts/qa11-product-readiness -o artifacts/stress-editor/harness-build -nologo -v quiet
+& ./build/tools/EditorStressProbe/run-editor-stress.ps1 -Payload C:/GitRepositories/my-capture-edit-recovery/artifacts/stress-editor/after-png-publish -Width 3840 -Items 1000 -StrokePoints 5000 -Label final -PixelPattern solid -EncoderMode product
+& ./build/tools/EditorStressProbe/run-editor-stress.ps1 -Payload C:/GitRepositories/my-capture-edit-recovery/artifacts/stress-editor/after-png-publish -Width 7680 -Items 1000 -StrokePoints 5000 -Label final -PixelPattern entropy -EncoderMode product
+```
+
+focused7ac888 exit0:33PASS/0FAIL/0SKIP(신규9+기존24),TRX artifacts/stress-editor/png-final-tests/png-recovery-final.trx. Publish2d2d0c exit0,Probeab3e71 exit0/경고0/오류0. 실제productmode종료08f406 exit0/PID55304,6b7427 exit0/PID47704. diagnostic override 없이 실제제품 encoder를 사용했습니다. 최종 publish는 a2e3d60에 이미커밋PNGfix를 더한 측정source이며 실제DLLSHA80C782C0821EE3232FE272DBD12BE4B16A7DC6F9BE424AAF58053DE094580892를 기준으로 구분합니다.
+
+최종pairreadback b80794 exit0, 실제Bgra32/96DPI/.NET10.0.11. 원본·복구·viewport·PNGbyteSHA는 이전제품과 exact동일,1010items/100000points/기존ID/복구문서 completeness/blob1(37515/113458630B)/weakref0·0 유지. guard미도달,소유process종료,생성물보존.
+
+|조건|원제품→최종제품maxheartbeat ms|worstgesture ms|p95 ms|peakprivate bytes|latestflush ms|
+|---|---|---|---|---|---|
+|4Ksolid|344.97→343.37|152.61→121.28|164.13→179.11|409563136→479289344|90.20→88.98|
+|8Kentropy|2083.44→334.99|2081.12→120.93|151.61→108.24|1295138816→1190404096|232.37→359.64|
+
+확정된 개선은 높은entropy PNG encode가 livebitmap lock을 전체 encode동안 소유하던2초 편집대기를 없앤 결과입니다. 독립copy는4K33MB/8K133MB managedpixelbuffer 및nativebacking을 추가합니다. 4Ksolid p95/peak,8Klatestflush도 개선되지 않은 수치로 유지합니다. 단회paired관측으로 확인한 효과 범위는 이부하에서의 편집대기 감소이며 전체memory/IO비용에는 위표와 같은 차이가 남습니다.
+
+library_motion source-only 리뷰는 materialfinding없음이며 root도 source/9tests 직접검토를 완료했습니다. 현재 root 전체통합검사 슬롯을 위해 추가실행은 중단했습니다. 재현runner의 post-startreceipt예외에서 exactownedProcess를 finally Kill/5초boundedWait/Dispose하는 보강을 source에 준비했으나 이 보강의 실행smoke는 아직NOT RUN이며 별도probe커밋/검증으로 구분합니다. 제품 경로/기존실측 산출물에 영향없습니다.
