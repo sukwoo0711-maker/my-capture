@@ -145,6 +145,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     // Distance from the live box's outer edge to its first glyph (see PlaceTextBox).
     private Point _liveTextInset;
     private double _liveTextWidth;
+    // The live box's left edge with the scroll bar on its right (see UpdateLiveTextViewport).
+    private double _liveTextLeft;
     private bool _completed;
     private bool _commitInProgress;
     private bool _redactionInProgress;
@@ -1067,6 +1069,9 @@ internal sealed partial class AnnotationEditorControl : Grid
             contentHost = textBox.Template.FindName("PART_ContentHost", textBox) as ScrollViewer;
             if (contentHost is not null)
             {
+                // Set before the host first applies a template, so the text view is never re-parented
+                // once the user types or composes.
+                contentHost.Template = CaptionScrollHostTemplate.Value;
                 contentHost.ApplyTemplate();
                 contentHost.ScrollChanged += scroll;
             }
@@ -1151,10 +1156,61 @@ internal sealed partial class AnnotationEditorControl : Grid
             _liveTextWidth = target.Width + chrome;
         }
 
-        Canvas.SetLeft(box, target.Left - _liveTextInset.X);
+        // UpdateLiveTextViewport places the box horizontally, once the bar's side is known.
+        _liveTextLeft = target.Left - _liveTextInset.X;
         Canvas.SetTop(box, target.Top - _liveTextInset.Y);
         UpdateLiveTextViewport(box);
     }
+
+    internal enum CaptionScrollBarSide { Right, Left, Overlay }
+
+    /// <summary>
+    /// Where the live caption's vertical bar stays visible. The text viewport neither moves nor
+    /// narrows (its width is the committed wrapping width), so the bar takes the side with room
+    /// inside the visible canvas: right of the caption, else left of it, else over its right edge
+    /// when the caption spans the whole width.
+    /// </summary>
+    internal static CaptionScrollBarSide ChooseCaptionScrollBarSide(double boxLeft, double boxWidth, double barWidth, double visibleWidth) =>
+        barWidth <= 0 || !(visibleWidth > 0) || boxLeft + boxWidth + barWidth <= visibleWidth + 0.5 ? CaptionScrollBarSide.Right
+        : boxLeft - barWidth >= -0.5 ? CaptionScrollBarSide.Left
+        : CaptionScrollBarSide.Overlay;
+
+    /// <summary>
+    /// The live caption's scroll host: the text viewport between two bar slots, so the vertical bar
+    /// can sit right of the caption, left of it, or over its right edge (see
+    /// <see cref="ChooseCaptionScrollBarSide"/>) without changing the text view or its width. The
+    /// bar keeps the application's ScrollBar style. Sealed once, so any editor thread may use it.
+    /// </summary>
+    private static readonly Lazy<ControlTemplate> CaptionScrollHostTemplate = new(() =>
+    {
+        var template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(
+            """
+            <ControlTemplate TargetType="ScrollViewer"
+                             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                <Grid Background="{TemplateBinding Background}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Column="1"
+                                            Margin="{TemplateBinding Padding}"
+                                            CanContentScroll="{TemplateBinding CanContentScroll}"
+                                            Content="{TemplateBinding Content}"
+                                            ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Column="2" Orientation="Vertical" Cursor="Arrow"
+                               AutomationProperties.AutomationId="VerticalScrollBar"
+                               Maximum="{TemplateBinding ScrollableHeight}"
+                               ViewportSize="{TemplateBinding ViewportHeight}"
+                               Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}"
+                               Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                </Grid>
+            </ControlTemplate>
+            """);
+        template.Seal();
+        return template;
+    });
 
     private void UpdateLiveTextViewport(TextBox box)
     {
@@ -1170,16 +1226,29 @@ internal sealed partial class AnnotationEditorControl : Grid
             box.MaxHeight = Math.Max(minimum, height - Canvas.GetTop(box));
         }
         var host = box.Template?.FindName("PART_ContentHost", box) as ScrollViewer;
+        var bar = host?.Template?.FindName("PART_VerticalScrollBar", host) as ScrollBar;
         double scrollWidth = 0;
-        if (host?.ComputedVerticalScrollBarVisibility == Visibility.Visible
-            && host.Template?.FindName("PART_VerticalScrollBar", host) is ScrollBar bar)
+        if (host?.ComputedVerticalScrollBarVisibility == Visibility.Visible && bar is not null)
         {
             scrollWidth = bar.ActualWidth > 0 ? bar.ActualWidth
                 : double.IsFinite(bar.Width) ? bar.Width : SystemParameters.VerticalScrollBarWidth;
         }
-        // The scrollbar occupies chrome, not the caption's wrapping width. Keep the same
-        // text viewport width as FitText so scrolling cannot change the saved line breaks.
-        box.Width = _liveTextWidth + scrollWidth;
+        // The scrollbar occupies chrome, not the caption's wrapping width. Keep the same text
+        // viewport width and place as FitText, so neither scrolling nor the bar's side can change
+        // the saved line breaks or move a glyph; the bar takes a side the canvas does not clip.
+        double visibleWidth = _overlayCanvas.ActualWidth;
+        CaptionScrollBarSide side = ChooseCaptionScrollBarSide(_liveTextLeft, _liveTextWidth, scrollWidth, visibleWidth);
+        if (bar is not null)
+        {
+            bool overlay = side == CaptionScrollBarSide.Overlay;
+            Grid.SetColumn(bar, side switch { CaptionScrollBarSide.Left => 0, CaptionScrollBarSide.Overlay => 1, _ => 2 });
+            bar.HorizontalAlignment = overlay ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
+            // Over the right edge, pull the bar in from the box's clipped chrome to the canvas edge.
+            double clipped = _liveTextLeft + _liveTextWidth - box.BorderThickness.Right - visibleWidth;
+            bar.Margin = overlay && clipped > 0 ? new Thickness(0, 0, clipped, 0) : default;
+        }
+        box.Width = _liveTextWidth + (side == CaptionScrollBarSide.Overlay ? 0 : scrollWidth);
+        Canvas.SetLeft(box, _liveTextLeft - (side == CaptionScrollBarSide.Left ? scrollWidth : 0));
     }
 
     internal AnnotationDocument CreateCurrentImageSnapshot()
