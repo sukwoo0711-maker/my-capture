@@ -76,8 +76,11 @@ public sealed class GalleryController
         IEnumerable<CaptureRecord> matches = RecordsInView(scope, browsing: includeFolders);
         string? trimmed = query?.Trim();
         if (!string.IsNullOrEmpty(trimmed))
-            matches = matches.Where(record => Matches(record, trimmed)
+        {
+            Func<CaptureRecord, bool> matcher = CaptureTextSearch.CreateMatcher(trimmed);
+            matches = matches.Where(record => matcher(record)
                 || _queue.GetExportFileName(record).Contains(trimmed, StringComparison.CurrentCultureIgnoreCase));
+        }
         CaptureRecord[] ordered = (sort switch
         {
             GallerySortOrder.Oldest => matches.OrderBy(record => record.CreatedAt).ThenBy(record => record.Id),

@@ -113,7 +113,44 @@ public static class CaptureTextSearch
     {
         ArgumentNullException.ThrowIfNull(record);
         string[] terms = SplitTerms(query);
-        return terms.Length == 0 || TryMatch(record, terms, out _);
+        return MatchesTerms(record, terms);
+    }
+
+    /// <summary>
+    /// Prepares one query for filtering a collection. The predicate reads current record
+    /// fields on each call, without retaining records or caching mutable metadata.
+    /// </summary>
+    public static Func<CaptureRecord, bool> CreateMatcher(string? query)
+    {
+        string[] terms = SplitTerms(query);
+        return record =>
+        {
+            ArgumentNullException.ThrowIfNull(record);
+            return MatchesTerms(record, terms);
+        };
+    }
+
+    private static bool MatchesTerms(CaptureRecord record, string[] terms)
+    {
+        // Boolean filters need no field attribution. A title/tag hit can avoid scanning
+        // the entire OCR document; Search still collects every matching field below.
+        string media = record.IsVideo
+            ? "동영상 비디오 video recording mp4"
+            : "이미지 사진 스크린샷 image screenshot png";
+        string? sourceApp = null;
+        foreach (string term in terms)
+        {
+            if (Contains(record.Title ?? string.Empty, term)
+                || Contains(record.SourceWindowTitle ?? string.Empty, term)
+                || Contains(media, term)
+                || Contains(record.Tags ?? string.Empty, term)
+                || Contains(record.SourcePageUrl ?? string.Empty, term)
+                || Contains(record.SourceDocumentPath ?? string.Empty, term)
+                || Contains(sourceApp ??= SourceAppText(record), term)
+                || Contains(record.OcrText ?? string.Empty, term)) continue;
+            return false;
+        }
+        return true;
     }
 
     /// <summary>Reports how much of <paramref name="records"/> carries recognised OCR text.</summary>
