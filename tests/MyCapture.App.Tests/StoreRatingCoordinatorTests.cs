@@ -292,7 +292,6 @@ public sealed class StoreRatingAndPrtScGuideApplyTests : KoreanCaptionTest
             DateTimeOffset attempted = new(2026, 10, 9, 0, 0, 0, TimeSpan.Zero);
             live().StoreRating.SuccessfulCaptureCount = 8;
             live().StoreRating.RequestAttemptedUtc = attempted;
-            live().StoreUpdate.PendingFromVersion = "4.1.1.0";
             live().StoreUpdate.CompletionNoticeVersion = "4.1.2.0";
 
             SettingsApplyResult result = apply.Apply(draft.ToAppSettings());
@@ -300,7 +299,6 @@ public sealed class StoreRatingAndPrtScGuideApplyTests : KoreanCaptionTest
             Assert.Equal(450, live().Queue.MaxItems);
             Assert.Equal(8, live().StoreRating.SuccessfulCaptureCount);
             Assert.Equal(attempted, live().StoreRating.RequestAttemptedUtc);
-            Assert.Equal("4.1.1.0", live().StoreUpdate.PendingFromVersion);
             Assert.Equal("4.1.2.0", store.Load().StoreUpdate.CompletionNoticeVersion);
             StoreRatingState persisted = store.Load().StoreRating;
             Assert.Equal(8, persisted.SuccessfulCaptureCount);

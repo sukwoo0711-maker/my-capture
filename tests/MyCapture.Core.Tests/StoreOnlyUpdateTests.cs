@@ -42,7 +42,6 @@ public sealed class StoreOnlyUpdateTests
         Assert.False(loaded.General.IsFirstRun);
         Assert.Empty(store.LastLoadWarnings);
         Assert.Equal("4.1.1.0", loaded.StoreUpdate.LastSeenVersion);
-        Assert.Equal("4.1.1.0", loaded.StoreUpdate.PendingFromVersion);
         Assert.Equal("4.1.2.0", loaded.StoreUpdate.CompletionNoticeVersion);
 
         // The next save writes only known settings, so the stale section disappears.
@@ -134,7 +133,8 @@ public sealed class StoreOnlyUpdateTests
         Assert.Equal(new[] { "$.storeUpdate" }, UpdatePropertyPaths(settings, "$"));
         JsonElement observations = settings.GetProperty("storeUpdate");
         Assert.Equal(JsonValueKind.Object, observations.ValueKind);
-        Assert.Equal(new[] { "completionNoticeVersion", "lastSeenVersion", "pendingFromVersion" },
+        // pendingFromVersion, written but never read by unreleased 4.1.2 candidates, is dropped on save.
+        Assert.Equal(new[] { "completionNoticeVersion", "lastSeenVersion" },
             observations.EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal));
         foreach (JsonProperty property in observations.EnumerateObject())
         {

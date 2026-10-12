@@ -19,7 +19,6 @@ internal sealed partial class SettingsWindow
     internal IStorePackageUpdateService? StoreUpdates { get; set; }
     internal Func<Task<bool>> PrepareStoreUpdate { get; set; } = () => Task.FromResult(false);
     internal Action FinishStoreUpdate { get; set; } = () => { };
-    internal Action? PersistStoreUpdateForTest { get; set; }
     internal bool StoreUpdatePackaged { get; set; } = AppPackage.IsPackaged;
     private bool _storeUpdateBusy;
     private bool _storeUpdateAvailable;
@@ -75,8 +74,6 @@ internal sealed partial class SettingsWindow
         SetStatusMessage(string.Empty);
         bool protectionAcquired = false;
         bool enabledBeforeInstallation = IsEnabled;
-        bool installationAttempted = false;
-        bool installationCompleted = false;
         try
         {
             StoreUpdates ??= new StorePackageUpdateService(this);
@@ -93,19 +90,10 @@ internal sealed partial class SettingsWindow
                 protectionAcquired = true;
                 enabledBeforeInstallation = IsEnabled;
                 IsEnabled = false;
-                installationAttempted = true;
-                _currentSettings().StoreUpdate.PendingFromVersion = CurrentUpdateVersion.ToString();
-                PersistUpdateObservation();
                 ShowStoreUpdate(new(StoreUpdatePhase.AwaitingConsent));
                 _storeUpdateProgressActive = true;
                 StoreUpdatePhase result = await StoreUpdates.InstallAsync(new UpdateProgressObserver(this, operation));
                 _storeUpdateProgressActive = false;
-                installationCompleted = result == StoreUpdatePhase.RestartRequired;
-                if (result != StoreUpdatePhase.RestartRequired)
-                {
-                    _currentSettings().StoreUpdate.PendingFromVersion = null;
-                    PersistUpdateObservation();
-                }
                 _storeUpdateAvailable = false;
                 SetStoreUpdateAction(false);
                 ShowStoreUpdate(new(result));
@@ -116,15 +104,6 @@ internal sealed partial class SettingsWindow
             _storeUpdateProgressActive = false;
             _storeUpdateAvailable = false;
             SetStoreUpdateAction(false);
-            // A failed attempt cannot retain a pending deployment. A later failed check
-            // must retain the successful deployment's observation until the next launch.
-            if (installationAttempted && !installationCompleted)
-            {
-                _currentSettings().StoreUpdate.PendingFromVersion = null;
-                try { PersistUpdateObservation(); }
-                catch (Exception persistenceError)
-                { _log.LogError(persistenceError, "Could not persist failed Store update observation"); }
-            }
             _log.LogError(error, "Store update operation failed");
             ShowStoreUpdate(new(StoreUpdatePhase.Failed));
         }
@@ -160,13 +139,6 @@ internal sealed partial class SettingsWindow
             if (owner.Dispatcher.CheckAccess()) Apply();
             else owner.Dispatcher.BeginInvoke((Action)Apply);
         }
-    }
-
-    private void PersistUpdateObservation()
-    {
-        if (PersistStoreUpdateForTest is { } persist) { persist(); return; }
-        (_settingsStore?.Invoke() ?? throw new InvalidOperationException("Store update state storage is unavailable."))
-            .Save(_currentSettings());
     }
 
     private void ShowStoreUpdate(StoreUpdateSnapshot snapshot)

@@ -236,21 +236,17 @@ public sealed partial class SettingsThemePreviewTests
                     var progress = (ProgressBar)window.FindName("UpdateProgress");
                     var fake = new ObservableStoreUpdates { Available = true };
                     window.StoreUpdates = fake;
-                    int persisted = 0, released = 0;
+                    int released = 0;
                     window.PrepareStoreUpdate = () => Task.FromResult(true);
                     window.FinishStoreUpdate = () => released++;
-                    window.PersistStoreUpdateForTest = () => persisted++;
                     Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
                     Assert.Equal(UiText.Get("StoreUpdate_InstallHelp"), AutomationProperties.GetHelpText(action));
 
                     Task failed = window.RunStoreUpdateActionAsync();
                     IProgress<StoreUpdateSnapshot> failedObserver = fake.Progress!;
-                    Assert.NotNull(settings.StoreUpdate.PendingFromVersion);
                     fake.Completion!.SetException(new IOException("Store transport failure"));
                     PumpUntil(window, failed);
                     Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
-                    Assert.Null(settings.StoreUpdate.PendingFromVersion);
-                    Assert.Equal(2, persisted);
                     Assert.Equal(1, released);
                     Assert.True(window.IsEnabled);
                     Assert.Equal(UiText.Get("StoreUpdate_Check"), action.Content);
@@ -278,8 +274,6 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Equal(21, progress.Value);
                     fake.Completion!.SetResult(StoreUpdatePhase.RestartRequired);
                     PumpUntil(window, install);
-                    string? successfulPending = settings.StoreUpdate.PendingFromVersion;
-                    Assert.NotNull(successfulPending);
                     completedObserver.Report(new(StoreUpdatePhase.Installing));
                     Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), state.Text);
 
@@ -291,23 +285,10 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
                     fake.CheckCompletion.SetException(new IOException("Check unavailable after successful deployment"));
                     PumpUntil(window, check);
-                    Assert.Equal(successfulPending, settings.StoreUpdate.PendingFromVersion);
                     Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
                     Assert.Equal(UiText.Get("StoreUpdate_Check"), action.Content);
                     Assert.Equal(2, released);
-
-                    // An observation-save failure never starts deployment; cleanup-save failure stays failed.
-                    fake.CheckCompletion = null;
-                    Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
-                    int attemptedSaves = 0;
-                    window.PersistStoreUpdateForTest = () => { attemptedSaves++; throw new IOException("Observation storage unavailable"); };
-                    Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
-                    Assert.Equal(2, attemptedSaves);
-                    Assert.Equal(2, fake.Installs);
-                    Assert.Null(settings.StoreUpdate.PendingFromVersion);
-                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
                     Assert.True(window.IsEnabled && action.IsEnabled);
-                    Assert.Equal(3, released);
                 }
                 finally
                 {
@@ -337,15 +318,13 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(0, fake.Installs); // Save/discard/cancel protection must allow installation first.
             Assert.Equal(UiText.Get("StoreUpdate_StateBlocked"), state.Text);
             Assert.True(window.IsEnabled);
-            int persisted = 0, protectionReleased = 0;
+            int protectionReleased = 0;
             window.PrepareStoreUpdate = () => Task.FromResult(true);
             window.FinishStoreUpdate = () => protectionReleased++;
-            window.PersistStoreUpdateForTest = () => persisted++;
             Task install = window.RunStoreUpdateActionAsync();
             Assert.False(install.IsCompleted);
             Assert.False(window.IsEnabled);
             Assert.False(((Button)window.FindName("ApplyButton")).IsEnabled);
-            Assert.Equal(1, persisted);
             Assert.Equal(1, fake.Installs);
             Assert.Equal(0, protectionReleased);
             Assert.Equal(UiText.Get("StoreUpdate_StateAwaitingConsent"), state.Text);
@@ -365,7 +344,6 @@ public sealed partial class SettingsThemePreviewTests
             SaveStoreUpdateEvidence(window, $"update-installing-{locale}-high-contrast-780x560.png");
             fake.Completion!.SetResult(StoreUpdatePhase.Canceled);
             PumpUntil(window, install);
-            Assert.Equal(2, persisted);
             Assert.Equal(1, protectionReleased);
             Assert.Equal(UiText.Get("StoreUpdate_StateCanceled"), state.Text);
             Assert.True(window.IsEnabled);
@@ -376,7 +354,6 @@ public sealed partial class SettingsThemePreviewTests
             Task completed = window.RunStoreUpdateActionAsync();
             fake.Completion!.SetResult(StoreUpdatePhase.RestartRequired);
             PumpUntil(window, completed);
-            Assert.Equal(3, persisted); // Pending source version is preserved until a changed version is observed.
             Assert.Equal(2, protectionReleased);
             Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), state.Text);
             Assert.True(window.IsEnabled);

@@ -11,18 +11,15 @@ public sealed class StoreUpdateObservationTests
         var state = new StoreUpdateState();
         Assert.True(state.ObserveLaunch("4.1.1.0", true));
         Assert.Null(state.CompletionNoticeVersion);
-        state.PendingFromVersion = "4.1.1.0";
         Assert.False(state.ObserveLaunch("4.1.1.0", true));
         Assert.Null(state.CompletionNoticeVersion);
-        Assert.Equal("4.1.1.0", state.PendingFromVersion);
     }
     [Fact]
     public void InstalledVersionIncreaseIsObservedAfterRestartIncludingAnExternalStoreUpdate()
     {
-        var state = new StoreUpdateState { LastSeenVersion = "4.1.1.0", PendingFromVersion = "4.1.1.0" };
+        var state = new StoreUpdateState { LastSeenVersion = "4.1.1.0" };
         Assert.True(state.ObserveLaunch("4.1.2.0", true));
         Assert.Equal("4.1.2.0", state.CompletionNoticeVersion);
-        Assert.Null(state.PendingFromVersion);
         Assert.False(state.ObserveLaunch("4.1.2.0", true));
         state.CompletionNoticeVersion = null;
         Assert.True(state.ObserveLaunch("4.1.3.0", true));
