@@ -133,6 +133,7 @@ internal static class ThemeService
         // Hover layers recolour their fill; a contrast theme keeps fills on Window, so hover
         // shows as a Highlight outline instead.
         SetBrush(resources, "Border.Hover", contrast ? SystemColor(SystemColorRole.Highlight) : Colors.Transparent);
+        ApplyFolderHoverResources(resources, contrast);
         bool strongChrome = contrast || theme == AppTheme.HighContrast;
         resources["Focus.RingThickness"] = new Thickness(strongChrome ? 2 : 1);
         resources["Focus.RingWidth"] = strongChrome ? 2d : 1d;
@@ -174,6 +175,35 @@ internal static class ThemeService
         var effect = new DropShadowEffect { Opacity = 0, BlurRadius = 0, ShadowDepth = 0 };
         effect.Freeze();
         return effect;
+    }
+
+    private static readonly SolidColorBrush ClearBrush = CreateClearBrush();
+
+    private static SolidColorBrush CreateClearBrush()
+    {
+        var brush = new SolidColorBrush(Colors.Transparent);
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>
+    /// The library folder card's hover edge and wash. App palettes alias the very Accent.Folder and
+    /// Surface.Hover brushes, so their look is unchanged. A Windows contrast theme draws the rest and
+    /// hover edges both in WindowText and the wash in the Window colour, so the hover edge takes
+    /// Highlight and the wash, which would dim that edge, turns clear. Brushes are swapped, never
+    /// recoloured. Call again after anything that replaces Accent.Folder or Surface.Hover.
+    /// </summary>
+    internal static void ApplyFolderHoverResources(ResourceDictionary resources, bool contrast)
+    {
+        if (contrast)
+        {
+            SetBrush(resources, "Border.FolderHover", SystemColor(SystemColorRole.Highlight));
+            resources["Surface.FolderHoverWash"] = ClearBrush;
+            return;
+        }
+
+        if (resources["Accent.Folder"] is Brush folder) resources["Border.FolderHover"] = folder;
+        if (resources["Surface.Hover"] is Brush hover) resources["Surface.FolderHoverWash"] = hover;
     }
 
     private static void SetBrush(ResourceDictionary resources, string key, Color color)

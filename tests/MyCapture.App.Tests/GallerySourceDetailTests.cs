@@ -134,6 +134,27 @@ public sealed class GallerySourceDetailTests
         });
 
     [Fact]
+    public void ShowAllHoverKeepsTheWholeWashAndAddsTheContrastOutline() =>
+        Render("ko-KR", 204, Image(EdgeSource(), LongTitle, Url), (window, panel, tile) =>
+        {
+            ToggleButton showAll = Named<ToggleButton>(panel, "LibrarySourcePageToggle");
+            var wash = (Border)showAll.Template.FindName("HoverLayer", showAll);
+            var outline = (Border)showAll.Template.FindName("HoverOutline", showAll);
+            // The outline is its own layer, so the hover wash still fills the whole chip.
+            Assert.Equal(new Thickness(0), wash.BorderThickness);
+            Assert.Equal(new Thickness(1), outline.BorderThickness);
+            Assert.Null(outline.Background);
+            Trigger hover = showAll.Template.Triggers.OfType<Trigger>().Single(trigger => trigger.Property == UIElement.IsMouseOverProperty);
+            Assert.Contains(hover.Setters.OfType<Setter>(), setter => setter.TargetName == "HoverOutline"
+                && setter.Property == FluidMotion.FadeToProperty && Equals(setter.Value, 1d));
+            // App palettes keep the outline clear; a Windows contrast theme's Border.Hover is Highlight.
+            Assert.Equal(0, ((SolidColorBrush)outline.BorderBrush).Color.A);
+            var highlight = Color.FromRgb(0xD6, 0xB4, 0xFD);
+            window.Resources["Border.Hover"] = new SolidColorBrush(highlight);
+            Assert.Equal(highlight, ((SolidColorBrush)outline.BorderBrush).Color);
+        });
+
+    [Fact]
     public void ShortValuesFitTheirLinesWithoutAToggle() =>
         Render("ko-KR", 252, Image(new CaptureSourceDetails("Windows 탐색기", ExplorerPath, @"C:\Work"), "Work"),
             (window, panel, tile) =>

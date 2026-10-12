@@ -35,10 +35,11 @@
              selection are layers over the rest chrome whose opacity triggers move through
              FluidMotion.FadeTo (hover and press over Motion.Fast, selection over Motion.Normal),
              snapping when Windows animation effects are off. Brushes are never animated. -->
-        <!-- Local washes retain the library's existing transparent edges in contrast themes. -->
-        <Style x:Key="LibraryUx.HoverWash" TargetType="Border" BasedOn="{StaticResource StateLayer.Hover}">
-            <Setter Property="BorderBrush" Value="Transparent" />
-        </Style>
+        <!-- The library's hover wash. A Windows contrast theme draws Surface.Hover in the Window
+             colour, so the hover shows through StateLayer's Border.Hover edge (Highlight there,
+             transparent in every app palette). A layer without a BorderThickness pairs it with a
+             separate StateLayer outline. -->
+        <Style x:Key="LibraryUx.HoverWash" TargetType="Border" BasedOn="{StaticResource StateLayer.Hover}" />
         <!-- A selected navigation row keeps its wash and accent pill without a card outline. -->
         <Style x:Key="LibraryUx.SelectedWash" TargetType="Border" BasedOn="{StaticResource StateLayer}">
             <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
@@ -639,12 +640,16 @@
                             <Path x:Name="Edge" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Style="{StaticResource LibraryUx.RestEdge}"
                                   Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" SnapsToDevicePixels="True" />
+                            <!-- Border.FolderHover and Surface.FolderHoverWash are Accent.Folder and Surface.Hover
+                                 in every app palette. A Windows contrast theme draws the rest and hover edges both
+                                 in WindowText, so the hover edge takes Highlight there and the wash, which would
+                                 dim it, turns clear (ThemeService.ApplyFolderHoverResources). -->
                             <Grid x:Name="HoverEdge" Opacity="0" IsHitTestVisible="False">
                                 <Path Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
-                                      Stroke="{DynamicResource Accent.Folder}" StrokeThickness="1" SnapsToDevicePixels="True" />
+                                      Stroke="{DynamicResource Border.FolderHover}" StrokeThickness="1" SnapsToDevicePixels="True" />
                             </Grid>
                             <Path x:Name="Wash" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
-                                  Fill="{DynamicResource Surface.Hover}" Opacity="0" IsHitTestVisible="False" />
+                                  Fill="{DynamicResource Surface.FolderHoverWash}" Opacity="0" IsHitTestVisible="False" />
                             <Path x:Name="DropRing" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Stroke="{DynamicResource Accent.Folder}" StrokeThickness="2" StrokeDashArray="3 2"
                                   Opacity="0" IsHitTestVisible="False" />
@@ -1890,11 +1895,15 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="ToggleButton">
-                                                        <!-- Hover and press washes fade over the whole chip. -->
+                                                        <!-- Hover and press washes fade over the whole chip; the contrast-theme
+                                                             hover outline (Border.Hover, transparent otherwise) fades with them. The
+                                                             outline is its own layer so the washes keep filling the whole chip. -->
                                                         <Grid>
                                                             <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius.Sm}" />
                                                             <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" CornerRadius="{DynamicResource Radius.Sm}" />
                                                             <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}" CornerRadius="{DynamicResource Radius.Sm}" />
+                                                            <Border x:Name="HoverOutline" Style="{StaticResource StateLayer}" BorderThickness="1"
+                                                                    CornerRadius="{DynamicResource Radius.Sm}" />
                                                             <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                             <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
                                                                     CornerRadius="{DynamicResource Radius.Sm}" IsHitTestVisible="False" Opacity="0" />
@@ -1902,6 +1911,7 @@
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsMouseOver" Value="True">
                                                                 <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                                                <Setter TargetName="HoverOutline" Property="themes:FluidMotion.FadeTo" Value="1" />
                                                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                                                             </Trigger>
                                                             <Trigger Property="IsPressed" Value="True">
