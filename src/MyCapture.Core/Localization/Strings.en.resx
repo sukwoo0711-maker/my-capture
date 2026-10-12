@@ -3415,7 +3415,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>Captures removed from a folder start a new retention period today.</value></data>
   <data name="Folder410.DeleteChanged" xml:space="preserve"><value>The folder contents changed after confirmation. Review them and try again.</value></data>
   <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>Includes folders, unassigned captures, and kept captures for this date.</value></data>
-  <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>Deleted folders and captures cannot be restored.</value></data>
+  <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>Folders and captures move to the Windows Recycle Bin. You can bring them back from Restore recently deleted.</value></data>
   <data name="Folder410.Storage" xml:space="preserve"><value>{0} folders · {1}</value></data>
   <data name="Folder410.StorageInfo" xml:space="preserve"><value>Folder storage exceeds the ordinary capture limit. Folder contents are kept until you delete them.</value></data>
   <data name="Folder410.ExportPathTooLong" xml:space="preserve"><value>The destination is too deep. Choose a shorter path.</value></data>

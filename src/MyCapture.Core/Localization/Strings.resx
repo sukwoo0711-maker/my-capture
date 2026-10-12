@@ -3415,7 +3415,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Folder410.RetentionRestarted" xml:space="preserve"><value>폴더에서 뺀 캡처는 오늘부터 보관 기간이 다시 적용됩니다.</value></data>
   <data name="Folder410.DeleteChanged" xml:space="preserve"><value>확인한 뒤 폴더 항목이 변경되어 삭제를 중단했습니다. 내용을 확인한 후 다시 시도하십시오.</value></data>
   <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>이 날짜의 폴더와 폴더에 넣지 않은 캡처, 보관한 캡처가 모두 포함됩니다.</value></data>
-  <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>삭제한 폴더와 캡처는 되돌릴 수 없습니다.</value></data>
+  <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>폴더와 캡처는 Windows 휴지통으로 이동합니다. 최근 삭제 복원에서 되돌릴 수 있습니다.</value></data>
   <data name="Folder410.Storage" xml:space="preserve"><value>폴더 {0}개 · {1}</value></data>
   <data name="Folder410.StorageInfo" xml:space="preserve"><value>폴더 보관 용량이 일반 캡처의 용량 한도를 넘었습니다. 폴더 항목은 자동 삭제되지 않습니다.</value></data>
   <data name="Folder410.ExportPathTooLong" xml:space="preserve"><value>선택한 저장 위치가 너무 깊습니다. 더 짧은 경로를 선택하십시오.</value></data>
