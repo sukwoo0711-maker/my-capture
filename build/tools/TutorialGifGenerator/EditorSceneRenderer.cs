@@ -41,19 +41,20 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
         if (_feature == "step-number") { start = new(198, 141); finish = new(423, 201); }
         if (_feature is "mosaic" or "blur") { start = new(182, 182); finish = new(462, 220); }
         if (_feature == "crop") { start = new(142, 92); finish = new(482, 242); }
-        if (_feature == "rotate") { tool = new(285, 289); start = tool; finish = tool; }
+        if (_feature == "rotate") { tool = new(320, 160); start = tool; finish = tool; }
         if (_feature is "save" or "copy") { tool = new(_feature == "save" ? 305 : 481, 40); start = tool; finish = tool; }
         var story = new TutorialStoryboard()
             .Hold("ready", 120, new PointD(92, 280))
-            .Motion("approach", 25, new PointD(92, 280), tool)
-            .Motion("choose", 8, tool, tool, pressed: true)
-            .Hold("chosen", 70, tool);
+            .Motion("approach", 25, new PointD(92, 280), tool);
+        if (_feature == "rotate") story.Hold("choose", 32, tool);
+        else story.Motion("choose", 8, tool, tool, pressed: true);
+        story.Hold("chosen", 70, tool);
         PointD tail = finish;
         if (_feature == "rotate")
         {
-            tail = new PointD(430, 289);
+            tail = tool;
             story.Motion("turn-left", 25, tool, tool).Hold("left-result", 180, tool)
-                .Motion("right-approach", 20, tool, tail).Motion("right-press", 8, tail, tail, pressed: true)
+                .Hold("right-press", 40, tail)
                 .Motion("turn-right", 25, tail, tail).Hold("result", 160, tail);
         }
         else if (_feature == "save")
@@ -101,7 +102,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
         bool complete = frame.Segment is "apply" or "applied-result" or "text-commit" or "complete";
         double progress = frame.Segment is "draw" or "type" ? TutorialStoryboard.SmoothStep(frame.Progress) : result ? 1 : 0;
         if (_feature is "save" or "copy") progress = 1;
-        if (_feature == "step-number") progress = frame.Segment is "step-one" or "step-approach" ? .25 : frame.Segment is "step-press" or "result" or "complete" ? 1 : 0;
+        if (_feature == "step-number") progress = frame.Segment is "canvas-press" or "step-one" or "step-approach" ? .25 : frame.Segment is "step-press" or "result" or "complete" ? 1 : 0;
         PointD cursor = frame.Cursor;
         if (_feature == "pen" && frame.Segment == "draw") cursor = new PointD(170 + 270 * progress, 170 + Math.Sin(progress * Math.PI * 3) * 28);
         BitmapSource scene = TutorialDrawing.DrawScene(dc =>
@@ -129,7 +130,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
             }
             else dc.DrawImage(_sample, new Rect(0, 0, 500, 205));
             var document = BuildDocument(progress);
-            if (_feature == "mosaic" && progress > 0) dc.PushClip(new RectangleGeometry(new Rect(110, 117, Math.Max(1, 280 * progress), 38)));
+            if (_feature == "mosaic" && progress > 0) dc.PushClip(new RectangleGeometry(new Rect(110, 117, Math.Max(1, 280 * progress), Math.Max(1, 38 * progress))));
             _renderer.Render(dc, document, 1, blurSource: _sample);
             if (_feature == "mosaic" && progress > 0) dc.Pop();
             dc.Pop(); dc.Pop();
@@ -193,7 +194,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
             case "step-number":
                 int count = p < .5 ? 1 : 2;
                 for (int i = 0; i < count; i++) document.Add(new TextAnnotation { IsStepNumber = true, Text = (i + 1).ToString(), Rect = new RectD(110 + i * 225, 60 + i * 60, 32, 32), FontSize = 22, Foreground = ColorRgba.White, Background = Accent, HasOutline = false }); break;
-            case "blur": document.Add(new BlurAnnotation { Rect = new RectD(110, 117, Math.Max(1, 280 * p), 38), Radius = 12 }); break;
+            case "blur": document.Add(new BlurAnnotation { Rect = new RectD(110, 117, Math.Max(1, 280 * p), Math.Max(1, 38 * p)), Radius = 12 }); break;
             case "mosaic": document.Add(new ImageAnnotation { Rect = new RectD(110, 117, 280, 38), SourceWidth = _mosaic.PixelWidth, SourceHeight = _mosaic.PixelHeight, AssetFileName = _mosaicAsset }); break;
             case "save":
             case "copy": document.Add(new RectangleAnnotation { Rect = new RectD(98, 45, 270, 108), Stroke = Accent, StrokeThickness = 4 }); break;
@@ -218,7 +219,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
         for (int i = 0; i < symbols.Length; i++)
         {
             double y = 66 + i * 27;
-            dc.DrawRoundedRectangle(chosen && selected == symbols[i] ? TutorialDrawing.Brush("Accent.Default") : TutorialDrawing.Brush("Surface.Raised"), null, new Rect(16, y, 30, 25), 4, 4);
+            dc.DrawRoundedRectangle(chosen && _feature is not "rotate" and not "save" and not "copy" && selected == symbols[i] ? TutorialDrawing.Brush("Accent.Default") : TutorialDrawing.Brush("Surface.Raised"), null, new Rect(16, y, 30, 25), 4, 4);
             Geometry? icon = Application.Current.TryFindResource(symbols[i]) as Geometry ?? symbols[i] switch
             {
                 "Icon.Ellipse" => new EllipseGeometry(new Rect(3, 3, 14, 14)),
@@ -232,7 +233,6 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
             }
         }
         TutorialDrawing.Text(dc, chosen ? ToolName() : L("도구 선택", "Choose a tool"), 72, 282, 14, Brushes.LightGray);
-        if (_feature == "rotate") TutorialDrawing.Text(dc, L("왼쪽 회전     오른쪽 회전", "Rotate left     Rotate right"), 250, 282, 14, Brushes.White);
         if (_feature is "crop" or "text") TutorialDrawing.Text(dc, complete ? L("적용됨", "Applied") : L("적용", "Apply"), 525, 280, 14, Brushes.White);
     }
 
@@ -320,7 +320,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
     }
     private string Key(string segment) => _feature switch
     {
-        "rectangle" => "R", "ellipse" => "E", "arrow" => "A", "pen" => "P", "highlighter" => "H", "text" => "T", "step-number" => "N", "mosaic" => "M", "blur" => "B", "crop" => "X",
+        "rectangle" => "R", "ellipse" => "E", "arrow" => "A", "pen" => "P", "highlighter" => "H", "text" => "T", "step-number" => "N", "mosaic" => "M", "blur" => "B", "crop" => segment is "apply-approach" or "apply" or "applied-result" or "complete" ? "Enter" : "X",
         "rotate" => segment is "right-approach" or "right-press" or "turn-right" or "result" or "complete" ? "W" : "Q", "save" => "Ctrl+S",
         _ => segment is "paste" or "pasted-result" or "complete" ? "Ctrl+V" : "Ctrl+C"
     };
