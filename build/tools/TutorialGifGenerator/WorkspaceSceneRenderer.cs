@@ -62,8 +62,7 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
         _menuRect = new Rect(246, 83, 280, _pinMenu.PixelHeight);
         _menuTarget = Add(menuPoint, _menuRect.Location);
         _pin = WindowContent(pin, _pinImage.PixelWidth, _pinImage.PixelHeight);
-        double pinHeight = Math.Min(98, 310d * _pin.PixelHeight / _pin.PixelWidth);
-        _pinRect = new Rect(175, Id == "pin-copy" ? 104 : 141, 310, pinHeight);
+        _pinRect = Fit(_pin, new Rect(175, Id == "pin-copy" ? 104 : 141, 310, 98));
         var bar = new PinHoverBar();
         FrameworkElement barRoot = (FrameworkElement)bar.Content;
         _bar = Snapshot(barRoot, 335);
@@ -325,8 +324,8 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
         }
         if (state is "pins" or "pins-returned")
         {
-            dc.DrawImage(_pin, new Rect(60, 137, 245, _pinRect.Height * 245 / 310));
-            dc.DrawImage(_pin, new Rect(330, 205, 245, _pinRect.Height * 245 / 310));
+            dc.DrawImage(_pin, Fit(_pin, new Rect(60, 137, 245, 98)));
+            dc.DrawImage(_pin, Fit(_pin, new Rect(330, 205, 245, 98)));
         }
         else if (state is not ("pins-hidden" or "pin-closed"))
         {
@@ -349,7 +348,7 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
         {
             dc.DrawRoundedRectangle(Brush("Surface.Floating"), new Pen(Brush("Border.Control"), 1), new Rect(42, 238, 552, 66), 7, 7);
             Text(dc, L(_ko, "빠른 저장 폴더", "Quick-save folder"), 56, 245, 14, Brush("Text.Secondary"));
-            dc.DrawImage(_pinImage, new Rect(56, 268, 112, 29));
+            dc.DrawImage(_pinImage, Fit(_pinImage, new Rect(56, 268, 112, 29)));
             Text(dc, "capture.png", 185, 270, 17, Brush("Text.Primary"));
             Text(dc, L(_ko, "저장됨", "Saved"), 460, 270, 16, Brush("Text.Primary"));
         }
@@ -429,6 +428,12 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
         }
         var border = new Border { Child = panel, Padding = new Thickness(5), Background = Brush("Surface.Floating"), BorderBrush = Brush("Border.Control"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7) };
         BitmapSource bitmap = Snapshot(border, 280); target = Center(chosen!, border); return bitmap;
+    }
+    private static Rect Fit(BitmapSource bitmap, Rect bounds)
+    {
+        double scale = Math.Min(bounds.Width / bitmap.PixelWidth, bounds.Height / bitmap.PixelHeight);
+        double width = bitmap.PixelWidth * scale, height = bitmap.PixelHeight * scale;
+        return new Rect(bounds.X + (bounds.Width - width) / 2, bounds.Y + (bounds.Height - height) / 2, width, height);
     }
     private static Rect DialogBounds(BitmapSource bitmap) => new(100, Math.Max(20, (SceneHeight - bitmap.PixelHeight) / 2d), 440, bitmap.PixelHeight);
     private static Point Center(FrameworkElement element, FrameworkElement root)
