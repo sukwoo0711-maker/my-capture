@@ -51,8 +51,10 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     private static readonly Guid CODECAPI_AVEncCommonRateControlMode = new("1c0608e9-370c-4710-8a58-cb6181c42423");
     private static readonly Guid CODECAPI_AVEncCommonQuality = new("fcbf57a3-7ea5-4b0c-9644-69b40c39c391");
     private static readonly Guid CODECAPI_AVEncCommonQualityVsSpeed = new("98332df8-03cd-476b-89fa-3f9e442dec9f");
+    private static readonly Guid MF_MT_VIDEO_NOMINAL_RANGE = new("c21b8ee5-b956-4071-8daf-325edf5cab11");
 
     private const uint MFVideoInterlace_Progressive = 2;
+    private const uint MFNominalRange_0_255 = 1;
     private const uint eAVEncCommonRateControlMode_Quality = 3;
 
     private readonly ILogger _log;
@@ -132,6 +134,13 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             if (_options.H264Profile is { } profile)
             {
                 SetU32(outType, MF_MT_MPEG2_PROFILE, (uint)profile);
+            }
+
+            if (_options.FullRange && _options.InputFormat == VideoEncoderInputFormat.Bgra32)
+            {
+                // The Sink Writer's RGB to NV12 converter follows the encoder's range, and the
+                // file declares it, so decoders that honour the declaration show true black and white.
+                SetU32(outType, MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255);
             }
 
             Check(_writer!.AddStream(outType, out _streamIndex), nameof(IMFSinkWriter.AddStream));

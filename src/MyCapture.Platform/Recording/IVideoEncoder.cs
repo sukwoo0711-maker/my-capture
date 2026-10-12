@@ -106,6 +106,15 @@ public sealed record VideoEncoderOptions(
     public int? QualityVsSpeed { get; init; }
 
     /// <summary>
+    /// Converts RGB input to full-range (0–255) Y'CbCr and declares that range in the stream,
+    /// instead of the studio range (16–235) recordings use. WPF's MediaElement shows decoded
+    /// samples without expanding studio range, so studio-range video looks washed out in it
+    /// (white at 235, black at 16); the feature tutorial clips, which only the app's own player
+    /// shows, use full range. Has no effect on NV12 input.
+    /// </summary>
+    public bool FullRange { get; init; }
+
+    /// <summary>
     /// A frame-size- and rate-aware default bitrate when none is specified.
     /// </summary>
     /// <remarks>
