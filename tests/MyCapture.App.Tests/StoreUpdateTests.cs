@@ -4,16 +4,30 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Settings;
 using MyCapture.App.Store;
 using MyCapture.App.Updates;
+using MyCapture.Core.Localization;
 using Xunit;
 
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The update tab only opens the Microsoft Store listing. No test here starts a process: every
+/// The update tab observes Store deployment and retains its listing fallback. No test starts a process: every
 /// <see cref="StoreUpdateLink"/> gets a recording opener.
 /// </summary>
 public sealed class StoreUpdateTests
 {
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void EveryObservedPhaseHasAnExplicitLocalizedStatus(string language)
+    {
+        using var scope = UiText.UseLanguage(language);
+        StoreUpdatePhase[] phases = Enum.GetValues<StoreUpdatePhase>();
+        string[] labels = phases.Select(SettingsWindow.StoreUpdateStatusText).ToArray();
+        Assert.All(labels, label => Assert.False(string.IsNullOrWhiteSpace(label)));
+        Assert.Equal(phases.Length, labels.Distinct(StringComparer.Ordinal).Count());
+        Assert.Throws<ArgumentOutOfRangeException>(() => SettingsWindow.StoreUpdateStatusText((StoreUpdatePhase)int.MaxValue));
+    }
+
     private static readonly Type[] GitHubUpdateTypes =
     [
         typeof(GitHubUpdateService), typeof(IUpdateService), typeof(UpdateSession), typeof(UpdateInstaller),

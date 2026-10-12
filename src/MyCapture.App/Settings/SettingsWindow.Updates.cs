@@ -69,7 +69,9 @@ internal sealed partial class SettingsWindow
     {
         if (_storeUpdateBusy || !StoreUpdatePackaged) return;
         _storeUpdateBusy = true; UpdateAction.IsEnabled = false;
+        SetStatusMessage(string.Empty);
         bool protectionAcquired = false;
+        bool enabledBeforeInstallation = IsEnabled;
         try
         {
             StoreUpdates ??= new StorePackageUpdateService(this);
@@ -84,6 +86,8 @@ internal sealed partial class SettingsWindow
             {
                 if (!await PrepareStoreUpdate()) { ShowStoreUpdate(new(StoreUpdatePhase.Blocked)); return; }
                 protectionAcquired = true;
+                enabledBeforeInstallation = IsEnabled;
+                IsEnabled = false;
                 _currentSettings().StoreUpdate.PendingFromVersion = CurrentUpdateVersion.ToString();
                 PersistUpdateObservation();
                 ShowStoreUpdate(new(StoreUpdatePhase.AwaitingConsent));
@@ -105,9 +109,13 @@ internal sealed partial class SettingsWindow
         }
         finally
         {
-            if (protectionAcquired) FinishStoreUpdate();
-            _storeUpdateBusy = false; UpdateAction.IsEnabled = true;
-            AutomationProperties.SetName(UpdateAction, (string)UpdateAction.Content);
+            try { if (protectionAcquired) FinishStoreUpdate(); }
+            finally
+            {
+                if (protectionAcquired) IsEnabled = enabledBeforeInstallation;
+                _storeUpdateBusy = false; UpdateAction.IsEnabled = true;
+                AutomationProperties.SetName(UpdateAction, (string)UpdateAction.Content);
+            }
         }
     }
 
@@ -130,7 +138,7 @@ internal sealed partial class SettingsWindow
 
     private void ShowStoreUpdate(StoreUpdateSnapshot snapshot)
     {
-        UpdateObservedStatus.Text = UiText.Get("StoreUpdate_State" + snapshot.Phase);
+        UpdateObservedStatus.Text = StoreUpdateStatusText(snapshot.Phase);
         UpdateProgress.Visibility = snapshot.Phase is StoreUpdatePhase.Checking or StoreUpdatePhase.AwaitingConsent
             or StoreUpdatePhase.Downloading or StoreUpdatePhase.Installing ? Visibility.Visible : Visibility.Collapsed;
         // TotalDownloadProgress is download progress, not a made-up installation percentage.
@@ -138,6 +146,22 @@ internal sealed partial class SettingsWindow
         if (snapshot.Progress is { } value && snapshot.Phase == StoreUpdatePhase.Downloading) UpdateProgress.Value = value * 100;
         AutomationProperties.SetName(UpdateProgress, UpdateObservedStatus.Text);
     }
+
+    internal static string StoreUpdateStatusText(StoreUpdatePhase phase) => phase switch
+    {
+        StoreUpdatePhase.Idle => UiText.Get("StoreUpdate_StateIdle"),
+        StoreUpdatePhase.Checking => UiText.Get("StoreUpdate_StateChecking"),
+        StoreUpdatePhase.Available => UiText.Get("StoreUpdate_StateAvailable"),
+        StoreUpdatePhase.Current => UiText.Get("StoreUpdate_StateCurrent"),
+        StoreUpdatePhase.AwaitingConsent => UiText.Get("StoreUpdate_StateAwaitingConsent"),
+        StoreUpdatePhase.Downloading => UiText.Get("StoreUpdate_StateDownloading"),
+        StoreUpdatePhase.Installing => UiText.Get("StoreUpdate_StateInstalling"),
+        StoreUpdatePhase.RestartRequired => UiText.Get("StoreUpdate_StateRestartRequired"),
+        StoreUpdatePhase.Canceled => UiText.Get("StoreUpdate_StateCanceled"),
+        StoreUpdatePhase.Failed => UiText.Get("StoreUpdate_StateFailed"),
+        StoreUpdatePhase.Blocked => UiText.Get("StoreUpdate_StateBlocked"),
+        _ => throw new ArgumentOutOfRangeException(nameof(phase)),
+    };
 
     private void OnStoreUpdatePage(object sender, RoutedEventArgs e)
     {

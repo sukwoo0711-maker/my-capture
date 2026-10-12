@@ -8,8 +8,8 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Updates come only from the Microsoft Store. Settings carry no update state, an update section
-/// written by some other build is ignored without losing the rest of the file, and no app code
+/// Updates come only from the Microsoft Store. Settings carry only typed Store version observations;
+/// legacy updater sections are ignored without losing the rest of the file, and no app code
 /// outside the dormant <c>Updates</c> folder reaches the GitHub updater.
 /// </summary>
 public sealed class StoreOnlyUpdateTests
@@ -26,6 +26,9 @@ public sealed class StoreOnlyUpdateTests
             {"schemaVersion":4,
              "updates":{"checkOnStartup":true,"channel":"github","lastCheckedUtc":"2026-01-01T00:00:00Z"},
              "update":{"skippedVersion":"9.9.9"},
+             "storeUpdate":{"lastSeenVersion":"4.1.1.0","pendingFromVersion":"4.1.1.0",
+                 "completionNoticeVersion":"4.1.2.0","channel":"github","installerPath":"C:\\private\\setup.exe",
+                 "updates":{"downloadUrl":"https://example.invalid/setup.exe"}},
              "recording":{"frameRate":"fps60","includeCursor":false},
              "pin":{"zoomStep":0.25}}
             """);
@@ -38,11 +41,15 @@ public sealed class StoreOnlyUpdateTests
         Assert.Equal(0.25, loaded.Pin.ZoomStep, 3);
         Assert.False(loaded.General.IsFirstRun);
         Assert.Empty(store.LastLoadWarnings);
+        Assert.Equal("4.1.1.0", loaded.StoreUpdate.LastSeenVersion);
+        Assert.Equal("4.1.1.0", loaded.StoreUpdate.PendingFromVersion);
+        Assert.Equal("4.1.2.0", loaded.StoreUpdate.CompletionNoticeVersion);
 
         // The next save writes only known settings, so the stale section disappears.
         store.Save(loaded);
         using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(workspace.Paths.SettingsFile));
-        Assert.Empty(UpdatePropertyPaths(saved.RootElement, "$"));
+        AssertOnlyStoreObservation(saved.RootElement);
+        Assert.Equal("4.1.2.0", saved.RootElement.GetProperty("storeUpdate").GetProperty("completionNoticeVersion").GetString());
         Assert.Equal("fps60", saved.RootElement.GetProperty("recording").GetProperty("frameRate").GetString());
     }
 
@@ -59,12 +66,14 @@ public sealed class StoreOnlyUpdateTests
     }
 
     [Fact]
-    public void DefaultSettingsJson_HasNoUpdateSetting()
+    public void DefaultSettingsJson_HasOnlyTypedStoreVersionObservation()
     {
         string json = JsonSerializer.Serialize(new AppSettings(), MyCapture.Core.Serialization.JsonDefaults.Readable);
         using JsonDocument document = JsonDocument.Parse(json);
 
-        Assert.Empty(UpdatePropertyPaths(document.RootElement, "$"));
+        AssertOnlyStoreObservation(document.RootElement);
+        foreach (JsonProperty property in document.RootElement.GetProperty("storeUpdate").EnumerateObject())
+            Assert.Equal(JsonValueKind.Null, property.Value.ValueKind);
     }
 
     [Fact]
@@ -105,7 +114,8 @@ public sealed class StoreOnlyUpdateTests
             foreach (JsonProperty property in element.EnumerateObject())
             {
                 string child = path + "." + property.Name;
-                if (property.Name.Contains("update", StringComparison.OrdinalIgnoreCase)) found.Add(child);
+                if (property.Name.Contains("update", StringComparison.OrdinalIgnoreCase)
+                    || property.Name.Contains("installer", StringComparison.OrdinalIgnoreCase)) found.Add(child);
                 found.AddRange(UpdatePropertyPaths(property.Value, child));
             }
         }
@@ -117,6 +127,21 @@ public sealed class StoreOnlyUpdateTests
         }
 
         return found;
+    }
+
+    private static void AssertOnlyStoreObservation(JsonElement settings)
+    {
+        Assert.Equal(new[] { "$.storeUpdate" }, UpdatePropertyPaths(settings, "$"));
+        JsonElement observations = settings.GetProperty("storeUpdate");
+        Assert.Equal(JsonValueKind.Object, observations.ValueKind);
+        Assert.Equal(new[] { "completionNoticeVersion", "lastSeenVersion", "pendingFromVersion" },
+            observations.EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal));
+        foreach (JsonProperty property in observations.EnumerateObject())
+        {
+            Assert.True(property.Value.ValueKind is JsonValueKind.Null or JsonValueKind.String, property.Name);
+            if (property.Value.ValueKind == JsonValueKind.String)
+                Assert.True(Version.TryParse(property.Value.GetString(), out _), property.Name);
+        }
     }
 
     private static string RepositoryRoot()
