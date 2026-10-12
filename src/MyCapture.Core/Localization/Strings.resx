@@ -3850,132 +3850,132 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_StartFailureBody" xml:space="preserve"><value>MyCapture를 다시 실행하십시오. 계속 실패하면 컴퓨터를 다시 시작한 뒤 실행하십시오. 그래도 시작되지 않으면 자세히의 내용을 복사해 문의할 때 첨부하십시오.</value></data>
   <data name="CopyTerms_SizeMb" xml:space="preserve"><value>{0:0.#}MB</value></data>
   <data name="CopyTerms_SizeKb" xml:space="preserve"><value>{0:N0}KB</value></data>
-  <data name="Tutorial.Select" xml:space="preserve"><value>?? ??</value></data>
-  <data name="Tutorial.CurrentKey" xml:space="preserve"><value>???: {0}</value></data>
-  <data name="Tutorial.image-rotate.Title" xml:space="preserve"><value>??? ??</value></data>
-  <data name="Tutorial.video-trim.Title" xml:space="preserve"><value>?? ??</value></data>
-  <data name="Tutorial.capture-region.Unassigned" xml:space="preserve"><value>??? ???? ?? ??? ?????.</value></data>
-  <data name="Tutorial.capture-region.Step1" xml:space="preserve"><value>1. ?? ??? ?????.</value></data>
-  <data name="Tutorial.capture-region.Step2" xml:space="preserve"><value>2. ??? ??? ????? ?????.</value></data>
-  <data name="Tutorial.capture-region.Step3" xml:space="preserve"><value>3. ?? ? ?? ??? ?? ????? ?????.</value></data>
-  <data name="Tutorial.record-region.Unassigned" xml:space="preserve"><value>??? ???? ?? ??? ?????.</value></data>
-  <data name="Tutorial.record-region.Step1" xml:space="preserve"><value>1. ??? ??? ????? ?????.</value></data>
-  <data name="Tutorial.record-region.Step2" xml:space="preserve"><value>2. ?? ????? ??? ??? ??? ?????.</value></data>
-  <data name="Tutorial.record-region.Step3" xml:space="preserve"><value>3. ??? ??? ?? ????? ??? ??? ? ????.</value></data>
-  <data name="Tutorial.record-pause.Unassigned" xml:space="preserve"><value>?? ???? ???? ??? ?????.</value></data>
-  <data name="Tutorial.record-pause.Step1" xml:space="preserve"><value>1. ?? ??? ?????.</value></data>
-  <data name="Tutorial.record-pause.Step2" xml:space="preserve"><value>2. ???? ???? ??? ???? ??? ????.</value></data>
-  <data name="Tutorial.record-pause.Step3" xml:space="preserve"><value>3. ?? ???? ???? ??? ?????.</value></data>
-  <data name="Tutorial.library-open.Unassigned" xml:space="preserve"><value>??? ???? ?????? ?????.</value></data>
-  <data name="Tutorial.library-open.Step1" xml:space="preserve"><value>1. ?????? ???.</value></data>
-  <data name="Tutorial.library-open.Step2" xml:space="preserve"><value>2. ??? ???? ?? ??? ?????.</value></data>
-  <data name="Tutorial.library-open.Step3" xml:space="preserve"><value>3. ??? ?? ???? ????? ??? ?????.</value></data>
-  <data name="Tutorial.capture-window.Unassigned" xml:space="preserve"><value>??? ??? ? ?? ???? ? ??? ?????.</value></data>
-  <data name="Tutorial.capture-window.Step1" xml:space="preserve"><value>1. ??? ? ?? ???? ????.</value></data>
-  <data name="Tutorial.capture-window.Step2" xml:space="preserve"><value>2. ? ??? ?????.</value></data>
-  <data name="Tutorial.capture-window.Step3" xml:space="preserve"><value>3. ??? ?? ?? ?? ??? ?????.</value></data>
-  <data name="Tutorial.capture-fullscreen.Unassigned" xml:space="preserve"><value>??? ??? ? ?? ???? ?? ?? ??? ?????.</value></data>
-  <data name="Tutorial.capture-fullscreen.Step1" xml:space="preserve"><value>1. ??? ??? ?? ???? ????.</value></data>
-  <data name="Tutorial.capture-fullscreen.Step2" xml:space="preserve"><value>2. ?? ?? ??? ?????.</value></data>
-  <data name="Tutorial.capture-fullscreen.Step3" xml:space="preserve"><value>3. ?? ???? ?? ?? ?? ??? ?????.</value></data>
-  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>??? ??? ? ?? ???? ??? ??? ?????.</value></data>
-  <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. ???? ? ?? ???? ????.</value></data>
-  <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. ??? ??? ???? ?? ???? ?? ??? ?????.</value></data>
-  <data name="Tutorial.capture-scroll.Step3" xml:space="preserve"><value>3. ?? ?? ??? ?????. ?? ? ?? ??? ???? ?????.</value></data>
-  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>?? ?? ??? ? ?? ???? ?? ??? ?????.</value></data>
-  <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. ?? ??? ?????.</value></data>
-  <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. ?? ?? ?? ??? ??? ?????.</value></data>
-  <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. ?? ??? ???? ??? ??? ??????.</value></data>
-  <data name="Tutorial.quick-access.Step1" xml:space="preserve"><value>1. ?? ??? ?? ?? ??? ???? Alt+Q? ????.</value></data>
-  <data name="Tutorial.quick-access.Step2" xml:space="preserve"><value>2. ???? ?? ??? ????? C? ????.</value></data>
-  <data name="Tutorial.quick-access.Step3" xml:space="preserve"><value>3. ?? ?? ??? Ctrl+V? ?? ??? ?????.</value></data>
-  <data name="Tutorial.color-copy.Step1" xml:space="preserve"><value>1. ?? ??? ?????.</value></data>
-  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. ??? ?? ?? ???? ?? C? ????.</value></data>
-  <data name="Tutorial.color-copy.Step3" xml:space="preserve"><value>3. ?? ?? ??? ?? ?? Ctrl+V? ?? ????.</value></data>
-  <data name="Tutorial.image-rectangle.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-rectangle.Step2" xml:space="preserve"><value>2. ??? ??? ???? ??? ??? ??????.</value></data>
-  <data name="Tutorial.image-rectangle.Step3" xml:space="preserve"><value>3. ???? ??? ? ????? ???? ?????.</value></data>
-  <data name="Tutorial.image-ellipse.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-ellipse.Step2" xml:space="preserve"><value>2. ?? ??? ???? ??? ??? ??????.</value></data>
-  <data name="Tutorial.image-ellipse.Step3" xml:space="preserve"><value>3. ??? ??? ? ????? ???? ?????.</value></data>
-  <data name="Tutorial.image-arrow.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-arrow.Step2" xml:space="preserve"><value>2. ??? ??? ???? ????? ???? ??????.</value></data>
-  <data name="Tutorial.image-arrow.Step3" xml:space="preserve"><value>3. ??? ??? ??? ? ????? ???? ?????.</value></data>
-  <data name="Tutorial.image-pen.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-pen.Step2" xml:space="preserve"><value>2. ? ??? ???? ???? ????? ????.</value></data>
-  <data name="Tutorial.image-pen.Step3" xml:space="preserve"><value>3. ?? ??? ??? ? ????? ???? ?????.</value></data>
-  <data name="Tutorial.image-highlighter.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-highlighter.Step2" xml:space="preserve"><value>2. ??? ??? ???? ??? ??? ??????.</value></data>
-  <data name="Tutorial.image-highlighter.Step3" xml:space="preserve"><value>3. ?? ??? ??? ? ????? ???? ?????.</value></data>
-  <data name="Tutorial.image-text.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-text.Step2" xml:space="preserve"><value>2. ??? ??? ???? ??? ?? ???? ??? ?????.</value></data>
-  <data name="Tutorial.image-text.Step3" xml:space="preserve"><value>3. ?? ?? ?? ???? ???? ??? ? ?????.</value></data>
-  <data name="Tutorial.image-step-number.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-step-number.Step2" xml:space="preserve"><value>2. ?? ?? ??? ???? ??? ??? ??? ?????.</value></data>
-  <data name="Tutorial.image-step-number.Step3" xml:space="preserve"><value>3. ???? ??? ??? ??? ? ?????.</value></data>
-  <data name="Tutorial.image-mosaic.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-mosaic.Step2" xml:space="preserve"><value>2. ???? ??? ???? ?? ??? ??????.</value></data>
-  <data name="Tutorial.image-mosaic.Step3" xml:space="preserve"><value>3. ???? ??? ??? ??? ? ?????.</value></data>
-  <data name="Tutorial.image-blur.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-blur.Step2" xml:space="preserve"><value>2. ?? ??? ???? ??? ??? ??? ??????.</value></data>
-  <data name="Tutorial.image-blur.Step3" xml:space="preserve"><value>3. ?? ??? ??? ??? ? ?????.</value></data>
-  <data name="Tutorial.image-crop.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-crop.Step2" xml:space="preserve"><value>2. ??? ??? ???? ?? ??? ?????.</value></data>
-  <data name="Tutorial.image-crop.Step3" xml:space="preserve"><value>3. Enter? ?????. Esc? ??? ???? ?????.</value></data>
-  <data name="Tutorial.image-rotate.Step1" xml:space="preserve"><value>1. ???? ????? ???.</value></data>
-  <data name="Tutorial.image-rotate.Step2" xml:space="preserve"><value>2. Q? ??, W? ????? ?????.</value></data>
-  <data name="Tutorial.image-rotate.Step3" xml:space="preserve"><value>3. ??? ??? ? ????? ???? ?????.</value></data>
-  <data name="Tutorial.image-save.Step1" xml:space="preserve"><value>1. ??? ???? ?????.</value></data>
-  <data name="Tutorial.image-save.Step2" xml:space="preserve"><value>2. Ctrl+S? ?? ?????.</value></data>
-  <data name="Tutorial.image-save.Step3" xml:space="preserve"><value>3. ?? ??? ????? Ctrl+Shift+S? ?? ??? ?????.</value></data>
-  <data name="Tutorial.image-copy.Step1" xml:space="preserve"><value>1. ???? ???? ??? ?????.</value></data>
-  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Ctrl+C? ??? ???? ???? ??? ? ??? ?????.</value></data>
-  <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. ?? ??? Ctrl+V? ?? ???? ?? ????.</value></data>
-  <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. ?????? ???.</value></data>
-  <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Ctrl+Shift+N? ?? ? ?? ??? ?????.</value></data>
-  <data name="Tutorial.folder-create.Step3" xml:space="preserve"><value>3. ???? ?? ??? ? ??? ?????.</value></data>
-  <data name="Tutorial.folder-rename.Step1" xml:space="preserve"><value>1. ??????? ??? ?? ??? ?????.</value></data>
-  <data name="Tutorial.folder-rename.Step2" xml:space="preserve"><value>2. F2? ??? ? ??? ?????.</value></data>
-  <data name="Tutorial.folder-rename.Step3" xml:space="preserve"><value>3. ???? ??? ?? ??? ?????.</value></data>
-  <data name="Tutorial.library-move.Step1" xml:space="preserve"><value>1. ??????? ??? ??? ?????.</value></data>
-  <data name="Tutorial.library-move.Step2" xml:space="preserve"><value>2. M? ??? ?? ??? ?????.</value></data>
-  <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. ??? ? ?? ???? ??? ?????.</value></data>
-  <data name="Tutorial.library-delete.Step1" xml:space="preserve"><value>1. ??????? ??? ??? ?????.</value></data>
-  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Del? ??? ?? ??? ??? ?????.</value></data>
-  <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. ?? ? ??? ?????. ??? ??? ????? ?????.</value></data>
-  <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. ??????? ??? ???.</value></data>
-  <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. Space? ?? ??? ?????.</value></data>
-  <data name="Tutorial.video-play.Step3" xml:space="preserve"><value>3. Space? ?? ?? ??? ???? ???????.</value></data>
-  <data name="Tutorial.video-frame-step.Step1" xml:space="preserve"><value>1. ?? ????? ??? ???????.</value></data>
-  <data name="Tutorial.video-frame-step.Step2" xml:space="preserve"><value>2. ??(,)? ?? ???, ???(.)? ?? ???? ?????.</value></data>
-  <data name="Tutorial.video-frame-step.Step3" xml:space="preserve"><value>3. ??? ????? ???? ??? ?????.</value></data>
-  <data name="Tutorial.video-trim.Step1" xml:space="preserve"><value>1. ?? ????? ?? ??? ?? ??? ???? I? ????.</value></data>
-  <data name="Tutorial.video-trim.Step2" xml:space="preserve"><value>2. ? ??? ???? O? ?? ??? ?????.</value></data>
-  <data name="Tutorial.video-trim.Step3" xml:space="preserve"><value>3. ??? ??? ??? ? ?????? ?? ??? ?????.</value></data>
-  <data name="Tutorial.video-gif-export.Step1" xml:space="preserve"><value>1. ?? ????? ??? ??? ?????.</value></data>
-  <data name="Tutorial.video-gif-export.Step2" xml:space="preserve"><value>2. G? ?? GIF ????? ?? ??? ????? ?????.</value></data>
-  <data name="Tutorial.video-gif-export.Step3" xml:space="preserve"><value>3. ????? ??? ??? ?? ??? ?????.</value></data>
-  <data name="Tutorial.pin-clipboard.Unassigned" xml:space="preserve"><value>??? ????? ???? ? ???? ??? ? ?????.</value></data>
-  <data name="Tutorial.pin-clipboard.Step1" xml:space="preserve"><value>1. ???? ???? ????? ?????.</value></data>
-  <data name="Tutorial.pin-clipboard.Step2" xml:space="preserve"><value>2. ??? ???? ? ???? ?? ??? ????.</value></data>
-  <data name="Tutorial.pin-clipboard.Step3" xml:space="preserve"><value>3. ?? ????? ????. Esc? ??? ?? ????.</value></data>
-  <data name="Tutorial.pin-hide-all.Unassigned" xml:space="preserve"><value>??? ????? ?? ? ??? ???? ??? ? ?????.</value></data>
-  <data name="Tutorial.pin-hide-all.Step1" xml:space="preserve"><value>1. ??? ?? ????.</value></data>
-  <data name="Tutorial.pin-hide-all.Step2" xml:space="preserve"><value>2. ??? ?? ? ??? ???? ????.</value></data>
-  <data name="Tutorial.pin-hide-all.Step3" xml:space="preserve"><value>3. ?? ???? ?? ??? ?? ?????.</value></data>
-  <data name="Tutorial.pin-click-through.Unassigned" xml:space="preserve"><value>?? ??? ???? ?? ??? ?????.</value></data>
-  <data name="Tutorial.pin-click-through.Step1" xml:space="preserve"><value>1. ??? ?? ????.</value></data>
-  <data name="Tutorial.pin-click-through.Step2" xml:space="preserve"><value>2. ? ?? ???? ?? ??? ???? ???? ??? ??? ?? ??? ???.</value></data>
-  <data name="Tutorial.pin-click-through.Step3" xml:space="preserve"><value>3. ? ?? ?? ?????. ??? ???? ?? ??? ??? ? ????.</value></data>
-  <data name="Tutorial.pin-restore.Unassigned" xml:space="preserve"><value>?? ?? ??? ??? ???? ? ?? ??? ?????.</value></data>
-  <data name="Tutorial.pin-restore.Step1" xml:space="preserve"><value>1. ??? ?? ?? ????.</value></data>
-  <data name="Tutorial.pin-restore.Step2" xml:space="preserve"><value>2. ??? ???? ??? ??? ? ?? ??? ?????.</value></data>
-  <data name="Tutorial.pin-restore.Step3" xml:space="preserve"><value>3. ??? ?? ?? ?? ?????.</value></data>
-  <data name="Tutorial.pin-copy.Step1" xml:space="preserve"><value>1. ??? ?? ???? ?????.</value></data>
-  <data name="Tutorial.pin-copy.Step2" xml:space="preserve"><value>2. Ctrl+C? ?? ? ???? ?????.</value></data>
-  <data name="Tutorial.pin-copy.Step3" xml:space="preserve"><value>3. ?? ??? Ctrl+V? ?? ?? ????. ?? ?? ??? ?????.</value></data>
-  <data name="Tutorial.pin-save.Step1" xml:space="preserve"><value>1. ??? ?? ???? ?????.</value></data>
-  <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Ctrl+S? ?? ?????.</value></data>
-  <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. ?? ??? ????? Ctrl+Shift+S? ?? ??? ?????.</value></data>
-  <data name="Tutorial.Unavailable" xml:space="preserve"><value>??? ??? ???? ?????. ?? ??? ?? ??? ?????.</value></data>
+  <data name="Tutorial.Select" xml:space="preserve"><value>기능 선택</value></data>
+  <data name="Tutorial.CurrentKey" xml:space="preserve"><value>단축키: {0}</value></data>
+  <data name="Tutorial.image-rotate.Title" xml:space="preserve"><value>이미지 회전</value></data>
+  <data name="Tutorial.video-trim.Title" xml:space="preserve"><value>녹화 트림</value></data>
+  <data name="Tutorial.capture-region.Unassigned" xml:space="preserve"><value>트레이 메뉴에서 영역 캡처를 선택합니다.</value></data>
+  <data name="Tutorial.capture-region.Step1" xml:space="preserve"><value>1. 영역 캡처를 시작합니다.</value></data>
+  <data name="Tutorial.capture-region.Step2" xml:space="preserve"><value>2. 복사할 부분을 드래그하여 선택합니다.</value></data>
+  <data name="Tutorial.capture-region.Step3" xml:space="preserve"><value>3. 캡처 후 동작 설정에 따라 편집하거나 저장합니다.</value></data>
+  <data name="Tutorial.record-region.Unassigned" xml:space="preserve"><value>트레이 메뉴에서 영역 녹화를 선택합니다.</value></data>
+  <data name="Tutorial.record-region.Step1" xml:space="preserve"><value>1. 녹화할 영역을 드래그하여 선택합니다.</value></data>
+  <data name="Tutorial.record-region.Step2" xml:space="preserve"><value>2. 녹화 컨트롤에서 시작을 누르고 화면을 조작합니다.</value></data>
+  <data name="Tutorial.record-region.Step3" xml:space="preserve"><value>3. 중지를 누르면 녹화 편집기에서 결과를 확인할 수 있습니다.</value></data>
+  <data name="Tutorial.record-pause.Unassigned" xml:space="preserve"><value>녹화 컨트롤의 일시정지 버튼을 사용합니다.</value></data>
+  <data name="Tutorial.record-pause.Step1" xml:space="preserve"><value>1. 영역 녹화를 시작합니다.</value></data>
+  <data name="Tutorial.record-pause.Step2" xml:space="preserve"><value>2. 일시정지 버튼이나 지정된 단축키로 녹화를 멈춥니다.</value></data>
+  <data name="Tutorial.record-pause.Step3" xml:space="preserve"><value>3. 같은 버튼이나 단축키로 녹화를 이어갑니다.</value></data>
+  <data name="Tutorial.library-open.Unassigned" xml:space="preserve"><value>트레이 메뉴에서 라이브러리를 선택합니다.</value></data>
+  <data name="Tutorial.library-open.Step1" xml:space="preserve"><value>1. 라이브러리를 엽니다.</value></data>
+  <data name="Tutorial.library-open.Step2" xml:space="preserve"><value>2. 확인할 이미지나 녹화 항목을 선택합니다.</value></data>
+  <data name="Tutorial.library-open.Step3" xml:space="preserve"><value>3. 항목을 열어 이미지를 편집하거나 녹화를 재생합니다.</value></data>
+  <data name="Tutorial.capture-window.Unassigned" xml:space="preserve"><value>트레이 메뉴의 더 많은 캡처에서 창 캡처를 선택합니다.</value></data>
+  <data name="Tutorial.capture-window.Step1" xml:space="preserve"><value>1. 캡처할 창 위에 포인터를 놓습니다.</value></data>
+  <data name="Tutorial.capture-window.Step2" xml:space="preserve"><value>2. 창 캡처를 실행합니다.</value></data>
+  <data name="Tutorial.capture-window.Step3" xml:space="preserve"><value>3. 포인터 아래 창의 캡처 결과를 확인합니다.</value></data>
+  <data name="Tutorial.capture-fullscreen.Unassigned" xml:space="preserve"><value>트레이 메뉴의 더 많은 캡처에서 전체 화면 캡처를 선택합니다.</value></data>
+  <data name="Tutorial.capture-fullscreen.Step1" xml:space="preserve"><value>1. 캡처할 모니터 위에 포인터를 놓습니다.</value></data>
+  <data name="Tutorial.capture-fullscreen.Step2" xml:space="preserve"><value>2. 전체 화면 캡처를 실행합니다.</value></data>
+  <data name="Tutorial.capture-fullscreen.Step3" xml:space="preserve"><value>3. 해당 모니터의 전체 화면 캡처 결과를 확인합니다.</value></data>
+  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>트레이 메뉴의 더 많은 캡처에서 스크롤 캡처를 선택합니다.</value></data>
+  <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. 스크롤할 창 위에 포인터를 놓습니다.</value></data>
+  <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. 스크롤 캡처를 실행하고 자동 스크롤이 끝날 때까지 기다립니다.</value></data>
+  <data name="Tutorial.capture-scroll.Step3" xml:space="preserve"><value>3. 이어 붙인 캡처를 확인합니다. 진행 중 같은 명령을 실행하면 취소합니다.</value></data>
+  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>캡처 선택 화면의 더 보기 메뉴에서 지연 시간을 선택합니다.</value></data>
+  <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. 지연 캡처를 시작합니다.</value></data>
+  <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. 대기 시간 동안 캡처할 화면을 준비합니다.</value></data>
+  <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. 선택 화면이 나타나면 캡처할 영역을 드래그합니다.</value></data>
+  <data name="Tutorial.quick-access.Step1" xml:space="preserve"><value>1. 캡처 결과가 빠른 실행 카드에 나타나면 Alt+Q를 누릅니다.</value></data>
+  <data name="Tutorial.quick-access.Step2" xml:space="preserve"><value>2. 카드에서 복사 버튼을 선택하거나 C를 누릅니다.</value></data>
+  <data name="Tutorial.quick-access.Step3" xml:space="preserve"><value>3. 붙여 넣을 곳에서 Ctrl+V를 눌러 결과를 사용합니다.</value></data>
+  <data name="Tutorial.color-copy.Step1" xml:space="preserve"><value>1. 영역 캡처를 시작합니다.</value></data>
+  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. 복사할 색상 위에 포인터를 놓고 C를 누릅니다.</value></data>
+  <data name="Tutorial.color-copy.Step3" xml:space="preserve"><value>3. 색상 형식 설정에 따른 값을 Ctrl+V로 붙여 넣습니다.</value></data>
+  <data name="Tutorial.image-rectangle.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-rectangle.Step2" xml:space="preserve"><value>2. 사각형 도구를 선택하고 표시할 부분을 드래그합니다.</value></data>
+  <data name="Tutorial.image-rectangle.Step3" xml:space="preserve"><value>3. 사각형을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-ellipse.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-ellipse.Step2" xml:space="preserve"><value>2. 타원 도구를 선택하고 표시할 부분을 드래그합니다.</value></data>
+  <data name="Tutorial.image-ellipse.Step3" xml:space="preserve"><value>3. 타원을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-arrow.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-arrow.Step2" xml:space="preserve"><value>2. 화살표 도구를 선택하고 시작점에서 끝점까지 드래그합니다.</value></data>
+  <data name="Tutorial.image-arrow.Step3" xml:space="preserve"><value>3. 화살표 방향을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-pen.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-pen.Step2" xml:space="preserve"><value>2. 펜 도구를 선택하고 포인터를 드래그하여 그립니다.</value></data>
+  <data name="Tutorial.image-pen.Step3" xml:space="preserve"><value>3. 그린 내용을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-highlighter.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-highlighter.Step2" xml:space="preserve"><value>2. 형광펜 도구를 선택하고 강조할 부분을 드래그합니다.</value></data>
+  <data name="Tutorial.image-highlighter.Step3" xml:space="preserve"><value>3. 강조 표시를 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-text.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-text.Step2" xml:space="preserve"><value>2. 텍스트 도구를 선택하고 이미지 위를 클릭하여 내용을 입력합니다.</value></data>
+  <data name="Tutorial.image-text.Step3" xml:space="preserve"><value>3. 입력 상자 밖을 클릭하여 텍스트를 확정한 뒤 저장합니다.</value></data>
+  <data name="Tutorial.image-step-number.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-step-number.Step2" xml:space="preserve"><value>2. 단계 번호 도구를 선택하고 설명할 위치를 차례로 클릭합니다.</value></data>
+  <data name="Tutorial.image-step-number.Step3" xml:space="preserve"><value>3. 자동으로 증가한 번호를 확인한 뒤 저장합니다.</value></data>
+  <data name="Tutorial.image-mosaic.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-mosaic.Step2" xml:space="preserve"><value>2. 모자이크 도구를 선택하고 가릴 영역을 드래그합니다.</value></data>
+  <data name="Tutorial.image-mosaic.Step3" xml:space="preserve"><value>3. 모자이크 처리한 범위를 확인한 뒤 저장합니다.</value></data>
+  <data name="Tutorial.image-blur.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-blur.Step2" xml:space="preserve"><value>2. 블러 도구를 선택하고 흐리게 처리할 영역을 드래그합니다.</value></data>
+  <data name="Tutorial.image-blur.Step3" xml:space="preserve"><value>3. 블러 처리한 범위를 확인한 뒤 저장합니다.</value></data>
+  <data name="Tutorial.image-crop.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-crop.Step2" xml:space="preserve"><value>2. 자르기 도구를 선택하고 남길 영역을 조절합니다.</value></data>
+  <data name="Tutorial.image-crop.Step3" xml:space="preserve"><value>3. Enter로 적용합니다. Esc를 누르면 자르기를 취소합니다.</value></data>
+  <data name="Tutorial.image-rotate.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
+  <data name="Tutorial.image-rotate.Step2" xml:space="preserve"><value>2. Q로 왼쪽, W로 오른쪽으로 회전합니다.</value></data>
+  <data name="Tutorial.image-rotate.Step3" xml:space="preserve"><value>3. 방향을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-save.Step1" xml:space="preserve"><value>1. 편집한 이미지를 확인합니다.</value></data>
+  <data name="Tutorial.image-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
+  <data name="Tutorial.image-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
+  <data name="Tutorial.image-copy.Step1" xml:space="preserve"><value>1. 이미지를 편집하고 결과를 확인합니다.</value></data>
+  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Ctrl+C를 누르면 이미지를 복사하고 저장한 뒤 편집을 완료합니다.</value></data>
+  <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. 다른 앱에서 Ctrl+V를 눌러 이미지를 붙여 넣습니다.</value></data>
+  <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. 라이브러리를 엽니다.</value></data>
+  <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Ctrl+Shift+N을 눌러 새 폴더 이름을 입력합니다.</value></data>
+  <data name="Tutorial.folder-create.Step3" xml:space="preserve"><value>3. 확인하면 폴더 목록에 새 폴더가 나타납니다.</value></data>
+  <data name="Tutorial.folder-rename.Step1" xml:space="preserve"><value>1. 라이브러리에서 이름을 바꿀 폴더를 선택합니다.</value></data>
+  <data name="Tutorial.folder-rename.Step2" xml:space="preserve"><value>2. F2를 누르고 새 이름을 입력합니다.</value></data>
+  <data name="Tutorial.folder-rename.Step3" xml:space="preserve"><value>3. 확인하여 변경된 폴더 이름을 확인합니다.</value></data>
+  <data name="Tutorial.library-move.Step1" xml:space="preserve"><value>1. 라이브러리에서 이동할 캡처를 선택합니다.</value></data>
+  <data name="Tutorial.library-move.Step2" xml:space="preserve"><value>2. M을 누르고 대상 폴더를 선택합니다.</value></data>
+  <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. 확인한 뒤 대상 폴더에서 캡처를 확인합니다.</value></data>
+  <data name="Tutorial.library-delete.Step1" xml:space="preserve"><value>1. 라이브러리에서 삭제할 항목을 선택합니다.</value></data>
+  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Del을 누르고 확인 창에서 삭제를 선택합니다.</value></data>
+  <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. 삭제 후 목록을 확인합니다. 필요한 항목은 휴지통에서 복원합니다.</value></data>
+  <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. 라이브러리에서 녹화를 엽니다.</value></data>
+  <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. Space를 눌러 녹화를 재생합니다.</value></data>
+  <data name="Tutorial.video-play.Step3" xml:space="preserve"><value>3. Space를 다시 눌러 원하는 장면에서 일시정지합니다.</value></data>
+  <data name="Tutorial.video-frame-step.Step1" xml:space="preserve"><value>1. 녹화 편집기에서 재생을 일시정지합니다.</value></data>
+  <data name="Tutorial.video-frame-step.Step2" xml:space="preserve"><value>2. 쉼표(,)로 이전 프레임, 마침표(.)로 다음 프레임을 확인합니다.</value></data>
+  <data name="Tutorial.video-frame-step.Step3" xml:space="preserve"><value>3. 필요한 프레임에서 편집이나 트림을 시작합니다.</value></data>
+  <data name="Tutorial.video-trim.Step1" xml:space="preserve"><value>1. 녹화 편집기에서 남길 구간의 시작 위치로 이동하고 I를 누릅니다.</value></data>
+  <data name="Tutorial.video-trim.Step2" xml:space="preserve"><value>2. 끝 위치로 이동하고 O를 눌러 구간을 지정합니다.</value></data>
+  <data name="Tutorial.video-trim.Step3" xml:space="preserve"><value>3. 선택한 구간을 확인한 뒤 라이브러리에 편집 내용을 저장합니다.</value></data>
+  <data name="Tutorial.video-gif-export.Step1" xml:space="preserve"><value>1. 녹화 편집기에서 내보낼 구간을 확인합니다.</value></data>
+  <data name="Tutorial.video-gif-export.Step2" xml:space="preserve"><value>2. G를 눌러 GIF 내보내기를 열고 옵션과 미리보기를 확인합니다.</value></data>
+  <data name="Tutorial.video-gif-export.Step3" xml:space="preserve"><value>3. 내보내기를 누르고 저장할 파일 위치를 선택합니다.</value></data>
+  <data name="Tutorial.pin-clipboard.Unassigned" xml:space="preserve"><value>설정의 단축키에서 클립보드 핀 단축키를 지정한 뒤 사용합니다.</value></data>
+  <data name="Tutorial.pin-clipboard.Step1" xml:space="preserve"><value>1. 이미지나 텍스트를 클립보드에 복사합니다.</value></data>
+  <data name="Tutorial.pin-clipboard.Step2" xml:space="preserve"><value>2. 지정된 클립보드 핀 단축키를 눌러 화면에 띄웁니다.</value></data>
+  <data name="Tutorial.pin-clipboard.Step3" xml:space="preserve"><value>3. 핀을 드래그하여 옮깁니다. Esc를 누르면 핀을 닫습니다.</value></data>
+  <data name="Tutorial.pin-hide-all.Unassigned" xml:space="preserve"><value>설정의 단축키에서 모든 핀 숨기기 단축키를 지정한 뒤 사용합니다.</value></data>
+  <data name="Tutorial.pin-hide-all.Step1" xml:space="preserve"><value>1. 화면에 핀을 띄웁니다.</value></data>
+  <data name="Tutorial.pin-hide-all.Step2" xml:space="preserve"><value>2. 지정된 모든 핀 숨기기 단축키를 누릅니다.</value></data>
+  <data name="Tutorial.pin-hide-all.Step3" xml:space="preserve"><value>3. 같은 단축키를 다시 누르면 핀이 나타납니다.</value></data>
+  <data name="Tutorial.pin-click-through.Unassigned" xml:space="preserve"><value>핀의 우클릭 메뉴에서 클릭 통과를 선택합니다.</value></data>
+  <data name="Tutorial.pin-click-through.Step1" xml:space="preserve"><value>1. 화면에 핀을 띄웁니다.</value></data>
+  <data name="Tutorial.pin-click-through.Step2" xml:space="preserve"><value>2. 핀 위에 포인터를 놓고 지정된 단축키를 누르거나 우클릭 메뉴로 클릭 통과를 켭니다.</value></data>
+  <data name="Tutorial.pin-click-through.Step3" xml:space="preserve"><value>3. 핀 아래 앱을 조작합니다. 지정된 단축키로 클릭 통과를 해제할 수 있습니다.</value></data>
+  <data name="Tutorial.pin-restore.Unassigned" xml:space="preserve"><value>닫힌 핀이 있으면 트레이 메뉴에서 핀 다시 열기를 선택합니다.</value></data>
+  <data name="Tutorial.pin-restore.Step1" xml:space="preserve"><value>1. 화면에 띄운 핀을 닫습니다.</value></data>
+  <data name="Tutorial.pin-restore.Step2" xml:space="preserve"><value>2. 지정된 단축키나 트레이 메뉴의 핀 다시 열기를 사용합니다.</value></data>
+  <data name="Tutorial.pin-restore.Step3" xml:space="preserve"><value>3. 최근에 닫은 핀이 다시 나타납니다.</value></data>
+  <data name="Tutorial.pin-copy.Step1" xml:space="preserve"><value>1. 복사할 핀을 클릭하여 선택합니다.</value></data>
+  <data name="Tutorial.pin-copy.Step2" xml:space="preserve"><value>2. Ctrl+C를 눌러 핀 이미지를 복사합니다.</value></data>
+  <data name="Tutorial.pin-copy.Step3" xml:space="preserve"><value>3. 다른 앱에서 Ctrl+V를 눌러 붙여 넣습니다. 핀은 열린 상태로 유지됩니다.</value></data>
+  <data name="Tutorial.pin-save.Step1" xml:space="preserve"><value>1. 저장할 핀을 클릭하여 선택합니다.</value></data>
+  <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
+  <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
+  <data name="Tutorial.Unavailable" xml:space="preserve"><value>사용법 영상을 불러오지 못했습니다. 아래 단계에서 사용 방법을 확인합니다.</value></data>
 </root>

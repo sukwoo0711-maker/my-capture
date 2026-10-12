@@ -213,30 +213,46 @@ internal class FeatureTutorialWindow : Window
         _loadCancellation = cancellation;
         int generation = ++_loadGeneration;
         string path = AssetPath;
+        GifSampleFrames? decoded = null;
+        bool unavailable = false;
         try
         {
-            GifSampleFrames frames = await DecodeOnStaAsync(path, _decode, cancellation.Token);
-            if (_closed || !IsVisible || cancellation.IsCancellationRequested || generation != _loadGeneration) return;
-            _frames = frames;
-            _player.Load(_frames.Timeline);
-            _status.Visibility = Visibility.Collapsed;
-            if (FluidMotion.AnimationsEnabled && IsActive) _player.Play();
+            decoded = await DecodeOnStaAsync(path, _decode, cancellation.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or NotSupportedException
             or InvalidOperationException or ArgumentException or FormatException or System.Runtime.InteropServices.COMException)
         {
-            if (_closed || !IsVisible || cancellation.IsCancellationRequested || generation != _loadGeneration) return;
-            ReleaseAnimation();
-            _status.Text = UiText.Get(_feature.Id == "text-copy" ? "TextCapture_TutorialUnavailable" : "Tutorial.Unavailable");
-            _status.Visibility = Visibility.Visible;
+            unavailable = true;
         }
         finally
         {
-            if (ReferenceEquals(_loadCancellation, cancellation)) _loadCancellation = null;
-            cancellation.Dispose();
+            try
+            {
+                if (!Dispatcher.HasShutdownStarted)
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        if (ReferenceEquals(_loadCancellation, cancellation)) _loadCancellation = null;
+                        if (_closed || !IsVisible || cancellation.IsCancellationRequested || generation != _loadGeneration) return;
+                        if (decoded is not null)
+                        {
+                            _frames = decoded;
+                            _player.Load(_frames.Timeline);
+                            _status.Visibility = Visibility.Collapsed;
+                            if (FluidMotion.AnimationsEnabled && IsActive) _player.Play();
+                        }
+                        else if (unavailable)
+                        {
+                            ReleaseAnimation();
+                            _status.Text = UiText.Get(_feature.Id == "text-copy" ? "TextCapture_TutorialUnavailable" : "Tutorial.Unavailable");
+                            _status.Visibility = Visibility.Visible;
+                        }
+                        UpdateControls();
+                    });
+            }
+            catch (OperationCanceledException) when (Dispatcher.HasShutdownStarted) { }
+            finally { cancellation.Dispose(); }
         }
-        UpdateControls();
     }
 
     private static Task<GifSampleFrames> DecodeOnStaAsync(string path,

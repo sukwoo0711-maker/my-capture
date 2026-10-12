@@ -5,7 +5,7 @@ namespace MyCapture.App;
 internal sealed record FeatureTutorial(string Id, string CategoryKey, string TitleKey, IReadOnlyList<string> HelpActions,
     Func<HotkeySettings, Hotkey>? GlobalKey, Func<string>? FixedKeys, string? UnassignedKey)
 {
-    internal string DisplayName => $"{UiText.Get(CategoryKey)} ? {UiText.Get(TitleKey)}";
+    internal string DisplayName => $"{UiText.Get(CategoryKey)} · {UiText.Get(TitleKey)}";
     internal IReadOnlyList<string> Steps => Id == "text-copy"
         ? new[] { UiText.Get("TextCapture_TutorialStep1"), UiText.Get("TextCapture_TutorialStep2"), UiText.Get("TextCapture_TutorialStep3") }
         : Enumerable.Range(1, 3).Select(i => UiText.Get($"Tutorial.{Id}.Step{i}")).ToArray();

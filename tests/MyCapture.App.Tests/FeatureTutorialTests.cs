@@ -10,6 +10,7 @@ using System.Windows.Threading;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Localization;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -30,6 +31,24 @@ public sealed class FeatureTutorialTests
             Assert.NotEqual(feature.TitleKey, UiText.Get(feature.TitleKey));
             Assert.Equal(3, feature.Steps.Count);
             Assert.All(feature.Steps, step => Assert.False(string.IsNullOrWhiteSpace(step) || step.StartsWith("Tutorial.", StringComparison.Ordinal)));
+            Assert.Contains(" · ", feature.DisplayName, StringComparison.Ordinal);
+            if (language == "ko-KR")
+            {
+                Assert.All(feature.Steps, step =>
+                {
+                    Assert.Contains(step, character => character is >= '\uAC00' and <= '\uD7A3');
+                    Assert.DoesNotContain("?", step, StringComparison.Ordinal);
+                    Assert.DoesNotContain("\uFFFD", step, StringComparison.Ordinal);
+                });
+                Assert.Equal("기능 선택", UiText.Get("Tutorial.Select"));
+                Assert.Equal("단축키: Ctrl+C", UiText.Format("Tutorial.CurrentKey", "Ctrl+C"));
+                if (feature.UnassignedKey is not null)
+                {
+                    string fallback = UiText.Get(feature.UnassignedKey);
+                    Assert.Contains(fallback, character => character is >= '\uAC00' and <= '\uD7A3');
+                    Assert.DoesNotContain("?", fallback, StringComparison.Ordinal);
+                }
+            }
             foreach (string action in feature.HelpActions)
                 Assert.Same(feature, TutorialCatalog.FindHelp(feature.CategoryKey, action));
         }
