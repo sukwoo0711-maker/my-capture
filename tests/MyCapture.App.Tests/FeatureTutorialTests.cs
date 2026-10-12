@@ -1,13 +1,10 @@
-using System.Collections.Concurrent;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Localization;
@@ -36,16 +33,16 @@ public sealed class FeatureTutorialTests
             {
                 Assert.All(feature.Steps, step =>
                 {
-                    Assert.Contains(step, character => character is >= '\uAC00' and <= '\uD7A3');
+                    Assert.Contains(step, character => character is >= '가' and <= '힣');
                     Assert.DoesNotContain("?", step, StringComparison.Ordinal);
-                    Assert.DoesNotContain("\uFFFD", step, StringComparison.Ordinal);
+                    Assert.DoesNotContain("�", step, StringComparison.Ordinal);
                 });
                 Assert.Equal("기능 선택", UiText.Get("Tutorial.Select"));
                 Assert.Equal("단축키: Ctrl+C", UiText.Format("Tutorial.CurrentKey", "Ctrl+C"));
                 if (feature.UnassignedKey is not null)
                 {
                     string fallback = UiText.Get(feature.UnassignedKey);
-                    Assert.Contains(fallback, character => character is >= '\uAC00' and <= '\uD7A3');
+                    Assert.Contains(fallback, character => character is >= '가' and <= '힣');
                     Assert.DoesNotContain("?", fallback, StringComparison.Ordinal);
                 }
             }
@@ -102,132 +99,102 @@ public sealed class FeatureTutorialTests
     });
 
     [Fact]
-    public void ConstructorListsAllFeaturesWithoutLoadingAndSwitchLoadsOnlyTheSelectedGif() => StaTestHost.Run(() =>
+    public void ConstructorListsAllFeaturesWithoutOpeningAndSwitchOpensOnlyTheSelectedVideo() => StaTestHost.Run(() =>
     {
         using var locale = UiText.UseLanguage("en-US");
-        var paths = new ConcurrentQueue<string>();
-        FeatureTutorialWindow window = Offscreen("image-blur", (path, _) => { paths.Enqueue(path); return Frames(); });
+        var media = new FakeTutorialMedia();
+        FeatureTutorialWindow window = Offscreen("image-blur", media, TutorialTestAssets.Create("image-blur", "pin-copy"));
         try
         {
-            Assert.Empty(paths);
+            Assert.Empty(media.OpenedPaths);
+            Assert.False(window.HasMedia);
             ComboBox choices = FirstRunWelcomeTests.Descendants(window).OfType<ComboBox>().Single();
             Assert.Equal(38, choices.Items.Count);
+            Assert.Contains(media.View, FirstRunWelcomeTests.Descendants(window));
             Show(window);
-            Assert.EndsWith("image-blur.en.gif", Assert.Single(paths), StringComparison.Ordinal);
-            window.TogglePlayback();
-            window.SelectFeature("pin-copy");
-            WaitLoaded(window);
-            Assert.Equal(2, paths.Count);
-            Assert.EndsWith("pin-copy.en.gif", paths.Last(), StringComparison.Ordinal);
-            Assert.Equal("pin-copy", window.SelectedFeatureId);
-            Assert.True(window.HasFrames);
-            window.Hide();
-            Assert.False(window.HasFrames);
+            Assert.Equal(Path.Combine(window.AssetDirectory, "image-blur.en.mp4"), Assert.Single(media.OpenedPaths));
+            Assert.True(window.HasMedia && window.HasFirstFrame);
             Assert.False(window.IsPlaying);
-            Assert.Null(FirstRunWelcomeTests.Descendants(window).OfType<Image>().Single().Source);
+            window.TogglePlayback();
+            Assert.True(window.IsPlaying && media.IsPlaying);
+            window.SelectFeature("pin-copy");
+            Assert.Equal(1, media.CloseCount);
+            Assert.False(window.IsPlaying || window.HasMedia || window.HasFirstFrame);
+            Drain(window);
+            Assert.Equal(2, media.OpenedPaths.Count);
+            Assert.EndsWith("pin-copy.en.mp4", media.OpenedPaths.Last(), StringComparison.Ordinal);
+            Assert.Equal("pin-copy", window.SelectedFeatureId);
+            Assert.True(window.HasFirstFrame);
+            window.Hide();
+            Assert.False(window.HasMedia || window.HasFirstFrame || window.IsPlaying);
+            Assert.False(media.IsOpen);
+            Assert.Equal(2, media.CloseCount);
+            Show(window);
+            Assert.Equal(3, media.OpenedPaths.Count);
+            Assert.EndsWith("pin-copy.en.mp4", media.OpenedPaths.Last(), StringComparison.Ordinal);
+            Assert.True(window.HasFirstFrame);
         }
         finally { window.Close(); }
     });
 
     [Fact]
-    public void RapidSwitchKeepsOneDecoderAndSkipsCanceledQueuedFeatures() => StaTestHost.Run(() =>
+    public void RapidSwitchOpensOnlyTheFeatureItStopsOn() => StaTestHost.Run(() =>
     {
         using var locale = UiText.UseLanguage("ko-KR");
-        using var enteredFirst = new ManualResetEventSlim();
-        using var finishStale = new ManualResetEventSlim();
-        using var staleReturned = new ManualResetEventSlim();
-        var tokens = new ConcurrentQueue<CancellationToken>();
-        var paths = new ConcurrentQueue<string>();
-        int concurrent = 0, maximum = 0;
-        FeatureTutorialWindow window = Offscreen("image-rectangle", (path, token) =>
-        {
-            int count = Interlocked.Increment(ref concurrent);
-            maximum = Math.Max(maximum, count);
-            paths.Enqueue(path);
-            try
-            {
-                if (path.Contains("image-mosaic", StringComparison.Ordinal)) return Frames();
-                tokens.Enqueue(token);
-                enteredFirst.Set();
-                Assert.True(finishStale.Wait(TimeSpan.FromSeconds(5)));
-                GifSampleFrames frames = Frames();
-                staleReturned.Set();
-                return frames;
-            }
-            finally { Interlocked.Decrement(ref concurrent); }
-        });
+        var media = new FakeTutorialMedia();
+        FeatureTutorialWindow window = Offscreen("image-rectangle", media, TutorialTestAssets.All());
         try
         {
-            window.Show(); Drain(window);
-            Assert.True(enteredFirst.Wait(TimeSpan.FromSeconds(5)));
+            Show(window);
             window.SelectFeature("image-blur");
+            window.SelectFeature("image-ellipse");
             window.SelectFeature("image-mosaic");
             Assert.Equal("image-mosaic", window.SelectedFeatureId);
-            Assert.True(window.IsLoading);
-            Assert.False(window.HasFrames);
-            Assert.Single(paths);
-            Assert.Single(tokens);
-            Assert.All(tokens, token => Assert.True(token.IsCancellationRequested));
-            finishStale.Set();
-            Assert.True(staleReturned.Wait(TimeSpan.FromSeconds(5)));
-            WaitLoaded(window);
-            Assert.True(window.HasFrames);
-            Assert.Equal(1, maximum);
-            Assert.Equal(0, concurrent);
-            Assert.Equal(2, paths.Count);
-            Assert.DoesNotContain(paths, path => path.Contains("image-blur", StringComparison.Ordinal));
-            Assert.EndsWith("image-mosaic.ko.gif", paths.Last(), StringComparison.Ordinal);
-            Image preview = FirstRunWelcomeTests.Descendants(window).OfType<Image>().Single();
-            Assert.NotNull(preview.Source);
-            window.Close();
+            Assert.True(window.IsOpenPending);
+            Assert.False(window.HasMedia);
+            Assert.Single(media.OpenedPaths);
             Drain(window);
-            Assert.False(window.HasFrames);
-            Assert.False(window.IsLoading);
-            Assert.False(window.IsPlaying);
-            Assert.Null(preview.Source);
+            Assert.Equal(2, media.OpenedPaths.Count);
+            Assert.DoesNotContain(media.OpenedPaths, path => path.Contains("image-blur", StringComparison.Ordinal)
+                || path.Contains("image-ellipse", StringComparison.Ordinal));
+            Assert.EndsWith("image-mosaic.ko.mp4", media.OpenedPaths.Last(), StringComparison.Ordinal);
+            Assert.True(window.HasFirstFrame);
+            Assert.Equal(media.OpenedPaths[1], media.CurrentPath);
         }
-        finally { finishStale.Set(); window.Close(); }
+        finally { window.Close(); }
     });
 
     [Fact]
-    public void ClosingAndReopeningStillShareOneActualDecoder() => StaTestHost.Run(() =>
+    public void ClosingBeforeOrDuringOpenNeverReattachesOrPlays() => StaTestHost.Run(() =>
     {
-        using var entered = new ManualResetEventSlim();
-        using var finish = new ManualResetEventSlim();
-        int concurrent = 0, maximum = 0;
-        FeatureTutorialWindow old = Offscreen("image-text", (_, _) =>
-        {
-            int count = Interlocked.Increment(ref concurrent);
-            maximum = Math.Max(maximum, count);
-            try { entered.Set(); Assert.True(finish.Wait(TimeSpan.FromSeconds(5))); return Frames(); }
-            finally { Interlocked.Decrement(ref concurrent); }
-        });
-        int freshReads = 0;
-        FeatureTutorialWindow fresh = Offscreen("pin-copy", (_, _) =>
-        {
-            int count = Interlocked.Increment(ref concurrent);
-            maximum = Math.Max(maximum, count);
-            try { Interlocked.Increment(ref freshReads); return Frames(); }
-            finally { Interlocked.Decrement(ref concurrent); }
-        });
+        bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = true;
+        string assets = TutorialTestAssets.Create("image-text");
+        var pending = new FakeTutorialMedia();
+        FeatureTutorialWindow beforeOpen = Offscreen("image-text", pending, assets);
+        var opening = new FakeTutorialMedia { AutoOpen = false };
+        FeatureTutorialWindow duringOpen = Offscreen("image-text", opening, assets);
         try
         {
-            old.Show(); Drain(old);
-            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
-            old.Close();
-            fresh.Show(); Drain(fresh);
-            Assert.True(fresh.IsLoading);
-            Assert.Equal(0, freshReads);
-            finish.Set();
-            WaitLoaded(fresh);
-            Assert.Equal(1, maximum);
-            Assert.Equal(1, freshReads);
-            Assert.True(fresh.HasFrames);
-            Assert.False(old.HasFrames);
-            fresh.Close();
-            Assert.False(fresh.HasFrames);
+            beforeOpen.Show();
+            Assert.True(beforeOpen.IsOpenPending);
+            beforeOpen.Close();
+            Drain(beforeOpen);
+            Assert.Empty(pending.OpenedPaths);
+            Assert.True(pending.Disposed);
+
+            Show(duringOpen);
+            Assert.True(duringOpen.HasMedia);
+            Assert.False(duringOpen.HasFirstFrame);
+            duringOpen.Close();
+            Assert.Equal(0, opening.Subscribers);
+            opening.RaiseOpened();
+            Drain(duringOpen);
+            Assert.False(duringOpen.HasMedia || duringOpen.HasFirstFrame || duringOpen.IsPlaying);
+            Assert.Equal(0, opening.PlayCount);
+            Assert.True(opening.Disposed);
         }
-        finally { finish.Set(); old.Close(); fresh.Close(); }
+        finally { beforeOpen.Close(); duringOpen.Close(); FluidMotion.AnimationsEnabledOverrideForTest = previous; }
     });
 
     [Fact]
@@ -235,6 +202,9 @@ public sealed class FeatureTutorialTests
     {
         static Window Owner() => new() { WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, Width = 200, Height = 100, ShowActivated = false, ShowInTaskbar = false };
+        Func<ITutorialMedia>? previous = FeatureTutorialWindow.MediaFactoryOverrideForTest;
+        var created = new List<FakeTutorialMedia>();
+        FeatureTutorialWindow.MediaFactoryOverrideForTest = () => { var media = new FakeTutorialMedia(); created.Add(media); return media; };
         Window first = Owner(), second = Owner();
         try
         {
@@ -245,14 +215,22 @@ public sealed class FeatureTutorialTests
             Assert.Same(tutorial, Assert.Single(second.OwnedWindows.OfType<FeatureTutorialWindow>()));
             Assert.Empty(first.OwnedWindows.OfType<FeatureTutorialWindow>());
             Assert.Same(second, tutorial.Owner);
+            Assert.Same(second, tutorial.LifetimeOwner);
+            Assert.Equal("pin-copy", tutorial.SelectedFeatureId);
+            Assert.Single(created);
             first.Hide();
             Assert.True(tutorial.IsVisible);
             second.Hide();
             Assert.False(tutorial.IsVisible);
-            Assert.False(tutorial.HasFrames);
-            Assert.False(tutorial.IsLoading);
+            Assert.False(tutorial.HasMedia || tutorial.IsOpenPending || tutorial.IsPlaying);
+            Assert.True(created[0].Disposed);
+            Assert.Null(tutorial.LifetimeOwner);
         }
-        finally { FeatureTutorialWindow.DismissForCapture(); first.Close(); second.Close(); }
+        finally
+        {
+            FeatureTutorialWindow.DismissForCapture(); first.Close(); second.Close();
+            FeatureTutorialWindow.MediaFactoryOverrideForTest = previous;
+        }
     });
 
     [Theory]
@@ -272,41 +250,199 @@ public sealed class FeatureTutorialTests
     });
 
     [Fact]
-    public void MissingGifAfterSwitchKeepsTheSelectedStaticStepsAndDropsPreviousFrames() => StaTestHost.Run(() =>
+    public void MissingVideoAfterSwitchIsLoggedAndKeepsTheSelectedStepsAsTheFallback() => StaTestHost.Run(() =>
     {
-        FeatureTutorialWindow window = Offscreen("image-text", (path, _) => path.Contains("pin-save", StringComparison.Ordinal)
-            ? throw new IOException("fixture missing") : Frames());
+        using var locale = UiText.UseLanguage("ko-KR");
+        using var trace = new TraceCapture();
+        var media = new FakeTutorialMedia();
+        FeatureTutorialWindow window = Offscreen("image-text", media, TutorialTestAssets.Create("image-text"));
         try
         {
             Show(window);
-            Assert.True(window.HasFrames);
+            Assert.True(window.HasFirstFrame);
             window.SelectFeature("pin-save");
-            WaitLoaded(window);
-            Assert.False(window.HasFrames);
-            Assert.False(window.IsPlaying);
-            TextBlock[] texts = FirstRunWelcomeTests.Descendants(window).OfType<TextBlock>().ToArray();
-            Assert.All(TutorialCatalog.Get("pin-save").Steps, step => Assert.Contains(texts, text => text.Text == step));
-            Assert.Contains(texts, text => text.Text == UiText.Get("Tutorial.Unavailable") && text.IsVisible);
-            Assert.Null(FirstRunWelcomeTests.Descendants(window).OfType<Image>().Single().Source);
+            Drain(window);
+            Assert.Single(media.OpenedPaths);
+            Assert.False(media.IsOpen);
+            Assert.True(window.IsShowingFallback);
+            Assert.False(window.HasMedia || window.HasFirstFrame || window.IsPlaying);
+            AssertFallback(window, "Tutorial.Unavailable", TutorialCatalog.Get("pin-save").Steps);
+            Assert.Contains(trace.Lines, line => line.Contains("pin-save", StringComparison.Ordinal)
+                && line.Contains(Path.Combine(window.AssetDirectory, "pin-save.ko.mp4"), StringComparison.Ordinal));
+            window.SelectFeature("image-text");
+            Drain(window);
+            Assert.False(window.IsShowingFallback);
+            Assert.True(window.HasFirstFrame);
         }
         finally { window.Close(); }
     });
 
-    private static FeatureTutorialWindow Offscreen(string id, Func<string, CancellationToken, GifSampleFrames> decode) =>
-        new(new HotkeySettings(), id, decode) { WindowStartupLocation = WindowStartupLocation.Manual,
+    [Fact]
+    public void MediaFailureSuchAsAMissingMediaFeaturePackFallsBackToTheSteps() => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage("en-US");
+        using var trace = new TraceCapture();
+        var media = new FakeTutorialMedia { AutoOpen = false };
+        FeatureTutorialWindow window = Offscreen("capture-region", media, TutorialTestAssets.Create("capture-region"));
+        try
+        {
+            Show(window);
+            Assert.True(window.HasMedia);
+            media.RaiseFailed(new COMException("Media Foundation is not available", unchecked((int)0xC00D36E5)));
+            Assert.True(window.IsShowingFallback);
+            Assert.False(media.IsOpen || window.HasMedia);
+            AssertFallback(window, "Tutorial.Unavailable", TutorialCatalog.Get("capture-region").Steps);
+            Assert.Contains(trace.Lines, line => line.Contains("Media Foundation is not available", StringComparison.Ordinal));
+            media.RaiseEnded();
+            media.RaiseOpened();
+            Assert.True(window.IsShowingFallback);
+            Assert.False(window.HasFirstFrame || window.IsPlaying);
+        }
+        finally { window.Close(); }
+    });
+
+    [Theory]
+    [InlineData("open")]
+    [InlineData("play")]
+    [InlineData("pause")]
+    [InlineData("rewind")]
+    [InlineData("loop")]
+    public void AnyMediaExceptionFallsBackWithoutThrowing(string call) => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage("ko-KR");
+        var error = new InvalidOperationException("fixture media failure");
+        var media = new FakeTutorialMedia { ThrowOnOpen = call == "open" ? error : null };
+        FeatureTutorialWindow window = Offscreen("image-crop", media, TutorialTestAssets.Create("image-crop"));
+        try
+        {
+            Show(window);
+            if (call != "open")
+            {
+                Assert.True(window.HasFirstFrame);
+                if (call is "pause" or "loop") window.TogglePlayback();
+                media.ThrowOnPlay = call is "play" or "loop" ? error : null;
+                media.ThrowOnPause = call == "pause" ? error : null;
+                media.ThrowOnRewind = call == "rewind" ? error : null;
+                media.ThrowOnClose = error; // A failing release is logged, never thrown.
+                switch (call)
+                {
+                    case "play": window.TogglePlayback(); break;
+                    case "pause": window.TogglePlayback(); break;
+                    case "rewind": window.Replay(); break;
+                    case "loop": media.RaiseEnded(); break;
+                }
+            }
+            Assert.True(window.IsShowingFallback);
+            Assert.False(window.HasMedia || window.IsPlaying);
+            AssertFallback(window, "Tutorial.Unavailable", TutorialCatalog.Get("image-crop").Steps);
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void EndedVideoLoopsFromTheFirstFrameAndKeepsPlaying() => StaTestHost.Run(() =>
+    {
+        var media = new FakeTutorialMedia();
+        FeatureTutorialWindow window = Offscreen("video-trim", media, TutorialTestAssets.Create("video-trim"));
+        try
+        {
+            Show(window);
+            window.TogglePlayback();
+            int plays = media.PlayCount;
+            media.RaiseEnded();
+            Assert.Equal(1, media.RewindCount);
+            Assert.Equal(plays + 1, media.PlayCount);
+            Assert.True(window.IsPlaying && media.IsPlaying);
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void CloseDisposesTheMediaAndUnsubscribesFromMediaMotionAndOwner() => StaTestHost.Run(() =>
+    {
+        var owner = new Window { WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000, Top = -10000, Width = 200, Height = 100, ShowActivated = false, ShowInTaskbar = false };
+        Func<ITutorialMedia>? previous = FeatureTutorialWindow.MediaFactoryOverrideForTest;
+        var media = new FakeTutorialMedia();
+        FeatureTutorialWindow.MediaFactoryOverrideForTest = () => media;
+        try
+        {
+            owner.Show();
+            FeatureTutorialWindow.ShowTutorial(owner, new HotkeySettings(), "pin-copy");
+            FeatureTutorialWindow tutorial = Assert.Single(owner.OwnedWindows.OfType<FeatureTutorialWindow>());
+            Drain(tutorial);
+            Assert.True(tutorial.IsWatchingMotionPreference);
+            Assert.Same(owner, tutorial.LifetimeOwner);
+            Assert.Equal(3, media.Subscribers);
+            tutorial.Close();
+            Assert.True(media.Disposed);
+            Assert.False(media.IsOpen);
+            Assert.Equal(0, media.Subscribers);
+            Assert.False(tutorial.IsWatchingMotionPreference);
+            Assert.Null(tutorial.LifetimeOwner);
+            owner.Hide();
+            owner.Show();
+            Assert.False(tutorial.IsVisible);
+        }
+        finally
+        {
+            FeatureTutorialWindow.DismissForCapture(); owner.Close();
+            FeatureTutorialWindow.MediaFactoryOverrideForTest = previous;
+        }
+    });
+
+    [Fact]
+    public void DefaultVideoPathIsTheSelectedFeaturesMp4BesideTheApp() => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage("ko-KR");
+        var window = new FeatureTutorialWindow(new HotkeySettings(), "library-move", () => new FakeTutorialMedia());
+        try
+        {
+            Assert.Equal(Path.Combine(Path.GetDirectoryName(typeof(FeatureTutorialWindow).Assembly.Location)!,
+                "Assets", "Tutorials", "library-move.ko.mp4"), window.AssetPath);
+        }
+        finally { window.Close(); }
+    });
+
+    /// <summary>
+    /// The shipped build carries both languages' video for every feature and no GIF: the lead adds
+    /// the MP4 files and their copy glob; until then this fails by design.
+    /// </summary>
+    [Fact]
+    public void EveryFeatureShipsANonEmptyKoreanAndEnglishVideoAndNoGif()
+    {
+        string tutorials = Path.Combine(Path.GetDirectoryName(typeof(FeatureTutorialWindow).Assembly.Location)!, "Assets", "Tutorials");
+        Assert.Empty(TutorialAssetProblems(tutorials));
+    }
+
+    internal static IReadOnlyList<string> TutorialAssetProblems(string directory)
+    {
+        if (!Directory.Exists(directory)) return [$"missing folder {directory}"];
+        var problems = new List<string>();
+        foreach (FeatureTutorial feature in TutorialCatalog.All)
+            foreach (string language in new[] { "ko", "en" })
+            {
+                var file = new FileInfo(Path.Combine(directory, $"{feature.Id}.{language}.mp4"));
+                if (!file.Exists) problems.Add($"missing {file.Name}");
+                else if (file.Length == 0) problems.Add($"empty {file.Name}");
+            }
+        problems.AddRange(Directory.EnumerateFiles(directory, "*.gif").Select(path => $"leftover {Path.GetFileName(path)}"));
+        return problems;
+    }
+
+    private static void AssertFallback(FeatureTutorialWindow window, string statusKey, IEnumerable<string> steps)
+    {
+        TextBlock[] texts = FirstRunWelcomeTests.Descendants(window).OfType<TextBlock>().ToArray();
+        Assert.All(steps, step => Assert.Contains(texts, text => text.Text == step && text.IsVisible));
+        Assert.Contains(texts, text => text.Text == UiText.Get(statusKey) && text.IsVisible);
+        Button[] buttons = FirstRunWelcomeTests.Descendants(window).OfType<Button>().ToArray();
+        Assert.False(buttons.Single(button => Equals(button.Content, UiText.Get("GifPreview_Play"))).IsEnabled);
+        Assert.False(buttons.Single(button => Equals(button.Content, UiText.Get("TextCapture_TutorialReplay"))).IsEnabled);
+    }
+
+    private static FeatureTutorialWindow Offscreen(string id, FakeTutorialMedia media, string assets) =>
+        new(new HotkeySettings(), id, () => media) { AssetDirectory = assets, WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
-    private static void Show(FeatureTutorialWindow window) { window.Show(); Drain(window); WaitLoaded(window); }
-    private static void Drain(FeatureTutorialWindow window) => window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-    private static void WaitLoaded(FeatureTutorialWindow window)
-    {
-        var timeout = System.Diagnostics.Stopwatch.StartNew();
-        while (window.IsLoading && timeout.Elapsed < TimeSpan.FromSeconds(5)) { Drain(window); Thread.Sleep(1); }
-        Assert.False(window.IsLoading, "Background STA decoder did not finish.");
-    }
-    private static GifSampleFrames Frames()
-    {
-        BitmapSource image = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[] { 0, 0, 255, 255 }, 4);
-        image.Freeze();
-        return new GifSampleFrames([image, image], [100, 100], 1, 1);
-    }
+    private static void Show(FeatureTutorialWindow window) { window.Show(); Drain(window); }
+    private static void Drain(Window window) => window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 }

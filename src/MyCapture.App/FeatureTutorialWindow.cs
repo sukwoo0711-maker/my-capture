@@ -1,65 +1,76 @@
-using System.IO;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.App.Capture;
-using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
+using MyCapture.Platform.Display;
 
 namespace MyCapture.App;
 
-/// <summary>Loads only the selected local animation, with static instructions for every workflow.</summary>
+/// <summary>
+/// Streams only the selected feature's local tutorial video, with static instructions for every
+/// workflow. A missing file or a media failure leaves the steps as a still fallback.
+/// </summary>
 internal class FeatureTutorialWindow : Window
 {
+    /// <summary>The 960×540 videos map 1:1 to this preview at 150% scaling.</summary>
+    internal const double PreviewMaxWidth = 640, PreviewMaxHeight = 360;
+    private const double PreferredWidth = 720, PreferredHeight = 780, MinimumWidth = 520, MinimumHeight = 480;
+
     private static FeatureTutorialWindow? _open;
-    private static readonly SemaphoreSlim DecodeAdmission = new(1, 1);
-    private readonly GifSamplePlayer _player;
-    private readonly Func<string, CancellationToken, GifSampleFrames> _decode;
-    private readonly Image _image = new() { Stretch = Stretch.Uniform };
+    private readonly ITutorialMedia _media;
     private readonly Button _play = new() { MinWidth = 100 };
     private readonly Button _replay = new() { MinWidth = 100, Margin = new Thickness(8, 0, 0, 0) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12) };
-    private GifSampleFrames? _frames;
-    private CancellationTokenSource? _loadCancellation;
-    private int _loadGeneration;
-    private bool _closed;
-    private bool _watchingMotion;
-    private Window? _lifetimeOwner;
     private readonly ComboBox _features = new() { MinHeight = 36, Margin = new Thickness(0, 0, 0, 12) };
     private readonly StackPanel _instructions = new();
     private readonly StackPanel _steps = new();
+    private DispatcherOperation? _pendingOpen;
+    private bool _mediaOpen;
+    private bool _hasFirstFrame;
+    private bool _playing;
+    private bool _fallback;
+    private bool _closed;
+    private bool _watchingMotion;
+    private Window? _lifetimeOwner;
     private Func<HotkeySettings> _readHotkeys;
     private FeatureTutorial _feature;
 
-    internal FeatureTutorialWindow(HotkeySettings hotkeys, string featureId = "text-copy", Func<string, CancellationToken, GifSampleFrames>? decode = null)
+    /// <summary>Replaces the real media of windows created without a factory (ShowTutorial) in tests.</summary>
+    internal static Func<ITutorialMedia>? MediaFactoryOverrideForTest { get; set; }
+
+    internal FeatureTutorialWindow(HotkeySettings hotkeys, string featureId = "text-copy", Func<ITutorialMedia>? mediaFactory = null)
     {
         ArgumentNullException.ThrowIfNull(hotkeys);
         _readHotkeys = () => hotkeys;
         _feature = TutorialCatalog.Get(featureId);
-        _decode = decode ?? GifSampleDecoder.Decode;
-        _player = new GifSamplePlayer(Dispatcher);
-        _player.FrameChanged += ShowFrame;
+        _media = (mediaFactory ?? MediaFactoryOverrideForTest ?? (() => new MediaElementTutorialMedia()))();
+        _media.Opened += OnMediaOpened;
+        _media.Failed += OnMediaFailed;
+        _media.Ended += OnMediaEnded;
         Title = TutorialTitle(_feature);
-        Width = 720; Height = 750;
-        MinWidth = 520; MinHeight = 540;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        FitToMonitor(MonitorEnumerator.GetFromCursor());
         StandardWindowTheme.Apply(this);
         SourceInitialized += (_, _) => CaptureWindowExclusion.DisableTransitions(this);
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
 
-        var root = new DockPanel { Margin = new Thickness(24, 16, 24, 24) };
+        var root = new DockPanel { Margin = new Thickness(24, 16, 24, 16) };
         var close = new Button { Content = UiText.Get("Dialog.Close"), MinWidth = 100, HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 16, 0, 0), IsCancel = true };
+            Margin = new Thickness(0, 12, 0, 0), IsCancel = true };
         close.SetResourceReference(StyleProperty, "Button.Secondary");
         close.Click += (_, _) => Close();
         DockPanel.SetDock(close, Dock.Bottom); root.Children.Add(close);
 
-        var content = new StackPanel();
         AutomationProperties.SetName(_features, UiText.Get("Tutorial.Select"));
         foreach (FeatureTutorial feature in TutorialCatalog.All)
             _features.Items.Add(new ComboBoxItem { Content = feature.DisplayName, Tag = feature.Id });
@@ -68,21 +79,20 @@ internal class FeatureTutorialWindow : Window
         {
             if (_features.SelectedItem is ComboBoxItem { Tag: string id } && id != _feature.Id) ApplyFeature(id);
         };
-        content.Children.Add(_features);
-        content.Children.Add(_instructions);
 
-        var preview = new Grid { Height = 360, MaxWidth = 640, Margin = new Thickness(0, 8, 0, 8) };
+        var preview = new Grid();
         _status.Text = UiText.Get("TextCapture_TutorialLoading");
         _status.HorizontalAlignment = HorizontalAlignment.Center;
         _status.VerticalAlignment = VerticalAlignment.Center;
         _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
-        AutomationProperties.SetName(_image, UiText.Get("TextCapture_TutorialAnimation"));
-        preview.Children.Add(_image); preview.Children.Add(_status);
-        var frame = new Border { BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Child = preview };
+        preview.Children.Add(_media.View); preview.Children.Add(_status);
+        // The video fills the frame, so clip it to the frame's inner rounded corners.
+        preview.SizeChanged += (_, e) => preview.Clip = new RectangleGeometry(new Rect(e.NewSize), 7, 7);
+        var frame = new Border { BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Child = preview,
+            Margin = new Thickness(0, 8, 0, 8) };
         frame.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         frame.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
-        content.Children.Add(frame);
 
         _play.SetResourceReference(StyleProperty, "Button.Secondary");
         _play.Click += (_, _) => TogglePlayback();
@@ -90,13 +100,19 @@ internal class FeatureTutorialWindow : Window
         AutomationProperties.SetName(_replay, UiText.Get("TextCapture_TutorialReplay"));
         _replay.SetResourceReference(StyleProperty, "Button.Secondary");
         _replay.Click += (_, _) => Replay();
-        var controls = new WrapPanel { Margin = new Thickness(0, 12, 0, 12) };
+        var controls = new WrapPanel { Margin = new Thickness(0, 4, 0, 8) };
         controls.Children.Add(_play); controls.Children.Add(_replay);
+
+        var steps = new ScrollViewer { Content = _steps, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        var content = new TutorialLayoutPanel { Preview = frame, Steps = steps };
+        content.Children.Add(_features);
+        content.Children.Add(_instructions);
+        content.Children.Add(frame);
         content.Children.Add(controls);
-        content.Children.Add(_steps);
+        content.Children.Add(steps);
         UpdateInstructions();
-        root.Children.Add(new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        root.Children.Add(content);
         Content = root;
         UpdateControls();
 
@@ -107,29 +123,45 @@ internal class FeatureTutorialWindow : Window
                 SystemParameters.StaticPropertyChanged += OnMotionPreferenceChanged;
                 _watchingMotion = true;
             }
-            LoadAnimation();
+            RequestOpen();
         };
         Deactivated += (_, _) => Pause();
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) Pause(); };
-        IsVisibleChanged += (_, _) => { if (_closed) return; if (!IsVisible) ReleaseAnimation(); else LoadAnimation(); };
+        IsVisibleChanged += (_, _) => { if (_closed) return; if (!IsVisible) ReleaseMedia(); else RequestOpen(); };
         Closed += (_, _) =>
         {
             _closed = true;
-            ReleaseAnimation();
-            _player.FrameChanged -= ShowFrame;
+            ReleaseMedia();
+            _media.Opened -= OnMediaOpened;
+            _media.Failed -= OnMediaFailed;
+            _media.Ended -= OnMediaEnded;
+            try { _media.Dispose(); }
+            catch (Exception error) { Trace.TraceWarning("Feature tutorial media could not be disposed: {0}", error); }
             if (_watchingMotion) SystemParameters.StaticPropertyChanged -= OnMotionPreferenceChanged;
+            _watchingMotion = false;
             if (_lifetimeOwner is not null) _lifetimeOwner.IsVisibleChanged -= OnOwnerVisibilityChanged;
+            _lifetimeOwner = null;
             if (ReferenceEquals(_open, this)) _open = null;
         };
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
     }
 
-    internal bool HasFrames => _frames is not null;
-    internal bool IsLoading => _loadCancellation is not null;
-    internal bool IsPlaying => _player.IsPlaying;
-    internal int FrameIndex => _player.Index;
-    internal string AssetPath => Path.Combine(Path.GetDirectoryName(typeof(FeatureTutorialWindow).Assembly.Location) ?? AppContext.BaseDirectory, "Assets", "Tutorials",
-        $"{_feature.Id}.{(UiText.Culture.TwoLetterISOLanguageName == "ko" ? "ko" : "en")}.gif");
+    /// <summary>An Open was issued for the selected feature and not yet released.</summary>
+    internal bool HasMedia => _mediaOpen;
+    /// <summary>The current media reported open, so its first frame is on screen.</summary>
+    internal bool HasFirstFrame => _hasFirstFrame;
+    internal bool IsOpenPending => _pendingOpen is not null;
+    internal bool IsPlaying => _playing;
+    internal bool IsShowingFallback => _fallback;
+    internal bool IsWatchingMotionPreference => _watchingMotion;
+    internal Window? LifetimeOwner => _lifetimeOwner;
+
+    /// <summary>Where the selected feature's videos live; tests point it at fixtures.</summary>
+    internal string AssetDirectory { get; init; } = Path.Combine(
+        Path.GetDirectoryName(typeof(FeatureTutorialWindow).Assembly.Location) ?? AppContext.BaseDirectory, "Assets", "Tutorials");
+
+    internal string AssetPath => Path.Combine(AssetDirectory,
+        $"{_feature.Id}.{(UiText.Culture.TwoLetterISOLanguageName == "ko" ? "ko" : "en")}.mp4");
 
     internal string SelectedFeatureId => _feature.Id;
     internal static string TutorialTitle(FeatureTutorial feature) => feature.Id == "text-copy"
@@ -156,6 +188,9 @@ internal class FeatureTutorialWindow : Window
         tutorial._readHotkeys = readHotkeys;
         tutorial.UpdateInstructions();
         tutorial.AttachOwner(owner);
+        // Size for the owner's monitor before showing: CenterOwner then keeps the window in its work area.
+        IntPtr ownerHandle = new WindowInteropHelper(owner).Handle;
+        if (ownerHandle != IntPtr.Zero) tutorial.FitToMonitor(MonitorEnumerator.GetFromWindow(ownerHandle));
         _open = tutorial;
         tutorial.Show();
     }
@@ -175,14 +210,32 @@ internal class FeatureTutorialWindow : Window
         _features.SelectedItem = _features.Items.Cast<ComboBoxItem>().Single(item => Equals(item.Tag, featureId));
     }
 
+    /// <summary>Fits the window to a monitor's work area, converted to this window's DIPs.</summary>
+    internal void FitToMonitor(MonitorInfo monitor)
+    {
+        double scale = Math.Max(1, monitor.Dpi) / 96.0;
+        FitToWorkArea(new Size(monitor.WorkArea.Width / scale, monitor.WorkArea.Height / scale));
+    }
+
+    /// <summary>
+    /// Keeps the preferred size where it fits and otherwise shrinks to the work area; the layout
+    /// then shrinks the 16:9 preview first and scrolls the steps only after that.
+    /// </summary>
+    internal void FitToWorkArea(Size workArea)
+    {
+        double width = Math.Max(1, workArea.Width), height = Math.Max(1, workArea.Height);
+        MinWidth = Math.Min(MinimumWidth, width);
+        MinHeight = Math.Min(MinimumHeight, height);
+        Width = Math.Clamp(PreferredWidth, MinWidth, width);
+        Height = Math.Clamp(PreferredHeight, MinHeight, height);
+    }
+
     private void ApplyFeature(string featureId)
     {
-        ReleaseAnimation();
+        ReleaseMedia();
         _feature = TutorialCatalog.Get(featureId);
         UpdateInstructions();
-        _status.Text = UiText.Get("TextCapture_TutorialLoading");
-        _status.Visibility = Visibility.Visible;
-        LoadAnimation();
+        RequestOpen();
     }
 
     private void UpdateInstructions()
@@ -197,7 +250,7 @@ internal class FeatureTutorialWindow : Window
             _instructions.Children.Add(Paragraph(UiText.Format("TextCapture_TutorialDirect", keys.CaptureText)));
         _steps.Children.Clear();
         foreach (string step in _feature.StepsFor(keys)) _steps.Children.Add(Paragraph(step));
-        AutomationProperties.SetName(_image, _feature.Id == "text-copy"
+        AutomationProperties.SetName(_media.View, _feature.Id == "text-copy"
             ? UiText.Get("TextCapture_TutorialAnimation") : _feature.DisplayName);
     }
 
@@ -215,101 +268,97 @@ internal class FeatureTutorialWindow : Window
         owner.IsVisibleChanged += OnOwnerVisibilityChanged;
     }
 
-    private async void LoadAnimation()
+    /// <summary>
+    /// Opens the selected feature once input settles, so rapidly stepping through the list opens
+    /// only the feature it stops on.
+    /// </summary>
+    private void RequestOpen()
     {
-        if (_closed || _frames is not null || _loadCancellation is not null || !IsVisible) return;
-        var cancellation = new CancellationTokenSource();
-        _loadCancellation = cancellation;
-        int generation = ++_loadGeneration;
-        string path = AssetPath;
-        GifSampleFrames? decoded = null;
-        bool unavailable = false;
-        try
-        {
-            decoded = await DecodeOnStaAsync(path, _decode, cancellation.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or NotSupportedException
-            or InvalidOperationException or ArgumentException or FormatException or System.Runtime.InteropServices.COMException)
-        {
-            unavailable = true;
-        }
-        finally
-        {
-            try
-            {
-                if (!Dispatcher.HasShutdownStarted)
-                    await Dispatcher.InvokeAsync(() =>
-                    {
-                        if (ReferenceEquals(_loadCancellation, cancellation)) _loadCancellation = null;
-                        if (_closed || !IsVisible || cancellation.IsCancellationRequested || generation != _loadGeneration) return;
-                        if (decoded is not null)
-                        {
-                            _frames = decoded;
-                            _player.Load(_frames.Timeline);
-                            _status.Visibility = Visibility.Collapsed;
-                            if (FluidMotion.AnimationsEnabled && IsActive) _player.Play();
-                        }
-                        else if (unavailable)
-                        {
-                            ReleaseAnimation();
-                            _status.Text = UiText.Get(_feature.Id == "text-copy" ? "TextCapture_TutorialUnavailable" : "Tutorial.Unavailable");
-                            _status.Visibility = Visibility.Visible;
-                        }
-                        UpdateControls();
-                    });
-            }
-            catch (OperationCanceledException) when (Dispatcher.HasShutdownStarted) { }
-            finally { cancellation.Dispose(); }
-        }
+        if (_closed || _pendingOpen is not null || Dispatcher.HasShutdownStarted) return;
+        _pendingOpen = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(OpenSelected));
     }
 
-    private static async Task<GifSampleFrames> DecodeOnStaAsync(string path,
-        Func<string, CancellationToken, GifSampleFrames> decode, CancellationToken cancellationToken)
+    private void OpenSelected()
     {
-        await DecodeAdmission.WaitAsync(cancellationToken).ConfigureAwait(false);
+        _pendingOpen = null;
+        if (_closed || !IsLoaded || !IsVisible || _mediaOpen || _fallback) return;
+        string path = AssetPath;
+        if (!File.Exists(path))
+        {
+            ShowFallback(null, $"the video {path} is missing");
+            return;
+        }
+        _mediaOpen = true;
+        _hasFirstFrame = false;
+        _status.Text = UiText.Get("TextCapture_TutorialLoading");
+        _status.Visibility = Visibility.Visible;
+        try { _media.Open(path); }
+        catch (Exception error)
+        {
+            ShowFallback(error, $"the video {path} could not be opened");
+            return;
+        }
+        UpdateControls();
+    }
+
+    private void OnMediaOpened()
+    {
+        if (_closed || !_mediaOpen || _fallback) return;
+        _hasFirstFrame = true;
+        _status.Visibility = Visibility.Collapsed;
+        if (FluidMotion.AnimationsEnabled && IsActive) StartPlayback();
+        else UpdateControls();
+    }
+
+    private void OnMediaFailed(Exception? error)
+    {
+        if (_closed || !_mediaOpen) return;
+        ShowFallback(error, $"playback of {AssetPath} failed");
+    }
+
+    private void OnMediaEnded()
+    {
+        if (_closed || !_mediaOpen || _fallback) return;
+        // Loop: back to the first frame, and keep playing when it was playing.
         try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var completed = new TaskCompletionSource<GifSampleFrames>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var thread = new Thread(() =>
-            {
-                try
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    GifSampleFrames frames = decode(path, cancellationToken);
-                    cancellationToken.ThrowIfCancellationRequested();
-                    completed.TrySetResult(frames);
-                }
-                catch (OperationCanceledException) { completed.TrySetCanceled(cancellationToken); }
-                catch (Exception error) { completed.TrySetException(error); }
-            }) { IsBackground = true, Name = "MyCapture feature tutorial decoder" };
-            thread.SetApartmentState(ApartmentState.STA);
-            thread.Start();
-            return await completed.Task.ConfigureAwait(false);
+            _media.Rewind();
+            if (_playing) _media.Play();
         }
-        finally { DecodeAdmission.Release(); }
+        catch (Exception error) { ShowFallback(error, "the video could not loop"); }
     }
 
     internal void TogglePlayback()
     {
-        if (_frames is null) return;
-        if (_player.IsPlaying) _player.Pause();
-        else _player.Play();
-        UpdateControls();
+        if (!CanControl) return;
+        if (_playing) Pause();
+        else StartPlayback();
     }
 
     internal void Replay()
     {
-        if (_frames is null) return;
-        _player.Seek(0);
-        _player.Play();
-        UpdateControls();
+        if (!CanControl) return;
+        try { _media.Rewind(); }
+        catch (Exception error)
+        {
+            ShowFallback(error, "the video could not rewind");
+            return;
+        }
+        StartPlayback();
     }
 
     internal void Pause()
     {
-        _player.Pause();
+        if (_mediaOpen && _playing)
+        {
+            try { _media.Pause(); }
+            catch (Exception error)
+            {
+                ShowFallback(error, "the video could not pause");
+                return;
+            }
+        }
+        _playing = false;
         UpdateControls();
     }
 
@@ -321,30 +370,127 @@ internal class FeatureTutorialWindow : Window
         else _ = Dispatcher.BeginInvoke(new Action(Apply));
     }
 
-    private void ReleaseAnimation()
+    private bool CanControl => !_closed && _mediaOpen && _hasFirstFrame && !_fallback;
+
+    private void StartPlayback()
     {
-        ++_loadGeneration;
-        _loadCancellation?.Cancel();
-        _loadCancellation = null;
-        _player.Load(null);
-        _image.Source = null;
-        _frames = null;
+        if (!CanControl) return;
+        try { _media.Play(); }
+        catch (Exception error)
+        {
+            ShowFallback(error, "the video could not play");
+            return;
+        }
+        _playing = true;
         UpdateControls();
     }
 
-    private void ShowFrame(int index)
+    /// <summary>Closes the current video; the selected feature's steps stay.</summary>
+    private void ReleaseMedia()
     {
-        if (_frames is not null) _image.Source = _frames.Frames[Math.Clamp(index, 0, _frames.Frames.Count - 1)];
+        _pendingOpen?.Abort();
+        _pendingOpen = null;
+        bool wasOpen = _mediaOpen;
+        _mediaOpen = false;
+        _hasFirstFrame = false;
+        _playing = false;
+        _fallback = false;
+        if (wasOpen)
+        {
+            try { _media.Close(); }
+            catch (Exception error) { Trace.TraceWarning("Feature tutorial video could not be closed: {0}", error); }
+        }
+        UpdateControls();
+    }
+
+    /// <summary>Shows the steps as a still fallback, as when Windows has no video playback.</summary>
+    private void ShowFallback(Exception? error, string reason)
+    {
+        Trace.TraceWarning("Feature tutorial {0} shows its steps only because {1}: {2}", _feature.Id, reason,
+            error?.ToString() ?? "no error details");
+        ReleaseMedia();
+        _fallback = true;
+        _status.Text = UiText.Get(_feature.Id == "text-copy" ? "TextCapture_TutorialUnavailable" : "Tutorial.Unavailable");
+        _status.Visibility = Visibility.Visible;
+        UpdateControls();
     }
 
     private void UpdateControls()
     {
-        string caption = UiText.Get(_player.IsPlaying ? "GifPreview_Pause" : "GifPreview_Play");
+        string caption = UiText.Get(_playing ? "GifPreview_Pause" : "GifPreview_Play");
         _play.Content = caption;
         AutomationProperties.SetName(_play, caption);
-        _play.IsEnabled = _replay.IsEnabled = (_frames?.Frames.Count ?? 0) > 1;
+        _play.IsEnabled = _replay.IsEnabled = CanControl;
     }
 
     private static TextBlock Paragraph(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap,
         Margin = new Thickness(0, 0, 0, 8) };
+
+    /// <summary>
+    /// Stacks the tutorial top to bottom. The 16:9 preview takes the height the other rows leave,
+    /// up to its 640×360 maximum; only when it reaches its minimum do the steps start to scroll.
+    /// </summary>
+    private sealed class TutorialLayoutPanel : Panel
+    {
+        private const double PreviewMinHeight = 90;
+        private double _previewHeight;
+
+        internal required FrameworkElement Preview { get; init; }
+        internal required FrameworkElement Steps { get; init; }
+
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            double width = double.IsInfinity(availableSize.Width) ? PreviewMaxWidth : availableSize.Width;
+            double fixedHeight = 0, desiredWidth = 0;
+            foreach (UIElement child in InternalChildren)
+            {
+                if (ReferenceEquals(child, Preview) || ReferenceEquals(child, Steps)) continue;
+                child.Measure(new Size(width, double.PositiveInfinity));
+                fixedHeight += child.DesiredSize.Height;
+                desiredWidth = Math.Max(desiredWidth, child.DesiredSize.Width);
+            }
+            Steps.Measure(new Size(width, double.PositiveInfinity));
+            double stepsWanted = Steps.DesiredSize.Height;
+            Thickness margin = Preview.Margin;
+            double marginX = margin.Left + margin.Right, marginY = margin.Top + margin.Bottom;
+            double largest = Math.Min(PreviewMaxHeight, Math.Max(0, width - marginX) * 9 / 16);
+            double room = availableSize.Height - fixedHeight - marginY;
+            _previewHeight = double.IsInfinity(room) ? largest
+                : Math.Clamp(room - stepsWanted, Math.Min(PreviewMinHeight, largest), largest);
+            Preview.Measure(new Size(_previewHeight * 16 / 9 + marginX, _previewHeight + marginY));
+            double stepsHeight = double.IsInfinity(room) ? stepsWanted : Math.Clamp(room - _previewHeight, 0, stepsWanted);
+            Steps.Measure(new Size(width, stepsHeight));
+            desiredWidth = Math.Max(desiredWidth, Math.Max(Preview.DesiredSize.Width, Steps.DesiredSize.Width));
+            return new Size(desiredWidth, fixedHeight + _previewHeight + marginY + stepsHeight);
+        }
+
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            double top = 0;
+            foreach (UIElement child in InternalChildren)
+            {
+                if (ReferenceEquals(child, Preview))
+                {
+                    Thickness margin = Preview.Margin;
+                    double width = _previewHeight * 16 / 9 + margin.Left + margin.Right;
+                    double height = _previewHeight + margin.Top + margin.Bottom;
+                    child.Arrange(new Rect(Math.Max(0, (finalSize.Width - width) / 2), top, width, height));
+                    top += height;
+                }
+                else if (ReferenceEquals(child, Steps))
+                {
+                    // Last row: whatever height is left, so a taller window never clips the steps.
+                    double height = Math.Max(0, finalSize.Height - top);
+                    child.Arrange(new Rect(0, top, finalSize.Width, height));
+                    top += height;
+                }
+                else
+                {
+                    child.Arrange(new Rect(0, top, finalSize.Width, child.DesiredSize.Height));
+                    top += child.DesiredSize.Height;
+                }
+            }
+            return finalSize;
+        }
+    }
 }

@@ -4,10 +4,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
@@ -18,97 +15,147 @@ namespace MyCapture.App.Tests;
 public sealed class TextCopyTutorialTests
 {
     [Fact]
-    public void ConstructingTheWindowDoesNotReadTheGif_LoadingUsesTheAppAssemblyFolder() => StaTestHost.Run(() =>
+    public void ConstructingTheWindowOpensNothing_ShowingOpensTheVideoBesideTheAppAndShowsItsFirstFrame() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("en-US");
-        int reads = 0;
-        string? readPath = null;
-        ApartmentState? apartment = null;
-        var window = Offscreen(new HotkeySettings(), (path, _) =>
-        { reads++; readPath = path; apartment = Thread.CurrentThread.GetApartmentState(); return Frames(); });
+        var media = new FakeTutorialMedia();
+        var window = new TextCopyTutorialWindow(new HotkeySettings(), () => media) { WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
-            Assert.Equal(0, reads);
-            Assert.False(window.HasFrames);
-            Show(window);
-            Assert.Equal(1, reads);
-            Assert.Equal(ApartmentState.STA, apartment);
+            Assert.Empty(media.OpenedPaths);
+            Assert.False(window.HasMedia);
             Assert.Equal(Path.Combine(Path.GetDirectoryName(typeof(TextCopyTutorialWindow).Assembly.Location)!,
-                "Assets", "Tutorials", "text-copy.en.gif"), readPath);
-            Assert.True(window.HasFrames);
-            Assert.Equal(UiText.Get("TextCapture_TutorialAnimation"), AutomationProperties.GetName(
-                FirstRunWelcomeTests.Descendants(window).OfType<Image>().Single()));
+                "Assets", "Tutorials", "text-copy.en.mp4"), window.AssetPath);
+            Assert.Equal(UiText.Get("TextCapture_TutorialAnimation"), AutomationProperties.GetName(media.View));
         }
         finally { window.Close(); }
-        Assert.False(window.HasFrames);
+        Assert.True(media.Disposed);
+
+        media = new FakeTutorialMedia();
+        window = Offscreen(new HotkeySettings(), media);
+        try
+        {
+            Assert.Empty(media.OpenedPaths);
+            Show(window);
+            Assert.Equal(Path.Combine(window.AssetDirectory, "text-copy.en.mp4"), Assert.Single(media.OpenedPaths));
+            Assert.True(window.HasFirstFrame);
+            Assert.DoesNotContain(Texts(window), text => text.Text == UiText.Get("TextCapture_TutorialLoading") && text.IsVisible);
+        }
+        finally { window.Close(); }
+        Assert.False(window.HasMedia);
+        Assert.True(media.Disposed);
     });
 
     [Fact]
-    public void ReducedMotionStartsPausedButExplicitPlayPauseAndReplayWork() => StaTestHost.Run(() =>
+    public void ReducedMotionShowsTheFirstFrameStillButExplicitPlayPauseAndReplayWork() => StaTestHost.Run(() =>
     {
         bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = false;
-        var window = Offscreen(new HotkeySettings());
+        var media = new FakeTutorialMedia();
+        var window = Offscreen(new HotkeySettings(), media);
         try
         {
             Show(window);
+            window.Activate();
+            Drain(window);
+            Assert.True(window.HasFirstFrame);
             Assert.False(window.IsPlaying);
+            Assert.Equal(0, media.PlayCount);
             Assert.All(new[] { "TextCapture_TutorialStep1", "TextCapture_TutorialStep2", "TextCapture_TutorialStep3" },
                 key => Assert.Contains(Texts(window), text => text.Text == UiText.Get(key)));
             Click(window, UiText.Get("GifPreview_Play"));
-            Assert.True(window.IsPlaying);
+            Assert.True(window.IsPlaying && media.IsPlaying);
             Click(window, UiText.Get("GifPreview_Pause"));
-            Assert.False(window.IsPlaying);
+            Assert.False(window.IsPlaying || media.IsPlaying);
             Click(window, UiText.Get("TextCapture_TutorialReplay"));
-            Assert.True(window.IsPlaying);
-            Assert.Equal(0, window.FrameIndex);
+            Assert.True(window.IsPlaying && media.IsPlaying);
+            Assert.Equal(1, media.RewindCount);
         }
         finally { window.Close(); FluidMotion.AnimationsEnabledOverrideForTest = previous; }
     });
 
     [Fact]
-    public void DeactivationMinimizeAndHideStopPlayback_HideAndCloseReleaseFrames() => StaTestHost.Run(() =>
+    public void WithMotionAnActiveWindowStartsPlayingAsSoonAsTheVideoOpens() => StaTestHost.Run(() =>
     {
-        var window = Offscreen(new HotkeySettings());
+        bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = true;
+        var media = new FakeTutorialMedia { AutoOpen = false };
+        var window = new TextCopyTutorialWindow(new HotkeySettings(), () => media)
+        {
+            AssetDirectory = TutorialTestAssets.Create("text-copy"), WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000, Top = -10000, ShowInTaskbar = false,
+        };
+        try
+        {
+            Show(window);
+            window.Activate();
+            Drain(window);
+            Assert.True(window.HasMedia);
+            Assert.False(window.IsPlaying);
+            media.RaiseOpened();
+            Assert.True(window.HasFirstFrame);
+            Assert.Equal(window.IsActive, window.IsPlaying);
+            Assert.Equal(window.IsActive, media.IsPlaying);
+        }
+        finally { window.Close(); FluidMotion.AnimationsEnabledOverrideForTest = previous; }
+    });
+
+    [Fact]
+    public void DeactivationMinimizeAndHideStopPlayback_HideReleasesAndShowReopens() => StaTestHost.Run(() =>
+    {
+        var media = new FakeTutorialMedia();
+        var window = Offscreen(new HotkeySettings(), media);
         try
         {
             Show(window);
             window.TogglePlayback();
             Assert.True(window.IsPlaying);
             typeof(Window).GetMethod("OnDeactivated", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [EventArgs.Empty]);
-            Assert.False(window.IsPlaying);
+            Assert.False(window.IsPlaying || media.IsPlaying);
             window.TogglePlayback();
             window.WindowState = WindowState.Minimized;
-            Assert.False(window.IsPlaying);
+            Assert.False(window.IsPlaying || media.IsPlaying);
             window.WindowState = WindowState.Normal;
             window.TogglePlayback();
             window.Hide();
             Assert.False(window.IsPlaying);
-            Assert.False(window.HasFrames);
-            Assert.Null(FirstRunWelcomeTests.Descendants(window).OfType<Image>().Single().Source);
+            Assert.False(window.HasMedia || window.HasFirstFrame);
+            Assert.False(media.IsOpen);
+            Show(window);
+            Assert.Equal(2, media.OpenedPaths.Count);
+            Assert.True(window.HasFirstFrame);
+            Assert.False(window.IsPlaying);
         }
         finally { window.Close(); }
-        Assert.False(window.IsPlaying);
-        Assert.False(window.HasFrames);
+        Assert.False(window.IsPlaying || window.HasMedia);
     });
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void MissingOrMalformedGifKeepsTheStepsAndDisablesPlayback(bool malformed) => StaTestHost.Run(() =>
+    [InlineData("missing")]
+    [InlineData("failed")]
+    [InlineData("throws")]
+    public void MissingOrFailingVideoKeepsTheStepsAndDisablesPlayback(string kind) => StaTestHost.Run(() =>
     {
-        var window = Offscreen(new HotkeySettings(), (_, _) => throw (malformed
-            ? new FileFormatException("fixture malformed") : new IOException("fixture missing")));
+        var media = new FakeTutorialMedia
+        {
+            AutoOpen = kind != "failed",
+            ThrowOnOpen = kind == "throws" ? new FileFormatException("fixture malformed") : null,
+        };
+        var window = Offscreen(new HotkeySettings(), media, kind == "missing" ? TutorialTestAssets.Create() : null);
         try
         {
             Show(window);
-            Assert.False(window.HasFrames);
-            Assert.False(window.IsPlaying);
+            if (kind == "failed") media.RaiseFailed(new FileFormatException("fixture malformed"));
+            Assert.True(window.IsShowingFallback);
+            Assert.False(window.HasMedia || window.IsPlaying);
             Assert.Contains(Texts(window), text => text.Text == UiText.Get("TextCapture_TutorialUnavailable") && text.IsVisible);
             Button play = FirstRunWelcomeTests.Descendants(window).OfType<Button>().Single(button =>
                 Equals(button.Content, UiText.Get("GifPreview_Play")));
             Assert.False(play.IsEnabled);
-            Assert.Contains(Texts(window), text => text.Text == UiText.Get("TextCapture_TutorialStep3"));
+            window.TogglePlayback();
+            Assert.False(window.IsPlaying);
+            Assert.Contains(Texts(window), text => text.Text == UiText.Get("TextCapture_TutorialStep3") && text.IsVisible);
         }
         finally { window.Close(); }
     });
@@ -118,54 +165,42 @@ public sealed class TextCopyTutorialTests
     {
         bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = true;
-        var window = Offscreen(new HotkeySettings());
+        var media = new FakeTutorialMedia();
+        var window = Offscreen(new HotkeySettings(), media);
         try
         {
             Show(window);
-            window.TogglePlayback();
+            if (!window.IsPlaying) window.TogglePlayback();
             Assert.True(window.IsPlaying);
             FluidMotion.AnimationsEnabledOverrideForTest = false;
             typeof(TextCopyTutorialWindow).GetMethod("OnMotionPreferenceChanged", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(window, [null, new System.ComponentModel.PropertyChangedEventArgs(nameof(SystemParameters.ClientAreaAnimation))]);
-            Assert.False(window.IsPlaying);
+            Assert.False(window.IsPlaying || media.IsPlaying);
         }
         finally { window.Close(); FluidMotion.AnimationsEnabledOverrideForTest = previous; }
     });
 
     [Fact]
-    public void ClosingDuringDecodeCancelsAndNeverReattachesFramesOrStartsThePlayer() => StaTestHost.Run(() =>
+    public void ClosingWhileTheVideoOpensNeverReattachesOrStartsIt() => StaTestHost.Run(() =>
     {
-        using var entered = new ManualResetEventSlim();
-        using var finish = new ManualResetEventSlim();
-        using var returned = new ManualResetEventSlim();
-        bool sawCancellation = false;
-        var window = Offscreen(new HotkeySettings(), (_, token) =>
-        {
-            entered.Set();
-            Assert.True(finish.Wait(TimeSpan.FromSeconds(5)));
-            sawCancellation = token.IsCancellationRequested;
-            GifSampleFrames frames = Frames();
-            returned.Set();
-            return frames;
-        });
+        bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = true;
+        var media = new FakeTutorialMedia { AutoOpen = false };
+        var window = Offscreen(new HotkeySettings(), media);
         try
         {
-            window.Show(); window.UpdateLayout();
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
-            Assert.True(window.IsLoading);
-            Assert.False(window.HasFrames);
+            Show(window);
+            Assert.True(window.HasMedia);
+            Assert.False(window.HasFirstFrame);
             window.Close();
-            finish.Set();
-            Assert.True(returned.Wait(TimeSpan.FromSeconds(5)));
+            media.RaiseOpened();
+            media.RaiseEnded();
             window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            Assert.True(sawCancellation);
-            Assert.False(window.IsLoading);
-            Assert.False(window.HasFrames);
-            Assert.False(window.IsPlaying);
-            Assert.Null(FirstRunWelcomeTests.Descendants(window).OfType<Image>().Single().Source);
+            Assert.False(window.HasMedia || window.HasFirstFrame || window.IsPlaying);
+            Assert.Equal(0, media.PlayCount);
+            Assert.True(media.Disposed);
         }
-        finally { finish.Set(); window.Close(); }
+        finally { window.Close(); FluidMotion.AnimationsEnabledOverrideForTest = previous; }
     });
 
     [Theory]
@@ -179,15 +214,15 @@ public sealed class TextCopyTutorialTests
             Capture = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, 0x4A),
             CaptureText = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x54),
         };
-        var configured = Offscreen(keys);
-        var unassigned = Offscreen(new HotkeySettings { Capture = Hotkey.None });
+        var configured = Offscreen(keys, new FakeTutorialMedia());
+        var unassigned = Offscreen(new HotkeySettings { Capture = Hotkey.None }, new FakeTutorialMedia());
         try
         {
             Assert.Contains(Texts(configured), text => text.Text == UiText.Format("TextCapture_TutorialCaptureKey", "Ctrl+Shift+J"));
             Assert.Contains(Texts(configured), text => text.Text == UiText.Format("TextCapture_TutorialDirect", "Ctrl+Alt+T"));
             Assert.Contains(Texts(unassigned), text => text.Text == UiText.Get("TextCapture_TutorialCaptureMenu"));
             Assert.DoesNotContain(Texts(unassigned), text => text.Text.Contains(UiText.Get("Hotkey.Unassigned"), StringComparison.Ordinal));
-            Assert.Equal(language.StartsWith("ko", StringComparison.Ordinal) ? "text-copy.ko.gif" : "text-copy.en.gif",
+            Assert.Equal(language.StartsWith("ko", StringComparison.Ordinal) ? "text-copy.ko.mp4" : "text-copy.en.mp4",
                 Path.GetFileName(configured.AssetPath));
         }
         finally { configured.Close(); unassigned.Close(); }
@@ -198,7 +233,9 @@ public sealed class TextCopyTutorialTests
     {
         using var language = UiText.UseLanguage("ko-KR");
         Func<HotkeySettings> previous = ShortcutHelpWindow.ReadHotkeys;
+        Func<ITutorialMedia>? previousMedia = FeatureTutorialWindow.MediaFactoryOverrideForTest;
         ShortcutHelpWindow.ReadHotkeys = () => new HotkeySettings();
+        FeatureTutorialWindow.MediaFactoryOverrideForTest = () => new FakeTutorialMedia();
         var help = new ShortcutHelpWindow { WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         try
@@ -222,40 +259,32 @@ public sealed class TextCopyTutorialTests
             Assert.True(tutorial.IsVisible);
             Assert.True(ShortcutHelpWindow.DismissForCapture());
             Assert.False(tutorial.IsVisible);
-            Assert.False(tutorial.HasFrames);
+            Assert.False(tutorial.HasMedia);
             Assert.False(tutorial.IsPlaying);
         }
-        finally { help.Close(); ShortcutHelpWindow.ReadHotkeys = previous; }
+        finally
+        {
+            help.Close();
+            ShortcutHelpWindow.ReadHotkeys = previous;
+            FeatureTutorialWindow.MediaFactoryOverrideForTest = previousMedia;
+        }
     });
 
-    private static TextCopyTutorialWindow Offscreen(HotkeySettings keys, Func<string, CancellationToken, GifSampleFrames>? decode = null) =>
-        new(keys, decode ?? ((_, _) => Frames())) { WindowStartupLocation = WindowStartupLocation.Manual,
-            Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
+    private static TextCopyTutorialWindow Offscreen(HotkeySettings keys, FakeTutorialMedia media, string? assets = null) =>
+        new(keys, () => media) { AssetDirectory = assets ?? TutorialTestAssets.Create("text-copy"),
+            WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
 
     private static void Show(TextCopyTutorialWindow window)
     {
         window.Show(); window.UpdateLayout();
-        window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-        var timeout = System.Diagnostics.Stopwatch.StartNew();
-        while (window.IsLoading && timeout.Elapsed < TimeSpan.FromSeconds(5))
-        {
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            Thread.Sleep(1);
-        }
-        Assert.False(window.IsLoading, "Background STA decoder did not finish.");
+        Drain(window);
     }
+
+    private static void Drain(Window window) => window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 
     private static void Click(TextCopyTutorialWindow window, string caption) =>
         FirstRunWelcomeTests.Descendants(window).OfType<Button>().Single(button => Equals(button.Content, caption))
             .RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
 
     private static TextBlock[] Texts(DependencyObject root) => FirstRunWelcomeTests.Descendants(root).OfType<TextBlock>().ToArray();
-
-    private static GifSampleFrames Frames()
-    {
-        BitmapSource red = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[] { 0, 0, 255, 255 }, 4);
-        BitmapSource blue = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[] { 255, 0, 0, 255 }, 4);
-        red.Freeze(); blue.Freeze();
-        return new GifSampleFrames([red, blue], [100, 100], 1, 1);
-    }
 }
