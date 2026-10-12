@@ -3570,6 +3570,35 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="StoreUpdate_StateCanceled" xml:space="preserve"><value>업데이트 취소됨</value></data>
   <data name="StoreUpdate_StateFailed" xml:space="preserve"><value>업데이트를 처리할 수 없습니다. Microsoft Store에서 확인하십시오.</value></data>
   <data name="StoreUpdate_StateBlocked" xml:space="preserve"><value>업데이트 보류됨</value></data>
+  <data name="LegacyImport.Title" xml:space="preserve"><value>기존 데이터 가져오기</value></data>
+  <data name="LegacyImport.Description" xml:space="preserve"><value>이전 MyCapture의 사진·영상·폴더를 현재 라이브러리에 복사합니다. 원본은 유지합니다.</value></data>
+  <data name="LegacyImport.Source" xml:space="preserve"><value>기존 데이터 폴더</value></data>
+  <data name="LegacyImport.ChooseFolder" xml:space="preserve"><value>다른 폴더 선택</value></data>
+  <data name="LegacyImport.Counts" xml:space="preserve"><value>사진 {0}개 · 영상 {1}개 · 폴더 {2}개</value></data>
+  <data name="LegacyImport.IncludeSettings" xml:space="preserve"><value>설정도 불러오기</value></data>
+  <data name="LegacyImport.KeepLibrary" xml:space="preserve"><value>저장 위치와 현재 라이브러리 설정은 유지합니다.</value></data>
+  <data name="LegacyImport.SettingsDraft" xml:space="preserve"><value>불러온 설정은 적용을 눌러야 저장합니다.</value></data>
+  <data name="LegacyImport.Copy" xml:space="preserve"><value>가져오기</value></data>
+  <data name="LegacyImport.Scanning" xml:space="preserve"><value>기존 데이터 확인 중</value></data>
+  <data name="LegacyImport.Ready" xml:space="preserve"><value>가져오기 준비됨</value></data>
+  <data name="LegacyImport.NoData" xml:space="preserve"><value>가져올 데이터가 없습니다. 기존 MyCapture의 데이터 폴더를 선택하십시오.</value></data>
+  <data name="LegacyImport.Preparing" xml:space="preserve"><value>진행 중인 작업 확인 중</value></data>
+  <data name="LegacyImport.Deferred" xml:space="preserve"><value>가져오기 보류됨</value></data>
+  <data name="LegacyImport.Copying" xml:space="preserve"><value>기존 데이터 복사 중</value></data>
+  <data name="LegacyImport.CopyProgress" xml:space="preserve"><value>기존 데이터 복사 중 · {0}/{1}개</value></data>
+  <data name="LegacyImport.Publishing" xml:space="preserve"><value>라이브러리에 추가 중</value></data>
+  <data name="LegacyImport.Recovering" xml:space="preserve"><value>가져온 데이터 복구 중</value></data>
+  <data name="LegacyImport.Canceling" xml:space="preserve"><value>가져오기 취소 중</value></data>
+  <data name="LegacyImport.Canceled" xml:space="preserve"><value>가져오기 취소됨</value></data>
+  <data name="LegacyImport.Completed" xml:space="preserve"><value>{0}개 가져옴 · 이미 가져온 항목 {1}개</value></data>
+  <data name="LegacyImport.InvalidSource" xml:space="preserve"><value>기존 데이터 폴더를 확인할 수 없습니다. 다른 폴더를 선택하십시오.</value></data>
+  <data name="LegacyImport.InvalidTarget" xml:space="preserve"><value>현재 라이브러리의 저장 위치를 확인하십시오.</value></data>
+  <data name="LegacyImport.SourceChanged" xml:space="preserve"><value>기존 데이터가 변경되었습니다. 이전 MyCapture를 종료한 뒤 다시 시도하십시오.</value></data>
+  <data name="LegacyImport.MissingPayload" xml:space="preserve"><value>기존 사진이나 영상 파일을 찾을 수 없습니다. 기존 데이터 폴더를 확인하십시오.</value></data>
+  <data name="LegacyImport.Failed" xml:space="preserve"><value>기존 데이터를 가져올 수 없습니다. 저장 위치와 접근 권한을 확인하십시오.</value></data>
+  <data name="LegacyImport.FailedDetail" xml:space="preserve"><value>기존 데이터를 가져올 수 없습니다. {0}</value></data>
+  <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>설정 불러옴 · 적용을 눌러야 저장합니다.</value></data>
+  <data name="LegacyImport.SettingsFailed" xml:space="preserve"><value>라이브러리는 가져왔지만 설정을 불러올 수 없습니다. {0}</value></data>
   <data name="Support_Heading" xml:space="preserve"><value>문제 신고</value></data>
   <data name="Support_Report" xml:space="preserve"><value>문제 신고 페이지 열기</value></data>
   <data name="Support_Preview" xml:space="preserve"><value>진단 정보 미리보기</value></data>

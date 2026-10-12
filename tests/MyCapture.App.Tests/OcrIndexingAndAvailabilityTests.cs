@@ -57,6 +57,47 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
 
     // ---- OcrIndexingService outcomes ----
 
+    [Fact]
+    public async Task MigrationLeaseBlocksQueuedIndexingUntilDisposedAndOnlyReleasesOnce()
+    {
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-indexing-lease-").FullName;
+        try
+        {
+            var queue = new CaptureQueue(AppPaths.CreateForRoot(root), new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+            var service = new OcrIndexingService(new GalleryController(queue, NullLogger<GalleryController>.Instance),
+                new FakeOcr(true), queue.GetDirectory, () => new OcrSettings(), NullLogger<OcrIndexingService>.Instance);
+            IDisposable lease = await service.AcquireIdleLeaseAsync();
+            Task<OcrIndexingOutcome> waiting = service.IndexMissingAsync();
+            Assert.False(waiting.IsCompleted);
+            lease.Dispose(); lease.Dispose();
+            Assert.Equal(OcrIndexingOutcome.NothingToDo, await waiting.WaitAsync(TimeSpan.FromSeconds(5)));
+            using IDisposable next = await service.AcquireIdleLeaseAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally { TestRecycleBin.DeleteDirectory(root, true); }
+    }
+
+    [Fact]
+    public async Task CanceledMigrationLeaseWaitDoesNotLeakOrReleaseTheCurrentLease()
+    {
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-indexing-lease-cancel-").FullName;
+        try
+        {
+            var queue = new CaptureQueue(AppPaths.CreateForRoot(root), new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+            var service = new OcrIndexingService(new GalleryController(queue, NullLogger<GalleryController>.Instance),
+                new FakeOcr(true), queue.GetDirectory, () => new OcrSettings(), NullLogger<OcrIndexingService>.Instance);
+            using var cancel = new CancellationTokenSource();
+            IDisposable lease = await service.AcquireIdleLeaseAsync();
+            Task<IDisposable> canceled = service.AcquireIdleLeaseAsync(cancel.Token);
+            cancel.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await canceled);
+            Task<OcrIndexingOutcome> waiting = service.IndexMissingAsync();
+            Assert.False(waiting.IsCompleted);
+            lease.Dispose();
+            Assert.Equal(OcrIndexingOutcome.NothingToDo, await waiting.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+        finally { TestRecycleBin.DeleteDirectory(root, true); }
+    }
+
     private sealed class FakeOcr : IOcrService
     {
         private readonly bool _available;

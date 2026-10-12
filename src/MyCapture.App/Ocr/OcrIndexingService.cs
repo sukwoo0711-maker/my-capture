@@ -116,6 +116,19 @@ public sealed class OcrIndexingService
         }
     }
 
+    /// <summary>Stops admission of OCR metadata writers while a library publication owns the queue.</summary>
+    internal async Task<IDisposable> AcquireIdleLeaseAsync(CancellationToken cancellationToken = default)
+    {
+        await _indexingGate.WaitAsync(cancellationToken);
+        return new IndexingLease(_indexingGate);
+    }
+
+    private sealed class IndexingLease(SemaphoreSlim gate) : IDisposable
+    {
+        private SemaphoreSlim? _gate = gate;
+        public void Dispose() => Interlocked.Exchange(ref _gate, null)?.Release();
+    }
+
     private async Task<OcrIndexingOutcome> IndexMissingCoreAsync(
         IProgress<OcrIndexingProgress>? progress,
         CancellationToken cancellationToken)

@@ -60,6 +60,7 @@ public partial class App : Application
     private readonly CancellationTokenSource _indexingCancellation = new();
     private bool _indexingRunning;
     private bool _indexingRequested;
+    private CancellationTokenSource? _automaticIndexingPassCancellation;
     private CapturePersistenceService? _persistence;
     private CaptureCommitService? _commit;
     private MyCapture.App.Recording.VideoLibraryService? _videoLibrary;
@@ -82,7 +83,7 @@ public partial class App : Application
     private CaptureRecord? _currentRecord;
     private CaptureEditSession? _currentEditSession;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         AtomicFile.RecycleTemporaryFile = path => { _ = new WindowsRecycleBin().RecycleFile(path); };
@@ -143,6 +144,7 @@ public partial class App : Application
             _services = BuildServiceProvider();
             _log = _services.GetRequiredService<ILogger<App>>();
             _log.LogInformation("MyCapture starting up");
+            await RecoverLegacyImportBeforeLoadAsync();
             InitializeShell();
             StartActivationListener();
         }
@@ -167,6 +169,7 @@ public partial class App : Application
             // A first run opens the library only after its welcome window closes.
             _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
         }
+        _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
     }
 
     /// <summary>The settings said first run when this process started; the welcome window was shown.</summary>
@@ -1603,17 +1606,20 @@ public partial class App : Application
     private async void RunAutomaticIndexing()
     {
         _indexingRequested = true;
-        if (_indexingRunning || _automaticIndexer is null || _indexingCancellation.IsCancellationRequested)
+        if (_indexingRunning || _automaticIndexer is null || _indexingCancellation.IsCancellationRequested || _legacyImportPreparing)
         {
             return;
         }
         _indexingRunning = true;
         try
         {
-            while (_indexingRequested && !_indexingCancellation.IsCancellationRequested)
+            while (_indexingRequested && !_indexingCancellation.IsCancellationRequested && !_legacyImportPreparing)
             {
                 _indexingRequested = false;
-                await _automaticIndexer.IndexMissingAsync(cancellationToken: _indexingCancellation.Token);
+                using var passCancellation = CancellationTokenSource.CreateLinkedTokenSource(_indexingCancellation.Token);
+                _automaticIndexingPassCancellation = passCancellation;
+                try { await _automaticIndexer.IndexMissingAsync(cancellationToken: passCancellation.Token); }
+                finally { _automaticIndexingPassCancellation = null; }
                 _galleryWindow?.RefreshFromQueue();
             }
         }
@@ -1748,6 +1754,7 @@ public partial class App : Application
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         ConfigureEngagementWindow(window);
+        ConfigureLegacyImportWindow(window);
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
         window.FloatRequested += (_, image) => _pins?.PinImage(image);
         // Header toolbar commands mirror the tray entries so capture/recording are reachable
@@ -2106,6 +2113,7 @@ public partial class App : Application
 
         services.AddSingleton(ResolveAppPaths());
         services.AddSingleton<SettingsStore>();
+        services.AddSingleton<ILegacyLibraryMigrationService, LegacyLibraryMigrationService>();
         services.AddSingleton<ScreenCaptureEngine>();
         services.AddSingleton<WindowCandidateService>();
         services.AddSingleton<WindowTitleService>();

@@ -1187,6 +1187,11 @@
                         <Button x:Name="StorePageAction" Content="{loc:Text StoreUpdate_OpenStore}" Style="{StaticResource Button.Secondary}"
                                 HorizontalAlignment="Left" Margin="0,0,0,16" Click="OnStoreUpdatePage" />
 
+                        <Button x:Name="LegacyImportAction" Content="{loc:Text LegacyImport.Title}"
+                                AutomationProperties.Name="{loc:Text LegacyImport.Title}"
+                                Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"
+                                Margin="0,0,0,16" Click="OnLegacyImport" Visibility="Collapsed" />
+
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text Support_Heading}" />
                         <WrapPanel>
                             <Button x:Name="SupportReport" Content="{loc:Text Support_Report}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,8" Click="OnSupportReport" />

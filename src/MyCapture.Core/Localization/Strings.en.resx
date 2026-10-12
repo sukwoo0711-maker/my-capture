@@ -3570,6 +3570,35 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="StoreUpdate_StateCanceled" xml:space="preserve"><value>Update canceled</value></data>
   <data name="StoreUpdate_StateFailed" xml:space="preserve"><value>Could not process the update. Check Microsoft Store.</value></data>
   <data name="StoreUpdate_StateBlocked" xml:space="preserve"><value>Update deferred</value></data>
+  <data name="LegacyImport.Title" xml:space="preserve"><value>Import existing data</value></data>
+  <data name="LegacyImport.Description" xml:space="preserve"><value>Copy photos, videos and folders from your previous MyCapture into this library. Original files are kept.</value></data>
+  <data name="LegacyImport.Source" xml:space="preserve"><value>Existing data folder</value></data>
+  <data name="LegacyImport.ChooseFolder" xml:space="preserve"><value>Choose another folder</value></data>
+  <data name="LegacyImport.Counts" xml:space="preserve"><value>{0} photos · {1} videos · {2} folders</value></data>
+  <data name="LegacyImport.IncludeSettings" xml:space="preserve"><value>Import settings too</value></data>
+  <data name="LegacyImport.KeepLibrary" xml:space="preserve"><value>Storage locations and current library settings are kept.</value></data>
+  <data name="LegacyImport.SettingsDraft" xml:space="preserve"><value>Imported settings are saved only when you choose Apply.</value></data>
+  <data name="LegacyImport.Copy" xml:space="preserve"><value>Import</value></data>
+  <data name="LegacyImport.Scanning" xml:space="preserve"><value>Checking existing data</value></data>
+  <data name="LegacyImport.Ready" xml:space="preserve"><value>Ready to import</value></data>
+  <data name="LegacyImport.NoData" xml:space="preserve"><value>No data to import. Choose the data folder from your previous MyCapture.</value></data>
+  <data name="LegacyImport.Preparing" xml:space="preserve"><value>Checking work in progress</value></data>
+  <data name="LegacyImport.Deferred" xml:space="preserve"><value>Import deferred</value></data>
+  <data name="LegacyImport.Copying" xml:space="preserve"><value>Copying existing data</value></data>
+  <data name="LegacyImport.CopyProgress" xml:space="preserve"><value>Copying existing data · {0}/{1} items</value></data>
+  <data name="LegacyImport.Publishing" xml:space="preserve"><value>Adding to library</value></data>
+  <data name="LegacyImport.Recovering" xml:space="preserve"><value>Recovering imported data</value></data>
+  <data name="LegacyImport.Canceling" xml:space="preserve"><value>Canceling import</value></data>
+  <data name="LegacyImport.Canceled" xml:space="preserve"><value>Import canceled</value></data>
+  <data name="LegacyImport.Completed" xml:space="preserve"><value>{0} items imported · {1} previously imported items</value></data>
+  <data name="LegacyImport.InvalidSource" xml:space="preserve"><value>Could not read the existing data folder. Choose another folder.</value></data>
+  <data name="LegacyImport.InvalidTarget" xml:space="preserve"><value>Check the current library's storage location.</value></data>
+  <data name="LegacyImport.SourceChanged" xml:space="preserve"><value>The existing data changed. Exit the previous MyCapture and try again.</value></data>
+  <data name="LegacyImport.MissingPayload" xml:space="preserve"><value>An existing photo or video file is missing. Check the existing data folder.</value></data>
+  <data name="LegacyImport.Failed" xml:space="preserve"><value>Could not import existing data. Check storage locations and access permissions.</value></data>
+  <data name="LegacyImport.FailedDetail" xml:space="preserve"><value>Could not import existing data. {0}</value></data>
+  <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>Settings loaded · Choose Apply to save them.</value></data>
+  <data name="LegacyImport.SettingsFailed" xml:space="preserve"><value>The library was imported, but settings could not be loaded. {0}</value></data>
   <data name="Support_Heading" xml:space="preserve"><value>Report a problem</value></data>
   <data name="Support_Report" xml:space="preserve"><value>Open issue page</value></data>
   <data name="Support_Preview" xml:space="preserve"><value>Preview diagnostics</value></data>

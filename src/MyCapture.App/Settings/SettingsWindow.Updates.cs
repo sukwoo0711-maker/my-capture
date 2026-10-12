@@ -31,6 +31,7 @@ internal sealed partial class SettingsWindow
 
     private void InitializeUpdates()
     {
+        InitializeLegacyImport();
         // The tab is the "About" category (header in XAML); the label carries the version, so
         // name the product without it.
         UpdateVersionLabel.Text = AppIdentity.WindowLabel + " · " + UpdateStrings.Current(CurrentUpdateVersion);
