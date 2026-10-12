@@ -94,3 +94,15 @@ dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Debug --filt
 PASS exit 0, chunk `b8ac69`, App 15/15. 새 검사에서 주석 문서가 변경돼도 original/base PNG byte[]가 같은 캐시 객체인 것을 확인했습니다. 이전 14건도 유지합니다.
 
 최종 후속 App 빌드 실제 명령 `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Debug -nologo -v quiet -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/compile-shared-trash.targets -o C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/build-blobs`: PASS exit 0, chunk `dde2af`, 경고 0 / 오류 0.
+
+## 원본 저장 실패·무편집 캡처 보호
+
+root 독립 검토에서 원본 persist 실패 후 새 캡처에 주석을 넣지 않은 경우 dirty=false로 종료되고 초안이 폐기되는 경계를 발견했습니다. `AnnotationEditorWindow.MarkUnpersistedCapture()`가 별도 보호 flag를 설정하고 즉시 draft debounce를 시작합니다. caption close/공통 exit/finalization 모두 이 flag를 미저장 선택과 보존 조건에 포함합니다. root가 capture coordinator의 원본 저장 상태 callback과 연결합니다. Copy는 flag와 초안을 유지하고 정상 Save 성공 또는 명시적 Discard만 retired 처리합니다. 원본 persist에 성공한 무편집 캡처는 질문 없이 종료하는 기존 동작을 유지합니다.
+
+실제 명령(cwd 동일):
+
+```text
+dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Debug --filter FullyQualifiedName~EditRecoveryTests --logger 'trx;LogFileName=edit-recovery-unpersisted-final.trx' --results-directory C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/unit-unpersisted-final -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/compile-shared-trash.targets -v quiet -nologo
+```
+
+PASS exit 0, chunk `289f7f`, 20/20. 새 5건은 원본 저장 실패·무편집 캡처의 Cancel/Save 재실패/Discard, 원본 저장 성공·무편집의 무질문 종료, Copy 후 초안 유지·정상 Save 후 초안 재복구 방지를 확인합니다. 실제 창 표시·클립보드 호출 없이 host callback으로 계약을 검증했습니다. 최종 Core는 앞선 8/8 그대로이며 native 검사는 root 슬롯 대기입니다.

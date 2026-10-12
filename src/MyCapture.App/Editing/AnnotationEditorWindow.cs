@@ -151,7 +151,7 @@ internal partial class AnnotationEditorWindow : Window
             return;
         }
 
-        bool ask = _closeAsked && !_committed && (_editor.HasUnsavedChanges || _recoveredDraft);
+        bool ask = _closeAsked && !_committed && NeedsUnsavedProtection;
         _closeAsked = false;
         if (ask)
         {

@@ -7,6 +7,7 @@ internal partial class AnnotationEditorWindow
 {
     private EditDraftSession? _draftSession;
     private bool _recoveredDraft;
+    private bool _unpersistedCapture;
     private bool _discardedDraft;
     private bool _closedForRecovery;
     private void InitializeDraftRecovery()
@@ -16,6 +17,12 @@ internal partial class AnnotationEditorWindow
         _editor.DraftChanged += OnDraftChanged;
     }
     private void OnDraftChanged(object? sender, EventArgs e) => _draftSession?.Changed();
+    internal void MarkUnpersistedCapture()
+    {
+        _unpersistedCapture = true;
+        _draftSession?.Changed();
+    }
+    private bool NeedsUnsavedProtection => _editor.HasUnsavedChanges || _recoveredDraft || _unpersistedCapture;
     internal void AdoptRecoveredDraft(EditDraftStore store, Guid id, long revision)
     {
         _recoveredDraft = true;
@@ -39,7 +46,7 @@ internal partial class AnnotationEditorWindow
         _closedForRecovery = true;
         _editor.DraftChanged -= OnDraftChanged;
         if (_draftSession is null) return;
-        _draftFinalization = _committed || _discardedDraft || !(_editor.HasUnsavedChanges || _recoveredDraft)
+        _draftFinalization = _committed || _discardedDraft || !NeedsUnsavedProtection
             ? _draftSession.RetireAsync() : _draftSession.FlushAsync();
         EditDraftSession.TrackFinalization(_draftFinalization);
     }
@@ -57,7 +64,7 @@ internal partial class AnnotationEditorWindow
         if (_editor.IsEditingOperationInProgress || _retiringDraft) return false;
         await FlushDraftAsync();
         if (_closedForRecovery) { await _draftFinalization; return true; }
-        if (!_committed && (_editor.HasUnsavedChanges || _recoveredDraft))
+        if (!_committed && NeedsUnsavedProtection)
         {
             switch (ConfirmClose())
             {

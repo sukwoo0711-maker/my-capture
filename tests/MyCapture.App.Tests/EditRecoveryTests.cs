@@ -228,4 +228,56 @@ public sealed class EditRecoveryTests
         Assert.Same(first.Files["base.png"], second.Files["base.png"]);
         window.Close();
     });
+
+    [Theory]
+    [InlineData((int)EditorCloseChoice.Cancel, false)]
+    [InlineData((int)EditorCloseChoice.SaveAndClose, false)]
+    [InlineData((int)EditorCloseChoice.DontSave, true)]
+    public void UnpersistedUneditedCapture_IsProtectedFromExit(int choiceValue, bool closes) => StaTestHost.Run(() =>
+    {
+        var window = Create(); string root = TestRecycleBin.CreateTempSubdirectory("MyCapture-unpersisted-").FullName;
+        var store = new EditDraftStore(root, _ => { });
+        var session = new EditDraftSession(store, window.Dispatcher, window.Editor.CaptureDraftAsync, _ => { });
+        typeof(AnnotationEditorWindow).GetField("_draftSession", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(window, session);
+        int prompts = 0, commits = 0;
+        window.CommitRequested = _ => { commits++; return Task.FromResult(false); };
+        window.ConfirmClose = () => { prompts++; return (EditorCloseChoice)choiceValue; };
+        Assert.False(window.Editor.HasUnsavedChanges); window.MarkUnpersistedCapture();
+        Assert.Equal(closes, Await(window.PrepareForAppExitAsync())); Assert.Equal(1, prompts);
+        Assert.Equal(choiceValue == (int)EditorCloseChoice.SaveAndClose ? 1 : 0, commits);
+        if (closes) Assert.Empty(store.ReadAvailable());
+        else
+        {
+            var draft = Assert.Single(store.ReadAvailable()); Assert.True(System.IO.File.Exists(store.ResolveFile(draft.Draft, "original.png")));
+            window.Close(); Assert.Single(store.ReadAvailable());
+        }
+    });
+
+    [Fact]
+    public void PersistedUneditedCapture_DoesNotRequireAnUnsavedPrompt() => StaTestHost.Run(() =>
+    {
+        var window = Create(); int prompts = 0;
+        window.ConfirmClose = () => { prompts++; return EditorCloseChoice.Cancel; };
+        Assert.True(Await(window.PrepareForAppExitAsync())); Assert.Equal(0, prompts);
+    });
+
+    [Fact]
+    public void UnpersistedCapture_CopyKeepsItsDraftAndSuccessfulSaveRetiresIt() => StaTestHost.Run(() =>
+    {
+        var window = Create(); var store = new EditDraftStore(TestRecycleBin.CreateTempSubdirectory("MyCapture-unpersisted-copy-").FullName, _ => { });
+        var session = new EditDraftSession(store, window.Dispatcher, window.Editor.CaptureDraftAsync, _ => { });
+        typeof(AnnotationEditorWindow).GetField("_draftSession", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(window, session);
+        window.MarkUnpersistedCapture();
+        window.CommitRequested = _ => Task.FromResult(true);
+        window.ConfirmClose = () => EditorCloseChoice.Cancel;
+        Assert.False(Await(window.PrepareForAppExitAsync())); Assert.Single(store.ReadAvailable());
+        typeof(AnnotationEditorControl).GetMethod("Commit", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(window.Editor, [EditorCommitAction.CopyToClipboard, false]);
+        Assert.False(window.WasCommitted); Assert.Single(store.ReadAvailable());
+        Assert.False(Await(window.PrepareForAppExitAsync()));
+        window.ConfirmClose = () => EditorCloseChoice.SaveAndClose;
+        Assert.True(Await(window.PrepareForAppExitAsync())); Assert.True(window.WasCommitted); Assert.Empty(store.ReadAvailable());
+    });
 }
