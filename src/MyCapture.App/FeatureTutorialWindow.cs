@@ -345,7 +345,9 @@ internal class FeatureTutorialWindow : Window
     private void RequestOpen()
     {
         if (_closed || _pendingOpen is not null || Dispatcher.HasShutdownStarted) return;
-        _pendingOpen = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(OpenSelected));
+        // ContextIdle, after input and rendering: creating a MediaElement holds up the next frame,
+        // so waiting lets the selected feature's still reach the screen before the video opens.
+        _pendingOpen = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(OpenSelected));
     }
 
     private void OpenSelected()
