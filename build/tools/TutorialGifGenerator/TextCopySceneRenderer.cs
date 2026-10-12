@@ -60,7 +60,7 @@ internal sealed class TextCopySceneRenderer : ITutorialSceneRenderer
     {
         _ko = language == "ko";
         var sampleLine = new FormattedText(SampleLines[1], CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            new Typeface((FontFamily)Application.Current.Resources["Font.Mono"]), 22, Brushes.White, 1);
+            new Typeface((FontFamily)Application.Current.Resources["Font.Mono"], FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), 22, Brushes.White, 1);
         Require(DragEnd.Y >= 177 + sampleLine.Height + 4, "Selection includes second line and bottom margin");
         _desktop = SourceScene(_ko);
         var bounds = new RectD(0, 0, SelectorWidth, SelectorHeight);

@@ -78,11 +78,11 @@ internal static class TutorialFixtures
         .Motion("action", 50, target, end, true)
         .Hold("result", 100, end)
         .Motion("follow", 35, end, follow)
-        .Motion("finish", 8, follow, follow, true)
-        .Hold("done", 276, follow);
+        .Motion("finish", 8, follow, new PointD(follow.X + 30, follow.Y))
+        .Hold("done", 276, new PointD(follow.X + 30, follow.Y));
     internal static IReadOnlyList<int> KeyFrames { get; } = new[] { 0, 44, 94, 95, 139 };
     internal static bool Result(TutorialFramePlan frame) => frame.Segment is "result" or "follow" or "finish" or "done";
-    internal static bool Input(TutorialFramePlan frame) => frame.Segment is "input" or "action" || Result(frame);
+    internal static bool Input(TutorialFramePlan frame) => frame.Segment is "click" or "input" or "action" || Result(frame);
     internal static BitmapSource Frame(BitmapSource scene, TutorialFramePlan frame, string caption, string key = "") => Compose(scene, caption, key, frame.Cursor,
-        frame.Cursor, frame.Segment is "click" or "finish" ? frame.Progress : 0);
+        frame.Cursor, frame.Segment == "click" ? frame.Progress : 0);
 }
