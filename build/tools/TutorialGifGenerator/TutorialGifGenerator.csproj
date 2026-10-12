@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>MyCapture.App.Tests</AssemblyName>
+    <StartupObject>Bootstrap</StartupObject>
+    <RollForward>Disable</RollForward>
+    <AppPayload Condition="'$(AppPayload)' == ''">C:/GitRepositories/my-capture-codex/artifacts/qa12-extreme-load</AppPayload>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="MyCapture"><HintPath>$(AppPayload)/MyCapture.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="MyCapture.Core"><HintPath>$(AppPayload)/MyCapture.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="MyCapture.Platform"><HintPath>$(AppPayload)/MyCapture.Platform.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <Target Name="RequirePayload" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(AppPayload)/MyCapture.dll')" Text="AppPayload must point to a published MyCapture payload." />
+  </Target>
+</Project>
