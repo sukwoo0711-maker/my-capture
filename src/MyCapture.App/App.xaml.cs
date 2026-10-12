@@ -1753,7 +1753,18 @@ public partial class App : Application
 
     private void HandleSettingsRequested()
     {
-        if (_preparingExit || _storeInstallationPending) return;
+        if (_preparingExit) return;
+        if (_storeInstallationPending)
+        {
+            // Reopen the existing progress surface without creating/reloading a settings draft.
+            if (_settingsWindow is { } progress)
+            {
+                progress.Show();
+                if (progress.WindowState == WindowState.Minimized) progress.WindowState = WindowState.Normal;
+                _ = progress.Activate();
+            }
+            return;
+        }
         _log?.LogInformation("Settings window requested");
 
         SettingsWindow? window = EnsureSettingsWindow();
