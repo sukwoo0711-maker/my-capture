@@ -18,6 +18,7 @@ internal sealed partial class SettingsWindow
     internal StoreUpdateLink StoreLink { get; set; } = new();
     internal IStorePackageUpdateService? StoreUpdates { get; set; }
     internal Func<Task<bool>> PrepareStoreUpdate { get; set; } = () => Task.FromResult(false);
+    internal Action FinishStoreUpdate { get; set; } = () => { };
     internal Action? PersistStoreUpdateForTest { get; set; }
     internal bool StoreUpdatePackaged { get; set; } = AppPackage.IsPackaged;
     private bool _storeUpdateBusy;
@@ -68,6 +69,7 @@ internal sealed partial class SettingsWindow
     {
         if (_storeUpdateBusy || !StoreUpdatePackaged) return;
         _storeUpdateBusy = true; UpdateAction.IsEnabled = false;
+        bool protectionAcquired = false;
         try
         {
             StoreUpdates ??= new StorePackageUpdateService(this);
@@ -81,6 +83,7 @@ internal sealed partial class SettingsWindow
             else
             {
                 if (!await PrepareStoreUpdate()) { ShowStoreUpdate(new(StoreUpdatePhase.Blocked)); return; }
+                protectionAcquired = true;
                 _currentSettings().StoreUpdate.PendingFromVersion = CurrentUpdateVersion.ToString();
                 PersistUpdateObservation();
                 ShowStoreUpdate(new(StoreUpdatePhase.AwaitingConsent));
@@ -102,6 +105,7 @@ internal sealed partial class SettingsWindow
         }
         finally
         {
+            if (protectionAcquired) FinishStoreUpdate();
             _storeUpdateBusy = false; UpdateAction.IsEnabled = true;
             AutomationProperties.SetName(UpdateAction, (string)UpdateAction.Content);
         }

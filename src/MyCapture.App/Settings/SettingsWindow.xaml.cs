@@ -396,6 +396,24 @@ internal sealed partial class SettingsWindow : Window
         CancelToTray();
     }
 
+    internal bool PrepareForAppExit(bool keepVisible)
+    {
+        if (!_draft.HasUnappliedChanges) return true;
+        switch (ConfirmUnappliedChanges())
+        {
+            case SettingsCloseChoice.Apply:
+                Apply();
+                if (_draft.HasUnappliedChanges) return false;
+                if (keepVisible) ShowSettings();
+                return true;
+            case SettingsCloseChoice.Discard:
+                ReloadDraft();
+                return true;
+            default:
+                return false;
+        }
+    }
+
     // ---- GitHub token ---------------------------------------------------------------
 
     private bool _syncingGitHubToken;

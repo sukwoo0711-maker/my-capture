@@ -60,6 +60,7 @@ public partial class App
     internal Task<bool> PrepareForStoreUpdateAsync() => PrepareForAppExitAsync(AppExitReason.StoreUpdate);
     internal async Task<bool> RequestSafeShutdownAsync()
     {
+        if (_storeInstallationPending) return false;
         if (!await PrepareForAppExitAsync(AppExitReason.Explicit)) return false;
         Shutdown(0); return true;
     }
@@ -79,6 +80,7 @@ public partial class App
             if (PrepareCapturePersistenceForExitAsync is { } prepareCapture && !await prepareCapture()) return false;
             foreach (Window window in Windows.Cast<Window>().ToArray())
             {
+                if (window is Settings.SettingsWindow settings && !settings.PrepareForAppExit(reason == AppExitReason.StoreUpdate)) return false;
                 if (window is AnnotationEditorWindow image && !await image.PrepareForAppExitAsync()) return false;
                 if (window is VideoEditorWindow video && !await video.PrepareForAppExitAsync()) return false;
             }

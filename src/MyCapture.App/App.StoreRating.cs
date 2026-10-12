@@ -42,7 +42,8 @@ public partial class App
 
     /// <summary>Anything on screen that a Store dialog must not interrupt.</summary>
     private bool IsStoreRatingDeferred() =>
-        _overlay?.IsActive == true || _recorder?.IsActive == true || _activeCountdown is not null
+        _storeInstallationPending || _preparingExit
+        || _overlay?.IsActive == true || _recorder?.IsActive == true || _activeCountdown is not null
         || _scrollCancellation is not null || _preparingAdvancedCapture || _quickAccess is not null
         || _pasteToScreenInFlight || HotkeyRecorder.Active is not null
         || Windows.OfType<Window>().Any(window => window.IsVisible

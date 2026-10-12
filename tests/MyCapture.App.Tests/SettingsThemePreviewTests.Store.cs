@@ -221,13 +221,15 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
             Assert.Equal(0, fake.Installs); // Save/discard/cancel protection must allow installation first.
             Assert.Equal(UiText.Get("StoreUpdate_StateBlocked"), state.Text);
-            int persisted = 0;
+            int persisted = 0, protectionReleased = 0;
             window.PrepareStoreUpdate = () => Task.FromResult(true);
+            window.FinishStoreUpdate = () => protectionReleased++;
             window.PersistStoreUpdateForTest = () => persisted++;
             Task install = window.RunStoreUpdateActionAsync();
             Assert.False(install.IsCompleted);
             Assert.Equal(1, persisted);
             Assert.Equal(1, fake.Installs);
+            Assert.Equal(0, protectionReleased);
             Assert.Equal(UiText.Get("StoreUpdate_StateAwaitingConsent"), state.Text);
             Assert.True(progress.IsIndeterminate);
             fake.Progress!.Report(new(StoreUpdatePhase.Downloading, .42));
@@ -244,6 +246,7 @@ public sealed partial class SettingsThemePreviewTests
             fake.Completion!.SetResult(StoreUpdatePhase.Canceled);
             PumpUntil(window, install);
             Assert.Equal(2, persisted);
+            Assert.Equal(1, protectionReleased);
             Assert.Equal(UiText.Get("StoreUpdate_StateCanceled"), state.Text);
             Assert.Equal(Visibility.Collapsed, progress.Visibility);
             Assert.True(((Button)window.FindName("UpdateAction")).IsEnabled);
@@ -253,7 +256,16 @@ public sealed partial class SettingsThemePreviewTests
             fake.Completion!.SetResult(StoreUpdatePhase.RestartRequired);
             PumpUntil(window, completed);
             Assert.Equal(3, persisted); // Pending source version is preserved until a changed version is observed.
+            Assert.Equal(2, protectionReleased);
             Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), state.Text);
+
+            // A transport failure must release work admission just like cancellation.
+            Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+            Task failed = window.RunStoreUpdateActionAsync();
+            fake.Completion!.SetException(new IOException("Store unavailable"));
+            PumpUntil(window, failed);
+            Assert.Equal(3, protectionReleased);
+            Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
         }
         finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
     }

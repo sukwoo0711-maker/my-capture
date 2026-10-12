@@ -29,7 +29,11 @@ public partial class App
         window.PreviewKeyDown += (_, _) => OnEngagementReturn(window);
         window.Deactivated += (_, _) => notice.Visibility = Visibility.Collapsed;
         window.Closed += (_, _) => _engagementNotices.Remove(window);
-        if (window is SettingsWindow settings) settings.PrepareStoreUpdate = PrepareStoreUpdateSafelyAsync;
+        if (window is SettingsWindow settings)
+        {
+            settings.PrepareStoreUpdate = PrepareStoreUpdateSafelyAsync;
+            settings.FinishStoreUpdate = ReleaseStoreUpdateProtection;
+        }
     }
 
     private void OnEngagementReturn(Window window)
@@ -66,4 +70,28 @@ public partial class App
     // The shutdown worker supplies the shared save/discard/cancel gate during integration.
     internal Func<Task<bool>>? PrepareStoreUpdateProtection { get; set; }
     private Task<bool> PrepareStoreUpdateSafelyAsync() => PrepareStoreUpdateProtection?.Invoke() ?? Task.FromResult(false);
+
+    private bool _storeInstallationPending;
+    private bool _galleryEnabledBeforeUpdate;
+
+    private async Task<bool> PrepareAndHoldStoreUpdateAsync()
+    {
+        if (_storeInstallationPending) return false;
+        _storeInstallationPending = true;
+        _galleryEnabledBeforeUpdate = _galleryWindow?.IsEnabled == true;
+        if (_galleryWindow is not null) _galleryWindow.IsEnabled = false;
+        try
+        {
+            if (await PrepareForStoreUpdateAsync()) return true;
+            ReleaseStoreUpdateProtection();
+            return false;
+        }
+        catch { ReleaseStoreUpdateProtection(); throw; }
+    }
+
+    private void ReleaseStoreUpdateProtection()
+    {
+        _storeInstallationPending = false;
+        if (_galleryWindow is not null) _galleryWindow.IsEnabled = _galleryEnabledBeforeUpdate;
+    }
 }

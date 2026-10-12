@@ -85,6 +85,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        AtomicFile.RecycleTemporaryFile = path => { _ = new WindowsRecycleBin().RecycleFile(path); };
         UiText.Configure(null);
 
         // Windows 11 is the supported baseline. The installer refuses older hosts, but the
@@ -262,7 +263,7 @@ public partial class App : Application
         var trayCommands = new TrayMenuCommands(HandleCaptureRequested, HandleRecordRegion, HandleCaptureWindow,
             HandleCaptureFullScreen, HandleScrollingCapture, () => HandleDelayedCapture(), HandleRepeatLastRegion,
             HandleCaptureTextRequested, HandleRestoreClosedPin, HandleGalleryRequested, HandleSettingsRequested,
-            ShortcutHelpWindow.ShowHelp, () => Shutdown(0));
+            ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync());
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             _pins?.CanRestoreClosed == true, _scrollCancellation is not null));
         // A capture started from the tray menu races the menu's dismissal; the coordinator
@@ -281,7 +282,7 @@ public partial class App : Application
         _tray.RecordRegionRequested += (_, _) => HandleRecordRegion();
         _tray.GalleryRequested += (_, _) => HandleGalleryRequested();
         _tray.SettingsRequested += (_, _) => HandleSettingsRequested();
-        _tray.ExitRequested += (_, _) => Shutdown(0);
+        _tray.ExitRequested += async (_, _) => await RequestSafeShutdownAsync();
         InitializeTextCapture();
         ShortcutHelpWindow.ReadHotkeys = () => _settings!.Hotkeys;
         ShortcutHelpWindow.OpenSettings = HandleSettingsRequested;
@@ -317,8 +318,9 @@ public partial class App : Application
             welcome.Show();
         }
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
-        _overlay.SelectionPersistRequested = OnCaptureSelectionCompletedAsync;
+        _overlay.SelectionPersistRequested = e => _capturePersistenceTask = OnCaptureSelectionCompletedAsync(e);
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
+        _overlay.OriginalNeedsRecovery = () => _currentRecord is null && _pendingRecord is not null;
         _overlay.EditingCompleted += OnAnnotationEditingCompleted;
         _overlay.OverlayClosed += (_, _) =>
         {
@@ -400,6 +402,14 @@ public partial class App : Application
             _startupService,
             _services.GetRequiredService<ILogger<SettingsApplyService>>());
         InitializeStoreRating();
+        PrepareCapturePersistenceForExitAsync = PreparePendingCaptureForExitAsync;
+        PrepareStoreUpdateProtection = PrepareAndHoldStoreUpdateAsync;
+        _initialEditRecoveryTask = InitializeEditRecoveryAsync();
+        SessionEnding += async (_, _) =>
+        {
+            try { await FlushEditingDraftsAsync(); }
+            catch (Exception error) { _log?.LogError(error, "Could not flush drafts on session ending"); }
+        };
 
         if (_hotkeys.Failures.Count > 0)
         {
@@ -437,6 +447,7 @@ public partial class App : Application
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
     {
+        if (_storeInstallationPending || _preparingExit) return;
         if (HotkeyRecorder.Active is { } recorder && _hotkeys?.GetAssigned(e.Command) is { } recorded)
         {
             recorder.Accept(recorded);
@@ -658,6 +669,7 @@ public partial class App : Application
     /// </summary>
     private async void HandlePasteToScreen()
     {
+        if (_storeInstallationPending || _preparingExit) return;
         if (_pins is null || _pasteToScreenInFlight)
         {
             return;
@@ -986,6 +998,7 @@ public partial class App : Application
 
     private bool GuardStillCapture(string mode, bool allowRetake = false)
     {
+        if (_storeInstallationPending || _preparingExit) return false;
         DismissQuickAccessForCapture();
         _shellPresenter?.DismissForCapture();
         if (_preparingAdvancedCapture || (_overlay?.IsActive == true && !(allowRetake && _overlay.CanRetake)) ||
@@ -1056,6 +1069,19 @@ public partial class App : Application
     }
 
     private CaptureRecord? _pendingRecord;
+    private Task _capturePersistenceTask = Task.CompletedTask;
+    private Task _initialEditRecoveryTask = Task.CompletedTask;
+
+    private async Task<bool> PreparePendingCaptureForExitAsync()
+    {
+        await _initialEditRecoveryTask;
+        if (_overlay?.IsSelecting == true || _activeCountdown is not null || _scrollCancellation is not null
+            || _preparingAdvancedCapture || _pasteToScreenInFlight || _gitHubUploadInFlight) return false;
+        await _capturePersistenceTask;
+        // Let the coordinator finish its awaited selection transition before enumerating editors.
+        await Dispatcher.Yield(DispatcherPriority.Background);
+        return true;
+    }
     private QuickAccessWindow? _quickAccess;
     private Guid? _latestReceipt;
     private bool _preparingAdvancedCapture;
@@ -1378,6 +1404,7 @@ public partial class App : Application
     /// </summary>
     private void HandleRecordRegion()
     {
+        if (_storeInstallationPending || _preparingExit) return;
         _shellPresenter?.DismissForCapture();
         if (_recorder is null || (!_recorder.IsActive && (_preparingAdvancedCapture || _overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)))
         {
@@ -1687,6 +1714,7 @@ public partial class App : Application
 
     private void HandleGalleryRequested()
     {
+        if (_storeInstallationPending || _preparingExit) return;
         _log?.LogInformation("Gallery activation requested");
 
         GalleryWindow? window = EnsureGalleryWindow();

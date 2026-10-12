@@ -64,6 +64,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? ReadWindowSources { get; set; }
 
     internal Func<bool> OpenEditorAfterCapture { get; set; } = () => true;
+    internal Func<bool> OriginalNeedsRecovery { get; set; } = () => false;
 
     /// <summary>Reads Capture.AutoDetectWindows when each selector opens. Off unless the app wires it.</summary>
     internal Func<bool> AutoDetectWindows { get; set; } = () => false;
@@ -553,6 +554,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 privacyRedactionService: PrivacyRedactionService,
                 sourceWindowTitle: selection.SourceTitle);
             _activeEditor = editor;
+            if (OriginalNeedsRecovery()) editor.MarkUnpersistedCapture();
             editor.CommitRequested = CommitRequested;
             editor.Committed += OnEditorCommitted;
             editor.Cancelled += OnEditorCancelled;
