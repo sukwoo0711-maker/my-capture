@@ -38,7 +38,7 @@
     <None Update="Assets\tray-capturing.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\tray-busy.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\tray-error.ico" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="Assets\Tutorials\text-copy.*.gif" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Assets\Tutorials\*.gif" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup><EmbeddedResource Include="Updates\UpdateHelper.ps1" LogicalName="MyCapture.UpdateHelper.ps1" /></ItemGroup>
