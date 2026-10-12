@@ -116,10 +116,13 @@ internal sealed class ShortcutHelpWindow : Window
                 {
                     string label = UiText.Get(entry.Action);
                     var row = new UniformGrid { Columns = 2, Margin = new Thickness(0, 6, 0, 6) };
-                    row.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+                    var action = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                    action.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap });
+                    if (IsTextTutorialEntry(entry.Action)) action.Children.Add(TutorialButton());
+                    row.Children.Add(action);
                     row.Children.Add(Keycaps(entry.Keys));
                     panel.Children.Add(row);
-                    FrameworkElement result = ResultRow(label, category, entry.Keys);
+                    FrameworkElement result = ResultRow(label, category, entry.Keys, IsTextTutorialEntry(entry.Action) ? keys : null);
                     results.Children.Add(result);
                     matches.Add(($"{label} {entry.Keys} {category}", result));
                 }
@@ -167,7 +170,7 @@ internal sealed class ShortcutHelpWindow : Window
     /// One search result: the action with its category in small text under it, then its keys.
     /// Same two columns as a tab row, at least 36 high with 12 at each side.
     /// </summary>
-    private static FrameworkElement ResultRow(string label, string category, string chord)
+    private FrameworkElement ResultRow(string label, string category, string chord, HotkeySettings? tutorialKeys = null)
     {
         var grid = new Grid { MinHeight = 36 };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
@@ -178,6 +181,7 @@ internal sealed class ShortcutHelpWindow : Window
         var tag = new TextBlock { Text = category, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) };
         tag.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         text.Children.Add(tag);
+        if (tutorialKeys is not null) text.Children.Add(TutorialButton());
         grid.Children.Add(text);
         FrameworkElement keycaps = Keycaps(chord);
         Grid.SetColumn(keycaps, 1);
@@ -203,7 +207,7 @@ internal sealed class ShortcutHelpWindow : Window
 
     internal static void OnWindowKey(object sender, KeyEventArgs e)
     {
-        if (sender is ShortcutHelpWindow or CaptureOverlayWindow || HotkeyRecorder.Active is not null || !CanShowHelp()) return;
+        if (sender is ShortcutHelpWindow or TextCopyTutorialWindow or CaptureOverlayWindow || HotkeyRecorder.Active is not null || !CanShowHelp()) return;
         if (IsHelpKey(e.Key, Keyboard.Modifiers, Keyboard.FocusedElement))
         { e.Handled = true; ShowHelp(); }
     }
@@ -213,13 +217,26 @@ internal sealed class ShortcutHelpWindow : Window
 
     internal static bool DismissForCapture()
     {
+        bool tutorialClosed = TextCopyTutorialWindow.DismissForCapture();
         Window[] windows = Application.Current?.Windows.OfType<ShortcutHelpWindow>().Where(w => w.IsVisible).ToArray() ?? [];
         foreach (Window window in windows) window.Close();
         // A capture shortcut pressed over the first-run welcome closes it without opening the library.
         WelcomeWindow[] welcomes = Application.Current?.Windows.OfType<WelcomeWindow>().Where(w => w.IsVisible).ToArray() ?? [];
         foreach (WelcomeWindow welcome in welcomes) welcome.DismissForCapture();
         if (_open?.IsVisible == true) { _open.Close(); return true; }
-        return windows.Length > 0 || welcomes.Length > 0;
+        return tutorialClosed || windows.Length > 0 || welcomes.Length > 0;
+    }
+
+    private static bool IsTextTutorialEntry(string action) => action is "TextCapture_Title" or "TextCapture_HelpToggle";
+
+    private Button TutorialButton()
+    {
+        var button = new Button { Content = UiText.Get("TextCapture_TutorialOpen"), HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 6, 0, 0), MinHeight = 32 };
+        button.SetResourceReference(StyleProperty, "Button.Secondary");
+        AutomationProperties.SetName(button, UiText.Get("TextCapture_TutorialTitle"));
+        button.Click += (_, _) => TextCopyTutorialWindow.ShowTutorial(this, ReadHotkeys());
+        return button;
     }
 
     private static string Display(Hotkey key) => key.IsAssigned ? key.ToString() : UiText.Get("Hotkey.Unassigned");

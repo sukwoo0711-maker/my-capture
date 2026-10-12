@@ -67,6 +67,12 @@ public sealed partial class SettingsThemePreviewTests
             var recorder = Assert.IsType<HotkeyRecorder>(window.FindName("CaptureTextHotkeyRecorder"));
             Assert.Equal("Ctrl+Alt+T", recorder.Text);
             Assert.Equal(UiText.Get("TextCapture_Title"), AutomationProperties.GetName(recorder));
+            tabs.SelectedIndex = 4;
+            Drain(window);
+            var tutorialButton = Assert.IsType<Button>(window.FindName("TextCopyTutorialButton"));
+            Assert.True(tutorialButton.IsVisible && tutorialButton.IsEnabled && tutorialButton.IsTabStop);
+            Assert.Equal(UiText.Get("TextCapture_TutorialOpen"), tutorialButton.Content);
+            Assert.Equal(UiText.Get("TextCapture_TutorialTitle"), AutomationProperties.GetName(tutorialButton));
             Assert.True(saved.Capture.AutoDetectWindows);
 
             SettingsWindow.ApplyCommand.Execute(null, window);
@@ -79,6 +85,16 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal("Ctrl+Alt+T", reloaded.Hotkeys.CaptureText.ToString());
 
             window.ShowSettings();
+            Drain(window);
+            tabs.SelectedIndex = 4;
+            Drain(window);
+            tutorialButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            TextCopyTutorialWindow tutorial = Assert.Single(window.OwnedWindows.OfType<TextCopyTutorialWindow>());
+            Assert.True(tutorial.IsVisible);
+            Assert.Contains(FirstRunWelcomeTests.Descendants(tutorial).OfType<TextBlock>(),
+                text => text.Text == UiText.Format("TextCapture_TutorialDirect", "Ctrl+Alt+T"));
+            tutorial.Close();
+            tabs.SelectedIndex = 1;
             Drain(window);
             Assert.False(detect.IsChecked);
             Assert.Equal(ColorFormat.Hsl, format.SelectedValue);

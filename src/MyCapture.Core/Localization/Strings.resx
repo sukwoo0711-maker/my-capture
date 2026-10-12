@@ -3466,6 +3466,19 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="TextCapture_OpenAdvanced" xml:space="preserve"><value>텍스트 인식 창 열기</value></data>
   <data name="TextCapture_HelpToggle" xml:space="preserve"><value>선택 중 텍스트 복사</value></data>
   <data name="TextCapture_HotkeyHint" xml:space="preserve"><value>영역을 선택하면 텍스트만 인식해 복사합니다. 이미지는 라이브러리에 저장하지 않습니다.</value></data>
+  <data name="TextCapture_TutorialOpen" xml:space="preserve"><value>사용법 보기</value></data>
+  <data name="TextCapture_TutorialTitle" xml:space="preserve"><value>텍스트 복사 사용법</value></data>
+  <data name="TextCapture_TutorialIntro" xml:space="preserve"><value>화면 속 글자를 선택해 복사하고, 원하는 곳에 붙여넣습니다.</value></data>
+  <data name="TextCapture_TutorialCaptureKey" xml:space="preserve"><value>{0}로 캡처 선택 화면을 연 다음 T를 누릅니다.</value></data>
+  <data name="TextCapture_TutorialCaptureMenu" xml:space="preserve"><value>트레이 메뉴의 영역 캡처로 선택 화면을 연 다음 T를 누릅니다.</value></data>
+  <data name="TextCapture_TutorialDirect" xml:space="preserve"><value>텍스트 복사 단축키 {0}로 바로 시작할 수도 있습니다. 이때는 T를 누르지 않습니다.</value></data>
+  <data name="TextCapture_TutorialAnimation" xml:space="preserve"><value>캡처 선택에서 T를 누르고 글자 영역을 드래그한 뒤 붙여넣는 예시</value></data>
+  <data name="TextCapture_TutorialLoading" xml:space="preserve"><value>사용법 불러오는 중</value></data>
+  <data name="TextCapture_TutorialUnavailable" xml:space="preserve"><value>사용법 영상을 불러오지 못했습니다. 아래 단계에 따라 텍스트를 복사하십시오.</value></data>
+  <data name="TextCapture_TutorialReplay" xml:space="preserve"><value>다시 보기</value></data>
+  <data name="TextCapture_TutorialStep1" xml:space="preserve"><value>1. 선택 화면에서 T를 눌러 텍스트 복사로 전환합니다.</value></data>
+  <data name="TextCapture_TutorialStep2" xml:space="preserve"><value>2. 복사할 글자 영역을 드래그합니다. 선택한 글자를 자동으로 인식해 복사합니다.</value></data>
+  <data name="TextCapture_TutorialStep3" xml:space="preserve"><value>3. 텍스트 복사됨 알림을 확인한 다음, 원하는 곳에서 Ctrl+V를 누릅니다.</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>색상을 복사하지 못했습니다.</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>색상 복사 형식</value></data>
   <data name="ColorPick_FormatHint" xml:space="preserve"><value>캡처 영역을 선택하는 중 C 키를 누르면 포인터 아래 색상을 이 형식으로 복사합니다.</value></data>

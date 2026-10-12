@@ -895,7 +895,11 @@
                                    Text="{loc:Text SettingsUx_OtherShortcutsHint}" />
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text TextCapture_Title}" />
+                            <DockPanel LastChildFill="True">
+                                <Button x:Name="TextCopyTutorialButton" Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:Text TextCapture_TutorialTitle}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Right" Margin="12,0,0,4" MinHeight="32" Click="OnTextCopyTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text TextCapture_Title}" VerticalAlignment="Center" />
+                            </DockPanel>
                             <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text TextCapture_HotkeyHint}" />
                             <settings:HotkeyRecorder x:Name="CaptureTextHotkeyRecorder" HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text TextCapture_Title}" DefaultText="" Text="{Binding CaptureTextHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
