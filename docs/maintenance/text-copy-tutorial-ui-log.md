@@ -97,3 +97,13 @@ F1 직접 TextBlock/WrapPanel 구조와 keycaps automation name을 유지합니�
 visible singleton 재사용은 이전 owner visibility 구독을 해제하고 새 Owner/_lifetimeOwner 구독으로 이관합니다. A→B 이관 뒤 A 숨김은 창을 닫지 않고 B 숨김은 정리하는 회귀를 추가했습니다. 클릭 통과의 마지막 단계는 PinWindow.cs의 실제 우선순위와 같이 현재 ToggleClickThrough, HideAllPins 두 번, 트레이 복원 안내를 선택합니다. 한영 각 분기의 회귀를 추가했습니다.
 
 이번 소스 수정 후 `git diff --check`는 chunk `9c34b5`, exit 0입니다. 빌드/집중 검사 슬롯을 요청했으며 결과를 아래에 기록합니다. 이 동안 WorkspaceSceneRenderer는 수정하지 않았습니다. 후속 Workspace 작업 준비를 위해 총괄 승인하에 common `67f956e`, draft `7824c13`을 cherry-pick했습니다(chunk `f0629f`, exit 0; 로컬 `424754d`, `f1ded52`). 기존 미추적 성능 테스트는 보존했습니다.
+
+source commit `6ca410d`는 chunk `421348`, exit 0입니다. 총괄 승인 슬롯에서 실제 실행한 최종 검증은 다음과 같습니다(cwd 위 동일 worktree).
+
+| 상태 | 실제 명령 | exit code | 결과·근거 |
+| --- | --- | --- | --- |
+| PASS | `dotnet build MyCapture.slnx -c Debug -v q -nologo` | 0 | chunk `e64038`, 경고 0/오류 0 |
+| PASS | `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --filter 'FullyQualifiedName~FeatureTutorialTests\|FullyQualifiedName~TextCopyTutorialTests\|FullyQualifiedName~ShortcutHelp\|FullyQualifiedName~TextCaptureFlowTests\|FullyQualifiedName~TextCaptureSettings_WindowDetectColorFormatAndHotkeyApplyThroughTheWindow\|FullyQualifiedName~GifSampleAnimationTests' --logger 'trx;LogFileName=feature-tutorial-serialized-final.trx' --results-directory artifacts/feature-tutorial-ui -v minimal` | 0 | chunk `5ebccb`, 43 PASS/0 FAIL/0 skip |
+| PASS | `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --filter 'FullyQualifiedName~LocalizationTests' --logger 'trx;LogFileName=feature-tutorial-localization-serialized-final.trx' --results-directory artifacts/feature-tutorial-ui -v minimal` | 0 | chunk `ce52e1`, 13 PASS/0 FAIL/0 skip |
+
+CPU 슬롯을 반환했습니다. 전체/native 검증은 총괄이 진행하며 작성자는 Workspace의 별도 기능 스토리 소스로 돌아갑니다.
