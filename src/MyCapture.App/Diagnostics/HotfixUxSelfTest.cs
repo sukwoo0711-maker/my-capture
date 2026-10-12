@@ -135,15 +135,28 @@ internal static class HotfixUxSelfTest
                             Check($"kept={kept}/hover={hover}: external foreground preserved", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive);
                             Check($"kept={kept}/hover={hover}: native pointer state", keyboardCard.IsPointerOver == hover);
                             string before = external.Text;
+                            int traceOffset = external.ReadInputTrace().Length;
                             foreach (byte key in new byte[] { 0x43, 0x45, 0x50, 0x53 }) { SendKey(inputHandle, key); Pump(50); }
                             SendKey(inputHandle, 0x1B); Pump(50);
                             // Read the separate process's actual text acknowledgement without resending keys.
                             var acknowledgement = Stopwatch.StartNew();
-                            while (external.Text != before + "ceps" && acknowledgement.Elapsed < TimeSpan.FromSeconds(1)) Pump(20);
-                            string inputObservation = $"External input acknowledgement: kept={kept}; hover={hover}; elapsed={acknowledgement.Elapsed.TotalMilliseconds:0.000}ms; expected={before + "ceps"}; actual={external.Text}";
+                            bool inputStateReady = false, capsLock = false;
+                            string inputStateError = "No complete input acknowledgement.";
+                            string expectedText = before + "ceps";
+                            while (acknowledgement.Elapsed < TimeSpan.FromSeconds(1))
+                            {
+                                string trace = external.ReadInputTrace();
+                                inputStateReady = TryObserveExternalKeyBatch(trace.Length >= traceOffset ? trace[traceOffset..] : "",
+                                    out capsLock, out inputStateError);
+                                if (inputStateReady) expectedText = before + (capsLock ? "CEPS" : "ceps");
+                                if (inputStateReady && external.Text == expectedText) break;
+                                Pump(20);
+                            }
+                            string inputObservation = $"External input acknowledgement: kept={kept}; hover={hover}; elapsed={acknowledgement.Elapsed.TotalMilliseconds:0.000}ms; capsLock={(inputStateReady ? capsLock.ToString() : "unknown")}; inputState={inputStateError}; expected={expectedText}; actual={external.Text}";
                             report.AppendLine(inputObservation);
                             Console.WriteLine(inputObservation);
-                            Check($"kept={kept}/hover={hover}: external C/E/P/S unchanged; text={external.Text}", external.Text == before + "ceps");
+                            Check($"kept={kept}/hover={hover}: external key order, no modifiers and stable CapsLock", inputStateReady);
+                            Check($"kept={kept}/hover={hover}: external C/E/P/S unchanged; text={external.Text}", external.Text == expectedText);
                             Check($"kept={kept}/hover={hover}: no card action or Esc dismissal", copies == 0 && saves == 0 && keyboardCard.IsVisible);
                         }
                         // RegisterHotKey cannot target a HWND owned by another process.
@@ -551,6 +564,31 @@ internal static class HotfixUxSelfTest
         return false;
     }
     [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+    internal static bool TryObserveExternalKeyBatch(string trace, out bool capsLock, out string observation)
+    {
+        capsLock = false;
+        string[] keys = ["C", "E", "P", "S", "Escape"];
+        string[] events = trace.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => line.Contains("; KeyDown key=", StringComparison.Ordinal)).ToArray();
+        observation = "Incomplete or unexpected key sequence.";
+        if (events.Length != keys.Length) return false;
+        for (int index = 0; index < keys.Length; index++)
+        {
+            string[] fields = events[index].TrimEnd('\r').Split("; ", StringSplitOptions.None);
+            if (!fields.Contains("KeyDown key=" + keys[index], StringComparer.Ordinal)) return false;
+            observation = "Unexpected modifiers or lost fixture focus.";
+            if (!fields.Contains("modifiers=None", StringComparer.Ordinal)
+                || !fields.Contains("control=False", StringComparer.Ordinal)
+                || !fields.Contains("focused=True", StringComparer.Ordinal)) return false;
+            string[] capsFields = fields.Where(field => field.StartsWith("capsLock=", StringComparison.Ordinal)).ToArray();
+            observation = "Missing or changing CapsLock observation.";
+            if (capsFields.Length != 1 || !bool.TryParse(capsFields[0]["capsLock=".Length..], out bool observed)) return false;
+            if (index == 0) capsLock = observed;
+            else if (observed != capsLock) return false;
+        }
+        observation = "C/E/P/S/Escape received once in order; modifiers=None; focus=True; CapsLock stable.";
+        return true;
+    }
     private static void RequireForeground(IntPtr expected)
     {
         IntPtr actual = GetForegroundWindow();
@@ -558,11 +596,25 @@ internal static class HotfixUxSelfTest
             throw new InvalidOperationException($"Input aborted: expected foreground {expected}, actual {actual}.");
     }
     private static void SendKey(IntPtr target, byte key) { InjectKey(target, key, 0); InjectKey(target, key, 2); }
-    private static void Click(IntPtr foreground, FrameworkElement control)
+    private static void Click(IntPtr foreground, FrameworkElement control, StringBuilder? report = null)
     {
         Point point = control.PointToScreen(new Point(control.ActualWidth / 2, control.ActualHeight / 2));
-        MoveCursor(foreground, (int)point.X, (int)point.Y);
-        MouseButton(foreground, 0x0002); MouseButton(foreground, 0x0004); Pump(100);
+        bool moved = false, downSent = false, upSent = false;
+        void Observe(string phase)
+        {
+            if (report is null) return;
+            var bounds = WindowStyleFacade.GetWindowBounds(foreground);
+            string state = $"HOTFIX_FIRST_CLICK_{phase}: UTC={DateTimeOffset.UtcNow:O}; expected={foreground}; actual={GetForegroundWindow()}; x={(int)point.X}; y={(int)point.Y}; control={control.ActualWidth:0.###}x{control.ActualHeight:0.###}; bounds={bounds.Left},{bounds.Top},{bounds.Right},{bounds.Bottom}; moved={moved}; downSent={downSent}; upSent={upSent}.";
+            report.AppendLine(state); Console.WriteLine(state);
+        }
+        try
+        {
+            Observe("MOVE_BEFORE"); MoveCursor(foreground, (int)point.X, (int)point.Y); moved = true; Observe("MOVE_AFTER");
+            Observe("DOWN_BEFORE"); MouseButton(foreground, 0x0002); downSent = true; Observe("DOWN_AFTER");
+            Observe("UP_BEFORE"); MouseButton(foreground, 0x0004); upSent = true; Observe("UP_AFTER");
+            Pump(100);
+        }
+        finally { Observe("FINAL"); }
     }
 
     private static void DragToExternal(IntPtr foreground, FrameworkElement preview)
@@ -586,11 +638,14 @@ internal static class HotfixUxSelfTest
     {
         var rect = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
         var window = new AnnotationEditorWindow(new FrozenFrame(sample, rect, null, 0), rect, sample);
-        owned.Add(window); window.Show(); Pump(150); window.Activate(); window.Editor.Focus();
+        bool contentRendered = false;
+        window.ContentRendered += (_, _) => contentRendered = true;
+        owned.Add(window); window.Show(); Pump(150);
+        bool activationAccepted = window.Activate(); window.Editor.Focus();
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
         void ObserveForeground(string phase, TimeSpan elapsed)
         {
-            string observation = $"HOTFIX_EDITOR_FOREGROUND_{phase}: UTC={DateTimeOffset.UtcNow:O}; PID={Environment.ProcessId}; expected={hwnd}; actual={GetForegroundWindow()}; elapsed={elapsed.TotalSeconds:0.000}s; no input injected during foreground wait.";
+            string observation = $"HOTFIX_EDITOR_FOREGROUND_{phase}: UTC={DateTimeOffset.UtcNow:O}; PID={Environment.ProcessId}; expected={hwnd}; actual={GetForegroundWindow()}; elapsed={elapsed.TotalSeconds:0.000}s; loaded={window.IsLoaded}; visible={window.IsVisible}; enabled={window.IsEnabled}; active={window.IsActive}; contentRendered={contentRendered}; editorFocus={ReferenceEquals(Keyboard.FocusedElement, window.Editor)}; activationAccepted={activationAccepted}; no input injected during foreground wait.";
             report.AppendLine(observation);
             Console.WriteLine(observation);
         }
@@ -598,13 +653,26 @@ internal static class HotfixUxSelfTest
         // Keep the dispatcher responsive so the operator can activate this owned editor.
         var foregroundWait = Stopwatch.StartNew();
         ObserveForeground("WAIT", foregroundWait.Elapsed);
-        while (GetForegroundWindow() != hwnd && foregroundWait.Elapsed < TimeSpan.FromSeconds(30)) Pump(50);
-        ObserveForeground(GetForegroundWindow() == hwnd ? "ACQUIRED" : "TIMEOUT", foregroundWait.Elapsed);
+        int stableRounds = 0;
+        while (foregroundWait.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            Pump(50);
+            if (foregroundWait.Elapsed >= TimeSpan.FromSeconds(30)) break;
+            if (GetForegroundWindow() == hwnd && window.IsActive && !ReferenceEquals(Keyboard.FocusedElement, window.Editor))
+                window.Editor.Focus();
+            bool ready = GetForegroundWindow() == hwnd && window.IsLoaded && window.IsVisible && window.IsEnabled
+                && window.IsActive && contentRendered && ReferenceEquals(Keyboard.FocusedElement, window.Editor);
+            stableRounds = ready ? stableRounds + 1 : 0;
+            if (stableRounds > 0) ObserveForeground("STABLE_" + stableRounds, foregroundWait.Elapsed);
+            if (stableRounds == 2) break;
+        }
+        ObserveForeground(stableRounds == 2 ? "ACQUIRED" : "TIMEOUT", foregroundWait.Elapsed);
+        if (stableRounds != 2) throw new TimeoutException("Owned editor did not become foreground-ready for two dispatcher rounds within 30 seconds; no input was injected.");
         RequireForeground(hwnd);
         // The visible command for a key: the crop bar replaces the top commands while cropping.
         ButtonBase Button(string key) => Ux402VisualMetrics.Descendants(window).OfType<ButtonBase>()
             .Single(b => AutomationProperties.GetAcceleratorKey(b) == key && b.IsVisible);
-        Click(hwnd, Button("A"));
+        Click(hwnd, Button("A"), report);
         check("mouse rail click returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
         foreach (var (key, hint) in new[] { ((byte)0x52, "R"), ((byte)0x45, "E") })
         {
@@ -703,13 +771,14 @@ internal static class HotfixUxSelfTest
                 "$t=New-Object System.Windows.Forms.TextBox; $t.Multiline=$true; $t.Dock='Fill'; $t.ImeMode=[System.Windows.Forms.ImeMode]::Disable; $f.Controls.Add($t); " +
                 "$t.AllowDrop=$true; $t.Add_DragEnter({param($sender,$e) if($e.Data.GetDataPresent('FileDrop')){$e.Effect=[System.Windows.Forms.DragDropEffects]::Copy}}); " +
                 "$t.Add_DragDrop({param($sender,$e) $t.AppendText('[drop:'+($e.Data.GetData('FileDrop')[0])+']')}); " +
-                "$t.Add_KeyDown({param($sender,$e) Write-InputTrace ('KeyDown key='+$e.KeyCode+'; modifiers='+$e.Modifiers+'; control='+$e.Control+'; focused='+$t.Focused+'; text='+$t.Text); " +
+                "$t.Add_KeyDown({param($sender,$e) Write-InputTrace ('KeyDown key='+$e.KeyCode+'; modifiers='+$e.Modifiers+'; control='+$e.Control+'; focused='+$t.Focused+'; capsLock='+[System.Windows.Forms.Control]::IsKeyLocked([System.Windows.Forms.Keys]::CapsLock)+'; text='+$t.Text); " +
                 "if($e.Control -and $e.KeyCode -eq 'V'){$img=$null; try{$contains=[System.Windows.Forms.Clipboard]::ContainsImage(); Write-InputTrace ('Clipboard ContainsImage='+$contains); " +
                 "try{$data=[System.Windows.Forms.Clipboard]::GetDataObject(); if($null -eq $data){Write-InputTrace 'Clipboard data object=null'}else{Write-InputTrace ('Clipboard formats='+[string]::Join(',', $data.GetFormats()))}}catch{Write-InputTrace ('Clipboard format observation exception='+$_.Exception.ToString())}; " +
                 "if($contains){$img=[System.Windows.Forms.Clipboard]::GetImage(); if($null -eq $img){Write-InputTrace 'Clipboard GetImage=null'}else{Write-InputTrace ('Clipboard GetImage='+$img.Width+'x'+$img.Height)}; " +
                 "$t.AppendText('[image:'+$img.Width+'x'+$img.Height+']'); $e.SuppressKeyPress=$true; Write-InputTrace ('Paste completed; text='+$t.Text)}}catch{Write-InputTrace ('Paste exception='+$_.Exception.ToString()); throw}finally{if($null -ne $img){$img.Dispose()}}}}); " +
                 "$t.Add_KeyUp({param($sender,$e) Write-InputTrace ('KeyUp key='+$e.KeyCode+'; modifiers='+$e.Modifiers+'; control='+$e.Control+'; focused='+$t.Focused+'; text='+$t.Text)}); " +
-                "$f.Add_Shown({[System.Windows.Forms.InputLanguage]::CurrentInputLanguage=[System.Windows.Forms.InputLanguage]::FromCulture([System.Globalization.CultureInfo]::GetCultureInfo('en-US')); $f.Activate(); $t.Focus(); $f.Text='MyCapture external input measurement; focused='+$t.Focused+'; ime='+$t.ImeMode+'; language='+[System.Windows.Forms.InputLanguage]::CurrentInputLanguage.Culture.Name+'; layout='+[System.Windows.Forms.InputLanguage]::CurrentInputLanguage.LayoutName+' ready'}); " +
+                "$f.Add_Shown({[System.Windows.Forms.InputLanguage]::CurrentInputLanguage=[System.Windows.Forms.InputLanguage]::FromCulture([System.Globalization.CultureInfo]::GetCultureInfo('en-US')); $f.Activate(); $t.Focus(); " +
+                "$f.Text='MyCapture external input measurement; focused='+$t.Focused+'; ime='+$t.ImeMode+'; language='+[System.Windows.Forms.InputLanguage]::CurrentInputLanguage.Culture.Name+'; layout='+[System.Windows.Forms.InputLanguage]::CurrentInputLanguage.LayoutName+'; capsLock='+[System.Windows.Forms.Control]::IsKeyLocked([System.Windows.Forms.Keys]::CapsLock)+' ready'; Write-InputTrace ('Shown; '+$f.Text)}); " +
                 "[System.Windows.Forms.Application]::Run($f)");
             Process process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start external input fixture.");
             try
