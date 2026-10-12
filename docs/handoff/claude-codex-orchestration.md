@@ -54,6 +54,12 @@
 - 텍스트10만/100만 자·긴 한 줄/다수 줄, 대량 라이브러리·검색·선택, 4K/8K 이미지·다수 주석·초안, 영역 선택의 입력 폭주를 단계별로 조사합니다. 내용 정확성·저장/복구·기존 UX를 유지하며 같은 조건의 전후 시간·할당·메모리·응답성으로 검증합니다.
 - 기존 작업 사본3개를 재사용합니다: a491의 `perf/stress-text`, aeae의 `perf/stress-library`, edit-recovery의 `perf/stress-editor`. root는 선택 화면 측정·실행 슬롯·통합·독립 검토를 담당합니다. 부하 측정은 직렬로 실행하며 각 owned 프로세스에 timeout·메모리 상한을 적용합니다. 실제 사용자 프로필·클립보드·앱은 조작하지 않습니다.
 - 기존 WebGPT 터널 및 Antigravity 검증 실패, 공식 native provider 확인 근거를 재사용했습니다. 제품의 Store 배포는 이번 요청 범위에 포함하지 않습니다. 실제 명령·측정 원본·실패와 개선 결과는 `artifacts/extreme-load-20261012/` 및 각 작업자의 개발 LOG에 보존합니다.
+- 대량 검색 `6a29df9`를 root `0a697d8`로 통합했습니다. 동일 .NET10.0.11, OCR16,384자/항목의1만 항목·8연속검색3회 중앙값209.55→166.72ms, 제목 검색14.63→2.45ms입니다. 실제 GalleryWindow 검색 handler 합계도329.19→272.98ms였으나 전체 창 시험 시간은8.93→9.39초로 화면 갱신 개선은 미확정입니다. worker Core41/App69 집중 검사 PASS, root 전체 검증은 통합 후 수행합니다.
+- 텍스트 진단에서 live TextBox가70,061DIP 높이로 늘어나는 것을 확인했습니다. 입력 viewport만454DIP로 제한한 비교에서10만 자 다수 줄 배치3547→365ms, 누적 할당3.16GB→22.1MB, 전체 글자·문서Rect·undo 동일입니다. 제품 반영과 scrollbar 폭/resize 회귀 검사를 진행합니다. 기존 `scroll-end` 측정에는 전체 선택의 지연된 렌더링이 포함되어 있어 순수 스크롤 지연과 분리합니다.
+- 영역 선택은 독립 입력 producer로240배치×32=7,680입력/단계를 전달해 마지막 포인터 렌더 일치를 확인했습니다. hover/drag UI 전달 대기P95는0.298/0.145ms, 입력 handler P95는0.0055/0.0035ms입니다. 이전60/120feedback 관측은 Rendering callback 안에서 입력을 주입하던 측정의 결합이었으며, 새 검사에서는 약240회 갱신됐습니다. 물리 화면 표시/DWM 지연은 이 수치의 범위 밖입니다. 4K/8K 전체 software raster도 측정했고 root는 이 근거로 overlay 제품 코드를 변경하지 않았습니다.
+- dense ink 수정 `a2e3d60`을 root `1330fac`로 통합했습니다. 4K/8K × 주석1천/1만 개와펜10만좌표의 같은 viewport 렌더3회 중앙값은228→125,341→219,205→103,277→190ms입니다. 첫그림 pixel SHA가4조건 모두같고 원본·초안·undo·복구내용을 보존했습니다. 1천주석 렌더당누적할당32.8→5.2MB. 독립소스검토와 pixel oracle8개 PASS. 전체프로세스 메모리·모든 heartbeat·저장시간 개선으로 해석하지 않습니다.
+- 100만 자에서 더 큰 실패를 확인했습니다. 원본 긴한줄은 actual PID58812/WPF IME TextBoxView FailFast(0x80131623), 제한된viewport 수정본은전체기능27.53초 PASS입니다. 다수줄 원본은첫layout에서60초guard, 수정본은첫layout4.76초를완료했으나 편집burst후전체선택settle에서60초guard가남았습니다. 순수scroll은3–10ms이며 텍스트배치/선택비용과구분합니다. 내부viewport·편집settle·공개WPF compatibility경로를artifact에서만조사중입니다.
+- 압축이어려운8K이미지의약113MB PNG 초안에서도원본/복구/viewport pixel SHA가같고저장은성공했습니다. 양쪽제품에서동시편집중약2초UIstall이남아 frozen image를공유하는PNG encoder/render 경계를추가조사합니다. 재현도구 `build/tools/OverlayStressProbe`는 `b3878e2`로보존했으며새경로build/실제7,680입력 smoke1c3e69 exit0도완료했습니다.
 
 ### 다음 버전 기본 동작 보강 — 구현·검증 완료, 드래그 지연 변동은 후속 조사 필요
 
@@ -365,6 +371,10 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 최종 QA11 전체 App session65745/d132df exit0(2327 PASS/0 FAIL/11 조건부 skip), UX session61639/a91861 exit0·RESULT PASS와 생성 PNG를 확인했습니다. Core1092/1092·별도 native Shell4/4 PASS 및 최종 산출물277파일·263 dependency 누락0을 독립 재확인했습니다. 실제 메뉴 복원·빈 목록·Esc·바깥 클릭·보호된 정상 종료 session60154/93add4 exit0, 이미지/주석4파일 SHA·원본 file ID 보존을 확인했습니다. meta.json 전체동일 검사6b3088 exit1은 보관 기간 재시작의 정상 갱신2필드를 구분하지 않은 것으로4a1d5f/390f70 exit0 및 독립 검토로 대조했습니다. root에서 Explorer `/select,`로 최종 `artifacts/qa11-product-readiness/MyCapture.exe` 위치를 열고 실제 선택 화면을 확인했습니다(af9983 exit0). 제품 소스2fc7fa4 및4.1.1 개발 버전 표시 유지, Store 재배포·사용자 앱 종료·파일 정리 없음. 드래그 callback 지연 변동은 미해결로 유지하며 실제 명령·cwd·종료·근거는 `artifacts/next-product-readiness/development-log.txt`와 raw receipt/TRX에 보존합니다.
 
 - 2026-10-12 Codex: 사용자 최악·과부하 성능 시험·개선 요청 착수. root/common-dir/remote와 clean73e0293 확인286fd1 exit0, 사용자MyCapture 프로세스 없음. `git switch -c perf/extreme-load` PASS45d8e9 exit0. CPU Ryzen7 9800X3D/16logical, RAM 약61.6GiB/가용30.4GiB를 확인했습니다. 기존 worker3개에 파일 소유권·동일baseline·실행직렬화·owned프로세스bounded조건·휴지통골든룰을 전달하고 기존worktree재사용을 배정했습니다. 이 단계는 준비이며 과부하 결과는 아직 없습니다.
+
+- 2026-10-12 Codex: 대량 검색 준비 matcher와 boolean short-circuit `6a29df9`를 직접 diff/test 검토6c7019 뒤 root `0a697d8`로 cherry-pick PASS98db91 exit0. worker 동일10.0.11 CPU baseline/after bdbfbe/4718cb exit0, 실제 GalleryWindow b31053/bc260d exit0, Core41/App69 PASS77a745/b2f7e6. root overlay 독립 producer/raster harness build3c807a exit0,4조건 session25897/58adad exit0, 원본/receipt와해석677313을 `artifacts/extreme-load-20261012/`에 보존했습니다. text/ink 수정·전체통합검사는 진행 중입니다.
+
+- 2026-10-12 Codex: 잉크source/8pixeltests/4pair측정·독립검토를확인하고 `a2e3d60`→`1330fac` cherry-pick PASS4f0d1c exit0. 8K entropy초안2조건 worker36ea8a/1a1af2 exit0,113,458,630B blob·원본/복구SHA동일이나공유WIC/PNG동시렌더2초stall가설추가조사중입니다. 재현overlay도구 `b3878e2` build+nativeburst1c3e69 exit0(ownedPID59524정상종료),10.0.11·240배치/7,680입력/최종포인터PASS를1498b8로확인했습니다. 1m텍스트원본FailFast와before/after각guard를서로구분해LOG에보존하고불완전한case를PASS로처리하지않습니다.
 
 ## 9. 인계 체크리스트
 
