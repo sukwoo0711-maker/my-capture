@@ -79,3 +79,13 @@ F1 직접 TextBlock/WrapPanel 구조와 keycaps automation name을 유지합니�
 - `python artifacts/feature-tutorial-ui/repair-localization.py`: chunk `316102`, exit 0. 새 Tutorial.* 한국어 128개에 실제 U+AC00–D7A3 한글 포함, ASCII `?`/U+FFFD 없음, 영문 새 값 `?` 없음과 U+00B7 구분점 확인 PASS.
 - `Get-Content -Encoding UTF8 artifacts/feature-tutorial-ui/korean-values.txt; git diff --check; git diff --stat`: chunk `dcba5b`, exit 0. 128개 실제 value 전체를 읽어 문구를 검토했습니다. 값 목록과 repair script를 보존했습니다. 신규 테스트는 한국어 각 step 및 미지정 안내의 실제 한글/물음표 부재와 기능 선택·단축키 레이블, 카테고리 구분점도 검사합니다.
 - 후속 소스 커밋 시점의 인코딩 복원 후 빌드/집중 검사: NOT RUN, exit N/A. 총괄이 승인한 짧은 슬롯에서 재실행한 결과를 이어서 기록합니다.
+
+후속 source commit `8d0ab86`은 chunk `a0ca5e`, exit 0입니다. 이후 총괄이 배정한 슬롯에서 다음을 실제 실행했습니다. 이 세 검사가 최종 source와 한국어 인코딩 회귀를 포함합니다.
+
+| 상태 | 실제 명령 | exit code | 결과·근거 |
+| --- | --- | --- | --- |
+| PASS | `dotnet build MyCapture.slnx -c Debug -v q -nologo` | 0 | chunk `14af1c`, 경고 0/오류 0 |
+| PASS | `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --filter 'FullyQualifiedName~FeatureTutorialTests\|FullyQualifiedName~TextCopyTutorialTests\|FullyQualifiedName~ShortcutHelp\|FullyQualifiedName~TextCaptureFlowTests\|FullyQualifiedName~TextCaptureSettings_WindowDetectColorFormatAndHotkeyApplyThroughTheWindow\|FullyQualifiedName~GifSampleAnimationTests' --logger 'trx;LogFileName=feature-tutorial-focused-utf8-final.trx' --results-directory artifacts/feature-tutorial-ui -v minimal` | 0 | chunk `f82f7d`, 39 PASS/0 FAIL/0 skip |
+| PASS | `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --filter 'FullyQualifiedName~LocalizationTests' --logger 'trx;LogFileName=feature-tutorial-localization-utf8-final.trx' --results-directory artifacts/feature-tutorial-ui -v minimal` | 0 | chunk `4bf063`, 13 PASS/0 FAIL/0 skip |
+
+검증 종료 후 CPU 슬롯을 총괄에게 반환했습니다. 변경된 UI 소스 외에 추가 실행이나 파일 정리를 수행하지 않았습니다. 전체 App/Core/실제 GIF/native 및 시각 비교는 총괄의 통합 검증에서 수행합니다.
