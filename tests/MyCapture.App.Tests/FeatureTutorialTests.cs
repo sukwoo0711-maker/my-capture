@@ -442,8 +442,8 @@ public sealed class FeatureTutorialTests
     });
 
     /// <summary>
-    /// The shipped build carries both languages' video for every feature and no GIF: the lead adds
-    /// the MP4 files and their copy glob; until then this fails by design.
+    /// The shipped build carries both languages' video for every feature and no GIF
+    /// (Assets\Tutorials\*.mp4 is copied to the output by MyCapture.App.csproj).
     /// </summary>
     [Fact]
     public void EveryFeatureShipsANonEmptyKoreanAndEnglishVideoAndNoGif()

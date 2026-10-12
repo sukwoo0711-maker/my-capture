@@ -685,13 +685,13 @@ internal sealed class CaptureScene : TutorialScene
             },
             "capture-fullscreen" => s switch
             {
-                "desktop" or "tray-move" or "tray-click" => (L("트레이 아이콘을 클릭", "Click the tray icon"), ""),
+                "desktop" or "tray-move" or "tray-click" => (L("알림 영역의 MyCapture 아이콘을 오른쪽 클릭", "Right-click the MyCapture icon in the notification area"), ""),
                 "tray" or "to-more" or "submenu" or "to-command" or "command" => (L("다른 캡처 › 전체 화면 캡처 선택", "More captures › Full-screen capture"), ""),
                 _ => (L("해당 모니터의 전체 화면 캡처 결과 확인", "Review the full-screen capture of that monitor"), ""),
             },
             "capture-delay" => s switch
             {
-                "desktop" or "tray-move" or "tray-click" => (L("트레이 아이콘을 클릭", "Click the tray icon"), ""),
+                "desktop" or "tray-move" or "tray-click" => (L("알림 영역의 MyCapture 아이콘을 오른쪽 클릭", "Right-click the MyCapture icon in the notification area"), ""),
                 "tray" or "to-more" or "submenu" or "to-command" or "command" => (L("다른 캡처 › 지연 캡처 선택", "More captures › Delayed capture"), ""),
                 "countdown-3" or "countdown-2" or "countdown-1" => (L("대기 시간 동안 캡처할 화면 준비", "Prepare the screen during the countdown"), ""),
                 "overlay" or "approach" or "drag" or "selected" => (L("선택 화면이 나타나면 영역을 드래그", "When the selector appears, drag the area"), ""),
