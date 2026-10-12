@@ -811,7 +811,7 @@ internal sealed partial class GalleryWindow : Window
         e.Handled = true;
     }
 
-    private void OnMoreCommandsClick(object sender, RoutedEventArgs e)
+    private async void OnMoreCommandsClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { ContextMenu: { } menu } button)
         {
@@ -819,6 +819,7 @@ internal sealed partial class GalleryWindow : Window
             menu.Placement = PlacementMode.Bottom;
             menu.IsOpen = true;
             e.Handled = true;
+            await PopulateDeletedCapturesAsync();
         }
     }
 
@@ -889,7 +890,7 @@ internal sealed partial class GalleryWindow : Window
     /// <summary>Which <see cref="MyCapture.App.Themes.FeedbackTiming"/> kind a status line follows.</summary>
     internal static MyCapture.App.Themes.FeedbackKind ClassifyActionStatus(string text)
     {
-        if (ActionRequiredStatusKeys.Any(key => text == UiText.Get(key))
+        if (text == UiText.Get("LibraryRecovery_Failed") || ActionRequiredStatusKeys.Any(key => text == UiText.Get(key))
             || text.StartsWith(UiText.Get("Folder410.ExportFailed"), StringComparison.Ordinal))
         {
             return MyCapture.App.Themes.FeedbackKind.ActionRequired;

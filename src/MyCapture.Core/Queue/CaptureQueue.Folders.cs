@@ -195,7 +195,7 @@ public sealed partial class CaptureQueue
             foreach (Guid id in requested)
             {
                 CaptureRecord? record = Find(id);
-                if (record is null || record.FolderId == folderId) continue;
+                if (record is null || IsRemovalPending(id) || record.FolderId == folderId) continue;
                 if (folder is null) ClearFolderAssignment(record);
                 else AssignToFolder(record, folder);
                 moved++;

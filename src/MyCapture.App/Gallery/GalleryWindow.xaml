@@ -1486,6 +1486,8 @@
                           Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                     <Button.ContextMenu>
                         <ContextMenu>
+                            <MenuItem x:Name="RestoreDeletedMenu" Header="{loc:Text LibraryRecovery_Recent}" />
+                            <Separator />
                             <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
                                       Foreground="{DynamicResource State.DangerHover}" />
                         </ContextMenu>

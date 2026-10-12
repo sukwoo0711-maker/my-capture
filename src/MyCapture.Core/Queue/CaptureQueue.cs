@@ -125,6 +125,7 @@ public sealed partial class CaptureQueue
     {
         lock (_evictionLeaseGate)
         {
+            if (_removalReservations.Contains(id)) throw new IOException("The capture is being moved to the Recycle Bin.");
             _evictionLeaseCounts.TryGetValue(id, out int count);
             _evictionLeaseCounts[id] = checked(count + 1);
         }
@@ -167,8 +168,18 @@ public sealed partial class CaptureQueue
                              && !record.IsPinned && record.FolderId is null && !IsEvictionLeased(record.Id))
             .OrderBy(record => record.RetentionReference)
             .ToArray();
+        if (PrepareRemoval is not null && ScheduleAutomaticRemoval is not null)
+        {
+            if (expired.Length > 0) ScheduleAutomaticRemoval(expired.Select(record => record.Id).ToArray(), "retention-age");
+            return 0; // The asynchronous transaction publishes its actual completed count.
+        }
         foreach (CaptureRecord record in expired)
         {
+            if (PrepareRemoval is not null)
+            {
+                TryRemoveRecoverably(record, "retention-age");
+                continue;
+            }
             _records.Remove(record);
             _totalBytes = Math.Max(0, _totalBytes - record.TotalBytes);
             Evicted?.Invoke(this, new CaptureEvictedEventArgs(record, "retention-age"));
@@ -179,7 +190,7 @@ public sealed partial class CaptureQueue
             UpdatePinPressureFlag();
             Save();
         }
-        return expired.Length;
+        return expired.Count(record => Find(record.Id) is null);
     }
 
     /// <summary>
@@ -299,6 +310,8 @@ public sealed partial class CaptureQueue
             return false;
         }
 
+        if (PrepareRemoval is not null) return TryRemoveRecoverably(record, "manual");
+
         _records.Remove(record);
         _totalBytes -= record.TotalBytes;
         if (_totalBytes < 0)
@@ -320,6 +333,8 @@ public sealed partial class CaptureQueue
     public async Task<CaptureBatchRemovalResult> RemoveManyAsync(IEnumerable<Guid> ids, Func<Guid, bool>? canRemove = null,
         CancellationToken cancellationToken = default)
     {
+        if (PrepareRemoval is not null)
+            return await RemoveManyRecoverablyAsync(ids, canRemove, cancellationToken);
         Guid[] requested = ids.Distinct().ToArray();
         using CaptureWriteReservation reservation = await ReservePublicationAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
@@ -400,6 +415,7 @@ public sealed partial class CaptureQueue
 
     public bool TogglePin(Guid id)
     {
+        if (IsRemovalPending(id)) throw new IOException("The capture is being moved to the Recycle Bin.");
         CaptureRecord? record = Find(id);
         if (record is null)
         {
@@ -656,16 +672,36 @@ public sealed partial class CaptureQueue
 
     private void EnforceLimits()
     {
+        if (_automaticLeaseReleaseDepth > 0) return;
         if (Volatile.Read(ref _evictionSuspensionCount) > 0)
         {
             return;
         }
 
+        if (PrepareRemoval is not null && ScheduleAutomaticRemoval is not null)
+        {
+            var excluded = new HashSet<Guid>();
+            long bytes = HistoryBytes;
+            int count = HistoryCount;
+            while ((count > _limits.MaxItems || bytes > _limits.MaxBytes) && excluded.Count < 10_000)
+            {
+                CaptureRecord? candidate = FindOldestUnpinned(excluded);
+                if (candidate is null) break;
+                excluded.Add(candidate.Id);
+                count--;
+                bytes = Math.Max(0, bytes - candidate.TotalBytes);
+            }
+            if (excluded.Count > 0) ScheduleAutomaticRemoval(excluded.ToArray(), "capacity");
+            UpdatePinPressureFlag();
+            return;
+        }
+
         // Walk from the oldest end, skipping pinned records.
         int guard = 0;
+        var failed = new HashSet<Guid>();
         while (IsOverCapacity() && guard++ < 10_000)
         {
-            CaptureRecord? victim = FindOldestUnpinned();
+            CaptureRecord? victim = FindOldestUnpinned(failed);
             if (victim is null)
             {
                 // Everything remaining is pinned. Stop rather than violating an
@@ -674,6 +710,12 @@ public sealed partial class CaptureQueue
             }
 
             string reason = HistoryCount > _limits.MaxItems ? "item-limit" : "byte-limit";
+
+            if (PrepareRemoval is not null)
+            {
+                if (!TryRemoveRecoverably(victim, reason)) failed.Add(victim.Id);
+                continue;
+            }
 
             _records.Remove(victim);
             _totalBytes -= victim.TotalBytes;
@@ -734,7 +776,7 @@ public sealed partial class CaptureQueue
     private static long SaturatingAdd(long left, long right) =>
         left > long.MaxValue - Math.Max(0, right) ? long.MaxValue : left + Math.Max(0, right);
 
-    private CaptureRecord? FindOldestUnpinned()
+    private CaptureRecord? FindOldestUnpinned(HashSet<Guid>? excluded = null)
     {
         var candidates = new List<CaptureRecord>();
         CaptureRecord? soleUnpinned = null;
@@ -748,7 +790,7 @@ public sealed partial class CaptureQueue
 
             unpinnedCount++;
             soleUnpinned = record;
-            if (!IsEvictionLeased(record.Id))
+            if (!IsEvictionLeased(record.Id) && !(excluded?.Contains(record.Id) ?? false))
             {
                 candidates.Add(record);
             }
