@@ -3599,6 +3599,12 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LegacyImport.FailedDetail" xml:space="preserve"><value>Could not import existing data. {0}</value></data>
   <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>Settings loaded · Choose Apply to save them.</value></data>
   <data name="LegacyImport.SettingsFailed" xml:space="preserve"><value>The library was imported, but settings could not be loaded. {0}</value></data>
+  <data name="LegacyImport.OverlappingRoots" xml:space="preserve"><value>Choose an existing data folder separate from the current storage location.</value></data>
+  <data name="LegacyImport.TargetChanged" xml:space="preserve"><value>The current library changed. Try importing again.</value></data>
+  <data name="LegacyImport.RecoveryRequired" xml:space="preserve"><value>Data recovery is required. Choose Retry recovery to continue.</value></data>
+  <data name="LegacyImport.RetryRecovery" xml:space="preserve"><value>Retry recovery</value></data>
+  <data name="LegacyImport.Recovered" xml:space="preserve"><value>Data recovery completed. Import again to check the result.</value></data>
+  <data name="LegacyImport.HistoryFolder" xml:space="preserve"><value>Previous MyCapture</value></data>
   <data name="Support_Heading" xml:space="preserve"><value>Report a problem</value></data>
   <data name="Support_Report" xml:space="preserve"><value>Open issue page</value></data>
   <data name="Support_Preview" xml:space="preserve"><value>Preview diagnostics</value></data>
