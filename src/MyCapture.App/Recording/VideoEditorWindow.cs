@@ -44,7 +44,7 @@ namespace MyCapture.App.Recording;
 /// (Shift = 10); otherwise they move a normal-editor "coarse" step.
 /// </para>
 /// </remarks>
-internal sealed class VideoEditorWindow : Window
+internal sealed partial class VideoEditorWindow : Window
 {
     private readonly Dictionary<string, Action> _shortcutActions = [];
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _shortcutActions;
@@ -219,7 +219,7 @@ internal sealed class VideoEditorWindow : Window
             else if (_overlayList is not null) { _overlayList.SelectedItem = null; }
         };
         _layerCanvas.InteractionStarted += (_, _) => BeginLayerInteraction();
-        _layerCanvas.BoundsChanged += (_, _) => _overlayPreview.InvalidateVisual();
+        _layerCanvas.BoundsChanged += (_, _) => { _overlayPreview.InvalidateVisual(); _draftSession?.Changed(); };
         _layerCanvas.InteractionCompleted += (_, _) => CompleteLayerInteraction();
         _layerCanvas.LayerActivated += (_, _) => EditSelectedOverlay();
         _previewEngine = new MediaElementPreviewEngine(_media);
@@ -333,6 +333,7 @@ internal sealed class VideoEditorWindow : Window
             () => _mediaReady && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase,
             HandleShortcut);
         Closing += OnClosingInternal;
+        InitializeDraftRecovery();
         Loaded += OnLoadedInternal;
         Closed += OnClosedInternal;
         IsVisibleChanged += (_, _) => { if (!IsVisible) { PausePlayback(); } };
@@ -416,8 +417,8 @@ internal sealed class VideoEditorWindow : Window
     internal bool HasUnsavedEditsForTest => HasUnsavedEdits();
 
     private bool HasUnsavedEdits() =>
-        _mediaReady && !_committed && _initialDocument is not null
-        && !DocumentsEquivalent(_initialDocument, BuildCurrentDocument());
+        !_committed && (_recoveredDraft || (_mediaReady && _initialDocument is not null
+        && !DocumentsEquivalent(_initialDocument, BuildCurrentDocument())));
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -1735,6 +1736,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void RememberEdit(VideoEditDocument? before = null)
     {
+        _draftSession?.Changed();
         _undo.Add(before ?? _editDocument.Clone());
         if (_undo.Count > 50) { _undo.RemoveAt(0); }
         _redo.Clear();
@@ -1754,6 +1756,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnTrimChanged()
     {
+        _draftSession?.Changed();
         if (_syncingTrim) return;
         bool changed = _editDocument.TrimInMs != _timeline.InMs || _editDocument.TrimOutMs != _timeline.OutMs;
         if (changed && _trimInteractionBefore is null) RememberEdit();
@@ -1819,6 +1822,7 @@ internal sealed class VideoEditorWindow : Window
         RefreshOverlayList(selected);
         RefreshTextPreview();
         UpdateStatusForMode();
+        _draftSession?.Changed();
     }
 
     private bool CanAddGraphic() => _mediaReady && !_operationRunning
@@ -2014,6 +2018,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnLayerTimingChanged(object? sender, EventArgs e)
     {
+        _draftSession?.Changed();
         _overlayPreview.SetOverlays(_editDocument.TextOverlays);
         _overlayPreview.SetFrameLayers(_editDocument.FrameEditLayers);
         _overlayPreview.SetSourceTime(CurrentMs());
@@ -2445,8 +2450,9 @@ internal sealed class VideoEditorWindow : Window
 
         if (!TryValidateLayerResources(_editDocument.FrameEditLayers)) { return; }
         VideoEditDocument document = BuildCurrentDocument();
-        if (_initialDocument is not null && DocumentsEquivalent(_initialDocument, document))
+        if (!_recoveredDraft && _initialDocument is not null && DocumentsEquivalent(_initialDocument, document))
         {
+            if (!await RetireDraftBeforeCloseAsync()) return;
             _statusLabel.Text = UiText.Get("Text_2D8B0244F4F4");
             _committed = true;
             Close();
@@ -2493,6 +2499,7 @@ internal sealed class VideoEditorWindow : Window
                 await VideoCommitHandler(document, outputPath, cancellationToken);
             }
 
+            if (!await RetireDraftBeforeCloseAsync()) return;
             _editDocument = document;
             _statusLabel.Text = UiText.Format("Text_0DA5C524F6BB", emitted);
             _committed = true;
@@ -2634,7 +2641,7 @@ internal sealed class VideoEditorWindow : Window
 
             if (File.Exists(fullPath))
             {
-                File.Delete(fullPath);
+                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(fullPath);
             }
         }
         catch (IOException)
@@ -2799,6 +2806,14 @@ internal sealed class VideoEditorWindow : Window
                 CommitTrim();
                 return;
             }
+            e.Cancel = true;
+            _ = Dispatcher.BeginInvoke(new Action(async () =>
+            {
+                if (!await RetireDraftBeforeCloseAsync()) return;
+                _discardedDraft = true;
+                Close();
+            }));
+            return;
         }
 
         if (!_operationRunning || _committed)
@@ -2831,6 +2846,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnClosedInternal(object? sender, EventArgs e)
     {
+        FinishDraftRecovery();
         _closing = true;
         CancellationTokenSource? operation = Interlocked.Exchange(ref _operationCts, null);
         try

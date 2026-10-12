@@ -104,6 +104,22 @@ internal sealed class RegionRecordingCoordinator
     // Starting a new still and protecting a window during a stop transition are different decisions.
     internal bool RequiresCaptureExclusion => _controls?.IsRecording == true;
 
+    /// <summary>Finish a recording before app exit; do not dispose an unfinished encoder.</summary>
+    internal async Task<bool> PrepareForAppExitAsync()
+    {
+        _dispatcher.VerifyAccess();
+        CancelRegionSelection();
+        if (_controls is { IsRecording: true } running)
+        {
+            _finishing = true;
+            running.RequestStop();
+        }
+        DateTime deadline = DateTime.UtcNow.AddSeconds(60);
+        while ((_finishing || _completionInProgress || _controls is not null) && DateTime.UtcNow < deadline)
+            await Task.Delay(50);
+        return !_finishing && !_completionInProgress && _controls is null;
+    }
+
     internal bool IsActive =>
         _selectionPreparation is not null
         || _selectionOverlay is not null

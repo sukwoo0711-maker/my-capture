@@ -49,7 +49,7 @@ namespace MyCapture.App.Editing;
 /// title bar, Alt+F4 or Cancel asks before dropping unsaved edits.
 /// </para>
 /// </remarks>
-internal sealed class AnnotationEditorControl : Grid
+internal sealed partial class AnnotationEditorControl : Grid
 {
     private EditorTool _preferredTool = EditorTool.Rectangle;
     private bool _preferencesReady;
@@ -366,6 +366,7 @@ internal sealed class AnnotationEditorControl : Grid
     internal bool IsPointerCaptured => _viewport.IsMouseCaptured;
 
     internal bool IsCommitInProgress => _commitInProgress && !_completed;
+    internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress;
 
     internal bool CapturePointer() => _viewport.CaptureMouse();
 
@@ -508,6 +509,7 @@ internal sealed class AnnotationEditorControl : Grid
         if (crop.Region.Width < 2 || crop.Region.Height < 2) { SetStatus(UiText.Get("Crop.TooSmall")); return; }
         RectD region = crop.Region;
         _crop = null; _surface.PendingCrop = null;
+        DraftChanged?.Invoke(this, EventArgs.Empty);
         ReleasePointer();
         ApplyCrop(region);
         SelectTool(EditorTool.Select);
@@ -523,6 +525,7 @@ internal sealed class AnnotationEditorControl : Grid
     }
     private void RefreshCrop()
     {
+        DraftChanged?.Invoke(this, EventArgs.Empty);
         _surface.PendingCrop = _crop;
         _surface.InvalidateVisual();
         UpdateCommandMode();
@@ -1078,6 +1081,7 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
     {
+        DraftChanged?.Invoke(this, EventArgs.Empty);
         if (sender is TextBox box)
         {
             LayoutLiveTextBox(box);
@@ -2597,6 +2601,7 @@ internal sealed class AnnotationEditorControl : Grid
     private void OnHistoryChanged()
     {
         _documentRevision++;
+        DraftChanged?.Invoke(this, EventArgs.Empty);
         _autoTrimCts?.Cancel();
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncBaseBitmapWithDocument();

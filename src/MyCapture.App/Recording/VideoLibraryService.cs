@@ -1580,7 +1580,7 @@ internal sealed class VideoLibraryService
 
             if (File.Exists(path))
             {
-                File.Delete(path);
+                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(Path.GetFullPath(path));
             }
 
             return !PathExists(path);
@@ -1601,7 +1601,7 @@ internal sealed class VideoLibraryService
         {
             if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
             {
-                Directory.Delete(directory);
+                _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleDirectory(Path.GetFullPath(directory));
             }
         }
         catch (IOException)

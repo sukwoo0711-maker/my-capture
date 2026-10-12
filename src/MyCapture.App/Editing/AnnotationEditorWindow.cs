@@ -17,7 +17,7 @@ namespace MyCapture.App.Editing;
 /// <summary>
 /// Resizable, taskbar-visible editor host used after capture selection and for gallery re-edit.
 /// </summary>
-internal class AnnotationEditorWindow : Window
+internal partial class AnnotationEditorWindow : Window
 {
     private readonly AnnotationEditorControl _editor;
     private bool _committed;
@@ -77,12 +77,18 @@ internal class AnnotationEditorWindow : Window
         Content = _editor;
 
         ContentRendered += OnContentRendered;
+        InitializeDraftRecovery();
     }
 
     internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested
     {
         get => _editor.CommitRequested;
-        set => _editor.CommitRequested = value;
+        set => _editor.CommitRequested = value is null ? null : async result =>
+        {
+            bool saved = await value(result);
+            if (!saved || result.Action == EditorCommitAction.CopyToClipboard) return saved;
+            return await RetireDraftBeforeCloseAsync();
+        };
     }
 
     internal event EventHandler<AnnotationEditingResult>? Committed;
@@ -138,14 +144,14 @@ internal class AnnotationEditorWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (_editor.IsCommitInProgress)
+        if (_editor.IsEditingOperationInProgress || _retiringDraft)
         {
             e.Cancel = true;
             _closeAsked = false;
             return;
         }
 
-        bool ask = _closeAsked && !_committed && _editor.HasUnsavedChanges;
+        bool ask = _closeAsked && !_committed && (_editor.HasUnsavedChanges || _recoveredDraft);
         _closeAsked = false;
         if (ask)
         {
@@ -160,7 +166,14 @@ internal class AnnotationEditorWindow : Window
                     _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, _editor.SaveAndClose);
                     return;
                 case EditorCloseChoice.DontSave:
-                    break;
+                    e.Cancel = true;
+                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(async () =>
+                    {
+                        if (!await RetireDraftBeforeCloseAsync()) return;
+                        _discardedDraft = true;
+                        Close();
+                    }));
+                    return;
                 default:
                     e.Cancel = true;
                     _ = _editor.Focus();
@@ -200,6 +213,7 @@ internal class AnnotationEditorWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        FinishDraftRecovery();
         _editor.EditingCompleted -= OnEditingCompleted;
         _editor.CloseRequested -= OnCloseRequested;
         ContentRendered -= OnContentRendered;

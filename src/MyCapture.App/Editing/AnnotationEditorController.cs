@@ -262,6 +262,12 @@ internal sealed class AnnotationEditorController
     /// <summary>How far the live canvas origin sits from the base bitmap at the current orientation, in pixels.</summary>
     internal PointD CropOrigin { get; private set; }
 
+    internal void RestoreDraftGeometry(int rotationTurns, PointD cropOrigin)
+    {
+        RotationTurns = ((rotationTurns % 4) + 4) % 4;
+        CropOrigin = cropOrigin;
+    }
+
     /// <summary>Rotates the annotation document in place as one reversible command.</summary>
     private sealed class DocumentCropCommand : IUndoableCommand
     {

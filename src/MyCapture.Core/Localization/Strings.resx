@@ -3772,6 +3772,14 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorFlow_CloseMessage" xml:space="preserve"><value>저장하지 않으면 이번에 편집한 내용이 사라집니다.</value></data>
   <data name="EditorFlow_SaveAndClose" xml:space="preserve"><value>저장하고 닫기</value></data>
   <data name="EditorFlow_DontSave" xml:space="preserve"><value>저장 안 함</value></data>
+  <data name="EditRecovery_Title" xml:space="preserve"><value>편집 초안 복구</value></data>
+  <data name="EditRecovery_Message" xml:space="preserve"><value>지난번 저장하지 못한 편집 내용을 복구하시겠습니까?</value></data>
+  <data name="EditRecovery_Restore" xml:space="preserve"><value>복구</value></data>
+  <data name="EditRecovery_Discard" xml:space="preserve"><value>초안 버리기</value></data>
+  <data name="EditRecovery_SaveFailed" xml:space="preserve"><value>편집 초안을 저장하지 못했습니다. 편집 내용을 파일로 저장하십시오.</value></data>
+  <data name="EditRecovery_OpenFailed" xml:space="preserve"><value>편집 초안을 열지 못했습니다.</value></data>
+  <data name="EditRecovery_RecordingTitle" xml:space="preserve"><value>녹화 완료 확인</value></data>
+  <data name="EditRecovery_RecordingMessage" xml:space="preserve"><value>녹화를 완료한 뒤 종료 또는 업데이트 준비를 진행하시겠습니까?</value></data>
   <data name="Onboard_TryNow" xml:space="preserve"><value>지금 해 보기</value></data>
   <data name="Onboard_TryNowHelp" xml:space="preserve"><value>이 창을 닫고 영역 캡처를 시작합니다.</value></data>
   <data name="Onboard_StepsName" xml:space="preserve"><value>시작 안내</value></data>

@@ -3772,6 +3772,14 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="EditorFlow_CloseMessage" xml:space="preserve"><value>If you don't save, the edits you made will be lost.</value></data>
   <data name="EditorFlow_SaveAndClose" xml:space="preserve"><value>Save and close</value></data>
   <data name="EditorFlow_DontSave" xml:space="preserve"><value>Don't save</value></data>
+  <data name="EditRecovery_Title" xml:space="preserve"><value>Recover editing draft</value></data>
+  <data name="EditRecovery_Message" xml:space="preserve"><value>Recover the edits that were not saved last time?</value></data>
+  <data name="EditRecovery_Restore" xml:space="preserve"><value>Recover</value></data>
+  <data name="EditRecovery_Discard" xml:space="preserve"><value>Discard draft</value></data>
+  <data name="EditRecovery_SaveFailed" xml:space="preserve"><value>The editing draft could not be saved. Save your edits to a file.</value></data>
+  <data name="EditRecovery_OpenFailed" xml:space="preserve"><value>The editing draft could not be opened.</value></data>
+  <data name="EditRecovery_RecordingTitle" xml:space="preserve"><value>Finish recording</value></data>
+  <data name="EditRecovery_RecordingMessage" xml:space="preserve"><value>Finish recording before preparing to exit or update?</value></data>
   <data name="Onboard_TryNow" xml:space="preserve"><value>Try it now</value></data>
   <data name="Onboard_TryNowHelp" xml:space="preserve"><value>Closes this window and starts a region capture.</value></data>
   <data name="Onboard_StepsName" xml:space="preserve"><value>Getting started</value></data>

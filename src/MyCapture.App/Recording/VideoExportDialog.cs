@@ -891,7 +891,7 @@ internal sealed class VideoExportDialog : Window
 
     private static void TryDelete(string path)
     {
-        try { if (File.Exists(path)) File.Delete(path); }
+        try { if (File.Exists(path)) _ = new MyCapture.Platform.Shell.WindowsRecycleBin().RecycleFile(Path.GetFullPath(path)); }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }
