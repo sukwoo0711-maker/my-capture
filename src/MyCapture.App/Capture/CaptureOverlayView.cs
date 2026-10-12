@@ -90,6 +90,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private readonly DrawingVisual _desktopVisual = new();
     private readonly DrawingVisual _dimmerVisual = new();
     private readonly DrawingVisual _revealVisual = new();
+    private bool _dimmerOutsideSelection;
     private readonly DrawingVisual _horizontalGuideVisual = new();
     private readonly DrawingVisual _verticalGuideVisual = new();
     private readonly RectangleGeometry _horizontalGuideClip = new();
@@ -945,6 +946,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 if (_frame?.Bitmap is { } bitmap) dc.DrawImage(bitmap, new Rect(RenderSize));
             using (DrawingContext dc = _dimmerVisual.RenderOpen())
                 dc.DrawRectangle(_dimmerBrush, null, new Rect(RenderSize));
+            _dimmerOutsideSelection = false;
             // Both image visuals share exactly one source; there is no rasterized cache.
             using (DrawingContext dc = _revealVisual.RenderOpen())
                 if (_frame?.Bitmap is { } revealBitmap) dc.DrawImage(revealBitmap, new Rect(RenderSize));
@@ -979,8 +981,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _targetTab = null;
             _targetLabel = null;
             RectD? revealed = _selection ?? hover;
-            _revealVisual.Clip = new RectangleGeometry(revealed is { } selected
-                ? ToDipRect(selected.ClampTo(FrameBounds)) : new Rect(0, 0, 0, 0));
+            UpdateRevealedRegion(revealed);
             using DrawingContext dc = _selectionVisual.RenderOpen();
             if (_selection is { } selection) DrawSelection(dc, selection);
             else if (hover is { } window) DrawDetectedWindow(dc, window, hoverWholeMonitor);
@@ -1028,6 +1029,52 @@ internal sealed class CaptureOverlayView : FrameworkElement
             using DrawingContext dc = _toastVisual.RenderOpen();
             if (_toastMessage is { } message && !_ended) DrawToast(dc, message);
         }
+    }
+
+    private void UpdateRevealedRegion(RectD? revealed)
+    {
+        Rect visible = revealed is { } selected
+            ? ToDipRect(selected.ClampTo(FrameBounds)) : new Rect(0, 0, 0, 0);
+        Rect viewport = new(RenderSize);
+        // Desktop capture is opaque Bgr32. Leave its selected pixels uncovered instead of
+        // painting the same desktop a second time over a full-screen dimmer. Fractional
+        // physical edges retain the original clip composition: antialias coverage at a
+        // corner is not equivalent to independently blended outside rectangles.
+        bool outside = _frame?.Bitmap.Format == PixelFormats.Bgr32
+            && PixelAligned(viewport) && PixelAligned(visible);
+        _revealVisual.Opacity = outside ? 0 : 1;
+        if (outside)
+        {
+            using DrawingContext dc = _dimmerVisual.RenderOpen();
+            if (visible.Width <= 0 || visible.Height <= 0)
+                dc.DrawRectangle(_dimmerBrush, null, viewport);
+            else
+            {
+                Dim(new Rect(0, 0, viewport.Width, visible.Top));
+                Dim(new Rect(0, visible.Bottom, viewport.Width, Math.Max(0, viewport.Height - visible.Bottom)));
+                Dim(new Rect(0, visible.Top, visible.Left, visible.Height));
+                Dim(new Rect(visible.Right, visible.Top, Math.Max(0, viewport.Width - visible.Right), visible.Height));
+            }
+            void Dim(Rect rect)
+            {
+                if (rect.Width > 0 && rect.Height > 0) dc.DrawRectangle(_dimmerBrush, null, rect);
+            }
+        }
+        else
+        {
+            if (_dimmerOutsideSelection)
+            {
+                using DrawingContext dc = _dimmerVisual.RenderOpen();
+                dc.DrawRectangle(_dimmerBrush, null, viewport);
+            }
+            _revealVisual.Clip = new RectangleGeometry(visible);
+        }
+        _dimmerOutsideSelection = outside;
+
+        bool PixelAligned(Rect rect) => Integer(rect.Left * _guideDpi.DpiScaleX)
+            && Integer(rect.Right * _guideDpi.DpiScaleX)
+            && Integer(rect.Top * _guideDpi.DpiScaleY) && Integer(rect.Bottom * _guideDpi.DpiScaleY);
+        static bool Integer(double value) => Math.Abs(value - Math.Round(value)) <= 0.000001;
     }
 
     /// <summary>Short confirmation chip above and to the right of the pointer, clear of the magnifier.</summary>
