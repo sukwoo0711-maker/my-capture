@@ -172,8 +172,8 @@ internal sealed class LegacyDataImportWindow : Window
                 }), _work.Token);
             if (result.Status == LegacyMigrationStatus.Completed)
             {
-                Selection = new(result, includeSettings);
                 _operations.Refresh();
+                Selection = new(result, includeSettings);
                 _status.Text = UiText.Format("LegacyImport.Completed", result.ImportedCount, result.SkippedCount);
             }
             else
@@ -223,9 +223,9 @@ internal sealed class LegacyDataImportWindow : Window
         {
             // Publication recovery is not canceled midway and never releases a stale live queue.
             await _operations.Recover();
-            _recoveryRequired = false;
             _operations.Refresh();
             ReleaseProtection();
+            _recoveryRequired = false;
             _status.Text = UiText.Get("LegacyImport.Recovered");
         }
         catch (Exception error)

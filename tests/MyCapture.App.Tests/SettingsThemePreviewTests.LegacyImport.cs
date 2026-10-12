@@ -27,6 +27,39 @@ public sealed partial class SettingsThemePreviewTests
         RunIsolated(nameof(LegacyImport_RecoveryFailureHoldsProtectionAndBlocksCloseUntilSuccessfulRetry), VerifyLegacyRecovery);
 
     [Fact]
+    public Task LegacyImport_RefreshFailureLeavesRecoveryRetryAvailableAndProtectionHeld() =>
+        RunIsolated(nameof(LegacyImport_RefreshFailureLeavesRecoveryRetryAvailableAndProtectionHeld), VerifyLegacyRefreshFailure);
+
+    private static void VerifyLegacyRefreshFailure()
+    {
+        Application application = CreateThemedApplication();
+        try
+        {
+            foreach (bool failDuringInitialCompletion in new[] { true, false })
+            {
+                int refreshes = 0, releases = 0;
+                var service = new LegacyFixtureService();
+                var operations = LegacyOperations(service, (_, _, _) => Task.FromResult(new LegacyMigrationResult(
+                    failDuringInitialCompletion ? LegacyMigrationStatus.Completed : LegacyMigrationStatus.Failed,
+                    ErrorCode: failDuringInitialCompletion ? null : "RecoveryRequired")), () => releases++);
+                operations = operations with { Refresh = () => { if (++refreshes == 1) throw new IOException("fixture refresh failed"); } };
+                var window = NewLegacyWindow(operations);
+                window.Show(); Drain(window);
+                CompleteLegacyTask(window.ImportAsync());
+                if (!failDuringInitialCompletion) CompleteLegacyTask(window.RetryRecoveryAsync());
+                Assert.True(window.IsRecoveryRequired); Assert.Null(window.Selection); Assert.Equal(0, releases);
+                Button retry = LegacyField<Button>(window, "_copy");
+                Assert.True(retry.IsVisible && retry.IsEnabled);
+                window.Close(); Assert.True(window.IsVisible);
+                CompleteLegacyTask(window.RetryRecoveryAsync());
+                Assert.False(window.IsRecoveryRequired); Assert.Equal(1, releases);
+                window.Close(); Assert.False(window.IsVisible);
+            }
+        }
+        finally { application.Shutdown(); }
+    }
+
+    [Fact]
     public Task LegacyImport_StaleScanAndProgressRemainBoundToTheActiveOperation() =>
         RunIsolated(nameof(LegacyImport_StaleScanAndProgressRemainBoundToTheActiveOperation), VerifyLegacyScanAndProgress);
 
@@ -150,6 +183,17 @@ public sealed partial class SettingsThemePreviewTests
                 SettingsWindow.ApplyCommand.Execute(null, window);
                 Assert.Equal(2, applies); Assert.Same(draft, window.DataContext);
                 Assert.Equal(before, File.ReadAllBytes(paths.SettingsFile));
+                var invalidHotkeys = new AppSettings();
+                invalidHotkeys.Hotkeys.OpenLibrary = invalidHotkeys.Hotkeys.Capture;
+                string invalidImport = Path.Combine(root, "legacy-duplicate-hotkeys.json");
+                store.ExportTo(invalidHotkeys, invalidImport);
+                window.ImportLegacySettingsDraft(invalidImport);
+                Assert.True(draft.HasErrors);
+                draft.OpenLibraryHotkey = "Ctrl+Shift+Z";
+                Assert.False(draft.HasErrors);
+                candidate = window.LegacyApplyCandidate(draft.ToAppSettings());
+                Assert.Equal(current.Queue.MaxBytes, candidate.Queue.MaxBytes);
+                Assert.Equal(JsonSerializer.Serialize(current.Queue), JsonSerializer.Serialize(candidate.Queue));
             }
             finally { window.CloseForExit(); }
         }
@@ -262,6 +306,8 @@ public sealed partial class SettingsThemePreviewTests
     private static void VerifyLegacyEvidence()
     {
         Application application = CreateThemedApplication();
+        bool? previousMotion = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
         try
         {
             MyCapture.Core.Platform.AppPackage.IsPackagedOverride = true;
@@ -307,7 +353,12 @@ public sealed partial class SettingsThemePreviewTests
                 dialog.Close();
             }
         }
-        finally { MyCapture.Core.Platform.AppPackage.IsPackagedOverride = null; application.Shutdown(); }
+        finally
+        {
+            FluidMotion.AnimationsEnabledOverrideForTest = previousMotion;
+            MyCapture.Core.Platform.AppPackage.IsPackagedOverride = null;
+            application.Shutdown();
+        }
     }
 
     private sealed class LegacyFixtureService : ILegacyLibraryMigrationService

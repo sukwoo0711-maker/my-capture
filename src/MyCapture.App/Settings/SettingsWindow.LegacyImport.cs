@@ -10,7 +10,18 @@ internal sealed partial class SettingsWindow
 {
     internal Func<Window, LegacyImportSelection?>? RunLegacyImport { get; set; }
     private SettingsDraft? _legacySettingsDraft;
-    private AppSettings? _legacyNormalizedBaseline;
+    private Dictionary<string, object?>? _legacyProtectedBaseline;
+    private static readonly (string Queue, string Draft)[] LegacyQueueFields =
+    [
+        (nameof(QueueSettings.MaxItems), nameof(SettingsDraft.MaxItems)),
+        (nameof(QueueSettings.MaxBytes), nameof(SettingsDraft.MaxGiB)),
+        (nameof(QueueSettings.CapturesDirectoryOverride), nameof(SettingsDraft.CapturesDirectoryOverride)),
+        (nameof(QueueSettings.ThumbnailLongEdge), nameof(SettingsDraft.ThumbnailLongEdge)),
+        (nameof(QueueSettings.ImageRetentionHours), nameof(SettingsDraft.ImageRetentionHours)),
+        (nameof(QueueSettings.FolderFilePrefix), nameof(SettingsDraft.FolderFilePrefix)),
+        (nameof(QueueSettings.UseCurrentFolderForNewCaptures), nameof(SettingsDraft.UseCurrentFolderForNewCaptures)),
+        (nameof(QueueSettings.DefaultCaptureFolderId), nameof(SettingsDraft.UseCurrentFolderForNewCaptures)),
+    ];
     private bool _legacyImportPackaged = AppPackage.IsPackaged;
     internal bool LegacyImportPackaged
     {
@@ -43,7 +54,10 @@ internal sealed partial class SettingsWindow
             PreserveLegacyTargetSettings(imported, current);
             _draft.ReplaceValues(imported);
             _legacySettingsDraft = _draft;
-            _legacyNormalizedBaseline = _draft.HasErrors ? null : _draft.ToAppSettings();
+            // Capture only protected UI fields; unrelated invalid hotkeys cannot erase this baseline.
+            _legacyProtectedBaseline = LegacyQueueFields.Select(field => field.Draft)
+                .Concat([nameof(SettingsDraft.QuickSaveDirectoryOverride), nameof(SettingsDraft.GitHubToken), nameof(SettingsDraft.LaunchAtLogin)])
+                .Distinct().ToDictionary(name => name, name => typeof(SettingsDraft).GetProperty(name)!.GetValue(_draft));
             SetStatusMessage(UiText.Get("LegacyImport.SettingsReady"));
             RefreshErrorSummary();
         }
@@ -56,18 +70,22 @@ internal sealed partial class SettingsWindow
 
     internal AppSettings LegacyApplyCandidate(AppSettings candidate)
     {
-        if (ReferenceEquals(_legacySettingsDraft, _draft) && _legacyNormalizedBaseline is { } baseline)
+        if (ReferenceEquals(_legacySettingsDraft, _draft) && _legacyProtectedBaseline is { } baseline)
         {
             AppSettings current = _currentSettings();
             QueueSettings exactQueue = current.DeepClone().Queue;
             // Each scalar preserves its exact live value only while the user leaves it unchanged.
-            foreach (var property in typeof(QueueSettings).GetProperties())
-                if (Equals(property.GetValue(candidate.Queue), property.GetValue(baseline.Queue)))
+            bool Unchanged(string name) => Equals(typeof(SettingsDraft).GetProperty(name)!.GetValue(_draft), baseline[name]);
+            foreach (var (queueProperty, draftProperty) in LegacyQueueFields)
+                if (Unchanged(draftProperty))
+                {
+                    var property = typeof(QueueSettings).GetProperty(queueProperty)!;
                     property.SetValue(candidate.Queue, property.GetValue(exactQueue));
-            if (candidate.Export.QuickSaveDirectoryOverride == baseline.Export.QuickSaveDirectoryOverride)
+                }
+            if (Unchanged(nameof(SettingsDraft.QuickSaveDirectoryOverride)))
                 candidate.Export.QuickSaveDirectoryOverride = current.Export.QuickSaveDirectoryOverride;
-            if (candidate.GitHub.Token == baseline.GitHub.Token) candidate.GitHub.Token = current.GitHub.Token;
-            if (candidate.General.LaunchAtLogin == baseline.General.LaunchAtLogin) candidate.General.LaunchAtLogin = current.General.LaunchAtLogin;
+            if (Unchanged(nameof(SettingsDraft.GitHubToken))) candidate.GitHub.Token = current.GitHub.Token;
+            if (Unchanged(nameof(SettingsDraft.LaunchAtLogin))) candidate.General.LaunchAtLogin = current.General.LaunchAtLogin;
             candidate.StoreRating = current.StoreRating;
             candidate.StoreUpdate = current.StoreUpdate;
             candidate.General.IsFirstRun = current.General.IsFirstRun;
