@@ -247,6 +247,41 @@ public sealed class CaptureOverlayCoordinatorTests
     });
 
     [Fact]
+    public void HotkeysOverAShownSelectorActAsOpenWhileThePageReadIsConfirming() => RunSta(() =>
+    {
+        var confirming = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        int reads = 0, acquisitions = 0;
+        CaptureOverlayWindow? overlay = null;
+        using var coordinator = Coordinator(_ => { Interlocked.Increment(ref acquisitions); return Frame(); });
+        coordinator.ReadWindowSources = null;
+        coordinator.TextCaptureRequested = _ => { };
+        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        coordinator.ReadPageUrls = candidates => Interlocked.Increment(ref reads) > 1
+            ? confirming.Task
+            : Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(candidates.ToDictionary(
+                candidate => candidate.Handle,
+                candidate => new BrowserDocumentSnapshot(candidate.ProcessId, candidate.Title, "document", "https://example.com/")));
+
+        coordinator.Start(false, false, false);
+        PumpUntil(() => overlay?.IsVisible == true);
+        Assert.False(overlay!.TextCaptureMode);
+        // The text capture command over the shown selector switches it, exactly as once it is ready.
+        coordinator.Start(false, false, false, textCapture: true);
+        Assert.True(overlay.TextCaptureMode);
+        Assert.False(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8)));
+        Assert.Equal(1, acquisitions);
+        Assert.Equal(2, reads);
+
+        confirming.SetResult(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        Assert.True(overlay.IsVisible);
+        coordinator.Cancel();
+        Assert.False(coordinator.IsActive);
+    });
+
+    [Fact]
     public void SelectorClosedWhileThePageReadIsConfirmingEndsTheSessionOnlyAfterTheRead() => RunSta(() =>
     {
         var confirming = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(

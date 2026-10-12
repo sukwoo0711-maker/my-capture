@@ -176,7 +176,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (_preparation is not null || _isOpeningEditor)
+        // A selector already showing its frozen frame behaves as open while its source details
+        // are still being confirmed; until it shows, the preparation ignores new requests.
+        if (_isOpeningEditor || (_preparation is not null && _activeOverlay is not { IsVisible: true }))
         {
             _log.LogInformation("Capture ignored while a frame or selection is being prepared");
             return;
@@ -485,7 +487,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (_preparation is not null || _isOpeningEditor)
+        if (_isOpeningEditor || (_preparation is not null && _activeOverlay is not { IsVisible: true }))
         {
             _log.LogInformation("Advanced capture ignored while the previous selection is being persisted");
             return false;
