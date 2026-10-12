@@ -45,7 +45,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
         if (_feature is "save" or "copy") { tool = new(_feature == "save" ? 305 : 481, 40); start = tool; finish = tool; }
         var story = new TutorialStoryboard()
             .Hold("ready", 120, new PointD(92, 280))
-            .Motion("approach", 25, new PointD(92, 280), tool);
+            .Motion("approach", _feature == "copy" ? 29 : 25, new PointD(92, 280), tool);
         if (_feature == "rotate") story.Hold("choose", 32, tool);
         else story.Motion("choose", 8, tool, tool, pressed: true);
         story.Hold("chosen", 70, tool);
