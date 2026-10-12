@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `chore/store-4.1.1-handoff` (4.1.1 패키지 검증 완료, Store 업로드 경로 차단) |
+| 현재 기록 브랜치 | `chore/store-4.1.1-handoff` (4.1.1 심사 제출 완료, Microsoft 처리 대기) |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -46,18 +46,18 @@
 - Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
-## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 배포 준비)
+## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
 
 ### Store 4.1.1 배포 요청
 
-- 사용자 요청: “4.1.1버전으로 배포해봐. 실조건에서 테스트할게.” 영역 선택·이미지 자르기·라이브러리 선택 최적화를 포함해 새 Store 업데이트를 준비합니다. 4.1.1/패키지4.1.1.0 버전과 한·영 변경 사항을 갱신했습니다. 기존 개발자를 위한 무료 캡처·핀 도구 설명은 유지합니다.
+- 사용자 요청: “4.1.1버전으로 배포해봐. 실조건에서 테스트할게.” 영역 선택·이미지 자르기·라이브러리 선택 최적화를 포함한 Store 업데이트를 심사 제출했습니다. 앱4.1.1/패키지4.1.1.0 버전과 한·영 변경 사항을 갱신했습니다. 기존 개발자를 위한 무료 캡처·핀 도구 설명은 유지합니다.
 - Partner Center를 새로 고쳐 Submission4의 **공개 완료**와 Start update 버튼을 확인했습니다. 4.1.0 심사 취소는 필요 없습니다. 공개4.1.0 소스·패키지를 보존하고 별도4.1.1을 검증해 제출합니다.
 - **다음 버전으로 유보:** Store 업데이트 중 앱 교체·설치 진행을 알 수 있는 화면. 사용자가 기존 앱 삭제 후 재설치로 느끼는 공백을 줄이는 것이 목적입니다. 실제 Store 업데이트 단계·앱 종료/재시작·데이터 보존과 앱이 관측할 수 있는 신호를 확인한 뒤 구현합니다. 4.1.1에는 포함하지 않습니다.
 - 4.1.1 버전 계약 9/9 PASS(exit0, chunk40ff65), root 전체 Release 빌드 경고0/오류0 PASS(session86582, exit0), 독립 diff 검토 완료. PR head `e751e963135598de492e785e8e3774cf7631b7fa`의 hosted CI run38199941458/38199939852 모두 SUCCESS: 각각 Core1066/App2274 통과, App 조건부7 건너뜀, 실패0, 필수 symlink gate PASS. [PR #76](https://github.com/sukwoo0711-maker/my-capture/pull/76)을 squash 병합했으며 main/배포 소스는 `9a3576353cb3c1f4481b42510b435b9b2c925ece`입니다. 병합 소스와 검사한 PR head의 전체 tree가 동일함을 확인했습니다.
-- Store **Submission5 (`1152921505702100136`) 초안**을 만들고 한·영4.1.1 변경 사항을 저장했습니다. 패키지는 아직 상속된4.0.3.0/4.1.0.0뿐이며4.1.1 업로드·심사 제출은 하지 않았습니다. 브라우저2/tab977755822의 packages 페이지입니다. 실제 file chooser의 setFiles가 Edge 확장의 파일 URL 접근 권한 부족으로 거부됐습니다. Windows 파일 선택 창 대체 경로를 확인하려던 Computer Use도 브라우저 URL을 신뢰성 있게 판별할 수 없다는 정책 사유로 이번 turn 제어를 중단했습니다. 보안 설정을 변경하지 않았으며 사용자에게 직접 파일 업로드 또는 확장 설정을 안내합니다.
+- Store **Submission5 (`1152921505702100136`) 심사 제출 완료**. 사용자가 “완료했어”라고 업로드 완료를 알린 뒤 실제 packages 화면에서4.1.1.0/101.1MB/x64/Windows.Desktop min22000을 확인했습니다. 자동 제거 예정이던4.1.0에는 Don't remove this package를 적용해4.0.3/4.1.0/4.1.1을 모두 보존하고 Save했습니다. Overview에서4.1.1을 포함한 세 패키지 Validated, Packages/Store listings Updated를 확인한 뒤 Submit for certification을 실행했습니다. 최종 화면은 **Update in certification / Submission Complete / Pre-processing In progress / Certification·Publishing Not started**이며 심사 통과 후 자동 게시 설정입니다. 아직 공개된4.1.1이나 실제 Store 설치 완료가 아닙니다. 브라우저2/tab977755822 overview를 결과 화면으로 보존했습니다. 증거: `artifacts/store-411-verification/store-411-submitted.jpg`.
 - 사용자 “응”으로 QA8 종료를 명시 승인했습니다. exact PID64500/QA8 실행 경로를 확인하고 종료했으며 MyCapture 부재를 확인했습니다. merged main9a35763의 clean release 소스에서 StoreOnly를 실행했습니다. 첫 시도는 hotfix-ux의 외부 fixture 키 입력 미반영으로 7/8 FAIL(exit1); 같은 EXE 단독 재실행과 새 전체 StoreOnly 재검사는 PASS(exit0), 최종 8/8입니다. assertion·제품 코드·입력 설정 변경은 없습니다. 첫 실패는 `artifacts/store-publish/4.1.1-attempt1-native-input-failure`로 이름을 바꿔 보존했고 최종본과 publish281개 전수 SHA256이 동일합니다. 정확한 입력 실패 원인은 미확정이며 이후 fixture 진단 보완 대상으로 남깁니다.
 - **4.1.1 제출 파일 검증 완료:** `C:\GitRepositories\my-capture-codex\artifacts\store\4.1.1\sukwoo0711.MyCapture_4.1.1.0_x64.msix`, 106021996 bytes, SHA256 `7a70cc128c38479fa9f3384e94ccbeb28ebf4340953723ba36a91785c6521e44`. package-store exit0, 독립 source·281 inventory·8종 report/result·MSIX342개 항목 검증 PASS. 실제 Core/Desktop runtime10.0.11, x64 R2R, source9a3576353cb3c1f4481b42510b435b9b2c925ece, exact Store identity와 startup disabled 확인. 이 파일은 unsigned Store 제출용이며 직접 설치 대상이 아닙니다. 실제 명령과 근거는 `artifacts/store-411-verification/`의 development-log.txt, artifact-review.md, hotfix-attempt1-diagnosis.md에 있습니다.
-- 재개 순서: 현재 Store packages 화면에서 사용자가 업로드한 4.1.1 상태를 먼저 확인하거나 지원되는 파일 chooser로 위 exact MSIX 업로드 → 기존 패키지 보존 상태와 새4.1.1 Validated 확인 → Save → 한영/패키지 최종 확인 → 심사 제출 및 제출 결과 확인. 배포는 이미 승인됐으므로 다시 승인을 묻지 않습니다. 코드·CI·병합·패키지·8종·독립 검증은 완료됐으며 현재 source/artifact가 바뀌지 않으면 반복하지 않습니다. 기존 source/MSIX/작업 사본·첫 실패 근거를 보존합니다.
+- 다음 단계: Microsoft 인증·공개 결과 확인 → 사용자가 Store에서4.1.1로 업데이트한 뒤 영역 선택을 실조건으로 테스트 → 피드백 반영. 제출된4.1.1을 취소하거나 중복 제출하지 않습니다. 코드·CI·병합·패키지·8종·독립 검증·등록·심사 제출은 완료됐습니다. 기존 source/MSIX/작업 사본·첫 실패 근거를 보존합니다. 다음 버전의 업데이트 진행 안내는 위 유보 항목에 따라 별도 작업합니다.
 
 ### 영역 선택 지연과 로컬 업데이트 창
 
@@ -155,7 +155,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** 사용자 요청에 따라 최적화 포함 4.1.1 Store 배포를 완료합니다. 코드·버전·Release 빌드·독립 검토·전체 CI·PR #76 병합·Store 한영 초안·MSIX·8종 패키지 검사·독립 artifact 검증은 완료됐습니다. 현재 자동 업로드는 확장 파일 접근 권한과 Windows 화면 제어의 URL 판별 정책으로 차단돼 있습니다. §3의 순서로 exact MSIX 업로드와 심사 제출을 마칩니다. 사용자는 Store 실제 설치 조건으로 영역 선택을 테스트할 예정입니다. 업데이트 진행 안내 화면은 다음 버전으로 유보했습니다. 아래는 이전 배포 작업의 완료 이력입니다.
+**현재 우선 작업:** 최적화 포함 4.1.1의 Store 심사 제출을 완료했습니다. Submission5는 전처리 중이며 심사 통과 후 자동 게시됩니다. 사용자는 Store 업데이트가 제공되면4.1.1 실제 설치 조건으로 영역 선택을 테스트할 예정입니다. 업데이트 진행 안내 화면은 다음 버전으로 유보했습니다. 제출 결과와 exact 소스·파일 근거는 §3에 있으며, 아래는 이전 배포 작업의 완료 이력입니다.
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
 2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
@@ -322,6 +322,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 사용자 “응”으로 QA8 종료 명시 승인. cwd `C:\GitRepositories\my-capture-codex`, exactPID64500/QA8 Path 확인 후 Stop-Process/WaitForExit 및 resident0 확인, release/store-4.1.1-main clean9a35763 전환 PASS(exit0, chunkf92368). 새 s411-bb1b5ab8 profile에서 `powershell.exe -NoProfile -NonInteractive -File build/package.ps1 -Version 4.1.1 -StoreOnly` session99980 FAIL(exit1, final444007), hotfix 외부 ceps 입력 미반영으로7/8. 동일EXE `--selftest-hotfix-ux` 별도 profile/output 재실행 session62372/ownedPID62960 PASS(exit0, final33b0d5). 원인 후보는 childfocus/IME/키상태, 확정하지 않음. 첫 결과는 경로 경계·reparse·파일 수·result hash 확인 후 sibling4.1.1-attempt1-native-input-failure로 보존 rename(삭제없음). 새 s411r profile 전체 StoreOnly session16960 PASS(exit0, finalbc81c3),8/8/281files; source/assertion 변경없고 첫/최종281file hash 전수동일(chunk8ffa45 exit0).
 - 2026-10-12 Codex: 동일 cwd에서 `powershell.exe -NoProfile -NonInteractive -File build/package-store.ps1 -Version 4.1.1 -PublishDir C:\GitRepositories\my-capture-codex\artifacts\store-publish\4.1.1\publish-win-x64 -OutputRoot C:\GitRepositories\my-capture-codex\artifacts\store\4.1.1 -IdentityName sukwoo0711.MyCapture -Publisher CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474 -PublisherDisplayName sukwoo0711` session65525 PASS(exit0, final4fd26a). MSIX SHA2567a70cc128c38479fa9f3384e94ccbeb28ebf4340953723ba36a91785c6521e44/106021996bytes. 독립 검증 actual4361cb/19536b exit0, root검토4f1cd2: exactsourceclean/281payload/8종/342MSIXentry/hash/identity/R2R/runtime10.0.11 PASS. 상세 `artifacts/store-411-verification/artifact-review.md`.
 - 2026-10-12 Codex: Store Submission5 packages 페이지에서 input[type=file] chooser 첫 시도 timeout으로 runtime reset; observed browse your files 링크를 통한 실제 chooser 획득 후 setFiles는 Edge 확장 Allow access to file URLs 권한 부족 오류. 새 패키지 미업로드. Windows native 파일 picker 대체 확인에서 Computer Use가 현재 브라우저 URL을 확실히 판별할 수 없다는 정책 사유로 이번 turn 종료를 요구해 추가 UI 조작 중단. 권한/보안 설정 변경·우회·심사 제출 없음. 사용자가 exact 제출용 MSIX를 업로드한 뒤 현재 화면을 먼저 확인하고 이어서 Save/심사 제출해야 함. 상태 기록은 chore/store-4.1.1-handoff로 복귀해 보존, release 소스·산출물은 그대로 유지.
+
+- 2026-10-12 Codex: 사용자 “완료했어”로 직접 업로드 완료를 알림. 기존 Edge2/tab977755822의 Submission5 packages에서4.1.1.0/101.1MB/x64 확인.4.1.0 자동 제거 예정 링크 Don't remove this package를 눌러 보존, Save 후 overview에서4.0.3/4.1.0/4.1.1 세 패키지 Validated와 Packages/Store listings Updated 확인. 승인된 배포 범위로 Submit for certification 실행 후 actual 화면 **Update in certification**, Submission Complete, Pre-processing In progress, Certification/Publishing Not started 및 통과 후 자동 게시 문구 확인. 화면 `artifacts/store-411-verification/store-411-submitted.jpg` 저장 및 tab markDeliverable. 보안 설정·확장 권한 변경·패키지 삭제·중복 업로드 없음. 공개/사용자 설치는 아직 미확인. UI 작업의 shell exit는 N/A, 근거는 실제 브라우저 상태·JPEG·development-log.txt. 로컬 인계 branch clean06b0458에서 상태 갱신, source/MSIX SHA는 §3과 동일하게 보존.
 
 ## 9. 인계 체크리스트
 
