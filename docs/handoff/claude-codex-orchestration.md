@@ -48,7 +48,7 @@
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
 
-### 다음 버전 기본 동작 보강 및 실기 성능 재검토 — 진행 중
+### 다음 버전 기본 동작 보강 — 구현·검증 완료, 드래그 지연 변동은 후속 조사 필요
 
 - 사용자 “좋아. 저거 진행해. 그리고 병목현상이 없도록 최적화되었는지 다시한번 실기검토해”로 앞선 제안을 구현하도록 승인했습니다. 범위는 방해 없는 평가 초대, 삭제 휴지통 이동·복원, 앱 종료 전 작업 보호, 실제 상태에 따른 업데이트 안내, 미저장 편집 초안 복구, 사용자 주도 문제 신고·진단 정보 복사, 영역 선택을 포함한 실기 성능 재검토입니다.
 - 기준은 `d3223ef`(4.1.1 제품 소스와 최신 인계 기록), root `feat/next-product-readiness`입니다. 심사 제출된 4.1.1과 MSIX는 보존합니다. 이번 요청으로 원격 배포를 새로 실행하지 않습니다.
@@ -58,7 +58,8 @@
 - 독립 검토의 자동 정리 요청 유실·삭제/편집 경쟁·복구 마커/인덱스 순서·UI 동기 저널 조회를 수정했습니다. 실제 Windows 탐색기 owned canary도 복원 후 `$I`를 남겼지만 namespace 항목은 사라졌습니다. 이에 원본 identity/bytes·`$R` 부재·namespace 부재로 실제 OS 계약을 확인한 공용 Shell canary2/2 PASS를 통합했습니다. 사용자 항목에는 조작하지 않았습니다.
 - App 첫 전체2327건 검사에서는2307 PASS/9 FAIL/11 조건부 skip을 확인했습니다. 실패는 이미지·영상 편집의 비동기 버리기/닫기3건, junction 임시 파일1건, 잠긴 파일의 Shell COM 오류가 기존 IO 복구 경계를 벗어난5건입니다. 원본·저널 보존 assertion을 유지해 모두 수정했고, 폐기 실패와 동시 종료 시 창 비활성 상태가 남는 독립 검토 지적도 수정했습니다. root 최종 전체 App 재검사 session62858/130ecc exit0에서2325 PASS/0 FAIL/11 조건부 skip, 실제 Windows Shell canary4/4 PASS입니다. QA9 self-contained x64/R2R 게시와 UX 자체 검사도 exit0/PASS이며 runtime10.0.11·263개 dependency 누락0을 독립 확인했습니다.
 - QA9 실제 편집 crash/restart 복구·종료 보호 PASS: 격리된 합성 이미지에 주석을 그린 뒤 exact owned PID를 강제 종료하고 재실행했습니다. 실제 복구 대화상자의 Recover로 주석이 복원됐고, 종료 Cancel은 편집 기능을 다시 활성화했으며 Save and close는 주석1개가 포함된 새 캡처 저장·초안 퇴역·정상 exit0까지 완료했습니다(session45357/966d31). 원본 SHA와 기존 Run-key fingerprint는 동일합니다. 진단 host는 실제 App shell/복구/저장을 사용하되 Run-key·clipboard·mutex 경계를 격리하고, 도구에서 누락된 EditorCloseDialog에만 ShowInTaskbar를 켰습니다. 원본·시험 사본은 보존합니다.
-- 실기 추가 결함 수정 — 실제 복원 목록 데이터가 있어도 공통 MenuItem 템플릿에 PART_Popup/ItemsPresenter가 없어 하위 메뉴가 표시되지 않았습니다. `06d6a0f`로 popup을 복원한 뒤 QA10 전체 검사는2242 PASS/84 FAIL/11 skip이었고84개 모두 loose XAML의 새 화살표 이름 해석 실패였습니다. helper/assertion을 유지하며 native20px 격자·1.6stroke 화살표와 명시적 속성 참조로 수정한 `2fc7fa4`를 통합했습니다. 실제 loaded popup·Right/Left·빈/로딩/항목 상태 및 기존 VideoNarrow13/13, pure loose2/2 PASS입니다. root Debug243068·QA11 publish eae1e1은 exit0이며 전체 App 최종 session65745가 진행 중입니다. QA9/QA10은 이전 근거로 보존하고 최종 전달 후보는 artifacts/qa11-product-readiness입니다.
+- 실기 추가 결함 수정 — 실제 복원 목록 데이터가 있어도 공통 MenuItem 템플릿에 PART_Popup/ItemsPresenter가 없어 하위 메뉴가 표시되지 않았습니다. `06d6a0f`로 popup을 복원한 뒤 QA10 전체 검사는2242 PASS/84 FAIL/11 skip이었고84개 모두 loose XAML의 새 화살표 이름 해석 실패였습니다. helper/assertion을 유지하며 native20px 격자·1.6stroke 화살표와 명시적 속성 참조로 수정한 `2fc7fa4`를 통합했습니다. 실제 loaded popup·Right/Left·빈/로딩/항목 상태 및 기존 VideoNarrow13/13, pure loose2/2 PASS입니다. root Debug243068·QA11 publish eae1e1은 exit0이며 최종 전체 App session65745/d132df에서2327 PASS/0 FAIL/11 조건부 skip,6분36초입니다. QA11 UX 자체 검사 session61639/a91861 exit0·RESULT PASS와 실제 생성 PNG를 확인했습니다. 최종 전달 빌드는 `artifacts/qa11-product-readiness/MyCapture.exe`이며 제품 소스는 `2fc7fa4b0de8fd4ac6c13c916c2b83d5b9f15402`, 버전 표시는4.1.1인 다음 버전 개발 사본입니다. self-contained Core/Desktop10.0.11·x64 R2R·277파일·263개 dependency 누락0·소스 일치를 독립 검증했습니다. QA9/QA10과 중간 실패 자료는 보존합니다.
+- QA11 실제 복원 메뉴 검증 PASS: owned 캡처859afe79를 실제 Windows 휴지통에서 메뉴로 복원해 라이브러리1→2개·주석 썸네일을 확인했습니다. 복원 후 빈 목록·Esc·바깥 클릭 닫힘과 보호된 정상 종료도 완료했습니다(session60154/93add4 exit0). 이미지3개와 layers.json의4파일 bytes/SHA 및 디렉터리 file ID는 보존됐습니다. 메타데이터는 RestoreRecord의 보관 기간 재시작으로 updatedAt/retentionStartedAt이 바뀌고 이전 meta.json은 .bak에 보존됐습니다. 초기6파일 전수동일 assertion 실패는 이 정상 갱신을 구분하지 않은 검증 오류로 원본을 남겼습니다. 실제 Store 설치·교체는 다음 패키지 배포 단계의 검증 대상으로 남습니다.
 - 정확한 Store4.1.1 DLL과 QA9의 실desktop 캡처/선택/편집기 각각3회가 정상 완료됐습니다. 새 선택 화면 첫 렌더는273.84/247.04/237.31ms, 기존308.13/307.35/255.60ms입니다. 입력이3개 mouse/1개 drag로 합쳐져 창 선택이 됐고 캡처 크기도 달라 연속 드래그·편집기 정량 비교로 사용하지 않습니다. 외부 host는 App 시작·실 hotkey·저장을 제외합니다.
 - 동일 synthetic native overlay 비교는 AB3쌍에서 drag 완료 중앙값1926.05→2067.59ms(+7.35%)였지만 추가 BA2쌍은 +24.72%/-0.37%로 변동했습니다. 긴 WPF callback 간격이 원인이며 제품 코드의 원인 귀속은 미확정입니다. renderer/input 소스는 기준 이후 동일하고 pointer handler는0.156ms 이하입니다. probe의120 callbacks는 실제 표시120프레임이 아니며 feedback약60회로 합쳐집니다. 병목 부재·일정한 개선율로 판정하지 않습니다. 실제4K 초안20주석 검사에서는 PNG blob1개/37711B를 재사용했고 오류0·복구20주석이 확인됐습니다. 원본·한계·명령은 artifacts/next-product-readiness와 개발 LOG에 보존했습니다.
 
@@ -169,7 +170,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** §3의 다음 버전 기본 동작 보강과 실기 성능 재검토를 구현·통합·검증합니다. 평가·업데이트·지원, 삭제·복원, 종료 보호·편집 복구를 별도 작업 사본에서 진행하고 root에서 통합합니다. 정확한 4.1.1 산출물과 새 개발 빌드의 비교, 실제 입력/복구 경로, 전체 필수 테스트 및 독립 검토를 끝낸 뒤 실기 빌드를 전달합니다. 4.1.1 심사 제출 상태와 산출물은 보존하며, 아래는 이전 배포 작업의 완료 이력입니다.
+**현재 우선 작업:** §3의 평가·업데이트·지원, 삭제·복원, 종료 보호·편집 복구 구현과 최종 빌드 검증을 완료했습니다. QA11 개발 빌드로 사용자 실기 피드백을 받습니다. 성능 재검토에서 영역 선택의 긴 WPF callback 간격과 실행별 변동이 남았으므로 다음 성능 작업은 실제 표시 시점·DWM/GPU·외부 부하를 구분하는 측정부터 시작합니다. 기존 AB/BA 원본과 입력 합쳐짐 한계를 유지하고 병목이 모두 제거됐다고 판정하지 않습니다. 실제 Store 설치·교체·재실행 검증은 다음 버전 패키지 배포 단계에서 수행합니다. 4.1.1 심사 제출 상태와 산출물은 보존하며, 아래는 이전 배포 작업의 완료 이력입니다.
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
 2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
@@ -353,6 +354,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: c1401a0 통합 후 App 전체 session62858/130ecc exit0(2325 PASS/11 조건부 skip), Core1092 PASS, native Shell4/4 PASS, QA9 publish17b4c4 exit0·UX session94855/cd3ab1 exit0를 확인했습니다. 실제 캡처3회/live session77139 exit0,4K 초안20주석 session18538 exit0, owned crash/restart/Recover/Cancel/Saveexit session45357/966d31 exit0와 원본·Run-key 보존을 확인했습니다. 실제 복원 메뉴에서 하위 popup 누락 버그를 발견해 icons가 수정 중입니다. AB drag+7.35%와 BA+24.72%/-0.37% 변동을 보존하며 전체 병목 부재로 확정하지 않습니다. 명령·cwd·실제 종료·범위는 artifacts/next-product-readiness/development-log.txt, 관련 raw JSON/receipt에 기록했습니다. Store 재배포·파일 정리는 실행하지 않았습니다.
 
 - 2026-10-12 Codex: 메뉴 popup `06d6a0f` 뒤 QA10 App전체 session94606/736dfb exit1(2242 PASS/84 FAIL/11 skip)을 수집했고 ed66eb에서84개 모두 SubmenuArrow loose XAML 실패임을 확인했습니다. worker0093918을 root `2fc7fa4`로 통합해 native20px/1.6stroke 화살표와명시속성참조로 해결했고 helper/assertion은 유지했습니다. worker pure2/2·native/Video13/13 PASS, root Debug2430680warn/error exit0, QA11 self-contained/R2R publish eae1e1 exit0, App전체 session65745 진행 중입니다. native 메뉴 복원용 owned새캡처859afe79만 actual queue/Shell helper17cb9d exit0으로 실제휴지통에 준비했고6파일identity/hash·다른원본보존을 확인했습니다. 실제 메뉴복원·최종UX는 전체테스트 종료 후 직렬 실행합니다.
+
+- 2026-10-12 Codex: 최종 QA11 전체 App session65745/d132df exit0(2327 PASS/0 FAIL/11 조건부 skip), UX session61639/a91861 exit0·RESULT PASS와 생성 PNG를 확인했습니다. Core1092/1092·별도 native Shell4/4 PASS 및 최종 산출물277파일·263 dependency 누락0을 독립 재확인했습니다. 실제 메뉴 복원·빈 목록·Esc·바깥 클릭·보호된 정상 종료 session60154/93add4 exit0, 이미지/주석4파일 SHA·원본 file ID 보존을 확인했습니다. meta.json 전체동일 검사6b3088 exit1은 보관 기간 재시작의 정상 갱신2필드를 구분하지 않은 것으로4a1d5f/390f70 exit0 및 독립 검토로 대조했습니다. root에서 Explorer `/select,`로 최종 `artifacts/qa11-product-readiness/MyCapture.exe` 위치를 열고 실제 선택 화면을 확인했습니다(af9983 exit0). 제품 소스2fc7fa4 및4.1.1 개발 버전 표시 유지, Store 재배포·사용자 앱 종료·파일 정리 없음. 드래그 callback 지연 변동은 미해결로 유지하며 실제 명령·cwd·종료·근거는 `artifacts/next-product-readiness/development-log.txt`와 raw receipt/TRX에 보존합니다.
 
 ## 9. 인계 체크리스트
 
