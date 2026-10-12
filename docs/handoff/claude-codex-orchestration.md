@@ -10,7 +10,7 @@
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
 | 현재 기록 브랜치 | `chore/store-4.1.1-handoff` (QA8 앱 종료 확인 대기) |
-| Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존, 4.1.1은 `release/store-4.1.1`/`e751e963135598de492e785e8e3774cf7631b7fa`, PR #76 |
+| Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
 | 이 문서 위치 | 현재 기록 브랜치의 `docs/handoff/claude-codex-orchestration.md` |
@@ -53,10 +53,10 @@
 - 사용자 요청: “4.1.1버전으로 배포해봐. 실조건에서 테스트할게.” 영역 선택·이미지 자르기·라이브러리 선택 최적화를 포함해 새 Store 업데이트를 준비합니다. 4.1.1/패키지4.1.1.0 버전과 한·영 변경 사항을 갱신했습니다. 기존 개발자를 위한 무료 캡처·핀 도구 설명은 유지합니다.
 - Partner Center를 새로 고쳐 Submission4의 **공개 완료**와 Start update 버튼을 확인했습니다. 4.1.0 심사 취소는 필요 없습니다. 공개4.1.0 소스·패키지를 보존하고 별도4.1.1을 검증해 제출합니다.
 - **다음 버전으로 유보:** Store 업데이트 중 앱 교체·설치 진행을 알 수 있는 화면. 사용자가 기존 앱 삭제 후 재설치로 느끼는 공백을 줄이는 것이 목적입니다. 실제 Store 업데이트 단계·앱 종료/재시작·데이터 보존과 앱이 관측할 수 있는 신호를 확인한 뒤 구현합니다. 4.1.1에는 포함하지 않습니다.
-- 4.1.1 버전 계약9/9 PASS(exit0,chunk40ff65), root 전체 Release 빌드 경고0/오류0 PASS(session86582,exit0), 독립 diff 검토 완료. [PR #76](https://github.com/sukwoo0711-maker/my-capture/pull/76)을 열었으며 정확한 head는`e751e963135598de492e785e8e3774cf7631b7fa`입니다. 전체 hosted CI run38199941458/38199939852는 마지막 조회에서 실행 중이며, 병합 전 완료 결과와 필수 symlink gate를 확인해야 합니다.
+- 4.1.1 버전 계약 9/9 PASS(exit0, chunk40ff65), root 전체 Release 빌드 경고0/오류0 PASS(session86582, exit0), 독립 diff 검토 완료. PR head `e751e963135598de492e785e8e3774cf7631b7fa`의 hosted CI run38199941458/38199939852 모두 SUCCESS: 각각 Core1066/App2274 통과, App 조건부7 건너뜀, 실패0, 필수 symlink gate PASS. [PR #76](https://github.com/sukwoo0711-maker/my-capture/pull/76)을 squash 병합했으며 main/배포 소스는 `9a3576353cb3c1f4481b42510b435b9b2c925ece`입니다. 병합 소스와 검사한 PR head의 전체 tree가 동일함을 확인했습니다.
 - Store **Submission5 (`1152921505702100136`) 초안**을 만들고 한·영4.1.1 변경 사항을 저장했습니다. 패키지는 아직 상속된4.0.3.0/4.1.0.0뿐이며4.1.1 업로드·심사 제출은 하지 않았습니다. 브라우저2/tab977755822를 이어서 사용합니다.
 - 현재 QA8 사용자 앱 PID64500이 실행 중이며, 8종 패키지 검사는 실제 전역 단축키를 등록하므로 MyCapture 부재를 요구합니다. 코드·버전·검토 준비 후 해당 앱 종료 허용을 질문했으나 아직 응답이 없습니다. 사용자 앱을 닫지 않았습니다. 실제 명령·결과는 `artifacts/store-411-verification/`에 기록합니다.
-- 재개 순서: 사용자 종료 허용 또는 실제 앱 부재 확인 → PR76 exact-head CI와 필수 symlink PASS 확인·병합 → main과 같은 깨끗한 release 소스 확보 → 새 짧은 data/TMP/TEMP 환경에서 `package.ps1 -Version 4.1.1 -StoreOnly` → 같은 publish 폴더로 `package-store.ps1` → 독립 소스·8종·파일해시·MSIX 검사 → Submission5에 업로드·한영/패키지 최종 확인·심사 제출. preflight LOG의 오류 cleanup 한계와 UI 독점 조건을 지킵니다. 기존 source/MSIX/작업 사본을 보존합니다.
+- 재개 순서: 사용자 종료 허용 또는 실제 앱 부재 확인 → 기록 브랜치를 보존한 채 `release/store-4.1.1-main`으로 전환하고 HEAD9a35763/clean 확인 → 새 짧은 data/TMP/TEMP 환경에서 `package.ps1 -Version 4.1.1 -StoreOnly` → 같은 publish 폴더를 명시해 `package-store.ps1` → 독립 소스·8종·파일해시·MSIX 검사 → Submission5에 업로드·한영/패키지 최종 확인·심사 제출. preflight LOG의 오류 cleanup 한계와 UI 독점 조건을 지킵니다. 기존 source/MSIX/작업 사본을 보존합니다. PR 병합과 전체 CI 검증은 완료됐으므로 반복하지 않습니다.
 
 ### 영역 선택 지연과 로컬 업데이트 창
 
@@ -154,7 +154,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** 사용자 요청에 따라 최적화 포함4.1.1 Store배포를 완료합니다. 코드/버전/Release빌드/독립검토/Store한영초안은준비됐으며, 현재QA8앱종료확인과PR76전체CI완료를기다립니다. §3의재개순서를따릅니다. 사용자는Store실제설치조건으로영역선택을테스트할예정입니다. 업데이트진행안내화면은다음버전으로유보했습니다. 소프트웨어raster감소만으로체감지연해결을확정하지않습니다. 아래는이전배포작업의완료이력입니다.
+**현재 우선 작업:** 사용자 요청에 따라 최적화 포함 4.1.1 Store 배포를 완료합니다. 코드·버전·Release 빌드·독립 검토·전체 CI·PR #76 병합·Store 한영 초안은 완료됐습니다. 현재 QA8 앱 종료 확인을 기다리며, 이후 §3의 순서로 패키지 검사와 심사 제출을 진행합니다. 사용자는 Store 실제 설치 조건으로 영역 선택을 테스트할 예정입니다. 업데이트 진행 안내 화면은 다음 버전으로 유보했습니다. 소프트웨어 raster 감소만으로 체감 지연 해결을 확정하지 않습니다. 아래는 이전 배포 작업의 완료 이력입니다.
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
 2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
@@ -315,6 +315,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 - 2026-10-12 Codex: 4.1.1 release commit e751e963135598de492e785e8e3774cf7631b7fa, `git push -u origin release/store-4.1.1` PASS(exit0,chunkb3ac95), `gh pr create --repo sukwoo0711-maker/my-capture --base main --head release/store-4.1.1 --title <4.1.1배포제목> --body-file artifacts/store-411-verification/pr-body.md` PASS(exit0,chunkf1658e),PR76. 버전계약9/9 PASS(exit0,chunk40ff65), root `powershell.exe -NoProfile -NonInteractive -File build/build.ps1 -Configuration Release` PASS(exit0,session86582/최종44a91e),경고0/오류0. 독립검토 `release-review.md` materialfinding없음. hostedCI38199941458/38199939852실행중으로완료판정전,병합없음.
 - 2026-10-12 Codex: PartnerCenter Start update로Submission5(id1152921505702100136)생성, ko-KR/en-US의releaseNotes만4.1.1최적화내용으로변경후각Save→Overview확인. 기존개발자무료도구소개·스크린샷유지. 패키지4.1.1미생성/미업로드/심사미제출. 코드/검토준비뒤QA8PID64500종료확인질문,응답없고최근조회에도앱존재. §5사용자앱종료금지와8종residentguard유지. `packaging-preflight.md`읽기검토완료,성공fresh경로/IO실패cleanup한계/별도raw-delete성능CLI제외/짧은새data/tmp조건기록. release소스SHA를보존하도록상태만별도chore/store-4.1.1-handoff에기록. 실제명령·원격CI·검토·브라우저근거는 `artifacts/store-411-verification/`,파일/작업사본삭제없음.
+
+- 2026-10-12 Codex: PR76 head e751e963의 CI38199939852/38199941458 모두 completed/success, 각 Core1066/App2274 통과·조건부7·실패0 및 필수 symlink gate Passed 확인. actual artifact test.log/상태/원본 로그는 `artifacts/store-411-verification/ci/`, 독립 검토 후 root `gh pr view 76 --repo sukwoo0711-maker/my-capture --json headRefOid,baseRefOid,state,mergeStateStatus,statusCheckRollup` PASS(exit0, chunke6cde5). cwd `C:\GitRepositories\my-capture-codex`; `gh pr merge 76 --repo sukwoo0711-maker/my-capture --squash --match-head-commit e751e963135598de492e785e8e3774cf7631b7fa` PASS(exit0, chunka9996c). fetch 및 merged 상태 조회 PASS(exit0, chunk7fb523), main9a3576353cb3c1f4481b42510b435b9b2c925ece. `git branch release/store-4.1.1-main 9a3576353cb3c1f4481b42510b435b9b2c925ece`와 검사한 PR head 대비 `git diff --exit-code` PASS(exit0, chunkd6a636). 모든 기존 브랜치·작업 사본 보존. QA8 PID64500은 실행 중으로 사용자 종료 승인 대기, 4.1.1 패키지 검사·MSIX 생성·업로드·심사 제출은 미실행. Submission5 초안 증거 `artifacts/store-411-verification/store-411-draft-awaiting-app-close.jpg`.
 
 ## 9. 인계 체크리스트
 
