@@ -73,3 +73,22 @@ dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconf
 Capture 결과 window/fullscreen은 실제 crop 비율을 유지하며 height상한200일 때 width도 함께 줄여중앙배치합니다. recording selection의 ShowModeBar/OffersOtherActions=false는 실제 RegionRecordingCoordinator 계약입니다. region Start click94–99까지Ready,recording100부터Recording,Stop145–150까지Recording,done151부터VideoResult로 전환합니다. 실제 decode motion-sheet/마지막PNG에서 이 전환/모자이크 블록 vsblur/회전 전체표시를 직접 확인했습니다(이미지도구 batch6). 부모가 ko/en 독립검토하며 영어 시각검토 소유권을 인수했습니다. 모든 원본·실패·옛 PNG 보존.
 
 최종 source와 자산을 검증 전에 전부 다시 읽어 쌓지 않습니다. 선택 manifest는 메타데이터와 파일SHA만 읽고 각 생성 시 수행한 실제decode receipt를 연결합니다. 기존 성공 중 영향을 받지 않는 기능은 재생성하지 않습니다. 제품copy/publish는 이후 별도 단계입니다.
+
+## Workspace 최종 교정 및 76개 전달
+
+부모가 승인한 UI 소스5d7e436/3bce8e6을 로컬3cdaf51/290619e로 통합했습니다. Snapshot root Content Margin=24 offset을 pointer/selection 좌표에 포함하고, 원본240×88 핀의 height cap 및 saved thumbnail에 uniformFit+중앙배치를 적용합니다. 부모 ko38개와 UI worker en38개는 최종 selected-source contact/motion sheet를 직접 검토해 승인했습니다. UI 최종 영어 Workspace 검토는 batch5 library-open/quick-access + batch7 folder4 + batch8 pin6입니다.
+
+| 상태 | cwd | 실제 명령 | exit | 근거 |
+| --- | --- | --- | ---: | --- |
+| PASS | `C:/GitRepositories/my-capture-edit-recovery` | `git cherry-pick 5d7e436` 후 위 표 동일 `dotnet build ...` | 0 | 678f47, local3cdaf51/build0warnings0errors |
+| PASS | 동일 | `dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconfig.json build/tools/TutorialGifGenerator/bin/Release/net10.0-windows10.0.22000.0/MyCapture.App.Tests.dll C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial C:/GitRepositories/my-capture-edit-recovery/build/tools/TutorialGifGenerator/review-attempt-batch-7 folder-create,folder-rename,library-move,library-delete` | 0 | 4e81ad/session58224→6542a9,4features8assets actualdecode PASS |
+| PASS | 동일 | `git cherry-pick 3bce8e6` 후 위 표 동일 `dotnet build ...` | 0 | 0ff487, local290619e/build0warnings0errors |
+| PASS | 동일 | `dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconfig.json build/tools/TutorialGifGenerator/bin/Release/net10.0-windows10.0.22000.0/MyCapture.App.Tests.dll C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial C:/GitRepositories/my-capture-edit-recovery/build/tools/TutorialGifGenerator/review-attempt-batch-8 pin-clipboard,pin-hide-all,pin-click-through,pin-restore,pin-copy,pin-save` | 0 | b5cef5/session66611→d9a74d,6features12assets actualdecode PASS |
+| PASS | 동일 | `& ./build/tools/TutorialGifGenerator/AssembleManifest.ps1 -CopyAssets` | 0 | ef4258,76selectedsources+receipt provenance+budget+fileSHA,productcopySHA equality |
+| PASS | 동일 | 最終manifest/76product files metadata read | 0 | f98281, count76,bytes129867958,totalframes7080,totaldecodedbytes1631232000,maxfile3014188,maxframes156,maxdecoded35942400 |
+
+`review-smooth-final/selected-source-manifest.json` と `.csv` は source GIF/receipt の絶対path、選択batch、SHA256、bytes、frames、duration、decodedbytes、delay、generator/validation timing、product destination/pathSHAを記録します。最終76receiptも`review-smooth-final/receipts/`にbyte-identicalcopyしました。原本11frame text GIF2個はproductの内容置換前に`review-smooth-final/as-is/`へphysicalcopyし保管しています。古いPNG/試行/failedGIFとworktreeもすべて保持、削除なし。詳細payloadSHAは全76receipt/manifestで一致 `73916DA5553DBB7D3A857BEF99D7675C9519CFD6400DDF3929D655C645D69D72` (.NET10.0.11)。合計decodedbytesは各clipの和で同時residentmemoryではなく、最大1clip35,942,400Bです。
+
+親による独立manifest確認dde6e5 exit0は76sourceGIF/receipt/committedreceipt/destinationSHAおよびframe/duration/合計一致PASS。このworkerは全GIFを再度同時loadしていません。個別生成時のproductdecoder/player検証receiptと、assembly hash一致を使用しました。CPUslotはbatch8とassembly完了後に親へ返却しました。publish/製品全test/統合native検証は親が実行します。
+
+親は67f956e以後3cdaf51まで16commitをroot382cc00へ統合済みです。その後のordered local sourceは290619e(親が統合着手)、最後のasset/manifest commitの順です。今回commitはnewgenerator assembly script、final LOG/README、76製品GIFと76receipt/selectedmanifest/原本text2GIFのみで、製品csproj/resx/UIsource変更はありません。
