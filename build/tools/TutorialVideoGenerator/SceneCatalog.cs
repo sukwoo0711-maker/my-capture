@@ -11,6 +11,8 @@ internal static class SceneCatalog
         if (CaptureScene.Features.Contains(id)) return new CaptureScene(id, language);
         if (VideoScene.Features.Contains(id)) return new VideoScene(id, language);
         if (PinScene.Features.Contains(id)) return new PinScene(id, language);
-        throw new NotSupportedException($"No scene renders '{id}' yet.");
+        if (LibraryScene.Features.Contains(id)) return new LibraryScene(id, language);
+        if (QuickAccessScene.Features.Contains(id)) return new QuickAccessScene(id, language);
+        throw new NotSupportedException($"No scene renders '{id}'.");
     }
 }
