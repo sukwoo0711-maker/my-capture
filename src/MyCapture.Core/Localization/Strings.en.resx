@@ -3967,6 +3967,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.pin-click-through.Step1" xml:space="preserve"><value>1. Place a pin on the screen.</value></data>
   <data name="Tutorial.pin-click-through.Step2" xml:space="preserve"><value>2. Place the pointer over the pin and use your shortcut or its right-click menu to enable Click through.</value></data>
   <data name="Tutorial.pin-click-through.Step3" xml:space="preserve"><value>3. Interact with the app underneath. Your assigned shortcut can disable Click through.</value></data>
+  <data name="Tutorial.pin-click-through.Exit" xml:space="preserve"><value>3. Use the app underneath the pin. To disable click through: {0}</value></data>
   <data name="Tutorial.pin-restore.Unassigned" xml:space="preserve"><value>When a closed pin is available, choose Reopen pin from the tray menu.</value></data>
   <data name="Tutorial.pin-restore.Step1" xml:space="preserve"><value>1. Close a pin on the screen.</value></data>
   <data name="Tutorial.pin-restore.Step2" xml:space="preserve"><value>2. Use your shortcut or Reopen pin in the tray menu.</value></data>
@@ -3978,5 +3979,4 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>The tutorial animation could not be loaded. Follow the steps below to use this feature.</value></data>
-  <data name="Tutorial.pin-click-through.Exit" xml:space="preserve"><value>3. Use the app underneath the pin. To disable click through: {0}</value></data>
 </root>
