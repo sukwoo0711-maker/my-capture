@@ -274,7 +274,7 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
             DrawOverlay(dc, Library(selectedFolder: Id == "folder-rename"), dialog, _dialogRect);
             if (Id == "folder-rename" && state == "name-initial")
             {
-                Point top = input.TranslatePoint(new Point(6, 7), _dialogRoot);
+                Point top = SnapshotPoint(input, new Point(6, 7), _dialogRoot!);
                 dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(65, 124, 108, 255)), null,
                     new Rect(_dialogRect.X + top.X, _dialogRect.Y + top.Y, Math.Min(320, input.Text.Length * 15), 22));
             }
@@ -436,7 +436,15 @@ internal sealed class WorkspaceSceneRenderer : ITutorialSceneRenderer
         Point point = element.TranslatePoint(new Point(element.ActualWidth / 2, element.ActualHeight / 2), root);
         if (element.ActualWidth <= 0 || element.ActualHeight <= 0 || !new Rect(0, 0, root.ActualWidth, root.ActualHeight).Contains(point))
             throw new InvalidOperationException("Fixture target must be measured inside the displayed control.");
-        return point;
+        return SnapshotPoint(element, new Point(element.ActualWidth / 2, element.ActualHeight / 2), root);
+    }
+    private static Point SnapshotPoint(FrameworkElement element, Point point, FrameworkElement root)
+    {
+        Point local = element.TranslatePoint(point, root);
+        // RenderTargetBitmap includes the arranged root's visual offset (for example
+        // the folder dialog content's 24px margin); TranslatePoint stops inside it.
+        Vector offset = VisualTreeHelper.GetOffset(root);
+        return new Point(local.X + offset.X, local.Y + offset.Y);
     }
     private static PointD Add(Point point, Point origin) => new(point.X + origin.X, point.Y + origin.Y);
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
