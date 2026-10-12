@@ -136,3 +136,13 @@ focused7ac888 exit0:33PASS/0FAIL/0SKIP(신규9+기존24),TRX artifacts/stress-ed
 확정된 개선은 높은entropy PNG encode가 livebitmap lock을 전체 encode동안 소유하던2초 편집대기를 없앤 결과입니다. 독립copy는4K33MB/8K133MB managedpixelbuffer 및nativebacking을 추가합니다. 4Ksolid p95/peak,8Klatestflush도 개선되지 않은 수치로 유지합니다. 단회paired관측으로 확인한 효과 범위는 이부하에서의 편집대기 감소이며 전체memory/IO비용에는 위표와 같은 차이가 남습니다.
 
 library_motion source-only 리뷰는 materialfinding없음이며 root도 source/9tests 직접검토를 완료했습니다. 현재 root 전체통합검사 슬롯을 위해 추가실행은 중단했습니다. 재현runner의 post-startreceipt예외에서 exactownedProcess를 finally Kill/5초boundedWait/Dispose하는 보강을 source에 준비했으나 이 보강의 실행smoke는 아직NOT RUN이며 별도probe커밋/검증으로 구분합니다. 제품 경로/기존실측 산출물에 영향없습니다.
+
+제품PNGfix+9tests+위실제LOG는 e772117adf2a7e0cf6fad00b64e58e6aa6b13476으로 먼저 커밋했습니다(d6b226 exit0). 재현probe 후속커밋은 제품변경 없이 source/README/runner만 추가합니다. runner hash를 child Start 전에 수집하고 Start 이후 try/finally가 exact Process만 Kill/5초종료확인/Dispose하며 stdout·stderr 각5초수집,외부60초timeout을 유지합니다. 종료미확인/출력미확인/finalizationerror를 구분하고 모든생성물을 보존합니다. Windows commandline의 trailingbackslash quote도 보존하고 receipt에 semanticargs와 실제escapedargs를 기록합니다.
+
+최종runner 문법은 아래 source parser읽기로 확인했습니다(cwd동일,13076e exit0/문법오류0). 본문실행 또는 runtime smoke를 대신하는 결과가 아닙니다.
+
+```powershell
+$tokens=$null; $parseErrors=$null; [void][Management.Automation.Language.Parser]::ParseFile('C:/GitRepositories/my-capture-edit-recovery/build/tools/EditorStressProbe/run-editor-stress.ps1',[ref]$tokens,[ref]$parseErrors); if($parseErrors.Count -ne 0){throw 'Runner syntax errors'}; Write-Output 'RUNNER_SYNTAX_ERRORS=0'
+```
+
+root 전체App55381이 진행중이므로 runner 보강후 runtime smoke는 비용/직렬슬롯 때문에 NOT RUN(exitN/A)입니다. root가 최종QA12payload의 productmode8Kentropy1회로 통합제품과 최종runner를 함께검증할 계획이며 결과는 root소유 최종LOG에 기록합니다. 기존실측은 보강전runner에서 actualexit0/완전한receipt/rawlogs를 확인한 근거 그대로 유지합니다. 이 시점의 새로운 runtime 결과는 없습니다.
