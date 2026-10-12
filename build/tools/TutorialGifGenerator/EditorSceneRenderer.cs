@@ -79,7 +79,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
             {
                 tail = new PointD(515, 250);
                 story.Motion("type", 8, start, start).Hold("typed", 120, start)
-                    .Motion("text-away", 20, start, tail).Motion("text-commit", 8, tail, tail, pressed: true).Hold("result", 120, tail);
+                    .Motion("text-away", 24, start, tail).Motion("text-commit", 8, tail, tail, pressed: true).Hold("result", 120, tail);
             }
             else
             {
