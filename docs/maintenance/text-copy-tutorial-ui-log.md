@@ -40,3 +40,7 @@ csproj는 두 GIF를 출력 및 publish에 PreserveNewest로 복사하도록 준
 ## 보존 및 인계
 
 파일 삭제·휴지통 비우기·새 worktree 생성·사용자 MyCapture 종료·클립보드 변경·프로필 변경·원격 변경을 수행하지 않았습니다. 기존 worker 작업 사본은 미추적 성능 테스트와 실패/최종 TRX가 있어 보존했습니다. 총괄이 제품 diff와 실제 화면을 확인하고 커밋을 cherry-pick한 뒤 통합 검증합니다.
+
+## 통합 회귀 수정
+
+총괄의 전체 App 테스트 session `75172`에서 `ShortcutHelpFrameKeysTests` 3건이 실패했습니다. 초기 작성은 모든 탭 행의 action TextBlock을 StackPanel로 감싸 기존 비디오/핀 행의 직접 자식 구조 계약을 변경했습니다. 초기 집중 필터에 `ShortcutHelpFrameKeysTests`가 빠져 이 회귀를 확인하지 못했습니다. 기존 일반 행에는 직접 TextBlock을 유지하고 두 튜토리얼 해당 행만 버튼을 위한 wrapper를 사용하도록 최소 수정했습니다. 기존 프레임/핀 구조 assertions는 유지했습니다. 총괄 전체 검사가 진행 중일 때 소스만 수정했습니다. 총괄 지시에 따라 집중 재실행 전에 이 최소 수정을 커밋하고, 통합 빌드·확장 집중 필터·전체 회귀는 총괄이 직렬 실행합니다. 이 수정 이후 worker 빌드/테스트는 미실행(exit code N/A)이며 앞선 26/26 결과는 이전 소스의 결과입니다. worker의 변경 후 `git diff --check`는 chunk `f702ad`, exit 0입니다.

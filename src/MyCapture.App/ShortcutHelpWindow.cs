@@ -116,10 +116,15 @@ internal sealed class ShortcutHelpWindow : Window
                 {
                     string label = UiText.Get(entry.Action);
                     var row = new UniformGrid { Columns = 2, Margin = new Thickness(0, 6, 0, 6) };
-                    var action = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-                    action.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap });
-                    if (IsTextTutorialEntry(entry.Action)) action.Children.Add(TutorialButton());
-                    row.Children.Add(action);
+                    var action = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+                    if (IsTextTutorialEntry(entry.Action))
+                    {
+                        var tutorialAction = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                        tutorialAction.Children.Add(action);
+                        tutorialAction.Children.Add(TutorialButton());
+                        row.Children.Add(tutorialAction);
+                    }
+                    else row.Children.Add(action);
                     row.Children.Add(Keycaps(entry.Keys));
                     panel.Children.Add(row);
                     FrameworkElement result = ResultRow(label, category, entry.Keys, IsTextTutorialEntry(entry.Action) ? keys : null);
