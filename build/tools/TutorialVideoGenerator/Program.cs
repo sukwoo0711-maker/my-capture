@@ -26,6 +26,9 @@ internal static class Program
 {
     internal const int DefaultBitrate = 300_000, DefaultQuality = 60;
 
+    /// <summary>Where scenes keep fixture files (a fixture library, a synthetic recording): under the output folder, never the user profile.</summary>
+    internal static string FixtureRoot { get; private set; } = Path.Combine(Path.GetTempPath(), "MyCapture.TutorialGenerator");
+
     [STAThread]
     private static int Main(string[] args)
     {
@@ -51,6 +54,10 @@ internal static class Program
             return 2;
         }
 
+        // Product code awaits on the UI thread; continuations must come back to this dispatcher
+        // even though the generator drives it from Main rather than from a dispatcher callback.
+        System.Threading.SynchronizationContext.SetSynchronizationContext(
+            new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher));
         Application app = CreateResourceHost();
         FluidMotion.AnimationsEnabledOverrideForTest = false;
         ThemeService.Apply(AppTheme.Glass);
@@ -84,6 +91,7 @@ internal static class Program
     private static int Run(Options options)
     {
         Directory.CreateDirectory(options.Output);
+        FixtureRoot = Directory.CreateDirectory(Path.Combine(options.Output, "fixtures")).FullName;
         var receipts = new List<ClipReceipt>();
         var failures = new List<string>();
         var total = Stopwatch.StartNew();

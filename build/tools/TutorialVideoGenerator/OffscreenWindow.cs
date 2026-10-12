@@ -66,20 +66,28 @@ internal sealed class OffscreenWindow : IDisposable
         return SnapshotElement(root, root.ActualWidth, root.ActualHeight, scale);
     }
 
-    internal static BitmapSource SnapshotElement(Visual visual, double width, double height, double scale = 1, Brush? backdrop = null)
+    /// <param name="opaque">
+    /// True for a normal window (HwndSource clears to black before WPF draws a translucent glass
+    /// Surface.Base); false for layered content such as a countdown card, keeping its transparency.
+    /// </param>
+    internal static BitmapSource SnapshotElement(Visual visual, double width, double height, double scale = 1, Brush? backdrop = null,
+        bool opaque = true)
     {
         double factor = Stage.Scale * scale;
         var bitmap = new RenderTargetBitmap(Math.Max(1, (int)Math.Round(width * factor)), Math.Max(1, (int)Math.Round(height * factor)),
             96 * factor, 96 * factor, PixelFormats.Pbgra32);
-        var underlay = new DrawingVisual();
-        using (DrawingContext dc = underlay.RenderOpen())
+        if (opaque || backdrop is not null)
         {
-            // HwndSource clears to black before WPF draws a translucent glass Surface.Base.
-            dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
-            if (backdrop is not null) dc.DrawRectangle(backdrop, null, new Rect(0, 0, width, height));
+            var underlay = new DrawingVisual();
+            using (DrawingContext dc = underlay.RenderOpen())
+            {
+                if (opaque) dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
+                if (backdrop is not null) dc.DrawRectangle(backdrop, null, new Rect(0, 0, width, height));
+            }
+
+            bitmap.Render(underlay);
         }
 
-        bitmap.Render(underlay);
         bitmap.Render(visual);
         bitmap.Freeze();
         return bitmap;

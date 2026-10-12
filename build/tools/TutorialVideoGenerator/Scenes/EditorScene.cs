@@ -139,14 +139,14 @@ internal sealed class EditorScene : TutorialScene
                 break;
             case "text":
                 ChooseTool(story);
-                story.Move("canvas", Image(320, 140)).Click("place").Hold("placed", 0.4);
+                story.Move("canvas", Image(200, 256)).Click("place").Hold("placed", 0.4);
                 story.Hold("typing", 1.6).Hold("typed", 0.8);
                 story.Move("away", Image(500, 280)).Click("commit");
                 story.Hold("result", 0.6);
                 break;
             case "step-number":
                 ChooseTool(story);
-                foreach (PointD at in new[] { Image(12, 60), Image(12, 112), Image(12, 148) })
+                foreach (PointD at in new[] { Image(290, 62), Image(262, 144), Image(290, 216) })
                     story.Move("step-move", at, 12).Click("step").Hold("stepped", 0.5);
                 break;
             case "crop":
@@ -447,7 +447,7 @@ internal sealed class EditorScene : TutorialScene
                         _ => L("표시할 부분을 드래그", "Drag over the area to mark"),
                     }, ""),
                     _ => (_feature is "mosaic" or "blur"
-                        ? L(tool + " 처리됨 · 저장하면 그대로 남음", tool + " applied · it stays in the saved image")
+                        ? L(tool + " 적용됨 · 범위 확인 후 저장", tool + " applied · check the area, then save")
                         : L(tool + " 추가됨 · Ctrl+Z로 취소", tool + " added · Ctrl+Z undoes it"), ""),
                 };
         }
