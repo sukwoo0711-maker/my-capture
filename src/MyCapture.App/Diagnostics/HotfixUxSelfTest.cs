@@ -65,7 +65,7 @@ internal static class HotfixUxSelfTest
             FluidMotion.AnimationsEnabledOverrideForTest = false;
             ThemeService.Apply(AppTheme.Midnight);
             BitmapSource sample = Sample();
-            VerifyEditorMouseShortcuts(sample, owned, Check);
+            VerifyEditorMouseShortcuts(sample, owned, Check, report);
             var rect = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
             var doc = AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight);
             doc.Items.Add(new RectangleAnnotation { Rect = new RectD(30, 30, 160, 90), Stroke = ColorRgba.FromRgb(255, 0, 0), StrokeThickness = 8 });
@@ -555,12 +555,25 @@ internal static class HotfixUxSelfTest
         Await(gesture); Pump(200);
     }
 
-    private static void VerifyEditorMouseShortcuts(BitmapSource sample, List<Window> owned, Action<string, bool> check)
+    private static void VerifyEditorMouseShortcuts(BitmapSource sample, List<Window> owned, Action<string, bool> check, StringBuilder report)
     {
         var rect = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
         var window = new AnnotationEditorWindow(new FrozenFrame(sample, rect, null, 0), rect, sample);
         owned.Add(window); window.Show(); Pump(150); window.Activate(); window.Editor.Focus();
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
+        void ObserveForeground(string phase, TimeSpan elapsed)
+        {
+            string observation = $"HOTFIX_EDITOR_FOREGROUND_{phase}: UTC={DateTimeOffset.UtcNow:O}; PID={Environment.ProcessId}; expected={hwnd}; actual={GetForegroundWindow()}; elapsed={elapsed.TotalSeconds:0.000}s; no input injected during foreground wait.";
+            report.AppendLine(observation);
+            Console.WriteLine(observation);
+        }
+        // A foreground-lock rejection must never redirect synthetic input to another app.
+        // Keep the dispatcher responsive so the operator can activate this owned editor.
+        var foregroundWait = Stopwatch.StartNew();
+        ObserveForeground("WAIT", foregroundWait.Elapsed);
+        while (GetForegroundWindow() != hwnd && foregroundWait.Elapsed < TimeSpan.FromSeconds(30)) Pump(50);
+        ObserveForeground(GetForegroundWindow() == hwnd ? "ACQUIRED" : "TIMEOUT", foregroundWait.Elapsed);
+        RequireForeground(hwnd);
         // The visible command for a key: the crop bar replaces the top commands while cropping.
         ButtonBase Button(string key) => Ux402VisualMetrics.Descendants(window).OfType<ButtonBase>()
             .Single(b => AutomationProperties.GetAcceleratorKey(b) == key && b.IsVisible);
