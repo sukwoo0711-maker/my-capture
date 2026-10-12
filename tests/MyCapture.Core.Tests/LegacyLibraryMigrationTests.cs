@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Annotations;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Serialization;
@@ -557,6 +558,7 @@ public sealed class LegacyLibraryMigrationTests
 
     private sealed class Fixture : IDisposable
     {
+        private readonly IDisposable _language = UiText.UseLanguage("ko-KR");
         private readonly TempWorkspace _workspace = new();
         internal DateTimeOffset Created { get; } = DateTimeOffset.UtcNow.AddMinutes(-5);
         internal AppPaths SourcePaths { get; }
@@ -621,6 +623,10 @@ public sealed class LegacyLibraryMigrationTests
         }
         internal CaptureQueue ReopenTarget() { var queue = NewQueue(TargetPaths, TargetSettings); queue.Load(); return queue; }
         private static CaptureQueue NewQueue(AppPaths paths, AppSettings settings) => new(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
-        public void Dispose() => _workspace.Dispose();
+        public void Dispose()
+        {
+            try { _workspace.Dispose(); }
+            finally { _language.Dispose(); }
+        }
     }
 }

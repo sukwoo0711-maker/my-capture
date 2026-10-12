@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MyCapture.Core.Annotations;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Serialization;
 using MyCapture.Core.Settings;
@@ -246,7 +247,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
             imported.FolderId = desiredFolder;
             if (imported.FolderId == historyId && !foldersById.ContainsKey(historyId))
             {
-                var history = new CaptureFolder { Id = historyId, Name = "이전 MyCapture", CreatedAt = record.CreatedAt };
+                var history = new CaptureFolder { Id = historyId, Name = UiText.Get("LegacyImport.HistoryFolder"), CreatedAt = record.CreatedAt };
                 history.Name = UniqueFolderName(state.Folders, history); state.Folders.Add(history); foldersById.Add(history.Id, history);
             }
             CaptureFolder destination = foldersById[imported.FolderId.Value];
