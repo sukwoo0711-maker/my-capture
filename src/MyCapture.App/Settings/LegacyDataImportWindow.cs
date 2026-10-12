@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using MyCapture.App.Themes;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Shell;
@@ -17,7 +18,7 @@ internal sealed record LegacyImportOperations(
     ILegacyLibraryMigrationService Service, AppPaths TargetPaths,
     Func<CancellationToken, Task<bool>> Prepare, Action Release,
     Func<string, IProgress<LegacyMigrationProgress>, CancellationToken, Task<LegacyMigrationResult>> Import,
-    Action Refresh);
+    Action Refresh, Func<Task> Recover);
 
 internal sealed class LegacyDataImportWindow : Window
 {
@@ -25,6 +26,7 @@ internal sealed class LegacyDataImportWindow : Window
     private CancellationTokenSource? _work;
     private long _generation;
     private bool _copying, _closed, _closeWhenStopped, _hasSettings;
+    private bool _recoveryRequired, _protectionHeld;
     private readonly TextBlock _source, _summary, _status;
     private readonly Button _choose, _copy, _cancel;
     private readonly CheckBox _includeSettings;
@@ -32,13 +34,14 @@ internal sealed class LegacyDataImportWindow : Window
     internal string SourceRoot { get; private set; }
     internal LegacyImportSelection? Selection { get; private set; }
     internal bool IsWorking => _copying;
+    internal bool IsRecoveryRequired => _recoveryRequired;
 
     internal LegacyDataImportWindow(LegacyImportOperations operations, string sourceRoot)
     {
         _operations = operations;
         SourceRoot = sourceRoot;
         Title = UiText.Get("LegacyImport.Title");
-        Width = 560; MinWidth = 420; Height = 430; MinHeight = 400;
+        Width = 560; MinWidth = 420; Height = 500; MinHeight = 400;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
         StandardWindowTheme.Apply(this);
@@ -54,6 +57,13 @@ internal sealed class LegacyDataImportWindow : Window
         _cancel.Click += (_, _) => RequestDismissal();
         actions.Children.Add(_copy); actions.Children.Add(_cancel);
         DockPanel.SetDock(actions, Dock.Bottom); root.Children.Add(actions);
+        var feedback = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
+        _status = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
+        feedback.Children.Add(_status);
+        _progress = new ProgressBar { Minimum = 0, Maximum = 100, Height = 4, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 8, 0, 0) };
+        feedback.Children.Add(_progress);
+        DockPanel.SetDock(feedback, Dock.Bottom); root.Children.Add(feedback);
         var panel = new StackPanel();
         panel.Children.Add(new TextBlock { Text = Title, FontSize = 20, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(new TextBlock { Text = UiText.Get("LegacyImport.Description"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 16) });
@@ -78,11 +88,6 @@ internal sealed class LegacyDataImportWindow : Window
         panel.Children.Add(_includeSettings);
         panel.Children.Add(new TextBlock { Text = UiText.Get("LegacyImport.KeepLibrary"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) });
         panel.Children.Add(new TextBlock { Text = UiText.Get("LegacyImport.SettingsDraft"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 12) });
-        _status = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
-        panel.Children.Add(_status);
-        _progress = new ProgressBar { Minimum = 0, Maximum = 100, Height = 4, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 8, 0, 0) };
-        panel.Children.Add(_progress);
         root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         Content = root;
         Loaded += async (_, _) => await ScanAsync();
@@ -134,11 +139,12 @@ internal sealed class LegacyDataImportWindow : Window
     internal async Task ImportAsync()
     {
         if (_copying || !_copy.IsEnabled) return;
+        if (_recoveryRequired) { await RetryRecoveryAsync(); return; }
         _copying = true;
         long generation = ++_generation;
         _work?.Cancel(); _work?.Dispose(); _work = new();
         bool includeSettings = _includeSettings.IsChecked == true;
-        bool protectedWork = false;
+        bool importStarted = false;
         _choose.IsEnabled = _copy.IsEnabled = _includeSettings.IsEnabled = false;
         _cancel.Content = UiText.Get("Dialog.Cancel");
         _status.Text = UiText.Get("LegacyImport.Preparing");
@@ -146,10 +152,11 @@ internal sealed class LegacyDataImportWindow : Window
         try
         {
             if (!await _operations.Prepare(_work.Token)) { _status.Text = UiText.Get("LegacyImport.Deferred"); return; }
-            protectedWork = true;
+            _protectionHeld = true;
             _work.Token.ThrowIfCancellationRequested();
+            importStarted = true;
             LegacyMigrationResult result = await _operations.Import(SourceRoot,
-                new Progress<LegacyMigrationProgress>(value =>
+                new DispatcherProgress(Dispatcher, value =>
                 {
                     if (_closed || !_copying || generation != _generation) return;
                     _status.Text = value.Stage switch
@@ -169,25 +176,90 @@ internal sealed class LegacyDataImportWindow : Window
                 _operations.Refresh();
                 _status.Text = UiText.Format("LegacyImport.Completed", result.ImportedCount, result.SkippedCount);
             }
-            else _status.Text = result.Status == LegacyMigrationStatus.Canceled ? UiText.Get("LegacyImport.Canceled") : ErrorText(result.ErrorCode);
+            else
+            {
+                _recoveryRequired = result.ErrorCode == "RecoveryRequired";
+                _status.Text = result.Status == LegacyMigrationStatus.Canceled ? UiText.Get("LegacyImport.Canceled") : ErrorText(result.ErrorCode);
+            }
         }
-        catch (OperationCanceledException) { _status.Text = UiText.Get("LegacyImport.Canceled"); }
-        catch (Exception error) { _status.Text = UiText.Format("LegacyImport.FailedDetail", ThemedDialog.RecoveryMessage(error)); }
+        catch (OperationCanceledException)
+        {
+            _recoveryRequired = importStarted;
+            _status.Text = _recoveryRequired ? ErrorText("RecoveryRequired") : UiText.Get("LegacyImport.Canceled");
+        }
+        catch (Exception error)
+        {
+            _recoveryRequired = importStarted;
+            _status.Text = UiText.Format("LegacyImport.FailedDetail", ThemedDialog.RecoveryMessage(error));
+            if (_recoveryRequired) _status.Text += " " + ErrorText("RecoveryRequired");
+        }
         finally
         {
             _copying = false; ++_generation;
-            if (protectedWork) _operations.Release();
-            _progress.Visibility = Visibility.Collapsed;
-            _cancel.Content = UiText.Get("Dialog.Close");
-            _copy.IsEnabled = _choose.IsEnabled = Selection is null;
-            _includeSettings.IsEnabled = Selection is null && _hasSettings;
-            if (Selection is not null) _copy.Visibility = Visibility.Collapsed;
-            if (_closeWhenStopped) Close();
+            if (!_recoveryRequired) ReleaseProtection();
+            ResetActions();
+            if (_closeWhenStopped && !_recoveryRequired) Close();
         }
+    }
+
+    private sealed class DispatcherProgress(Dispatcher dispatcher, Action<LegacyMigrationProgress> apply)
+        : IProgress<LegacyMigrationProgress>
+    {
+        public void Report(LegacyMigrationProgress value)
+        {
+            if (!dispatcher.HasShutdownStarted && !dispatcher.HasShutdownFinished)
+                _ = dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => apply(value)));
+        }
+    }
+
+    internal async Task RetryRecoveryAsync()
+    {
+        if (_copying || !_recoveryRequired) return;
+        _copying = true;
+        _copy.IsEnabled = _cancel.IsEnabled = false;
+        _status.Text = UiText.Get("LegacyImport.Recovering");
+        _progress.Visibility = Visibility.Visible; _progress.IsIndeterminate = true;
+        try
+        {
+            // Publication recovery is not canceled midway and never releases a stale live queue.
+            await _operations.Recover();
+            _recoveryRequired = false;
+            _operations.Refresh();
+            ReleaseProtection();
+            _status.Text = UiText.Get("LegacyImport.Recovered");
+        }
+        catch (Exception error)
+        {
+            _status.Text = UiText.Format("LegacyImport.FailedDetail", ThemedDialog.RecoveryMessage(error))
+                + " " + ErrorText("RecoveryRequired");
+        }
+        finally { _copying = false; ResetActions(); }
+    }
+
+    private void ReleaseProtection()
+    {
+        if (!_protectionHeld) return;
+        _operations.Release();
+        _protectionHeld = false;
+    }
+
+    private void ResetActions()
+    {
+        _progress.Visibility = Visibility.Collapsed;
+        _cancel.Content = UiText.Get("Dialog.Close");
+        _cancel.IsEnabled = !_recoveryRequired;
+        _copy.Content = UiText.Get(_recoveryRequired ? "LegacyImport.RetryRecovery" : "LegacyImport.Copy");
+        AutomationProperties.SetName(_copy, (string)_copy.Content);
+        _copy.IsEnabled = Selection is null;
+        _choose.IsEnabled = Selection is null && !_recoveryRequired;
+        _includeSettings.IsEnabled = Selection is null && _hasSettings && !_recoveryRequired;
+        if (Selection is not null) _copy.Visibility = Visibility.Collapsed;
+        if (_recoveryRequired) _closeWhenStopped = false;
     }
 
     private void RequestDismissal()
     {
+        if (_recoveryRequired) return;
         if (!_copying) { Close(); return; }
         _closeWhenStopped = true;
         _work?.Cancel();
@@ -196,7 +268,7 @@ internal sealed class LegacyDataImportWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (_copying) { e.Cancel = true; RequestDismissal(); }
+        if (_copying || _recoveryRequired) { e.Cancel = true; RequestDismissal(); }
         base.OnClosing(e);
     }
 
@@ -204,6 +276,9 @@ internal sealed class LegacyDataImportWindow : Window
     {
         "SourceMissing" or "InvalidSource" => "LegacyImport.InvalidSource",
         "InvalidTarget" => "LegacyImport.InvalidTarget",
+        "OverlappingRoots" => "LegacyImport.OverlappingRoots",
+        "TargetChanged" => "LegacyImport.TargetChanged",
+        "RecoveryRequired" => "LegacyImport.RecoveryRequired",
         "SourceChanged" => "LegacyImport.SourceChanged",
         "MissingPayload" => "LegacyImport.MissingPayload",
         _ => "LegacyImport.Failed",

@@ -14,6 +14,8 @@ public partial class App
     private LegacyDataImportWindow? _legacyImportWindow;
     private bool _legacyImportPreparing;
     private IDisposable? _legacyIndexingLease;
+    private IDisposable? _legacyPresenterLease;
+    private bool _legacySharedProtectionHeld;
     private List<(Window Window, bool Enabled)>? _legacyImportWindowStates;
 
     private Task RecoverLegacyImportBeforeLoadAsync()
@@ -45,7 +47,8 @@ public partial class App
             PrepareLegacyImportAsync, ReleaseLegacyImport,
             (root, progress, token) => _services.GetRequiredService<ILegacyLibraryMigrationService>()
                 .ImportAsync(root, _capturePaths, _queue, _settings, progress, token),
-            () => { _galleryWindow?.RefreshFromQueue(); _tray?.SetCaptureCount(_queue.Count); });
+            () => { _galleryWindow?.RefreshFromQueue(); _tray?.SetCaptureCount(_queue.Count); },
+            RecoverLegacyImportWhileHeldAsync);
         var window = new LegacyDataImportWindow(operations, source) { Owner = owner };
         _legacyImportWindow = window;
         try { _ = window.ShowDialog(); return window.Selection; }
@@ -58,11 +61,15 @@ public partial class App
         _legacyImportPreparing = true;
         try
         {
+            // Initial recovery can itself publish metadata; finish it before acquiring protection.
+            await Task.WhenAll(_initialLibraryRecoveryTask, _initialEditRecoveryTask).WaitAsync(token);
             if (!await PrepareAndHoldStoreUpdateAsync()) { _legacyImportPreparing = false; return false; }
+            _legacySharedProtectionHeld = true;
             _legacyImportWindowStates = Windows.Cast<Window>().Where(window => !ReferenceEquals(window, _legacyImportWindow))
                 .Select(window => (window, window.IsEnabled)).ToList();
             foreach (var (window, _) in _legacyImportWindowStates) window.IsEnabled = false;
             _automaticIndexingPassCancellation?.Cancel();
+            if (_ocrPresenter is not null) _legacyPresenterLease = await _ocrPresenter.AcquireMutationLeaseAsync(token);
             if (_automaticIndexer is not null) _legacyIndexingLease = await _automaticIndexer.AcquireIdleLeaseAsync(token);
             while (_indexingRunning) await Task.Delay(20, token);
             return true;
@@ -72,14 +79,26 @@ public partial class App
 
     private void ReleaseLegacyImport()
     {
+        _legacyPresenterLease?.Dispose();
+        _legacyPresenterLease = null;
         _legacyIndexingLease?.Dispose();
         _legacyIndexingLease = null;
         if (_legacyImportWindowStates is { } states)
             foreach (var (window, enabled) in states) window.IsEnabled = enabled;
         _legacyImportWindowStates = null;
         _legacyImportPreparing = false;
-        ReleaseStoreUpdateProtection();
+        if (_legacySharedProtectionHeld) ReleaseStoreUpdateProtection();
+        _legacySharedProtectionHeld = false;
         RequestAutomaticIndexing();
+    }
+
+    private async Task RecoverLegacyImportWhileHeldAsync()
+    {
+        if (!_legacySharedProtectionHeld || _services is null || _queue is null || _capturePaths is null)
+            throw new InvalidOperationException("Legacy import protection is unavailable.");
+        await _services.GetRequiredService<ILegacyLibraryMigrationService>()
+            .RecoverPendingAsync(_capturePaths, CancellationToken.None);
+        using (_queue.SuspendEviction()) _queue.Load();
     }
 
     internal static bool ShouldOfferLegacyImport(bool packaged, bool quietLaunch, bool alreadyOffered) =>

@@ -456,6 +456,43 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
 
     // ---- Indexer happy path over a REAL persisted capture ----
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Presenter_MigrationLeaseInvalidatesQueuedAndLateRecordWrites(bool completeBeforeLease) => RunSta(() =>
+    {
+        var service = new CancellationIgnoringOcr();
+        int writes = 0;
+        using var presenter = new OcrResultPresenter(service, Dispatcher.CurrentDispatcher, _ => { },
+            NullLogger<OcrResultPresenter>.Instance);
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        using var cancellation = new CancellationTokenSource();
+        typeof(OcrResultPresenter).GetField("_inFlight", flags)!.SetValue(presenter, cancellation);
+        typeof(OcrResultPresenter).GetField("_onFreshResult", flags)!.SetValue(presenter, (Action<OcrResult>)(_ => writes++));
+        var recognition = (Task)typeof(OcrResultPresenter).GetMethod("RecognizeAsync", flags)!.Invoke(presenter,
+            [OcrRequest.FromBitmap(SolidBitmap(20, 20)), cancellation, false])!;
+        if (completeBeforeLease)
+        {
+            service.Complete("queued result");
+            Assert.True(SpinWait.SpinUntil(() => recognition.IsCompleted, TimeSpan.FromSeconds(5)));
+        }
+        Task<IDisposable> acquiring = presenter.AcquireMutationLeaseAsync(CancellationToken.None);
+        PumpDispatcherOnce();
+        using IDisposable lease = acquiring.GetAwaiter().GetResult();
+        Assert.True(service.ObservedToken.IsCancellationRequested);
+        if (!completeBeforeLease)
+        {
+            service.Complete("late result");
+            Assert.True(SpinWait.SpinUntil(() => recognition.IsCompleted, TimeSpan.FromSeconds(5)));
+        }
+        PumpDispatcherOnce();
+        Assert.Equal(0, writes);
+        // Blocked admission does not even construct a new request or show an OCR window.
+        presenter.ShowRecognized(() => throw new InvalidOperationException("Must remain blocked"), "blocked", _ => writes++);
+        Assert.Null(typeof(OcrResultPresenter).GetField("_currentRequestFactory", flags)!.GetValue(presenter));
+        Assert.Equal(0, writes);
+    });
+
     private static void RunSta(Action action)
     {
         Exception? failure = null;

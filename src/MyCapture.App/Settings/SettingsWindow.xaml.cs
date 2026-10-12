@@ -179,6 +179,8 @@ internal sealed partial class SettingsWindow : Window
 
     private void ReloadDraftFrom(AppSettings settings)
     {
+        _legacySettingsDraft = null;
+        _legacyNormalizedBaseline = null;
         DetachDraftEvents();
         _draft = new SettingsDraft(settings);
         AttachDraftEvents();
@@ -237,6 +239,8 @@ internal sealed partial class SettingsWindow : Window
     {
         // Deliberate and reversible: resets the draft only. Nothing is written until Apply,
         // so Cancel (or reopening) restores the prior values.
+        _legacySettingsDraft = null;
+        _legacyNormalizedBaseline = null;
         _draft.ResetToDefaults();
         RefreshErrorSummary();
     }
@@ -305,6 +309,8 @@ internal sealed partial class SettingsWindow : Window
             // Exports never carry the GitHub PAT, so the import must not wipe the live one.
             imported.GitHub.Token = _currentSettings().GitHub.Token;
             // The import replaces the values but stays an unapplied change until Apply.
+            _legacySettingsDraft = null;
+            _legacyNormalizedBaseline = null;
             _draft.ReplaceValues(imported);
             SetStatusMessage(UiText.Get("Settings_ImportDone"));
             RefreshErrorSummary();
@@ -327,7 +333,7 @@ internal sealed partial class SettingsWindow : Window
             return; // Do not close on errors.
         }
 
-        AppSettings next = _draft.ToAppSettings();
+        AppSettings next = LegacyApplyCandidate(_draft.ToAppSettings());
         SettingsApplyResult result = _applyDraft?.Invoke(next, _draft.FolderDestinationEdited) ?? _apply(next);
 
         if (!result.Saved)

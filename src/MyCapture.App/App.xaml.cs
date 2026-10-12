@@ -1754,7 +1754,6 @@ public partial class App : Application
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         ConfigureEngagementWindow(window);
-        ConfigureLegacyImportWindow(window);
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
         window.FloatRequested += (_, image) => _pins?.PinImage(image);
         // Header toolbar commands mirror the tray entries so capture/recording are reachable
@@ -1811,6 +1810,7 @@ public partial class App : Application
             applyDraft: (next, edited) => _settingsApply!.Apply(next, edited));
 
         ConfigureEngagementWindow(window);
+        ConfigureLegacyImportWindow(window);
         window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
