@@ -78,7 +78,7 @@ internal sealed class EditorSceneRenderer : ITutorialSceneRenderer
             else if (_feature == "text")
             {
                 tail = new PointD(515, 250);
-                story.Motion("type", 8, start, start).Hold("typed", 120, start)
+                story.Motion("type", 6, start, start).Hold("typed", 120, start)
                     .Motion("text-away", 24, start, tail).Motion("text-commit", 8, tail, tail, pressed: true).Hold("result", 120, tail);
             }
             else
