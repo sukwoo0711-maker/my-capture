@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
@@ -170,6 +171,79 @@ public sealed class FeatureTutorialTests
             Assert.Equal(3, media.OpenedPaths.Count);
             Assert.EndsWith("pin-copy.en.mp4", media.OpenedPaths.Last(), StringComparison.Ordinal);
             Assert.True(window.HasFirstFrame);
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void FirstFrameStillShowsBeforeTheVideoOpensAndFollowsEverySelection() => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage("ko-KR");
+        var media = new FakeTutorialMedia { AutoOpen = false };
+        string assets = TutorialTestAssets.Create("image-blur", "pin-copy", "image-text");
+        TutorialTestAssets.AddStills(assets, "image-blur", "pin-copy");
+        FeatureTutorialWindow window = Offscreen("image-blur", media, assets);
+        try
+        {
+            Show(window);
+            Assert.True(window.HasMedia);
+            Assert.False(window.HasFirstFrame);
+            Assert.True(window.HasPoster);
+            Assert.Equal(Path.Combine(assets, "image-blur.ko.jpg"), window.PosterPath);
+            Assert.False(LoadingTextVisible(window));
+            media.RaiseOpened();
+            Assert.True(window.HasFirstFrame && window.HasPoster);
+
+            // The still follows the selection at once; the video opens only once it settles.
+            window.SelectFeature("pin-copy");
+            Assert.True(window.IsOpenPending);
+            Assert.True(window.HasPoster);
+            Assert.Equal(Path.Combine(assets, "pin-copy.ko.jpg"), window.PosterPath);
+            Drain(window);
+            Assert.EndsWith("pin-copy.ko.mp4", media.OpenedPaths.Last(), StringComparison.Ordinal);
+            Assert.False(LoadingTextVisible(window));
+
+            // Without a still the loading text shows until the video opens.
+            window.SelectFeature("image-text");
+            Assert.False(window.HasPoster);
+            Drain(window);
+            Assert.True(LoadingTextVisible(window));
+            media.RaiseOpened();
+            Assert.False(LoadingTextVisible(window));
+
+            // A failure shows its message in place of the picture; a later selection brings the still back.
+            window.SelectFeature("image-blur");
+            Drain(window);
+            Assert.True(window.HasPoster);
+            media.RaiseFailed(new COMException("Media Foundation is not available", unchecked((int)0xC00D36E5)));
+            Assert.False(window.HasPoster);
+            AssertFallback(window, "Tutorial.Unavailable", TutorialCatalog.Get("image-blur").Steps);
+            window.SelectFeature("pin-copy");
+            Assert.True(window.HasPoster);
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void UnreadableStillIsLoggedAndTheVideoStillOpens() => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage("en-US");
+        using var trace = new TraceCapture();
+        var media = new FakeTutorialMedia { AutoOpen = false };
+        string assets = TutorialTestAssets.Create("capture-scroll");
+        File.WriteAllBytes(Path.Combine(assets, "capture-scroll.en.jpg"), [0xFF, 0xD8, 0x00]);
+        FeatureTutorialWindow window = Offscreen("capture-scroll", media, assets);
+        try
+        {
+            Show(window);
+            Assert.False(window.HasPoster);
+            Assert.True(LoadingTextVisible(window));
+            Assert.Contains(trace.Lines, line => line.Contains("capture-scroll", StringComparison.Ordinal)
+                && line.Contains(Path.Combine(assets, "capture-scroll.en.jpg"), StringComparison.Ordinal));
+            Assert.EndsWith("capture-scroll.en.mp4", Assert.Single(media.OpenedPaths), StringComparison.Ordinal);
+            media.RaiseOpened();
+            Assert.True(window.HasFirstFrame);
+            Assert.False(window.IsShowingFallback);
         }
         finally { window.Close(); }
     });
@@ -442,11 +516,11 @@ public sealed class FeatureTutorialTests
     });
 
     /// <summary>
-    /// The shipped build carries both languages' video for every feature and no GIF
-    /// (Assets\Tutorials\*.mp4 is copied to the output by MyCapture.App.csproj).
+    /// The shipped build carries both languages' video and first-frame still for every feature and
+    /// no GIF (Assets\Tutorials\*.mp4 and *.jpg are copied to the output by MyCapture.App.csproj).
     /// </summary>
     [Fact]
-    public void EveryFeatureShipsANonEmptyKoreanAndEnglishVideoAndNoGif()
+    public void EveryFeatureShipsANonEmptyKoreanAndEnglishVideoAndStillAndNoGif()
     {
         string tutorials = Path.Combine(Path.GetDirectoryName(typeof(FeatureTutorialWindow).Assembly.Location)!, "Assets", "Tutorials");
         Assert.Empty(TutorialAssetProblems(tutorials));
@@ -462,6 +536,11 @@ public sealed class FeatureTutorialTests
                 var file = new FileInfo(Path.Combine(directory, $"{feature.Id}.{language}.mp4"));
                 if (!file.Exists) problems.Add($"missing {file.Name}");
                 else if (file.Length == 0) problems.Add($"empty {file.Name}");
+                var still = new FileInfo(Path.ChangeExtension(file.FullName, ".jpg"));
+                if (!still.Exists) { problems.Add($"missing {still.Name}"); continue; }
+                using FileStream stream = still.OpenRead();
+                BitmapFrame frame = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
+                if (frame.PixelWidth != 960 || frame.PixelHeight != 540) problems.Add($"{still.Name} is {frame.PixelWidth}x{frame.PixelHeight}");
             }
         problems.AddRange(Directory.EnumerateFiles(directory, "*.gif").Select(path => $"leftover {Path.GetFileName(path)}"));
         return problems;
@@ -476,6 +555,9 @@ public sealed class FeatureTutorialTests
         Assert.False(buttons.Single(button => Equals(button.Content, UiText.Get("GifPreview_Play"))).IsEnabled);
         Assert.False(buttons.Single(button => Equals(button.Content, UiText.Get("TextCapture_TutorialReplay"))).IsEnabled);
     }
+
+    private static bool LoadingTextVisible(FeatureTutorialWindow window) => FirstRunWelcomeTests.Descendants(window).OfType<TextBlock>()
+        .Any(text => text.Text == UiText.Get("TextCapture_TutorialLoading") && text.IsVisible);
 
     private static FeatureTutorialWindow Offscreen(string id, FakeTutorialMedia media, string assets) =>
         new(new HotkeySettings(), id, () => media) { AssetDirectory = assets, WindowStartupLocation = WindowStartupLocation.Manual,

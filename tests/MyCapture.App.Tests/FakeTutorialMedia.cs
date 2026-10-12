@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.Tests;
 
@@ -110,6 +111,22 @@ internal static class TutorialTestAssets
     }
 
     internal static string All() => Create(TutorialCatalog.All.Select(feature => feature.Id).ToArray());
+
+    /// <summary>Adds a small, valid first-frame still {id}.ko.jpg and {id}.en.jpg for each feature named.</summary>
+    internal static void AddStills(string directory, params string[] featureIds)
+    {
+        var pixels = new byte[16 * 9 * 4];
+        Array.Fill(pixels, (byte)0x80);
+        BitmapSource still = BitmapSource.Create(16, 9, 96, 96, PixelFormats.Bgr32, null, pixels, 16 * 4);
+        foreach (string id in featureIds)
+            foreach (string language in new[] { "ko", "en" })
+            {
+                var encoder = new JpegBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(still));
+                using var stream = File.Create(Path.Combine(directory, $"{id}.{language}.jpg"));
+                encoder.Save(stream);
+            }
+    }
 }
 
 /// <summary>Collects Trace warnings written while it is installed.</summary>

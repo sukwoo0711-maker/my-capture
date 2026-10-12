@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Capture;
 using MyCapture.App.Themes;
@@ -17,7 +18,8 @@ namespace MyCapture.App;
 
 /// <summary>
 /// Streams only the selected feature's local tutorial video, with static instructions for every
-/// workflow. A missing file or a media failure leaves the steps as a still fallback.
+/// workflow. The video's first frame, shipped as a still beside it, shows at once while the video
+/// opens. A missing file or a media failure leaves the steps as a still fallback.
 /// </summary>
 internal class FeatureTutorialWindow : Window
 {
@@ -33,6 +35,10 @@ internal class FeatureTutorialWindow : Window
     private readonly ComboBox _features = new() { MinHeight = 36, Margin = new Thickness(0, 0, 0, 12) };
     private readonly StackPanel _instructions = new();
     private readonly StackPanel _steps = new();
+    // A Border with an image brush, not an Image: the still duplicates the video, so it stays out
+    // of the UI Automation tree.
+    private readonly Border _poster = new();
+    private string? _posterPath;
     private DispatcherOperation? _pendingOpen;
     private bool _mediaOpen;
     private bool _hasFirstFrame;
@@ -86,7 +92,8 @@ internal class FeatureTutorialWindow : Window
         _status.VerticalAlignment = VerticalAlignment.Center;
         _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
-        preview.Children.Add(_media.View); preview.Children.Add(_status);
+        RenderOptions.SetBitmapScalingMode(_poster, BitmapScalingMode.HighQuality);
+        preview.Children.Add(_poster); preview.Children.Add(_media.View); preview.Children.Add(_status);
         // The video fills the frame, so clip it to the frame's inner rounded corners.
         preview.SizeChanged += (_, e) => preview.Clip = new RectangleGeometry(new Rect(e.NewSize), 7, 7);
         var frame = new Border { BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Child = preview,
@@ -123,6 +130,8 @@ internal class FeatureTutorialWindow : Window
                 SystemParameters.StaticPropertyChanged += OnMotionPreferenceChanged;
                 _watchingMotion = true;
             }
+            // Loaded runs before the first render, so the window appears with the still in place.
+            ShowPoster();
             RequestOpen();
         };
         Deactivated += (_, _) => Pause();
@@ -150,6 +159,8 @@ internal class FeatureTutorialWindow : Window
     internal bool HasMedia => _mediaOpen;
     /// <summary>The current media reported open, so its first frame is on screen.</summary>
     internal bool HasFirstFrame => _hasFirstFrame;
+    /// <summary>The selected feature's first-frame still is showing, beneath the video.</summary>
+    internal bool HasPoster => _poster.Background is not null;
     internal bool IsOpenPending => _pendingOpen is not null;
     internal bool IsPlaying => _playing;
     internal bool IsShowingFallback => _fallback;
@@ -162,6 +173,9 @@ internal class FeatureTutorialWindow : Window
 
     internal string AssetPath => Path.Combine(AssetDirectory,
         $"{_feature.Id}.{(UiText.Culture.TwoLetterISOLanguageName == "ko" ? "ko" : "en")}.mp4");
+
+    /// <summary>The video's first frame as a JPEG beside it.</summary>
+    internal string PosterPath => Path.ChangeExtension(AssetPath, ".jpg");
 
     internal string SelectedFeatureId => _feature.Id;
     /// <summary>
@@ -245,7 +259,53 @@ internal class FeatureTutorialWindow : Window
         ReleaseMedia();
         _feature = TutorialCatalog.Get(featureId);
         UpdateInstructions();
+        // The still is one small file, so it follows every selection at once; the video opens
+        // only for the feature the selection settles on.
+        ShowPoster();
         RequestOpen();
+    }
+
+    /// <summary>
+    /// Shows the selected feature's first-frame still and hides the loading text over it. Without
+    /// the still, the loading text stays until the video opens.
+    /// </summary>
+    private void ShowPoster()
+    {
+        string path = PosterPath;
+        if (path == _posterPath) return;
+        ClearPoster();
+        _posterPath = path;
+        if (!File.Exists(path))
+        {
+            Trace.TraceWarning("Feature tutorial {0} has no first-frame still at {1}; the video shows once it opens.", _feature.Id, path);
+            return;
+        }
+        try
+        {
+            var image = new BitmapImage();
+            using (FileStream stream = File.OpenRead(path))
+            {
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.StreamSource = stream;
+                image.EndInit();
+            }
+            image.Freeze();
+            var brush = new ImageBrush(image) { Stretch = Stretch.Uniform };
+            brush.Freeze();
+            _poster.Background = brush;
+            if (!_fallback) _status.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception error)
+        {
+            Trace.TraceWarning("Feature tutorial {0} could not show its first-frame still {1}: {2}", _feature.Id, path, error);
+        }
+    }
+
+    private void ClearPoster()
+    {
+        _poster.Background = null;
+        _posterPath = null;
     }
 
     private void UpdateInstructions()
@@ -301,7 +361,8 @@ internal class FeatureTutorialWindow : Window
         _mediaOpen = true;
         _hasFirstFrame = false;
         _status.Text = UiText.Get("TextCapture_TutorialLoading");
-        _status.Visibility = Visibility.Visible;
+        ShowPoster();
+        _status.Visibility = HasPoster ? Visibility.Collapsed : Visibility.Visible;
         try { _media.Open(path); }
         catch (Exception error)
         {
@@ -420,6 +481,8 @@ internal class FeatureTutorialWindow : Window
             error?.ToString() ?? "no error details");
         ReleaseMedia();
         _fallback = true;
+        // The message replaces the picture; the steps below stay.
+        ClearPoster();
         _status.Text = UiText.Get(_feature.Id == "text-copy" ? "TextCapture_TutorialUnavailable" : "Tutorial.Unavailable");
         _status.Visibility = Visibility.Visible;
         UpdateControls();

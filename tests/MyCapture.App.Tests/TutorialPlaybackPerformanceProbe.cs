@@ -14,8 +14,9 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// Evidence probe for the feature tutorial player with the real MediaElement and the shipped
-/// MP4 files. Runs only when MYCAPTURE_TUTORIAL_PERF names an output JSON path, alone in its
-/// process (it creates the process Application).
+/// MP4 files and first-frame stills. It times the first frame on screen (the still) and the video
+/// ready to play separately. Runs only when MYCAPTURE_TUTORIAL_PERF names an output JSON path,
+/// alone in its process (it creates the process Application).
 /// </summary>
 public sealed class TutorialPlaybackPerformanceProbe
 {
@@ -46,7 +47,9 @@ public sealed class TutorialPlaybackPerformanceProbe
             bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
             FluidMotion.AnimationsEnabledOverrideForTest = true;
             var open = new List<double>();
+            var openVideo = new List<double>();
             var switching = new List<double>();
+            var switchingVideo = new List<double>();
             var workingSet = new List<double>();
             var privateBytes = new List<double>();
             var cpu = new List<double>();
@@ -77,8 +80,10 @@ public sealed class TutorialPlaybackPerformanceProbe
                 {
                     var clock = Stopwatch.StartNew();
                     window.Show();
-                    WaitFirstFrame(window);
+                    WaitFor(window, () => window.HasPoster || window.HasFirstFrame);
                     if (measure) open.Add(clock.Elapsed.TotalMilliseconds);
+                    WaitFor(window, () => window.HasFirstFrame);
+                    if (measure) openVideo.Add(clock.Elapsed.TotalMilliseconds);
                     if (!window.IsPlaying) window.TogglePlayback();
                     Pump(TimeSpan.FromMilliseconds(1000));
                     process.Refresh();
@@ -102,26 +107,34 @@ public sealed class TutorialPlaybackPerformanceProbe
                     string next = Features[(Array.IndexOf(Features, feature) + 1) % Features.Length];
                     var switchClock = Stopwatch.StartNew();
                     window.SelectFeature(next);
-                    WaitFirstFrame(window);
+                    WaitFor(window, () => window.HasPoster || window.HasFirstFrame);
                     if (measure) switching.Add(switchClock.Elapsed.TotalMilliseconds);
+                    WaitFor(window, () => window.HasFirstFrame);
+                    if (measure) switchingVideo.Add(switchClock.Elapsed.TotalMilliseconds);
                 }
                 finally { window.Close(); }
             }
 
             string tutorials = Path.Combine(Path.GetDirectoryName(typeof(FeatureTutorialWindow).Assembly.Location)!, "Assets", "Tutorials");
             FileInfo[] assets = new DirectoryInfo(tutorials).GetFiles("*.mp4");
+            FileInfo[] stills = new DirectoryInfo(tutorials).GetFiles("*.jpg");
             var result = new
             {
                 Player = typeof(FeatureTutorialWindow).Assembly.GetName().Version?.ToString(),
                 Media = "MediaElement",
                 Features, Rounds = 3,
+                // First frame on screen: the still, or the video when there is no still.
                 OpenToFirstFrameMs = Summary(open),
+                OpenToVideoReadyMs = Summary(openVideo),
                 SwitchToFirstFrameMs = Summary(switching),
+                SwitchToVideoReadyMs = Summary(switchingVideo),
                 PlayingWorkingSetDeltaMiB = Summary(workingSet),
                 PlayingPrivateBytesDeltaMiB = Summary(privateBytes),
                 PlayingCpuPercentOfOneCore = Summary(cpu),
                 AssetCount = assets.Length,
                 AssetBytes = assets.Sum(file => file.Length),
+                StillCount = stills.Length,
+                StillBytes = stills.Sum(file => file.Length),
             };
             File.WriteAllText(output, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
         });
@@ -142,10 +155,10 @@ public sealed class TutorialPlaybackPerformanceProbe
         Pump(TimeSpan.FromMilliseconds(300));
     }
 
-    private static void WaitFirstFrame(FeatureTutorialWindow window)
+    private static void WaitFor(FeatureTutorialWindow window, Func<bool> shown)
     {
         var timeout = Stopwatch.StartNew();
-        while (!window.HasFirstFrame)
+        while (!shown())
         {
             if (window.IsShowingFallback) throw new InvalidOperationException($"Tutorial {window.SelectedFeatureId} fell back to its steps: {window.AssetPath}");
             if (timeout.Elapsed > TimeSpan.FromSeconds(20))
