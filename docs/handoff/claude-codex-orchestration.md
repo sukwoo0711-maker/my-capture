@@ -60,6 +60,9 @@
 - dense ink 수정 `a2e3d60`을 root `1330fac`로 통합했습니다. 4K/8K × 주석1천/1만 개와펜10만좌표의 같은 viewport 렌더3회 중앙값은228→125,341→219,205→103,277→190ms입니다. 첫그림 pixel SHA가4조건 모두같고 원본·초안·undo·복구내용을 보존했습니다. 1천주석 렌더당누적할당32.8→5.2MB. 독립소스검토와 pixel oracle8개 PASS. 전체프로세스 메모리·모든 heartbeat·저장시간 개선으로 해석하지 않습니다.
 - 100만 자에서 더 큰 실패를 확인했습니다. 원본 긴한줄은 actual PID58812/WPF IME TextBoxView FailFast(0x80131623), 제한된viewport 수정본은전체기능27.53초 PASS입니다. 다수줄 원본은첫layout에서60초guard, 수정본은첫layout4.76초를완료했으나 편집burst후전체선택settle에서60초guard가남았습니다. 순수scroll은3–10ms이며 텍스트배치/선택비용과구분합니다. 내부viewport·편집settle·공개WPF compatibility경로를artifact에서만조사중입니다.
 - 압축이어려운8K이미지의약113MB PNG 초안에서도원본/복구/viewport pixel SHA가같고저장은성공했습니다. 양쪽제품에서동시편집중약2초UIstall이남아 frozen image를공유하는PNG encoder/render 경계를추가조사합니다. 재현도구 `build/tools/OverlayStressProbe`는 `b3878e2`로보존했으며새경로build/실제7,680입력 smoke1c3e69 exit0도완료했습니다.
+- 후속 원인 분리·수정 완료: text `5051d6e`→root `06e19ae`, PNG `e772117`→root `33f6652`를 통합했습니다. OCR 읽기 전용 TextBox에만 InputMethod 연동을 끊어 WPF TSF의 전체 선택 범위 재포맷을 줄였습니다. 기존 자동 선택·복사·UIA를 유지하고 편집 IME는 그대로입니다. 최종 OCR10만 자 전체 시나리오7.53→1.49초, 100만 자는60초guard→7.79초 PASS입니다. 초기100만 자 배치7.37초와 편집100만 다수 줄 전체 선택guard는 남아 있습니다.
+- PNG 인코더의 source.SyncObject 잠금이 WriteSource 전체 구간에 걸리는 WPF10.0.11 소스를 확인했고, background STA에서 독립 픽셀 backing을 만든 비교로 원인을 분리했습니다. 최종 제품8K entropy/1천 주석/펜10만 좌표에서 최악 편집2081→121ms, heartbeat최대2083→335ms, 원본·복구·PNG·viewport SHA 동일입니다.4K 단색 heartbeat나 PNG 전체 처리시간·메모리는 일관된 개선이 아닙니다. 새 이미지형식/alpha/palette/DPI/metadata/cache9개 포함 집중33/33 PASS입니다.
+- root 최종 통합 검증: source `33f6652a9a4f6cc63862bf06e846c438e942ab27`, Debug build `fd9311` exit0·경고0/오류0, Core session96382/`ad1e0a` exit0·1105/1105 PASS. App 전체 session55381 진행 중이며 아직 완료 판정 전입니다. 최종 QA12 publish·UX·OS 키보드 입력 검증은 이 검사 뒤 직렬 실행합니다.
 
 ### 다음 버전 기본 동작 보강 — 구현·검증 완료, 드래그 지연 변동은 후속 조사 필요
 
@@ -183,7 +186,13 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** §3의 평가·업데이트·지원, 삭제·복원, 종료 보호·편집 복구 구현과 최종 빌드 검증을 완료했습니다. QA11 개발 빌드로 사용자 실기 피드백을 받습니다. 성능 재검토에서 영역 선택의 긴 WPF callback 간격과 실행별 변동이 남았으므로 다음 성능 작업은 실제 표시 시점·DWM/GPU·외부 부하를 구분하는 측정부터 시작합니다. 기존 AB/BA 원본과 입력 합쳐짐 한계를 유지하고 병목이 모두 제거됐다고 판정하지 않습니다. 실제 Store 설치·교체·재실행 검증은 다음 버전 패키지 배포 단계에서 수행합니다. 4.1.1 심사 제출 상태와 산출물은 보존하며, 아래는 이전 배포 작업의 완료 이력입니다.
+**현재 우선 작업:** 사용자 최악·과부하 성능 시험 요청을 수행합니다. 대량 검색, 밀집 잉크, 긴 텍스트 viewport, 읽기 전용 OCR 선택, 큰 PNG 초안 저장의 개선을 `33f6652`까지 통합했습니다. 다음 순서로 마무리합니다.
+
+1. **진행 중 — 전체 회귀 검사:** Debug 빌드와 Core1105개 PASS. App 전체 session55381의 실제 종료 코드·TRX를 수집하고 실패가 있으면 원인과 수정 후 필요한 검사를 완료합니다.
+2. **대기 — QA12 실기 빌드:** 새 `artifacts/qa12-extreme-load`에 self-contained x64/R2R·Core/Desktop10.0.11로 게시한 뒤 격리된 짧은 프로필에서 UX 자체 검사와 실제 긴 텍스트 키보드/Undo·OCR→편집 포커스/IME를 확인합니다. 사용자 MyCapture는 종료하지 않습니다.
+3. **대기 — 전달과 기록:** 최종 산출물·측정 전후·남은100만 자 편집 전체 선택 한계와 초기 OCR 배치 비용을 보고하고 §3/§8에 근거를 남깁니다. 재현 probe와 모든 실패/중간 자료·기존 작업 사본을 보존합니다. Store 재배포는 이번 요청 범위에 포함하지 않습니다.
+
+**이전 작업 완료 이력:** 평가·업데이트·지원, 휴지통 삭제·복원, 종료 보호·편집 복구는 QA11에서 검증했습니다. 실제 Store 설치·교체·재실행 검증은 다음 패키지 배포 단계입니다. 아래 이전 배포 작업과4.1.1 제출 산출물은 보존합니다.
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
 2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
@@ -375,6 +384,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 대량 검색 준비 matcher와 boolean short-circuit `6a29df9`를 직접 diff/test 검토6c7019 뒤 root `0a697d8`로 cherry-pick PASS98db91 exit0. worker 동일10.0.11 CPU baseline/after bdbfbe/4718cb exit0, 실제 GalleryWindow b31053/bc260d exit0, Core41/App69 PASS77a745/b2f7e6. root overlay 독립 producer/raster harness build3c807a exit0,4조건 session25897/58adad exit0, 원본/receipt와해석677313을 `artifacts/extreme-load-20261012/`에 보존했습니다. text/ink 수정·전체통합검사는 진행 중입니다.
 
 - 2026-10-12 Codex: 잉크source/8pixeltests/4pair측정·독립검토를확인하고 `a2e3d60`→`1330fac` cherry-pick PASS4f0d1c exit0. 8K entropy초안2조건 worker36ea8a/1a1af2 exit0,113,458,630B blob·원본/복구SHA동일이나공유WIC/PNG동시렌더2초stall가설추가조사중입니다. 재현overlay도구 `b3878e2` build+nativeburst1c3e69 exit0(ownedPID59524정상종료),10.0.11·240배치/7,680입력/최종포인터PASS를1498b8로확인했습니다. 1m텍스트원본FailFast와before/after각guard를서로구분해LOG에보존하고불완전한case를PASS로처리하지않습니다.
+
+- 2026-10-12 Codex: text worker capacity 이후 root가 소유권을 인수해 readonly OCR TSF 최소 수정·UIA/전체 선택 회귀21/21 PASS(session98758/5410e5 exit0)를 완료하고5051d6e→06e19ae 통합81855e exit0. 실제10.0.11 OCR10만25950b/100만35b2e3 exit0·전체SHA동일·정상종료. PNG independent backing과9개형식검사를 직접/독립 검토한e772117→33f6652 통합5cda6c exit0; 실제entropy receipt/PID47704exit0와pixel/PNG동일을d4cc49로확인. root Debug fd9311 경고0/오류0, Core96382/ad1e0a 1105/1105 exit0. App전체55381 진행 중. actualcwd/commands/raw/한계는 development-log 및각 tracked maintenance LOG에보존.
 
 ## 9. 인계 체크리스트
 
