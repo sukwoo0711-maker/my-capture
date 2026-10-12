@@ -26,9 +26,6 @@ internal static class Program
 {
     internal const int DefaultBitrate = 300_000, DefaultQuality = 60;
 
-    /// <summary>Where scenes keep fixture files (a fixture library, a synthetic recording): under the output folder, never the user profile.</summary>
-    internal static string FixtureRoot { get; private set; } = Path.Combine(Path.GetTempPath(), "MyCapture.TutorialGenerator");
-
     [STAThread]
     private static int Main(string[] args)
     {
@@ -88,10 +85,19 @@ internal static class Program
         return app;
     }
 
+    /// <summary>
+    /// Scratch folder inside the output folder for files a scene must create (for example a
+    /// synthetic recording the real video editor opens, or what an export writes). Never the
+    /// user's profile.
+    /// </summary>
+    internal static string WorkFolder => s_workFolder ?? throw new InvalidOperationException("The output folder is not chosen yet.");
+
+    private static string? s_workFolder;
+
     private static int Run(Options options)
     {
         Directory.CreateDirectory(options.Output);
-        FixtureRoot = Directory.CreateDirectory(Path.Combine(options.Output, "fixtures")).FullName;
+        s_workFolder = Path.Combine(options.Output, "work");
         var receipts = new List<ClipReceipt>();
         var failures = new List<string>();
         var total = Stopwatch.StartNew();

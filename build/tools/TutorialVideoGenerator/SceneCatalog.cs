@@ -9,6 +9,7 @@ internal static class SceneCatalog
     {
         if (EditorScene.Features.Contains(id)) return new EditorScene(id, language);
         if (CaptureScene.Features.Contains(id)) return new CaptureScene(id, language);
+        if (VideoScene.Features.Contains(id)) return new VideoScene(id, language);
         throw new NotSupportedException($"No scene renders '{id}' yet.");
     }
 }

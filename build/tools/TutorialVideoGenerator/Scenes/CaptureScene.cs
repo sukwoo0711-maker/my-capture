@@ -642,7 +642,7 @@ internal sealed class CaptureScene : TutorialScene
     {
         if (_videoHost is null)
         {
-            string folder = Path.Combine(Program.FixtureRoot, $"{Id}.{(Korean ? "ko" : "en")}");
+            string folder = Path.Combine(Program.WorkFolder, $"{Id}.{(Korean ? "ko" : "en")}");
             Directory.CreateDirectory(folder);
             BitmapSource recorded = Crop(RecordRegion);
             int w = recorded.PixelWidth & ~1, h = recorded.PixelHeight & ~1;
