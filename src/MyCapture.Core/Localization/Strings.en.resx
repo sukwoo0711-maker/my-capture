@@ -3435,6 +3435,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="StoreRating_Button" xml:space="preserve"><value>Rate in Microsoft Store</value></data>
   <data name="StoreRating_ButtonHelp" xml:space="preserve"><value>Opens the MyCapture review page in the Microsoft Store app.</value></data>
   <data name="StoreRating_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Check that the Microsoft Store app is installed.</value></data>
+  <data name="StoreRating_InviteMessage" xml:space="preserve"><value>Would you like to rate MyCapture in Microsoft Store?</value></data>
+  <data name="StoreRating_InviteAction" xml:space="preserve"><value>Rate</value></data>
   <data name="PrtScGuide_Heading" xml:space="preserve"><value>PrintScreen key conflict</value></data>
   <data name="PrtScGuide_Message" xml:space="preserve"><value>Windows is set to open its capture tool with the Print Screen key, so the MyCapture shortcut may not work. Turn the option off in Windows Settings &gt; Accessibility &gt; Keyboard.</value></data>
   <data name="PrtScGuide_OpenSettings" xml:space="preserve"><value>Open Windows Settings</value></data>
@@ -3533,6 +3535,29 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="StoreUpdate_OpenStore" xml:space="preserve"><value>Open in Microsoft Store</value></data>
   <data name="StoreUpdate_OpenStoreHelp" xml:space="preserve"><value>Opens the MyCapture page in the Microsoft Store app, or in a browser when the Store app cannot open.</value></data>
   <data name="StoreUpdate_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Open {0} in a browser.</value></data>
+  <data name="StoreUpdate_ObservedDescription" xml:space="preserve"><value>Check for updates, then install through Microsoft Store. The app may close during installation.</value></data>
+  <data name="StoreUpdate_Check" xml:space="preserve"><value>Check for updates</value></data>
+  <data name="StoreUpdate_CheckHelp" xml:space="preserve"><value>Checks Microsoft Store for updates to this app.</value></data>
+  <data name="StoreUpdate_Install" xml:space="preserve"><value>Install update</value></data>
+  <data name="StoreUpdate_CompletedVersion" xml:space="preserve"><value>Updated to version {0}</value></data>
+  <data name="StoreUpdate_StateIdle" xml:space="preserve"><value>Updates not checked</value></data>
+  <data name="StoreUpdate_StateChecking" xml:space="preserve"><value>Checking for updates</value></data>
+  <data name="StoreUpdate_StateAvailable" xml:space="preserve"><value>Update available</value></data>
+  <data name="StoreUpdate_StateCurrent" xml:space="preserve"><value>No update available</value></data>
+  <data name="StoreUpdate_StateAwaitingConsent" xml:space="preserve"><value>Waiting for Microsoft Store permission</value></data>
+  <data name="StoreUpdate_StateDownloading" xml:space="preserve"><value>Downloading update</value></data>
+  <data name="StoreUpdate_StateInstalling" xml:space="preserve"><value>Installing update</value></data>
+  <data name="StoreUpdate_StateRestartRequired" xml:space="preserve"><value>Restart the app to check the installed version.</value></data>
+  <data name="StoreUpdate_StateCanceled" xml:space="preserve"><value>Update canceled</value></data>
+  <data name="StoreUpdate_StateFailed" xml:space="preserve"><value>Could not process the update. Check Microsoft Store.</value></data>
+  <data name="StoreUpdate_StateBlocked" xml:space="preserve"><value>Update deferred</value></data>
+  <data name="Support_Heading" xml:space="preserve"><value>Report a problem</value></data>
+  <data name="Support_Report" xml:space="preserve"><value>Open issue page</value></data>
+  <data name="Support_Preview" xml:space="preserve"><value>Preview diagnostics</value></data>
+  <data name="Support_Copy" xml:space="preserve"><value>Copy diagnostics</value></data>
+  <data name="Support_Copied" xml:space="preserve"><value>Diagnostics copied</value></data>
+  <data name="Support_CopyFailed" xml:space="preserve"><value>Could not copy diagnostics. Copy from the preview.</value></data>
+  <data name="Support_OpenFailed" xml:space="preserve"><value>Could not open the issue page.</value></data>
   <data name="LibraryFolder_CardCount" xml:space="preserve"><value>Captures: {0}</value></data>
   <data name="LibraryFolder_CardCountWithFolders" xml:space="preserve"><value>Folders: {1} · Captures: {0}</value></data>
   <data name="LibraryFolder_CardAccessibleName" xml:space="preserve"><value>Folder {0}, {1}</value></data>

@@ -32,7 +32,10 @@ public partial class App
             IsStoreRatingDeferred,
             new StoreContextRatingRequester(),
             services.GetRequiredService<ILogger<StoreRatingCoordinator>>(),
-            AppPackage.IsPackaged);
+            AppPackage.IsPackaged,
+            isUserActive: () => ActiveEngagementWindow() is not null,
+            showInvitation: ShowStoreInvitation);
+        InitializeStoreUpdateObservation();
         if (_settingsApply is not null)
             _settingsApply.PrintScreenCaptureKeyEnabled = PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled;
     }

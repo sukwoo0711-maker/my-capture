@@ -51,6 +51,8 @@ public sealed class AppSettings
 
     /// <summary>Local state for the one-time Microsoft Store rating request. An explicit null reads as new.</summary>
     public StoreRatingState StoreRating { get; set => field = value ?? new(); } = new();
+
+    public StoreUpdateState StoreUpdate { get; set => field = value ?? new(); } = new();
 }
 
 /// <summary>Global shortcuts, registered for as long as the app runs.</summary>

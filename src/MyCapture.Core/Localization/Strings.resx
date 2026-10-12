@@ -3435,6 +3435,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="StoreRating_Button" xml:space="preserve"><value>Microsoft Store에서 평가</value></data>
   <data name="StoreRating_ButtonHelp" xml:space="preserve"><value>Microsoft Store 앱에서 MyCapture 평가 페이지를 엽니다.</value></data>
   <data name="StoreRating_OpenFailed" xml:space="preserve"><value>Microsoft Store를 열 수 없습니다. Microsoft Store 앱이 설치되어 있는지 확인하십시오.</value></data>
+  <data name="StoreRating_InviteMessage" xml:space="preserve"><value>MyCapture를 Microsoft Store에서 평가하시겠습니까?</value></data>
+  <data name="StoreRating_InviteAction" xml:space="preserve"><value>평가</value></data>
   <data name="PrtScGuide_Heading" xml:space="preserve"><value>PrintScreen 키 충돌</value></data>
   <data name="PrtScGuide_Message" xml:space="preserve"><value>Windows에서 Print Screen 키가 Windows 캡처 도구를 열도록 설정되어 있어 MyCapture 단축키가 동작하지 않을 수 있습니다. Windows 설정 &gt; 접근성 &gt; 키보드에서 이 옵션을 끄십시오.</value></data>
   <data name="PrtScGuide_OpenSettings" xml:space="preserve"><value>Windows 설정 열기</value></data>
@@ -3533,6 +3535,29 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="StoreUpdate_OpenStore" xml:space="preserve"><value>Microsoft Store에서 열기</value></data>
   <data name="StoreUpdate_OpenStoreHelp" xml:space="preserve"><value>Microsoft Store 앱에서 MyCapture 페이지를 엽니다. Store 앱을 열 수 없으면 브라우저에서 엽니다.</value></data>
   <data name="StoreUpdate_OpenFailed" xml:space="preserve"><value>Microsoft Store를 열 수 없습니다. 브라우저에서 {0} 주소를 여십시오.</value></data>
+  <data name="StoreUpdate_ObservedDescription" xml:space="preserve"><value>업데이트를 확인한 뒤 Microsoft Store를 통해 설치합니다. 설치 중 앱이 종료될 수 있습니다.</value></data>
+  <data name="StoreUpdate_Check" xml:space="preserve"><value>업데이트 확인</value></data>
+  <data name="StoreUpdate_CheckHelp" xml:space="preserve"><value>Microsoft Store에서 이 앱의 업데이트를 확인합니다.</value></data>
+  <data name="StoreUpdate_Install" xml:space="preserve"><value>업데이트 설치</value></data>
+  <data name="StoreUpdate_CompletedVersion" xml:space="preserve"><value>{0} 버전으로 업데이트됨</value></data>
+  <data name="StoreUpdate_StateIdle" xml:space="preserve"><value>업데이트 미확인</value></data>
+  <data name="StoreUpdate_StateChecking" xml:space="preserve"><value>업데이트 확인 중</value></data>
+  <data name="StoreUpdate_StateAvailable" xml:space="preserve"><value>업데이트 있음</value></data>
+  <data name="StoreUpdate_StateCurrent" xml:space="preserve"><value>사용 가능한 업데이트 없음</value></data>
+  <data name="StoreUpdate_StateAwaitingConsent" xml:space="preserve"><value>Microsoft Store 설치 승인 대기</value></data>
+  <data name="StoreUpdate_StateDownloading" xml:space="preserve"><value>업데이트 다운로드 중</value></data>
+  <data name="StoreUpdate_StateInstalling" xml:space="preserve"><value>업데이트 설치 중</value></data>
+  <data name="StoreUpdate_StateRestartRequired" xml:space="preserve"><value>앱을 다시 실행하면 설치된 버전을 확인합니다.</value></data>
+  <data name="StoreUpdate_StateCanceled" xml:space="preserve"><value>업데이트 취소됨</value></data>
+  <data name="StoreUpdate_StateFailed" xml:space="preserve"><value>업데이트를 처리할 수 없습니다. Microsoft Store에서 확인하십시오.</value></data>
+  <data name="StoreUpdate_StateBlocked" xml:space="preserve"><value>업데이트 보류됨</value></data>
+  <data name="Support_Heading" xml:space="preserve"><value>문제 신고</value></data>
+  <data name="Support_Report" xml:space="preserve"><value>문제 신고 페이지 열기</value></data>
+  <data name="Support_Preview" xml:space="preserve"><value>진단 정보 미리보기</value></data>
+  <data name="Support_Copy" xml:space="preserve"><value>진단 정보 복사</value></data>
+  <data name="Support_Copied" xml:space="preserve"><value>진단 정보 복사됨</value></data>
+  <data name="Support_CopyFailed" xml:space="preserve"><value>진단 정보를 복사할 수 없습니다. 미리보기에서 직접 복사하십시오.</value></data>
+  <data name="Support_OpenFailed" xml:space="preserve"><value>문제 신고 페이지를 열 수 없습니다.</value></data>
   <data name="LibraryFolder_CardCount" xml:space="preserve"><value>캡처 {0}개</value></data>
   <data name="LibraryFolder_CardCountWithFolders" xml:space="preserve"><value>폴더 {1}개 · 캡처 {0}개</value></data>
   <data name="LibraryFolder_CardAccessibleName" xml:space="preserve"><value>폴더 {0}, {1}</value></data>

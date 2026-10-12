@@ -108,6 +108,7 @@ public sealed class SettingsApplyService
         AppSettings previous = _current();
         // The window never edits the Store rating state; keep what captures recorded meanwhile.
         next.StoreRating = previous.StoreRating;
+        next.StoreUpdate = previous.StoreUpdate;
         // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.
         next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);

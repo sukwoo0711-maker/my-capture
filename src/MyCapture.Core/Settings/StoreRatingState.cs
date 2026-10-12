@@ -31,6 +31,9 @@ public sealed class StoreRatingState
     /// Once set the app never asks again, whatever the Store dialog returned.
     /// </summary>
     public DateTimeOffset? RequestAttemptedUtc { get; set; }
+
+    /// <summary>The inline invitation was shown once, including dismissal or ignoring it.</summary>
+    public DateTimeOffset? InvitationShownUtc { get; set; }
 }
 
 /// <summary>
@@ -104,6 +107,7 @@ public static class StoreRatingPolicy
         ArgumentNullException.ThrowIfNull(state);
         return isPackaged
             && state.RequestAttemptedUtc is null
+            && state.InvitationShownUtc is null
             && !state.LastCaptureFailed
             && state.SuccessfulCaptureCount >= RequiredSuccessfulCaptures
             && state.FirstSeenUtc is { } first

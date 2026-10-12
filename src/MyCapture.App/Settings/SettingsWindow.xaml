@@ -1130,6 +1130,21 @@
                                     Click="OnStoreRatingClick" />
                         </WrapPanel>
 
+                        <TextBlock x:Name="UpdateObservedStatus" TextWrapping="Wrap" Margin="0,0,0,6" Foreground="{DynamicResource Text.Secondary}" />
+                        <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Height="4" Margin="0,0,0,12" Visibility="Collapsed" />
+                        <Button x:Name="StorePageAction" Content="{loc:Text StoreUpdate_OpenStore}" Style="{StaticResource Button.Secondary}"
+                                HorizontalAlignment="Left" Margin="0,0,0,16" Click="OnStoreUpdatePage" />
+
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text Support_Heading}" />
+                        <WrapPanel>
+                            <Button x:Name="SupportReport" Content="{loc:Text Support_Report}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,8" Click="OnSupportReport" />
+                            <Button x:Name="SupportPreview" Content="{loc:Text Support_Preview}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,8" Click="OnDiagnosticsPreview" />
+                            <Button x:Name="DiagnosticsCopy" Content="{loc:Text Support_Copy}" Style="{StaticResource Button.Secondary}" Visibility="Collapsed" Margin="0,0,8,8" Click="OnDiagnosticsCopy" />
+                        </WrapPanel>
+                        <TextBox x:Name="DiagnosticsPreview" IsReadOnly="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="180"
+                                 Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16"
+                                 AutomationProperties.Name="{loc:Text Support_Preview}" />
+
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_BackupHeading}" />
                         <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,10"
                                    Text="{loc:Text SettingsUx_BackupHint}" />
