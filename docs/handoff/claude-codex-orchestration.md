@@ -9,8 +9,8 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `release/store-4.1.1` (최적화 포함 Store 업데이트 준비) |
-| Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존, 4.1.1은 현재 기록 브랜치에서 준비 |
+| 현재 기록 브랜치 | `chore/store-4.1.1-handoff` (QA8 앱 종료 확인 대기) |
+| Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존, 4.1.1은 `release/store-4.1.1`/`e751e963135598de492e785e8e3774cf7631b7fa`, PR #76 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
 | 이 문서 위치 | 현재 기록 브랜치의 `docs/handoff/claude-codex-orchestration.md` |
@@ -53,7 +53,10 @@
 - 사용자 요청: “4.1.1버전으로 배포해봐. 실조건에서 테스트할게.” 영역 선택·이미지 자르기·라이브러리 선택 최적화를 포함해 새 Store 업데이트를 준비합니다. 4.1.1/패키지4.1.1.0 버전과 한·영 변경 사항을 갱신했습니다. 기존 개발자를 위한 무료 캡처·핀 도구 설명은 유지합니다.
 - Partner Center를 새로 고쳐 Submission4의 **공개 완료**와 Start update 버튼을 확인했습니다. 4.1.0 심사 취소는 필요 없습니다. 공개4.1.0 소스·패키지를 보존하고 별도4.1.1을 검증해 제출합니다.
 - **다음 버전으로 유보:** Store 업데이트 중 앱 교체·설치 진행을 알 수 있는 화면. 사용자가 기존 앱 삭제 후 재설치로 느끼는 공백을 줄이는 것이 목적입니다. 실제 Store 업데이트 단계·앱 종료/재시작·데이터 보존과 앱이 관측할 수 있는 신호를 확인한 뒤 구현합니다. 4.1.1에는 포함하지 않습니다.
-- 현재 QA8 사용자 앱 PID64500이 실행 중이며, 8종 패키지 검사는 MyCapture 부재를 요구합니다. 종료 권한 없이 사용자 앱을 닫지 않습니다. 실제 명령·결과는 `artifacts/store-411-verification/`에 기록합니다.
+- 4.1.1 버전 계약9/9 PASS(exit0,chunk40ff65), root 전체 Release 빌드 경고0/오류0 PASS(session86582,exit0), 독립 diff 검토 완료. [PR #76](https://github.com/sukwoo0711-maker/my-capture/pull/76)을 열었으며 정확한 head는`e751e963135598de492e785e8e3774cf7631b7fa`입니다. 전체 hosted CI run38199941458/38199939852는 마지막 조회에서 실행 중이며, 병합 전 완료 결과와 필수 symlink gate를 확인해야 합니다.
+- Store **Submission5 (`1152921505702100136`) 초안**을 만들고 한·영4.1.1 변경 사항을 저장했습니다. 패키지는 아직 상속된4.0.3.0/4.1.0.0뿐이며4.1.1 업로드·심사 제출은 하지 않았습니다. 브라우저2/tab977755822를 이어서 사용합니다.
+- 현재 QA8 사용자 앱 PID64500이 실행 중이며, 8종 패키지 검사는 실제 전역 단축키를 등록하므로 MyCapture 부재를 요구합니다. 코드·버전·검토 준비 후 해당 앱 종료 허용을 질문했으나 아직 응답이 없습니다. 사용자 앱을 닫지 않았습니다. 실제 명령·결과는 `artifacts/store-411-verification/`에 기록합니다.
+- 재개 순서: 사용자 종료 허용 또는 실제 앱 부재 확인 → PR76 exact-head CI와 필수 symlink PASS 확인·병합 → main과 같은 깨끗한 release 소스 확보 → 새 짧은 data/TMP/TEMP 환경에서 `package.ps1 -Version 4.1.1 -StoreOnly` → 같은 publish 폴더로 `package-store.ps1` → 독립 소스·8종·파일해시·MSIX 검사 → Submission5에 업로드·한영/패키지 최종 확인·심사 제출. preflight LOG의 오류 cleanup 한계와 UI 독점 조건을 지킵니다. 기존 source/MSIX/작업 사본을 보존합니다.
 
 ### 영역 선택 지연과 로컬 업데이트 창
 
@@ -151,7 +154,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** QA8 `artifacts/qa8-selection-performance/MyCapture.exe`에서 실제 캡처 영역 선택의 추적 지연을 확인합니다. 중복 합성 제거와73개 집중검사·게시본 검증·파일 위치 열기는 완료했습니다(§3). 사용자 피드백이 계속되면 선택 화면 진입/드래그/선택 완료 중 구간과 해당 빌드를 확인하고 실제 하드웨어 입력·프레임 표시 경로를 추적합니다. 소프트웨어 raster 감소만으로 체감 지연 해결을 확정하지 않습니다. 제품 최적화 1차(자르기/redo·전체 선택)도 완료입니다. mosaic 영역 읽기·비디오 이미지 레이어 복사 제거는 이번 증상과 연결된 근거가 없어 아직 변경하지 않았습니다. 아래는 이전 배포 작업의 완료 이력입니다.
+**현재 우선 작업:** 사용자 요청에 따라 최적화 포함4.1.1 Store배포를 완료합니다. 코드/버전/Release빌드/독립검토/Store한영초안은준비됐으며, 현재QA8앱종료확인과PR76전체CI완료를기다립니다. §3의재개순서를따릅니다. 사용자는Store실제설치조건으로영역선택을테스트할예정입니다. 업데이트진행안내화면은다음버전으로유보했습니다. 소프트웨어raster감소만으로체감지연해결을확정하지않습니다. 아래는이전배포작업의완료이력입니다.
 
 1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
 2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
@@ -309,6 +312,9 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: root sourceff7e46c clean에서 `dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:PublishProfile=win-x64-self-contained -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-codex/artifacts/latency-regression/pin-runtime-10.0.11.targets -o C:/GitRepositories/my-capture-codex/artifacts/qa8-selection-performance -p:SourceRevisionId=ff7e46cb7e2a8e4ec9a7a796122b963f8fb59ae1 -nologo` PASS(exit0,chunkd0cf87). 독립source/runtime10.0.11/R2R/deps263누락0 PASS(exit0), DLL SHA256 E1D9C2ABF2EEE45B3E60D3194BCC26AF87FD9ED99E70B803C75B103000BC100C. 최종DLL을외부OverlayProbe로로드한syntheticsnapshot PASS(exit0,chunkc24349),PNG기존쌍과hash일치(chunkbe235f). Computer Use의 기존Explorer87166948에서새폴더열기·MyCapture응용프로그램선택화면확인. 실행파일은§3경로,Store변경없음. 모든작업사본·산출물보존.
 
 - 2026-10-12 Codex: 사용자4.1.1 Store배포명시승인,업데이트중진행상태화면은다음버전으로유보. cwd `C:\GitRepositories\my-capture-codex`에서 fetch origin PASS(exit0),origin/main3994219확인, `git switch -c release/store-4.1.1` PASS(exit0). 기존ebd1107최적화포함4.1.1버전·manifest·계약·배포예시·한영What'snew수정. PartnerCenter브라우저2/tab977755822새로고침으로Submission4공개완료직접확인. 사용자QA8PID64500보호,패키지검사전종료조건은남아있음. 진행LOG `artifacts/store-411-verification/`.
+
+- 2026-10-12 Codex: 4.1.1 release commit e751e963135598de492e785e8e3774cf7631b7fa, `git push -u origin release/store-4.1.1` PASS(exit0,chunkb3ac95), `gh pr create --repo sukwoo0711-maker/my-capture --base main --head release/store-4.1.1 --title <4.1.1배포제목> --body-file artifacts/store-411-verification/pr-body.md` PASS(exit0,chunkf1658e),PR76. 버전계약9/9 PASS(exit0,chunk40ff65), root `powershell.exe -NoProfile -NonInteractive -File build/build.ps1 -Configuration Release` PASS(exit0,session86582/최종44a91e),경고0/오류0. 독립검토 `release-review.md` materialfinding없음. hostedCI38199941458/38199939852실행중으로완료판정전,병합없음.
+- 2026-10-12 Codex: PartnerCenter Start update로Submission5(id1152921505702100136)생성, ko-KR/en-US의releaseNotes만4.1.1최적화내용으로변경후각Save→Overview확인. 기존개발자무료도구소개·스크린샷유지. 패키지4.1.1미생성/미업로드/심사미제출. 코드/검토준비뒤QA8PID64500종료확인질문,응답없고최근조회에도앱존재. §5사용자앱종료금지와8종residentguard유지. `packaging-preflight.md`읽기검토완료,성공fresh경로/IO실패cleanup한계/별도raw-delete성능CLI제외/짧은새data/tmp조건기록. release소스SHA를보존하도록상태만별도chore/store-4.1.1-handoff에기록. 실제명령·원격CI·검토·브라우저근거는 `artifacts/store-411-verification/`,파일/작업사본삭제없음.
 
 ## 9. 인계 체크리스트
 
