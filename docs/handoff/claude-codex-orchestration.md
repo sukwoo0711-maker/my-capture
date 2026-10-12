@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `perf/extreme-load` (과부하 병목 개선·QA12 검증 및 전달 완료) |
+| 현재 기록 브랜치 | `feat/text-copy-tutorial` (텍스트 복사 GIF 사용법 구현 진행) |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -47,6 +47,13 @@
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
+
+### 텍스트 복사 GIF 사용법 — 진행 중
+
+- 사용자 요청: 단축키의 텍스트 복사 같은 기능을 GIF로 쉽게 이해할 수 있게 만듭니다. 첫 적용은 텍스트 복사이며 설정 단축키와 F1 도움말의 해당 항목에서 엽니다.
+- 기준 `a8ef489`/제품 `33f6652`, root `feat/text-copy-tutorial`. 실제 흐름은 캡처 선택 중 T → 영역 드래그 → OCR 자동 복사 → Ctrl+V입니다. 별도 CaptureText 단축키는 기본 미지정이며 사용자 설정을 안내에 반영합니다.
+- GIF는 합성 예제와 실제 제품 UI 렌더를 사용한 한영 오프라인 자산으로 준비합니다. 열 때만 읽고 재생/일시정지/다시보기, 닫기·숨김 시 재생 정리 및 시스템 모션 설정을 적용합니다. 사용자 화면·클립보드를 녹화 자료로 사용하지 않습니다.
+- 기존 작업 사본 a491은 UI, edit-recovery는 GIF 생성 도구·자산으로 재사용합니다. source/generated asset 범위를 분리하고 root가 통합·독립 검토·native/전체 검증을 관리합니다. LOG/시각 비교/검증은 `artifacts/text-copy-tutorial/`에 보존합니다. Store 재배포는 포함하지 않습니다.
 
 ### 최악·과부하 조건 성능 개선 — QA12 검증·전달 완료
 
@@ -187,7 +194,7 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 작업 결과:** 과부하 병목5종 개선, 전체 회귀 검사, QA12 실기 빌드와 실제 키보드 smoke를 완료했습니다. 실제 결과와 제한은 §3을 따릅니다.
+**현재 우선 작업:** 텍스트 복사 GIF 사용법을 구현·검증합니다. 실제 동작과 일치하는 한영 GIF, 설정/F1의 진입점, 재생 수명·모션 설정·현재 단축키 안내를 통합한 뒤 새 실기 빌드를 전달합니다. 과부하 개선 QA12의 완료 결과와 후속 한계는 §3을 유지합니다.
 
 1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1105 PASS, App2353 PASS/실패0/기존 조건부11 skip. 최종 제품33f6652 이후 제품 변경은 없습니다.
 2. **완료 — QA12 실기 빌드·전달:** `artifacts/qa12-extreme-load/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. UX 자체 검사·payload 스트레스·10만 자 실제 입력/Undo·정상 종료 확인 및 폴더 열기 완료. 실제 TSF 한글 조합은 미확인입니다.
@@ -390,6 +397,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 - 2026-10-12 Codex: root cwd `C:/GitRepositories/my-capture-codex`, 제품33f6652의 최종 App `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger "trx;LogFileName=extreme-app.trx" --results-directory artifacts/extreme-load-20261012 -v minimal` session55381/da1d9c exit0(2353PASS/0FAIL/11조건부skip), Core1105PASS. self-contained QA12 publish442fa8 exit0, UX `powershell.exe -NoProfile -NonInteractive -File artifacts/next-product-readiness/run-owned-check.ps1 -Payload C:/GitRepositories/my-capture-codex/artifacts/qa12-extreme-load -Mode ux` session65934/501f0f exit0·RESULT PASS·PNG직접확인. 독립d27b17/bcb276 exit0, DLL2BF9DE6D…81F5/277파일/deps263누락0/10.0.11/x64/R2R 확인. 정확한 publish 명령은 development-log에 보존.
 - 2026-10-12 Codex: 재현 도구78e30d5→527f9bc,6e75dbb→d7b5ec7 통합 뒤 root finalpayload 빌드d02dab/938df7 exit0 및 actual8K PNG f1e9d9/OCR100k8e3be2 exit0 PASS. Computer Use로 실제 OCR→편집100k 입력·선택·Home/End·Undo, session93413/PID59528/7f0872 exit0 HOLD_CLOSED. 한글😀100004자→CtrlZ100000자/원본SHA동일, native-editor-home.json/native-editor-unicode-undo.json 보존. Hangul 키 미지원/IMEOff 유지로 실제 한글조합 미확인. root9b1d23 TRX/UX/ownedPID부재 exit0, 독립b31ad9/2ade73 exit0 수치/해석검토. Explorer QA12폴더 화면확인, 파일실행·Store·원격변경·삭제 없음. 남은100만다수줄60초guard/OCR초기7.37초 포함 §3/§4 최종 갱신. 첫 문서 갱신 bc0cea exit1은 PowerShell→Python pipe의 문자열 인코딩으로 substring 미일치, 파일 쓰기 전 실패; UTF8 파일로 재실행.
+
+- 2026-10-12 Codex: 사용자 GIF 사용법 요청 착수. root a8ef489/제품33f6652 기준 identity/status882c0a exit0, `git switch -c feat/text-copy-tutorial` 48b239 exit0. 설정/F1의 텍스트 복사 항목에서 한영 GIF를 열고 현재 단축키·T전환·자동 복사·붙여넣기를 안내하는 범위 확정. native `/root/tutorial_ui`와 `/root/tutorial_asset`를 기존 a491/edit-recovery 작업 사본에 분리 배정. 이전 Pro tunnel_unavailable/Agy validation_failed와 공식 native 경로 확인을 재사용했고 재호출·권한 확장은 하지 않음. actual QA12 AS-IS PNG 복사·직접 확인 f8b1f3 exit0. 구현·최종 검증은 진행 중이며 LOG는 `artifacts/text-copy-tutorial/development-log.txt`.
 
 ## 9. 인계 체크리스트
 
