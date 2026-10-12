@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `feat/feature-tutorials` (부드러운 GIF·기능별 튜토리얼 QA14 완료) |
+| 현재 기록 브랜치 | `release/store-4.1.2` (다음 배포본 준비·완성 파일 실기 성능 검증 진행) |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -432,6 +432,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 - 2026-10-12 Codex: 기능별 소스16개를710235b~382cc00(`198ef8` exit0), 핀비율290619e→725eb50(`adcc87` exit0), 자산31f5e92→제품0fef3b3(`cab1a8` exit0), 문서874e0f2→3a1a500으로 통합. 최종38기능/76GIF 실제개별decoder/player검사, ko38/en38시각검토 및 원본/receipt/복사SHA독립검사dde6e5 exit0 PASS. Core첫회1104/1FAIL은SHA내부1809오탐; 범위유지ASCII경계/한국어포함11회귀·독립검토후638836f. `dotnet build MyCapture.slnx -c Debug -v q -nologo` f1a0d5/3f7e1a exit0, 전체Core1116(d60d4b)·App2375/0FAIL/11기존skip(c74213) exit0. 정확한명령과실패는root LOG보존.
 - 2026-10-12 Codex: QA14 `dotnet publish ... -p:SourceRevisionId=0fef3b302dea6ff2e09aa923165731fe52a3325f -o artifacts/qa14-feature-tutorials` session37348/3d46e6 exit0. 독립 source/runtime353files/deps263/GIF76검사4ee5a1 및 x64/R2R2d0d26 exit0 PASS, DLL EB14DB0701149FB09C78174E57C621C41F23E610DF77F387FC13FCBA98A90D6D. `run-owned-check.ps1 -Payload .../qa14-feature-tutorials -Mode ux` session29554/78aa0f exit0·RESULTPASS. 최종실제UI helper session37840/b2040b exit0 CLOSED, Sky로5기능재생·정지·다시보기·전환·재열기·닫기, 최종프레임/타이머해제dac119 exit0. Explorer443353524에QA14경로열기확인. 사용자앱·프로필·클립보드와기존산출물/작업사본보존, 원격변경/삭제없음. QA14요청범위완료.
+
+- 2026-10-12 Codex: 다음 배포본 작성·완료 후 실기 성능 검사 요청 인수. clean221328e/root/common-dir/remote 확인 f59cbc exit0, release/store-4.1.2 분기 b94964 exit0. 4.1.2 메타데이터·필수8종패키지검사·MSIX준비 후 동일완성payload의 영역선택/대량텍스트/8K저장/검색/사용법재생 성능을 직렬 실행합니다. WebGPT register2f81f0 exit1 tunnel_unavailable, 소유터널 LastTaskResult1. native오프라인검사0f88f7 exit1은 로컬비표준endpoint확인요구이며3a1608 exit0에서 model_provider=openai/Codexon--upstreamchatgpt를 확인했습니다. 기존작업사본 재사용, 사용자앱 종료·원격변경·삭제 없음. 결과는 artifacts/release-4.1.2/development-log.txt에 기록합니다.
 
 ## 9. 인계 체크리스트
 
