@@ -1,4 +1,6 @@
 using MyCapture.App.Diagnostics;
+using System.IO;
+using System.Text;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -57,6 +59,35 @@ public sealed class HotfixExternalInputObservationTests
             + "\r\n2026-10-12T16:51:17Z; PID=25232; KeyUp key=Escape; modifiers=None; focused=True";
         Assert.True(HotfixUxSelfTest.TryObserveExternalKeyBatch(trace, out bool actual, out _));
         Assert.True(actual);
+    }
+
+    [Fact]
+    public void TraceReader_AllowsFixtureAppendWhileOpen_AndPreservesEveryKeyObservation()
+    {
+        string directory = OwnedTestDirectory.Create("MyCapture-HotfixTraceSharing-");
+        string path = Path.Combine(directory, "external-input-events.txt");
+        var encoding = new UTF8Encoding(false);
+        string prefix = "2026-10-12T17:16:33Z; PID=47300; Shown; capsLock=True\n";
+        string events = Trace(true);
+        File.WriteAllText(path, prefix, encoding);
+
+        // ReadAllText's former read-only sharing prevents the child's AppendAllText writer.
+        // Hold that same sharing mode open to reproduce the collision deterministically.
+        using (var oldReader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.Throws<IOException>(() => File.AppendAllText(path, events, encoding));
+        Assert.Equal(prefix, File.ReadAllText(path, encoding));
+
+        using (var stream = HotfixUxSelfTest.OpenExternalInputTrace(path))
+        {
+            File.AppendAllText(path, events, encoding);
+            using var reader = new StreamReader(stream, encoding);
+            string observed = reader.ReadToEnd();
+            Assert.Equal(prefix + events, observed);
+            Assert.True(HotfixUxSelfTest.TryObserveExternalKeyBatch(observed, out bool capsLock, out _));
+            Assert.True(capsLock);
+        }
+        Assert.Equal(prefix + events, File.ReadAllText(path, encoding));
+        // Retain the unique synthetic fixture as failure/success evidence; close handles only.
     }
 
     private static string Trace(bool capsLock) => string.Join('\n', new[] { "C", "E", "P", "S", "Escape" }

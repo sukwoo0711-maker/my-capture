@@ -564,6 +564,9 @@ internal static class HotfixUxSelfTest
         return false;
     }
     [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+    internal static FileStream OpenExternalInputTrace(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
     internal static bool TryObserveExternalKeyBatch(string trace, out bool capsLock, out string observation)
     {
         capsLock = false;
@@ -804,7 +807,13 @@ internal static class HotfixUxSelfTest
         }
         internal string ReadInputTrace()
         {
-            try { return File.Exists(_inputTracePath) ? File.ReadAllText(_inputTracePath, Encoding.UTF8) : "No fixture key events were recorded."; }
+            try
+            {
+                if (!File.Exists(_inputTracePath)) return "No fixture key events were recorded.";
+                using var stream = OpenExternalInputTrace(_inputTracePath);
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+                return reader.ReadToEnd();
+            }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             { return "Fixture input trace unavailable: " + error; }
         }
