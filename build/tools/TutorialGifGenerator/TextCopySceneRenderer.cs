@@ -31,7 +31,7 @@ internal sealed class TextCopySceneRenderer : ITutorialSceneRenderer
     private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
     internal const string Sample = "npm run build\nBuild completed";
     private static readonly string[] SampleLines = Sample.Split('\n');
-    private static readonly PointD InitialCursor = new(76, 226), DragStart = new(59, 132), DragEnd = new(367, 200), NoteCaret = new(65, 168);
+    private static readonly PointD InitialCursor = new(76, 226), DragStart = new(59, 132), DragEnd = new(367, 212), NoteCaret = new(65, 168);
     internal static TutorialStoryboard CreateStoryboard() => new TutorialStoryboard()
         .Hold("capture", 80, InitialCursor).Hold("text-mode", 80, InitialCursor)
         .Motion("approach", 35, InitialCursor, DragStart)
@@ -59,6 +59,9 @@ internal sealed class TextCopySceneRenderer : ITutorialSceneRenderer
     public TextCopySceneRenderer(string language)
     {
         _ko = language == "ko";
+        var sampleLine = new FormattedText(SampleLines[1], CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+            new Typeface((FontFamily)Application.Current.Resources["Font.Mono"]), 22, Brushes.White, 1);
+        Require(DragEnd.Y >= 177 + sampleLine.Height + 4, "Selection includes second line and bottom margin");
         _desktop = SourceScene(_ko);
         var bounds = new RectD(0, 0, SelectorWidth, SelectorHeight);
         var monitor = new MonitorInfo("Tutorial fixture", bounds, bounds, 96, true);
@@ -104,7 +107,7 @@ internal sealed class TextCopySceneRenderer : ITutorialSceneRenderer
                 _view.SelectMode(CaptureSelectorMode.Text);
                 Require(_view.Mode == CaptureSelectorMode.Text, "Text mode transition");
             }
-            bool dragging = plan.Segment == "drag";
+            bool dragging = plan.Segment is "press" or "drag";
             _interaction.SetValue(_view, Enum.Parse(_interaction.FieldType, dragging ? "Create" : "None"));
             if (dragging) Set(_view, "_dragAnchor", new PointD(DragStart.X * SceneScale, DragStart.Y * SceneScale));
             Invoke(_view, "OnMouseMove", new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseMoveEvent });

@@ -7,9 +7,9 @@ internal static class Bootstrap
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args.Length != 2)
+        if (args.Length is < 2 or > 3)
         {
-            Console.Error.WriteLine("TutorialGifGenerator <published-payload-folder> <new-output-folder>");
+            Console.Error.WriteLine("TutorialGifGenerator <published-payload-folder> <new-output-folder> [comma-separated-feature-ids]");
             return 2;
         }
         try
