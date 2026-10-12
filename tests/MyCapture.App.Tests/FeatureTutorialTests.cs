@@ -130,42 +130,55 @@ public sealed class FeatureTutorialTests
     });
 
     [Fact]
-    public void RapidSwitchCancelsStaleDecodersAndOnlyLastFeatureCanAttachFrames() => StaTestHost.Run(() =>
+    public void RapidSwitchKeepsOneDecoderAndSkipsCanceledQueuedFeatures() => StaTestHost.Run(() =>
     {
+        using var locale = UiText.UseLanguage("ko-KR");
         using var enteredFirst = new ManualResetEventSlim();
-        using var enteredSecond = new ManualResetEventSlim();
         using var finishStale = new ManualResetEventSlim();
-        using var staleReturned = new CountdownEvent(2);
+        using var staleReturned = new ManualResetEventSlim();
         var tokens = new ConcurrentQueue<CancellationToken>();
+        var paths = new ConcurrentQueue<string>();
+        int concurrent = 0, maximum = 0;
         FeatureTutorialWindow window = Offscreen("image-rectangle", (path, token) =>
         {
-            if (path.Contains("image-mosaic", StringComparison.Ordinal)) return Frames();
-            tokens.Enqueue(token);
-            if (path.Contains("image-rectangle", StringComparison.Ordinal)) enteredFirst.Set(); else enteredSecond.Set();
-            Assert.True(finishStale.Wait(TimeSpan.FromSeconds(5)));
-            GifSampleFrames frames = Frames();
-            staleReturned.Signal();
-            return frames;
+            int count = Interlocked.Increment(ref concurrent);
+            maximum = Math.Max(maximum, count);
+            paths.Enqueue(path);
+            try
+            {
+                if (path.Contains("image-mosaic", StringComparison.Ordinal)) return Frames();
+                tokens.Enqueue(token);
+                enteredFirst.Set();
+                Assert.True(finishStale.Wait(TimeSpan.FromSeconds(5)));
+                GifSampleFrames frames = Frames();
+                staleReturned.Set();
+                return frames;
+            }
+            finally { Interlocked.Decrement(ref concurrent); }
         });
         try
         {
             window.Show(); Drain(window);
             Assert.True(enteredFirst.Wait(TimeSpan.FromSeconds(5)));
             window.SelectFeature("image-blur");
-            Assert.True(enteredSecond.Wait(TimeSpan.FromSeconds(5)));
             window.SelectFeature("image-mosaic");
-            WaitLoaded(window);
             Assert.Equal("image-mosaic", window.SelectedFeatureId);
-            Assert.True(window.HasFrames);
-            Assert.Equal(2, tokens.Count);
+            Assert.True(window.IsLoading);
+            Assert.False(window.HasFrames);
+            Assert.Single(paths);
+            Assert.Single(tokens);
             Assert.All(tokens, token => Assert.True(token.IsCancellationRequested));
-            Image preview = FirstRunWelcomeTests.Descendants(window).OfType<Image>().Single();
-            ImageSource? selected = preview.Source;
-            Assert.NotNull(selected);
             finishStale.Set();
             Assert.True(staleReturned.Wait(TimeSpan.FromSeconds(5)));
-            Drain(window);
-            Assert.Same(selected, preview.Source);
+            WaitLoaded(window);
+            Assert.True(window.HasFrames);
+            Assert.Equal(1, maximum);
+            Assert.Equal(0, concurrent);
+            Assert.Equal(2, paths.Count);
+            Assert.DoesNotContain(paths, path => path.Contains("image-blur", StringComparison.Ordinal));
+            Assert.EndsWith("image-mosaic.ko.gif", paths.Last(), StringComparison.Ordinal);
+            Image preview = FirstRunWelcomeTests.Descendants(window).OfType<Image>().Single();
+            Assert.NotNull(preview.Source);
             window.Close();
             Drain(window);
             Assert.False(window.HasFrames);
@@ -174,6 +187,88 @@ public sealed class FeatureTutorialTests
             Assert.Null(preview.Source);
         }
         finally { finishStale.Set(); window.Close(); }
+    });
+
+    [Fact]
+    public void ClosingAndReopeningStillShareOneActualDecoder() => StaTestHost.Run(() =>
+    {
+        using var entered = new ManualResetEventSlim();
+        using var finish = new ManualResetEventSlim();
+        int concurrent = 0, maximum = 0;
+        FeatureTutorialWindow old = Offscreen("image-text", (_, _) =>
+        {
+            int count = Interlocked.Increment(ref concurrent);
+            maximum = Math.Max(maximum, count);
+            try { entered.Set(); Assert.True(finish.Wait(TimeSpan.FromSeconds(5))); return Frames(); }
+            finally { Interlocked.Decrement(ref concurrent); }
+        });
+        int freshReads = 0;
+        FeatureTutorialWindow fresh = Offscreen("pin-copy", (_, _) =>
+        {
+            int count = Interlocked.Increment(ref concurrent);
+            maximum = Math.Max(maximum, count);
+            try { Interlocked.Increment(ref freshReads); return Frames(); }
+            finally { Interlocked.Decrement(ref concurrent); }
+        });
+        try
+        {
+            old.Show(); Drain(old);
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            old.Close();
+            fresh.Show(); Drain(fresh);
+            Assert.True(fresh.IsLoading);
+            Assert.Equal(0, freshReads);
+            finish.Set();
+            WaitLoaded(fresh);
+            Assert.Equal(1, maximum);
+            Assert.Equal(1, freshReads);
+            Assert.True(fresh.HasFrames);
+            Assert.False(old.HasFrames);
+            fresh.Close();
+            Assert.False(fresh.HasFrames);
+        }
+        finally { finish.Set(); old.Close(); fresh.Close(); }
+    });
+
+    [Fact]
+    public void ReusedTutorialTransfersOwnerAndOnlyNewOwnerVisibilityClosesIt() => StaTestHost.Run(() =>
+    {
+        static Window Owner() => new() { WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000, Top = -10000, Width = 200, Height = 100, ShowActivated = false, ShowInTaskbar = false };
+        Window first = Owner(), second = Owner();
+        try
+        {
+            first.Show(); second.Show();
+            FeatureTutorialWindow.ShowTutorial(first, new HotkeySettings(), "image-text");
+            FeatureTutorialWindow tutorial = Assert.Single(first.OwnedWindows.OfType<FeatureTutorialWindow>());
+            FeatureTutorialWindow.ShowTutorial(second, new HotkeySettings(), "pin-copy");
+            Assert.Same(tutorial, Assert.Single(second.OwnedWindows.OfType<FeatureTutorialWindow>()));
+            Assert.Empty(first.OwnedWindows.OfType<FeatureTutorialWindow>());
+            Assert.Same(second, tutorial.Owner);
+            first.Hide();
+            Assert.True(tutorial.IsVisible);
+            second.Hide();
+            Assert.False(tutorial.IsVisible);
+            Assert.False(tutorial.HasFrames);
+            Assert.False(tutorial.IsLoading);
+        }
+        finally { FeatureTutorialWindow.DismissForCapture(); first.Close(); second.Close(); }
+    });
+
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void ClickThroughRecoveryUsesToggleThenHideTwiceThenTray(string language) => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage(language);
+        FeatureTutorial feature = TutorialCatalog.Get("pin-click-through");
+        var keys = new HotkeySettings { ToggleClickThrough = new(HotkeyModifiers.Control, 0x4A),
+            HideAllPins = new(HotkeyModifiers.Alt, 0x48) };
+        Assert.Equal(UiText.Format("Tutorial.pin-click-through.Exit", "Ctrl+J"), feature.StepsFor(keys)[2]);
+        keys.ToggleClickThrough = Hotkey.None;
+        Assert.Equal(UiText.Format("Tutorial.pin-click-through.Exit", UiText.Format("Hotkey.Twice", "Alt+H")), feature.StepsFor(keys)[2]);
+        keys.HideAllPins = Hotkey.None;
+        Assert.Equal(UiText.Format("Tutorial.pin-click-through.Exit", UiText.Get("Hotkey.TrayRestore")), feature.StepsFor(keys)[2]);
     });
 
     [Fact]

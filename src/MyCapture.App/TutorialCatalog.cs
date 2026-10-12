@@ -9,6 +9,14 @@ internal sealed record FeatureTutorial(string Id, string CategoryKey, string Tit
     internal IReadOnlyList<string> Steps => Id == "text-copy"
         ? new[] { UiText.Get("TextCapture_TutorialStep1"), UiText.Get("TextCapture_TutorialStep2"), UiText.Get("TextCapture_TutorialStep3") }
         : Enumerable.Range(1, 3).Select(i => UiText.Get($"Tutorial.{Id}.Step{i}")).ToArray();
+    internal IReadOnlyList<string> StepsFor(HotkeySettings hotkeys)
+    {
+        if (Id != "pin-click-through") return Steps;
+        string recovery = hotkeys.ToggleClickThrough.IsAssigned ? hotkeys.ToggleClickThrough.ToString()
+            : hotkeys.HideAllPins.IsAssigned ? UiText.Format("Hotkey.Twice", hotkeys.HideAllPins)
+            : UiText.Get("Hotkey.TrayRestore");
+        return [Steps[0], Steps[1], UiText.Format("Tutorial.pin-click-through.Exit", recovery)];
+    }
     internal string EntryText(HotkeySettings hotkeys)
     {
         if (Id == "text-copy") return TextCopyTutorialWindow.CaptureEntryText(hotkeys);

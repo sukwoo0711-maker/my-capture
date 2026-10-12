@@ -3978,4 +3978,5 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>The tutorial animation could not be loaded. Follow the steps below to use this feature.</value></data>
+  <data name="Tutorial.pin-click-through.Exit" xml:space="preserve"><value>3. Use the app underneath the pin. To disable click through: {0}</value></data>
 </root>

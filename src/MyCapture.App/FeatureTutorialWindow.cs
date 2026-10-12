@@ -16,6 +16,7 @@ namespace MyCapture.App;
 internal class FeatureTutorialWindow : Window
 {
     private static FeatureTutorialWindow? _open;
+    private static readonly SemaphoreSlim DecodeAdmission = new(1, 1);
     private readonly GifSamplePlayer _player;
     private readonly Func<string, CancellationToken, GifSampleFrames> _decode;
     private readonly Image _image = new() { Stretch = Stretch.Uniform };
@@ -142,6 +143,7 @@ internal class FeatureTutorialWindow : Window
         if (!ShortcutHelpWindow.CanShowHelp()) return;
         if (_open is { IsVisible: true })
         {
+            _open.AttachOwner(owner);
             _open._readHotkeys = readHotkeys;
             _open.SelectFeature(featureId);
             _open.UpdateInstructions();
@@ -153,9 +155,7 @@ internal class FeatureTutorialWindow : Window
             ? new TextCopyTutorialWindow(readHotkeys()) : new FeatureTutorialWindow(readHotkeys(), featureId);
         tutorial._readHotkeys = readHotkeys;
         tutorial.UpdateInstructions();
-        tutorial.Owner = owner;
-        tutorial._lifetimeOwner = owner;
-        owner.IsVisibleChanged += tutorial.OnOwnerVisibilityChanged;
+        tutorial.AttachOwner(owner);
         _open = tutorial;
         tutorial.Show();
     }
@@ -196,7 +196,7 @@ internal class FeatureTutorialWindow : Window
         if (_feature.Id == "text-copy" && keys.CaptureText.IsAssigned)
             _instructions.Children.Add(Paragraph(UiText.Format("TextCapture_TutorialDirect", keys.CaptureText)));
         _steps.Children.Clear();
-        foreach (string step in _feature.Steps) _steps.Children.Add(Paragraph(step));
+        foreach (string step in _feature.StepsFor(keys)) _steps.Children.Add(Paragraph(step));
         AutomationProperties.SetName(_image, _feature.Id == "text-copy"
             ? UiText.Get("TextCapture_TutorialAnimation") : _feature.DisplayName);
     }
@@ -204,6 +204,15 @@ internal class FeatureTutorialWindow : Window
     private void OnOwnerVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (_lifetimeOwner?.IsVisible == false && !_closed) Close();
+    }
+
+    private void AttachOwner(Window owner)
+    {
+        if (ReferenceEquals(_lifetimeOwner, owner)) return;
+        if (_lifetimeOwner is not null) _lifetimeOwner.IsVisibleChanged -= OnOwnerVisibilityChanged;
+        Owner = owner;
+        _lifetimeOwner = owner;
+        owner.IsVisibleChanged += OnOwnerVisibilityChanged;
     }
 
     private async void LoadAnimation()
@@ -255,25 +264,31 @@ internal class FeatureTutorialWindow : Window
         }
     }
 
-    private static Task<GifSampleFrames> DecodeOnStaAsync(string path,
+    private static async Task<GifSampleFrames> DecodeOnStaAsync(string path,
         Func<string, CancellationToken, GifSampleFrames> decode, CancellationToken cancellationToken)
     {
-        var completed = new TaskCompletionSource<GifSampleFrames>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() =>
+        await DecodeAdmission.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            try
+            cancellationToken.ThrowIfCancellationRequested();
+            var completed = new TaskCompletionSource<GifSampleFrames>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var thread = new Thread(() =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                GifSampleFrames frames = decode(path, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                completed.TrySetResult(frames);
-            }
-            catch (OperationCanceledException) { completed.TrySetCanceled(cancellationToken); }
-            catch (Exception error) { completed.TrySetException(error); }
-        }) { IsBackground = true, Name = "MyCapture feature tutorial decoder" };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        return completed.Task;
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    GifSampleFrames frames = decode(path, cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    completed.TrySetResult(frames);
+                }
+                catch (OperationCanceledException) { completed.TrySetCanceled(cancellationToken); }
+                catch (Exception error) { completed.TrySetException(error); }
+            }) { IsBackground = true, Name = "MyCapture feature tutorial decoder" };
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            return await completed.Task.ConfigureAwait(false);
+        }
+        finally { DecodeAdmission.Release(); }
     }
 
     internal void TogglePlayback()

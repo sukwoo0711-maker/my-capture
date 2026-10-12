@@ -89,3 +89,11 @@ F1 직접 TextBlock/WrapPanel 구조와 keycaps automation name을 유지합니�
 | PASS | `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --filter 'FullyQualifiedName~LocalizationTests' --logger 'trx;LogFileName=feature-tutorial-localization-utf8-final.trx' --results-directory artifacts/feature-tutorial-ui -v minimal` | 0 | chunk `4bf063`, 13 PASS/0 FAIL/0 skip |
 
 검증 종료 후 CPU 슬롯을 총괄에게 반환했습니다. 변경된 UI 소스 외에 추가 실행이나 파일 정리를 수행하지 않았습니다. 전체 App/Core/실제 GIF/native 및 시각 비교는 총괄의 통합 검증에서 수행합니다.
+
+## 독립 검토 반영 — 디코드 동시성 및 소유 창
+
+총괄은 UI 리뷰에서 세 가지 보완을 요청했습니다. FeatureTutorialWindow의 전창 공유 SemaphoreSlim(1,1)이 admission을 제어하여 gate 획득 후에만 background STA를 생성합니다. queued request가 취소되면 decoder에 진입하지 않고, 실제 decoder 종료 후 finally에서 gate를 반환합니다. 기존 token/세대 guard는 유지합니다. RapidSwitch 회귀는 실제 decoder 최대 동시성 1, 중간 선택 미진입, 최종 선택만 적용으로 강화했습니다. 닫기/재열기 간 같은 한도를 공유하는 회귀도 추가했습니다.
+
+visible singleton 재사용은 이전 owner visibility 구독을 해제하고 새 Owner/_lifetimeOwner 구독으로 이관합니다. A→B 이관 뒤 A 숨김은 창을 닫지 않고 B 숨김은 정리하는 회귀를 추가했습니다. 클릭 통과의 마지막 단계는 PinWindow.cs의 실제 우선순위와 같이 현재 ToggleClickThrough, HideAllPins 두 번, 트레이 복원 안내를 선택합니다. 한영 각 분기의 회귀를 추가했습니다.
+
+이번 소스 수정 후 `git diff --check`는 chunk `9c34b5`, exit 0입니다. 빌드/집중 검사 슬롯을 요청했으며 결과를 아래에 기록합니다. 이 동안 WorkspaceSceneRenderer는 수정하지 않았습니다. 후속 Workspace 작업 준비를 위해 총괄 승인하에 common `67f956e`, draft `7824c13`을 cherry-pick했습니다(chunk `f0629f`, exit 0; 로컬 `424754d`, `f1ded52`). 기존 미추적 성능 테스트는 보존했습니다.
