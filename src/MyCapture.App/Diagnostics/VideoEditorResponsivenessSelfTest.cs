@@ -300,6 +300,24 @@ internal static class VideoEditorResponsivenessSelfTest
                 "intent loop caused zero Gen2 collections",
                 $"intent loop caused {gen2Collections} Gen2 collection(s)");
 
+            // Filmstrip publications request legitimate static redraws independently of pointer input.
+            // Await the real decoder and drain its queued publication callbacks before counting input frames.
+            long preparationFramesBefore = timeline.RenderFrameCountForTest;
+            editor.UpdateLayout();
+            bool filmstripCompleted = PumpUntil(
+                () => timeline.FilmstripForTest?.IsCompleted == true, TimeSpan.FromSeconds(10));
+            bool publicationsDrained = false;
+            _ = editor.Dispatcher.BeginInvoke(DispatcherPriority.Background,
+                new Action(() => publicationsDrained = true));
+            bool publicationDrainCompleted = PumpUntil(() => publicationsDrained, TimeSpan.FromSeconds(1));
+            timeline.FlushRenderForTest();
+            Gate(filmstripCompleted && publicationDrainCompleted && timeline.FilmstripForTest?.IsCompleted == true,
+                "filmstrip decoder and queued publications completed before scrub measurement",
+                "filmstrip preparation did not complete within its bounded readiness budget");
+            Line($"Composition preparation: decoder-completed={filmstripCompleted}; publications-drained={publicationDrainCompleted}; " +
+                $"published={timeline.FilmstripForTest?.PublishedCount}; tiles={timeline.FilmstripForTest?.Layout.TileCount}; " +
+                $"render-frames={timeline.RenderFrameCountForTest - preparationFramesBefore}");
+
             // Five seconds at approximately 60 input samples/sec. SeekFromOverview exercises
             // the real event wiring and worst-case detail-follow path, not a private shortcut.
             var pointerLatencies = new double[DragSamples];
@@ -323,17 +341,25 @@ internal static class VideoEditorResponsivenessSelfTest
                 PumpFor(TimeSpan.FromMilliseconds(16));
             }
 
+            long framesAfterInput = timeline.RenderFrameCountForTest;
+            var releaseWatch = Stopwatch.StartNew();
             long finalGeneration = coordinator.RequestExact(clipMs * 0.75);
             bool exactCompleted = PumpUntil(
                 () => coordinator.PresentedGeneration == finalGeneration,
                 TimeSpan.FromSeconds(3));
+            releaseWatch.Stop();
             double pointerP95 = Percentile(pointerLatencies, 0.95);
             double pointerP99 = Percentile(pointerLatencies, 0.99);
             double cycleP95 = Percentile(cycleTimes, 0.95);
             double cycleP99 = Percentile(cycleTimes, 0.99);
             double maxCycle = cycleTimes.Max();
-            long renderedFrames = timeline.RenderFrameCountForTest - framesBefore;
+            long framesAfterRelease = timeline.RenderFrameCountForTest;
+            long renderedFrames = framesAfterInput - framesBefore;
             long issuedSeeks = coordinator.IssuedSeekCountForTest - seeksBefore;
+            Line(string.Create(CultureInfo.InvariantCulture,
+                $"Composition scopes: start={framesBefore}, input-end={framesAfterInput}, release-end={framesAfterRelease}; " +
+                $"input-frames={renderedFrames}, release-frames={framesAfterRelease - framesAfterInput}, " +
+                $"total-frames={framesAfterRelease - framesBefore}; release-exact-wait={releaseWatch.Elapsed.TotalMilliseconds:0.000}ms"));
             Line(string.Create(
                 CultureInfo.InvariantCulture,
                 $"5s real scrub: samples={DragSamples}, pointer p95={pointerP95:0.000}ms, " +
