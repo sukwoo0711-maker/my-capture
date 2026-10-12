@@ -3478,7 +3478,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="TextCapture_TutorialDirect" xml:space="preserve"><value>You can also start directly with your copy-text shortcut, {0}. Do not press T when using this shortcut.</value></data>
   <data name="TextCapture_TutorialAnimation" xml:space="preserve"><value>Example of pressing T in the capture selector, dragging over words, and pasting them</value></data>
   <data name="TextCapture_TutorialLoading" xml:space="preserve"><value>Loading tutorial</value></data>
-  <data name="TextCapture_TutorialUnavailable" xml:space="preserve"><value>The tutorial animation could not be loaded. Follow the steps below to copy text.</value></data>
+  <data name="TextCapture_TutorialUnavailable" xml:space="preserve"><value>The tutorial video could not be loaded. Follow the steps below to copy text.</value></data>
   <data name="TextCapture_TutorialReplay" xml:space="preserve"><value>Replay</value></data>
   <data name="TextCapture_TutorialStep1" xml:space="preserve"><value>1. Press T in the capture selector to switch to copy text.</value></data>
   <data name="TextCapture_TutorialStep2" xml:space="preserve"><value>2. Drag over the words you want to copy. The selected words are recognized and copied automatically.</value></data>
@@ -3921,7 +3921,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.capture-region.Step1" xml:space="preserve"><value>1. Start a region capture.</value></data>
   <data name="Tutorial.capture-region.Step2" xml:space="preserve"><value>2. Drag to select the area to capture.</value></data>
   <data name="Tutorial.capture-region.Step3" xml:space="preserve"><value>3. Edit or save according to your after-capture setting.</value></data>
-  <data name="Tutorial.record-region.Unassigned" xml:space="preserve"><value>Choose Region recording from the tray menu.</value></data>
+  <data name="Tutorial.record-region.Unassigned" xml:space="preserve"><value>Choose Screen recording from the tray menu.</value></data>
   <data name="Tutorial.record-region.Step1" xml:space="preserve"><value>1. Drag to select the recording area.</value></data>
   <data name="Tutorial.record-region.Step2" xml:space="preserve"><value>2. Click Start in the recording controls and perform the action.</value></data>
   <data name="Tutorial.record-region.Step3" xml:space="preserve"><value>3. Click Stop to review the result in the recording editor.</value></data>
@@ -3933,19 +3933,19 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.library-open.Step1" xml:space="preserve"><value>1. Open the library.</value></data>
   <data name="Tutorial.library-open.Step2" xml:space="preserve"><value>2. Select an image or recording.</value></data>
   <data name="Tutorial.library-open.Step3" xml:space="preserve"><value>3. Open the item to edit the image or play the recording.</value></data>
-  <data name="Tutorial.capture-window.Unassigned" xml:space="preserve"><value>Choose Window capture under More capture in the tray menu.</value></data>
+  <data name="Tutorial.capture-window.Unassigned" xml:space="preserve"><value>Choose Window capture under More captures in the tray menu.</value></data>
   <data name="Tutorial.capture-window.Step1" xml:space="preserve"><value>1. Place the pointer over the window to capture.</value></data>
   <data name="Tutorial.capture-window.Step2" xml:space="preserve"><value>2. Run Window capture.</value></data>
   <data name="Tutorial.capture-window.Step3" xml:space="preserve"><value>3. Review the captured window beneath the pointer.</value></data>
-  <data name="Tutorial.capture-fullscreen.Unassigned" xml:space="preserve"><value>Choose Full screen capture under More capture in the tray menu.</value></data>
+  <data name="Tutorial.capture-fullscreen.Unassigned" xml:space="preserve"><value>Choose Full-screen capture under More captures in the tray menu.</value></data>
   <data name="Tutorial.capture-fullscreen.Step1" xml:space="preserve"><value>1. Place the pointer on the monitor to capture.</value></data>
-  <data name="Tutorial.capture-fullscreen.Step2" xml:space="preserve"><value>2. Run Full screen capture.</value></data>
+  <data name="Tutorial.capture-fullscreen.Step2" xml:space="preserve"><value>2. Run Full-screen capture.</value></data>
   <data name="Tutorial.capture-fullscreen.Step3" xml:space="preserve"><value>3. Review the full-screen capture of that monitor.</value></data>
-  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>Choose Scrolling capture under More capture in the tray menu.</value></data>
+  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>Choose Scrolling capture under More captures in the tray menu.</value></data>
   <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. Place the pointer over a scrollable window.</value></data>
   <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. Run Scrolling capture and wait for automatic scrolling to finish.</value></data>
   <data name="Tutorial.capture-scroll.Step3" xml:space="preserve"><value>3. Review the stitched capture. Run the same command during capture to cancel.</value></data>
-  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>Choose a delay in the capture selector's More menu.</value></data>
+  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>Choose a delay in the capture selector's More captures menu.</value></data>
   <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. Start a delayed capture.</value></data>
   <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. Prepare the screen during the countdown.</value></data>
   <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. When the selector appears, drag to select the capture area.</value></data>
@@ -3965,7 +3965,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.image-arrow.Step2" xml:space="preserve"><value>2. Select Arrow and drag from the start to the tip.</value></data>
   <data name="Tutorial.image-arrow.Step3" xml:space="preserve"><value>3. Review its direction, then save or copy to finish.</value></data>
   <data name="Tutorial.image-pen.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
-  <data name="Tutorial.image-pen.Step2" xml:space="preserve"><value>2. Select Pen and drag the pointer to draw.</value></data>
+  <data name="Tutorial.image-pen.Step2" xml:space="preserve"><value>2. Select Pencil and drag the pointer to draw.</value></data>
   <data name="Tutorial.image-pen.Step3" xml:space="preserve"><value>3. Review the drawing, then save or copy to finish.</value></data>
   <data name="Tutorial.image-highlighter.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-highlighter.Step2" xml:space="preserve"><value>2. Select Highlighter and drag over the content to emphasize.</value></data>
@@ -3996,15 +3996,15 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. Press Ctrl+V in another app to paste the image.</value></data>
   <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. Open the library.</value></data>
   <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Press Ctrl+Shift+N and enter a name for the new folder.</value></data>
-  <data name="Tutorial.folder-create.Step3" xml:space="preserve"><value>3. Confirm to add the folder to the folder list.</value></data>
+  <data name="Tutorial.folder-create.Step3" xml:space="preserve"><value>3. Click Create to add the folder to the folder list.</value></data>
   <data name="Tutorial.folder-rename.Step1" xml:space="preserve"><value>1. Select a folder in the library.</value></data>
   <data name="Tutorial.folder-rename.Step2" xml:space="preserve"><value>2. Press F2 and enter its new name.</value></data>
-  <data name="Tutorial.folder-rename.Step3" xml:space="preserve"><value>3. Confirm and check the updated folder name.</value></data>
+  <data name="Tutorial.folder-rename.Step3" xml:space="preserve"><value>3. Click Save to show the new name in the folder list.</value></data>
   <data name="Tutorial.library-move.Step1" xml:space="preserve"><value>1. Select captures to move in the library.</value></data>
   <data name="Tutorial.library-move.Step2" xml:space="preserve"><value>2. Press M and choose the destination folder.</value></data>
-  <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. Confirm, then find the captures in that folder.</value></data>
+  <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. Click Move to folder, then find the captures in that folder.</value></data>
   <data name="Tutorial.library-delete.Step1" xml:space="preserve"><value>1. Select an item to delete in the library.</value></data>
-  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Press Del and confirm deletion in the dialog.</value></data>
+  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Press Del and click OK in the confirmation dialog.</value></data>
   <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. Review the list. Restore needed items from the recycle bin.</value></data>
   <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. Open a recording from the library.</value></data>
   <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. Press Space to play.</value></data>
@@ -4026,14 +4026,14 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.pin-hide-all.Step1" xml:space="preserve"><value>1. Place pins on the screen.</value></data>
   <data name="Tutorial.pin-hide-all.Step2" xml:space="preserve"><value>2. Press your Hide all pins shortcut.</value></data>
   <data name="Tutorial.pin-hide-all.Step3" xml:space="preserve"><value>3. Press the same shortcut again to show the pins.</value></data>
-  <data name="Tutorial.pin-click-through.Unassigned" xml:space="preserve"><value>Choose Click through from the pin's right-click menu.</value></data>
+  <data name="Tutorial.pin-click-through.Unassigned" xml:space="preserve"><value>Right-click the pin and choose Click through to windows behind.</value></data>
   <data name="Tutorial.pin-click-through.Step1" xml:space="preserve"><value>1. Place a pin on the screen.</value></data>
-  <data name="Tutorial.pin-click-through.Step2" xml:space="preserve"><value>2. Place the pointer over the pin and use your shortcut or its right-click menu to enable Click through.</value></data>
-  <data name="Tutorial.pin-click-through.Step3" xml:space="preserve"><value>3. Interact with the app underneath. Your assigned shortcut can disable Click through.</value></data>
-  <data name="Tutorial.pin-click-through.Exit" xml:space="preserve"><value>3. Use the app underneath the pin. To disable click through: {0}</value></data>
-  <data name="Tutorial.pin-restore.Unassigned" xml:space="preserve"><value>When a closed pin is available, choose Reopen pin from the tray menu.</value></data>
+  <data name="Tutorial.pin-click-through.Step2" xml:space="preserve"><value>2. Place the pointer over the pin, then press your shortcut or right-click the pin and choose Click through to windows behind.</value></data>
+  <data name="Tutorial.pin-click-through.Step3" xml:space="preserve"><value>3. Interact with the app underneath. Your assigned shortcut turns off Click through to windows behind.</value></data>
+  <data name="Tutorial.pin-click-through.Exit" xml:space="preserve"><value>3. Use the app underneath the pin. To turn off Click through to windows behind: {0}</value></data>
+  <data name="Tutorial.pin-restore.Unassigned" xml:space="preserve"><value>When a closed pin is available, choose Reopen closed pin from the tray menu.</value></data>
   <data name="Tutorial.pin-restore.Step1" xml:space="preserve"><value>1. Close a pin on the screen.</value></data>
-  <data name="Tutorial.pin-restore.Step2" xml:space="preserve"><value>2. Use your shortcut or Reopen pin in the tray menu.</value></data>
+  <data name="Tutorial.pin-restore.Step2" xml:space="preserve"><value>2. Use your shortcut or Reopen closed pin in the tray menu.</value></data>
   <data name="Tutorial.pin-restore.Step3" xml:space="preserve"><value>3. The most recently closed pin appears again.</value></data>
   <data name="Tutorial.pin-copy.Step1" xml:space="preserve"><value>1. Click the pin to focus it.</value></data>
   <data name="Tutorial.pin-copy.Step2" xml:space="preserve"><value>2. Press Ctrl+C to copy the pin image.</value></data>
@@ -4041,5 +4041,5 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.pin-save.Step1" xml:space="preserve"><value>1. Click the pin to focus it.</value></data>
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
-  <data name="Tutorial.Unavailable" xml:space="preserve"><value>The tutorial animation could not be loaded. Follow the steps below to use this feature.</value></data>
+  <data name="Tutorial.Unavailable" xml:space="preserve"><value>The tutorial video could not be loaded. Follow the steps below to use this feature.</value></data>
 </root>

@@ -3472,11 +3472,11 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="TextCapture_HotkeyHint" xml:space="preserve"><value>영역을 선택하면 텍스트만 인식해 복사합니다. 이미지는 라이브러리에 저장하지 않습니다.</value></data>
   <data name="TextCapture_TutorialOpen" xml:space="preserve"><value>사용법 보기</value></data>
   <data name="TextCapture_TutorialTitle" xml:space="preserve"><value>텍스트 복사 사용법</value></data>
-  <data name="TextCapture_TutorialIntro" xml:space="preserve"><value>화면 속 글자를 선택해 복사하고, 원하는 곳에 붙여넣습니다.</value></data>
+  <data name="TextCapture_TutorialIntro" xml:space="preserve"><value>화면 속 글자를 선택해 복사하고, 원하는 곳에 붙여 넣습니다.</value></data>
   <data name="TextCapture_TutorialCaptureKey" xml:space="preserve"><value>{0}로 캡처 선택 화면을 연 다음 T를 누릅니다.</value></data>
   <data name="TextCapture_TutorialCaptureMenu" xml:space="preserve"><value>트레이 메뉴의 영역 캡처로 선택 화면을 연 다음 T를 누릅니다.</value></data>
   <data name="TextCapture_TutorialDirect" xml:space="preserve"><value>텍스트 복사 단축키 {0}로 바로 시작할 수도 있습니다. 이때는 T를 누르지 않습니다.</value></data>
-  <data name="TextCapture_TutorialAnimation" xml:space="preserve"><value>캡처 선택에서 T를 누르고 글자 영역을 드래그한 뒤 붙여넣는 예시</value></data>
+  <data name="TextCapture_TutorialAnimation" xml:space="preserve"><value>캡처 선택에서 T를 누르고 글자 영역을 드래그한 뒤 붙여 넣는 예시</value></data>
   <data name="TextCapture_TutorialLoading" xml:space="preserve"><value>사용법 불러오는 중</value></data>
   <data name="TextCapture_TutorialUnavailable" xml:space="preserve"><value>사용법 영상을 불러오지 못했습니다. 아래 단계에 따라 텍스트를 복사하십시오.</value></data>
   <data name="TextCapture_TutorialReplay" xml:space="preserve"><value>다시 보기</value></data>
@@ -3919,9 +3919,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.video-trim.Title" xml:space="preserve"><value>녹화 트림</value></data>
   <data name="Tutorial.capture-region.Unassigned" xml:space="preserve"><value>트레이 메뉴에서 영역 캡처를 선택합니다.</value></data>
   <data name="Tutorial.capture-region.Step1" xml:space="preserve"><value>1. 영역 캡처를 시작합니다.</value></data>
-  <data name="Tutorial.capture-region.Step2" xml:space="preserve"><value>2. 복사할 부분을 드래그하여 선택합니다.</value></data>
+  <data name="Tutorial.capture-region.Step2" xml:space="preserve"><value>2. 캡처할 부분을 드래그하여 선택합니다.</value></data>
   <data name="Tutorial.capture-region.Step3" xml:space="preserve"><value>3. 캡처 후 동작 설정에 따라 편집하거나 저장합니다.</value></data>
-  <data name="Tutorial.record-region.Unassigned" xml:space="preserve"><value>트레이 메뉴에서 영역 녹화를 선택합니다.</value></data>
+  <data name="Tutorial.record-region.Unassigned" xml:space="preserve"><value>트레이 메뉴에서 화면 녹화를 선택합니다.</value></data>
   <data name="Tutorial.record-region.Step1" xml:space="preserve"><value>1. 녹화할 영역을 드래그하여 선택합니다.</value></data>
   <data name="Tutorial.record-region.Step2" xml:space="preserve"><value>2. 녹화 컨트롤에서 시작을 누르고 화면을 조작합니다.</value></data>
   <data name="Tutorial.record-region.Step3" xml:space="preserve"><value>3. 중지를 누르면 녹화 편집기에서 결과를 확인할 수 있습니다.</value></data>
@@ -3933,23 +3933,23 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.library-open.Step1" xml:space="preserve"><value>1. 라이브러리를 엽니다.</value></data>
   <data name="Tutorial.library-open.Step2" xml:space="preserve"><value>2. 확인할 이미지나 녹화 항목을 선택합니다.</value></data>
   <data name="Tutorial.library-open.Step3" xml:space="preserve"><value>3. 항목을 열어 이미지를 편집하거나 녹화를 재생합니다.</value></data>
-  <data name="Tutorial.capture-window.Unassigned" xml:space="preserve"><value>트레이 메뉴의 더 많은 캡처에서 창 캡처를 선택합니다.</value></data>
+  <data name="Tutorial.capture-window.Unassigned" xml:space="preserve"><value>트레이 메뉴의 다른 캡처에서 창 캡처를 선택합니다.</value></data>
   <data name="Tutorial.capture-window.Step1" xml:space="preserve"><value>1. 캡처할 창 위에 포인터를 놓습니다.</value></data>
   <data name="Tutorial.capture-window.Step2" xml:space="preserve"><value>2. 창 캡처를 실행합니다.</value></data>
   <data name="Tutorial.capture-window.Step3" xml:space="preserve"><value>3. 포인터 아래 창의 캡처 결과를 확인합니다.</value></data>
-  <data name="Tutorial.capture-fullscreen.Unassigned" xml:space="preserve"><value>트레이 메뉴의 더 많은 캡처에서 전체 화면 캡처를 선택합니다.</value></data>
+  <data name="Tutorial.capture-fullscreen.Unassigned" xml:space="preserve"><value>트레이 메뉴의 다른 캡처에서 전체 화면 캡처를 선택합니다.</value></data>
   <data name="Tutorial.capture-fullscreen.Step1" xml:space="preserve"><value>1. 캡처할 모니터 위에 포인터를 놓습니다.</value></data>
   <data name="Tutorial.capture-fullscreen.Step2" xml:space="preserve"><value>2. 전체 화면 캡처를 실행합니다.</value></data>
   <data name="Tutorial.capture-fullscreen.Step3" xml:space="preserve"><value>3. 해당 모니터의 전체 화면 캡처 결과를 확인합니다.</value></data>
-  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>트레이 메뉴의 더 많은 캡처에서 스크롤 캡처를 선택합니다.</value></data>
+  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>트레이 메뉴의 다른 캡처에서 스크롤 캡처를 선택합니다.</value></data>
   <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. 스크롤할 창 위에 포인터를 놓습니다.</value></data>
   <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. 스크롤 캡처를 실행하고 자동 스크롤이 끝날 때까지 기다립니다.</value></data>
   <data name="Tutorial.capture-scroll.Step3" xml:space="preserve"><value>3. 이어 붙인 캡처를 확인합니다. 진행 중 같은 명령을 실행하면 취소합니다.</value></data>
-  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>캡처 선택 화면의 더 보기 메뉴에서 지연 시간을 선택합니다.</value></data>
+  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>캡처 선택 화면의 다른 캡처 메뉴에서 지연 시간을 선택합니다.</value></data>
   <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. 지연 캡처를 시작합니다.</value></data>
   <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. 대기 시간 동안 캡처할 화면을 준비합니다.</value></data>
   <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. 선택 화면이 나타나면 캡처할 영역을 드래그합니다.</value></data>
-  <data name="Tutorial.quick-access.Step1" xml:space="preserve"><value>1. 캡처 결과가 빠른 실행 카드에 나타나면 Alt+Q를 누릅니다.</value></data>
+  <data name="Tutorial.quick-access.Step1" xml:space="preserve"><value>1. 캡처 결과가 빠른 작업 카드에 나타나면 Alt+Q를 누릅니다.</value></data>
   <data name="Tutorial.quick-access.Step2" xml:space="preserve"><value>2. 카드에서 복사 버튼을 선택하거나 C를 누릅니다.</value></data>
   <data name="Tutorial.quick-access.Step3" xml:space="preserve"><value>3. 붙여 넣을 곳에서 Ctrl+V를 눌러 결과를 사용합니다.</value></data>
   <data name="Tutorial.color-copy.Step1" xml:space="preserve"><value>1. 영역 캡처를 시작합니다.</value></data>
@@ -3965,7 +3965,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.image-arrow.Step2" xml:space="preserve"><value>2. 화살표 도구를 선택하고 시작점에서 끝점까지 드래그합니다.</value></data>
   <data name="Tutorial.image-arrow.Step3" xml:space="preserve"><value>3. 화살표 방향을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
   <data name="Tutorial.image-pen.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
-  <data name="Tutorial.image-pen.Step2" xml:space="preserve"><value>2. 펜 도구를 선택하고 포인터를 드래그하여 그립니다.</value></data>
+  <data name="Tutorial.image-pen.Step2" xml:space="preserve"><value>2. 연필 도구를 선택하고 포인터를 드래그하여 그립니다.</value></data>
   <data name="Tutorial.image-pen.Step3" xml:space="preserve"><value>3. 그린 내용을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
   <data name="Tutorial.image-highlighter.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-highlighter.Step2" xml:space="preserve"><value>2. 형광펜 도구를 선택하고 강조할 부분을 드래그합니다.</value></data>
@@ -3996,15 +3996,15 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. 다른 앱에서 Ctrl+V를 눌러 이미지를 붙여 넣습니다.</value></data>
   <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. 라이브러리를 엽니다.</value></data>
   <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Ctrl+Shift+N을 눌러 새 폴더 이름을 입력합니다.</value></data>
-  <data name="Tutorial.folder-create.Step3" xml:space="preserve"><value>3. 확인하면 폴더 목록에 새 폴더가 나타납니다.</value></data>
+  <data name="Tutorial.folder-create.Step3" xml:space="preserve"><value>3. 만들기를 선택하면 폴더 목록에 새 폴더가 나타납니다.</value></data>
   <data name="Tutorial.folder-rename.Step1" xml:space="preserve"><value>1. 라이브러리에서 이름을 바꿀 폴더를 선택합니다.</value></data>
   <data name="Tutorial.folder-rename.Step2" xml:space="preserve"><value>2. F2를 누르고 새 이름을 입력합니다.</value></data>
-  <data name="Tutorial.folder-rename.Step3" xml:space="preserve"><value>3. 확인하여 변경된 폴더 이름을 확인합니다.</value></data>
+  <data name="Tutorial.folder-rename.Step3" xml:space="preserve"><value>3. 저장을 선택하면 폴더 목록에 새 이름이 표시됩니다.</value></data>
   <data name="Tutorial.library-move.Step1" xml:space="preserve"><value>1. 라이브러리에서 이동할 캡처를 선택합니다.</value></data>
   <data name="Tutorial.library-move.Step2" xml:space="preserve"><value>2. M을 누르고 대상 폴더를 선택합니다.</value></data>
-  <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. 확인한 뒤 대상 폴더에서 캡처를 확인합니다.</value></data>
+  <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. 폴더로 이동을 선택한 뒤 대상 폴더에서 캡처를 확인합니다.</value></data>
   <data name="Tutorial.library-delete.Step1" xml:space="preserve"><value>1. 라이브러리에서 삭제할 항목을 선택합니다.</value></data>
-  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Del을 누르고 확인 창에서 삭제를 선택합니다.</value></data>
+  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Del을 누르고 확인 창에서 확인을 선택합니다.</value></data>
   <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. 삭제 후 목록을 확인합니다. 필요한 항목은 휴지통에서 복원합니다.</value></data>
   <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. 라이브러리에서 녹화를 엽니다.</value></data>
   <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. Space를 눌러 녹화를 재생합니다.</value></data>
@@ -4026,14 +4026,14 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.pin-hide-all.Step1" xml:space="preserve"><value>1. 화면에 핀을 띄웁니다.</value></data>
   <data name="Tutorial.pin-hide-all.Step2" xml:space="preserve"><value>2. 지정된 모든 핀 숨기기 단축키를 누릅니다.</value></data>
   <data name="Tutorial.pin-hide-all.Step3" xml:space="preserve"><value>3. 같은 단축키를 다시 누르면 핀이 나타납니다.</value></data>
-  <data name="Tutorial.pin-click-through.Unassigned" xml:space="preserve"><value>핀의 우클릭 메뉴에서 클릭 통과를 선택합니다.</value></data>
+  <data name="Tutorial.pin-click-through.Unassigned" xml:space="preserve"><value>핀의 오른쪽 클릭 메뉴에서 뒤 창 클릭 허용을 선택합니다.</value></data>
   <data name="Tutorial.pin-click-through.Step1" xml:space="preserve"><value>1. 화면에 핀을 띄웁니다.</value></data>
-  <data name="Tutorial.pin-click-through.Step2" xml:space="preserve"><value>2. 핀 위에 포인터를 놓고 지정된 단축키를 누르거나 우클릭 메뉴로 클릭 통과를 켭니다.</value></data>
-  <data name="Tutorial.pin-click-through.Step3" xml:space="preserve"><value>3. 핀 아래 앱을 조작합니다. 지정된 단축키로 클릭 통과를 해제할 수 있습니다.</value></data>
-  <data name="Tutorial.pin-click-through.Exit" xml:space="preserve"><value>3. 핀 아래 앱을 조작합니다. 클릭 통과 해제: {0}</value></data>
-  <data name="Tutorial.pin-restore.Unassigned" xml:space="preserve"><value>닫힌 핀이 있으면 트레이 메뉴에서 핀 다시 열기를 선택합니다.</value></data>
+  <data name="Tutorial.pin-click-through.Step2" xml:space="preserve"><value>2. 핀 위에 포인터를 놓고 지정된 단축키를 누르거나 오른쪽 클릭 메뉴에서 뒤 창 클릭 허용을 켭니다.</value></data>
+  <data name="Tutorial.pin-click-through.Step3" xml:space="preserve"><value>3. 핀 아래 앱을 조작합니다. 지정된 단축키로 뒤 창 클릭 허용을 해제할 수 있습니다.</value></data>
+  <data name="Tutorial.pin-click-through.Exit" xml:space="preserve"><value>3. 핀 아래 앱을 조작합니다. 뒤 창 클릭 허용 해제: {0}</value></data>
+  <data name="Tutorial.pin-restore.Unassigned" xml:space="preserve"><value>닫힌 핀이 있으면 트레이 메뉴에서 닫은 핀 다시 열기를 선택합니다.</value></data>
   <data name="Tutorial.pin-restore.Step1" xml:space="preserve"><value>1. 화면에 띄운 핀을 닫습니다.</value></data>
-  <data name="Tutorial.pin-restore.Step2" xml:space="preserve"><value>2. 지정된 단축키나 트레이 메뉴의 핀 다시 열기를 사용합니다.</value></data>
+  <data name="Tutorial.pin-restore.Step2" xml:space="preserve"><value>2. 지정된 단축키나 트레이 메뉴의 닫은 핀 다시 열기를 사용합니다.</value></data>
   <data name="Tutorial.pin-restore.Step3" xml:space="preserve"><value>3. 최근에 닫은 핀이 다시 나타납니다.</value></data>
   <data name="Tutorial.pin-copy.Step1" xml:space="preserve"><value>1. 복사할 핀을 클릭하여 선택합니다.</value></data>
   <data name="Tutorial.pin-copy.Step2" xml:space="preserve"><value>2. Ctrl+C를 눌러 핀 이미지를 복사합니다.</value></data>
