@@ -39,3 +39,13 @@ attempt1–4의 출력은 ignored `review-attempt-*/`에 그대로 보존했습�
 | text-copy.en.gif | 144217 | EDA303D03070F9EB8E2294B6CD651556BDD14D5D176E52436EEB51D16E1A6E67 |
 
 최종 `.gif`만 새 `src/MyCapture.App/Assets/Tutorials/`에 File.Copy(overwrite:false)로 적용하고 최종 receipt/keyframe PNG/contactsheet를 새 `review/`에 같은 방식으로 복사했습니다. `a1d310` exit0에서 제품 자산의 SHA256이 위 최종 receipt와 같음을 확인했습니다. attempt 폴더, bin/obj와 작업 사본은 보존합니다. 삭제 없음. 실행 자료는 개발 tool 디렉터리에만 보관하며 제품 Assets에는 GIF 두 개만 있습니다. 제품 실제 OCR/클립보드/전체 UI 실기 검증은 이 authoring fixture 검사의 범위 밖이며 부모의 통합 검증에서 수행합니다.
+
+자산 staging `git add -- build/tools/TutorialGifGenerator src/MyCapture.App/Assets/Tutorials/text-copy.ko.gif src/MyCapture.App/Assets/Tutorials/text-copy.en.gif` 및 `git diff --cached --check`, stat 확인: `1db560` exit0, 소유 범위의 새24파일만 포함. `git commit -m "feat(tutorial): 텍스트 복사 한영 GIF와 재현 생성기 추가" -m <이유>`: `f082cb` exit0, 커밋 `55760701e3a2b74c68ed5df3dbcc3b3fc23c7df0`, 이후 `git status --short` clean. 기존 브랜치/ignored 모든 시도/작업 사본 보존. 원격 변경 없음.
+
+## 독립 UI 읽기 검토
+
+부모의 추가 요청으로 별도 작성자 UI commit `968039d598fdd0e2acac2474eb2c9caacfb934d0`를 읽기만 검토했습니다. 검토 cwd `C:/GitRepositories/my-capture/.claude/worktrees/agent-a491402ad82aa2759`. 해당 작업자의 소스·LOG·테스트를 수정하거나 실행하지 않았습니다. `git log -1 --oneline; git status --short; git show --stat --oneline HEAD; git show HEAD -- <설정/도움말/csproj/resx>; Get-Content -Encoding UTF8`로 신규 창과 테스트 확인: `16ab77` exit0. 기존 untracked `CaptureLatencyInvestigationTests.cs`가 남아 있는 상태를 확인하고 그대로 보존했습니다. capture dismiss chain와 작성자 실행 LOG 추가 확인: `b20c0e` exit0.
+
+검토 범위: background STA/frozen frames, 생성자 IO 없음, 닫기/숨김/owner 숨김과 decode 완료의 race, CTS/세대 번호/closed·visible guard, 플레이어 timer 정지 및 timeline/image/frame 참조 해제, motion·owner 이벤트 구독 해제, 기존 `ShortcutHelpWindow.DismissForCapture`에서의 tutorial 종료와 shell capture 연계, 현재 저장된 Capture/CaptureText 단축키 안내, 미지정 대안, assembly 위치 기준 ko/en asset 경로, output+publish copy 설정, 감소 모션 시작 정지와 사용자 명시 재생 및 정적 안내. 테스트가 close-during-decode, missing/malformed, hide/minimize/deactivation, current custom key/locales, search entry를 다루는지 확인했습니다. 작업자 26/26·현지화13/13 결과는 작성자 LOG에서 확인한 근거이며 이 검토자는 재실행하지 않았습니다.
+
+중대한 발견 사항 없음. 외부 코드가 직접 Hide 후 같은 instance.Show를 호출하는 가상 경로는 Loaded 재호출 여부에 따라 재로드가 없을 수 있으나 현재 제품은 owner 숨김/캡처에서 Close하고 ShowTutorial에서 숨은 instance를 Close 후 새로 생성하므로 제품 경로에 영향이 없습니다. 실제 자산을 포함한 native 최종 검증은 부모가 수행합니다. 검토 결과를 부모에게 전달했습니다.
