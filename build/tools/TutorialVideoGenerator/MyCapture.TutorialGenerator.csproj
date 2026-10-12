@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Renders the feature tutorial clips (src/MyCapture.App/Assets/Tutorials/*.mp4) from the
+    current product source. The product grants this assembly internal access by name; see
+    InternalsVisibleTo in MyCapture.App and MyCapture.Core. Never shipped.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>MyCapture.TutorialGenerator</AssemblyName>
+    <RootNamespace>MyCapture.TutorialGenerator</RootNamespace>
+    <!-- DPI-unaware: every offscreen product window lays out at 96 DPI, so a 1:1 render is pixel exact. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\MyCapture.App\MyCapture.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,240 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Media.Imaging;
+using MyCapture.App;
+using MyCapture.App.Themes;
+using MyCapture.Core.Themes;
+
+namespace MyCapture.TutorialGenerator;
+
+/// <summary>
+/// Renders every feature tutorial (TutorialCatalog × ko/en) from the current product source to
+/// H.264 MP4. Usage:
+/// <code>
+/// dotnet run --project build/tools/TutorialVideoGenerator -c Release -- [--features id,id] [--languages ko,en]
+///     [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high] [--install] [--no-sheets]
+/// </code>
+/// Output defaults to artifacts/tutorials/&lt;timestamp&gt; (Git ignores artifacts/). --install copies the
+/// clips to src/MyCapture.App/Assets/Tutorials.
+/// </summary>
+internal static class Program
+{
+    internal const int DefaultBitrate = 300_000, DefaultQuality = 60;
+
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        if (args.Length >= 3 && args[0] == "inspect")
+        {
+            // inspect <clip.mp4> <ms>[,<ms>…]: full-size decoded frames next to the clip, for review.
+            using var reader = new MyCapture.Platform.Recording.MediaFoundationVideoFrameReader(args[1]);
+            foreach (string ms in args[2].Split(','))
+            {
+                double at = double.Parse(ms, CultureInfo.InvariantCulture);
+                ClipReview.SavePng(ClipReview.Frame(reader, at), Path.ChangeExtension(args[1], null) + $".{at:00000}ms.png");
+            }
+
+            return 0;
+        }
+
+        Options options;
+        try { options = Options.Parse(args); }
+        catch (ArgumentException error)
+        {
+            Console.Error.WriteLine(error.Message);
+            Console.Error.WriteLine("MyCapture.TutorialGenerator [--features id,id|all] [--languages ko,en] [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high|main|baseline|default] [--install] [--no-sheets]");
+            return 2;
+        }
+
+        Application app = CreateResourceHost();
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        ThemeService.Apply(AppTheme.Glass);
+        Stage.Scale = options.Width / Stage.Width;
+        try
+        {
+            return Run(options);
+        }
+        finally
+        {
+            app.Shutdown();
+        }
+    }
+
+    /// <summary>
+    /// A plain Application carrying exactly App.xaml's resources. Never the product's App class:
+    /// WPF posts Application.OnStartup on construction, which would start the resident app (the
+    /// user's settings, library, retention, tray icon and hotkeys) inside the generator.
+    /// </summary>
+    private static Application CreateResourceHost()
+    {
+        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        foreach (string dictionary in new[] { "Tokens", "Symbols", "Controls" })
+            app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{dictionary}.xaml") });
+        app.Resources["BoolToVisibility"] = new MyCapture.App.Gallery.BoolToVisibilityConverter();
+        app.Resources["PinLabel"] = new MyCapture.App.Gallery.PinLabelConverter();
+        app.Resources["IsHeaderRow"] = new MyCapture.App.Gallery.IsHeaderRowConverter();
+        return app;
+    }
+
+    private static int Run(Options options)
+    {
+        Directory.CreateDirectory(options.Output);
+        var receipts = new List<ClipReceipt>();
+        var failures = new List<string>();
+        var total = Stopwatch.StartNew();
+        foreach (string feature in options.Features)
+        foreach (string language in options.Languages)
+        {
+            try
+            {
+                receipts.Add(Render(feature, language, options));
+            }
+            catch (Exception error)
+            {
+                failures.Add($"{feature}.{language}: {error}");
+                Console.Error.WriteLine($"CLIP=FAIL ID={feature} LANGUAGE={language} {error}");
+            }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+
+        string dll = typeof(TutorialCatalog).Assembly.Location;
+        var summary = new
+        {
+            Product = typeof(TutorialCatalog).Assembly.GetName().Version?.ToString(),
+            ProductDllSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dll))),
+            Theme = "Glass (default)",
+            Resolution = $"{Stage.PixelWidth}x{Stage.PixelHeight}",
+            options.Bitrate, options.Quality, options.Profile,
+            Fps = TutorialStoryboard.Fps,
+            Encoder = "Media Foundation H.264 (software MFT), MP4",
+            Clips = receipts.Count,
+            Bytes = receipts.Sum(receipt => receipt.Bytes),
+            ElapsedSeconds = Math.Round(total.Elapsed.TotalSeconds, 1),
+            Failures = failures,
+            Receipts = receipts,
+        };
+        File.WriteAllText(Path.Combine(options.Output, "receipt.json"),
+            JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+        Console.WriteLine($"RESULT={(failures.Count == 0 ? "PASS" : "FAIL")} CLIPS={receipts.Count} BYTES={summary.Bytes} OUT={options.Output}");
+        if (failures.Count > 0) return 1;
+        if (options.Install) Install(options);
+        return 0;
+    }
+
+    private sealed record ClipReceipt(string Feature, string Language, long Bytes, int Frames, double Seconds, int UniquePictures,
+        long RenderMs, string Sha256, string Provenance);
+
+    private static ClipReceipt Render(string feature, string language, Options options)
+    {
+        UiText.Configure(language);
+        using IDisposable scope = UiText.UseLanguage(language);
+        var clock = Stopwatch.StartNew();
+        using TutorialScene scene = SceneCatalog.Create(feature, language);
+        TutorialStoryboard story = scene.Story;
+        if (story.DurationSeconds is < 7 or > 15)
+            throw new InvalidDataException($"Clip length {story.DurationSeconds:0.0}s is outside 7–15 s.");
+        string mp4 = Path.Combine(options.Output, $"{feature}.{language}.mp4");
+        var keys = new List<(double Ms, string Label)>();
+        int frame = 0;
+        using (var writer = new ClipWriter(mp4, Stage.PixelWidth, Stage.PixelHeight, options.Bitrate, options.Quality, options.Profile))
+        {
+            string? previous = null;
+            foreach (TutorialFramePlan plan in story.Frames)
+            {
+                BitmapSource picture = Stage.Render(dc => scene.Draw(dc, plan));
+                writer.Write(picture, plan.Repeat);
+                if (plan.Repeat > 1 || (plan.IsLast && plan.Segment != previous))
+                    keys.Add(((frame + plan.Repeat / 2.0) * 1000 / TutorialStoryboard.Fps, plan.Segment));
+                previous = plan.IsLast ? plan.Segment : previous;
+                frame += plan.Repeat;
+            }
+
+            writer.Complete();
+        }
+
+        long renderMs = clock.ElapsedMilliseconds;
+        if (options.Sheets)
+        {
+            List<(double Ms, string Label)> chosen = keys.Count <= 12 ? keys
+                : Enumerable.Range(0, 12).Select(i => keys[(int)Math.Round(i * (keys.Count - 1) / 11.0)]).ToList();
+            ClipReview.SaveSheet(mp4, chosen, Path.Combine(options.Output, $"{feature}.{language}.sheet.png"));
+        }
+
+        long bytes = new FileInfo(mp4).Length;
+        Console.WriteLine($"CLIP=PASS ID={feature} LANGUAGE={language} FRAMES={frame} SECONDS={story.DurationSeconds:0.00} BYTES={bytes} MS={renderMs}");
+        return new ClipReceipt(feature, language, bytes, frame, Math.Round(story.DurationSeconds, 2), story.Frames.Count, renderMs,
+            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(mp4))), scene.Provenance);
+    }
+
+    private static void Install(Options options)
+    {
+        string target = Path.Combine(RepositoryRoot(), "src", "MyCapture.App", "Assets", "Tutorials");
+        Directory.CreateDirectory(target);
+        foreach (string feature in options.Features)
+        foreach (string language in options.Languages)
+        {
+            string name = $"{feature}.{language}.mp4";
+            File.Copy(Path.Combine(options.Output, name), Path.Combine(target, name), overwrite: true);
+        }
+
+        Console.WriteLine($"INSTALLED={options.Features.Count * options.Languages.Count} TARGET={target}");
+    }
+
+    internal static string RepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            if (File.Exists(Path.Combine(directory.FullName, "MyCapture.slnx"))) return directory.FullName;
+        throw new DirectoryNotFoundException("MyCapture.slnx was not found above the generator.");
+    }
+
+    private sealed record Options(IReadOnlyList<string> Features, IReadOnlyList<string> Languages, string Output, int Width, int Bitrate,
+        int? Quality, int? Profile, bool Install, bool Sheets)
+    {
+        internal static Options Parse(string[] args)
+        {
+            string[] all = TutorialCatalog.All.Select(feature => feature.Id).ToArray();
+            IReadOnlyList<string> features = all, languages = ["ko", "en"];
+            string? output = null;
+            int width = 960, bitrate = DefaultBitrate;
+            int? quality = DefaultQuality, profile = 100;
+            bool install = false, sheets = true;
+            for (int i = 0; i < args.Length; i++)
+            {
+                string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
+                switch (args[i])
+                {
+                    case "--features":
+                        string value = Next();
+                        features = value == "all" ? all : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                        break;
+                    case "--languages": languages = Next().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries); break;
+                    case "--out": output = Path.GetFullPath(Next()); break;
+                    case "--width": width = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--bitrate": bitrate = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                    case "--quality": string q = Next(); quality = q == "bitrate" ? null : int.Parse(q, CultureInfo.InvariantCulture); break;
+                    case "--profile": profile = Next() switch { "high" => 100, "main" => 77, "baseline" => 66, "default" => null, _ => throw new ArgumentException("Profile is high, main, baseline or default.") }; break;
+                    case "--install": install = true; break;
+                    case "--no-sheets": sheets = false; break;
+                    default: throw new ArgumentException($"Unknown argument {args[i]}.");
+                }
+            }
+
+            if (features.Count == 0 || features.Distinct().Count() != features.Count || features.Except(all).Any())
+                throw new ArgumentException("Unknown or duplicate feature id.");
+            if (languages.Count == 0 || languages.Except(["ko", "en"]).Any()) throw new ArgumentException("Languages are ko and en.");
+            if (width is < 640 or > 1920 || width % 16 != 0 || width * 9 % 16 != 0) throw new ArgumentException("Width must be a multiple of 16 between 640 and 1920.");
+            if (bitrate is < 50_000 or > 4_000_000) throw new ArgumentException("Bitrate is in bits per second (50000–4000000).");
+            output ??= Path.Combine(RepositoryRoot(), "artifacts", "tutorials", DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+            if (Directory.Exists(output) && Directory.EnumerateFileSystemEntries(output).Any())
+                throw new ArgumentException($"Output folder is not empty: {output}");
+            return new Options(features, languages, output, width, bitrate, quality, profile, install, sheets);
+        }
+    }
+}
