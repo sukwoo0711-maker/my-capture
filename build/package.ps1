@@ -1,6 +1,7 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
-    [string]$Version = '4.1.0'
+    [string]$Version = '4.1.0',
+    [switch]$StoreOnly
 )
 
 Set-StrictMode -Version 2.0
@@ -10,6 +11,9 @@ $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\
 $versionMatch = [regex]::Match($Version, $semVerPattern)
 if (-not $versionMatch.Success) {
     throw "Version must use a SemVer core with an optional prerelease (for example 1.7.0 or 1.7.0-rc.1): $Version"
+}
+if ($StoreOnly -and $Version -cnotmatch '\A[1-9][0-9]{0,4}\.(?:0|[1-9][0-9]{0,4})\.(?:0|[1-9][0-9]{0,4})\z') {
+    throw 'Store-only publish requires a stable numeric Store version.'
 }
 
 $baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
@@ -29,7 +33,8 @@ if (-not [string]::Equals([string]$productVersionNodes[0].InnerText, $baseVersio
     throw "Requested package version $Version does not match the release version declared in Directory.Build.props."
 }
 
-$releaseRoot = [IO.Path]::GetFullPath((Join-Path $repo 'artifacts\release')).TrimEnd('\')
+$outputFamily = if ($StoreOnly) { 'artifacts\store-publish' } else { 'artifacts\release' }
+$releaseRoot = [IO.Path]::GetFullPath((Join-Path $repo $outputFamily)).TrimEnd('\')
 $artifactRoot = [IO.Path]::GetFullPath((Join-Path $releaseRoot $Version)).TrimEnd('\')
 if (-not $artifactRoot.StartsWith($releaseRoot + '\', [StringComparison]::OrdinalIgnoreCase) -or
     -not [string]::Equals((Split-Path -Leaf $artifactRoot), $Version, [StringComparison]::Ordinal)) {
@@ -222,7 +227,7 @@ if (Test-Path -LiteralPath $artifactRoot) {
     throw "Preserving existing release artifacts; move them to the Recycle Bin before repackaging: $artifactRoot"
 }
 [IO.Directory]::CreateDirectory($publish) | Out-Null
-[IO.Directory]::CreateDirectory($stage) | Out-Null
+if (-not $StoreOnly) { [IO.Directory]::CreateDirectory($stage) | Out-Null }
 
 function Assert-SelfContainedPublish([string]$PublishRoot) {
     $requiredRuntimeFiles = @(
@@ -306,6 +311,38 @@ try {
     foreach ($record in $inventory) {
         $totalExpandedBytes += [long]$record.Bytes
         if ($totalExpandedBytes -gt 2147483648) { throw 'Published payload exceeds the 2 GiB installer safety limit.' }
+    }
+
+    if ($StoreOnly) {
+        # Same verified publish; Store does not consume the ZIP/IExpress bootstrap.
+        $selfTestRoot = Join-Path $artifactRoot 'packaged-self-tests'
+        & (Join-Path $PSScriptRoot 'run-packaged-self-tests.ps1') -PublishRoot $publish -OutputRoot $selfTestRoot
+        . (Join-Path $PSScriptRoot 'packaged-validation.ps1')
+        $runs = @(Get-ChildItem -LiteralPath $selfTestRoot -Directory)
+        if ($runs.Count -ne 1) { throw 'Expected exactly one Store publish self-test run.' }
+        $selfTests = Assert-PackagedSelfTestResult $runs[0].FullName
+        $finalSourceState = Get-GitSourceState
+        if (-not $finalSourceState.WorkingTreeClean -or $finalSourceState.Commit -cne $sourceCommit) {
+            throw 'Release source changed during Store publish.'
+        }
+        [ordered]@{
+            SchemaVersion = 3; Product = 'MyCapture'; Version = $Version
+            SourceCommit = $sourceCommit; SourceTreeClean = $true
+            Runtime = 'win-x64'; Architecture = 'x64'; SelfContained = $true
+            Offline = $true; Unsigned = $true; StoreOnly = $true
+            GeneratedUtc = [DateTime]::UtcNow.ToString('O')
+            PublishInventory = $inventory; Deliverables = @()
+            PackagedSelfTestRun = $runs[0].Name
+            PackagedSelfTestResultSha256 = Get-Sha256 (Join-Path $runs[0].FullName 'result.json')
+        } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $releaseManifestOutput -Encoding UTF8
+        $verified = Assert-StorePublishProvenance $repo $publish $Version
+        "$(Get-Sha256 $releaseManifestOutput)  release-manifest.json" |
+            Set-Content -LiteralPath $shaSumsOutput -Encoding ASCII
+        Write-Output "STORE_PUBLISH=$publish"
+        Write-Output "FILES=$($inventory.Count)"
+        Write-Output "SELF_TESTS=$($selfTests.PassCount)/$(@($selfTests.Tests).Count)"
+        Write-Output "RELEASE_MANIFEST=$releaseManifestOutput"
+        return
     }
 
     New-InventoryZip $publish $portable $inventory

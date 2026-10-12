@@ -79,8 +79,10 @@ $PublishDir = [IO.Path]::GetFullPath($PublishDir).TrimEnd('\')
 if (-not (Test-Path -LiteralPath $PublishDir -PathType Container)) {
     throw "Publish folder not found: $PublishDir. Run build\package.ps1 -Version $Version first."
 }
-# package.ps1 adds the legal notices after its self-contained check; their presence ties this
-# folder to that verified publish rather than an arbitrary build output.
+. (Join-Path $PSScriptRoot 'packaged-validation.ps1')
+$provenance = Assert-StorePublishProvenance $repo $PublishDir $Version
+$provenanceHash = (Get-FileHash -LiteralPath (Join-Path (Split-Path -Parent $PublishDir) 'release-manifest.json') -Algorithm SHA256).Hash
+# Legal notices remain mandatory in addition to the exact source and inventory gate.
 foreach ($required in @('MyCapture.exe', 'MyCapture.dll', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.md',
         'DOTNET-LICENSE.txt', 'DOTNET-THIRD-PARTY-NOTICES.txt', 'Assets\tray-idle.ico')) {
     if (-not (Test-Path -LiteralPath (Join-Path $PublishDir $required) -PathType Leaf)) {
@@ -191,6 +193,10 @@ $msixName = '{0}_{1}_x64.msix' -f $IdentityName, $packageVersion
 $msix = Join-Path $OutputRoot $msixName
 Invoke-Tool $makeappx @('pack', '/d', $stage, '/p', $msix, '/o')
 
+$finalProvenance = Assert-StorePublishProvenance $repo $PublishDir $Version
+if ($finalProvenance.SourceCommit -cne $provenance.SourceCommit -or
+    (Get-FileHash -LiteralPath (Join-Path (Split-Path -Parent $PublishDir) 'release-manifest.json') -Algorithm SHA256).Hash -cne $provenanceHash) { throw 'Source changed during Store packaging.' }
+
 $hash = (Get-FileHash -LiteralPath $msix -Algorithm SHA256).Hash.ToLowerInvariant()
 $summary = [ordered]@{
     Package = $msixName
@@ -204,6 +210,8 @@ $summary = [ordered]@{
     LocalTest = [bool]$LocalTest
     MaxVersionTested = $MaxVersionTested
     PublishDir = $PublishDir
+    SourceCommit = $provenance.SourceCommit
+    ReleaseManifestSha256 = (Get-FileHash -LiteralPath (Join-Path (Split-Path -Parent $PublishDir) 'release-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
     BuildTools = "Microsoft.Windows.SDK.BuildTools $toolsVersion"
     StartupTaskId = [string]$manifest.Package.Applications.Application.Extensions.Extension.StartupTask.TaskId
 }

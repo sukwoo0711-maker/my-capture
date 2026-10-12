@@ -162,6 +162,11 @@ public sealed class ReleaseVersionContractTests
     public void PackagedSelfTestRunner_RequiresExitZeroAndAnExactPassFromAllEightTests()
     {
         string runner = Read("build/run-packaged-self-tests.ps1");
+        string definition = Read("build/packaged-validation.ps1");
+
+        Assert.Contains(". (Join-Path $PSScriptRoot 'packaged-validation.ps1')", runner, StringComparison.Ordinal);
+        Assert.Contains("$tests = @(Get-PackagedSelfTests)", runner, StringComparison.Ordinal);
+        Assert.Contains("function Get-PackagedSelfTests", definition, StringComparison.Ordinal);
 
         string[] switches =
         [
@@ -177,7 +182,7 @@ public sealed class ReleaseVersionContractTests
 
         foreach (string commandLineSwitch in switches)
         {
-            Assert.Contains(commandLineSwitch, runner, StringComparison.Ordinal);
+            Assert.Contains(commandLineSwitch, definition, StringComparison.Ordinal);
         }
 
         Assert.Contains("$exitCode -ne 0", runner, StringComparison.Ordinal);

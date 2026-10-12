@@ -66,6 +66,17 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 - **버전**: 패키지 버전은 `<버전>.0`입니다. 네 번째 자리는 Store가 예약한 자리라서 항상 0입니다. 새 제출은 이전 제출보다 버전이 높아야 합니다.
 - **서명**: 패키지는 서명하지 않은 채로 올립니다. Store가 인증 후 서명합니다.
 
+### Store 전용 게시 경로
+
+GitHub ZIP/설치 프로그램이 필요 없는 다음 Store 배포에는 `package.ps1 -StoreOnly`를 사용할 수 있습니다. 같은 self-contained 게시·법적 고지·파일 inventory 검사를 수행하고 필수 self-test 8종을 실행한 뒤 ZIP 압축과 IExpress 생성을 건너뜁니다. 실행 중인 MyCapture가 있으면 검사 gate가 중단됩니다. 기존 출력은 보존하므로 새 버전의 깨끗한 소스에서 실행합니다.
+
+```powershell
+.\build\package.ps1 -Version 4.1.0 -StoreOnly
+.\build\package-store.ps1 -Version 4.1.0 -PublishDir .\artifacts\store-publish\4.1.0\publish-win-x64 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
+```
+
+`package-store.ps1`은 두 게시 경로 모두에서 인접한 `release-manifest.json`의 clean source SHA·버전·x64 런타임·전체 파일 크기/해시를 확인합니다. Store 전용 경로는 저장된 8종 결과 JSON과 보고서 해시도 다시 확인합니다. 동일 버전이라도 소스나 게시 파일이 달라지면 패키징을 중단합니다. 기존 GitHub release 경로와 필수 installer 검사는 유지됩니다.
+
 ## 3. 제출 전 로컬 확인 (선택)
 
 로컬 테스트 ID로 같은 패키지를 만들고, 서명 없이 설치해 봅니다.
