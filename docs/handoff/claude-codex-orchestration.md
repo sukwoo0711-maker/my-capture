@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `feat/feature-tutorials` (부드러운 GIF·기능별 튜토리얼 확장 진행) |
+| 현재 기록 브랜치 | `feat/feature-tutorials` (부드러운 GIF·기능별 튜토리얼 QA14 완료) |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -48,14 +48,20 @@
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
 
-### 부드러운 GIF·기능별 사용법 — 진행 중
+### 부드러운 GIF·기능별 사용법 — QA14 구현·검증·전달 완료
 
 - 사용자 피드백: GIF의 움직임을 부드럽게 하고 기능마다 별도 튜토리얼을 만듭니다. 기준2bb6cd6/제품b4ae87e/QA13, root `feat/feature-tutorials`. 기존11프레임 한영 GIF와 설정/도움말 화면을 `artifacts/feature-tutorials/`에 AS-IS로 복사했습니다.
-- 움직임은25fps(4cs)와 가감속 cursor/drag, 읽기 구간은 hold로 구성합니다. 먼저 텍스트 복사 pilot으로 화질·연속성·파일/프레임 메모리·실제 재생을 검토한 뒤 기능별로 확장합니다. 사용법 창의 지연 로딩·취소·모션 설정·정적 안내는 유지합니다.
+- 움직임은25fps(4cs)와 가감속 cursor/drag, 읽기 구간은 hold로 구성했습니다. 텍스트 복사 pilot으로 화질·연속성·파일/프레임 메모리·실제 재생을 검토한 뒤 기능별 확장을 완료했습니다. 사용법 창의 지연 로딩·취소·모션 설정·정적 안내를 유지합니다.
 - 선택 질문에 추가 답변이 없어 기능별 사용 흐름을 기본으로 진행합니다. 현재 F1의42개 행을38개 기능별 GIF(한영76파일)로 연결합니다. 텍스트 복사의 두 진입, Q/W회전, I/O트림은 각각 같은 기능으로 묶고 핀 닫기는 기본 핀 사용법에 포함합니다. 전역 단축키는 현재 설정값을 표시합니다. 새 설치의 선택 단축키 미지정과 이미지 편집기 Ctrl+C의 완료 동작을 확인했습니다.
 - 텍스트 복사 pilot은156프레임/11.2초, ko1,908,377B/en1,986,202B, 디코딩 프레임35,942,400B입니다. root가 실제 QA13 decoder/player로40초 재생하고 화면을 확인했습니다. session6229/`851d95` exit0, callback 중앙41.06ms/P95 54.29ms, 닫기 후 player정지/image해제. GIF 모션 구간25fps이며 측정값은 물리 표시 지연이 아닙니다. 한영 디코딩 contact sheet 직접 검토 완료, 기존 QA13 payload는 보존했습니다.
 - 공통 renderer API `67f956e`를 `a606a69`로 통합했습니다. 기존 edit-recovery는 공통 생성기·캡처9개, a491은 공통 사용법 창·기능 선택·F1/설정 연결과 라이브러리/핀12개, aeae는 이미지/영상17개 기능을 담당합니다. 파일 소유권을 나누고 CPU/native 실행은 직렬로 관리합니다. 기존 실패한 Pro/Antigravity 경로는 반복하지 않고 동일한 공식 native 경로를 재사용합니다. 원격 배포·삭제는 범위에 없습니다.
-- 공통 UI를 `2e29e86`~`18dfe9f`로 통합했습니다. 38개 기능 선택, F1 42행·설정 단축키의 사용법 진입, 현재 키 설정, 한영 단계 설명을 제공합니다. 독립 검토에서 찾은 동시 디코더·소유 창 이관·핀 클릭 통과 해제 안내를 수정했습니다. 전역 gate가 실제 디코드를 한 개씩 실행하고 취소된 대기는 건너뜁니다. worker의 집중 App43/43·현지화13/13 PASS, 독립 재검토 완료. root의 실제 UI 예비 검토 session13337/`860b26` exit0 CLOSED, 검색·기능 전환·누락 자산 안내·닫기/프레임 해제 확인. 이 예비 실행은 이전 QA13 GIF로 레이아웃을 검사했으며 최종76개 자산 검증은 진행 중입니다.
+- 공통 UI를 `2e29e86`~`18dfe9f`로 통합했습니다. 38개 기능 선택, F1 42행·설정 단축키13개 사용법 진입, 현재 키 설정, 한영 단계 설명을 제공합니다. 독립 검토에서 찾은 동시 디코더·소유 창 이관·핀 클릭 통과 해제 안내를 수정했습니다. 전역 gate가 실제 디코드를 한 개씩 실행하고 취소된 대기는 건너뜁니다. worker 집중 App43/43·현지화13/13 PASS, 독립 재검토 완료. 이전 QA13 GIF를 사용한 UI 예비 검토 session13337/`860b26` exit0 CLOSED에 이어 아래 QA14 최종 자산 실기 검토를 완료했습니다.
+
+- 최종 제품 소스는 **`0fef3b302dea6ff2e09aa923165731fe52a3325f`**입니다. 38기능/한영76GIF를 통합했으며 각각640×360, 11.0–11.2초, 움직임25fps입니다. 총129,867,958B, 개별 최대3,014,188B/156프레임/35,942,400B decoded payload입니다. root 한국어38개와 독립 영어38개 시각 검토 완료. 녹화 버튼 전환·모자이크/흐림·회전fit·폴더 클릭/선택 좌표·핀/썸네일 비율을 교정했습니다. 실제 decoder/player receipt와 원본/복사 SHA76개 독립 대조`dde6e5` exit0 PASS. 경로는 `build/tools/TutorialGifGenerator/review-smooth-final/selected-source-manifest.json`입니다.
+- 통합 Debug `f1a0d5`/`3f7e1a` exit0 경고0/오류0. 첫 Core1104 PASS/1FAIL은 receipt의 SHA 내부1809를 Windows 지원 문구로 오판한 기존 정규식 문제였습니다. 원본 근거와 탐색 범위를 유지하고 ASCII 토큰 경계·실제 지원 문구/SDK/해시/한국어 인접 표현 회귀11개를 추가했습니다(`638836f`). 독립 재검토 완료. 최종 Core **1116/1116 PASS**, session23042/`d60d4b` exit0. 전체 App **2375 PASS/0 FAIL/기존 조건부11 skip**, session50896/`c74213` exit0,6분36초입니다.
+- **QA14 실기 파일:** `C:/GitRepositories/my-capture-codex/artifacts/qa14-feature-tutorials/MyCapture.exe`. self-contained win-x64/R2R·Core/Desktop10.0.11, 표시 버전 `4.1.1+0fef3b302dea6ff2e09aa923165731fe52a3325f`. publish session37348/`3d46e6` exit0, DLL SHA256 **`EB14DB0701149FB09C78174E57C621C41F23E610DF77F387FC13FCBA98A90D6D`**. 독립353파일/deps263누락0/제품source차이0/GIF76개SHA일치(`4ee5a1`), x64/R2R(`2d0d26`) PASS. 첫 검증 도구의 PowerShell 해시테이블 합계 집계 오류는 pscustomobject로 고쳐 재검사했으며 실패 근거를 보존했습니다.
+- UX 자체 검사 session29554/PID45868/`78aa0f` exit0·RESULT PASS, receipt `artifacts/next-product-readiness/ux-8af2d206/`. 밝고 어두운 F1, 고대비 단축키 설정 PNG 직접 확인. 실제 QA14 DLL/최종 GIF를 사용하는 격리 WPF host에서 Sky로 텍스트 복사 자동 재생·정지·다시보기, 회전/트림/핀 클릭 통과 전환, Esc, 별도 텍스트 입력 사용법 재열기·닫기를 확인했습니다. session37840/PID31628/`b2040b` exit0 CLOSED,191338ms. `native-final-ko.json` 최종 visible/frames/loading/playing 모두false 또는객체수거, runtime10.0.11·DLLSHA일치(`dac119` exit0). 합성 자료로 사용법 재생을 검사했고 사용자 프로필·클립보드 거래는 수행하지 않았습니다.
+- 기존 Explorer443353524를 QA14 폴더로 이동해 화면의 경로를 확인했습니다. 각 기능 GIF는 그 아래 `Assets/Tutorials/`에 있습니다. 실제 명령·실패·TRX·native 결과·전후 자료는 `artifacts/feature-tutorials/`에 보존했습니다. 재사용한 작업 사본과 모든 생성 시도/QA12/QA13도 보존했습니다. 이번 후속 작업의 Store 재배포·push·PR·병합·삭제는 없습니다.
 
 ### 텍스트 복사 GIF 사용법 — QA13 구현·검증·전달 완료
 
@@ -207,10 +213,10 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 
 ## 4. 앞으로 할 일 (우선순위 순)
 
-**현재 우선 작업:** QA13 GIF의 동작 구간을25fps로 부드럽게 개선하고, 실제 제품의 기능별로 독립된 사용법 GIF와 진입점을 확장합니다. 파일/프레임 메모리·지연 로딩·취소를 검사하고 새 실기 빌드를 전달합니다. QA13과 과부하 개선 QA12의 완료 결과와 후속 한계는 §3을 유지합니다.
+**현재 상태:** 부드러운 기능별 GIF38개(한영76파일), F1/설정 연결, 지연 로딩·취소·메모리 해제와 QA14 실기 빌드 전달을 완료했습니다. 다음 접점은 사용자의 QA14 실기 피드백입니다. 과부하 개선 QA12의 후속 한계와 이전 QA13은 §3에 보존합니다.
 
-1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1105 PASS, App2363 PASS/실패0/기존 조건부11 skip. 최종 제품소스b4ae87e의 설정/F1/튜토리얼과 기존 성능 개선을 함께 검사했습니다.
-2. **완료 — QA13 실기 빌드·전달:** `artifacts/qa13-text-copy-tutorial/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. 설정 → 단축키 → 텍스트 복사 → 사용법 보기, F1의 해당 행·검색 결과에서 한영 GIF를 엽니다. UX 자체 검사·실제재생/정지/다시보기/종료·AS-IS/TO-BE·폴더 열기 완료. QA12와 기존 산출물은 보존했습니다.
+1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1116 PASS, App2375 PASS/실패0/기존 조건부11 skip. 최종 제품소스0fef3b3의 기능별 사용법과 기존 성능 개선을 함께 검사했습니다. 지원 문구 검사 오탐 수정은638836f입니다.
+2. **완료 — QA14 실기 빌드·전달:** `artifacts/qa14-feature-tutorials/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. F1 해당 기능 → 사용법 보기 또는 설정 → 단축키의 사용법 보기에서 엽니다. 사용법 창 상단에38개 기능 선택이 있습니다. UX 자체 검사·최종GIF 실제재생/정지/다시보기/기능전환/종료·AS-IS/TO-BE·폴더 열기 완료.
 3. **후속 우선순위:** 편집100만 자 여러 줄의 전체 선택60초guard, OCR100만 자 첫 표시7.37초, 전체 Gallery 갱신과 물리 화면 지연을 별도 개선 대상으로 유지합니다. QA12 사용자 실기 피드백을 함께 반영합니다. 다음 Store 배포 시 새 버전·필수 패키지 검사·실제 업데이트 교체 검증이 필요합니다.
 
 **이전 작업 완료 이력:** 평가·업데이트·지원, 휴지통 삭제·복원, 종료 보호·편집 복구는 QA11에서 검증했습니다. 실제 Store 설치·교체·재실행 검증은 다음 패키지 배포 단계입니다. 아래 이전 배포 작업과4.1.1 제출 산출물은 보존합니다.
@@ -423,6 +429,9 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: smooth pilot 공통API67f956e→a606a69(`60426d` exit0) 통합. generator build830def/renderd4aab1 exit0, root nativeprobe build0eeb83 exit0·실제 QA13 decoder/player 재생 session6229/851d95 exit0(156프레임/11.2초, callback P50 41.06/P95 54.29ms, 종료해제). Sky 실제창과 한영 decodedcontact sheet 검토 완료. 현재 F1 42행→38기능/한영76자산 범위로 UI·capture/library/pin·image/video 소유를 나누고 기존 a491/edit-recovery/aeae 작업 사본을 재사용합니다. 모든 원본·시도 보존, 실제 명령과 실패는 `artifacts/feature-tutorials/development-log.txt`에 기록합니다. 최종 기능별 구현·QA14 검증은 진행 중.
 
 - 2026-10-12 Codex: 공통 UI ade7334/8d0ab86/8178359/6ca410d/4734041→2e29e86/9637396/754f76b/e0a1084/a2add60 통합(`7ad7e3` exit0), resx 인접 정렬2e492c3→18dfe9f(`911f43` exit0). 독립 읽기 검토16f6dc에서 동시 디코더·Owner·핀 해제 안내 수정 확인. root 실제 UI 예비 검사 session13337/860b26 exit0 CLOSED, F1 검색→텍스트 복사→기능 목록→블러 누락 안내→닫기 확인. ui-layout-native-1.json 최종 visible/frames/loading/playing 모두false, 실패없음(c67d94 exit0). 최종 GIF 생성은 asset26기능과 UI의 Workspace12기능으로 분담 조정, 최종 전체 검증은 미완료입니다.
+
+- 2026-10-12 Codex: 기능별 소스16개를710235b~382cc00(`198ef8` exit0), 핀비율290619e→725eb50(`adcc87` exit0), 자산31f5e92→제품0fef3b3(`cab1a8` exit0), 문서874e0f2→3a1a500으로 통합. 최종38기능/76GIF 실제개별decoder/player검사, ko38/en38시각검토 및 원본/receipt/복사SHA독립검사dde6e5 exit0 PASS. Core첫회1104/1FAIL은SHA내부1809오탐; 범위유지ASCII경계/한국어포함11회귀·독립검토후638836f. `dotnet build MyCapture.slnx -c Debug -v q -nologo` f1a0d5/3f7e1a exit0, 전체Core1116(d60d4b)·App2375/0FAIL/11기존skip(c74213) exit0. 정확한명령과실패는root LOG보존.
+- 2026-10-12 Codex: QA14 `dotnet publish ... -p:SourceRevisionId=0fef3b302dea6ff2e09aa923165731fe52a3325f -o artifacts/qa14-feature-tutorials` session37348/3d46e6 exit0. 독립 source/runtime353files/deps263/GIF76검사4ee5a1 및 x64/R2R2d0d26 exit0 PASS, DLL EB14DB0701149FB09C78174E57C621C41F23E610DF77F387FC13FCBA98A90D6D. `run-owned-check.ps1 -Payload .../qa14-feature-tutorials -Mode ux` session29554/78aa0f exit0·RESULTPASS. 최종실제UI helper session37840/b2040b exit0 CLOSED, Sky로5기능재생·정지·다시보기·전환·재열기·닫기, 최종프레임/타이머해제dac119 exit0. Explorer443353524에QA14경로열기확인. 사용자앱·프로필·클립보드와기존산출물/작업사본보존, 원격변경/삭제없음. QA14요청범위완료.
 
 ## 9. 인계 체크리스트
 
