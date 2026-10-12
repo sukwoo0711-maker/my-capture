@@ -22,3 +22,23 @@ Windows 정본 `C:/Users/sukwo/.codex/instructions/windows-execution.md` 2026-09
 - 영어 decoded contact sheet를 직접 확인, 부모도 한국어 decoded contact sheet 직접 확인. 실제 animated native 검토는 부모가 외부 자산 경로로 격리 probe를 준비합니다. QA13 제품 payload를 덮어쓰지 않습니다.
 
 공통 API를 독립 파일로 추출했습니다: `TutorialStoryboard`, `ITutorialSceneRenderer`, `TutorialDrawing`, `TutorialGifPipeline`; text-copy는 `TextCopySceneRenderer`가 소유합니다. renderer가 정적 scene·현재 UI만 보관하고 Generate가 하나씩 렌더/quantize/encode합니다. 계획 객체만 보관하며 원본 프레임 목록을 누적하지 않습니다. 자세한 signature/worker 경계는 `RENDERER-API.md`에 있습니다. 이 추출 뒤의 빌드/재생성은 부모 native CPU 슬롯 반환 후 실행하며 아직 통과 판정이 아닙니다. 최초 pilot 출력과 기존11frame review/attempt는 보존했습니다.
+
+## API 分리 및 기능별 확장
+
+기능 목록 38개가 부모에 의해 확정되었습니다. text/capture8 = 9개와 common CLI/pipeline은 이 worker, image13/video4 = 17개는 icons worker, Workspace12는 이후 UI worker에 소유권을 이관했습니다. Workspace 초안은 first3 snapshot baseline이며 final asset 채택 대상이 아닙니다. 부모 native pilot 실제 재생 PASS는 851d95 exit0, QA13 decoder/player156frames/35,942,400B/11.2sec, decode126ms, moving callback559 P50 41.06ms/P95 54.29ms/max60.22ms; root가 실제 pointer/selection/caption을 관찰했습니다.
+
+모든 다음 명령 cwd는 `C:/GitRepositories/my-capture-edit-recovery`입니다. source 정책 정본 Windows를 다시 직접 읽은 tool73d417(exit0)을 기록합니다.
+
+| 상태 | 실제 명령 | exit | 근거 |
+|---|---|---:|---|
+| PASS | `dotnet build build/tools/TutorialGifGenerator/TutorialGifGenerator.csproj -c Release -v q -nologo -p:AppPayload=C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial` | 0 | 2e85e9,0warn/err, common extraction |
+| PASS | `dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconfig.json build/tools/TutorialGifGenerator/bin/Release/net10.0-windows10.0.22000.0/MyCapture.App.Tests.dll C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial C:/GitRepositories/my-capture-edit-recovery/build/tools/TutorialGifGenerator/review-attempt-smooth-2` | 0 | b0c818, text two locales156/11200ms |
+| FAIL | 위와 동일 build command | 1 | a0571b, newsource20errors: UiText namespace missing + Typeface(FontFamily) overload. Compile only; render was NOT RUN at this point. GlobalUsings and full Typeface constructor fixed. |
+| PASS | 위와 동일 build command | 0 | 47bc84,0warn/err, source integration including icons through447ad63 |
+| PASS | `dotnet exec --runtimeconfig build/tools/TutorialGifGenerator/fixture.runtimeconfig.json build/tools/TutorialGifGenerator/bin/Release/net10.0-windows10.0.22000.0/MyCapture.App.Tests.dll C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial C:/GitRepositories/my-capture-edit-recovery/build/tools/TutorialGifGenerator/review-attempt-batch-1 text-copy,capture-region,folder-create` | 0 | 967d59 session61108→3db19a;6 actual decoded validated assets |
+
+first3 batch bytes: text ko1,920,144/en1,998,598(frames156),capture-region ko1,985,220/en2,137,158(frames140),folder-create ko2,634,191/en3,043,502(frames140). All11200ms; budgets/fullopaque/exactdelays/disposal1/loop0/motion/player validated per asset; hashes/frames/motion in each locale receipt.json. Direct decoded ko text/capture/folder contact sheets inspected. Root also viewed ko/en capture +ko text. Folder pointer ends near Cancel rather than Create and uses generic sequencing; ownership moved to UI worker for correction. Originals/attempts retained without deletion.
+
+Following source fixes are not yet built/rendered at this entry: capture output dimension removed and headers changed to Captured image/Recorded video; C uses actual CopyColorAtPointerAsync with inert delegate and exact solid swatch552,249 assertion; region physical pixel crop asserts matches actual overlay; recording independent child fixture matches product order/style/minwidth/grid and measures actualbuttoncenters; region retains same visual350x89 from selection throughready/start/record/stop/videoresult; pause/resume use each measuredbuttoncenter and freeze elapsed whilepaused. RecordingControlWindow constructor is excluded because ApplyPhysicalLayout enumerates native monitors. An uninitialized Window approach was considered and rejected before implementation. No Window internals skipped. Text secondline y177 font22 FormattedText.Height+4px fits selection bottom212.
+
+CLI directly constructs internal editor/video renderers rather than public-only reflection ctor lookup. Final icons source through4febb80 integrated (local08f4637/808f8ab); rootpost-UI native inspection CPUslot currently held, no conflicting build/render started. Each completed clip writes its own receipt before batch completion; decoded frames and renderer leave scope before next asset, forcedGC only at clip boundaries. Input/scene descriptors are not a bitmap preload list.
