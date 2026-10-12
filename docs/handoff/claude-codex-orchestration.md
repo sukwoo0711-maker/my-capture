@@ -9,7 +9,7 @@
 | **현재 오케스트레이터** | **Codex** (모델 `gpt-6-astra`, 2026-10-12부터) |
 | 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
 | 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `feat/next-product-readiness` (다음 버전 기본 동작 보강 및 실기 성능 재검토 진행) |
+| 현재 기록 브랜치 | `perf/extreme-load` (최악·과부하 조건의 병목 측정 및 개선 진행) |
 | Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
 | 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
 | Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
@@ -47,6 +47,13 @@
 - 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
 
 ## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
+
+### 최악·과부하 조건 성능 개선 — 진행 중
+
+- 사용자 요청: 10만 자 이상의 텍스트 입력을 포함해 다양한 최악·과부하 조건을 실제로 시험하고 병목을 측정·개선합니다. 기준은 검증된 QA11 소스 `73e0293`(제품 `2fc7fa4`)과 기존 `artifacts/qa11-product-readiness`입니다.
+- 텍스트10만/100만 자·긴 한 줄/다수 줄, 대량 라이브러리·검색·선택, 4K/8K 이미지·다수 주석·초안, 영역 선택의 입력 폭주를 단계별로 조사합니다. 내용 정확성·저장/복구·기존 UX를 유지하며 같은 조건의 전후 시간·할당·메모리·응답성으로 검증합니다.
+- 기존 작업 사본3개를 재사용합니다: a491의 `perf/stress-text`, aeae의 `perf/stress-library`, edit-recovery의 `perf/stress-editor`. root는 선택 화면 측정·실행 슬롯·통합·독립 검토를 담당합니다. 부하 측정은 직렬로 실행하며 각 owned 프로세스에 timeout·메모리 상한을 적용합니다. 실제 사용자 프로필·클립보드·앱은 조작하지 않습니다.
+- 기존 WebGPT 터널 및 Antigravity 검증 실패, 공식 native provider 확인 근거를 재사용했습니다. 제품의 Store 배포는 이번 요청 범위에 포함하지 않습니다. 실제 명령·측정 원본·실패와 개선 결과는 `artifacts/extreme-load-20261012/` 및 각 작업자의 개발 LOG에 보존합니다.
 
 ### 다음 버전 기본 동작 보강 — 구현·검증 완료, 드래그 지연 변동은 후속 조사 필요
 
@@ -356,6 +363,8 @@ R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표�
 - 2026-10-12 Codex: 메뉴 popup `06d6a0f` 뒤 QA10 App전체 session94606/736dfb exit1(2242 PASS/84 FAIL/11 skip)을 수집했고 ed66eb에서84개 모두 SubmenuArrow loose XAML 실패임을 확인했습니다. worker0093918을 root `2fc7fa4`로 통합해 native20px/1.6stroke 화살표와명시속성참조로 해결했고 helper/assertion은 유지했습니다. worker pure2/2·native/Video13/13 PASS, root Debug2430680warn/error exit0, QA11 self-contained/R2R publish eae1e1 exit0, App전체 session65745 진행 중입니다. native 메뉴 복원용 owned새캡처859afe79만 actual queue/Shell helper17cb9d exit0으로 실제휴지통에 준비했고6파일identity/hash·다른원본보존을 확인했습니다. 실제 메뉴복원·최종UX는 전체테스트 종료 후 직렬 실행합니다.
 
 - 2026-10-12 Codex: 최종 QA11 전체 App session65745/d132df exit0(2327 PASS/0 FAIL/11 조건부 skip), UX session61639/a91861 exit0·RESULT PASS와 생성 PNG를 확인했습니다. Core1092/1092·별도 native Shell4/4 PASS 및 최종 산출물277파일·263 dependency 누락0을 독립 재확인했습니다. 실제 메뉴 복원·빈 목록·Esc·바깥 클릭·보호된 정상 종료 session60154/93add4 exit0, 이미지/주석4파일 SHA·원본 file ID 보존을 확인했습니다. meta.json 전체동일 검사6b3088 exit1은 보관 기간 재시작의 정상 갱신2필드를 구분하지 않은 것으로4a1d5f/390f70 exit0 및 독립 검토로 대조했습니다. root에서 Explorer `/select,`로 최종 `artifacts/qa11-product-readiness/MyCapture.exe` 위치를 열고 실제 선택 화면을 확인했습니다(af9983 exit0). 제품 소스2fc7fa4 및4.1.1 개발 버전 표시 유지, Store 재배포·사용자 앱 종료·파일 정리 없음. 드래그 callback 지연 변동은 미해결로 유지하며 실제 명령·cwd·종료·근거는 `artifacts/next-product-readiness/development-log.txt`와 raw receipt/TRX에 보존합니다.
+
+- 2026-10-12 Codex: 사용자 최악·과부하 성능 시험·개선 요청 착수. root/common-dir/remote와 clean73e0293 확인286fd1 exit0, 사용자MyCapture 프로세스 없음. `git switch -c perf/extreme-load` PASS45d8e9 exit0. CPU Ryzen7 9800X3D/16logical, RAM 약61.6GiB/가용30.4GiB를 확인했습니다. 기존 worker3개에 파일 소유권·동일baseline·실행직렬화·owned프로세스bounded조건·휴지통골든룰을 전달하고 기존worktree재사용을 배정했습니다. 이 단계는 준비이며 과부하 결과는 아직 없습니다.
 
 ## 9. 인계 체크리스트
 
