@@ -45,7 +45,7 @@ public partial class App
             try
             {
                 if (prompt.Choice == EditorCloseChoice.DontSave) { await Task.Run(() => DraftStore.RetireAsync(draft.SessionId)); continue; }
-                if (draft.Kind == "image") OpenRecoveredImage(draft, directory);
+                if (draft.Kind == "image") await OpenRecoveredImageAsync(draft);
                 else await OpenRecoveredVideoAsync(draft);
             }
             catch (Exception error)
@@ -70,6 +70,7 @@ public partial class App
         if (_preparingExit) return false;
         _preparingExit = true;
         bool? galleryEnabled = _galleryWindow?.IsEnabled;
+        var settingsStates = new List<(Settings.SettingsWindow Window, bool Enabled)>();
         if (_galleryWindow is not null) _galleryWindow.IsEnabled = false;
         try
         {
@@ -78,9 +79,14 @@ public partial class App
                     MessageBoxButton.OKCancel, defaultResult: MessageBoxResult.Cancel) != MessageBoxResult.OK) return false;
             if (_recorder is not null && !await _recorder.PrepareForAppExitAsync()) return false;
             if (PrepareCapturePersistenceForExitAsync is { } prepareCapture && !await prepareCapture()) return false;
+            foreach (var settings in Windows.Cast<Window>().OfType<Settings.SettingsWindow>().ToArray())
+            {
+                if (!settings.PrepareForAppExit(reason == AppExitReason.StoreUpdate)) return false;
+                settingsStates.Add((settings, settings.IsEnabled));
+                settings.IsEnabled = false;
+            }
             foreach (Window window in Windows.Cast<Window>().ToArray())
             {
-                if (window is Settings.SettingsWindow settings && !settings.PrepareForAppExit(reason == AppExitReason.StoreUpdate)) return false;
                 if (window is AnnotationEditorWindow image && !await image.PrepareForAppExitAsync()) return false;
                 if (window is VideoEditorWindow video && !await video.PrepareForAppExitAsync()) return false;
             }
@@ -90,6 +96,7 @@ public partial class App
         catch (Exception error) { _log?.LogError(error, "Could not prepare app exit ({Reason})", reason); return false; }
         finally
         {
+            foreach (var (settings, settingsEnabled) in settingsStates) settings.IsEnabled = settingsEnabled;
             if (_galleryWindow is not null && galleryEnabled is { } enabled) _galleryWindow.IsEnabled = enabled;
             _preparingExit = false;
         }
@@ -102,22 +109,36 @@ public partial class App
         _ => Task.CompletedTask,
     }));
 
-    private static BitmapSource LoadDraftBitmap(string path)
+    internal bool PreserveDraftsForSessionEnding()
     {
-        using var stream = File.OpenRead(path);
-        var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad;
-        image.StreamSource = stream; image.EndInit(); image.Freeze(); return image;
+        bool wasPreparing = _preparingExit;
+        _preparingExit = true;
+        var windows = Windows.Cast<Window>().Select(window => (Window: window, Enabled: window.IsEnabled)).ToArray();
+        foreach (var (window, _) in windows) window.IsEnabled = false;
+        try
+        {
+            return EditRecoveryPresentation.DrainSessionEnding(Dispatcher, async () =>
+            {
+                while (Windows.Cast<Window>().OfType<AnnotationEditorWindow>().Any(window => window.Editor.IsEditingOperationInProgress))
+                    await Task.Delay(50);
+                await FlushEditingDraftsAsync();
+                await EditDraftSession.WaitForFinalizationsAsync();
+            }, TimeSpan.FromSeconds(3), message => _log?.LogWarning("Session-ending draft flush: {Message}", message));
+        }
+        finally
+        {
+            foreach (var (window, enabled) in windows) window.IsEnabled = enabled;
+            _preparingExit = wasPreparing;
+        }
     }
-    private void OpenRecoveredImage(EditDraft draft, string directory)
+
+    private async Task OpenRecoveredImageAsync(EditDraft draft)
     {
-        string basePath = DraftStore!.ResolveFile(draft, "base.png");
-        string originalPath = DraftStore.ResolveFile(draft, "original.png");
-        var bitmap = LoadDraftBitmap(basePath);
-        var original = string.Equals(basePath, originalPath, StringComparison.OrdinalIgnoreCase) ? bitmap : LoadDraftBitmap(originalPath);
-        AnnotationDocument document = AnnotationDocument.TryFromJson(draft.Document) ?? throw new IOException("Invalid draft document.");
-        var assets = draft.Metadata.Where(x => x.Key.StartsWith("asset:", StringComparison.Ordinal))
-            .ToDictionary(x => x.Key[6..], x => draft.Files.ContainsKey(x.Value)
-                ? LoadDraftBitmap(DraftStore.ResolveFile(draft, x.Value)) : throw new IOException("Invalid draft asset reference."));
+        var decoded = await EditRecoveryPresentation.DecodeImageAsync(DraftStore!, draft);
+        var bitmap = decoded.Current;
+        var original = decoded.Original;
+        var document = decoded.Document;
+        var assets = decoded.Assets;
         var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
         var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, original,
             initialDocument: document, initialAssets: assets, sourceWindowTitle: draft.Metadata.GetValueOrDefault("title"));

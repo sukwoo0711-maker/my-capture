@@ -280,4 +280,51 @@ public sealed class EditRecoveryTests
         window.ConfirmClose = () => EditorCloseChoice.SaveAndClose;
         Assert.True(Await(window.PrepareForAppExitAsync())); Assert.True(window.WasCommitted); Assert.Empty(store.ReadAvailable());
     });
+
+    [Fact]
+    public void RecoveryDecoder_LoadsDetachedFrozenPixelsAndReusesTheSharedOriginalBlob() => StaTestHost.Run(() =>
+    {
+        var window = Create(); Edit(window); var snapshot = Await(window.Editor.CaptureDraftAsync())!;
+        var store = new EditDraftStore(TestRecycleBin.CreateTempSubdirectory("MyCapture-decode-").FullName, _ => { });
+        store.WriteAsync(Guid.NewGuid(), 1, snapshot.Kind, snapshot.Document, snapshot.Metadata, snapshot.Files, () => true)
+            .GetAwaiter().GetResult();
+        var draft = Assert.Single(store.ReadAvailable()).Draft;
+        var decoded = Await(EditRecoveryPresentation.DecodeImageAsync(store, draft));
+        Assert.True(decoded.Current.IsFrozen); Assert.True(decoded.Original.IsFrozen); Assert.Same(decoded.Current, decoded.Original);
+        Assert.Equal(64, decoded.Current.PixelWidth); Assert.Equal(48, decoded.Current.PixelHeight);
+        Assert.Single(decoded.Document.Items);
+        Assert.Equal(snapshot.Files["base.png"], AnnotationEditorControl.EncodeDraftBitmap(decoded.Current));
+        window.Close();
+    });
+
+    [Fact]
+    public void SessionEndingDrain_CompletesDispatcherContinuationsBeforeReturning() => StaTestHost.Run(() =>
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var completion = new TaskCompletionSource(); bool flushed = false; var messages = new List<string>();
+        Assert.True(EditRecoveryPresentation.DrainSessionEnding(dispatcher, () =>
+        {
+            dispatcher.BeginInvoke(new Action(() => { flushed = true; completion.SetResult(); }));
+            return completion.Task;
+        }, TimeSpan.FromSeconds(1), messages.Add));
+        Assert.True(flushed); Assert.Empty(messages);
+    });
+
+    [Fact]
+    public void SessionEndingDrain_LogsDeadlineWithoutCancellingPendingWorkOrTheOsSession() => StaTestHost.Run(() =>
+    {
+        var pending = new TaskCompletionSource(); var messages = new List<string>();
+        Assert.False(EditRecoveryPresentation.DrainSessionEnding(Dispatcher.CurrentDispatcher, () => pending.Task,
+            TimeSpan.FromMilliseconds(20), messages.Add));
+        Assert.False(pending.Task.IsCompleted); Assert.Single(messages); pending.SetResult();
+    });
+
+    [Fact]
+    public void SessionEndingDrain_ReportsFlushFailureAndPreservesTheFallbackContract() => StaTestHost.Run(() =>
+    {
+        var messages = new List<string>();
+        Assert.False(EditRecoveryPresentation.DrainSessionEnding(Dispatcher.CurrentDispatcher,
+            () => Task.FromException(new System.IO.IOException("Fixture write failure")), TimeSpan.FromSeconds(1), messages.Add));
+        Assert.Equal("Fixture write failure", Assert.Single(messages));
+    });
 }

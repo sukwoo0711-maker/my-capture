@@ -106,3 +106,26 @@ dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Debug --filt
 ```
 
 PASS exit 0, chunk `289f7f`, 20/20. 새 5건은 원본 저장 실패·무편집 캡처의 Cancel/Save 재실패/Discard, 원본 저장 성공·무편집의 무질문 종료, Copy 후 초안 유지·정상 Save 후 초안 재복구 방지를 확인합니다. 실제 창 표시·클립보드 호출 없이 host callback으로 계약을 검증했습니다. 최종 Core는 앞선 8/8 그대로이며 native 검사는 root 슬롯 대기입니다.
+
+## root 통합 후 종료 대기·설정·복구 디코딩 보강
+
+root `f3667ab6e946a32ce197336c1be34edfe8970c83` 통합 소스를 읽고 SessionEnding async-void가 첫 await에서 WPF로 반환하는 경계와 Settings 확인 뒤 다른 editor 저장을 기다리는 동안 설정이 다시 dirty가 되는 경계를 확인했습니다. 기존 `feat/next-edit-recovery`와 산출물은 유지했습니다. `f45369e` 기준 예비 branch도 보존하고, parent의 최신 base 지시에 따라 같은 사본에서 `fix/next-edit-recovery-presentation-final`을 만들었습니다. 전환 전 git diff의 삭제 대상은 0개였고 시작 HEAD는 위 f3667ab였습니다.
+
+- `PreserveDraftsForSessionEnding()`는 새 진입과 창 입력을 잠그고, 개인정보 처리 완료·최근 초안 flush·진행 중 finalization을 동기 DispatcherFrame에서 최대 3초 예산으로 기다립니다. 완료/실패/시간 초과를 구분하고 시간 초과에는 마지막 durable revision을 유지하며 OS 로그아웃을 취소하지 않습니다. 잠금은 이전 상태로 복원합니다. 이미 실행 중인 동기 UI 작업 자체를 강제로 중단하는 함수는 아닙니다.
+- root는 App.xaml.cs의 async SessionEnding hook을 `SessionEnding += (_, _) => { _ = PreserveDraftsForSessionEnding(); };`로 교체해야 합니다. 이 파일은 worker가 편집하지 않았습니다.
+- Settings 자체 Apply/Discard/Cancel을 먼저 처리한 뒤 Settings 입력을 잠급니다. 이후 이미지/영상 저장 await 전체 구간에서 잠금을 유지하고 Cancel/실패/성공 후 이전 enabled 값을 복원합니다. 기존 Store guard가 false로 잠근 상태도 유지합니다.
+- 이미지 복구의 문서 준비/안전한 blob resolve/PNG 디코딩을 `App.EditRecovery.Presentation.cs`의 1개 awaited STA worker로 이동했습니다. UI는 detached frozen bitmap만 받아 창을 생성합니다. 동일 blob은 1회만 디코딩하며 initial recovery Task가 worker를 기다립니다. 영상 source hash는 기존 background 경로를 유지합니다.
+
+실제 검증 cwd `C:/GitRepositories/my-capture-edit-recovery`:
+
+```text
+dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Debug --filter FullyQualifiedName~EditRecoveryTests --logger 'trx;LogFileName=edit-recovery-presentation-fixed.trx' --results-directory C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/unit-presentation-fixed -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/compile-shared-trash.targets -v quiet -nologo
+```
+
+PASS exit 0, session `8899`, final chunk `4e5b7f`, 24/24. 기존 20건과 실제 blob decode/frozen pixels/공유 원본 동일 객체, dispatcher continuation을 완료한 후 동기 반환, 예산 만료 시 pending 작업 유지/OS 취소 없음, flush 오류 보고 4건입니다. 앞선 컴파일 시도는 로컬 변수명 충돌 CS0136으로 exit 1(chunk `23ae8a`)이며 이름 수정 후 위 결과를 확인했습니다.
+
+```text
+dotnet build src/MyCapture.App/MyCapture.App.csproj -c Debug -nologo -v quiet -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/compile-shared-trash.targets -o C:/GitRepositories/my-capture-edit-recovery/artifacts/edit-recovery/build-presentation
+```
+
+PASS exit 0, chunk `1b8331`, 경고 0/오류 0. 공유 휴지통 source include는 기존 private targets를 그대로 재사용했고 서비스 소스는 편집하지 않았습니다. `git diff --check` exit 0(chunk `d7b20d`). 실제 OS 로그아웃·GUI·native crash·Store API 실행은 아직 root 슬롯 대기 NOT RUN/N/A입니다.
