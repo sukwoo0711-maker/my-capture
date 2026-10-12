@@ -25,7 +25,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect ar
 | 형식 | H.264 High 프로필 MP4, 오디오 없음 |
 | 해상도 | 960×540(`--width`로 변경). 사용법 창의 640×360 DIP 영역을 150% 배율에서 1:1로 채웁니다 |
 | 프레임 | 25fps, 클립당 약 11초 |
-| 화질 | Media Foundation 소프트웨어 H.264 인코더의 고정 품질 60(`--quality`). GPU와 관계없이 같은 결과를 냅니다 |
+| 화질 | Media Foundation 소프트웨어 H.264 인코더의 고정 품질 60(`--quality`)과 품질 우선 설정(QualityVsSpeed 100). GPU와 관계없이 같은 인코더를 씁니다. 품질 우선 설정은 키 표시가 사라진 자리에 남던 옅은 잔상도 없앱니다 |
 | 테마 | 기본 테마(Glass, 어두운 테마) |
 
 정지 구간은 움직임이 없어 거의 용량을 차지하지 않고, 첫 프레임은 키 프레임이라 애니메이션 줄이기 설정에서도 바로 보입니다.
@@ -44,6 +44,8 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect ar
 - 제품의 `App` 클래스를 만들지 않습니다. WPF는 `Application` 생성 시 `OnStartup`을 예약하므로, 첫 디스패처 처리에서 상주 앱(사용자 설정, 라이브러리, 보존 기간 정리, 트레이, 전역 단축키, 편집 초안 복구)이 생성기 안에서 시작됩니다. 생성기는 `App.xaml`과 같은 리소스만 가진 일반 `Application`을 사용합니다.
 - 사용자 프로필을 건드리지 않습니다. 라이브러리가 필요한 장면은 출력 폴더 아래 임시 `AppPaths`를 사용합니다. 클립보드 복사, 파일 저장, 휴지통 이동, OCR 모델 다운로드처럼 바깥에 흔적을 남기는 거래는 실행하지 않고, 제품이 그 결과로 보여 주는 화면 상태를 재현합니다. 편집기 커밋은 `CommitRequested`를 장면이 대신 받습니다.
 - 실제 마우스를 잡지 않습니다. 화면 밖 창에서 마우스 캡처를 얻으면 사용자의 클릭이 생성기로 갈 수 있습니다.
+- 팝업(ContextMenu, Popup, 드롭다운, 도구 설명)은 열지 않습니다. WPF는 팝업을 모니터 작업 영역 안으로 옮기므로 사용자 화면에 나타날 수 있습니다. 메뉴는 부모 없이 Measure/Arrange한 요소로 렌더합니다(`ThemedShellPresenter.CreateMenu`, 핀의 `ContextMenu`).
+- 화면에 직접 자리를 잡는 창(알림 카드, 녹화 제어 창, 카운트다운)은 띄우지 않고 내용만 렌더합니다. 알림 카드는 `ThemedShellPresenter.CreateActionNotification`으로 만듭니다.
 - 파일이 필요한 장면(동영상 편집기가 여는 합성 녹화, 실제 GIF 내보내기 결과)은 `Program.WorkFolder`(출력 폴더의 `work`) 아래 장면별 폴더에 만들고 장면이 끝나면 지웁니다. 모달 대화 상자는 띄우지 않습니다. 동영상 편집기의 내보내기 대화 상자는 `ExportDialogHostForTest`로 화면 밖에 열고, Windows 저장 대화 상자처럼 운영체제가 그리는 창만 장면이 직접 그립니다.
 - 설명 문구는 제품 용어와 같게 씁니다(예: 블러, 뒤 창 클릭 허용, 빠른 작업, 닫은 핀 다시 열기). 한국어 설명은 명사형 또는 합니다체로 쓰고 해요체, 느낌표, 감탄사, 이모지를 쓰지 않습니다.
 - 클립 길이는 7–15초여야 하며 보통 11초 안팎으로 맞춥니다.

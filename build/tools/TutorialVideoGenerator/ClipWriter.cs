@@ -24,7 +24,7 @@ internal sealed class ClipWriter : IDisposable
         _encoder = new MediaFoundationVideoEncoder(
             new VideoEncoderOptions(path, width, height, TutorialStoryboard.Fps, bitrate)
             {
-                AllowHardwareEncoder = false, ConstantQuality = quality, H264Profile = profile,
+                AllowHardwareEncoder = false, ConstantQuality = quality, H264Profile = profile, QualityVsSpeed = quality is null ? null : 100,
             },
             NullLogger<MediaFoundationVideoEncoder>.Instance);
     }
