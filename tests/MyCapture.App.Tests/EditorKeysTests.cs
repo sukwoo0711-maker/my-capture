@@ -94,7 +94,7 @@ public sealed class EditorKeysTests
         color.Text = "#zz";
 
         Assert.True(Press(color, Key.Escape, ime: false));
-        Assert.Equal(controller.StrokeColor.ToHex(), color.Text);
+        Assert.Equal(AnnotationEditorControl.ColorCode(controller.StrokeColor), color.Text);
         Assert.Same(host.Editor, Keyboard.FocusedElement);
         Assert.True(Press(host.Editor, Key.E, ime: true));
         Assert.Equal(EditorTool.Ellipse, controller.Tool);

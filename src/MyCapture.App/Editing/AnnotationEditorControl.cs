@@ -121,6 +121,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private ColumnDefinition _inspectorColumn = null!;
     private Border _inspectorPanel = null!;
     private WrapPanel _swatchPanel = null!;
+    private TextBox _customColorInput = null!;
     private FrameworkElement _colorSection = null!;
     private FrameworkElement _thicknessSection = null!;
     private TextBlock _inspectorTitle = null!;
@@ -2110,26 +2111,27 @@ internal sealed partial class AnnotationEditorControl : Grid
                 Height = 40,
                 Margin = new Thickness(0, 0, 8, 8),
                 Padding = new Thickness(0),
-                ToolTip = UiText.Format("Text_151C77170A94", swatchColor.ToHex()),
+                ToolTip = UiText.Format("Text_151C77170A94", ColorCode(swatchColor)),
                 BorderThickness = new Thickness(1),
                 // A control boundary, so a dark swatch stays outlined on a dark panel.
                 BorderBrush = Brush("Border.Control", Colors.Gray),
                 Background = swatchColor.ToBrush(),
             };
-            AutomationName(swatchButton, UiText.Format("Text_151C77170A94", swatchColor.ToHex()));
+            AutomationName(swatchButton, UiText.Format("Text_151C77170A94", ColorCode(swatchColor)));
             PreserveEditorMouseFocus(swatchButton);
             swatchButton.Click += (_, _) =>
             {
                 _controller.ApplyStrokeColor(swatchColor);
                 RememberPreferences();
                 RefreshStepFeedback();
-                SetStatus(UiText.Format("Text_67CAE5B118A3", swatchColor.ToHex()));
+                SetStatus(UiText.Format("Text_67CAE5B118A3", ColorCode(swatchColor)));
             };
             _swatchPanel.Children.Add(swatchButton);
         }
 
         panel.Children.Add(_swatchPanel);
-        var custom = new TextBox { Text = _controller.StrokeColor.ToHex(), MinHeight = 32, Margin = new Thickness(0, 4, 0, 4) };
+        var custom = new TextBox { Text = ColorCode(_controller.StrokeColor), MinHeight = 32, Margin = new Thickness(0, 4, 0, 4) };
+        _customColorInput = custom;
         AutomationName(custom, UiText.Get("Tools.CustomColor"));
         InputMethod.SetIsInputMethodEnabled(custom, true);
         // Enter applies and Esc restores; both hand the keyboard back to the canvas so the next
@@ -2146,7 +2148,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             else if (e.Key == Key.Escape)
             {
                 e.Handled = true;
-                custom.Text = _controller.StrokeColor.ToHex();
+                custom.Text = ColorCode(_controller.StrokeColor);
                 Focus();
             }
         };
@@ -2191,9 +2193,22 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.ApplyStrokeColor(color);
         RememberPreferences();
         RefreshStepFeedback();
-        SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
+        // Short and lower-case forms read back in the one form the editor shows.
+        if (_customColorInput is not null) _customColorInput.Text = ColorCode(color);
+        SetStatus(UiText.Format("Text_67CAE5B118A3", ColorCode(color)));
         return true;
     }
+
+    /// <summary>The color input, for tests.</summary>
+    internal TextBox CustomColorInputForTest => _customColorInput;
+
+    /// <summary>
+    /// The color as people write it: <c>#RRGGBB</c> when opaque, and <c>#AARRGGBB</c> only when it
+    /// is see-through. The input accepts either form.
+    /// </summary>
+    internal static string ColorCode(ColorRgba color) => color.A == byte.MaxValue
+        ? string.Create(CultureInfo.InvariantCulture, $"#{color.R:X2}{color.G:X2}{color.B:X2}")
+        : color.ToHex();
 
     /// <summary>
     /// After a mouse pick from <paramref name="combo"/>'s list, returns the keyboard to the
