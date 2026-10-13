@@ -150,6 +150,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private string? _targetLabel;
     private Rect? _activeCueSegment;
     private bool _staticDirty = true;
+    private Size _staticSize = Size.Empty;
     private bool _released;
     private RectD? _drawnSelection;
     private PointD? _drawnAnchor;
@@ -662,7 +663,14 @@ internal sealed class CaptureOverlayView : FrameworkElement
             if (_released) return;
             ThemeService.CaptureGuideChanged -= OnGuidePaletteChanged;
             ThemeService.CaptureGuideChanged += OnGuidePaletteChanged;
-            OnGuidePaletteChanged();
+            // The constructor already resolved the palette. Rebuilding the static layers anyway redrew
+            // the whole virtual desktop once more just after the selector appeared, as the pointer
+            // started to move; only a palette that changed since then needs it.
+            if (_guidePalette is not { } constructed || !SamePalette(CaptureGuidePalette.Resolve(), constructed)
+                || !SameColor(RecordingSelectionCue.Resolve(), _recordingBrush))
+                OnGuidePaletteChanged();
+            // Feedback asked for before Loaded (the pointer read on activation) is drawn on the next frame.
+            else QueueFeedback();
         };
         Unloaded += (_, _) =>
         {
@@ -728,6 +736,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
+        // The first arrange renders the layers at the new size before this notification arrives;
+        // marking them dirty again then redrew the whole desktop on the first pointer frame.
+        if (sizeInfo.NewSize == _staticSize && !_staticDirty) return;
         _staticDirty = true;
         QueueFeedback();
     }
@@ -945,6 +956,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (rebuild)
         {
             _staticDirty = false;
+            _staticSize = RenderSize;
             StaticRenderCount++;
             BuildGuidePens();
             _instructionText = _anchorText = _precisionText = null;
@@ -2085,6 +2097,15 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _modeBar?.ApplyPalette(_guidePalette);
         _startGuide?.ApplyPalette(_guidePalette);
     }
+
+    /// <summary>Whether two palettes paint identically: the same keys, each a solid brush of the same colour.</summary>
+    internal static bool SamePalette(IReadOnlyDictionary<string, Brush> left, IReadOnlyDictionary<string, Brush> right) =>
+        left.Count == right.Count
+        && left.All(entry => right.TryGetValue(entry.Key, out Brush? other) && SameColor(entry.Value, other));
+
+    private static bool SameColor(Brush left, Brush right) =>
+        ReferenceEquals(left, right)
+        || (left is SolidColorBrush a && right is SolidColorBrush b && a.Color == b.Color && a.Opacity == b.Opacity);
 
     private void OnGuidePaletteChanged()
     {

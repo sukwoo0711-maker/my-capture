@@ -193,6 +193,42 @@ public sealed class CaptureOverlayPerformanceTests
     });
 
     [Fact]
+    public void Loading_WithTheConstructionPalette_DoesNotRedrawTheDesktopAgain() => StaTestHost.Run(() =>
+    {
+        var view = new CaptureOverlayView(Frame());
+        var host = Host(view);
+        view.ReadCursor = () => new PointD(120, 100);
+        (int Renders, bool Dirty)? atLoaded = null;
+        // Runs after the view's own Loaded handler, which subscribes to palette changes.
+        view.Loaded += (_, _) => atLoaded = (view.StaticRenderCount, Field<bool>(view, "_staticDirty"));
+        try
+        {
+            host.Show();
+            PumpUntil(() => view.IsLoaded && view.StaticRenderCount > 0 && atLoaded.HasValue);
+            // The selector renders its layers before Loaded; Loaded must not mark them for a rebuild.
+            Assert.True(atLoaded!.Value.Renders > 0, "The layers had not rendered before Loaded.");
+            Assert.False(atLoaded.Value.Dirty);
+            int desktop = view.StaticRenderCount;
+            view.FlushFeedbackForTest();
+            Assert.Equal(desktop, view.StaticRenderCount);
+        }
+        finally { view.ReleaseResources(); host.Close(); }
+    });
+
+    [Fact]
+    public void PaletteComparison_MatchesEqualColoursOnly() => StaTestHost.Run(() =>
+    {
+        IReadOnlyDictionary<string, Brush> first = MyCapture.App.Themes.CaptureGuidePalette.Resolve();
+        IReadOnlyDictionary<string, Brush> second = MyCapture.App.Themes.CaptureGuidePalette.Resolve();
+        Assert.True(CaptureOverlayView.SamePalette(first, second));
+        var changed = first.ToDictionary(entry => entry.Key, entry => entry.Value);
+        changed["CaptureGuide.Line"] = new SolidColorBrush(Color.FromArgb(1, 2, 3, 4));
+        Assert.False(CaptureOverlayView.SamePalette(first, changed));
+        changed.Remove("CaptureGuide.Line");
+        Assert.False(CaptureOverlayView.SamePalette(first, changed));
+    });
+
+    [Fact]
     public void Selector_HasNoSystemFocusRectangle() => StaTestHost.Run(() =>
     {
         // The default rectangle dash-outlines the whole virtual desktop after the opening shortcut and
