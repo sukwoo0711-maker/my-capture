@@ -1799,7 +1799,15 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        HandleKeyDown(e);
+    }
 
+    /// <summary>
+    /// The selector's keys. Also called by its window for keys that reach the window before the
+    /// selector holds keyboard focus.
+    /// </summary>
+    internal void HandleKeyDown(KeyEventArgs e)
+    {
         // A Korean IME in Hangul mode reports letters as ImeProcessed; C and T must still work.
         Key key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
         if (key is not (Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt
@@ -1866,6 +1874,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnKeyUp(KeyEventArgs e)
     {
         base.OnKeyUp(e);
+        HandleKeyUp(e);
+    }
+
+    /// <inheritdoc cref="HandleKeyDown"/>
+    internal void HandleKeyUp(KeyEventArgs e)
+    {
         if (!_ended && e.Key is Key.LeftShift or Key.RightShift) UpdatePointer();
     }
 

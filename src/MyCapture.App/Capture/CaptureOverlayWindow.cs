@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Interop;
 using MyCapture.App.Themes;
 using MyCapture.Core.Capture;
@@ -305,6 +306,26 @@ internal sealed class CaptureOverlayWindow : Window
     }
 
     private void OnActivated(object? sender, EventArgs e) => _view.InitializePointer();
+
+    /// <summary>
+    /// The selector takes keyboard focus in <see cref="OnContentRendered"/>, after its first frame:
+    /// moving focus earlier costs a text-services round trip that delayed that frame. Until then keys
+    /// reach this window, which the system activates about 50 ms sooner, and an Esc or a mode key
+    /// pressed as the selector appeared was lost. Keys aimed at the window itself now go to the
+    /// selector exactly as they would with focus; keys from the selector or its bar reach it directly.
+    /// </summary>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (!e.Handled && !_completed && ReferenceEquals(e.OriginalSource, this)) _view.HandleKeyDown(e);
+    }
+
+    /// <inheritdoc cref="OnKeyDown"/>
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+        if (!e.Handled && !_completed && ReferenceEquals(e.OriginalSource, this)) _view.HandleKeyUp(e);
+    }
 
     private void OnDpiChanged(object? sender, DpiChangedEventArgs e)
     {
