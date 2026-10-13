@@ -77,7 +77,7 @@ public sealed partial class SettingsThemePreviewTests
                     () => { }, () => { }, () => { }, () => { }, () => { }, () => { }, () => { }, () => { }, () => { },
                     () => { }, () => { }, () => { }, () => { }), new HotkeySettings(), canRestoreClosedPin: true, scrollingActive: false);
                 ContextMenu menu = presenter.CreateMenu(entries);
-                Save(RenderMenu(menu, openBranch: 2), "tray-menu");
+                Save(RenderMenu(menu, openBranch: 3), "tray-menu");
 
                 RenderCaptureScenes(theme, Save);
                 RenderRecordingBarScenes(Save);

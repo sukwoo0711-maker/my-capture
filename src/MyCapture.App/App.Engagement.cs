@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Windows;
-using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Gallery;
@@ -16,18 +15,20 @@ public partial class App
     private readonly Dictionary<Window, EngagementNotice> _engagementNotices = [];
     private Window? ActiveEngagementWindow() => _engagementNotices.Keys.FirstOrDefault(window => window.IsActive && window.IsVisible);
 
+    /// <summary>Clears the settings window's Apply row; the library keeps its status bar visible.</summary>
+    private const double SettingsFooterInset = 76, LibraryFooterInset = 44;
+
     private void ConfigureEngagementWindow(Window window)
     {
-        if (window.Content is not UIElement existing) return;
+        if (window.Content is not UIElement) return;
         var notice = new EngagementNotice { ReviewChosen = () => _storeRating?.AcceptInvitation() };
-        window.Content = null;
-        var host = new DockPanel(); DockPanel.SetDock(notice, Dock.Top);
-        host.Children.Add(notice); host.Children.Add(existing); window.Content = host;
+        // An overlay, so nothing under the pointer moves when it appears. It stays until closed
+        // or acted on; leaving the window does not take it away.
+        EngagementNoticeHost.Attach(window, notice, window is SettingsWindow ? SettingsFooterInset : LibraryFooterInset);
         _engagementNotices.Add(window, notice);
-        // Activation can also come from capture restoration. Only input establishes user presence.
-        window.PreviewMouseDown += (_, _) => OnEngagementReturn(window);
-        window.PreviewKeyDown += (_, _) => OnEngagementReturn(window);
-        window.Deactivated += (_, _) => notice.Visibility = Visibility.Collapsed;
+        // A return counts once the window has stayed active for a moment, never at the instant a
+        // click activates it, so the card cannot land under that click.
+        _ = EngagementNoticeHost.WatchReturns(window, () => OnEngagementReturn(window));
         window.Closed += (_, _) => _engagementNotices.Remove(window);
         if (window is SettingsWindow settings)
         {

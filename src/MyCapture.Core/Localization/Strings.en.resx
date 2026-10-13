@@ -2998,6 +2998,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="ShellRetake_ReadyTitle" xml:space="preserve"><value>{0} is ready</value></data>
   <data name="ShellRetake_ReadyMessage" xml:space="preserve"><value>Press {0} to capture your screen. Open settings and the library from the tray icon.</value></data>
   <data name="ShellRetake_ReadyWithoutShortcut" xml:space="preserve"><value>Start a capture from the tray icon, or assign a capture shortcut in settings.</value></data>
+  <data name="Shell_ChangeShortcut" xml:space="preserve"><value>Change shortcut</value></data>
   <data name="LibrarySelection_Count" xml:space="preserve"><value>{0} selected</value></data>
   <data name="LibrarySelection_Delete" xml:space="preserve"><value>Delete</value></data>
   <data name="LibrarySelection_Reduce" xml:space="preserve"><value>Reduce file size</value></data>
@@ -3885,8 +3886,15 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditRecovery_Discard" xml:space="preserve"><value>Discard draft</value></data>
   <data name="EditRecovery_SaveFailed" xml:space="preserve"><value>The editing draft could not be saved. Save your edits to a file.</value></data>
   <data name="EditRecovery_OpenFailed" xml:space="preserve"><value>The editing draft could not be opened.</value></data>
+  <data name="EditRecovery_DiscardFailed" xml:space="preserve"><value>Could not discard the editing draft.</value></data>
   <data name="EditRecovery_RecordingTitle" xml:space="preserve"><value>Finish recording</value></data>
   <data name="EditRecovery_RecordingMessage" xml:space="preserve"><value>Finish recording before preparing to exit or update?</value></data>
+  <data name="EditRecovery_Later" xml:space="preserve"><value>Later</value></data>
+  <data name="EditRecovery_ImageDraft" xml:space="preserve"><value>Image edit draft</value></data>
+  <data name="EditRecovery_VideoDraft" xml:space="preserve"><value>Video edit draft</value></data>
+  <data name="EditRecovery_Detail" xml:space="preserve"><value>{0} · {1} × {2}</value></data>
+  <data name="EditRecovery_TimeFormat" xml:space="preserve"><value>MMM d, HH:mm</value><comment>.NET custom date and time format for when a draft was saved.</comment></data>
+  <data name="EditRecovery_RowAction" xml:space="preserve"><value>{0}: {1}</value></data>
   <data name="Onboard_TryNow" xml:space="preserve"><value>Try it now</value></data>
   <data name="Onboard_TryNowHelp" xml:space="preserve"><value>Closes this window and starts a region capture.</value></data>
   <data name="Onboard_StepsName" xml:space="preserve"><value>Getting started</value></data>
@@ -3895,11 +3903,19 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and opened in the editor.</value></data>
   <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and shown on a quick access card.</value></data>
   <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>Each capture is copied to the clipboard and saved to the library.</value></data>
+  <data name="Onboard_RetentionNotice" xml:space="preserve"><value>Images are deleted after {0} unless kept or filed in a folder.</value></data>
   <data name="Onboard_TrayTitle" xml:space="preserve"><value>Tray icon</value></data>
   <data name="Onboard_TrayBody" xml:space="preserve"><value>MyCapture sits in the notification area at the right end of the taskbar. Click its icon for the library or right-click it for the menu. If you cannot see it, select ^.</value></data>
   <data name="Onboard_TrayMoreCaptures" xml:space="preserve"><value>More captures</value></data>
   <data name="Onboard_TrayCopyText" xml:space="preserve"><value>Copy text</value></data>
   <data name="Onboard_TrayReopenPin" xml:space="preserve"><value>Reopen closed pin</value></data>
+  <data name="Onboard_StartAtSignIn" xml:space="preserve"><value>Start MyCapture when I sign in to Windows</value></data>
+  <data name="Onboard_StartAtSignInHelp" xml:space="preserve"><value>If this is off, shortcuts work only after you start MyCapture yourself each time you sign in.</value></data>
+  <data name="Onboard_StartAtSignInTitle" xml:space="preserve"><value>Start at sign-in</value></data>
+  <data name="Tray_PinClipboard" xml:space="preserve"><value>Pin clipboard</value></data>
+  <data name="Tray_ClipboardEmpty" xml:space="preserve"><value>Clipboard is empty</value></data>
+  <data name="Tray_HideAllPins" xml:space="preserve"><value>Hide all pins</value></data>
+  <data name="Tray_ShowAllPins" xml:space="preserve"><value>Show all pins</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>Keyboard shortcuts</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>Click: library · Right-click: menu</value></data>
   <data name="Onboard_BarCapture" xml:space="preserve"><value>Capture</value></data>
@@ -3942,6 +3958,9 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tutorial.Select" xml:space="preserve"><value>Choose a feature</value></data>
   <data name="Tutorial.CurrentKey" xml:space="preserve"><value>Shortcut: {0}</value></data>
   <data name="Tutorial.AccessibleName" xml:space="preserve"><value>{0} tutorial</value></data>
+  <data name="Tutorial.OpenAccessibleName" xml:space="preserve"><value>{0} — View tutorial</value></data>
+  <data name="Tutorial.SetShortcut" xml:space="preserve"><value>Set shortcut</value></data>
+  <data name="Tutorial.SetShortcutHelp" xml:space="preserve"><value>Opens this feature's shortcut in Settings &gt; Shortcuts.</value></data>
   <data name="Tutorial.VideoName" xml:space="preserve"><value>{0} tutorial video</value></data>
   <data name="Tutorial.image-rotate.Title" xml:space="preserve"><value>Rotate image</value></data>
   <data name="Tutorial.video-trim.Title" xml:space="preserve"><value>Trim video</value></data>

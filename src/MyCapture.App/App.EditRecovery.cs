@@ -34,25 +34,54 @@ public partial class App
         IReadOnlyList<(EditDraft Draft, string Directory)> available;
         try { available = await Task.Run(DraftStore.ReadAvailable); }
         catch (Exception error) { _log?.LogError(error, "Could not enumerate editing drafts"); return; }
-        foreach (var (draft, directory) in available)
+        if (available.Count == 0) return;
+
+        // One dialog lists every draft, newest first. It keeps initial recovery pending until it
+        // closes, exactly as the one-draft-at-a-time prompts did.
+        var drafts = new Dictionary<Guid, EditDraft>();
+        var items = new List<DraftRecoveryItem>();
+        foreach (EditDraft draft in available.Select(entry => entry.Draft).OrderByDescending(draft => draft.SavedUtc))
         {
-            var prompt = new EditorCloseDialog(UiText.Get("EditRecovery_Title"), UiText.Get("EditRecovery_Message"),
-                UiText.Get("EditRecovery_Restore"), UiText.Get("EditRecovery_Discard"), UiText.Get("Dialog.Cancel"))
-            { WindowStartupLocation = WindowStartupLocation.CenterScreen };
-            _ = prompt.ShowDialog();
-            if (prompt.Choice == EditorCloseChoice.Cancel) continue;
-            try
-            {
-                if (prompt.Choice == EditorCloseChoice.DontSave) { await Task.Run(() => DraftStore.RetireAsync(draft.SessionId)); continue; }
-                if (draft.Kind == "image") await OpenRecoveredImageAsync(draft);
-                else await OpenRecoveredVideoAsync(draft);
-            }
-            catch (Exception error)
-            {
-                _log?.LogError(error, "Could not reopen editing draft {SessionId}", draft.SessionId);
-                Themes.ThemedDialog.Error(null, UiText.Get("EditRecovery_OpenFailed"), error);
-            }
+            drafts[draft.SessionId] = draft;
+            items.Add(await EditRecoveryPresentation.DescribeAsync(DraftStore, draft, VideoDraftThumbnailPath));
         }
+        DraftRecoveryDialog? dialog = null;
+        dialog = new DraftRecoveryDialog(items, (item, choice) => ResolveDraftAsync(drafts[item.SessionId], choice, dialog));
+        dialog.ShowInFront();
+        await dialog.Completion;
+    }
+
+    /// <summary>Recovers or discards one draft; a failure is reported and leaves the draft listed.</summary>
+    private async Task<bool> ResolveDraftAsync(EditDraft draft, DraftRecoveryChoice choice, Window? owner)
+    {
+        try
+        {
+            if (choice == DraftRecoveryChoice.Discard)
+            {
+                await Task.Run(() => DraftStore!.RetireAsync(draft.SessionId));
+                return true;
+            }
+            if (draft.Kind == "image") await OpenRecoveredImageAsync(draft);
+            else await OpenRecoveredVideoAsync(draft);
+            return true;
+        }
+        catch (Exception error)
+        {
+            _log?.LogError(error, "Could not {Choice} editing draft {SessionId}", choice, draft.SessionId);
+            Themes.ThemedDialog.Error(owner is { IsVisible: true } ? owner : null,
+                UiText.Get(choice == DraftRecoveryChoice.Discard ? "EditRecovery_DiscardFailed" : "EditRecovery_OpenFailed"), error);
+            return false;
+        }
+    }
+
+    /// <summary>The library thumbnail of the recording a video draft edits, when it is still there.</summary>
+    private string? VideoDraftThumbnailPath(EditDraft draft)
+    {
+        if (_queue is null || _videoLibrary is null || !draft.Metadata.TryGetValue("source", out string? source)) return null;
+        string full = Path.GetFullPath(source);
+        CaptureRecord? record = _queue.Records.FirstOrDefault(x => x.IsVideo
+            && string.Equals(Path.GetFullPath(_videoLibrary.SourcePath(x)), full, StringComparison.OrdinalIgnoreCase));
+        return record is null ? null : _queue.GetFilePath(record, CaptureFileNames.Thumbnail);
     }
 
     /// <summary>Store API can install after this gate; the app remains alive to show progress.</summary>

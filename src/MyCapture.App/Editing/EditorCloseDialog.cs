@@ -104,7 +104,13 @@ internal sealed class EditorCloseDialog : Window
     {
         var dialog = new EditorCloseDialog();
         if (owner.IsVisible) dialog.Owner = owner;
-        else dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        else
+        {
+            // Without a visible owner the question needs its own taskbar button, or it can wait
+            // unseen behind other windows.
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            dialog.ShowInTaskbar = true;
+        }
         _ = dialog.ShowDialog();
         return dialog.Choice;
     }

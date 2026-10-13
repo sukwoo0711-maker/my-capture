@@ -80,7 +80,9 @@ public sealed class FeatureTutorialTests
                 FeatureTutorial feature = TutorialCatalog.Get(Assert.IsType<string>(tutorial.Tag));
                 Assert.True(tutorial.IsTabStop && tutorial.Focusable);
                 Assert.Equal(UiText.Get("TextCapture_TutorialOpen"), tutorial.Content);
-                Assert.Equal(FeatureTutorialWindow.TutorialTitle(feature), AutomationProperties.GetName(tutorial));
+                // The name names the feature and contains the visible label.
+                Assert.Equal(FeatureTutorialWindow.OpenButtonName(feature), AutomationProperties.GetName(tutorial));
+                Assert.Contains(UiText.Get("TextCapture_TutorialOpen"), AutomationProperties.GetName(tutorial), StringComparison.Ordinal);
                 Assert.NotEqual(UiText.Get(feature.TitleKey), AutomationProperties.GetName(tutorial));
             }
             // The search results carry their own copy of every tutorial button.
@@ -88,7 +90,7 @@ public sealed class FeatureTutorialTests
                 .Where(button => button.Tag is string && !rows.Any(row => FirstRunWelcomeTests.Descendants(row).Contains(button))).ToArray();
             Assert.Equal(42, results.Length);
             Assert.All(results, button => Assert.Equal(
-                FeatureTutorialWindow.TutorialTitle(TutorialCatalog.Get((string)button.Tag)), AutomationProperties.GetName(button)));
+                FeatureTutorialWindow.OpenButtonName(TutorialCatalog.Get((string)button.Tag)), AutomationProperties.GetName(button)));
         }
         finally { help.Close(); }
     });

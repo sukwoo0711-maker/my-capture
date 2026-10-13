@@ -2998,6 +2998,7 @@
   <data name="ShellRetake_ReadyTitle" xml:space="preserve"><value>{0} 준비 완료</value></data>
   <data name="ShellRetake_ReadyMessage" xml:space="preserve"><value>{0} 키를 누르면 화면을 캡처합니다. 트레이 아이콘에서 설정과 라이브러리를 열 수 있습니다.</value></data>
   <data name="ShellRetake_ReadyWithoutShortcut" xml:space="preserve"><value>트레이 아이콘에서 화면 캡처를 시작하거나 설정에서 캡처 단축키를 지정하십시오.</value></data>
+  <data name="Shell_ChangeShortcut" xml:space="preserve"><value>단축키 변경</value></data>
   <data name="LibrarySelection_Count" xml:space="preserve"><value>{0}개 선택</value></data>
   <data name="LibrarySelection_Delete" xml:space="preserve"><value>삭제</value></data>
   <data name="LibrarySelection_Reduce" xml:space="preserve"><value>파일 크기 줄이기</value></data>
@@ -3885,8 +3886,15 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditRecovery_Discard" xml:space="preserve"><value>초안 버리기</value></data>
   <data name="EditRecovery_SaveFailed" xml:space="preserve"><value>편집 초안을 저장하지 못했습니다. 편집 내용을 파일로 저장하십시오.</value></data>
   <data name="EditRecovery_OpenFailed" xml:space="preserve"><value>편집 초안을 열지 못했습니다.</value></data>
+  <data name="EditRecovery_DiscardFailed" xml:space="preserve"><value>편집 초안을 버리지 못했습니다.</value></data>
   <data name="EditRecovery_RecordingTitle" xml:space="preserve"><value>녹화 완료 확인</value></data>
   <data name="EditRecovery_RecordingMessage" xml:space="preserve"><value>녹화를 완료한 뒤 종료 또는 업데이트 준비를 진행하시겠습니까?</value></data>
+  <data name="EditRecovery_Later" xml:space="preserve"><value>나중에</value></data>
+  <data name="EditRecovery_ImageDraft" xml:space="preserve"><value>이미지 편집 초안</value></data>
+  <data name="EditRecovery_VideoDraft" xml:space="preserve"><value>동영상 편집 초안</value></data>
+  <data name="EditRecovery_Detail" xml:space="preserve"><value>{0} · {1} × {2}</value></data>
+  <data name="EditRecovery_TimeFormat" xml:space="preserve"><value>M월 d일 HH:mm</value><comment>.NET custom date and time format for when a draft was saved.</comment></data>
+  <data name="EditRecovery_RowAction" xml:space="preserve"><value>{0}: {1}</value></data>
   <data name="Onboard_TryNow" xml:space="preserve"><value>지금 해 보기</value></data>
   <data name="Onboard_TryNowHelp" xml:space="preserve"><value>이 창을 닫고 영역 캡처를 시작합니다.</value></data>
   <data name="Onboard_StepsName" xml:space="preserve"><value>시작 안내</value></data>
@@ -3895,11 +3903,19 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 편집기가 열립니다.</value></data>
   <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 빠른 작업 카드가 나타납니다.</value></data>
   <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장됩니다.</value></data>
+  <data name="Onboard_RetentionNotice" xml:space="preserve"><value>이미지는 {0} 뒤 자동 삭제됩니다. 보관하거나 폴더에 넣은 항목은 유지됩니다.</value></data>
   <data name="Onboard_TrayTitle" xml:space="preserve"><value>트레이 아이콘</value></data>
   <data name="Onboard_TrayBody" xml:space="preserve"><value>MyCapture는 작업 표시줄 오른쪽 알림 영역에 있습니다. 아이콘을 클릭하면 라이브러리가, 오른쪽 클릭하면 메뉴가 열립니다. 아이콘이 보이지 않으면 ^ 단추를 누르십시오.</value></data>
   <data name="Onboard_TrayMoreCaptures" xml:space="preserve"><value>다른 캡처</value></data>
   <data name="Onboard_TrayCopyText" xml:space="preserve"><value>텍스트 복사</value></data>
   <data name="Onboard_TrayReopenPin" xml:space="preserve"><value>닫은 핀 다시 열기</value></data>
+  <data name="Onboard_StartAtSignIn" xml:space="preserve"><value>Windows에 로그인하면 MyCapture 실행</value></data>
+  <data name="Onboard_StartAtSignInHelp" xml:space="preserve"><value>끄면 Windows에 다시 로그인한 뒤 MyCapture를 직접 실행해야 단축키가 동작합니다.</value></data>
+  <data name="Onboard_StartAtSignInTitle" xml:space="preserve"><value>로그인 시 실행</value></data>
+  <data name="Tray_PinClipboard" xml:space="preserve"><value>클립보드를 핀으로 띄우기</value></data>
+  <data name="Tray_ClipboardEmpty" xml:space="preserve"><value>클립보드가 비어 있습니다</value></data>
+  <data name="Tray_HideAllPins" xml:space="preserve"><value>핀 모두 숨기기</value></data>
+  <data name="Tray_ShowAllPins" xml:space="preserve"><value>핀 모두 보이기</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>단축키 보기</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>클릭: 라이브러리 · 오른쪽 클릭: 메뉴</value></data>
   <data name="Onboard_BarCapture" xml:space="preserve"><value>캡처</value></data>
@@ -3942,6 +3958,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.Select" xml:space="preserve"><value>기능 선택</value></data>
   <data name="Tutorial.CurrentKey" xml:space="preserve"><value>단축키: {0}</value></data>
   <data name="Tutorial.AccessibleName" xml:space="preserve"><value>{0} 사용법</value></data>
+  <data name="Tutorial.OpenAccessibleName" xml:space="preserve"><value>{0} 사용법 보기</value></data>
+  <data name="Tutorial.SetShortcut" xml:space="preserve"><value>단축키 지정</value></data>
+  <data name="Tutorial.SetShortcutHelp" xml:space="preserve"><value>설정의 단축키 탭에서 이 기능의 단축키 칸을 엽니다.</value></data>
   <data name="Tutorial.VideoName" xml:space="preserve"><value>{0} 사용법 동영상</value></data>
   <data name="Tutorial.image-rotate.Title" xml:space="preserve"><value>이미지 회전</value></data>
   <data name="Tutorial.video-trim.Title" xml:space="preserve"><value>동영상 자르기</value></data>

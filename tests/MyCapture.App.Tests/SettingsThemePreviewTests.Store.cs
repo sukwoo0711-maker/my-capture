@@ -44,19 +44,26 @@ public sealed partial class SettingsThemePreviewTests
                 try
                 {
                     UIElement original = (UIElement)window.Content;
-                    window.Content = null;
                     var notice = new EngagementNotice();
-                    var host = new DockPanel(); DockPanel.SetDock(notice, Dock.Top);
-                    host.Children.Add(notice); host.Children.Add(original); window.Content = host;
+                    // The shell's overlay: the card floats over the content and never moves it.
+                    EngagementNoticeHost.Attach(window, notice, bottomInset: 76);
                     int requests = 0; notice.ReviewChosen = () => requests++;
                     window.Show();
+                    var apply = Assert.IsType<Button>(window.FindName("ApplyButton"));
                     foreach ((double width, double height, string theme) in new[] { (940d, 700d, AppThemeNames.Glass), (780d, 560d, AppThemeNames.HighContrast) })
                     {
                         ThemeService.ApplyFromSettings(theme); window.Width = width; window.Height = height;
+                        notice.Dismiss(); Drain(window);
+                        Point before = original.TranslatePoint(new Point(), window);
                         notice.ShowInvitation(); Drain(window);
+                        Assert.Equal(before, original.TranslatePoint(new Point(), window));
                         Assert.Equal(0, requests);
                         AssertFits(window, notice);
                         foreach (Button button in Descendants(notice).OfType<Button>()) AssertFits(window, button);
+                        // It sits above the Apply row, so Apply and Cancel stay reachable.
+                        Rect card = notice.TransformToAncestor(window).TransformBounds(new Rect(notice.RenderSize));
+                        Rect applyBounds = apply.TransformToAncestor(window).TransformBounds(new Rect(apply.RenderSize));
+                        Assert.True(card.Bottom <= applyBounds.Top, $"{card} covers Apply {applyBounds}");
                         SaveStoreUpdateEvidence(window, $"rating-invitation-{locale}-{theme}-{width}x{height}.png");
                     }
                     Button close = Descendants(notice).OfType<Button>().Single(button => (string)button.Content == UiText.Get("Dialog.Close"));
@@ -70,7 +77,7 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Equal(Visibility.Collapsed, notice.Visibility);
                     notice.ShowUpdateCompleted("4.1.2.0"); Drain(window);
                     Assert.Equal(Visibility.Collapsed, review.Visibility);
-                    Assert.Single(Descendants(notice).OfType<TextBlock>(), text => text.Text == UiText.Format("StoreUpdate_CompletedVersion", "4.1.2.0"));
+                    Assert.Single(Descendants(notice).OfType<TextBlock>(), text => text.Text == UiText.Format("StoreUpdate_CompletedVersion", "4.1.2"));
                     SaveStoreUpdateEvidence(window, $"update-completed-{locale}-high-contrast-780x560.png");
                 }
                 finally { window.CloseForExit(); }

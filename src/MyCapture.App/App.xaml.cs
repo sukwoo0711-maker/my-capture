@@ -265,13 +265,16 @@ public partial class App : Application
 
         _shellPresenter = new ThemedShellPresenter(() => _overlay?.IsActive == true || _recorder?.IsActive == true);
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
-        // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return.
+        // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return,
+        // and Pin clipboard is enabled only while the clipboard announces an image or text.
         var trayCommands = new TrayMenuCommands(HandleCaptureRequested, HandleRecordRegion, HandleCaptureWindow,
             HandleCaptureFullScreen, HandleScrollingCapture, () => HandleDelayedCapture(), HandleRepeatLastRegion,
             HandleCaptureTextRequested, HandleRestoreClosedPin, HandleGalleryRequested, HandleSettingsRequested,
-            ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync());
+            ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync(),
+            PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll());
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
-            _pins?.CanRestoreClosed == true, _scrollCancellation is not null));
+            new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
+                ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true)));
         // A capture started from the tray menu races the menu's dismissal; the coordinator
         // uses this to decide whether the frozen frame must wait it out.
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
@@ -292,6 +295,7 @@ public partial class App : Application
         InitializeTextCapture();
         ShortcutHelpWindow.ReadHotkeys = () => _settings!.Hotkeys;
         ShortcutHelpWindow.OpenSettings = HandleSettingsRequested;
+        FeatureTutorialWindow.OpenShortcutSetting = HandleShortcutSettingsRequested;
         ShortcutHelpWindow.CanShowHelp = () => !_preparingAdvancedCapture && _overlay?.IsSelecting != true;
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent, new System.Windows.Input.KeyEventHandler(ShortcutHelpWindow.OnWindowKey));
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent,
@@ -301,11 +305,13 @@ public partial class App : Application
         _launchedFirstRun = launch.ShowWelcome;
         if (launch.ShowWelcome)
         {
-            var welcome = new WelcomeWindow(_settings.Hotkeys, _settings.General.AfterCapture);
+            var welcome = new WelcomeWindow(_settings.Hotkeys, _settings.General.AfterCapture, _settings.Queue.ImageRetentionHours);
             welcome.Closed += (_, _) =>
             {
+                StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
                 try { _services?.GetRequiredService<SettingsStore>().CompleteFirstRun(_settings!); }
                 catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
+                AnnounceAfterWelcome(welcome.Outcome, startup);
                 switch (FirstRunPlan.Next(welcome.Outcome))
                 {
                     case AfterWelcome.OpenLibrary:
@@ -387,11 +393,12 @@ public partial class App : Application
         // Launch-at-login: reconcile a stale/moved Run entry to this build's path on
         // startup, best-effort. Never mutates the Run key on this machine during tests
         // because the self-test path returns before InitializeShell runs. Windows owns the
-        // Store build's startup task, so there the setting mirrors the task instead.
+        // Store build's startup task, so there the setting mirrors the task instead. A first
+        // run registers nothing here: the welcome's start-at-sign-in choice decides on close.
         _startupService = _services.GetRequiredService<IStartupRegistration>();
         try
         {
-            _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
+            if (!launch.ShowWelcome) _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
             if (_startupService is PackagedStartupRegistration)
             {
                 _settings.General.LaunchAtLogin = _startupService.IsEnabled();
@@ -405,7 +412,12 @@ public partial class App : Application
         _settingsApply = new SettingsApplyService(
             _services.GetRequiredService<SettingsStore>(),
             () => _settings!,
-            updated => { _settings = updated; ShortcutPresentation.Refresh(); _pins?.TrimClosedHistory(); },
+            updated =>
+            {
+                Hotkey previousCapture = _settings!.Hotkeys.Capture;
+                _settings = updated; ShortcutPresentation.Refresh(); _pins?.TrimClosedHistory();
+                AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
+            },
             _queue,
             _hotkeys,
             _startupService,
@@ -427,12 +439,10 @@ public partial class App : Application
                 ? string.Empty
                 : UiText.Format("Text_646F2DBF1852", _hotkeys.Failures.Count - 1);
 
-            _tray.ShowBalloon(
-                UiText.Get("Text_5564316AA7EB"),
+            ShowHotkeyConflict(first,
                 UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix)
                     + PrintScreenFailureLine(_hotkeys.Failures)
-                    + (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys ? "\n" + UiText.Get("Hotkey.Migrated") : string.Empty),
-                TrayBalloonKind.Warning);
+                    + (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys ? "\n" + UiText.Get("Hotkey.Migrated") : string.Empty));
         }
         else
         {
@@ -441,13 +451,10 @@ public partial class App : Application
                 if (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys)
                     _tray.ShowBalloon(UiText.Get("Hotkey.MigratedTitle"), UiText.Get("Hotkey.Migrated"),
                         TrayBalloonKind.Information, playSound: false);
-                else if (launch.ShowReadyNotification)
-                    _readyNotification.Notify(true, _settings.Hotkeys.Capture,
-                        (title, message) => _tray.ShowBalloon(title, message, TrayBalloonKind.Information, playSound: false));
             }
             catch (Exception ex)
             {
-                _log?.LogWarning(ex, "Could not show resident-ready notification");
+                _log?.LogWarning(ex, "Could not show the shortcut migration notification");
             }
         }
     }

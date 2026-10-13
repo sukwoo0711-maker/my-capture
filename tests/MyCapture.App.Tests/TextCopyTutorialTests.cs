@@ -251,7 +251,7 @@ public sealed class TextCopyTutorialTests
             Assert.All(tutorials, button =>
             {
                 Assert.Equal(UiText.Get("TextCapture_TutorialOpen"), button.Content);
-                Assert.Equal("텍스트 복사 사용법", AutomationProperties.GetName(button));
+                Assert.Equal("텍스트 복사 사용법 보기", AutomationProperties.GetName(button));
                 Assert.True(button.Focusable && button.IsTabStop);
             });
             tutorials[0].RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));

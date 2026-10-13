@@ -1,18 +1,38 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Interop;
 using System.Windows.Media;
 using MyCapture.App.Capture;
 using MyCapture.App.Themes;
+using MyCapture.Core.Primitives;
+using MyCapture.Platform.Display;
 using MyCapture.Platform.Shell;
 
 namespace MyCapture.App;
 
 /// <summary>One bounded, nonactivating app notification and a themed tray command menu.</summary>
+/// <remarks>
+/// Notifications share the floating-card chrome (1px <c>Border.Subtle</c>, 8px corners,
+/// <c>Shadow.Card</c>) and appear at the bottom right of the monitor the pointer is on, so they
+/// show up where the user is working rather than on the primary monitor.
+/// </remarks>
 internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : IDisposable
 {
-    private Window? _toast;
+    /// <summary>The transparent band around a notification card that its shadow draws into.</summary>
+    internal const double ShadowMargin = 12;
 
+    /// <summary>The gap between a notification card and the edges of the work area.</summary>
+    internal const double EdgeGap = 16;
+
+    /// <summary>Width of a notification card, without its shadow band.</summary>
+    internal const double CardWidth = 360;
+
+    /// <summary>The 8px corner Windows 11 gives rounded windows (DWMWCP_ROUND).</summary>
+    internal static readonly CornerRadius CardCorner = new(8);
+
+    private Window? _toast;
 
     /// <summary>Raised whenever a tray-owned surface (command menu) has just left the screen,
     /// so a capture starting immediately afterwards can wait out the dismissal.</summary>
@@ -20,11 +40,15 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     private ContextMenu? _menu;
     private FeedbackCountdown? _countdown;
 
+    /// <summary>The monitor notifications appear on: the one with the pointer. Tests replace it.</summary>
+    internal Func<MonitorInfo> NotificationMonitor { get; init; } = MonitorEnumerator.GetFromCursor;
+
     /// <summary>
     /// A command or a submenu branch in the tray tree. A null Action marks a branch. A command
-    /// with <c>IsEnabled</c> false stays visible but cannot be invoked.
+    /// with <c>IsEnabled</c> false stays visible but cannot be invoked; its <c>ToolTip</c> says why.
     /// </summary>
-    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "", bool IsEnabled = true)
+    internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "",
+        bool IsEnabled = true, string ToolTip = "")
     {
         /// <summary>A divider between groups; it runs nothing.</summary>
         internal static MenuEntry Separator { get; } = new(string.Empty, null) { IsSeparator = true };
@@ -37,31 +61,15 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         Dismiss();
         if (suppressNotification()) return;
         var content = new StackPanel();
-        content.Children.Add(KoreanWordWrap.Show(new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, title));
-        content.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) }, message));
+        content.Children.Add(Heading(title));
+        content.Children.Add(Body(message));
         var close = new Button { Content = UiText.Get("Shell.Close"), MinHeight = 36, HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => Dismiss();
         content.Children.Add(close);
-        var window = CreateWindow(content, title);
-        window.Width = 360;
-        window.ShowActivated = false;
-        window.Topmost = true;
-        window.WindowStyle = WindowStyle.None;
-        window.SizeToContent = SizeToContent.Height;
+        Window window = CreateNotificationWindow(content, title, new Thickness(20));
         window.SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(window);
-        window.Loaded += (_, _) =>
-        {
-            Rect work = SystemParameters.WorkArea;
-            window.Left = Math.Max(work.Left, work.Right - window.ActualWidth - 16);
-            window.Top = Math.Max(work.Top, work.Bottom - window.ActualHeight - 16);
-        };
-        // An error stays until closed; information and warnings leave after the result time.
-        Present(window, kind switch
-        {
-            TrayBalloonKind.Error => FeedbackKind.ActionRequired,
-            TrayBalloonKind.Warning => FeedbackKind.Warning,
-            _ => FeedbackKind.Result,
-        }, title + " " + message);
+        PlaceOnPointerMonitor(window);
+        Present(window, KindOf(kind), title + " " + message);
     }
 
     /// <summary>
@@ -91,6 +99,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     internal (bool Open, FeedbackKind Kind, TimeSpan? Remaining) NotificationForTest =>
         (_toast?.IsVisible == true, _toastKind, _countdown?.Remaining);
 
+    /// <summary>Test hook: the open notification window.</summary>
+    internal Window? NotificationWindowForTest => _toast;
+
     /// <summary>Test hook: spends display time as the countdown's clock would.</summary>
     internal void AdvanceNotificationForTest(TimeSpan elapsed) => _countdown?.Advance(elapsed);
 
@@ -103,21 +114,13 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         System.Windows.Automation.AutomationProperties.SetName(action, message);
         action.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
         action.Click += (_, _) => { Dismiss(); openLibrary(); };
-        var window = CreateWindow(action, UiText.Get("QuickAccess.Title"));
-        window.Width = 320; window.SizeToContent = SizeToContent.Height;
-        window.ShowActivated = false; window.Topmost = true; window.WindowStyle = WindowStyle.None;
+        Window window = CreateNotificationWindow(action, UiText.Get("QuickAccess.Title"), new Thickness(8), width: 320);
         window.SourceInitialized += (_, _) =>
         {
-            MyCapture.Platform.Display.WindowStyleFacade.SetNoActivate(new System.Windows.Interop.WindowInteropHelper(window).Handle, true);
+            WindowStyleFacade.SetNoActivate(new WindowInteropHelper(window).Handle, true);
             CaptureWindowExclusion.DisableTransitions(window); CaptureWindowExclusion.TryApply(window);
         };
-        window.Loaded += (_, _) =>
-        {
-            var monitor = MyCapture.Platform.Display.MonitorEnumerator.GetFromCursor();
-            Rect position = QuickAccessWindow.Position(monitor.WorkArea, monitor.ScaleFactor, window.ActualWidth, window.ActualHeight);
-            MyCapture.Platform.Display.PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new System.Windows.Interop.WindowInteropHelper(window).Handle,
-                new MyCapture.Core.Primitives.RectD(position.X * monitor.ScaleFactor, position.Y * monitor.ScaleFactor, position.Width * monitor.ScaleFactor, position.Height * monitor.ScaleFactor));
-        };
+        PlaceOnPointerMonitor(window);
         Present(window, FeedbackKind.Confirmation, message);
     }
 
@@ -156,14 +159,21 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
                 // The shared MenuItem template draws a flat command row with no submenu popup,
                 // so a branch carries its own template that opens its children beside it.
                 var branch = new MenuItem { Header = entry.Label, MinHeight = 36, Template = CreateSubmenuTemplate() };
-                System.Windows.Automation.AutomationProperties.SetName(branch, entry.Label);
+                AutomationProperties.SetName(branch, entry.Label);
                 AppendEntries(branch.Items, children, root);
                 items.Add(branch);
                 continue;
             }
 
             var item = new MenuItem { Header = entry.Label, MinHeight = 36, InputGestureText = entry.Gesture, IsEnabled = entry.IsEnabled };
-            if (entry.Gesture.Length > 0) System.Windows.Automation.AutomationProperties.SetAcceleratorKey(item, entry.Gesture);
+            if (entry.Gesture.Length > 0) AutomationProperties.SetAcceleratorKey(item, entry.Gesture);
+            if (entry.ToolTip.Length > 0)
+            {
+                // A disabled command says why it cannot run, by pointer and to screen readers.
+                item.ToolTip = entry.ToolTip;
+                ToolTipService.SetShowOnDisabled(item, true);
+                AutomationProperties.SetHelpText(item, entry.ToolTip);
+            }
             Action action = entry.Action ?? (() => { });
             item.Click += (_, _) =>
             {
@@ -226,14 +236,94 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         </ControlTemplate>
         """);
 
-    private static Window CreateWindow(UIElement child, string title)
+    /// <summary>
+    /// A borderless, transparent notification window around one floating card: the card has the
+    /// shared 1px subtle border, 8px corners and card shadow, and the shadow draws into the
+    /// transparent band around it.
+    /// </summary>
+    internal static Window CreateNotificationWindow(UIElement child, string title, Thickness padding, double width = CardWidth)
     {
-        var window = new Window { Title = title, ShowInTaskbar = false, ResizeMode = ResizeMode.NoResize,
-            Content = new Border { Padding = new Thickness(20), Child = child } };
-        window.SetResourceReference(Window.BackgroundProperty, "Surface.Base");
+        // The shadow sits on its own layer behind the card, so the card's text is not drawn
+        // through the shadow effect and keeps its normal rendering.
+        var shadow = new Border { CornerRadius = CardCorner, IsHitTestVisible = false };
+        shadow.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
+        shadow.SetResourceReference(UIElement.EffectProperty, "Shadow.Card");
+        var card = new Border { CornerRadius = CardCorner, BorderThickness = new Thickness(1), Padding = padding, Child = child };
+        card.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
+        card.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        AutomationProperties.SetAutomationId(card, "MyCapture.Shell.NotificationCard");
+        var surface = new Grid { Margin = new Thickness(ShadowMargin) };
+        surface.Children.Add(shadow);
+        surface.Children.Add(card);
+        var window = new Window
+        {
+            Title = title,
+            ShowInTaskbar = false,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = Brushes.Transparent,
+            Width = width + (2 * ShadowMargin),
+            SizeToContent = SizeToContent.Height,
+            ShowActivated = false,
+            Topmost = true,
+            Content = surface,
+            // Placed on the pointer's monitor once its height is known; never flashes elsewhere.
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -32000,
+            Top = -32000,
+        };
         window.SetResourceReference(Window.ForegroundProperty, "Text.Primary");
         return window;
     }
+
+    /// <summary>
+    /// Where a notification window of <paramref name="width"/> × <paramref name="height"/> DIPs
+    /// goes on a monitor: its visible card <see cref="EdgeGap"/> inside the bottom-right corner of
+    /// the work area, with the transparent shadow band around it.
+    /// </summary>
+    internal static Rect NotificationBounds(RectD workArea, double scale, double width, double height)
+    {
+        double left = workArea.Left / scale, top = workArea.Top / scale;
+        double right = workArea.Right / scale, bottom = workArea.Bottom / scale;
+        double x = right - EdgeGap - width + ShadowMargin;
+        double y = bottom - EdgeGap - height + ShadowMargin;
+        return new Rect(Math.Max(left - ShadowMargin, x), Math.Max(top - ShadowMargin, y), width, height);
+    }
+
+    /// <summary>Puts the window on the pointer's monitor once laid out, and again if a DPI change resizes it.</summary>
+    private void PlaceOnPointerMonitor(Window window)
+    {
+        MonitorInfo? monitor = null;
+        void Place()
+        {
+            monitor ??= NotificationMonitor();
+            Rect bounds = NotificationBounds(monitor.WorkArea, monitor.ScaleFactor, window.ActualWidth, window.ActualHeight);
+            double scale = monitor.ScaleFactor;
+            PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(window).Handle,
+                new RectD(bounds.X * scale, bounds.Y * scale, bounds.Width * scale, bounds.Height * scale));
+        }
+        window.Loaded += (_, _) => Place();
+        window.SizeChanged += (_, _) => { if (window.IsLoaded && window.IsVisible) Place(); };
+    }
+
+    private static TextBlock Heading(string title) =>
+        KoreanWordWrap.Show(new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, title);
+
+    private static TextBlock Body(string message)
+    {
+        var body = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 12) };
+        // Korean wraps between words, never inside one.
+        KoreanWordWrap.SetText(body, message);
+        return body;
+    }
+
+    private static FeedbackKind KindOf(TrayBalloonKind kind) => kind switch
+    {
+        TrayBalloonKind.Error => FeedbackKind.ActionRequired,
+        TrayBalloonKind.Warning => FeedbackKind.Warning,
+        _ => FeedbackKind.Result,
+    };
 
     internal void Dismiss()
     {
@@ -254,21 +344,18 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
 
     /// <summary>
     /// The bounded notification with one follow-up command beside Close. Pointing at it pauses
-    /// the dismissal countdown so the command can be reached before the card disappears.
+    /// the dismissal countdown so the command can be reached before the card disappears. An
+    /// error stays until it is closed or acted on.
     /// </summary>
-    internal void ShowActionNotification(string title, string message, string actionLabel, Action action)
+    internal void ShowActionNotification(string title, string message, string actionLabel, Action action,
+        TrayBalloonKind kind = TrayBalloonKind.Information)
     {
         ArgumentNullException.ThrowIfNull(action);
         Dismiss();
         if (suppressNotification()) return;
         Window window = CreateActionNotification(title, message, actionLabel, action);
-        window.Loaded += (_, _) =>
-        {
-            Rect work = SystemParameters.WorkArea;
-            window.Left = Math.Max(work.Left, work.Right - window.ActualWidth - 16);
-            window.Top = Math.Max(work.Top, work.Bottom - window.ActualHeight - 16);
-        };
-        Present(window, FeedbackKind.Result, title + " " + message);
+        PlaceOnPointerMonitor(window);
+        Present(window, KindOf(kind), title + " " + message);
     }
 
     /// <summary>
@@ -278,24 +365,19 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     internal Window CreateActionNotification(string title, string message, string actionLabel, Action action)
     {
         var content = new StackPanel();
-        content.Children.Add(KoreanWordWrap.Show(new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, title));
-        content.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) }, message));
+        content.Children.Add(Heading(title));
+        content.Children.Add(Body(message));
         var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
         var run = new Button { Content = actionLabel, MinHeight = 36, Margin = new Thickness(0, 0, 8, 0) };
         run.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
-        System.Windows.Automation.AutomationProperties.SetName(run, actionLabel);
+        AutomationProperties.SetName(run, actionLabel);
         run.Click += (_, _) => { Dismiss(); action(); };
         var close = new Button { Content = UiText.Get("Shell.Close"), MinHeight = 36 };
         close.Click += (_, _) => Dismiss();
         buttons.Children.Add(run);
         buttons.Children.Add(close);
         content.Children.Add(buttons);
-        var window = CreateWindow(content, title);
-        window.Width = 360;
-        window.ShowActivated = false;
-        window.Topmost = true;
-        window.WindowStyle = WindowStyle.None;
-        window.SizeToContent = SizeToContent.Height;
+        Window window = CreateNotificationWindow(content, title, new Thickness(20));
         window.SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(window);
         return window;
     }

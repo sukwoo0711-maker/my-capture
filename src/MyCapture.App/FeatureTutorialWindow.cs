@@ -53,6 +53,16 @@ internal class FeatureTutorialWindow : Window
     /// <summary>Replaces the real media of windows created without a factory (ShowTutorial) in tests.</summary>
     internal static Func<ITutorialMedia>? MediaFactoryOverrideForTest { get; set; }
 
+    /// <summary>
+    /// Opens Settings → Shortcuts on the row that edits the given <see cref="SettingsDraft"/>
+    /// hotkey property. The shell sets it; without it no "Set shortcut" button is offered.
+    /// </summary>
+    internal static Action<string>? OpenShortcutSetting { get; set; }
+
+    /// <summary>"Set shortcut", offered only while the selected feature's global shortcut is unassigned.</summary>
+    internal Button SetShortcutButton { get; } = new() { MinHeight = 32, HorizontalAlignment = HorizontalAlignment.Left,
+        Margin = new Thickness(0, 0, 0, 8), Padding = new Thickness(12, 4, 12, 4) };
+
     internal FeatureTutorialWindow(HotkeySettings hotkeys, string featureId = "text-copy", Func<ITutorialMedia>? mediaFactory = null)
     {
         ArgumentNullException.ThrowIfNull(hotkeys);
@@ -109,6 +119,13 @@ internal class FeatureTutorialWindow : Window
         _replay.Click += (_, _) => Replay();
         var controls = new WrapPanel { Margin = new Thickness(0, 4, 0, 8) };
         controls.Children.Add(_play); controls.Children.Add(_replay);
+
+        SetShortcutButton.Content = UiText.Get("Tutorial.SetShortcut");
+        SetShortcutButton.SetResourceReference(StyleProperty, "Button.Secondary");
+        AutomationProperties.SetName(SetShortcutButton, UiText.Get("Tutorial.SetShortcut"));
+        AutomationProperties.SetHelpText(SetShortcutButton, UiText.Get("Tutorial.SetShortcutHelp"));
+        SetShortcutButton.ToolTip = UiText.Get("Tutorial.SetShortcutHelp");
+        SetShortcutButton.Click += (_, _) => OpenShortcutSettings();
 
         var steps = new ScrollViewer { Content = _steps, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
@@ -183,6 +200,12 @@ internal class FeatureTutorialWindow : Window
     /// it, so a screen reader never hears a bare feature name that sounds like the feature itself.
     /// </summary>
     internal static string TutorialTitle(FeatureTutorial feature) => UiText.Format("Tutorial.AccessibleName", TutorialSubject(feature));
+
+    /// <summary>
+    /// The accessible name of a "View tutorial" button: "{feature} 사용법 보기" / "{feature} — View
+    /// tutorial". It contains the visible label, so speech input can say what the button shows.
+    /// </summary>
+    internal static string OpenButtonName(FeatureTutorial feature) => UiText.Format("Tutorial.OpenAccessibleName", TutorialSubject(feature));
 
     /// <summary>The feature's own title, or its category-qualified name when another tutorial shares that title.</summary>
     internal static string TutorialSubject(FeatureTutorial feature)
@@ -318,10 +341,25 @@ internal class FeatureTutorialWindow : Window
         _instructions.Children.Add(Paragraph(_feature.EntryText(keys)));
         if (_feature.Id == "text-copy" && keys.CaptureText.IsAssigned)
             _instructions.Children.Add(Paragraph(UiText.Format("TextCapture_TutorialDirect", keys.CaptureText)));
+        // An unassigned shortcut is not a dead end: the button opens the row that assigns it.
+        if (OffersSetShortcut(_feature, keys)) _instructions.Children.Add(SetShortcutButton);
         _steps.Children.Clear();
         foreach (string step in _feature.StepsFor(keys)) _steps.Children.Add(Paragraph(step));
         AutomationProperties.SetName(_media.View, _feature.Id == "text-copy"
             ? UiText.Get("TextCapture_TutorialAnimation") : UiText.Format("Tutorial.VideoName", TutorialSubject(_feature)));
+    }
+
+    /// <summary>Whether the feature has a global shortcut that is unassigned and the shell can open its row.</summary>
+    internal static bool OffersSetShortcut(FeatureTutorial feature, HotkeySettings keys) =>
+        OpenShortcutSetting is not null && feature.GlobalKey is { } key && !key(keys).IsAssigned
+        && ShortcutSettingTarget.ForFeature(feature.Id) is not null;
+
+    /// <summary>Closes the tutorial so it does not cover the row, then opens Settings → Shortcuts on it.</summary>
+    private void OpenShortcutSettings()
+    {
+        if (ShortcutSettingTarget.ForFeature(_feature.Id) is not { } row || OpenShortcutSetting is not { } open) return;
+        Close();
+        open(row);
     }
 
     private void OnOwnerVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
