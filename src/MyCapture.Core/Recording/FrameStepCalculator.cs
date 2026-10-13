@@ -40,8 +40,16 @@ public static class FrameStepCalculator
     }
 
     /// <summary>
-    /// Advances by <paramref name="frames"/> whole frames (negative moves back).
+    /// Moves <paramref name="frames"/> whole frames (negative moves back) from the frame shown at
+    /// <paramref name="positionMs"/> and returns the start of that frame, between the first frame
+    /// and the last one.
     /// </summary>
+    /// <remarks>
+    /// The step counts frames, not milliseconds. Rounding the position to the nearest boundary
+    /// first made a step from the second half of a frame, or from the clip end, land in the frame
+    /// already shown; and a step past the last frame used to park at the clip end, which still
+    /// shows the last frame. Either way the press changed nothing on screen.
+    /// </remarks>
     public static double StepByFrames(double positionMs, int frames, int fps, double durationMs)
     {
         if (fps <= 0)
@@ -49,9 +57,25 @@ public static class FrameStepCalculator
             return Clamp(positionMs, durationMs);
         }
 
-        double frame = FrameDurationMs(fps);
-        double snapped = SnapToFrame(positionMs, fps, durationMs);
-        return Clamp(snapped + (frames * frame), durationMs);
+        int last = LastFrameIndex(fps, durationMs);
+        int current = Math.Min(FrameIndexAt(positionMs, fps, durationMs), last);
+        long target = Math.Clamp((long)current + frames, 0, last);
+        return Clamp(target * FrameDurationMs(fps), durationMs);
+    }
+
+    /// <summary>
+    /// Zero-based index of the last frame that starts before <paramref name="durationMs"/>; a clip
+    /// whose container length is a hair short of the frame grid still ends with a whole frame.
+    /// </summary>
+    public static int LastFrameIndex(int fps, double durationMs)
+    {
+        if (fps <= 0 || !(durationMs > 0))
+        {
+            return 0;
+        }
+
+        double frames = Math.Ceiling((durationMs / FrameDurationMs(fps)) - 1e-6);
+        return frames >= int.MaxValue ? int.MaxValue - 1 : Math.Max(0, (int)frames - 1);
     }
 
     /// <summary>

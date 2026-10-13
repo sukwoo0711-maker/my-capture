@@ -40,12 +40,67 @@ public sealed class FrameStepCalculatorTests
     }
 
     [Fact]
-    public void StepByFrames_ClampsAtDurationWhenSteppingPastEnd()
+    public void StepByFrames_StopsOnTheLastFrameWhenSteppingPastEnd()
     {
+        // The clip end shows the last frame (frame 299 at 9966.7 ms); parking there would make
+        // the next press change nothing.
         double next = FrameStepCalculator.StepByFrames(9_990, 5, 30, 10_000);
 
-        Assert.Equal(10_000, next, 3);
+        Assert.Equal(299 * FrameStepCalculator.FrameDurationMs(30), next, 3);
     }
+
+    [Theory]
+    // From the second half of frame 1 (40-66 ms at 30 fps) the next frame is frame 2.
+    [InlineData(50, 1, 30, 10_000, 2)]
+    [InlineData(50, -1, 30, 10_000, 0)]
+    // From the clip end, which shows the last frame, one step back is the frame before it.
+    [InlineData(3_000, -1, 30, 3_000, 88)]
+    // A container a hair short of the grid (2999.98 ms at 60 fps) still has 180 frames.
+    [InlineData(2_999.9833, -1, 60, 2_999.9833, 178)]
+    [InlineData(2_983.3167, -1, 60, 2_999.9833, 177)]
+    [InlineData(2_966.6667, 1, 60, 2_999.9833, 179)]
+    [InlineData(1_600, 1, 15, 3_000, 25)]
+    [InlineData(1_600, 1, 30, 3_000, 49)]
+    public void StepByFrames_MovesFromTheFrameShownToItsNeighbour(double position, int frames, int fps, double duration, int expectedFrame)
+    {
+        double next = FrameStepCalculator.StepByFrames(position, frames, fps, duration);
+
+        Assert.Equal(expectedFrame * FrameStepCalculator.FrameDurationMs(fps), next, 3);
+        Assert.Equal(expectedFrame, FrameStepCalculator.FrameIndexAt(next, fps, duration));
+    }
+
+    [Fact]
+    public void StepByFrames_VisitsEveryFrameOnceInEachDirection()
+    {
+        foreach ((int fps, double duration) in new[] { (15, 2_999.9333), (30, 3_000.0), (60, 2_999.9833), (24, 1_041.6667) })
+        {
+            int last = FrameStepCalculator.LastFrameIndex(fps, duration);
+            double position = 0;
+            for (int frame = 1; frame <= last + 2; frame++)
+            {
+                position = FrameStepCalculator.StepByFrames(position, 1, fps, duration);
+                Assert.Equal(Math.Min(frame, last), FrameStepCalculator.FrameIndexAt(position, fps, duration));
+            }
+
+            position = duration;
+            for (int frame = last - 1; frame >= -2; frame--)
+            {
+                position = FrameStepCalculator.StepByFrames(position, -1, fps, duration);
+                Assert.Equal(Math.Max(frame, 0), FrameStepCalculator.FrameIndexAt(position, fps, duration));
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(30, 3_000, 89)]
+    [InlineData(60, 2_999.9833, 179)]
+    [InlineData(15, 2_999.9333, 44)]
+    [InlineData(30, 3_000.5, 90)]
+    [InlineData(30, 10, 0)]
+    [InlineData(30, 0, 0)]
+    [InlineData(0, 3_000, 0)]
+    public void LastFrameIndex_IsTheLastFrameStartingBeforeTheEnd(int fps, double duration, int expected) =>
+        Assert.Equal(expected, FrameStepCalculator.LastFrameIndex(fps, duration));
 
     [Fact]
     public void SnapToFrame_LandsOnNearestFrameBoundary()

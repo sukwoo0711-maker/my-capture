@@ -1375,6 +1375,7 @@ internal sealed partial class VideoEditorWindow : Window
         StopLoadTimers();
 
         _durationMs = durationMs > 0 ? durationMs : Math.Max(1, _recording.DurationMs);
+        _previewEngine.DurationMs = _durationMs;
         _mediaReady = true;
         RefreshIdentityDetails(_durationMs);
 
@@ -1398,7 +1399,7 @@ internal sealed partial class VideoEditorWindow : Window
 
         try
         {
-            _media.Position = TimeSpan.FromMilliseconds(_editDocument.TrimInMs);
+            _media.Position = TimeSpan.FromMilliseconds(_previewEngine.PresentationPositionMs(_editDocument.TrimInMs));
             _media.Pause();
         }
         catch (InvalidOperationException)
@@ -2789,13 +2790,7 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetName(_positionChip, UiText.Format("Text_D8A09D5BCDCB", FormatMs(positionMs), FormatMs(_durationMs), frame, total));
     }
 
-    private int TotalFrameCount()
-    {
-        double frameMs = FrameStepCalculator.FrameDurationMs(_recording.Fps);
-        return frameMs > 0
-            ? Math.Max(1, (int)Math.Ceiling(_durationMs / frameMs))
-            : 1;
-    }
+    private int TotalFrameCount() => FrameStepCalculator.LastFrameIndex(_recording.Fps, _durationMs) + 1;
 
     private static string FormatMs(double ms)
     {
