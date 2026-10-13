@@ -161,6 +161,16 @@ public sealed class CaptureOverlayPerformanceTests
     });
 
     [Fact]
+    public void Selector_HasNoSystemFocusRectangle() => StaTestHost.Run(() =>
+    {
+        // The default rectangle dash-outlines the whole virtual desktop after the opening shortcut and
+        // is re-rasterised on every pointer frame; the selector shows focus through its own cues.
+        var view = new CaptureOverlayView(Frame());
+        try { Assert.Null(view.FocusVisualStyle); }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Fact]
     public void LostCaptureAndCancel_ClearRetainedGuidesAndFeedback() => StaTestHost.Run(() =>
     {
         var view = new CaptureOverlayView(Frame());

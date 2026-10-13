@@ -670,6 +670,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
         };
 
         Focusable = true;
+        // The system focus rectangle would dash-outline the whole virtual desktop. It shows after the
+        // keyboard shortcut that opens the selector, and its bounds meet every dirty region, so WPF
+        // re-rasterised thousands of dashes on each pointer frame. The selection, the highlighted
+        // window and the mode bar's own focus cues already show where the keys act.
+        FocusVisualStyle = null;
         // The selector never accepts text; keep single-letter commands out of the IME.
         InputMethod.SetIsInputMethodEnabled(this, false);
         Cursor = Cursors.Cross;
