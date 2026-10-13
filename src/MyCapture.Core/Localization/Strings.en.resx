@@ -4132,8 +4132,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tutorial.library-delete.Step1" xml:space="preserve"><value>1. Select an item to delete in the library.</value></data>
   <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Press Del and confirm the deletion in the dialog.</value></data>
   <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. Review the list. Bring items back with Restore recently deleted in the library.</value></data>
-  <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. Open a recording from the library.</value></data>
-  <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. Press Space to play.</value></data>
+  <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. Select a recording in the library and click Edit video.</value></data>
+  <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. Press Space in the video editor to play.</value></data>
   <data name="Tutorial.video-play.Step3" xml:space="preserve"><value>3. Press Space again to pause at the scene you want.</value></data>
   <data name="Tutorial.video-frame-step.Step1" xml:space="preserve"><value>1. Pause playback in the video editor.</value></data>
   <data name="Tutorial.video-frame-step.Step2" xml:space="preserve"><value>2. Press comma (,) for the previous frame or period (.) for the next.</value></data>
