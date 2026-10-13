@@ -75,7 +75,11 @@ public sealed class MediaPlaybackRangeTests
             RangePatternClip.Pump(TimeSpan.FromMilliseconds(500));
 
             BitmapSource frame = editor.RenderCurrentFrameForTest() ?? throw new Xunit.Sdk.XunitException("no preview frame");
-            RangePatternClip.AssertMatchesSource(frame, width, height);
+            // A full-range clip is shown without the effect, so its accuracy is the platform
+            // decoder's: the software H.264 decoder on hosts without hardware decoding (GitHub-hosted
+            // runners) lifts full-range zero by up to 10 steps (cyan read (10,254,254)). Studio-range
+            // recordings keep the strict 8: unexpanded studio range is 16 or more steps off.
+            RangePatternClip.AssertMatchesSource(frame, width, height, tolerance: fullRange ? 12 : 8);
         }
         finally
         {

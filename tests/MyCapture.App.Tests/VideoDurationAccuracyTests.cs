@@ -196,7 +196,8 @@ public sealed class VideoDurationAccuracyTests : KoreanCaptionTest
         player.Open(new Uri(path, UriKind.Absolute));
         try
         {
-            Assert.True(PumpUntil(() => opened || failed, TimeSpan.FromSeconds(10)) && opened, "WPF could not open the clip");
+            // Opening is slower on GPU-less CI hosts under load; only the wait grows, not the check.
+            Assert.True(PumpUntil(() => opened || failed, TimeSpan.FromSeconds(30)) && opened, "WPF could not open the clip");
             return player.NaturalDuration.HasTimeSpan ? player.NaturalDuration.TimeSpan.TotalMilliseconds : null;
         }
         finally { player.Close(); }
