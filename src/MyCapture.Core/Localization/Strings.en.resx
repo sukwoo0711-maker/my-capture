@@ -4057,8 +4057,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tutorial.record-pause.Step3" xml:space="preserve"><value>3. Resume with the same button or shortcut.</value></data>
   <data name="Tutorial.library-open.Unassigned" xml:space="preserve"><value>Choose Library from the tray menu.</value></data>
   <data name="Tutorial.library-open.Step1" xml:space="preserve"><value>1. Open the library.</value></data>
-  <data name="Tutorial.library-open.Step2" xml:space="preserve"><value>2. Select an image or recording.</value></data>
-  <data name="Tutorial.library-open.Step3" xml:space="preserve"><value>3. Open the item to edit the image or play the recording.</value></data>
+  <data name="Tutorial.library-open.Step2" xml:space="preserve"><value>2. Select an image or video.</value></data>
+  <data name="Tutorial.library-open.Step3" xml:space="preserve"><value>3. Open the item to edit the image or play the video.</value></data>
   <data name="Tutorial.capture-window.Unassigned" xml:space="preserve"><value>Choose Window capture under More captures in the tray menu.</value></data>
   <data name="Tutorial.capture-window.Step1" xml:space="preserve"><value>1. Place the pointer over the window to capture.</value></data>
   <data name="Tutorial.capture-window.Step2" xml:space="preserve"><value>2. Run Window capture.</value></data>
@@ -4109,7 +4109,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tutorial.image-blur.Step2" xml:space="preserve"><value>2. Select Blur and drag over the area to blur.</value></data>
   <data name="Tutorial.image-blur.Step3" xml:space="preserve"><value>3. Review the blurred area, then save.</value></data>
   <data name="Tutorial.image-crop.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
-  <data name="Tutorial.image-crop.Step2" xml:space="preserve"><value>2. Select Crop and adjust the area to keep.</value></data>
+  <data name="Tutorial.image-crop.Step2" xml:space="preserve"><value>2. Choose Crop in the top commands and adjust the area to keep.</value></data>
   <data name="Tutorial.image-crop.Step3" xml:space="preserve"><value>3. Press Enter to apply, or Esc to cancel the crop.</value></data>
   <data name="Tutorial.image-rotate.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-rotate.Step2" xml:space="preserve"><value>2. Press Q to rotate left or W to rotate right.</value></data>
@@ -4130,8 +4130,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tutorial.library-move.Step2" xml:space="preserve"><value>2. Press M and choose the destination folder.</value></data>
   <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. Click Move to folder, then find the captures in that folder.</value></data>
   <data name="Tutorial.library-delete.Step1" xml:space="preserve"><value>1. Select an item to delete in the library.</value></data>
-  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Press Del and confirm the deletion in the dialog.</value></data>
-  <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. Review the list. Bring items back with Restore recently deleted in the library.</value></data>
+  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Press Del, then click Move to Recycle Bin in the dialog.</value></data>
+  <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. Undo on the status line or Ctrl+Z restores what you just deleted. Earlier deletions come back from Restore recently deleted.</value></data>
   <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. Select a recording in the library and click Edit video.</value></data>
   <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. Press Space in the video editor to play.</value></data>
   <data name="Tutorial.video-play.Step3" xml:space="preserve"><value>3. Press Space again to pause at the scene you want.</value></data>

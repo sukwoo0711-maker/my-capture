@@ -15,15 +15,18 @@ namespace MyCapture.TutorialGenerator.Scenes;
 
 /// <summary>
 /// The library clips: the real GalleryWindow over a fixture queue, the real tray menu, folder and
-/// confirmation dialogs and the real image editor. Selection, folder navigation and dialog buttons
-/// run through the product's own handlers and queue operations.
+/// confirmation dialogs and the real image editor. Selection, folder navigation, dialog buttons and
+/// deletion run through the product's own handlers and queue operations.
 /// </summary>
 /// <remarks>
-/// The library's key handlers (Ctrl+Shift+N, F2, M, Del, Enter) open their dialogs with
-/// ShowDialog, which would block the generator and activate a window. For those keys the scene
-/// builds the same dialog the handler builds (GalleryFolderEditDialog.ForName/ForMove,
-/// ThemedDialog, GalleryEditorWindow) with the same arguments, shows it off screen, and after the
-/// dialog closes does what the handler does next (refresh, navigate, status line).
+/// The library's key handlers (Ctrl+Shift+N, F2, M, Enter) open their dialogs with ShowDialog,
+/// which would block the generator and activate a window. For those keys the scene builds the
+/// same dialog the handler builds (GalleryFolderEditDialog.ForName/ForMove, GalleryEditorWindow)
+/// with the same arguments, shows it off screen, and after the dialog closes does what the handler
+/// does next (refresh, navigate, status line). Del runs the product's own
+/// GalleryWindow.DeleteCapturesAsync; only its confirmation, the dialog
+/// LibraryPermanentDeletion.CreateRecycleConfirmation builds, is shown off screen and answered
+/// with its own button first.
 /// </remarks>
 internal sealed class LibraryScene : TutorialScene
 {
@@ -38,7 +41,7 @@ internal sealed class LibraryScene : TutorialScene
     private readonly LibraryFixture _library;
     private readonly Shown _gallery;
     private readonly List<OffscreenWindow> _hosts = [];
-    private Shown? _dialog, _status, _editor;
+    private Shown? _dialog, _editor;
     private TextBox? _nameBox;
     private string _typedName = string.Empty, _initialName = string.Empty;
     private int _typedCount;
@@ -51,7 +54,7 @@ internal sealed class LibraryScene : TutorialScene
     private readonly Dictionary<string, (PointD Planned, Func<FrameworkElement> Target)> _pointerChecks = [];
     private CaptureRecord? _target;
     private CaptureFolder? _destination;
-    private bool _libraryOpen = true;
+    private bool _libraryOpen = true, _deleted;
 
     // Tray menu (library-open).
     private ContextMenu? _menu;
@@ -79,10 +82,12 @@ internal sealed class LibraryScene : TutorialScene
 
     internal override string Provenance =>
         "Real GalleryWindow over a fixture CaptureQueue (temporary AppPaths under the output folder, synthetic captures), "
-        + "real tray ContextMenu from ThemedShellPresenter.CreateMenu(TrayMenuLayout.Build), real GalleryFolderEditDialog, "
-        + "ThemedDialog and GalleryEditorWindow; selection, folder navigation, folder create/rename, capture move and "
-        + "removal run through the product's view model, handlers and queue. Removal uses the queue's recoverable-removal "
-        + "seam pointed at a folder inside the fixture, never the Recycle Bin. Taskbar and desktop are synthetic.";
+        + "real tray ContextMenu from ThemedShellPresenter.CreateMenu(TrayMenuLayout.Build) with every command App wires, "
+        + "real GalleryFolderEditDialog, LibraryPermanentDeletion.CreateRecycleConfirmation and GalleryEditorWindow; "
+        + "selection, folder navigation, folder create/rename and capture move run through the product's view model, "
+        + "handlers and queue, and deletion through GalleryWindow.DeleteCapturesAsync with a real RecoverableLibraryService "
+        + "(status line result with Undo) whose trash is a folder inside the fixture, never the Recycle Bin. "
+        + "Taskbar and desktop are synthetic.";
 
     private GalleryWindow Gallery => _library.Window;
 
@@ -186,12 +191,8 @@ internal sealed class LibraryScene : TutorialScene
     {
         _libraryOpen = false;
         _target = _library.Records["dashboard"];
-        HotkeySettings keys = NewInstallDefaults.Create().Hotkeys;
-        static void Nothing() { }
-        var commands = new TrayMenuCommands(Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing,
-            Library: () => _libraryOpen = true, Nothing, Nothing, Nothing);
         // The tray menu exactly as the tray builds it; rendered detached (a popup would land on screen).
-        _menu = new ThemedShellPresenter(() => true).CreateMenu(TrayMenuLayout.Build(commands, keys, canRestoreClosedPin: false, scrollingActive: false));
+        _menu = new ThemedShellPresenter(() => true).CreateMenu(TrayMenu.Entries(library: () => _libraryOpen = true));
         LayoutMenu();
         _libraryItem = _menu.Items.OfType<MenuItem>().First(item => Equals(item.Header, UiText.Get("Text_8739F6684453")));
         PointD tray = Taskbar.TrayIcon;
@@ -304,28 +305,36 @@ internal sealed class LibraryScene : TutorialScene
         var story = new TutorialStoryboard(Rest);
         story.Hold("open", 0.8);
         story.Move("tile-move", TilePoint(_target, onTitle: true)).Click("tile-click").Hold("selected", 0.6);
-        // ConfirmDeleteMany: the themed confirmation, Cancel as the default.
-        var confirm = new ThemedDialog(UiText.Format("LibrarySelection_DeleteConfirm", 1), UiText.Get("LibrarySelection_Delete"),
-            MessageBoxButton.OKCancel, MessageBoxResult.Cancel);
-        _dialog = OpenDialog(confirm);
-        story.Hold("key", 0.5).Hold("dialog", 0.8);
-        story.Move("ok-move", _dialog.Of(DialogButton(_dialog, "Dialog.OK"))).Click("ok");
-        // The result line the handler shows next (ShowStatus): measured on an identical dialog.
-        PointD close;
-        using (var probe = new OffscreenWindow(new ThemedDialog(UiText.Format("LibrarySelection_Removed", 1, 0), "MyCapture",
-            MessageBoxButton.OK, MessageBoxResult.None), 500, 300, show: false))
-        {
-            probe.Window.SizeToContent = SizeToContent.Height;
-            probe.Window.Show();
-            Settle(150);
-            Shown measured = Placed(probe);
-            close = measured.Of(DialogButton(measured, "Dialog.Close"));
-        }
-
-        story.Hold("removed", 1.6);
-        story.Move("close-move", close).Click("close").Hold("closed", 0.4);
-        _pointerChecks["close-move"] = (close, () => DialogButton(_status!, "Dialog.Close"));
+        // Del → DeleteCapturesAsync asks LibraryPermanentDeletion.ConfirmRecycle first: the dialog it
+        // builds ([Move to Recycle Bin] in the danger style, Cancel as the default), shown off screen.
+        // It asks about the selection, which the click makes this one capture (checked when Del runs).
+        _dialog = OpenDialog(LibraryPermanentDeletion.CreateRecycleConfirmation(1, entireLibrary: false));
+        story.Hold("key", 0.5).Hold("dialog", 1.0);
+        story.Move("ok-move", _dialog.Of(DialogButton(_dialog, "LibrarySelection_MoveToRecycleBin"))).Click("ok").Hold("removed", 1.4);
+        // The result goes to the status line with Undo beside it; the pointer goes to Undo.
+        PointD undo = MeasureUndo();
+        story.Move("undo-move", undo).Hold("undo", 1.8);
+        _pointerChecks["undo-move"] = (undo, () => Gallery.LibraryStatusAction);
         return story.Finish("result", 11);
+    }
+
+    /// <summary>
+    /// Where Undo lands on the status line once DeleteCapturesAsync reports one recycled capture:
+    /// the line is laid out with the same words (GalleryWindow.DeleteStatus) and hidden again; the
+    /// pointer check compares it with the real line when the clip reaches it.
+    /// </summary>
+    private PointD MeasureUndo()
+    {
+        Gallery.LibraryActionStatus.Text = GalleryWindow.DeleteStatus(1, new CaptureBatchRemovalResult(1, 0), null);
+        Gallery.LibraryStatusAction.Content = UiText.Get("LibraryUndo_Action");
+        Gallery.LibraryStatusActionPanel.Visibility = Visibility.Visible;
+        Settle(60);
+        PointD point = _gallery.Of(Gallery.LibraryStatusAction);
+        Gallery.LibraryStatusActionPanel.Visibility = Visibility.Collapsed;
+        Gallery.LibraryStatusAction.Content = null;
+        Gallery.LibraryActionStatus.Text = string.Empty;
+        Settle(60);
+        return point;
     }
 
     private Shown Placed(OffscreenWindow host)
@@ -382,7 +391,6 @@ internal sealed class LibraryScene : TutorialScene
         if (_libraryOpen) _gallery.Draw(dc);
         if (_editor is { Visible: true }) _editor.Draw(dc);
         if (_dialog is { Visible: true }) { _dialog.Draw(dc); DrawCaret(dc); }
-        if (_status is { Visible: true }) _status.Draw(dc);
         if (_menuOpen && _menu is not null) DrawMenu(dc);
         (string caption, string key) = Caption(frame.Segment);
         if (frame.Pressed) Stage.DrawClick(dc, frame.Cursor, frame.Progress);
@@ -395,7 +403,7 @@ internal sealed class LibraryScene : TutorialScene
         if (frame.IsFirst && _pointerChecks.TryGetValue(frame.Segment, out var check))
         {
             FrameworkElement target = check.Target();
-            PointD actual = (_status is { Visible: true } && _status.Host.Window.IsAncestorOf(target) ? _status : _gallery).Of(target);
+            PointD actual = _gallery.Of(target);
             if (Math.Abs(actual.X - check.Planned.X) > 2 || Math.Abs(actual.Y - check.Planned.Y) > 2)
                 throw new InvalidOperationException($"'{frame.Segment}' points at ({check.Planned.X:0},{check.Planned.Y:0}) but its target is now at ({actual.X:0},{actual.Y:0}).");
         }
@@ -430,7 +438,7 @@ internal sealed class LibraryScene : TutorialScene
                 // Selecting the tree row runs the tree's own SelectedItemChanged handler.
                 Node((_feature == "folder-rename" ? _library.ReferenceFolder : _destination!).Id).IsSelected = true;
                 break;
-            case "dialog" when _dialog is { Visible: false } && _status is null:
+            case "dialog" when _dialog is { Visible: false } && !_deleted:
                 ShowDialogNow();
                 break;
             case "typing":
@@ -450,13 +458,6 @@ internal sealed class LibraryScene : TutorialScene
                 break;
             case "ok" when frame.IsLast:
                 Delete();
-                break;
-            case "close" when frame.IsLast && _status is not null:
-                DialogButton(_status, "Dialog.Close").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                _status.Visible = false;
-                // ConfirmDeleteMany's finally block, once the result dialog is closed.
-                ViewModel.Refresh();
-                ViewModel.SetThumbnailLoadingEnabled(Gallery.IsVisible);
                 break;
         }
 
@@ -514,21 +515,22 @@ internal sealed class LibraryScene : TutorialScene
 
     private void Delete()
     {
-        // The confirmation's own OK button records the result and closes the dialog.
+        // The danger button records OK and closes the dialog, as it does over the library.
         var confirm = (ThemedDialog)_dialog!.Host.Window;
-        DialogButton(_dialog, "Dialog.OK").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        DialogButton(_dialog, "LibrarySelection_MoveToRecycleBin").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         _dialog.Visible = false;
         if (confirm.Result != MessageBoxResult.OK) throw new InvalidOperationException("The confirmation did not return OK.");
         Settle(60);
-        // ConfirmDeleteMany after OK: the removal, then the result shown in a ThemedDialog.
-        Guid[] targets = [_target!.Id];
-        foreach (Guid id in targets) ViewModel.FindTile(id)?.SetThumbnailLoadingEnabled(false);
-        CaptureBatchRemovalResult result = LibraryFixture.Wait(_library.Queue.RemoveManyAsync(targets, _library.CanRemove));
-        if (result.RemovedCount != 1 || result.CleanupPendingCount != 0)
-            throw new InvalidOperationException($"The fixture removal did not complete: {result}.");
-        string status = UiText.Format("LibrarySelection_Removed", result.RemovedCount, targets.Length - result.RemovedCount);
-        _status = OpenDialog(new ThemedDialog(status, "MyCapture", MessageBoxButton.OK, MessageBoxResult.None));
-        _status.Visible = true;
+        // Del runs DeleteCapturesAsync over the selection (ConfirmDeleteMany); its confirmation is
+        // the dialog just answered, asked about exactly this selection.
+        Guid[] selected = [.. ViewModel.Selection.SelectedIds];
+        if (selected.Length != 1 || selected[0] != _target!.Id)
+            throw new InvalidOperationException("The click did not select exactly the capture the confirmation asked about.");
+        Gallery.ConfirmDelete = (count, entireLibrary) => count == 1 && !entireLibrary && confirm.Result == MessageBoxResult.OK;
+        LibraryFixture.Wait(Gallery.DeleteCapturesAsync(selected));
+        _deleted = true;
+        if (ViewModel.FindTile(_target.Id) is not null || Gallery.StatusActionLabelForTest != UiText.Get("LibraryUndo_Action"))
+            throw new InvalidOperationException("The delete did not leave the list with Undo on the status line.");
     }
 
     // ---- Tray menu ----------------------------------------------------------------------------
@@ -564,7 +566,7 @@ internal sealed class LibraryScene : TutorialScene
     private Stage.PointerKind PointerAt(PointD stage)
     {
         if (_menuOpen && _libraryItem is not null && MenuItemContains(_libraryItem, stage)) return Stage.PointerKind.Hand;
-        foreach (Shown? window in new[] { _status, _dialog, _editor, _libraryOpen ? _gallery : null })
+        foreach (Shown? window in new[] { _dialog, _editor, _libraryOpen ? _gallery : null })
         {
             if (window is not { Visible: true } || !window.Contains(stage)) continue;
             if (window.Host.ClientRoot.InputHitTest(window.Local(stage)) is not DependencyObject hit) return Stage.PointerKind.Arrow;
@@ -589,54 +591,62 @@ internal sealed class LibraryScene : TutorialScene
         switch (_feature)
         {
             case "library-open":
+                string library = Ui("Text_8739F6684453");
                 return segment switch
                 {
                     "desktop" or "tray-move" or "tray-click" or "menu" =>
                         (L("알림 영역의 MyCapture 아이콘을 마우스 오른쪽 단추로 클릭", "Right-click the MyCapture icon in the notification area"), ""),
-                    "item-move" or "item-hover" or "item-click" => (L("트레이 메뉴에서 라이브러리 선택", "Choose Library in the tray menu"), ""),
-                    "library" or "tile-move" or "tile-click" or "selected" => (L("확인할 이미지나 녹화 항목 선택", "Select an image or recording"), ""),
+                    "item-move" or "item-hover" or "item-click" => (L($"트레이 메뉴에서 {library} 선택", $"Choose {library} in the tray menu"), ""),
+                    "library" or "tile-move" or "tile-click" or "selected" => (L("확인할 이미지나 동영상 선택", "Select an image or video"), ""),
                     "enter" => (L("Enter: 이미지 편집기에서 열기", "Enter opens the image in the editor"), "Enter"),
-                    _ => (L("이미지는 편집기, 녹화는 재생 창에서 열림", "Images open in the editor, recordings in the player"), ""),
+                    _ => (L("이미지는 편집기, 동영상은 재생 창에서 열림", "Images open in the editor, videos in the player"), ""),
                 };
             case "folder-create":
+                string create = Label(DialogSave);
                 return segment switch
                 {
                     "open" => (L("라이브러리 열기", "Open the library"), ""),
-                    "key" or "dialog" => (L("Ctrl+Shift+N: 새 폴더", "Ctrl+Shift+N: New folder"), "Ctrl+Shift+N"),
+                    "key" or "dialog" => ($"{FeatureKeys}: {Ui("Folder410.NewFolder")}", FeatureKeys),
                     "typing" or "typed" => (L("새 폴더 이름 입력", "Type the new folder's name"), ""),
-                    "save-move" or "save" => (L("만들기 선택 또는 Enter", "Click Create or press Enter"), "Enter"),
+                    "save-move" or "save" => (L($"{create} 선택 또는 Enter", $"Click {create} or press Enter"), "Enter"),
                     _ => (L("폴더 목록에 새 폴더가 나타나고 열림", "The new folder appears in the folder list and opens"), ""),
                 };
             case "folder-rename":
+                string save = Label(DialogSave);
                 return segment switch
                 {
                     "open" or "tree-move" or "tree-click" or "selected" => (L("폴더 목록에서 이름을 바꿀 폴더 선택", "Select the folder in the folder list"), ""),
-                    "key" or "dialog" => (L("F2: 이름 변경", "F2: Rename"), "F2"),
+                    "key" or "dialog" => ($"{FeatureKeys}: {Ui("Folder410.Rename")}", FeatureKeys),
                     "typing" or "typed" => (L("새 이름 입력", "Type the new name"), ""),
-                    "save-move" or "save" => (L("저장 선택 또는 Enter", "Click Save or press Enter"), "Enter"),
+                    "save-move" or "save" => (L($"{save} 선택 또는 Enter", $"Click {save} or press Enter"), "Enter"),
                     _ => (L("바뀐 폴더 이름 확인", "Check the new folder name"), ""),
                 };
             case "library-move":
+                string move = Label(DialogSave), destination = Ui("Folder410.Destination");
                 return segment switch
                 {
                     "open" or "tile-move" or "tile-click" or "selected" => (L("이동할 캡처 선택", "Select the capture to move"), ""),
-                    "key" or "dialog" => (L("M: 폴더로 이동", "M: Move to folder"), "M"),
-                    "choose-move" or "choose" or "chosen" => (L("이동 위치에서 대상 폴더 선택", "Choose the folder under Destination"), ""),
-                    "save-move" or "save" => (L("폴더로 이동 선택", "Click Move to folder"), ""),
+                    "key" or "dialog" => ($"{FeatureKeys}: {Ui("Folder410.MoveCaptures")}", FeatureKeys),
+                    "choose-move" or "choose" or "chosen" => (L($"{destination}에서 대상 폴더 선택", $"Choose the folder under {destination}"), ""),
+                    "save-move" or "save" => (L($"{move} 선택", $"Click {move}"), ""),
                     "moved" => (L("캡처가 대상 폴더로 이동됨", "The capture moves to the folder"), ""),
                     _ => (L("대상 폴더에서 캡처 확인", "Find the capture in that folder"), ""),
                 };
             default:
+                string recycle = Ui("LibrarySelection_MoveToRecycleBin"), undo = Ui("LibraryUndo_Action");
                 return segment switch
                 {
                     "open" or "tile-move" or "tile-click" or "selected" => (L("삭제할 항목 선택", "Select the item to delete"), ""),
-                    "key" or "dialog" => (L("Del: 삭제 확인 창 열기", "Del asks for confirmation"), "Del"),
-                    "ok-move" or "ok" => (L("확인 창에서 확인 선택", "Click OK in the confirmation"), ""),
-                    "removed" or "close-move" or "close" => (L("라이브러리에서 삭제됨", "Removed from the library"), ""),
-                    _ => (L("목록 확인 · 필요한 항목은 최근 삭제 복원으로 되돌림", "Check the list · Restore recently deleted brings items back"), ""),
+                    "key" or "dialog" => (L($"{FeatureKeys}: {recycle} 확인", $"{FeatureKeys}: confirm {recycle}"), FeatureKeys),
+                    "ok-move" or "ok" => (L($"{recycle} 선택", $"Click {recycle}"), ""),
+                    "removed" => (L("목록에서 바로 사라지고 상태 줄에 결과 표시", "It leaves the list and the status line shows the result"), ""),
+                    _ => (L($"상태 줄의 {undo} 또는 Ctrl+Z로 복원", $"{undo} on the status line or Ctrl+Z brings it back"), ""),
                 };
         }
     }
+
+    /// <summary>The open folder dialog's confirming button (Create, Save or Move to folder).</summary>
+    private Button DialogSave => ((GalleryFolderEditDialog)(_dialog ?? throw new InvalidOperationException("No folder dialog.")).Host.Window).SaveButton;
 
     public override void Dispose()
     {

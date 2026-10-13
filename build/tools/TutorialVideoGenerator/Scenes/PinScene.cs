@@ -173,11 +173,10 @@ internal sealed class PinScene : TutorialScene
     {
         LivePin pin = AddPin(TablePin(), new Point(600, 140));
         var shell = new ThemedShellPresenter(static () => true);
-        Action none = static () => { };
-        var commands = new TrayMenuCommands(none, none, none, none, none, none, none, none, Reopen, none, none, none, none);
         var tray = new PointD(TrayIconBounds.X + TrayIconBounds.Width / 2, TrayIconBounds.Y + TrayIconBounds.Height / 2);
-        // The tray menu is rebuilt on every open; a closed pin is waiting when this one opens.
-        _trayMenu = new MenuView(shell.CreateMenu(TrayMenuLayout.Build(commands, _hotkeys, canRestoreClosedPin: true, scrollingActive: false)),
+        // The tray menu is rebuilt on every open: when this one opens, the only pin is closed (no
+        // pin is open, so Hide all pins is absent) and it can come back.
+        _trayMenu = new MenuView(shell.CreateMenu(TrayMenu.Entries(new TrayMenuState(CanRestoreClosedPin: true, PinCount: 0), restoreClosedPin: Reopen)),
             new Point(tray.X, tray.Y));
         _menuTarget = _trayMenu.Item(UiText.Get("Onboard_TrayReopenPin"));
         var story = new TutorialStoryboard(new PointD(470, 400));
@@ -716,62 +715,76 @@ internal sealed class PinScene : TutorialScene
 
     // ---- Captions -------------------------------------------------------------------------------
 
-    private (string Caption, string Key) Caption(string segment) => _feature switch
+    private (string Caption, string Key) Caption(string segment)
     {
-        "pin-clipboard" => segment switch
+        return _feature switch
         {
-            "open" or "to-text" or "select-text" or "selected" => (L("핀으로 띄울 텍스트 선택", "Select the text to pin"), ""),
-            "copy" => (L("Ctrl+C로 클립보드에 복사", "Copy it to the clipboard with Ctrl+C"), "Ctrl+C"),
-            "shortcut" => (L("지정된 클립보드를 핀으로 띄우기 단축키 누름", "Press your Pin clipboard to screen shortcut"), ""),
-            "pinned" => (L("클립보드 내용이 핀으로 화면에 표시됨", "The clipboard content appears as a pin"), ""),
-            "drag" or "moved" => (L("핀을 드래그하여 원하는 위치로 이동", "Drag the pin where you need it"), ""),
-            "esc" => (L("Esc로 핀 닫기", "Press Esc to close the pin"), "Esc"),
-            _ => (L("핀 닫힘", "The pin is closed"), ""),
-        },
-        "pin-hide-all" => segment switch
-        {
-            "pins" => (L("화면에 띄운 핀 두 개", "Two pins on the screen"), ""),
-            "hide" => (L("지정된 핀 모두 숨기기 단축키 누름", "Press your Hide all pins shortcut"), ""),
-            "hidden" => (L("모든 핀이 숨겨져 아래 창이 보임", "All pins are hidden and the window below shows"), ""),
-            "show" => (L("같은 단축키를 다시 누름", "Press the same shortcut again"), ""),
-            "returned" => (L("핀이 같은 위치에 다시 표시됨", "The pins return to the same places"), ""),
-            _ => (L("가려졌던 메모를 바로 편집", "Edit the note the pins were covering"), ""),
-        },
-        "pin-click-through" => segment switch
-        {
-            "open" or "to-pin" or "hover" or "right-click" => (L("핀에서 오른쪽 클릭", "Right-click the pin"), ""),
-            "menu" or "to-item" or "item" or "choose" => (L("메뉴에서 뒤 창 클릭 허용 선택", "Choose Click through to windows behind"), ""),
-            "through" => (L("뒤 창 클릭 허용 켜짐 · 핀이 클릭을 받지 않음", "Click-through is on · the pin no longer takes clicks"), ""),
-            "result" => (L("핀은 계속 표시됨 · 지정된 단축키로 해제", "The pin stays visible · your assigned shortcut turns it off"), ""),
-            _ => (L("핀 아래 앱을 그대로 조작", "Use the app underneath the pin"), ""),
-        },
-        "pin-restore" => segment switch
-        {
-            "open" or "to-pin" or "select" or "selected" => (L("닫을 핀을 클릭하여 선택", "Click the pin to select it"), ""),
-            "esc" => (L("Esc로 핀 닫기", "Press Esc to close the pin"), "Esc"),
-            "closed" => (L("핀 닫힘", "The pin is closed"), ""),
-            "to-tray" or "tray-click" => (L("알림 영역의 MyCapture 아이콘을 오른쪽 클릭", "Right-click the MyCapture icon in the notification area"), ""),
-            "restored" => (L("최근에 닫은 핀이 같은 위치에 다시 열림", "The most recently closed pin reopens in the same place"), ""),
-            _ => (L("닫은 핀 다시 열기 선택 · 지정된 단축키도 같은 동작", "Choose Reopen closed pin · your assigned shortcut does the same"), ""),
-        },
-        "pin-copy" => segment switch
-        {
-            "open" or "to-pin" or "select" or "selected" => (L("복사할 핀을 클릭하여 선택", "Click the pin to select it"), ""),
-            "copy" or "copied" => (L("Ctrl+C로 핀 이미지 복사", "Press Ctrl+C to copy the pin image"), "Ctrl+C"),
-            "to-note" or "note-click" or "caret" => (L("붙여 넣을 앱을 클릭", "Click the app to paste into"), ""),
-            "paste" => (L("Ctrl+V로 붙여 넣기", "Paste with Ctrl+V"), "Ctrl+V"),
-            _ => (L("이미지 붙여 넣음 · 핀은 그대로 열려 있음", "The image is pasted · the pin stays open"), ""),
-        },
-        _ => segment switch
-        {
-            "open" or "to-pin" or "select" or "selected" => (L("저장할 핀을 클릭하여 선택", "Click the pin to select it"), ""),
-            "save" or "saved" => (L("Ctrl+S로 빠른 저장 폴더에 바로 저장", "Ctrl+S saves straight to the quick-save folder"), "Ctrl+S"),
-            "to-bar-save" or "bar-save" => (L("핀 위 도구 막대의 저장도 같은 동작", "Save on the pin's toolbar does the same"), ""),
-            _ => (L("빠른 저장 폴더에 PNG 저장됨 · 다른 위치는 Ctrl+Shift+S", "PNG saved to the quick-save folder · Ctrl+Shift+S picks another place"), ""),
-        },
-    };
+            "pin-clipboard" => segment switch
+            {
+                "open" or "to-text" or "select-text" or "selected" => (L("핀으로 띄울 텍스트 선택", "Select the text to pin"), ""),
+                "copy" => (L("Ctrl+C로 클립보드에 복사", "Copy it to the clipboard with Ctrl+C"), "Ctrl+C"),
+                "shortcut" => (L($"지정된 {Ui("Text_1FBCF51E2FF5")} 단축키 누름", $"Press your {Ui("Text_1FBCF51E2FF5")} shortcut"), ""),
+                "pinned" => (L("클립보드 내용이 핀으로 화면에 표시됨", "The clipboard content appears as a pin"), ""),
+                "drag" or "moved" => (L("핀을 드래그하여 원하는 위치로 이동", "Drag the pin where you need it"), ""),
+                "esc" => (L($"{CloseGesture}로 핀 닫기", $"Press {CloseGesture} to close the pin"), CloseGesture),
+                _ => (L("핀 닫힘", "The pin is closed"), ""),
+            },
+            "pin-hide-all" => segment switch
+            {
+                "pins" => (L("화면에 띄운 핀 두 개", "Two pins on the screen"), ""),
+                "hide" => (L($"지정된 {Ui("Tray_HideAllPins")} 단축키 누름", $"Press your {Ui("Tray_HideAllPins")} shortcut"), ""),
+                "hidden" => (L("모든 핀이 숨겨져 아래 창이 보임", "All pins are hidden and the window below shows"), ""),
+                "show" => (L("같은 단축키를 다시 누름", "Press the same shortcut again"), ""),
+                "returned" => (L("핀이 같은 위치에 다시 표시됨", "The pins return to the same places"), ""),
+                _ => (L("가려졌던 메모를 바로 편집", "Edit the note the pins were covering"), ""),
+            },
+            "pin-click-through" => segment switch
+            {
+                "open" or "to-pin" or "hover" or "right-click" => (L("핀에서 오른쪽 클릭", "Right-click the pin"), ""),
+                "menu" or "to-item" or "item" or "choose" =>
+                    (L($"메뉴에서 {Ui("Onboard_PinAllowClickThrough")} 선택", $"Choose {Ui("Onboard_PinAllowClickThrough")}"), ""),
+                "through" => (L($"{Ui("Onboard_PinAllowClickThrough")} 켜짐 · 핀이 클릭을 받지 않음", "Click-through is on · the pin no longer takes clicks"), ""),
+                // The way back the pin's own feedback names for the current shortcuts.
+                "result" => (L($"핀은 계속 표시됨 · 해제: {PinWindow.ClickThroughRecoveryHint()}",
+                    $"The pin stays visible · Turn off: {PinWindow.ClickThroughRecoveryHint()}"), ""),
+                _ => (L("핀 아래 앱을 그대로 조작", "Use the app underneath the pin"), ""),
+            },
+            "pin-restore" => segment switch
+            {
+                "open" or "to-pin" or "select" or "selected" => (L("닫을 핀을 클릭하여 선택", "Click the pin to select it"), ""),
+                "esc" => (L($"{CloseGesture}로 핀 닫기", $"Press {CloseGesture} to close the pin"), CloseGesture),
+                "closed" => (L("핀 닫힘", "The pin is closed"), ""),
+                "to-tray" or "tray-click" => (L("알림 영역의 MyCapture 아이콘을 오른쪽 클릭", "Right-click the MyCapture icon in the notification area"), ""),
+                "restored" => (L("최근에 닫은 핀이 같은 위치에 다시 열림", "The most recently closed pin reopens in the same place"), ""),
+                _ => (L($"{Ui("Onboard_TrayReopenPin")} 선택 · 지정된 단축키도 같은 동작", $"Choose {Ui("Onboard_TrayReopenPin")} · your assigned shortcut does the same"), ""),
+            },
+            "pin-copy" => segment switch
+            {
+                "open" or "to-pin" or "select" or "selected" => (L("복사할 핀을 클릭하여 선택", "Click the pin to select it"), ""),
+                "copy" or "copied" => (L($"{FeatureKeys}로 핀 이미지 복사", $"Press {FeatureKeys} to copy the pin image"), FeatureKeys),
+                "to-note" or "note-click" or "caret" => (L("붙여 넣을 앱을 클릭", "Click the app to paste into"), ""),
+                "paste" => (L("Ctrl+V로 붙여 넣기", "Paste with Ctrl+V"), "Ctrl+V"),
+                _ => (L("이미지 붙여 넣음 · 핀은 그대로 열려 있음", "The image is pasted · the pin stays open"), ""),
+            },
+            _ => segment switch
+            {
+                "open" or "to-pin" or "select" or "selected" => (L("저장할 핀을 클릭하여 선택", "Click the pin to select it"), ""),
+                "save" or "saved" => (L($"{FeatureKeys}로 빠른 저장 폴더에 바로 저장", $"{FeatureKeys} saves straight to the quick-save folder"), FeatureKeys),
+                "to-bar-save" or "bar-save" => (L($"핀 위 도구 막대의 {Ui("QuickAccess.Save")}도 같은 동작", $"{Ui("QuickAccess.Save")} on the pin's toolbar does the same"), ""),
+                _ => (L($"빠른 저장 폴더에 PNG 저장됨 · 다른 위치는 {SaveAsGesture}", $"PNG saved to the quick-save folder · {SaveAsGesture} picks another place"), ""),
+            },
+        };
+    }
 
     // ---- Helpers --------------------------------------------------------------------------------
+
+    /// <summary>The key the pin's own menu gives Close.</summary>
+    private string CloseGesture => MenuCommand(FirstPin, "Dialog.Close").InputGestureText;
+
+    /// <summary>The key the pin's own menu gives Save as.</summary>
+    private string SaveAsGesture => MenuCommand(FirstPin, "Text_A81F975C401F").InputGestureText;
+
+    private PinWindow FirstPin => _pins.FirstOrDefault()?.Window ?? throw new InvalidOperationException("No pin is open yet.");
 
     private static PointD Center(Rect rect) => new(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
 

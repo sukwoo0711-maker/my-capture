@@ -1409,7 +1409,11 @@ internal sealed class PinWindow : Window
         return key.IsAssigned ? key.ToString() : string.Empty;
     }
 
-    private static string ClickThroughRecoveryHint()
+    /// <summary>
+    /// How to turn click-through off again with the current shortcuts. The pin's feedback says it;
+    /// the tutorial clip generator shows the same words in its caption.
+    /// </summary>
+    internal static string ClickThroughRecoveryHint()
     {
         HotkeySettings keys = ShortcutHelpWindow.ReadHotkeys();
         return keys.ToggleClickThrough.IsAssigned ? keys.ToggleClickThrough.ToString()

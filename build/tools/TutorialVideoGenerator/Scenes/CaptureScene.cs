@@ -300,12 +300,8 @@ internal sealed class CaptureScene : TutorialScene
 
     // ---- Tray menu -----------------------------------------------------------------------------
 
-    private List<ThemedShellPresenter.MenuEntry> TrayMenuEntries()
-    {
-        Action noop = () => { };
-        var commands = new TrayMenuCommands(noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop);
-        return TrayMenuLayout.Build(commands, new HotkeySettings(), canRestoreClosedPin: false, scrollingActive: false).ToList();
-    }
+    /// <summary>The tray menu as the app builds it for a new installation (see <see cref="TrayMenu"/>).</summary>
+    private static List<ThemedShellPresenter.MenuEntry> TrayMenuEntries() => [.. TrayMenu.Entries()];
 
     private (BitmapSource Root, Rect RootBounds, BitmapSource Sub, Rect SubBounds)? _trayMenus;
 
@@ -553,6 +549,12 @@ internal sealed class CaptureScene : TutorialScene
         DrawDesktop(dc, text);
     }
 
+    /// <summary>
+    /// The Text copied notification: the window ShowActionNotification presents, at its own width
+    /// (the card plus the transparent band its shadow draws into) and natural height, placed where
+    /// ThemedShellPresenter.NotificationBounds puts it in the work area above the taskbar. The
+    /// window draws its own card, border and shadow, so no frame is added.
+    /// </summary>
     private void DrawNotification(DrawingContext dc)
     {
         if (_notification is null)
@@ -561,18 +563,20 @@ internal sealed class CaptureScene : TutorialScene
             int characters = TextCaptureService.CountCharacters(Fixtures.TerminalCommand + "\n" + Fixtures.TerminalResult);
             Window card = presenter.CreateActionNotification(UiText.Get("TextCapture_Copied"),
                 UiText.Format("TextCapture_CopiedDetail", characters), UiText.Get("TextCapture_OpenAdvanced"), () => { });
-            card.SizeToContent = SizeToContent.Manual;
-            using var host = new OffscreenWindow(card, 360, 160);
+            using var host = new OffscreenWindow(card, card.Width, 200, show: false);
             card.SizeToContent = SizeToContent.Height;
-            Stage.Pump(60);
-            _notification = host.Snapshot();
+            card.Show();
+            Stage.Pump(60);            card.UpdateLayout();
+            FrameworkElement root = host.ClientRoot;
+            _notification = OffscreenWindow.SnapshotElement(root, root.ActualWidth, root.ActualHeight, opaque: false);
+            _notificationBounds = ThemedShellPresenter.NotificationBounds(new RectD(0, 0, SceneWidth, SceneHeight - TaskbarHeight), 1,
+                root.ActualWidth, root.ActualHeight);
         }
 
-        double w = _notification.PixelWidth / Stage.Scale, h = _notification.PixelHeight / Stage.Scale;
-        var bounds = new Rect(SceneWidth - w - 16, SceneHeight - TaskbarHeight - h - 12, w, h);
-        Stage.DrawWindowFrame(dc, bounds, string.Empty, caption: false);
-        dc.DrawImage(_notification, bounds);
+        dc.DrawImage(_notification, _notificationBounds);
     }
+
+    private Rect _notificationBounds;
 
     // ---- Recording -----------------------------------------------------------------------------
 
@@ -607,6 +611,8 @@ internal sealed class CaptureScene : TutorialScene
         if (state != "ready") window.PreviewRecordingForTest(paused: state == "paused", TimeSpan.FromSeconds(2));
         (_, Point origin) = RecordingPicture();
         Button button = primary ? window.PrimaryButtonForTest : window.PauseButtonForTest;
+        // Captions name the button by the words it shows in that state (녹화 시작, 중지, 일시 정지, 재개).
+        _buttonLabels[(primary, state)] = Label(button);
         Point center = button.TranslatePoint(new Point(button.ActualWidth / 2, button.ActualHeight / 2), (UIElement)window.Content);
         _recording = null; // a fresh window for the clip itself
         return new PointD(origin.X + center.X, origin.Y + center.Y);
@@ -638,6 +644,8 @@ internal sealed class CaptureScene : TutorialScene
 
     private double _recordingSeconds;
 
+    private readonly Dictionary<(bool Primary, string State), string> _buttonLabels = [];
+
     private void DrawVideoEditor(DrawingContext dc)
     {
         if (_videoHost is null)
@@ -668,11 +676,13 @@ internal sealed class CaptureScene : TutorialScene
     private (string Caption, string Key) Caption(TutorialFramePlan frame)
     {
         string s = frame.Segment;
+        string region = Ui("Text_2C20ADDA2018"), more = Ui("Onboard_TrayMoreCaptures");
+        string ButtonText(bool primary, string state) => _buttonLabels[(primary, state)];
         return _feature switch
         {
             "capture-region" => s switch
             {
-                "desktop" => (L("영역 캡처 시작", "Start a region capture"), ""),
+                "desktop" => (L($"{region} 시작", $"Start {region}"), ""),
                 "overlay" or "approach" => (L("캡처 선택 화면", "The capture selector opens"), ""),
                 "drag" or "selected" => (L("캡처할 부분을 드래그", "Drag over the area to capture"), ""),
                 _ => (L("편집기에서 결과 확인 · 클립보드와 라이브러리에 저장됨", "Review it in the editor · copied and saved to the library"), ""),
@@ -680,19 +690,21 @@ internal sealed class CaptureScene : TutorialScene
             "capture-window" => s switch
             {
                 "desktop" or "point" or "pointed" => (L("캡처할 창 위에 포인터를 놓기", "Point at the window to capture"), ""),
-                "shortcut" => (L("지정한 창 캡처 단축키 실행", "Use your assigned Window capture shortcut"), ""),
+                "shortcut" => (L($"지정한 {Ui("Text_EA1FBABE64F3")} 단축키 실행", $"Use your assigned {Ui("Text_EA1FBABE64F3")} shortcut"), ""),
                 _ => (L("포인터 아래 창의 캡처 결과 확인", "Review the window under the pointer"), ""),
             },
             "capture-fullscreen" => s switch
             {
                 "desktop" or "tray-move" or "tray-click" => (L("알림 영역의 MyCapture 아이콘을 오른쪽 클릭", "Right-click the MyCapture icon in the notification area"), ""),
-                "tray" or "to-more" or "submenu" or "to-command" or "command" => (L("다른 캡처 › 전체 화면 캡처 선택", "More captures › Full-screen capture"), ""),
+                "tray" or "to-more" or "submenu" or "to-command" or "command" =>
+                    (L($"{more} › {Ui("Text_65BB6610ACA0")} 선택", $"{more} › {Ui("Text_65BB6610ACA0")}"), ""),
                 _ => (L("해당 모니터의 전체 화면 캡처 결과 확인", "Review the full-screen capture of that monitor"), ""),
             },
             "capture-delay" => s switch
             {
                 "desktop" or "tray-move" or "tray-click" => (L("알림 영역의 MyCapture 아이콘을 오른쪽 클릭", "Right-click the MyCapture icon in the notification area"), ""),
-                "tray" or "to-more" or "submenu" or "to-command" or "command" => (L("다른 캡처 › 지연 캡처 선택", "More captures › Delayed capture"), ""),
+                "tray" or "to-more" or "submenu" or "to-command" or "command" =>
+                    (L($"{more} › {Ui("Text_38FF9B0AA541")} 선택", $"{more} › {Ui("Text_38FF9B0AA541")}"), ""),
                 "countdown-3" or "countdown-2" or "countdown-1" => (L("대기 시간 동안 캡처할 화면 준비", "Prepare the screen during the countdown"), ""),
                 "overlay" or "approach" or "drag" or "selected" => (L("선택 화면이 나타나면 영역을 드래그", "When the selector appears, drag the area"), ""),
                 _ => (L("편집기에서 결과 확인", "Review it in the editor"), ""),
@@ -700,39 +712,43 @@ internal sealed class CaptureScene : TutorialScene
             "capture-scroll" => s switch
             {
                 "desktop" or "point" or "pointed" => (L("스크롤할 창 위에 포인터를 놓기", "Point at the window to scroll"), ""),
-                "shortcut" or "scrolling" or "scrolled" => (L("지정한 스크롤 캡처 단축키 실행 · 자동 스크롤 대기", "Use your Scrolling capture shortcut and wait for the scroll"), ""),
+                "shortcut" or "scrolling" or "scrolled" => (L($"지정한 {Ui("Text_4DBA30197C0A")} 단축키 실행 · 자동 스크롤 대기",
+                    $"Use your {Ui("Text_4DBA30197C0A")} shortcut and wait for the scroll"), ""),
                 _ => (L("이어 붙인 캡처 확인 · 같은 명령으로 취소", "Review the stitched capture · the same command cancels"), ""),
             },
             "color-copy" => s switch
             {
-                "overlay" or "approach" => (L("영역 캡처에서 복사할 색상 위에 포인터 놓기", "In the selector, point at the color"), ""),
+                "overlay" or "approach" => (L($"{region}에서 복사할 색상 위에 포인터 놓기", "In the selector, point at the color"), ""),
                 "pixel" => (L("돋보기에서 색상 값 확인", "Check the value in the magnifier"), ""),
-                "copy-key" or "copied" => (L("C로 색상 값 복사", "Press C to copy the value"), "C"),
+                "copy-key" or "copied" => (L($"{FeatureKeys}로 색상 값 복사", $"Press {FeatureKeys} to copy the value"), FeatureKeys),
                 "closed" or "paste-move" or "paste-click" => (L("붙여 넣을 곳으로 이동", "Go to where you want it"), ""),
                 _ => (L("Ctrl+V로 붙여 넣기 · 형식은 색상 형식 설정을 따름", "Paste with Ctrl+V · the format follows your setting"), "Ctrl+V"),
             },
             "text-copy" => s switch
             {
                 "overlay" => (L("캡처 선택 화면", "The capture selector"), ""),
-                "text-key" or "text-mode" => (L("T로 텍스트 복사로 전환", "Press T to switch to copy text"), "T"),
+                "text-key" or "text-mode" => (L($"T로 {Ui("TextCapture_Title")}로 전환", $"Press T to switch to {Ui("TextCapture_Title").ToLowerInvariant()}"), "T"),
                 "approach" or "drag" or "selected" => (L("복사할 글자 영역을 드래그", "Drag over the words to copy"), ""),
-                "copied" => (L("자동으로 인식해 복사 · 텍스트 복사됨 알림", "Recognized and copied · Text copied notification"), ""),
+                "copied" => (L($"자동으로 인식해 복사 · {Ui("TextCapture_Copied")} 알림", $"Recognized and copied · {Ui("TextCapture_Copied")} notification"), ""),
                 "paste-move" or "paste-click" => (L("붙여 넣을 곳으로 이동", "Go to where you want the text"), ""),
                 _ => (L("Ctrl+V로 붙여 넣기", "Paste with Ctrl+V"), "Ctrl+V"),
             },
             "record-region" => s switch
             {
                 "record-overlay" or "approach" or "drag" => (L("녹화할 영역을 드래그", "Drag the area to record"), ""),
-                "ready" or "start-move" or "start" => (L("녹화 컨트롤에서 녹화 시작 선택", "Click Start recording in the recording controls"), ""),
+                "ready" or "start-move" or "start" => (L($"녹화 컨트롤에서 {ButtonText(true, "ready")} 선택",
+                    $"Click {ButtonText(true, "ready")} in the recording controls"), ""),
                 "recording" or "stop-move" => (L("녹화 중 · 화면을 조작", "Recording · work on the screen"), ""),
-                "stop" => (L("정지 선택", "Click Stop"), ""),
+                "stop" => (L($"{ButtonText(true, "recording")} 선택", $"Click {ButtonText(true, "recording")}"), ""),
                 _ => (L("동영상 편집기에서 결과 확인", "Review it in the video editor"), ""),
             },
             _ => s switch
             {
-                "recording" or "pause-move" => (L("녹화 중 일시정지 선택", "Click Pause while recording"), ""),
-                "pause" or "paused" => (L("일시정지 중에는 녹화되지 않음", "Paused time is not recorded"), ""),
-                "resume-move" or "resume" => (L("같은 버튼으로 녹화 이어가기", "Resume with the same button"), ""),
+                "recording" or "pause-move" => (L($"녹화 중 {ButtonText(false, "recording")} 선택", $"Click {ButtonText(false, "recording")} while recording"), ""),
+                "pause" or "paused" => (L($"{Ui("RecordingPause_State")} · 이 구간은 동영상에 포함되지 않음",
+                    $"{Ui("RecordingPause_State")} · this time is not in the video"), ""),
+                "resume-move" or "resume" => (L($"{ButtonText(false, "paused")} 선택으로 녹화 이어가기",
+                    $"Click {ButtonText(false, "paused")} to continue recording"), ""),
                 _ => (L("같은 영역 녹화가 이어짐", "Recording continues in the same area"), ""),
             },
         };

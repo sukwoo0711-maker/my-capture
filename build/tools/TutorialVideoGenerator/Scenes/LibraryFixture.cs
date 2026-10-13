@@ -14,22 +14,23 @@ using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Imaging;
+using MyCapture.Platform.Shell;
 
 namespace MyCapture.TutorialGenerator.Scenes;
 
 /// <summary>
 /// A real library over a fixture queue: CaptureQueue on a temporary AppPaths below the run's
 /// output folder, real records with synthetic captures, and the product's GalleryController,
-/// GalleryViewModel, CaptureCommitService, VideoLibraryService and GalleryWindow, built the way
-/// StoreScreenshotSelfTest.LibraryScene builds them. Removal never reaches the Recycle Bin: the
-/// queue's recoverable-removal seam moves a capture folder to a sibling folder in the fixture.
+/// GalleryViewModel, CaptureCommitService, VideoLibraryService, RecoverableLibraryService and
+/// GalleryWindow, built the way StoreScreenshotSelfTest.LibraryScene builds them. Removal never
+/// reaches the Recycle Bin: the recovery service's trash moves a capture folder to a folder inside
+/// the fixture, and its journal lives in the fixture's own data folder.
 /// </summary>
 internal sealed class LibraryFixture : IDisposable
 {
     private readonly ILoggerFactory _logs = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning));
     private readonly OcrResultPresenter _presenter;
     private readonly AppSettings _settings = new();
-    private readonly string _trash;
 
     internal LibraryFixture(bool korean)
     {
@@ -38,27 +39,23 @@ internal sealed class LibraryFixture : IDisposable
         string root = Path.Combine(Program.OutputFolder, "fixtures", "library-" + Guid.NewGuid().ToString("N")[..12]);
         Paths = AppPaths.CreateForRoot(root);
         Directory.CreateDirectory(Paths.CapturesRoot);
-        _trash = Path.Combine(root, "removed");
-        Directory.CreateDirectory(_trash);
-        Queue = new CaptureQueue(Paths, _settings.Queue, _logs.CreateLogger<CaptureQueue>())
-        {
-            // The product moves removed captures to the Recycle Bin through this seam; the
-            // fixture moves them to a folder inside itself and can move them back.
-            PrepareRemoval = (record, _) => FixtureRemoval.Move(Queue!.GetDirectory(record), Path.Combine(_trash, record.Id.ToString("N"))),
-        };
+        Queue = new CaptureQueue(Paths, _settings.Queue, _logs.CreateLogger<CaptureQueue>());
+        // What the app wires: user deletions go through the recovery service, which journals them
+        // (Undo, Restore recently deleted) and hands the folder to its trash.
+        Recovery = new RecoverableLibraryService(Queue, Paths, new FixtureTrash(Path.Combine(root, "removed")),
+            _logs.CreateLogger<RecoverableLibraryService>());
+        Queue.PrepareRemoval = Recovery.PrepareRemoval;
 
         // Folders from yesterday, so today's captures lead the library and the folders follow.
         DevelopmentFolder = Wait(Queue.CreateFolderAsync(L("개발 기록", "Development notes"), null, Now.AddDays(-1).AddHours(-3)));
         ReferenceFolder = Wait(Queue.CreateFolderAsync(L("참고 자료", "References"), null, Now.AddDays(-1).AddHours(-3)));
         foreach (Sample sample in Samples()) AddRecord(sample);
 
-        Controller = new GalleryController(Queue, _logs.CreateLogger<GalleryController>());
+        Controller = new GalleryController(Queue, _logs.CreateLogger<GalleryController>()) { Recovery = Recovery };
         var persistence = new CapturePersistenceService(Queue, Paths, () => _settings.Queue, _logs.CreateLogger<CapturePersistenceService>());
         var commit = new CaptureCommitService(persistence, () => _settings, () => Paths, _logs.CreateLogger<CaptureCommitService>(),
             (_, _) => Task.FromResult(true));
         var videoLibrary = new VideoLibraryService(Queue, Paths, _logs.CreateLogger<VideoLibraryService>());
-        // The library's own removal guard: never a capture that is being written or edited.
-        CanRemove = id => !commit.IsRecordBusy(id) && !videoLibrary.IsBusy(id);
         var ocr = new UxReviewSelfTest.FixtureOcr();
         _presenter = new OcrResultPresenter(ocr, System.Windows.Threading.Dispatcher.CurrentDispatcher, _ => { }, NullLogger.Instance);
         ViewModel = new GalleryViewModel(Controller,
@@ -91,7 +88,7 @@ internal sealed class LibraryFixture : IDisposable
 
     internal UxReviewSelfTest.FixturePrivacy Privacy { get; } = new();
 
-    internal Func<Guid, bool> CanRemove { get; }
+    internal RecoverableLibraryService Recovery { get; }
 
     /// <summary>
     /// The library's clock: the current minute, so the gallery and the editor (which reads the
@@ -320,25 +317,38 @@ internal sealed class LibraryFixture : IDisposable
         _logs.Dispose();
     }
 
-    /// <summary>Stands in for the Recycle Bin: a directory move inside the fixture, reversible.</summary>
-    private sealed class FixtureRemoval : ICaptureRemovalTransaction
+    /// <summary>
+    /// Stands in for the Recycle Bin: the recovery service's trash moves a capture folder into a
+    /// folder inside the fixture and back. No Shell call is made.
+    /// </summary>
+    private sealed class FixtureTrash(string root) : IRecoverableTrash
     {
-        private readonly string _from, _to;
+        private readonly Dictionary<string, RecycledPathReceipt> _receipts = new(StringComparer.OrdinalIgnoreCase);
 
-        private FixtureRemoval(string from, string to) { _from = from; _to = to; }
+        /// <summary>A moved directory keeps its creation time, which tells this folder from a new one at the same path.</summary>
+        public string GetIdentity(string path) =>
+            Directory.GetCreationTimeUtc(path).Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-        internal static ICaptureRemovalTransaction? Move(string from, string to)
+        public RecycledPathReceipt RecycleDirectory(string path)
         {
-            if (!Directory.Exists(from)) return null;
-            Directory.Move(from, to);
-            return new FixtureRemoval(from, to);
+            Directory.CreateDirectory(root);
+            string target = Path.Combine(root, Guid.NewGuid().ToString("N"));
+            string identity = GetIdentity(path);
+            Directory.Move(path, target);
+            var receipt = new RecycledPathReceipt(path, target, identity, "tutorial-fixture", true);
+            _receipts[path] = receipt;
+            return receipt;
         }
 
-        public bool Rollback()
+        public void RestoreDirectory(RecycledPathReceipt receipt)
         {
-            if (!Directory.Exists(_to) || Directory.Exists(_from)) return false;
-            Directory.Move(_to, _from);
-            return true;
+            if (Directory.Exists(receipt.OriginalPath) || !Directory.Exists(receipt.RecycledPath))
+                throw new IOException("The fixture capture cannot be restored.");
+            Directory.Move(receipt.RecycledPath, receipt.OriginalPath);
         }
+
+        public RecycledPathReceipt? FindRecycledDirectory(string originalPath, string identity) =>
+            _receipts.TryGetValue(originalPath, out RecycledPathReceipt? receipt) && receipt.Identity == identity
+                && Directory.Exists(receipt.RecycledPath) ? receipt : null;
     }
 }

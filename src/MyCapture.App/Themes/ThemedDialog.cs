@@ -341,7 +341,8 @@ internal sealed class ThemedDialog : Window
         bool destructive = false, IReadOnlyList<DialogCommand>? commands = null) =>
         Present(owner, new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel, okLabel, destructive, commands), icon);
 
-    private static MessageBoxResult Present(Window? owner, ThemedDialog dialog, MessageBoxImage icon)
+    /// <summary>Shows a dialog built by one of the Create* factories modally over its owner.</summary>
+    internal static MessageBoxResult Present(Window? owner, ThemedDialog dialog, MessageBoxImage icon)
     {
         owner = owner?.IsVisible == true ? owner : Application.Current?.Windows.OfType<Window>()
             .FirstOrDefault(window => window.IsActive && IsSuitableOwner(window));

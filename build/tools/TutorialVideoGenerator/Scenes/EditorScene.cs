@@ -50,21 +50,24 @@ internal sealed class EditorScene : TutorialScene
             sourceWindowTitle: L("릴리스 준비", "Release prep"));
         _host = new OffscreenWindow(_window, ClientWidth, ClientHeight);
         _editor = _window.Editor;
-        (EditorTool Tool, string Name, string Key) tool = _feature switch
+        // The tool, its name (the catalog's title for this tutorial) and the key the editor shows for it.
+        (EditorTool Tool, string Command) tool = _feature switch
         {
-            "rectangle" => (EditorTool.Rectangle, UiText.Get("Text_DC0760235344"), "R"),
-            "ellipse" => (EditorTool.Ellipse, UiText.Get("Tools.Ellipse"), "E"),
-            "arrow" => (EditorTool.Arrow, UiText.Get("Text_2785CE58DF74"), "A"),
-            "pen" => (EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), "P"),
-            "highlighter" => (EditorTool.Highlighter, UiText.Get("Tools.Highlighter"), "H"),
-            "text" => (EditorTool.Text, UiText.Get("Text_258AD4B095A1"), "T"),
-            "step-number" => (EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), "N"),
-            "mosaic" => (EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), "M"),
-            "blur" => (EditorTool.Blur, UiText.Get("EditorBlur_Name"), "B"),
-            "crop" => (EditorTool.Crop, UiText.Get("Tools_Crop"), "X"),
-            _ => (EditorTool.Select, "", ""),
+            "rectangle" => (EditorTool.Rectangle, "Rectangle"),
+            "ellipse" => (EditorTool.Ellipse, "Ellipse"),
+            "arrow" => (EditorTool.Arrow, "Arrow"),
+            "pen" => (EditorTool.Pen, "Pen"),
+            "highlighter" => (EditorTool.Highlighter, "Highlighter"),
+            "text" => (EditorTool.Text, "Text"),
+            "step-number" => (EditorTool.StepNumber, "StepNumber"),
+            "mosaic" => (EditorTool.Mosaic, "Mosaic"),
+            "blur" => (EditorTool.Blur, "Blur"),
+            "crop" => (EditorTool.Crop, "Crop"),
+            _ => (EditorTool.Select, ""),
         };
-        (_tool, _toolName, _toolKey) = tool;
+        _tool = tool.Tool;
+        _toolName = tool.Command.Length == 0 ? string.Empty : Ui(TutorialCatalog.Get(id).TitleKey);
+        _toolKey = tool.Command.Length == 0 ? string.Empty : Hint(ShortcutScope.Annotation, tool.Command);
         Story = BuildStory();
     }
 
@@ -179,7 +182,8 @@ internal sealed class EditorScene : TutorialScene
         var region = new RectD(0, 0, _image.PixelWidth, _image.PixelHeight);
         var probe = new AnnotationEditorWindow(new FrozenFrame(_image, region, null, 0), region, _image);
         using var host = new OffscreenWindow(probe, ClientWidth, ClientHeight);
-        probe.Editor.HandleShortcut(Key.X, ModifierKeys.None);
+        ShortcutDefinition crop = ShortcutCatalog.Get(ShortcutScope.Annotation, "Crop");
+        probe.Editor.HandleShortcut(crop.Key, crop.Modifiers);
         Stage.Pump(60);
         FrameworkElement apply = host.Find<FrameworkElement>().First(element => element.IsVisible
             && AutomationProperties.GetAutomationId(element) == "EditorFlowCropApply");
@@ -275,7 +279,7 @@ internal sealed class EditorScene : TutorialScene
                 ((Button)RotateButton(left: false)).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                 break;
             case "save-key":
-                BeginCommit(() => _editor.HandleShortcut(Key.S, ModifierKeys.Control));
+                BeginCommit(() => Press(ShortcutScope.Annotation, "Save"));
                 break;
             case "copy" when frame.IsLast:
                 BeginCommit(() => ((Button)ByAutomationId("EditorFlowCopy")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)));
@@ -292,6 +296,14 @@ internal sealed class EditorScene : TutorialScene
         }
 
         Stage.Pump(15);
+    }
+
+    /// <summary>Presses the key the editor routes to <paramref name="command"/> (ShortcutCatalog).</summary>
+    private void Press(ShortcutScope scope, string command)
+    {
+        ShortcutDefinition shortcut = ShortcutCatalog.Get(scope, command);
+        if (!_editor.HandleShortcut(shortcut.Key, shortcut.Modifiers))
+            throw new InvalidOperationException($"The editor did not handle {shortcut.Hint} ({command}).");
     }
 
     private void BeginCommit(Action command)
@@ -391,32 +403,37 @@ internal sealed class EditorScene : TutorialScene
         switch (_feature)
         {
             case "crop":
+                string apply = Ui("Crop.Apply"), cancel = Ui("Text_BE876433993A");
+                string applyKey = Hint(ShortcutScope.Crop, "Apply"), cancelKey = Hint(ShortcutScope.Crop, "Cancel");
                 return segment switch
                 {
-                    "open" or "command" or "crop-open" => (L("위쪽 명령의 자르기 선택", "Choose Crop in the top commands"), "X"),
-                    "crop-mode" => (L("자르기 모드: 명령 막대가 비율·적용·취소로 바뀜", "Crop mode swaps the commands for ratio, Apply and Cancel"), "X"),
-                    "apply-move" or "crop-apply" => (L("적용 선택 또는 Enter", "Click Apply or press Enter"), "Enter"),
-                    "result" => (L("자르기 적용됨 · Esc로 자르기 취소", "Crop applied · Esc cancels a pending crop"), ""),
+                    "open" or "command" or "crop-open" => (L($"위쪽 명령의 {tool} 선택", $"Choose {tool} in the top commands"), _toolKey),
+                    "crop-mode" => (L($"{tool} 모드: 명령 막대가 비율·{apply}·{cancel}로 바뀜", $"{tool} mode swaps the commands for ratio, {apply} and {cancel}"), _toolKey),
+                    "apply-move" or "crop-apply" => (L($"{apply} 선택 또는 {applyKey}", $"Click {apply} or press {applyKey}"), applyKey),
+                    "result" => (L($"{Ui("Tools_CropApplied")} · 적용 전에는 {cancelKey}로 취소", $"{Ui("Tools_CropApplied")} · {cancelKey} cancels a crop not yet applied"), ""),
                     _ => (L("모서리를 끌어 남길 영역 조절", "Drag the corners to the area to keep"), ""),
                 };
             case "rotate":
                 return segment switch
                 {
-                    "open" or "command" or "rotate-left" or "rotated-left" => (L("왼쪽 회전: 이미지를 왼쪽으로 90도", "Rotate left turns the image 90°"), "Q"),
-                    _ => (L("오른쪽 회전으로 되돌림", "Rotate right turns it back"), "W"),
+                    "open" or "command" or "rotate-left" or "rotated-left" =>
+                        (L($"{Ui("EditorUx_RotateLeft")}: 이미지를 왼쪽으로 90도", $"{Ui("EditorUx_RotateLeft")} turns the image 90°"), Hint(ShortcutScope.Annotation, "RotateLeft")),
+                    _ => (L($"{Ui("EditorUx_RotateRight")}으로 되돌림", $"{Ui("EditorUx_RotateRight")} turns it back"), Hint(ShortcutScope.Annotation, "RotateRight")),
                 };
             case "save":
+                string save = Hint(ShortcutScope.Annotation, "Save");
                 return segment switch
                 {
                     "open" or "review" => (L("편집한 이미지 확인", "Review the edited image"), ""),
-                    "save-key" or "saving" => (L("Ctrl+S: 빠른 저장 폴더에 바로 저장", "Ctrl+S saves straight to the quick-save folder"), "Ctrl+S"),
-                    _ => (L("PNG 저장됨 · 다른 위치는 Ctrl+Shift+S", "PNG saved · Ctrl+Shift+S chooses another place"), ""),
+                    "save-key" or "saving" => (L($"{save}: 빠른 저장 폴더에 바로 저장", $"{save} saves straight to the quick-save folder"), save),
+                    _ => (L($"PNG 저장됨 · 다른 위치는 {Hint(ShortcutScope.Annotation, "SaveAs")}", $"PNG saved · {Hint(ShortcutScope.Annotation, "SaveAs")} chooses another place"), ""),
                 };
             case "copy":
+                string copy = Hint(ShortcutScope.Annotation, "Copy"), copyLabel = Ui("Text_37B3D3B11B26");
                 return segment switch
                 {
-                    "open" or "command" => (L("복사 선택 또는 Ctrl+C", "Click Copy or press Ctrl+C"), "Ctrl+C"),
-                    "copy" or "copying" or "closed" => (L("저장하고 클립보드에 복사한 뒤 편집기 닫힘", "Saves, copies to the clipboard and closes the editor"), "Ctrl+C"),
+                    "open" or "command" => (L($"{copyLabel} 선택 또는 {copy}", $"Click {copyLabel} or press {copy}"), copy),
+                    "copy" or "copying" or "closed" => (L("저장하고 클립보드에 복사한 뒤 편집기 닫힘", "Saves, copies to the clipboard and closes the editor"), copy),
                     "note" or "note-click" => (L("붙여 넣을 앱으로 이동", "Switch to the app to paste into"), ""),
                     _ => (L("Ctrl+V로 이미지 붙여 넣기", "Paste the image with Ctrl+V"), "Ctrl+V"),
                 };
@@ -446,9 +463,10 @@ internal sealed class EditorScene : TutorialScene
                         "mosaic" or "blur" => L("가릴 영역을 드래그", "Drag over the area to hide"),
                         _ => L("표시할 부분을 드래그", "Drag over the area to mark"),
                     }, ""),
+                    // Drawn shapes: the words the editor's status line shows for the new shape.
                     _ => (_feature is "mosaic" or "blur"
                         ? L(tool + " 적용됨 · 범위 확인 후 저장", tool + " applied · check the area, then save")
-                        : L(tool + " 추가됨 · Ctrl+Z로 취소", tool + " added · Ctrl+Z undoes it"), ""),
+                        : UiText.Format("EditorFlow_Added", tool), ""),
                 };
         }
     }

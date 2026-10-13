@@ -52,7 +52,9 @@ internal sealed class QuickAccessScene : TutorialScene
         _card = new QuickAccessWindow(_captured,
             copy: () => { _copies++; return Task.FromResult(true); },
             edit: () => { }, pin: () => Task.CompletedTask, save: () => Task.FromResult(true), library: () => { },
-            export: () => Task.FromResult(string.Empty), excludeFromCapture: false);
+            export: () => Task.FromResult(string.Empty), excludeFromCapture: false,
+            // Wired like App does; the clip never presses T, and nothing reads or writes the clipboard.
+            copyText: () => Task.FromResult(new TextCaptureOutcome(TextCaptureStatus.Unavailable, null, 0)));
         _card.Closed += (_, _) => _cardClosed = true;
         // The card's content, detached from its never-shown window (see remarks).
         var surface = (UIElement)_card.Content;
@@ -71,7 +73,7 @@ internal sealed class QuickAccessScene : TutorialScene
     }
 
     internal override string Provenance =>
-        "Real QuickAccessWindow content (preview, Copy/Edit/Pin/Save with their keys, keep toggle, status line, countdown) laid out "
+        "Real QuickAccessWindow content (preview, Copy/Edit/Pin/Save/Copy text with their keys, Keep toggle, status line, countdown) laid out "
         + "detached; placed by QuickAccessWindow.Position, timed by Advance and driven by HandleShortcut. Copy calls a fake delegate "
         + "(no clipboard). The captured page, note app and taskbar are synthetic.";
 
@@ -124,7 +126,8 @@ internal sealed class QuickAccessScene : TutorialScene
                 FocusLook.Apply(_closeButton);
                 break;
             case "copy" when _copies == 0:
-                if (!_card.HandleShortcut(Key.C, ModifierKeys.None)) throw new InvalidOperationException("C did not run the card's Copy.");
+                ShortcutDefinition copy = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Copy");
+                if (!_card.HandleShortcut(copy.Key, copy.Modifiers)) throw new InvalidOperationException($"{copy.Hint} did not run the card's Copy.");
                 break;
             case "note-click" when frame.IsLast:
                 // Clicking another app deactivates the card: keyboard access ends, the countdown resumes.
@@ -170,9 +173,11 @@ internal sealed class QuickAccessScene : TutorialScene
 
     private (string Caption, string Key) Caption(string segment) => segment switch
     {
-        "appear" => (L("캡처하면 캡처 빠른 작업 카드가 나타남", "After a capture, the quick-access card appears"), ""),
-        "alt-q" => (L("Alt+Q: 키보드로 카드 사용", "Alt+Q: control the card from the keyboard"), "Alt+Q"),
-        "copy" => (L("C: 복사 · 카드에 복사됨 표시", "C copies the capture · the card shows Copied"), "C"),
+        "appear" => (L($"캡처하면 {Ui("QuickAccess.Title")} 카드가 나타남", "After a capture, the quick access card appears"), ""),
+        "alt-q" => (L($"{Hint(ShortcutScope.QuickAccess, "Activate")}: 키보드로 카드 사용", $"{Hint(ShortcutScope.QuickAccess, "Activate")}: control the card from the keyboard"),
+            Hint(ShortcutScope.QuickAccess, "Activate")),
+        "copy" => (L($"{Hint(ShortcutScope.QuickAccess, "Copy")}: {Ui("QuickAccess.Copy")} · 카드에 {Ui("QuickAccess.Copied")} 표시",
+            $"{Hint(ShortcutScope.QuickAccess, "Copy")}: {Ui("QuickAccess.Copy")} · the card shows {Ui("QuickAccess.Copied")}"), Hint(ShortcutScope.QuickAccess, "Copy")),
         "note-move" or "note-click" or "paste-wait" => (L("붙여 넣을 곳 클릭", "Click where to paste"), ""),
         "paste" => (L("Ctrl+V로 붙여 넣기", "Paste with Ctrl+V"), "Ctrl+V"),
         _ => (L("캡처가 붙여 넣어짐 · 카드는 잠시 후 닫힘", "The capture is pasted · the card closes shortly"), ""),

@@ -4057,8 +4057,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.record-pause.Step3" xml:space="preserve"><value>3. 같은 버튼이나 단축키로 녹화를 이어갑니다.</value></data>
   <data name="Tutorial.library-open.Unassigned" xml:space="preserve"><value>트레이 메뉴에서 라이브러리를 선택합니다.</value></data>
   <data name="Tutorial.library-open.Step1" xml:space="preserve"><value>1. 라이브러리를 엽니다.</value></data>
-  <data name="Tutorial.library-open.Step2" xml:space="preserve"><value>2. 확인할 이미지나 녹화 항목을 선택합니다.</value></data>
-  <data name="Tutorial.library-open.Step3" xml:space="preserve"><value>3. 항목을 열어 이미지를 편집하거나 녹화를 재생합니다.</value></data>
+  <data name="Tutorial.library-open.Step2" xml:space="preserve"><value>2. 확인할 이미지나 동영상을 선택합니다.</value></data>
+  <data name="Tutorial.library-open.Step3" xml:space="preserve"><value>3. 항목을 열어 이미지를 편집하거나 동영상을 재생합니다.</value></data>
   <data name="Tutorial.capture-window.Unassigned" xml:space="preserve"><value>트레이 메뉴의 다른 캡처에서 창 캡처를 선택합니다.</value></data>
   <data name="Tutorial.capture-window.Step1" xml:space="preserve"><value>1. 캡처할 창 위에 포인터를 놓습니다.</value></data>
   <data name="Tutorial.capture-window.Step2" xml:space="preserve"><value>2. 창 캡처를 실행합니다.</value></data>
@@ -4109,7 +4109,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.image-blur.Step2" xml:space="preserve"><value>2. 블러 도구를 선택하고 블러 처리할 영역을 드래그합니다.</value></data>
   <data name="Tutorial.image-blur.Step3" xml:space="preserve"><value>3. 블러 처리한 범위를 확인한 뒤 저장합니다.</value></data>
   <data name="Tutorial.image-crop.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
-  <data name="Tutorial.image-crop.Step2" xml:space="preserve"><value>2. 자르기 도구를 선택하고 남길 영역을 조절합니다.</value></data>
+  <data name="Tutorial.image-crop.Step2" xml:space="preserve"><value>2. 위쪽 명령의 자르기를 선택하고 남길 영역을 조절합니다.</value></data>
   <data name="Tutorial.image-crop.Step3" xml:space="preserve"><value>3. Enter로 적용합니다. Esc를 누르면 자르기를 취소합니다.</value></data>
   <data name="Tutorial.image-rotate.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-rotate.Step2" xml:space="preserve"><value>2. Q로 왼쪽, W로 오른쪽으로 회전합니다.</value></data>
@@ -4130,8 +4130,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.library-move.Step2" xml:space="preserve"><value>2. M을 누르고 대상 폴더를 선택합니다.</value></data>
   <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. 폴더로 이동을 선택한 뒤 대상 폴더에서 캡처를 확인합니다.</value></data>
   <data name="Tutorial.library-delete.Step1" xml:space="preserve"><value>1. 라이브러리에서 삭제할 항목을 선택합니다.</value></data>
-  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Del을 누른 뒤 확인 창에서 삭제를 확정합니다.</value></data>
-  <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. 삭제 후 목록을 확인합니다. 필요한 항목은 라이브러리의 최근 삭제 복원으로 되돌립니다.</value></data>
+  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Del을 누른 뒤 확인 창에서 휴지통으로 이동을 선택합니다.</value></data>
+  <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. 상태 줄의 되돌리기나 Ctrl+Z로 방금 삭제한 항목을 복원합니다. 이전에 삭제한 항목은 최근 삭제 복원에서 되돌립니다.</value></data>
   <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. 라이브러리에서 녹화를 선택하고 동영상 편집을 누릅니다.</value></data>
   <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. 동영상 편집기에서 Space를 눌러 녹화를 재생합니다.</value></data>
   <data name="Tutorial.video-play.Step3" xml:space="preserve"><value>3. Space를 다시 눌러 원하는 장면에서 일시 정지합니다.</value></data>

@@ -22,9 +22,15 @@ internal static class LibraryPermanentDeletion
     /// </summary>
     /// <param name="entireLibrary">Empty the whole library rather than delete a selection.</param>
     internal static bool ConfirmRecycle(Window owner, int count, bool entireLibrary) =>
-        ThemedDialog.Show(owner, RecyclePrompt(count, entireLibrary), UiText.Get("LibrarySelection_Delete"),
-            MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel,
-            okLabel: UiText.Get("LibrarySelection_MoveToRecycleBin"), destructive: true) == MessageBoxResult.OK;
+        ThemedDialog.Present(owner, CreateRecycleConfirmation(count, entireLibrary), MessageBoxImage.Warning) == MessageBoxResult.OK;
+
+    /// <summary>
+    /// The confirmation <see cref="ConfirmRecycle"/> shows, before it is placed or shown. The
+    /// tutorial clip generator renders it offscreen.
+    /// </summary>
+    internal static ThemedDialog CreateRecycleConfirmation(int count, bool entireLibrary) =>
+        new(RecyclePrompt(count, entireLibrary), UiText.Get("LibrarySelection_Delete"), MessageBoxButton.OKCancel,
+            MessageBoxResult.Cancel, okLabel: UiText.Get("LibrarySelection_MoveToRecycleBin"), destructive: true);
 
     internal static string RecyclePrompt(int count, bool entireLibrary) =>
         UiText.Format(entireLibrary ? "LibrarySelection_ClearConfirm" : "LibrarySelection_DeleteConfirm", count);

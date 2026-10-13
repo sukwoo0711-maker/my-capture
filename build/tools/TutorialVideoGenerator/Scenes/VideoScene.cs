@@ -300,23 +300,23 @@ internal sealed class VideoScene : TutorialScene
             case "play-key" or "pause-key":
                 // Playback starts where the playhead is; the steady clock below resumes from there.
                 if (frame.Segment == "play-key") _playStartMs = _timeline.PlayheadMs;
-                Press(Key.Space);
+                Press("Play");
                 if (frame.Segment == "play-key") BeginSteadyPlayback();
                 break;
             case "playing":
                 ShowPlaybackAt(_playStartMs + (frame.Step + 1) * FrameMs);
                 break;
             case "next-key":
-                Press(Key.OemPeriod, newFrame: true);
+                Press("NextFrame", newFrame: true);
                 break;
             case "previous-key":
-                Press(Key.OemComma, newFrame: true);
+                Press("PreviousFrame", newFrame: true);
                 break;
             case "in-key":
-                Press(Key.I);
+                Press("In");
                 break;
             case "out-key":
-                Press(Key.O);
+                Press("Out");
                 break;
             case "click-in" or "click-out" when frame.IsLast:
                 ClickStrip(frame.Cursor);
@@ -342,7 +342,7 @@ internal sealed class VideoScene : TutorialScene
                 _closed = true;
                 break;
             case "gif-key":
-                Press(Key.G);
+                Press("Gif");
                 if (_dialog is null) throw new InvalidOperationException("G did not open the export dialog.");
                 break;
             case "ready":
@@ -380,14 +380,17 @@ internal sealed class VideoScene : TutorialScene
         }
     }
 
-    private void Press(Key key, bool newFrame = false)
+    /// <summary>Presses the key the editor routes to <paramref name="command"/> (ShortcutCatalog, video scope).</summary>
+    private void Press(string command, bool newFrame = false)
     {
+        ShortcutDefinition shortcut = ShortcutCatalog.Get(ShortcutScope.Video, command);
         long before = newFrame ? PreviewSignature() : 0;
-        _editor.HandleShortcut(key, ModifierKeys.None);
+        if (!_editor.HandleShortcut(shortcut.Key, shortcut.Modifiers))
+            throw new InvalidOperationException($"The video editor did not handle {shortcut.Hint} ({command}).");
         Stage.Pump(30);
         WaitForSeek();
         if (newFrame && !WaitForPreviewChange(before, 2000))
-            throw new InvalidOperationException($"The preview did not show the frame at {_timeline.PlayheadMs:0} ms after {key}.");
+            throw new InvalidOperationException($"The preview did not show the frame at {_timeline.PlayheadMs:0} ms after {shortcut.Hint}.");
     }
 
     /// <summary>The status line under the timeline.</summary>
@@ -638,47 +641,52 @@ internal sealed class VideoScene : TutorialScene
 
     private (string Caption, string Key) Caption(string segment)
     {
+        // Keys as the editor routes them (ShortcutCatalog, video scope).
+        string play = Hint(ShortcutScope.Video, "Play"), next = Hint(ShortcutScope.Video, "NextFrame"), previous = Hint(ShortcutScope.Video, "PreviousFrame");
+        string trimIn = Hint(ShortcutScope.Video, "In"), trimOut = Hint(ShortcutScope.Video, "Out"), gif = Hint(ShortcutScope.Video, "Gif");
         switch (_feature)
         {
             case "play":
                 return segment switch
                 {
                     "open" => (L("라이브러리에서 연 녹화 · 동영상 편집", "A recording opened from the library"), ""),
-                    "play-key" => (L("Space: 재생", "Space plays the recording"), "Space"),
+                    "play-key" => (L($"{play}: 재생", $"{play} plays the recording"), play),
                     "playing" => (L("재생 중 · 재생 위치가 타임라인을 따라 이동", "Playing · the playhead moves along the timeline"), ""),
-                    "pause-key" => (L("Space를 다시 눌러 일시정지", "Press Space again to pause"), "Space"),
-                    _ => (L("일시정지됨 · 지금 장면에서 멈춤", "Paused on the current scene"), ""),
+                    "pause-key" => (L($"{play}를 다시 눌러 일시 정지", $"Press {play} again to pause"), play),
+                    _ => (L("일시 정지됨 · 지금 장면에서 멈춤", "Paused on the current scene"), ""),
                 };
             case "frame-step":
                 return segment switch
                 {
-                    "open" or "play-key" or "playing" => (L("Space: 재생", "Space plays the recording"), segment == "play-key" ? "Space" : ""),
-                    "pause-key" or "paused" => (L("Space: 일시정지", "Space pauses playback"), segment == "pause-key" ? "Space" : ""),
-                    "next-key" or "next" => (L("마침표(.): 다음 프레임", "Period (.) shows the next frame"), "."),
-                    "previous-key" or "previous" => (L("쉼표(,): 이전 프레임", "Comma (,) shows the previous frame"), ","),
-                    "in-key" => (L("I: 이 프레임부터 남길 구간 시작", "I starts the part to keep at this frame"), "I"),
-                    _ => (L("시작 지정됨 · 이어서 O로 끝 지정", "Start set · press O to set the end"), ""),
+                    "open" or "play-key" or "playing" => (L($"{play}: 재생", $"{play} plays the recording"), segment == "play-key" ? play : ""),
+                    "pause-key" or "paused" => (L($"{play}: 일시 정지", $"{play} pauses playback"), segment == "pause-key" ? play : ""),
+                    "next-key" or "next" => (L($"마침표({next}): 다음 프레임", $"Period ({next}) shows the next frame"), next),
+                    "previous-key" or "previous" => (L($"쉼표({previous}): 이전 프레임", $"Comma ({previous}) shows the previous frame"), previous),
+                    "in-key" => (L($"{trimIn}: 이 프레임부터 남길 구간 시작", $"{trimIn} starts the part to keep at this frame"), trimIn),
+                    _ => (L($"시작 지정됨 · 이어서 {trimOut}로 끝 지정", $"Start set · press {trimOut} to set the end"), ""),
                 };
             case "trim":
+                string save = Ui("MediaExport_SaveEdits");
                 return segment switch
                 {
                     "open" or "move-in" or "click-in" or "seeked-in" => (L("남길 구간의 시작 위치로 이동", "Move to where the part to keep starts"), ""),
-                    "in-key" or "in-set" => (L("I: 남길 구간의 시작 지정", "I sets the start of the part to keep"), "I"),
+                    "in-key" or "in-set" => (L($"{trimIn}: 남길 구간의 시작 지정", $"{trimIn} sets the start of the part to keep"), trimIn),
                     "move-out" or "click-out" or "seeked-out" => (L("끝 위치로 이동", "Move to where it ends"), ""),
-                    "out-key" => (L("O: 남길 구간의 끝 지정", "O sets the end of the part to keep"), "O"),
+                    "out-key" => (L($"{trimOut}: 남길 구간의 끝 지정", $"{trimOut} sets the end of the part to keep"), trimOut),
                     "out-set" => (L("선택한 구간과 남는 길이 확인", "Review the kept range and its length"), ""),
-                    "move-save" or "save-click" => (L("라이브러리에 저장 선택", "Click Save to library"), ""),
-                    "saving" or "finalizing" => (L("편집한 녹화를 라이브러리에 저장하는 중", "Saving the edited recording to the library"), ""),
-                    _ => (L("저장 완료 · 편집한 녹화가 라이브러리에 저장됨", "Saved · the edited recording is in the library"), ""),
+                    "move-save" or "save-click" => (L($"{save} 선택", $"Click {save}"), ""),
+                    "saving" or "finalizing" => (L("편집한 동영상을 라이브러리에 저장하는 중", "Saving the edited video to the library"), ""),
+                    _ => (L("저장 완료 · 편집한 동영상이 라이브러리에 저장됨", "Saved · the edited video is in the library"), ""),
                 };
             default:
+                string export = Ui("MediaExport_Export");
                 return segment switch
                 {
                     "open" => (L("내보낼 구간 확인", "Review the range to export"), ""),
-                    "gif-key" or "preparing" => (L("G: GIF 내보내기", "G: Export GIF"), "G"),
+                    "gif-key" or "preparing" => ($"{gif}: {Ui("Help.Gif")}", gif),
                     "ready" or "options" or "options-shown" => (L("GIF 크기 · 재생 속도 · 공유 목표 크기 확인", "Review GIF size, playback speed and share size limit"), ""),
                     "scroll" or "scrolled" => (L("미리보기 샘플과 크기 확인", "Check the preview sample and its size"), ""),
-                    "move-export" or "export-click" => (L("내보내기 선택", "Click Export"), ""),
+                    "move-export" or "export-click" => (L($"{export} 선택", $"Click {export}"), ""),
                     "save-as" or "move-save" or "save-click" => (L("저장할 위치와 파일 이름 선택", "Choose where to save and the file name"), ""),
                     _ => (L("GIF 저장됨 · 폴더 열기로 파일 확인", "GIF saved · Open folder shows the file"), ""),
                 };

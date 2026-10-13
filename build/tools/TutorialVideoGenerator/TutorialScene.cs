@@ -30,6 +30,28 @@ internal abstract class TutorialScene : IDisposable
 
     protected string L(string korean, string english) => Korean ? korean : english;
 
+    /// <summary>
+    /// A product string. Captions name buttons, commands, menus and results with the words the
+    /// product shows (its UiText keys), so a renamed command renames the caption with it.
+    /// </summary>
+    protected static string Ui(string key) => UiText.Get(key);
+
+    /// <summary>The key the product shows beside a command (ShortcutCatalog).</summary>
+    protected static string Hint(MyCapture.App.ShortcutScope scope, string command) => MyCapture.App.ShortcutCatalog.Get(scope, command).Hint;
+
+    /// <summary>The fixed keys the tutorial window shows for this feature (TutorialCatalog).</summary>
+    protected string FeatureKeys => MyCapture.App.TutorialCatalog.Get(Id).FixedKeys?.Invoke()
+        ?? throw new InvalidOperationException($"{Id} has no fixed keys.");
+
+    /// <summary>The words a product button shows: its text, or the text beside its icon.</summary>
+    protected static string Label(System.Windows.Controls.ContentControl control) => control.Content switch
+    {
+        string text => text,
+        System.Windows.DependencyObject content => string.Join(" ", OffscreenWindow.Descendants(content)
+            .OfType<System.Windows.Controls.TextBlock>().Select(block => block.Text).Where(text => !string.IsNullOrWhiteSpace(text))),
+        _ => throw new InvalidOperationException("The control shows no words."),
+    };
+
     /// <summary>Common finish: caption strip, click ring and the pointer on top.</summary>
     protected static void Overlay(DrawingContext dc, TutorialFramePlan frame, string caption, string key,
         Stage.PointerKind pointer = Stage.PointerKind.Arrow, bool showPointer = true)
