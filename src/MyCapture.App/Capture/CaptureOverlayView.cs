@@ -174,10 +174,15 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private Pen _chipBorderPen = null!;
     private Pen _magnifierBorderPen = null!;
     private Pen _magnifierGridPen = null!;
+    private Brush? _magnifierGridQuarterBrush;
     internal int StaticRenderCount { get; private set; }
     internal int DimmerRenderCount { get; private set; }
     internal int FeedbackRenderCount { get; private set; }
     internal int MagnifierUpdateCount { get; private set; }
+    internal int MagnifierGridFillCount { get; private set; }
+
+    /// <summary>Tests turn this off to draw the strokes that the pixel fills stand in for.</summary>
+    internal bool MagnifierGridFills { get; set; } = true;
     internal bool HasPendingFeedback => _feedbackScheduler.IsPending;
     internal BitmapSource? MagnifierBitmapForTest => _magnifierCrop;
     internal string SampleLabelForTest => _sampleLabel;
@@ -1566,15 +1571,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
         double cellWidth = width / _magnifierCrop.PixelWidth;
         double cellHeight = imageHeight / _magnifierCrop.PixelHeight;
-        Pen gridPen = _magnifierGridPen;
-        for (int index = 1; index < _magnifierCrop.PixelWidth; index++)
-        {
-            dc.DrawLine(gridPen, new Point(x + (index * cellWidth), y), new Point(x + (index * cellWidth), y + imageHeight));
-        }
-        for (int index = 1; index < _magnifierCrop.PixelHeight; index++)
-        {
-            dc.DrawLine(gridPen, new Point(x, y + (index * cellHeight)), new Point(x + width, y + (index * cellHeight)));
-        }
+        DrawMagnifierGrid(dc, new Rect(x, y, width, imageHeight), _magnifierCrop.PixelWidth, _magnifierCrop.PixelHeight);
 
         int cursorX = Math.Clamp((int)Math.Floor(_cursorPixel.X) - _magnifierCropX, 0, _magnifierCrop.PixelWidth - 1);
         int cursorY = Math.Clamp((int)Math.Floor(_cursorPixel.Y) - _magnifierCropY, 0, _magnifierCrop.PixelHeight - 1);
@@ -1587,6 +1584,62 @@ internal sealed class CaptureOverlayView : FrameworkElement
         double footerTop = y + imageHeight;
         dc.DrawText(color, new Point(x + 8, footerTop + 5));
         dc.DrawText(location, new Point(x + width - location.Width - 8, footerTop + 6));
+    }
+
+    /// <summary>
+    /// The magnifier's cell lines: half-pixel strokes centred on the cell edges, vertical ones first.
+    /// </summary>
+    /// <remarks>
+    /// The magnifier follows the pointer, so its grid is rasterised again on every pointer frame.
+    /// As 28 antialiased strokes that took about 40% of the render thread, nearly all of it scan
+    /// converting the tall vertical lines. When a cell edge falls on a device-pixel edge, which is
+    /// always so for the real cursor at any standard scale, a half-pixel stroke covers exactly a
+    /// quarter of the pixel on each side of it. The selector then fills those two whole pixels with
+    /// the grid colour at a quarter of its alpha: the same colour, alpha and blending order reach
+    /// the screen, and the pixel-aligned fills need no scan conversion. Any other alignment draws
+    /// the strokes themselves.
+    /// </remarks>
+    private void DrawMagnifierGrid(DrawingContext dc, Rect image, int columns, int rows)
+    {
+        double cellWidth = image.Width / columns;
+        double cellHeight = image.Height / rows;
+        if (MagnifierGridFills && _magnifierGridQuarterBrush is { } quarter && MagnifierGridOnDevicePixels(image, cellWidth, cellHeight))
+        {
+            MagnifierGridFillCount++;
+            double px = GuidePixelSizeX, py = GuidePixelSizeY;
+            for (int index = 1; index < columns; index++)
+                dc.DrawRectangle(quarter, null, new Rect(image.X + (index * cellWidth) - px, image.Y, 2 * px, image.Height));
+            for (int index = 1; index < rows; index++)
+                dc.DrawRectangle(quarter, null, new Rect(image.X, image.Y + (index * cellHeight) - py, image.Width, 2 * py));
+            return;
+        }
+        Pen gridPen = _magnifierGridPen;
+        for (int index = 1; index < columns; index++)
+        {
+            double lineX = image.X + (index * cellWidth);
+            dc.DrawLine(gridPen, new Point(lineX, image.Y), new Point(lineX, image.Bottom));
+        }
+        for (int index = 1; index < rows; index++)
+        {
+            double lineY = image.Y + (index * cellHeight);
+            dc.DrawLine(gridPen, new Point(image.X, lineY), new Point(image.Right, lineY));
+        }
+    }
+
+    /// <summary>
+    /// Whether every grid stroke is half a device pixel wide and centred on a device-pixel edge, with
+    /// its ends on device-pixel edges: one frame pixel is one device pixel and the magnifier and its
+    /// cells sit on whole device pixels.
+    /// </summary>
+    private bool MagnifierGridOnDevicePixels(Rect image, double cellWidth, double cellHeight)
+    {
+        double scaleX = _guideDpi.DpiScaleX, scaleY = _guideDpi.DpiScaleY;
+        return Math.Abs(scaleX - scaleY) <= 0.000001
+            && Math.Abs((_magnifierGridPen.Thickness * scaleX) - 0.5) <= 0.000001
+            && Math.Abs((DipPerPixelX * scaleX) - 1) <= 0.0001 && Math.Abs((DipPerPixelY * scaleY) - 1) <= 0.0001
+            && IsWhole(image.X * scaleX) && IsWhole(image.Y * scaleY)
+            && IsWhole(image.Width * scaleX) && IsWhole(image.Height * scaleY)
+            && IsWhole(cellWidth * scaleX) && IsWhole(cellHeight * scaleY);
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
@@ -2115,10 +2168,32 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _chipBorderPen = Create("CaptureGuide.ChipBorder", 1);
         _magnifierBorderPen = Create("CaptureGuide.MagnifierBorder", 1);
         _magnifierGridPen = Create("CaptureGuide.MagnifierGrid", 0.5);
+        _magnifierGridQuarterBrush = QuarterAlpha(_guidePalette["CaptureGuide.MagnifierGrid"]);
         _recordingPen = new Pen(_recordingBrush, 2 * pixel);
         _recordingPen.Freeze();
         _recordingEdgePen = new Pen(_recordingBrush, 3 * pixel);
         _recordingEdgePen.Freeze();
+    }
+
+    /// <summary>
+    /// The grid colour with a quarter of its alpha, for whole pixels a half-pixel stroke covers by a
+    /// quarter. Only the alpha changes: brushes reach the hardware renderer as scRGB floats, where
+    /// multiplying by 0.25 is exact, so the fill carries what the stroke's coverage would. The
+    /// software renderer premultiplies in bytes, where the two orders round alike only for an opaque
+    /// colour or one whose channels are all 0 or 255; that covers the black or white grid of the
+    /// themes and the high-contrast text colour. Anything else returns null and keeps the strokes.
+    /// </summary>
+    internal static Brush? QuarterAlpha(Brush brush)
+    {
+        if (brush is not SolidColorBrush { Opacity: 1 } solid) return null;
+        Color color = solid.Color;
+        if (color.A != 255 && !(Extreme(color.R) && Extreme(color.G) && Extreme(color.B))) return null;
+        color.ScA = solid.Color.ScA * 0.25f;
+        var quarter = new SolidColorBrush(color);
+        quarter.Freeze();
+        return quarter;
+
+        static bool Extreme(byte channel) => channel is 0 or 255;
     }
 
     private FormattedText CreateText(string text, Typeface typeface, double size, Brush brush) =>
