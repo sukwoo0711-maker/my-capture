@@ -139,8 +139,10 @@ public sealed partial class SettingsThemePreviewTests
             var selection = (Panel)window.FindName("SelectionCommands");
             Button[] visibleActions = selection.Children.OfType<Button>().Where(button => button.IsVisible).ToArray();
             Assert.Equal(5, visibleActions.Length); // clear, ZIP, move, delete, reduce (GIF is video only)
-            foreach (FrameworkElement element in visibleActions.Append<FrameworkElement>(placeholder))
+            // More stays after them, so restoring deleted captures is reachable with a selection.
+            foreach (FrameworkElement element in visibleActions.Append<FrameworkElement>(placeholder).Append(more))
                 AssertInsideClient(element, client, language);
+            AssertLeftToRight(client, visibleActions[^1], more);
             AssertSameRow(bar, visibleActions.Cast<FrameworkElement>().Append(searchField)
                 .Append((Button)window.FindName("CaptureRegionIconButton")).ToArray());
             AssertLeftToRight(client, (Button)window.FindName("RecordRegionIconButton"), searchField, visibleActions[0]);

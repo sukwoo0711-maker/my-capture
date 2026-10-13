@@ -117,6 +117,8 @@ internal sealed partial class GalleryWindow : Window
         // Bubbling, so a tile's open caption hint or a menu consumes Escape first.
         KeyDown += OnLibraryKeyDown;
         InitializeActionStatus();
+        InitializeRecovery();
+        InitializeEmptyLibrary();
         IsVisibleChanged += (_, _) =>
         {
             _visibilityGeneration++;
@@ -181,6 +183,7 @@ internal sealed partial class GalleryWindow : Window
         Topmost = true;
         Topmost = false;
         _ = Focus();
+        ShowPendingRetentionNotice();
     }
 
     /// <summary>Refreshes an already-open gallery without stealing focus from the video editor.</summary>
@@ -196,6 +199,7 @@ internal sealed partial class GalleryWindow : Window
 
         _viewModel.Refresh();
         RefreshOcrCoverageBanner();
+        ShowPendingRetentionNotice();
     }
 
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
@@ -838,6 +842,7 @@ internal sealed partial class GalleryWindow : Window
         "Folder410.OperationFailed", "Folder410.DeleteChanged", "Library.Archive.Failed",
         "Library.SourcePage.OpenFailed", "Library.SourcePage.CopyFailed",
         "Library.Source.OpenFolderFailed", "Library.Source.CopyPathFailed",
+        "LibrarySelection_DeleteFailed",
     ];
 
     // Plain confirmations; every other line carries a count, a hint or a cause to read.
@@ -847,6 +852,7 @@ internal sealed partial class GalleryWindow : Window
     private static readonly string[] ProgressStatusKeys =
     [
         "Library.Archive.Preparing", "Library.Archive.Progress", "Folder410.ExportPreparing", "Folder410.ExportProgress",
+        "LibraryUndo_Restoring",
     ];
 
     private void InitializeActionStatus()
@@ -871,7 +877,7 @@ internal sealed partial class GalleryWindow : Window
         _statusDismiss.SetResourceReference(StyleProperty, "Button.GhostCompact");
         System.Windows.Automation.AutomationProperties.SetName(_statusDismiss, UiText.Get("Feedback.Dismiss"));
         _statusDismiss.Click += (_, _) => DismissActionStatus();
-        Grid.SetColumn(_statusDismiss, 2);
+        Grid.SetColumn(_statusDismiss, 3);
         LibraryStatusBar.Children.Add(_statusDismiss);
         // After the selection handler, so Esc still clears a selection first.
         KeyDown += (_, e) =>
@@ -891,7 +897,8 @@ internal sealed partial class GalleryWindow : Window
     internal static MyCapture.App.Themes.FeedbackKind ClassifyActionStatus(string text)
     {
         if (text == UiText.Get("LibraryRecovery_Failed") || ActionRequiredStatusKeys.Any(key => text == UiText.Get(key))
-            || text.StartsWith(UiText.Get("Folder410.ExportFailed"), StringComparison.Ordinal))
+            || text.StartsWith(UiText.Get("Folder410.ExportFailed"), StringComparison.Ordinal)
+            || MatchesFormat(text, "LibraryUndo_PartlyRestored"))
         {
             return MyCapture.App.Themes.FeedbackKind.ActionRequired;
         }
@@ -920,6 +927,7 @@ internal sealed partial class GalleryWindow : Window
     private void OnActionStatusChanged(object? sender, EventArgs e)
     {
         string text = LibraryActionStatus.Text;
+        SyncStatusAction();
         MyCapture.App.Themes.FeedbackKind previous = _statusKind;
         _statusKind = string.IsNullOrEmpty(text) ? MyCapture.App.Themes.FeedbackKind.Echo : ClassifyActionStatus(text);
         bool dismissible = !string.IsNullOrEmpty(text) && MyCapture.App.Themes.FeedbackTiming.StaysUntilDismissed(_statusKind);
@@ -977,46 +985,6 @@ internal sealed partial class GalleryWindow : Window
         _hiddenForCapture = true;
         Window.GetWindow(this)?.Hide();
         RecordRegionRequested?.Invoke();
-    }
-
-    private async void ConfirmDeleteMany(IEnumerable<Guid> ids, bool entireLibrary)
-    {
-        if (_deleteInProgress) return;
-        Guid[] targets = ids.Distinct().ToArray();
-        if (targets.Length == 0) return;
-        _deleteInProgress = true;
-        try
-        {
-            string prompt = UiText.Format(entireLibrary ? "LibrarySelection_ClearConfirm" : "LibrarySelection_DeleteConfirm", targets.Length);
-            if (MyCapture.App.Themes.ThemedDialog.Show(this, prompt, UiText.Get("LibrarySelection_Delete"), MessageBoxButton.OKCancel,
-                MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
-            CloseInlinePlayer(); // MediaElement must release its source before directory cleanup.
-            foreach (Guid id in targets) _viewModel.FindTile(id)?.SetThumbnailLoadingEnabled(false);
-            Func<Guid, bool> canRemove = id => !_commitService.IsRecordBusy(id) && !_videoLibrary.IsBusy(id);
-            CaptureBatchRemovalResult result = await _queue.RemoveManyAsync(targets, canRemove);
-            IReadOnlyList<Guid> unavailable = result.RecycleUnavailableIds;
-            CaptureBatchRemovalResult? permanent = await LibraryPermanentDeletion.ResolveAsync(unavailable,
-                count => LibraryPermanentDeletion.Confirm(this, count),
-                ids => _queue.RemoveManyPermanentlyAsync(ids, canRemove));
-            int removed = result.RemovedCount + (permanent?.RemovedCount ?? 0);
-            int cleanupPending = result.CleanupPendingCount + (permanent?.CleanupPendingCount ?? 0);
-            string status = UiText.Format("LibrarySelection_Removed", removed, targets.Length - removed);
-            if (cleanupPending > 0) status += "\n" + UiText.Format("LibrarySelection_CleanupPending", cleanupPending);
-            if (unavailable.Count > 0 && permanent is null) status += "\n" + LibraryPermanentDeletion.KeptStatus(unavailable.Count);
-            ShowStatus(status);
-        }
-        catch (Exception ex)
-        {
-            _log.LogWarning(ex, "Could not durably remove selected library entries");
-            ShowStatus(UiText.Get("LibrarySelection_DeleteFailed"));
-        }
-        finally
-        {
-            _deleteInProgress = false;
-            _viewModel.Refresh();
-            _viewModel.SetThumbnailLoadingEnabled(IsVisible);
-            RaiseCaptureChanged();
-        }
     }
 
     private async Task CopyRenderedAsync(GalleryItemViewModel tile)

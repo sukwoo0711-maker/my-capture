@@ -1458,8 +1458,11 @@
                 </Grid>
             </Grid>
 
+            <!-- Right side: the library commands or the selection's commands, then More, which stays
+                 in place either way so restoring and the library folder are reachable with a selection. -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
             <!-- Library commands (nothing selected). -->
-            <StackPanel x:Name="LibraryCommands" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel x:Name="LibraryCommands" Orientation="Horizontal" VerticalAlignment="Center">
                 <StackPanel.Style>
                     <Style TargetType="StackPanel">
                         <Style.Triggers>
@@ -1484,24 +1487,10 @@
                     <ComboBoxItem Content="{loc:Text Folder410.Oldest}" />
                     <ComboBoxItem Content="{loc:Text Folder410.ByName}" />
                 </ComboBox>
-                <Button x:Name="MoreCommandsButton" Style="{StaticResource LibraryUx.CommandIcon}" Margin="0"
-                        ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
-                        Click="OnMoreCommandsClick">
-                    <themes:SymbolIcon Size="20" Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
-                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem x:Name="RestoreDeletedMenu" Header="{loc:Text LibraryRecovery_Recent}" />
-                            <Separator />
-                            <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
-                                      Foreground="{DynamicResource State.DangerHover}" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
             </StackPanel>
 
             <!-- Selection commands, in the same place. -->
-            <StackPanel x:Name="SelectionCommands" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+            <StackPanel x:Name="SelectionCommands" Orientation="Horizontal" VerticalAlignment="Center"
                         AutomationProperties.Name="{loc:Text LibraryUx_SelectionBarName}"
                         Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
                 <Button x:Name="ClearSelectionButton" Style="{StaticResource LibraryUx.CommandIcon}"
@@ -1524,6 +1513,22 @@
                 <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource LibraryUx.CommandButton}" Margin="0"
                         DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick"
                         Visibility="{Binding DataContext.CanGifSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+            <Button x:Name="MoreCommandsButton" Style="{StaticResource LibraryUx.CommandIcon}" Margin="2,0,0,0"
+                    ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
+                    Click="OnMoreCommandsClick">
+                <themes:SymbolIcon Size="20" Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
+                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem x:Name="RestoreDeletedMenu" Header="{loc:Text LibraryRecovery_Recent}" />
+                        <MenuItem x:Name="OpenLibraryFolderMenu" Header="{loc:Text LibraryFolder_OpenLibrary}" Click="OnOpenLibraryFolderClick" />
+                        <Separator />
+                        <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
+                                  Foreground="{DynamicResource State.DangerHover}" />
+                    </ContextMenu>
+                </Button.ContextMenu>
+            </Button>
             </StackPanel>
         </Grid>
 
@@ -2008,6 +2013,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock x:Name="SummaryLabel" Text="{Binding SummaryText}" Style="{StaticResource StatusBar.Text}"
@@ -2038,7 +2044,16 @@
                        HorizontalAlignment="Right" VerticalAlignment="Center"
                        Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}"
                        AutomationProperties.LiveSetting="Polite" />
-            <Button x:Name="ArchiveCancelButton" Grid.Column="2" Content="{loc:Text Library.Action.Cancel}"
+            <!-- The result's own follow-up (Undo after a delete, Change after the first automatic
+                 deletion); hidden whenever the line shows anything else. -->
+            <StackPanel x:Name="LibraryStatusActionPanel" Grid.Column="2" Orientation="Horizontal" Visibility="Collapsed"
+                        VerticalAlignment="Center">
+                <TextBlock Text="·" Margin="6,0,2,0" VerticalAlignment="Center" Foreground="{DynamicResource Text.Muted}"
+                           FontSize="{StaticResource FontSize.Caption}" />
+                <Button x:Name="LibraryStatusAction" Style="{StaticResource Button.GhostCompact}"
+                        VerticalAlignment="Center" FontWeight="SemiBold" Click="OnStatusActionClick" />
+            </StackPanel>
+            <Button x:Name="ArchiveCancelButton" Grid.Column="3" Content="{loc:Text Library.Action.Cancel}"
                     Style="{StaticResource Button.GhostCompact}" Click="OnCancelArchiveClick" Visibility="Collapsed" Margin="8,0,0,0" />
         </Grid>
 

@@ -9,25 +9,46 @@ namespace MyCapture.App.Gallery;
 
 internal sealed partial class GalleryWindow
 {
+    private bool _detailsPaneOpen = true;
+
     /// <summary>
     /// Whether the details pane is shown. Hiding it leaves a narrow rail with the button that
     /// brings it back, and the library takes the width, so a narrow window fits another column.
-    /// The choice lasts while the app runs; the window is reused when it reopens.
+    /// The choice lasts while the app runs; the window is reused when it reopens. An empty
+    /// library has nothing to describe, so neither the pane nor its rail is shown then.
     /// </summary>
-    internal bool IsDetailsPaneOpen => GalleryDetailsPanel.Visibility == Visibility.Visible;
+    internal bool IsDetailsPaneOpen => _detailsPaneOpen;
 
     private void OnHideDetailsClick(object sender, RoutedEventArgs e) => SetDetailsPaneOpen(false);
 
     private void OnShowDetailsClick(object sender, RoutedEventArgs e) => SetDetailsPaneOpen(true);
 
+    /// <summary>Keeps the empty state's shortcut current and the details pane off an empty library.</summary>
+    private void InitializeEmptyLibrary()
+    {
+        _viewModel.CaptureShortcutText = () => ReadHotkeys().Capture is { IsAssigned: true } capture ? capture.ToString() : string.Empty;
+        _viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is null or "" or nameof(GalleryViewModel.QueueIsEmpty)) ApplyDetailsPaneVisibility();
+        };
+        ApplyDetailsPaneVisibility();
+    }
+
+    private void ApplyDetailsPaneVisibility()
+    {
+        bool empty = _viewModel.QueueIsEmpty;
+        GalleryDetailsPanel.Visibility = !empty && _detailsPaneOpen ? Visibility.Visible : Visibility.Collapsed;
+        GalleryDetailsRail.Visibility = !empty && !_detailsPaneOpen ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     internal void SetDetailsPaneOpen(bool open)
     {
-        if (open == IsDetailsPaneOpen) return;
+        if (open == _detailsPaneOpen) return;
         // Keyboard focus inside the pane that is about to disappear moves to its counterpart, so
         // the same key toggles straight back and focus never falls to the window.
         bool hadFocus = (open ? GalleryDetailsRail : GalleryDetailsPanel).IsKeyboardFocusWithin;
-        GalleryDetailsPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        GalleryDetailsRail.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        _detailsPaneOpen = open;
+        ApplyDetailsPaneVisibility();
         if (hadFocus) _ = (open ? HideDetailsButton : ShowDetailsButton).Focus();
         if (open && FluidMotion.AnimationsEnabled)
         {

@@ -12,9 +12,27 @@ namespace MyCapture.App.Gallery;
 /// One user deletion the Recycle Bin can restore. <see cref="Record"/> is a minimal snapshot:
 /// OCR text, page links, window titles, tags and source details are not journaled. Restore reads
 /// the full metadata from the restored directory and uses this snapshot only as a fallback.
+/// <see cref="Batch"/> names the delete command that removed it, so Undo restores that command's
+/// captures together; journals written before batches existed are each their own batch.
 /// </summary>
 public sealed record DeletedLibraryCapture(Guid Token, CaptureRecord Record, string OriginalPath,
-    string Identity, string Reason, DateTimeOffset DeletedAt);
+    string Identity, string Reason, DateTimeOffset DeletedAt, Guid? Batch = null)
+{
+    /// <summary>The batch Undo restores this capture with.</summary>
+    public Guid BatchKey => Batch ?? Token;
+}
+
+/// <summary>A restorable deletion and the thumbnail inside its Recycle Bin item, when it is there.</summary>
+public sealed record DeletedLibraryEntry(DeletedLibraryCapture Capture, string? ThumbnailPath);
+
+/// <summary>
+/// The restore menu's content: the newest deletions, and the most recent delete command with the
+/// number of its captures that can still be restored.
+/// </summary>
+public sealed record DeletedLibraryOverview(IReadOnlyList<DeletedLibraryEntry> Recent, Guid? LastBatch, int LastBatchCount);
+
+/// <summary>How many captures of a batch came back, and how many stayed in the Recycle Bin.</summary>
+public sealed record LibraryBatchRestoreResult(int Restored, int Failed);
 
 /// <summary>
 /// The Recycle Bin holds only captures the user deletes from the library. Automatic capacity
@@ -34,6 +52,9 @@ public sealed class RecoverableLibraryService
     private readonly Dictionary<string, HashSet<Guid>> _pendingMaintenance = [];
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, byte> _attemptedMaintenance = new();
     private readonly HashSet<Task> _pendingRestores = [];
+    private readonly AsyncLocal<Guid?> _batch = new();
+    private readonly string _retentionNoticeFile;
+    private RetentionNoticeState? _retentionNotice;
     public Task MaintenanceCompletion { get; private set; } = Task.CompletedTask;
     internal Action<string>? BeforeJournalWriteForTest { get; set; }
     internal Action<Guid>? BeforePermanentDeleteForTest { get; set; }
@@ -45,6 +66,30 @@ public sealed class RecoverableLibraryService
         _trash = trash;
         _log = log;
         _journalRoot = ValidatedFilePaths.CreateDirectory(Path.Combine(paths.DataRoot, "deleted-captures"));
+        _retentionNoticeFile = Path.Combine(paths.DataRoot, "retention-notice.json");
+    }
+
+    /// <summary>
+    /// Tags every capture the user deletes in this async flow with <paramref name="batch"/>, so the
+    /// whole command can be undone at once. The tag flows into the removal worker with the
+    /// execution context and ends when the scope is disposed.
+    /// </summary>
+    public IDisposable BeginBatch(Guid batch)
+    {
+        Guid? previous = _batch.Value;
+        _batch.Value = batch;
+        return new BatchScope(this, previous);
+    }
+
+    private sealed class BatchScope(RecoverableLibraryService owner, Guid? previous) : IDisposable
+    {
+        private bool _disposed;
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            owner._batch.Value = previous;
+        }
     }
 
     public ICaptureRemovalTransaction? PrepareRemoval(CaptureRecord record, string reason)
@@ -57,7 +102,7 @@ public sealed class RecoverableLibraryService
         // Snapshot before any Shell action. A failed receipt write still leaves enough
         // information to find this exact recycled filesystem object after restart.
         var entry = new DeletedLibraryCapture(Guid.NewGuid(), MinimalSnapshot(record), original, identity, reason,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow, _batch.Value);
         Write(entry.Token, "intent", entry);
         RecycledPathReceipt? receipt = null;
         try
@@ -222,6 +267,163 @@ public sealed class RecoverableLibraryService
         return Task.Run<IReadOnlyList<DeletedLibraryCapture>>(() => RecentDeleted().Take(limit).ToArray());
     }
 
+    /// <summary>
+    /// The restore menu's content, read off the caller's thread: the newest <paramref name="limit"/>
+    /// deletions with their Recycle Bin thumbnails, and the last delete command's restorable count.
+    /// </summary>
+    public Task<DeletedLibraryOverview> RecentDeletedOverviewAsync(int limit = 20)
+    {
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        return Task.Run(() =>
+        {
+            IReadOnlyList<DeletedLibraryCapture> all = RecentDeleted();
+            Guid? last = all.Count > 0 ? all[0].BatchKey : null;
+            int lastCount = last is { } batch ? all.Count(entry => entry.BatchKey == batch) : 0;
+            DeletedLibraryEntry[] recent = all.Take(limit).Select(entry => new DeletedLibraryEntry(entry, RecycledThumbnail(entry))).ToArray();
+            return new DeletedLibraryOverview(recent, last, lastCount);
+        });
+    }
+
+    /// <summary>The thumbnail file inside the recorded Recycle Bin item; no Shell lookup.</summary>
+    private string? RecycledThumbnail(DeletedLibraryCapture entry)
+    {
+        if (ReadReceipt(entry) is not { } receipt) return null;
+        string thumbnail = Path.Combine(receipt.RecycledPath, CaptureFileNames.Thumbnail);
+        return File.Exists(thumbnail) ? thumbnail : null;
+    }
+
+    /// <summary>
+    /// Restores every capture of one delete command. The Shell moves run on one worker and the
+    /// library index is written once for the whole batch, so undoing a hundred captures costs one
+    /// publication instead of a hundred. A capture whose Recycle Bin item is gone, or whose
+    /// original location is taken, stays where it is and counts as failed.
+    /// </summary>
+    public Task<LibraryBatchRestoreResult> RestoreBatchAsync(Guid batch)
+    {
+        Task<LibraryBatchRestoreResult> operation = RestoreBatchCoreAsync(batch);
+        lock (_gate) _pendingRestores.Add(operation);
+        return ObserveBatchRestoreAsync(operation);
+    }
+
+    private async Task<LibraryBatchRestoreResult> ObserveBatchRestoreAsync(Task<LibraryBatchRestoreResult> operation)
+    {
+        try { return await operation; }
+        finally { lock (_gate) _pendingRestores.Remove(operation); }
+    }
+
+    private async Task<LibraryBatchRestoreResult> RestoreBatchCoreAsync(Guid batch)
+    {
+        DeletedLibraryCapture[] entries = await Task.Run(() => ReadIntents()
+            .Where(entry => entry.BatchKey == batch && !IsRestored(entry.Token)).ToArray());
+        // Already back in the library (for example restored one by one): nothing to move.
+        DeletedLibraryCapture[] pending = entries.Where(entry => _queue.Find(entry.Record.Id) is null).ToArray();
+        var restored = await Task.Run(() =>
+        {
+            var moved = new List<(DeletedLibraryCapture Entry, CaptureRecord Record)>(pending.Length);
+            foreach (DeletedLibraryCapture entry in pending)
+            {
+                try
+                {
+                    RecycledPathReceipt receipt = ResolveReceipt(entry)
+                        ?? throw new IOException("The recorded Recycle Bin item is unavailable.");
+                    _trash.RestoreDirectory(receipt);
+                    moved.Add((entry, RestoredRecord(entry)));
+                }
+                catch (Exception ex)
+                {
+                    _log.LogWarning(ex, "Could not restore capture {Id} of a deleted batch", entry.Record.Id);
+                }
+            }
+            return moved;
+        });
+        if (restored.Count > 0)
+        {
+            // A failure here leaves the restored originals and their intents for startup recovery,
+            // exactly like a single restore.
+            await _queue.RestoreRecordsAsync(restored.Select(item => item.Record).ToArray());
+            await Task.Run(() =>
+            {
+                foreach ((DeletedLibraryCapture entry, _) in restored)
+                {
+                    try { MarkRestored(entry.Token); }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    { _log.LogWarning(ex, "Could not mark capture {Id} restored", entry.Record.Id); continue; }
+                    TryDeleteJournal(entry.Token);
+                }
+            });
+        }
+        return new LibraryBatchRestoreResult(restored.Count, pending.Length - restored.Count);
+    }
+
+    // ---- First automatic deletion notice ---------------------------------------------------
+
+    private sealed record RetentionNoticeState(bool Shown, int Pending);
+
+    /// <summary>
+    /// Counts images the retention period deleted until the library has told the user once.
+    /// Kept in a small app-owned file, so the notice appears once per installation.
+    /// </summary>
+    internal void NoteRetentionDeletion(int count)
+    {
+        if (count <= 0) return;
+        lock (_gate)
+        {
+            RetentionNoticeState state = ReadRetentionNotice();
+            if (state.Shown) return;
+            WriteRetentionNotice(state with { Pending = state.Pending + count });
+        }
+    }
+
+    /// <summary>The images deleted before the first notice, or null once it has been shown.</summary>
+    public int? PendingRetentionNotice
+    {
+        get
+        {
+            lock (_gate)
+            {
+                RetentionNoticeState state = ReadRetentionNotice();
+                return state.Shown || state.Pending <= 0 ? null : state.Pending;
+            }
+        }
+    }
+
+    /// <summary>Returns the pending count and records the notice as shown, or null when there is none.</summary>
+    public int? TakeRetentionNotice()
+    {
+        lock (_gate)
+        {
+            RetentionNoticeState state = ReadRetentionNotice();
+            if (state.Shown || state.Pending <= 0) return null;
+            WriteRetentionNotice(state with { Shown = true });
+            return state.Pending;
+        }
+    }
+
+    private RetentionNoticeState ReadRetentionNotice()
+    {
+        if (_retentionNotice is { } cached) return cached;
+        RetentionNoticeState state = new(false, 0);
+        try
+        {
+            if (File.Exists(_retentionNoticeFile)
+                && JsonSerializer.Deserialize<RetentionNoticeState>(File.ReadAllText(_retentionNoticeFile)) is { } stored)
+                state = stored with { Pending = Math.Max(0, stored.Pending) };
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            _log.LogWarning(ex, "Could not read the retention notice state");
+        }
+        return _retentionNotice = state;
+    }
+
+    private void WriteRetentionNotice(RetentionNoticeState state)
+    {
+        _retentionNotice = state;
+        try { AtomicFile.WriteExportBytes(_retentionNoticeFile, JsonSerializer.SerializeToUtf8Bytes(state)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { _log.LogWarning(ex, "Could not save the retention notice state"); }
+    }
+
     /// <summary>Connect on the queue owner (the UI dispatcher in production). Capacity and
     /// retention eviction delete files on a worker after the index publication; user
     /// deletions move to the Recycle Bin on a worker. Publication resumes on that owner.
@@ -259,6 +461,7 @@ public sealed class RecoverableLibraryService
             {
                 _attemptedMaintenance.Clear();
                 CaptureBatchRemovalResult result = await _queue.RemoveAutomaticallyAsync(ids, reason, canRemove);
+                if (reason == "retention-age") NoteRetentionDeletion(result.RemovedCount);
                 completed?.Invoke(result);
                 // Failed/attempted IDs are not retried because a trigger overlapped this
                 // same transaction. Distinct new work is drained against current state.
