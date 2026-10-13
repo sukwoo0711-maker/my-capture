@@ -51,11 +51,13 @@ OCR로 이미지 속 글자를 텍스트로 복사하고, 표를 CSV·Markdown·
 - 키보드 조작과 스크린 리더 접근성
 - 계정, 광고, 캡처 횟수 제한 없음
 
-### 이 버전의 새로운 기능 (4.1.1)
+### 이 버전의 새로운 기능 (4.1.3)
 
-- 캡처 영역을 선택할 때 화면을 그리는 처리 비용을 줄였습니다.
-- 큰 이미지의 일부를 자르거나 다시 실행할 때 메모리 사용량을 줄였습니다.
-- 라이브러리에서 전체 선택과 선택 상태 확인에 필요한 작업을 줄였습니다.
+- 캡처 영역을 고를 때 마우스 포인터와 안내선이 지연 없이 따라옵니다.
+- 캡처 단축키를 누르면 브라우저 주소나 폴더 정보를 기다리지 않고 바로 선택 화면을 표시합니다.
+- 라이브러리에서 삭제한 항목은 휴지통으로 이동하고, 삭제 직후 Ctrl+Z로 되돌릴 수 있습니다.
+- 동영상 편집기와 재생 창에서 녹화가 흐리게 보이던 문제를 수정했습니다.
+- 38개 기능의 사용법을 짧은 동영상으로 안내합니다.
 
 ### 검색어
 
@@ -97,11 +99,13 @@ MyCapture supports global shortcuts, a tray menu, Korean and English interfaces,
 - Keyboard and screen reader accessibility
 - No account, ads or capture limits
 
-### What's new in this version (4.1.1)
+### What's new in this version (4.1.3)
 
-- Reduced drawing work while selecting a capture region.
-- Reduced memory use when cropping part of a large image or redoing a crop.
-- Reduced processing when selecting all captures and checking selections in the library.
+- The pointer and guide lines follow the mouse without lag while you select a capture region.
+- The capture shortcut shows the selection screen right away instead of waiting for the browser address or folder.
+- Deleted library items go to the Recycle Bin, and Ctrl+Z restores them right after deleting.
+- Fixed recordings looking washed out in the video editor and player.
+- Short videos show how to use 38 features.
 
 ### Search terms
 
