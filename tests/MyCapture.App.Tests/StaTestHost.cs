@@ -61,10 +61,29 @@ internal static class WpfTestThread
     {
         try
         {
-            if (Dispatcher.FromThread(Thread.CurrentThread) is { HasShutdownStarted: false } dispatcher)
+            if (Dispatcher.FromThread(Thread.CurrentThread) is not { HasShutdownStarted: false } dispatcher)
             {
-                dispatcher.InvokeShutdown();
+                return;
             }
+
+            // Let work the test left queued finish first, such as a context menu's popup that
+            // was just closed: shutting down with it pending hung inside InvokeShutdown (the
+            // ShutdownStarted event ran, ShutdownFinished never did).
+            try
+            {
+                var drained = new DispatcherFrame();
+                var limit = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Send, (_, _) => drained.Continue = false, dispatcher);
+                _ = dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => drained.Continue = false));
+                Dispatcher.PushFrame(drained);
+                limit.Stop();
+            }
+            catch (Exception ex)
+            {
+                // Late work the test left behind failed, or processing is disabled; shut down anyway.
+                Console.Error.WriteLine($"Test thread dispatcher drain failed: {ex}");
+            }
+
+            dispatcher.InvokeShutdown();
         }
         catch (Exception ex)
         {
