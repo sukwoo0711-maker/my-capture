@@ -59,14 +59,50 @@ internal static class Program
         FluidMotion.AnimationsEnabledOverrideForTest = false;
         ThemeService.Apply(AppTheme.Glass);
         Stage.Scale = options.Width / Stage.Width;
+        // The generator drives real product windows. A previous version created the resident App,
+        // which ran retention cleanup on the owner's library and rewrote the sign-in Run entry to
+        // this tool, so every run now proves it left the real profile and the Run entry untouched.
+        string before = UserStateFingerprint();
+        int exitCode;
         try
         {
-            return Run(options);
+            exitCode = Run(options);
         }
         finally
         {
             app.Shutdown();
         }
+
+        string after = UserStateFingerprint();
+        if (!string.Equals(before, after, StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine("The real MyCapture profile or the sign-in Run entry changed during generation.");
+            Console.Error.WriteLine("before: " + before);
+            Console.Error.WriteLine("after:  " + after);
+            return 3;
+        }
+
+        return exitCode;
+    }
+
+    /// <summary>
+    /// Sizes and write times of the owner's real profile files plus the HKCU Run value. Only metadata
+    /// is read; nothing in the profile is opened for writing.
+    /// </summary>
+    private static string UserStateFingerprint()
+    {
+        var parts = new List<string>();
+        string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MyCapture");
+        foreach (string name in new[] { "index.json", "settings.json", "folders.json" })
+        {
+            var file = new FileInfo(Path.Combine(profile, name));
+            parts.Add(file.Exists ? $"{name}:{file.Length}:{file.LastWriteTimeUtc.Ticks}" : $"{name}:-");
+        }
+
+        using Microsoft.Win32.RegistryKey? run = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+            @"Software\Microsoft\Windows\CurrentVersion\Run", writable: false);
+        parts.Add("run:" + (run?.GetValue("MyCapture") as string ?? "-"));
+        return string.Join("|", parts);
     }
 
     /// <summary>
