@@ -554,7 +554,7 @@
     <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
   </data>
   <data name="Text_328D27BC4C06" xml:space="preserve">
-    <value>시작과 끝 시간을 초 단위 숫자로 입력하십시오.</value>
+    <value>시작과 끝 시간을 0:01.500처럼 입력하십시오. 초 단위 숫자(1.5)도 입력할 수 있습니다.</value>
     <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
   </data>
   <data name="Text_328D9EF717EC" xml:space="preserve">

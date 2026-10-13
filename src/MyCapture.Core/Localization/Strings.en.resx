@@ -554,7 +554,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
   </data>
   <data name="Text_328D27BC4C06" xml:space="preserve">
-    <value>Enter start and end times as numbers of seconds.</value>
+    <value>Enter start and end times like 0:01.500. Seconds (1.5) also work.</value>
     <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
   </data>
   <data name="Text_328D9EF717EC" xml:space="preserve">
