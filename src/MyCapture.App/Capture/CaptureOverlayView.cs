@@ -109,6 +109,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private RectD? _drawnHover;
     private bool _drawnHoverWholeMonitor;
     private IReadOnlyList<MonitorInfo>? _monitors;
+    private readonly Func<IReadOnlyList<MonitorInfo>> _readMonitorsOnce;
     private WindowCandidate? _selectedWindow;
     private bool _dragBeyondClick;
     private bool _textCaptureMode;
@@ -164,6 +165,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private FormattedText? _instructionText;
     private FormattedText? _anchorText;
     private FormattedText? _precisionText;
+    private FormattedText? _sampleText;
+    private string? _sampleTextLabel;
+    private FormattedText? _coordinateText;
+    private (int X, int Y) _coordinateTextPixel;
     private Pen _pointerOuterPen = null!;
     private Pen _pointerInnerPen = null!;
     private Pen _anchorPen = null!;
@@ -609,7 +614,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             window = WindowDetectHitTest.FindTopmost(_windowCandidates, screenPoint, OwnWindowHandle);
             region = window is null ? null : WindowDetectHitTest.ResolveRegion(window, _windowCandidates, screenPoint,
-                _screenBounds, () => _monitors ??= ReadMonitors(), out wholeMonitor);
+                _screenBounds, _readMonitorsOnce, out wholeMonitor);
             if (region is null) window = null;
         }
         else if (_interaction == InteractionMode.Create && !_dragBeyondClick)
@@ -661,6 +666,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _instructionVisual, _anchorVisual, _pointerVisual, _magnifierVisual, _toastVisual,
         };
         _feedbackScheduler = new CompositionFrameScheduler(Dispatcher, RenderLayers);
+        // Hover runs on every pointer move; a lambda written there would be allocated each time.
+        _readMonitorsOnce = () => _monitors ??= ReadMonitors();
         _revealVisual.Clip = _revealClip;
         _horizontalGuideVisual.Clip = _horizontalGuideClip;
         _verticalGuideVisual.Clip = _verticalGuideClip;
@@ -966,7 +973,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _staticSize = RenderSize;
             StaticRenderCount++;
             BuildGuidePens();
-            _instructionText = _anchorText = _precisionText = null;
+            _instructionText = _anchorText = _precisionText = _sampleText = _coordinateText = null;
             using (DrawingContext dc = _desktopVisual.RenderOpen())
                 if (_frame?.Bitmap is { } bitmap) dc.DrawImage(bitmap, new Rect(RenderSize));
             using (DrawingContext dc = _dimmerVisual.RenderOpen())
@@ -1578,9 +1585,20 @@ internal sealed class CaptureOverlayView : FrameworkElement
         var cell = new Rect(x + (cursorX * cellWidth), y + (cursorY * cellHeight), cellWidth, cellHeight);
         dc.DrawRectangle(null, _magnifierBorderPen, cell);
 
-        string coordinate = $"{(int)_cursorPixel.X}, {(int)_cursorPixel.Y}";
-        FormattedText color = CreateText(_sampleLabel, _monoTypeface, 12, _primaryTextBrush);
-        FormattedText location = CreateText(coordinate, _monoTypeface, 10, _mutedTextBrush);
+        // A label that reads the same as on the last frame keeps its text layout.
+        if (_sampleText is null || !string.Equals(_sampleTextLabel, _sampleLabel, StringComparison.Ordinal))
+        {
+            _sampleText = CreateText(_sampleLabel, _monoTypeface, 12, _primaryTextBrush);
+            _sampleTextLabel = _sampleLabel;
+        }
+        (int X, int Y) coordinate = ((int)_cursorPixel.X, (int)_cursorPixel.Y);
+        if (_coordinateText is null || _coordinateTextPixel != coordinate)
+        {
+            _coordinateText = CreateText($"{coordinate.X}, {coordinate.Y}", _monoTypeface, 10, _mutedTextBrush);
+            _coordinateTextPixel = coordinate;
+        }
+        FormattedText color = _sampleText;
+        FormattedText location = _coordinateText;
         double footerTop = y + imageHeight;
         dc.DrawText(color, new Point(x + 8, footerTop + 5));
         dc.DrawText(location, new Point(x + width - location.Width - 8, footerTop + 6));

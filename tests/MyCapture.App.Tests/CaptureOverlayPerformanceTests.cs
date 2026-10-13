@@ -269,6 +269,68 @@ public sealed class CaptureOverlayPerformanceTests
     });
 
     [Fact]
+    public void PointerMoves_OverDetectedWindows_AllocateNothing() => StaTestHost.Run(() =>
+    {
+        var view = new CaptureOverlayView(Frame()) { DetectWindows = true };
+        var host = Host(view);
+        PointD pointer = new(100, 80);
+        view.ReadCursor = () => pointer;
+        try
+        {
+            host.Show();
+            PumpUntil(() => view.IsLoaded && view.StaticRenderCount > 0);
+            view.WindowCandidates =
+            [
+                new WindowCandidate(new IntPtr(31), new RectD(40, 40, 200, 150), "Front"),
+                new WindowCandidate(new IntPtr(32), new RectD(0, 0, 640, 360), "Back"),
+            ];
+            view.UpdatePointer(false, false);
+            view.FlushFeedbackForTest();
+            // Leave one frame pending, as during a real burst of moves between two frames.
+            pointer = new PointD(101, 81);
+            view.UpdatePointer(false, false);
+            Assert.True(view.HasPendingFeedback);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 400; i++)
+            {
+                // Crossing between the two windows changes the highlight on many of these moves.
+                pointer = new PointD(30 + (i % 300), 30 + (i % 200));
+                view.UpdatePointer(false, false);
+            }
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.True(allocated == 0, $"400 pointer moves allocated {allocated} bytes.");
+        }
+        finally { view.ReleaseResources(); host.Close(); }
+    });
+
+    [Fact]
+    public void RepeatedMagnifierLabels_KeepTheirTextLayout() => StaTestHost.Run(() =>
+    {
+        var view = new CaptureOverlayView(Frame());
+        PointD pointer = new(120, 100);
+        view.ReadCursor = () => pointer;
+        try
+        {
+            SetMouseOver(view, true);
+            view.InitializePointer();
+            Render(view, 640, 360);
+            FormattedText sample = Field<FormattedText>(view, "_sampleText");
+            FormattedText coordinate = Field<FormattedText>(view, "_coordinateText");
+            // Same colour, new position: the colour label is reused and the coordinate is new.
+            pointer = new PointD(121, 100);
+            view.UpdatePointer(false, false);
+            Render(view, 640, 360);
+            Assert.Same(sample, Field<FormattedText>(view, "_sampleText"));
+            Assert.NotSame(coordinate, Field<FormattedText>(view, "_coordinateText"));
+            // A palette change rebuilds the static layers, and the labels with their brushes.
+            Invoke(view, "OnGuidePaletteChanged");
+            Render(view, 640, 360);
+            Assert.NotSame(sample, Field<FormattedText>(view, "_sampleText"));
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Fact]
     public void LostCaptureAndCancel_ClearRetainedGuidesAndFeedback() => StaTestHost.Run(() =>
     {
         var view = new CaptureOverlayView(Frame());

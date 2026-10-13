@@ -33,8 +33,10 @@ internal static class WindowDetectHitTest
         IntPtr excludedHandle = default)
     {
         ArgumentNullException.ThrowIfNull(candidates);
-        foreach (WindowCandidate candidate in candidates)
+        // Runs on every pointer move: index the list instead of boxing an enumerator each time.
+        for (int index = 0; index < candidates.Count; index++)
         {
+            WindowCandidate candidate = candidates[index];
             if (excludedHandle != IntPtr.Zero && candidate.Handle == excludedHandle) continue;
             RectD bounds = candidate.ScreenBounds.Normalized();
             if (bounds.Width < MinimumRegionPixels || bounds.Height < MinimumRegionPixels) continue;

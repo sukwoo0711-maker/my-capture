@@ -12,6 +12,8 @@ internal sealed class CompositionFrameScheduler : IDisposable
 {
     private readonly Dispatcher _dispatcher;
     private readonly Action _render;
+    // One delegate for every subscription: a method group would allocate a new one on each frame.
+    private readonly EventHandler _onRendering;
     private bool _isPending;
     private bool _disposed;
 
@@ -19,6 +21,7 @@ internal sealed class CompositionFrameScheduler : IDisposable
     {
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _render = render ?? throw new ArgumentNullException(nameof(render));
+        _onRendering = OnRendering;
     }
 
     internal long RequestCount { get; private set; }
@@ -50,7 +53,7 @@ internal sealed class CompositionFrameScheduler : IDisposable
         }
 
         _isPending = true;
-        CompositionTarget.Rendering += OnRendering;
+        CompositionTarget.Rendering += _onRendering;
     }
 
     internal void CancelPending()
@@ -66,7 +69,7 @@ internal sealed class CompositionFrameScheduler : IDisposable
             return;
         }
 
-        CompositionTarget.Rendering -= OnRendering;
+        CompositionTarget.Rendering -= _onRendering;
         _isPending = false;
     }
 
@@ -79,7 +82,7 @@ internal sealed class CompositionFrameScheduler : IDisposable
             return;
         }
 
-        CompositionTarget.Rendering -= OnRendering;
+        CompositionTarget.Rendering -= _onRendering;
         _isPending = false;
         RenderFrameCount++;
         _render();
@@ -109,7 +112,7 @@ internal sealed class CompositionFrameScheduler : IDisposable
             return;
         }
 
-        CompositionTarget.Rendering -= OnRendering;
+        CompositionTarget.Rendering -= _onRendering;
         _isPending = false;
         RenderFrameCount++;
         _render();
