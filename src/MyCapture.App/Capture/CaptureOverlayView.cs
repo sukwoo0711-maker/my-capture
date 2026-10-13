@@ -150,6 +150,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private string? _targetLabel;
     private Rect? _activeCueSegment;
     private bool _staticDirty = true;
+    private Size _staticSize = Size.Empty;
     private bool _released;
     private RectD? _drawnSelection;
     private PointD? _drawnAnchor;
@@ -158,6 +159,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private PointD? _drawnMagnifierPointer;
     private bool _drawnMagnifierMouseOver;
     private bool _guideGeometryReady;
+    private bool _guideStripsArePixels;
     private bool _guidesVisible;
     private FormattedText? _instructionText;
     private FormattedText? _anchorText;
@@ -661,7 +663,14 @@ internal sealed class CaptureOverlayView : FrameworkElement
             if (_released) return;
             ThemeService.CaptureGuideChanged -= OnGuidePaletteChanged;
             ThemeService.CaptureGuideChanged += OnGuidePaletteChanged;
-            OnGuidePaletteChanged();
+            // The constructor already resolved the palette. Rebuilding the static layers anyway redrew
+            // the whole virtual desktop once more just after the selector appeared, as the pointer
+            // started to move; only a palette that changed since then needs it.
+            if (_guidePalette is not { } constructed || !SamePalette(CaptureGuidePalette.Resolve(), constructed)
+                || !SameColor(RecordingSelectionCue.Resolve(), _recordingBrush))
+                OnGuidePaletteChanged();
+            // Feedback asked for before Loaded (the pointer read on activation) is drawn on the next frame.
+            else QueueFeedback();
         };
         Unloaded += (_, _) =>
         {
@@ -670,6 +679,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
         };
 
         Focusable = true;
+        // The system focus rectangle would dash-outline the whole virtual desktop. It shows after the
+        // keyboard shortcut that opens the selector, and its bounds meet every dirty region, so WPF
+        // re-rasterised thousands of dashes on each pointer frame. The selection, the highlighted
+        // window and the mode bar's own focus cues already show where the keys act.
+        FocusVisualStyle = null;
         // The selector never accepts text; keep single-letter commands out of the IME.
         InputMethod.SetIsInputMethodEnabled(this, false);
         Cursor = Cursors.Cross;
@@ -722,6 +736,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
+        // The first arrange renders the layers at the new size before this notification arrives;
+        // marking them dirty again then redrew the whole desktop on the first pointer frame.
+        if (sizeInfo.NewSize == _staticSize && !_staticDirty) return;
         _staticDirty = true;
         QueueFeedback();
     }
@@ -939,6 +956,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (rebuild)
         {
             _staticDirty = false;
+            _staticSize = RenderSize;
             StaticRenderCount++;
             BuildGuidePens();
             _instructionText = _anchorText = _precisionText = null;
@@ -1235,18 +1253,26 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _guidesVisible = false;
             return;
         }
-        if (rebuild || !_guideGeometryReady)
+        Point p = ToDipPoint(_cursorPixel);
+        bool pixelStrips = GuideStripsOnDevicePixels;
+        if (rebuild || !_guideGeometryReady || pixelStrips != _guideStripsArePixels)
         {
             GuideGeometryBuildCount++;
             // Retain two narrow strips rather than redrawing one viewport-sized visual.
             // Their order preserves the original horizontal-then-vertical intersection.
             using (DrawingContext dc = _horizontalGuideVisual.RenderOpen())
-                DrawGuide(dc, new Point(0, 0), new Point(ActualWidth, 0));
+            {
+                if (pixelStrips) DrawStrip(dc, horizontal: true);
+                else DrawGuide(dc, new Point(0, 0), new Point(ActualWidth, 0));
+            }
             using (DrawingContext dc = _verticalGuideVisual.RenderOpen())
-                DrawGuide(dc, new Point(0, 0), new Point(0, ActualHeight));
+            {
+                if (pixelStrips) DrawStrip(dc, horizontal: false);
+                else DrawGuide(dc, new Point(0, 0), new Point(0, ActualHeight));
+            }
             _guideGeometryReady = true;
+            _guideStripsArePixels = pixelStrips;
         }
-        Point p = ToDipPoint(_cursorPixel);
         _horizontalGuideVisual.Offset = new Vector(0, p.Y);
         _verticalGuideVisual.Offset = new Vector(p.X, 0);
         double halfStroke = _guideShadowPen.Thickness / 2;
@@ -1271,7 +1297,38 @@ internal sealed class CaptureOverlayView : FrameworkElement
             dc.DrawLine(_guideShadowPen, from, to);
             dc.DrawLine(_guideLinePen, from, to);
         }
+
+        // The bitmap covers the pixel on each side of the cursor's pixel edge, so it lands on the
+        // device pixels the strokes would paint. The visual's offset moves it with the pointer.
+        void DrawStrip(DrawingContext dc, bool horizontal)
+        {
+            Brush shadow = _guidePalette["CaptureGuide.LineShadow"], line = _guidePalette["CaptureGuide.Line"];
+            if (horizontal)
+            {
+                dc.DrawImage(CaptureGuideStrip.Get(shadow, line, PixelWidth, horizontal: true),
+                    new Rect(0, -DipPerPixelY, ActualWidth, CaptureGuideStrip.Thickness * DipPerPixelY));
+            }
+            else
+            {
+                dc.DrawImage(CaptureGuideStrip.Get(shadow, line, PixelHeight, horizontal: false),
+                    new Rect(-DipPerPixelX, 0, CaptureGuideStrip.Thickness * DipPerPixelX, ActualHeight));
+            }
+        }
     }
+
+    /// <summary>
+    /// Whether the guides fall on device-pixel edges: the pointer is on a whole pixel (always true for
+    /// the real cursor) and one frame pixel is one device pixel. Only then do the cached strips match
+    /// the strokes pixel for pixel; anything else draws the strokes themselves.
+    /// </summary>
+    private bool GuideStripsOnDevicePixels =>
+        IsWhole(_cursorPixel.X) && IsWhole(_cursorPixel.Y)
+        && Math.Abs((DipPerPixelX * _guideDpi.DpiScaleX) - 1) <= 0.0001
+        && Math.Abs((DipPerPixelY * _guideDpi.DpiScaleY) - 1) <= 0.0001;
+
+    private static bool IsWhole(double value) => Math.Abs(value - Math.Round(value)) <= 0.000001;
+
+    internal bool GuideStripsArePixelsForTest => _guideStripsArePixels;
 
     private void DrawDimensionLabel(DrawingContext dc, RectD pixels, Rect selectionDip)
     {
@@ -2041,6 +2098,15 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _startGuide?.ApplyPalette(_guidePalette);
     }
 
+    /// <summary>Whether two palettes paint identically: the same keys, each a solid brush of the same colour.</summary>
+    internal static bool SamePalette(IReadOnlyDictionary<string, Brush> left, IReadOnlyDictionary<string, Brush> right) =>
+        left.Count == right.Count
+        && left.All(entry => right.TryGetValue(entry.Key, out Brush? other) && SameColor(entry.Value, other));
+
+    private static bool SameColor(Brush left, Brush right) =>
+        ReferenceEquals(left, right)
+        || (left is SolidColorBrush a && right is SolidColorBrush b && a.Color == b.Color && a.Opacity == b.Opacity);
+
     private void OnGuidePaletteChanged()
     {
         if (_released) return;
@@ -2055,18 +2121,17 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         GuidePenBuildCount++;
         double pixel = GuidePixelSizeX;
-        Pen Create(string key, double width, DashStyle? dash = null)
+        Pen Create(string key, double width)
         {
             var pen = new Pen(_guidePalette[key], width * pixel);
-            if (dash is not null) pen.DashStyle = dash;
             pen.Freeze();
             return pen;
         }
         _pointerOuterPen = Create("CaptureGuide.CrosshairShadow", 3);
         _pointerInnerPen = Create("CaptureGuide.Crosshair", 1);
         _anchorPen = Create("CaptureGuide.StartPoint", 1);
-        _guideShadowPen = Create("CaptureGuide.LineShadow", 2, new DashStyle([1.5, 1.5], 0));
-        _guideLinePen = Create("CaptureGuide.Line", 1, new DashStyle([3, 3], 0));
+        _guideShadowPen = CaptureGuideStrip.ShadowPen(_guidePalette["CaptureGuide.LineShadow"], pixel);
+        _guideLinePen = CaptureGuideStrip.LinePen(_guidePalette["CaptureGuide.Line"], pixel);
         _selectionBorderPen = Create("CaptureGuide.SelectionBorder", 1);
         _accentChipPen = Create("CaptureGuide.SelectionBorder", 2);
         _detectedBorderPen = Create("CaptureGuide.SelectionBorder", 3);

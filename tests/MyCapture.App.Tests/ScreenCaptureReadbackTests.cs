@@ -95,6 +95,28 @@ public sealed class ScreenCaptureReadbackTests
     });
 
     [Fact]
+    public void TopDownRows_BecomeAFrozenBitmapThatOwnsItsPixels() => StaTestHost.Run(() =>
+    {
+        const int width = 5, height = 3;
+        byte[] rows = Enumerable.Range(0, width * height * 4).Select(i => (byte)(i * 7)).ToArray();
+        IntPtr native = Marshal.AllocHGlobal(rows.Length);
+        try
+        {
+            Marshal.Copy(rows, 0, native, rows.Length);
+            BitmapSource bitmap = ScreenCaptureEngine.FromTopDownBgrx(native, width, height);
+            // The source memory is released right after the copy; the bitmap must not refer to it.
+            Marshal.Copy(new byte[rows.Length], 0, native, rows.Length);
+            Assert.True(bitmap.IsFrozen);
+            Assert.IsNotType<WriteableBitmap>(bitmap);
+            Assert.Equal(PixelFormats.Bgr32, bitmap.Format);
+            byte[] actual = new byte[rows.Length];
+            bitmap.CopyPixels(actual, width * 4, 0);
+            for (int i = 0; i < rows.Length; i += 4) Assert.Equal(rows.AsSpan(i, 3).ToArray(), actual.AsSpan(i, 3).ToArray());
+        }
+        finally { Marshal.FreeHGlobal(native); }
+    });
+
+    [Fact]
     public void Readback_DoesNotAllocateAManagedPixelPlane() => StaTestHost.Run(() =>
     {
         using var surface = new NativeSurface(513, 257);
@@ -122,6 +144,8 @@ public sealed class ScreenCaptureReadbackTests
         {
             BitmapSource bitmap = fixture.Engine.CaptureRegion(fixture.Region, includeCursor);
             Assert.True(bitmap.IsFrozen);
+            // No WriteableBitmap: it would give the capturing worker its own WPF media context.
+            Assert.IsNotType<WriteableBitmap>(bitmap);
             Assert.Equal(320, bitmap.PixelWidth);
             Assert.Equal(240, bitmap.PixelHeight);
             if (!includeCursor)
