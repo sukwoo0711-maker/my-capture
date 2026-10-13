@@ -77,7 +77,8 @@ public sealed partial class SettingsThemePreviewTests
 
             using (UiText.UseLanguage("ko-KR"))
             {
-                // MYCAPTURE_LIBSET_ONLY=settings limits a timing run to the settings window.
+                // MYCAPTURE_LIBSET_ONLY=settings limits a timing run to the settings window in a fresh
+                // process: closed library windows of the same process slow later window construction.
                 if (Environment.GetEnvironmentVariable("MYCAPTURE_LIBSET_ONLY") != "settings")
                 {
                     MeasureLibraryOpen(1_000, timings);
@@ -507,6 +508,7 @@ public sealed partial class SettingsThemePreviewTests
     {
         var cold = new List<double>();
         var warm = new List<double>();
+        var construct = new List<double>();
         // MYCAPTURE_LIBSET_SAMPLES raises the settings sample count for a quieter median.
         int samples = int.TryParse(Environment.GetEnvironmentVariable("MYCAPTURE_LIBSET_SAMPLES"), out int requested) && requested > 5
             ? requested : 5;
@@ -514,6 +516,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             var watch = Stopwatch.StartNew();
             SettingsWindow window = CreateSettingsUxWindow(new AppSettings { General = { Theme = AppThemeNames.Glass } }).Window;
+            construct.Add(watch.Elapsed.TotalMilliseconds);
             window.ShowSettings();
             Drain(window);
             cold.Add(watch.Elapsed.TotalMilliseconds);
@@ -532,6 +535,7 @@ public sealed partial class SettingsThemePreviewTests
             }
         }
         Record(timings, "settings open cold", cold);
+        Record(timings, "settings open cold (construction part)", construct);
         Record(timings, "settings reopen", warm);
     }
 }
