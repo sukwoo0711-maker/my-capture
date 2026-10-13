@@ -1915,6 +1915,21 @@ public partial class App : Application
                 _log?.LogDebug(ex, "Capture pipeline prewarm failed");
             }
         });
+
+        // The selector's own first-use costs (mode bar templates, fonts, guide strips for this
+        // desktop) are paid once while the app is idle after launch instead of on the first hotkey.
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+        {
+            if (_overlay?.IsActive == true) return;
+            try
+            {
+                CaptureOverlayPrewarm.Run(MonitorEnumerator.GetVirtualDesktopBounds());
+            }
+            catch (Exception ex)
+            {
+                _log?.LogDebug(ex, "Capture selector prewarm failed");
+            }
+        }));
     }
 
     private void StartActivationListener()
