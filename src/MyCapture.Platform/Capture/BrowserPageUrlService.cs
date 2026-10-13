@@ -33,9 +33,9 @@ public sealed class BrowserPageUrlService
     /// tabs) took about 455 ms, and browser walks alone about 370 ms. A ceiling below that
     /// cancelled the batch and the capture stored no URL. The probe returns as soon as it
     /// finishes, so the ceiling is a bound for a provider that hangs, not the normal wait.
-    /// The region selector does not wait for either read (CapturePageContext.AcquireFrameAsync):
-    /// the ceiling bounds how late a capture's page is known, and the synchronous advanced
-    /// captures (window, fixed size, previous region), which still wait for their reads.
+    /// No capture waits for either read (CapturePageContext.AcquireFrameAsync for the region
+    /// selector, AdvancedCaptureService for window, fixed-size, previous-region and scrolling
+    /// captures): the ceiling bounds how late a capture's page is known.
     /// </summary>
     internal static readonly TimeSpan DefaultBudget = TimeSpan.FromMilliseconds(900);
 

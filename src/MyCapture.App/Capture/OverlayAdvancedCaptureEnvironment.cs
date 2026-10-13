@@ -13,8 +13,10 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
     private readonly CaptureOverlayCoordinator _coordinator;
     private readonly WindowTitleService _windowTitles;
     private readonly Func<bool> _includeCursor;
-    private readonly BrowserPageUrlService _pageUrls = new();
-    private readonly WindowSourceService _windowSources = new();
+    // No capture waits for these reads, so a read that finds the previous capture's probe still
+    // running waits for it within its own deadline instead of giving up at once.
+    private readonly BrowserPageUrlService _pageUrls = new(waitForBusyProbe: true);
+    private readonly WindowSourceService _windowSources = new(waitForBusyProbe: true);
 
     internal OverlayAdvancedCaptureEnvironment(
         CaptureOverlayCoordinator coordinator,
@@ -57,11 +59,8 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
 
     public WindowUnderCursor? WindowAt(PointD screenPoint) => _windowTitles.ResolveAt(screenPoint);
 
-    // Existing advanced still commands are synchronous. The bounded reader waits for its
-    // own deadline here; its native UI Automation work always runs on its own MTA thread.
-    public BrowserDocumentSnapshot? ReadSourceDocument(WindowUnderCursor? window) =>
-        ReadSourceDocumentAsync(window).GetAwaiter().GetResult();
-
+    // Only asynchronous reads: the native UI Automation work runs on its own MTA thread under its own
+    // deadline, and the capture that started it never waits for it.
     public async Task<BrowserDocumentSnapshot?> ReadSourceDocumentAsync(WindowUnderCursor? window)
     {
         if (window is null || window.Handle == IntPtr.Zero || window.ProcessId == 0) return null;
@@ -71,11 +70,8 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
         return documents.GetValueOrDefault(window.Handle);
     }
 
-    // Same bounded-wait pattern as the page read: the application and Explorer folder reads run on
-    // their own threads under their own deadlines.
-    public WindowSourceSnapshot? ReadWindowSource(WindowUnderCursor? window) =>
-        ReadWindowSourceAsync(window).GetAwaiter().GetResult();
-
+    // Like the page read: the application and Explorer folder reads run on their own threads under
+    // their own deadlines.
     public async Task<WindowSourceSnapshot?> ReadWindowSourceAsync(WindowUnderCursor? window)
     {
         if (window is null || window.Handle == IntPtr.Zero || window.ProcessId == 0) return null;
@@ -115,7 +111,8 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
             selection.SourceTitle,
             selection.RecordForRepeat,
             selection.SourcePageUrl,
-            selection.SourceDetails);
+            selection.SourceDetails,
+            selection.PendingSource);
 
     private static bool Contains(RectD outer, RectD inner) =>
         inner.Left >= outer.Left

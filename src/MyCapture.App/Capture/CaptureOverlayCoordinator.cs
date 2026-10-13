@@ -447,13 +447,18 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// Opens the normal editor directly for an advanced capture whose physical region is already
     /// known. No full-screen overlay is created.
     /// </summary>
+    /// <param name="pendingSource">
+    /// Page and application still being read; the capture is saved and opened without waiting for them
+    /// (<see cref="CaptureSelectionCompletedEventArgs.PendingSource"/>).
+    /// </param>
     internal bool StartWithSelection(
         FrozenFrame frame,
         RectD region,
         string sourceTitle,
         bool recordForRepeat,
         string sourcePageUrl = "",
-        MyCapture.Core.Capture.CaptureSourceDetails? sourceDetails = null)
+        MyCapture.Core.Capture.CaptureSourceDetails? sourceDetails = null,
+        Task<CaptureSelectionSource>? pendingSource = null)
     {
         ArgumentNullException.ThrowIfNull(frame);
         VerifyDispatcherAccess();
@@ -481,6 +486,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             sourcePageUrl: sourcePageUrl)
         {
             SourceDetails = sourceDetails ?? MyCapture.Core.Capture.CaptureSourceDetails.Empty,
+            PendingSource = pendingSource,
         };
 
         _log.LogInformation(
