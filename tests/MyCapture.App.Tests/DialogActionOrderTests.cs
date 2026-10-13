@@ -53,17 +53,39 @@ public sealed class DialogActionOrderTests
     public void DestructiveConfirmationsLeadWithTheActionButEnterCancels(string language) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
-        // The library's delete confirmation and the folder deletion dialog.
+        // A plain OK/Cancel question that defaults to Cancel is not marked destructive by itself.
         Verify(new ThemedDialog("Delete?", "Delete", MessageBoxButton.OKCancel, MessageBoxResult.Cancel),
             [UiText.Get("Dialog.OK"), UiText.Get("Dialog.Cancel")], defaultIndex: 1, language);
+        // The library's delete confirmation names where the items go, in the danger style.
+        Verify(new ThemedDialog(LibraryPermanentDeletion.RecyclePrompt(3, entireLibrary: false), UiText.Get("LibrarySelection_Delete"),
+                MessageBoxButton.OKCancel, MessageBoxResult.Cancel, okLabel: UiText.Get("LibrarySelection_MoveToRecycleBin"), destructive: true),
+            [UiText.Get("LibrarySelection_MoveToRecycleBin"), UiText.Get("Dialog.Cancel")], defaultIndex: 1, language, dangerIndex: 0);
+        // Deleting permanently when the Recycle Bin cannot take the items.
+        Verify(new ThemedDialog(UiText.Format("LibrarySelection_RecycleUnavailableMessage", 2), UiText.Get("LibrarySelection_RecycleUnavailableTitle"),
+                MessageBoxButton.OKCancel, MessageBoxResult.Cancel, okLabel: UiText.Get("LibrarySelection_PermanentDelete"), destructive: true),
+            [UiText.Get("LibrarySelection_PermanentDelete"), UiText.Get("Dialog.Cancel")], defaultIndex: 1, language, dangerIndex: 0);
         var folder = new GalleryFolderDeletionDialog("Review", new CaptureFolderDeletionPreview(3, 2, 4, 1));
         Verify(folder, [UiText.Get("Folder410.Delete"), UiText.Get("Library.Action.Cancel")], defaultIndex: 1, language,
             shown => Assert.True(folder.CancelButton.IsKeyboardFocused || !shown.IsActive,
-                $"{language}: the folder deletion dialog must open with focus on cancel"));
+                $"{language}: the folder deletion dialog must open with focus on cancel"), dangerIndex: 0);
+    });
+
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void EmptyLibraryConfirmationSaysItemsGoToTheRecycleBin(string language) => StaTestHost.Run(() =>
+    {
+        using var scope = UiText.UseLanguage(language);
+        string prompt = LibraryPermanentDeletion.RecyclePrompt(12, entireLibrary: true);
+        Assert.Contains(language == "ko-KR" ? "항목은 Windows 휴지통으로 이동합니다." : "Items move to the Windows Recycle Bin.", prompt);
+        Verify(new ThemedDialog(prompt, UiText.Get("LibrarySelection_Delete"), MessageBoxButton.OKCancel, MessageBoxResult.Cancel,
+                okLabel: UiText.Get("LibrarySelection_MoveToRecycleBin"), destructive: true),
+            [UiText.Get("LibrarySelection_MoveToRecycleBin"), UiText.Get("Dialog.Cancel")], defaultIndex: 1, language, dangerIndex: 0,
+            evidenceName: "clear-library");
     });
 
     private static void Verify(Window dialog, string[] captions, int defaultIndex, string language,
-        Action<Window>? whileShown = null, bool escCancels = true)
+        Action<Window>? whileShown = null, bool escCancels = true, int? dangerIndex = null, string? evidenceName = null)
     {
         LoadTheme(dialog);
         // Final layout at once: the entrance fade would otherwise be caught mid-way in the evidence.
@@ -88,7 +110,8 @@ public sealed class DialogActionOrderTests
             Assert.Equal(escCancels ? [captions.Length - 1] : [], Enumerable.Range(0, buttons.Length).Where(index => buttons[index].IsCancel));
             Assert.Equal([defaultIndex], Enumerable.Range(0, buttons.Length).Where(index => buttons[index].IsDefault));
             for (int index = 0; index < buttons.Length; index++)
-                Assert.Same(dialog.FindResource(index == defaultIndex ? "Button.Primary" : "Button.Secondary"), buttons[index].Style);
+                Assert.Same(dialog.FindResource(index == defaultIndex ? "Button.Primary" : index == dangerIndex ? "Button.Danger" : "Button.Secondary"),
+                    buttons[index].Style);
 
             for (int index = 0; index < buttons.Length; index++)
             {
@@ -105,7 +128,9 @@ public sealed class DialogActionOrderTests
             }
 
             whileShown?.Invoke(dialog);
-            SaveEvidence(dialog, $"dialog-{dialog.GetType().Name}-{captions[0]}-{language}.png");
+            SaveEvidence(dialog, evidenceName is null
+                ? $"dialog-{dialog.GetType().Name}-{captions[0]}-{language}.png"
+                : $"dialog-{evidenceName}-{language}.png");
         }
         finally
         {

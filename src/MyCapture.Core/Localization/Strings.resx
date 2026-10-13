@@ -3004,7 +3004,7 @@
   <data name="LibrarySelection_Gif" xml:space="preserve"><value>GIF 내보내기</value></data>
   <data name="LibrarySelection_SelectDay" xml:space="preserve"><value>이 날짜의 표시된 항목 선택</value></data>
   <data name="LibrarySelection_ClearHint" xml:space="preserve"><value>전체 라이브러리 비우기</value></data>
-  <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>검색 결과와 관계없이 전체 라이브러리의 {0}개 항목을 삭제하시겠습니까? 보관 항목과 동영상도 포함됩니다. 이후 새로 추가된 항목은 유지됩니다.</value></data>
+  <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>검색 결과와 관계없이 전체 라이브러리의 {0}개 항목을 삭제하시겠습니까? 보관 항목과 동영상도 포함됩니다. 이후 새로 추가된 항목은 유지됩니다. 항목은 Windows 휴지통으로 이동합니다.</value></data>
   <data name="LibrarySelection_DeleteConfirm" xml:space="preserve"><value>선택한 {0}개 항목을 휴지통으로 이동하시겠습니까?</value></data>
   <data name="LibraryRecovery_Recent" xml:space="preserve"><value>최근 삭제 복원</value></data>
   <data name="LibraryRecovery_Empty" xml:space="preserve"><value>복원할 항목 없음</value></data>
@@ -3017,6 +3017,7 @@
   <data name="LibrarySelection_RecycleUnavailableTitle" xml:space="preserve"><value>휴지통 사용 불가</value></data>
   <data name="LibrarySelection_RecycleUnavailableMessage" xml:space="preserve"><value>휴지통으로 옮길 수 없는 항목이 {0}개 있습니다. 휴지통이 꺼져 있거나, 항목이 이동식·네트워크 드라이브에 있거나, 휴지통 용량보다 클 수 있습니다. 이 항목을 영구 삭제하시겠습니까? 영구 삭제한 항목은 복원할 수 없습니다.</value></data>
   <data name="LibrarySelection_PermanentDelete" xml:space="preserve"><value>영구 삭제</value></data>
+  <data name="LibrarySelection_MoveToRecycleBin" xml:space="preserve"><value>휴지통으로 이동</value></data>
   <data name="LibrarySelection_RecycleUnavailableKept" xml:space="preserve"><value>휴지통으로 옮길 수 없는 {0}개 항목은 삭제하지 않았습니다.</value></data>
   <data name="MediaExport_SourceProtected" xml:space="preserve"><value>원본 영상에는 덮어쓸 수 없습니다. 다른 파일 이름을 선택하십시오.</value></data>
   <data name="MediaExport_Extension" xml:space="preserve"><value>파일 확장자는 {0}이어야 합니다.</value></data>
@@ -3295,6 +3296,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Dialog.Unsupported" xml:space="preserve"><value>지원하지 않는 형식입니다. 다른 파일이나 형식을 선택하십시오.</value></data>
   <data name="Dialog.Yes" xml:space="preserve"><value>예</value></data>
   <data name="Dialog.ChooseLocation" xml:space="preserve"><value>다른 위치 선택</value></data>
+  <data name="Dialog.DiskFull" xml:space="preserve"><value>{0} 드라이브의 공간이 부족합니다. 여유 공간을 확보한 뒤 다시 시도하십시오.</value></data>
+  <data name="Dialog.DiskFullUnknownDrive" xml:space="preserve"><value>저장할 드라이브의 공간이 부족합니다. 여유 공간을 확보한 뒤 다시 시도하십시오.</value></data>
+  <data name="Dialog.InUse" xml:space="preserve"><value>다른 프로그램이 파일을 사용하고 있습니다. 그 프로그램을 닫은 뒤 다시 시도하십시오.</value></data>
+  <data name="Dialog.OpenSaveLocation" xml:space="preserve"><value>저장 위치 열기</value></data>
+  <data name="Dialog.OpenSaveLocationFailed" xml:space="preserve"><value>저장 위치를 열 수 없습니다. 파일 탐색기에서 직접 여십시오.</value></data>
+  <data name="Dialog.ReportProblem" xml:space="preserve"><value>문제 신고</value></data>
   <data name="Help.Annotation" xml:space="preserve"><value>이미지 편집기</value></data>
   <data name="Help.Capture" xml:space="preserve"><value>캡처</value></data>
   <data name="Help.Frame" xml:space="preserve"><value>이전·다음 프레임</value></data>
@@ -3927,9 +3934,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>자동으로 닫지 않기</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q 또는 카드 클릭: 키보드 조작</value></data>
   <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>카드 클릭: 키보드 조작</value></data>
-  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 자세히의 내용을 복사해 문의할 때 첨부하십시오.</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 자세히의 내용을 복사해 문제 신고에 첨부하십시오.</value></data>
   <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture를 시작할 수 없습니다</value></data>
-  <data name="Onboard_StartFailureBody" xml:space="preserve"><value>MyCapture를 다시 실행하십시오. 계속 실패하면 컴퓨터를 다시 시작한 뒤 실행하십시오. 그래도 시작되지 않으면 자세히의 내용을 복사해 문의할 때 첨부하십시오.</value></data>
+  <data name="Onboard_StartFailureBody" xml:space="preserve"><value>MyCapture를 다시 실행하십시오. 계속 실패하면 컴퓨터를 다시 시작한 뒤 실행하십시오. 그래도 시작되지 않으면 자세히의 내용을 복사해 문제 신고에 첨부하십시오.</value></data>
   <data name="CopyTerms_SizeMb" xml:space="preserve"><value>{0:0.#}MB</value></data>
   <data name="CopyTerms_SizeKb" xml:space="preserve"><value>{0:N0}KB</value></data>
   <data name="Tutorial.Select" xml:space="preserve"><value>기능 선택</value></data>

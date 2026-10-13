@@ -27,7 +27,55 @@ public static class UiText
     }
 
     public static string Get(string key) => Resources.GetString(key, Culture) ?? throw new MissingManifestResourceException($"Missing UI resource: {key}");
-    public static string Format(string key, params object?[] arguments) => string.Format(Culture, Get(key), arguments);
+
+    /// <summary>
+    /// Formats a translated composite string. A count may choose its noun with
+    /// <c>{0:plural:item|items}</c>: the first form when the argument is exactly 1, the second
+    /// otherwise. Korean has no plural, so only English resources use it.
+    /// </summary>
+    public static string Format(string key, params object?[] arguments)
+    {
+        CultureInfo culture = Culture;
+        string format = Get(key);
+        return format.Contains(PluralFormatter.Marker, StringComparison.Ordinal)
+            ? string.Format(new PluralFormatter(culture), format, arguments)
+            : string.Format(culture, format, arguments);
+    }
+
+    /// <summary>Formats every item as the culture would, except the <c>plural:</c> selectors.</summary>
+    private sealed class PluralFormatter(CultureInfo culture) : IFormatProvider, ICustomFormatter
+    {
+        internal const string Marker = ":plural:";
+        private const string Prefix = "plural:";
+
+        public object? GetFormat(Type? formatType) => formatType == typeof(ICustomFormatter) ? this : culture.GetFormat(formatType);
+
+        public string Format(string? format, object? arg, IFormatProvider? formatProvider)
+        {
+            if (format is not null && format.StartsWith(Prefix, StringComparison.Ordinal))
+            {
+                string[] forms = format[Prefix.Length..].Split('|');
+                return forms.Length >= 2 && !IsOne(arg) ? forms[1] : forms[0];
+            }
+
+            return arg switch
+            {
+                null => string.Empty,
+                IFormattable formattable => formattable.ToString(format, culture),
+                _ => arg.ToString() ?? string.Empty,
+            };
+        }
+
+        private static bool IsOne(object? value) => value switch
+        {
+            double number => number == 1,
+            float number => number == 1,
+            decimal number => number == 1,
+            sbyte or byte or short or ushort or int or uint or long or ulong =>
+                Convert.ToDecimal(value, CultureInfo.InvariantCulture) == 1m,
+            _ => false,
+        };
+    }
 
     /// <summary>Context-local override for previews/tests; does not mutate another thread's language.</summary>
     public static IDisposable UseLanguage(string language)

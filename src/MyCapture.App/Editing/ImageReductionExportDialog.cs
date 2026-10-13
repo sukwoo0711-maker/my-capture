@@ -72,7 +72,8 @@ internal sealed class ImageReductionExportDialog : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var panel = new StackPanel();
         root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
-        panel.Children.Add(new TextBlock { Text = UiText.Get("ExportReduction_Description"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18) });
+        panel.Children.Add(MyCapture.App.Themes.KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18) },
+            UiText.Get("ExportReduction_Description")));
         panel.Children.Add(_targetText);
         panel.Children.Add(_target);
         // One line for the calculation, so the preview below never jumps while it runs.

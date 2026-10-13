@@ -91,8 +91,64 @@ public sealed class LocalizationTests
         }
         Dictionary<string, string> Read(string language) => manager.GetResourceSet(CultureInfo.GetCultureInfo(language), true, false)!
             .Cast<DictionaryEntry>().ToDictionary(e => (string)e.Key, e => (string)e.Value!);
+        // A {n:plural:one|other} selector picks an English noun for a count that the item {n}
+        // already places, so it is not an argument placement of its own.
         static string[] Items(string value) => Regex.Matches(value, @"(?<!\{)\{\d+(?:,-?\d+)?(?::[^{}]+)?\}(?!\})")
-            .Select(m => m.Value).Order(StringComparer.Ordinal).ToArray();
+            .Select(m => m.Value).Where(item => !item.Contains(":plural:", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal).ToArray();
+    }
+
+    [Fact]
+    public void EnglishCountsUseSingularForOneAndKoreanStaysUnchanged()
+    {
+        using (UiText.UseLanguage("en-US"))
+        {
+            Assert.Equal("Move 1 selected item to the Recycle Bin?", UiText.Format("LibrarySelection_DeleteConfirm", 1));
+            Assert.Equal("Move 3 selected items to the Recycle Bin?", UiText.Format("LibrarySelection_DeleteConfirm", 3));
+            Assert.Equal("Move 0 selected items to the Recycle Bin?", UiText.Format("LibrarySelection_DeleteConfirm", 0));
+            Assert.Equal("Removed 1 item from the library · Kept 2 unavailable or in-use items",
+                UiText.Format("LibrarySelection_Removed", 1, 2));
+            Assert.Equal("Removed 2 items from the library · Kept 1 unavailable or in-use item",
+                UiText.Format("LibrarySelection_Removed", 2, 1));
+            Assert.Equal("1,234 items", UiText.Format("Text_B6D9CAB382C8", 1234));
+            Assert.Equal("1 item", UiText.Format("Text_B6D9CAB382C8", 1));
+            Assert.Equal("Auto-delete in 1 day 2 hours", UiText.Format("Gallery.RetentionDaysHours", 1, 2));
+            Assert.Equal("Auto-delete in 2 days 1 hour", UiText.Format("Gallery.RetentionDaysHours", 2, 1));
+        }
+
+        using (UiText.UseLanguage("ko-KR"))
+        {
+            Assert.Equal("선택한 1개 항목을 휴지통으로 이동하시겠습니까?", UiText.Format("LibrarySelection_DeleteConfirm", 1));
+            Assert.Equal("자동 삭제까지 1일 2시간", UiText.Format("Gallery.RetentionDaysHours", 1, 2));
+        }
+
+        // Every selector names exactly two forms and refers to an argument the string places.
+        var manager = new ResourceManager("MyCapture.Core.Localization.Strings", typeof(UiText).Assembly);
+        foreach (DictionaryEntry entry in manager.GetResourceSet(CultureInfo.GetCultureInfo("en"), true, false)!)
+        {
+            string value = (string)entry.Value!;
+            foreach (Match selector in Regex.Matches(value, @"\{(\d+):plural:([^{}|]+)\|([^{}|]+)\}"))
+                Assert.Contains("{" + selector.Groups[1].Value, value.Replace(selector.Value, string.Empty), StringComparison.Ordinal);
+            Assert.Equal(Regex.Matches(value, ":plural:").Count, Regex.Matches(value, @"\{\d+:plural:[^{}|]+\|[^{}|]+\}").Count);
+        }
+
+        // Only UiText.Format understands the selector; a string read with Get and formatted
+        // elsewhere would show "plural:" literally.
+        string[] plural = manager.GetResourceSet(CultureInfo.GetCultureInfo("en"), true, false)!.Cast<DictionaryEntry>()
+            .Where(entry => ((string)entry.Value!).Contains(":plural:", StringComparison.Ordinal))
+            .Select(entry => (string)entry.Key).ToArray();
+        Assert.NotEmpty(plural);
+        DirectoryInfo? root = new(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "src", "MyCapture.Core", "MyCapture.Core.csproj"))) root = root.Parent;
+        Assert.NotNull(root);
+        foreach (string file in Directory.EnumerateFiles(Path.Combine(root.FullName, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(p => !p.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
+                && !p.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)))
+        {
+            string text = File.ReadAllText(file);
+            foreach (string key in plural)
+                Assert.DoesNotContain($"UiText.Get(\"{key}\")", text, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

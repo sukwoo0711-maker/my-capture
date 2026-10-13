@@ -125,8 +125,11 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.True(window.IsPrintScreenGuideVisible);
                     Assert.True(panel.IsVisible);
                     Assert.Equal(UiText.Get("PrtScGuide_Heading"), AutomationProperties.GetName(panel));
-                    Assert.Equal(UiText.Get("PrtScGuide_Message"),
-                        Assert.IsType<TextBlock>(window.FindName("PrtScGuideMessage")).Text);
+                    // The message keeps Korean words whole when it wraps; readers get the plain text.
+                    TextBlock message = Assert.IsType<TextBlock>(window.FindName("PrtScGuideMessage"));
+                    Assert.Equal(UiText.Get("PrtScGuide_Message"), KoreanWordWrap.Strip(message.Text));
+                    string spoken = AutomationProperties.GetName(message);
+                    Assert.Equal(UiText.Get("PrtScGuide_Message"), spoken.Length > 0 ? spoken : message.Text);
                     var open = Assert.IsType<Button>(window.FindName("PrtScGuideOpenSettings"));
                     Assert.Equal(UiText.Get("PrtScGuide_OpenSettings"), AutomationProperties.GetName(open));
                     Assert.True(open.IsVisible && open.IsEnabled && open.Focusable);

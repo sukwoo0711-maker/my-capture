@@ -37,8 +37,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         Dismiss();
         if (suppressNotification()) return;
         var content = new StackPanel();
-        content.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        content.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) });
+        content.Children.Add(KoreanWordWrap.Show(new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, title));
+        content.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) }, message));
         var close = new Button { Content = UiText.Get("Shell.Close"), MinHeight = 36, HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => Dismiss();
         content.Children.Add(close);
@@ -98,8 +98,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     {
         Dismiss();
         if (suppressNotification()) return;
-        var action = new Button { Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+        var action = new Button { Content = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, message),
             Padding = new Thickness(12), ToolTip = UiText.Get("QuickAccess.Library") };
+        System.Windows.Automation.AutomationProperties.SetName(action, message);
         action.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
         action.Click += (_, _) => { Dismiss(); openLibrary(); };
         var window = CreateWindow(action, UiText.Get("QuickAccess.Title"));
@@ -277,8 +278,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     internal Window CreateActionNotification(string title, string message, string actionLabel, Action action)
     {
         var content = new StackPanel();
-        content.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        content.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) });
+        content.Children.Add(KoreanWordWrap.Show(new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, title));
+        content.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) }, message));
         var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
         var run = new Button { Content = actionLabel, MinHeight = 36, Margin = new Thickness(0, 0, 8, 0) };
         run.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");

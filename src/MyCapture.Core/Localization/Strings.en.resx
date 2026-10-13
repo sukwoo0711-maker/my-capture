@@ -2077,7 +2077,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_B6D9CAB382C8" xml:space="preserve">
-    <value>{0:N0} items</value>
+    <value>{0:N0} {0:plural:item|items}</value>
     <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
   </data>
   <data name="Text_B6DE798A150D" xml:space="preserve">
@@ -3004,20 +3004,21 @@ Actual reduction {2}% · {3}</value></data>
   <data name="LibrarySelection_Gif" xml:space="preserve"><value>Export GIF</value></data>
   <data name="LibrarySelection_SelectDay" xml:space="preserve"><value>Select displayed items from this day</value></data>
   <data name="LibrarySelection_ClearHint" xml:space="preserve"><value>Clear entire library</value></data>
-  <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>Delete all {0} items from the entire library, including kept items and videos, regardless of search? Items added after this confirmation will remain.</value></data>
-  <data name="LibrarySelection_DeleteConfirm" xml:space="preserve"><value>Move the {0} selected items to the Recycle Bin?</value></data>
+  <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>Delete all {0} {0:plural:item|items} from the entire library, including kept items and videos, regardless of search? Items added after this confirmation will remain. Items move to the Windows Recycle Bin.</value></data>
+  <data name="LibrarySelection_DeleteConfirm" xml:space="preserve"><value>Move {0} selected {0:plural:item|items} to the Recycle Bin?</value></data>
   <data name="LibraryRecovery_Recent" xml:space="preserve"><value>Restore recently deleted</value></data>
   <data name="LibraryRecovery_Empty" xml:space="preserve"><value>No items to restore</value></data>
   <data name="LibraryRecovery_Loading" xml:space="preserve"><value>Loading</value></data>
   <data name="LibraryRecovery_Restored" xml:space="preserve"><value>Restored to the library</value></data>
   <data name="LibraryRecovery_Failed" xml:space="preserve"><value>Could not restore. Check the file at the original location or the item in the Recycle Bin.</value></data>
-  <data name="LibrarySelection_Removed" xml:space="preserve"><value>Removed {0} items from the library; {1} unavailable or in-use items retained</value></data>
+  <data name="LibrarySelection_Removed" xml:space="preserve"><value>Removed {0} {0:plural:item|items} from the library · Kept {1} unavailable or in-use {1:plural:item|items}</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>Could not save the deletion. Check the library and try again.</value></data>
-  <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>{0} removed items still have files awaiting cleanup. No disk space recovery is confirmed for those items.</value></data>
+  <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>{0} removed {0:plural:item still has|items still have} files awaiting cleanup. No disk space recovery is confirmed for {0:plural:it|those items}.</value></data>
   <data name="LibrarySelection_RecycleUnavailableTitle" xml:space="preserve"><value>Recycle Bin unavailable</value></data>
-  <data name="LibrarySelection_RecycleUnavailableMessage" xml:space="preserve"><value>{0} items cannot be moved to the Recycle Bin. The Recycle Bin may be turned off, or the items may be on a removable or network drive or larger than the Recycle Bin. Delete these items permanently? Permanently deleted items cannot be restored.</value></data>
+  <data name="LibrarySelection_RecycleUnavailableMessage" xml:space="preserve"><value>{0} {0:plural:item|items} cannot be moved to the Recycle Bin. The Recycle Bin may be turned off, or the items may be on a removable or network drive or larger than the Recycle Bin. Delete {0:plural:this item|these items} permanently? Permanently deleted items cannot be restored.</value></data>
   <data name="LibrarySelection_PermanentDelete" xml:space="preserve"><value>Delete permanently</value></data>
-  <data name="LibrarySelection_RecycleUnavailableKept" xml:space="preserve"><value>{0} items that cannot be moved to the Recycle Bin were not deleted.</value></data>
+  <data name="LibrarySelection_MoveToRecycleBin" xml:space="preserve"><value>Move to Recycle Bin</value></data>
+  <data name="LibrarySelection_RecycleUnavailableKept" xml:space="preserve"><value>{0} {0:plural:item that cannot be moved to the Recycle Bin was|items that cannot be moved to the Recycle Bin were} not deleted.</value></data>
   <data name="MediaExport_SourceProtected" xml:space="preserve"><value>Choose another file name to preserve the original video.</value></data>
   <data name="MediaExport_Extension" xml:space="preserve"><value>Use the {0} file extension.</value></data>
   <data name="MediaExport_Title" xml:space="preserve"><value>Export video</value></data>
@@ -3103,11 +3104,11 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>Clipboard image to GitHub URL</value></data>
   <data name="Gallery.Float" xml:space="preserve"><value>Pin to screen</value></data>
   <data name="Gallery.FloatHint" xml:space="preserve"><value>Pin this capture on top of other windows.</value></data>
-  <data name="Gallery.RetentionDays" xml:space="preserve"><value>Auto-delete in {0} days</value></data>
-  <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>Auto-delete in {0} days {1} hours</value></data>
-  <data name="Gallery.RetentionHours" xml:space="preserve"><value>Auto-delete in {0} hours</value></data>
-  <data name="Gallery.RetentionHoursMinutes" xml:space="preserve"><value>Auto-delete in {0} hours {1} minutes</value></data>
-  <data name="Gallery.RetentionMinutes" xml:space="preserve"><value>Auto-delete in {0} minutes</value></data>
+  <data name="Gallery.RetentionDays" xml:space="preserve"><value>Auto-delete in {0} {0:plural:day|days}</value></data>
+  <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>Auto-delete in {0} {0:plural:day|days} {1} {1:plural:hour|hours}</value></data>
+  <data name="Gallery.RetentionHours" xml:space="preserve"><value>Auto-delete in {0} {0:plural:hour|hours}</value></data>
+  <data name="Gallery.RetentionHoursMinutes" xml:space="preserve"><value>Auto-delete in {0} {0:plural:hour|hours} {1} {1:plural:minute|minutes}</value></data>
+  <data name="Gallery.RetentionMinutes" xml:space="preserve"><value>Auto-delete in {0} {0:plural:minute|minutes}</value></data>
   <data name="Gallery.RetentionKept" xml:space="preserve"><value>Kept</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>No expiry</value></data>
   <data name="Gallery.RetentionExpired" xml:space="preserve"><value>Awaiting auto-delete</value></data>
@@ -3295,6 +3296,12 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Dialog.Unsupported" xml:space="preserve"><value>This format is not supported. Choose another file or format.</value></data>
   <data name="Dialog.Yes" xml:space="preserve"><value>Yes</value></data>
   <data name="Dialog.ChooseLocation" xml:space="preserve"><value>Choose another location</value></data>
+  <data name="Dialog.DiskFull" xml:space="preserve"><value>Not enough space on drive {0}. Free up space and try again.</value></data>
+  <data name="Dialog.DiskFullUnknownDrive" xml:space="preserve"><value>Not enough space on the drive. Free up space and try again.</value></data>
+  <data name="Dialog.InUse" xml:space="preserve"><value>Another program is using the file. Close it and try again.</value></data>
+  <data name="Dialog.OpenSaveLocation" xml:space="preserve"><value>Open save location</value></data>
+  <data name="Dialog.OpenSaveLocationFailed" xml:space="preserve"><value>The save location could not be opened. Open it in File Explorer.</value></data>
+  <data name="Dialog.ReportProblem" xml:space="preserve"><value>Report a problem</value></data>
   <data name="Help.Annotation" xml:space="preserve"><value>Image editor</value></data>
   <data name="Help.Capture" xml:space="preserve"><value>Capture</value></data>
   <data name="Help.Frame" xml:space="preserve"><value>Previous / next frame</value></data>
@@ -3927,9 +3934,9 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>Keep open</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q or click the card: use the keys</value></data>
   <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>Click the card: use the keys</value></data>
-  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, copy the text under Details and include it when you report the problem.</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, copy the text under Details, select Report a problem, and attach it.</value></data>
   <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture could not start</value></data>
-  <data name="Onboard_StartFailureBody" xml:space="preserve"><value>Start MyCapture again. If it still fails, restart the computer and try once more. If it still does not start, copy the text under Details and include it when you report the problem.</value></data>
+  <data name="Onboard_StartFailureBody" xml:space="preserve"><value>Start MyCapture again. If it still fails, restart the computer and try once more. If it still does not start, copy the text under Details, select Report a problem, and attach it.</value></data>
   <data name="CopyTerms_SizeMb" xml:space="preserve"><value>{0:0.#} MB</value></data>
   <data name="CopyTerms_SizeKb" xml:space="preserve"><value>{0:N0} KB</value></data>
   <data name="Tutorial.Select" xml:space="preserve"><value>Choose a feature</value></data>

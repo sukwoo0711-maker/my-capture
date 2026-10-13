@@ -216,8 +216,10 @@ public sealed class EditorFlowTests
             Assert.True(dialog.SaveButton.IsDefault);
             Assert.True(dialog.CancelButton.IsCancel);
             Assert.False(dialog.DontSaveButton.IsDefault || dialog.DontSaveButton.IsCancel);
-            Assert.Contains(Descendants(dialog).OfType<TextBlock>(), text => text.Text == "편집한 내용을 저장하시겠습니까?");
-            Assert.Contains(Descendants(dialog).OfType<TextBlock>(), text => text.Text == "저장하지 않으면 이번에 편집한 내용이 사라집니다.");
+            // The heading and message keep Korean words whole when they wrap; the words are the same.
+            Assert.Contains(Descendants(dialog).OfType<TextBlock>(), text => MyCapture.App.Themes.KoreanWordWrap.Strip(text.Text) == "편집한 내용을 저장하시겠습니까?");
+            Assert.Contains(Descendants(dialog).OfType<TextBlock>(), text => MyCapture.App.Themes.KoreanWordWrap.Strip(text.Text) == "저장하지 않으면 이번에 편집한 내용이 사라집니다.");
+            Assert.Equal("편집한 내용을 저장하시겠습니까?", System.Windows.Automation.AutomationProperties.GetName(dialog.Heading));
             Button pressed = id switch { "save" => dialog.SaveButton, "dont" => dialog.DontSaveButton, _ => dialog.CancelButton };
             pressed.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Assert.Equal(expected, dialog.Choice);
