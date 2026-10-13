@@ -322,9 +322,9 @@ internal sealed class PinWindow : Window
         bar.MouseEnter += (_, _) => _hoverHideTimer.Stop();
         bar.MouseLeave += (_, _) => ScheduleHoverBarHide();
         bar.SizeChanged += (_, _) => PlaceHoverBar();
-        bar.Compact = false;
-        bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        _labeledHoverBarWidth = bar.DesiredSize.Width;
+        // Measured before the bar is ever shown; measuring the hidden window itself gave zero,
+        // so even the narrowest pin kept the names.
+        _labeledHoverBarWidth = bar.MeasureLabeledWidth();
         return bar;
     }
 
@@ -348,6 +348,12 @@ internal sealed class PinWindow : Window
         IntPtr barHandle = new WindowInteropHelper(bar).Handle;
         if (barHandle == IntPtr.Zero) return;
         // A narrow pin keeps the icons and drops the names, which stay in the tooltips.
+        if (_labeledHoverBarWidth <= 0 && !bar.Compact)
+        {
+            // Resources were not there before the first show; the shown, labelled bar is the measure.
+            bar.UpdateLayout();
+            _labeledHoverBarWidth = bar.ActualWidth;
+        }
         bar.Compact = Width < _labeledHoverBarWidth + (PinHoverBar.EdgeGap * 4);
         bar.UpdateLayout();
         DpiScale dpi = VisualTreeHelper.GetDpi(this);

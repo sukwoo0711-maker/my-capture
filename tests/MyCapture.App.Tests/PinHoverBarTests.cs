@@ -184,13 +184,68 @@ public sealed class PinHoverBarTests
         }
     });
 
-    private static PinWindow Pin(out BitmapSource image)
+    [Fact]
+    public void ANarrowPinGetsTheCompactBarAndAWideOneKeepsTheNames() => StaTestHost.Run(() =>
     {
-        byte[] pixels = new byte[360 * 220 * 4];
+        using var language = UiText.UseLanguage("ko-KR");
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;
+        PinHoverBar.ApplyCaptureExclusion = _ => true;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        try
+        {
+            // Measured before it is ever shown: a never-shown window measured to zero, so
+            // every pin kept the names and a narrow pin's bar stuck out past its edges.
+            var unshown = new PinHoverBar();
+            double labeled = unshown.MeasureLabeledWidth();
+            Assert.True(labeled > 150, $"labelled width {labeled}");
+            Assert.False(unshown.Compact);
+            unshown.Close();
+
+            foreach (var (width, compact) in new[] { (200, true), (600, false) })
+            {
+                PinWindow pin = Pin(out _, width, 220);
+                try
+                {
+                    pin.Show();
+                    Enter(pin);
+                    PinHoverBar bar = pin.HoverBarForTest!;
+                    bar.UpdateLayout();
+                    Assert.Equal(compact, bar.Compact);
+                    TextBlock[] names = [.. Descendants(bar.CopyButton).OfType<TextBlock>()];
+                    Assert.All(names, name => Assert.Equal(compact ? Visibility.Collapsed : Visibility.Visible, name.Visibility));
+                    // The names stay in the tooltips and automation names.
+                    Assert.Equal("복사", AutomationProperties.GetName(bar.CopyButton));
+                    if (compact) Assert.True(bar.ActualWidth < labeled, $"compact {bar.ActualWidth} vs {labeled}");
+                    else Assert.InRange(bar.ActualWidth, labeled - 2, labeled + 2);
+                }
+                finally { pin.Close(); }
+            }
+        }
+        finally
+        {
+            PinHoverBar.ApplyCaptureExclusion = exclusion;
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        foreach (object child in LogicalTreeHelper.GetChildren(root))
+        {
+            if (child is not DependencyObject node) continue;
+            yield return node;
+            foreach (DependencyObject descendant in Descendants(node)) yield return descendant;
+        }
+    }
+
+    private static PinWindow Pin(out BitmapSource image, int width = 360, int height = 220)
+    {
+        byte[] pixels = new byte[width * height * 4];
         Array.Fill(pixels, (byte)0xEE);
-        image = BitmapSource.Create(360, 220, 96, 96, PixelFormats.Bgra32, null, pixels, 360 * 4);
+        image = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
         image.Freeze();
-        return new PinWindow(PinContent.FromImage(image), new PinViewState(360, 220, 1, 1, 0.1), -10000, -10000, () => new PinSettings())
+        return new PinWindow(PinContent.FromImage(image), new PinViewState(width, height, 1, 1, 0.1), -10000, -10000, () => new PinSettings())
         {
             ShowActivated = false,
             // Keep the bar beside the off-screen pin instead of on the desktop.
