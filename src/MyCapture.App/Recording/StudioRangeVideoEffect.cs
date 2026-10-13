@@ -92,7 +92,10 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
     internal static void Apply(MediaElement media, bool studioRange)
     {
         ArgumentNullException.ThrowIfNull(media);
-        if (studioRange)
+        // Without a GPU (Remote Desktop, virtual machines, hosted CI) WPF runs pixel shaders on the
+        // CPU for every video frame, which slows playback and seeking far more than the slightly
+        // flat colours cost. The correction is applied only where the shader runs in hardware.
+        if (studioRange && HardwareShaderAvailable())
         {
             if (media.Effect is not StudioRangeVideoEffect)
             {
@@ -104,6 +107,13 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
             media.ClearValue(UIElement.EffectProperty);
         }
     }
+
+    /// <summary>
+    /// True when WPF renders in hardware (tier 2) with pixel shader 2.0 support. Read on the UI
+    /// thread; tests replace it.
+    /// </summary>
+    internal static Func<bool> HardwareShaderAvailable { get; set; } = () =>
+        (RenderCapability.Tier >> 16) >= 2 && RenderCapability.IsPixelShaderVersionSupported(2, 0);
 
     protected override Freezable CreateInstanceCore() => new StudioRangeVideoEffect();
 }

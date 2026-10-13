@@ -18,6 +18,27 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class MediaPlaybackRangeTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StudioRangeCorrectionRunsOnlyWithHardwareShaders(bool hardware) => StaTestHost.Run(() =>
+    {
+        Func<bool> previous = StudioRangeVideoEffect.HardwareShaderAvailable;
+        StudioRangeVideoEffect.HardwareShaderAvailable = () => hardware;
+        try
+        {
+            var media = new System.Windows.Controls.MediaElement();
+            StudioRangeVideoEffect.Apply(media, studioRange: true);
+            Assert.Equal(hardware, media.Effect is StudioRangeVideoEffect);
+            StudioRangeVideoEffect.Apply(media, studioRange: false);
+            Assert.Null(media.Effect);
+        }
+        finally
+        {
+            StudioRangeVideoEffect.HardwareShaderAvailable = previous;
+        }
+    });
+
     [Fact]
     public void StudioRangeShaderBytecodeIsItsCheckedInSource()
     {
@@ -71,7 +92,11 @@ public sealed class MediaPlaybackRangeTests
             while (!editor.IsMediaReadyForTest && !editor.HasMediaFailedForTest && DateTime.UtcNow < deadline)
                 RangePatternClip.Pump(TimeSpan.FromMilliseconds(20));
             Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
-            Assert.Equal(!fullRange, editor.MediaForTest.Effect is StudioRangeVideoEffect);
+            bool hardware = StudioRangeVideoEffect.HardwareShaderAvailable();
+            Assert.Equal(!fullRange && hardware, editor.MediaForTest.Effect is StudioRangeVideoEffect);
+            // Without hardware shaders (hosted CI, Remote Desktop) studio range stays uncorrected by
+            // design, so only the effect decision is checked there.
+            if (!fullRange && !hardware) return;
             RangePatternClip.Pump(TimeSpan.FromMilliseconds(500));
 
             BitmapSource frame = editor.RenderCurrentFrameForTest() ?? throw new Xunit.Sdk.XunitException("no preview frame");

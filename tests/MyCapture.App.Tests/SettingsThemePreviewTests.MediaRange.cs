@@ -39,6 +39,13 @@ public sealed partial class SettingsThemePreviewTests
                 RangePatternClip.Pump(TimeSpan.FromMilliseconds(500));
 
                 var video = (MediaElement)typeof(GalleryVideoPlayerWindow).GetField("_video", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(player)!;
+                if (!StudioRangeVideoEffect.HardwareShaderAvailable())
+                {
+                    // Software rendering keeps playback fast instead of correcting the range.
+                    Assert.Null(video.Effect);
+                    return;
+                }
+
                 Assert.IsType<StudioRangeVideoEffect>(video.Effect);
                 var visual = new DrawingVisual();
                 using (DrawingContext context = visual.RenderOpen())
