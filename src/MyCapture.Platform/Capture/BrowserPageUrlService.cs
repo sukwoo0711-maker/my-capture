@@ -25,6 +25,7 @@ public sealed class BrowserPageUrlService
         IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> _probe;
     private readonly TimeSpan _budget;
     private readonly SemaphoreSlim _gate;
+    private readonly bool _waitForBusyProbe;
 
     /// <summary>
     /// Deadline for one probe. The probe walks every exposed window in one pass, so its cost
@@ -32,32 +33,43 @@ public sealed class BrowserPageUrlService
     /// tabs) took about 455 ms, and browser walks alone about 370 ms. A ceiling below that
     /// cancelled the batch and the capture stored no URL. The probe returns as soon as it
     /// finishes, so the ceiling is a bound for a provider that hangs, not the normal wait.
-    /// The read before the pixels holds back the screen grab and therefore the selector for
-    /// its whole duration, up to this ceiling; only the confirming read after the pixels runs
-    /// while the selector is already shown (CapturePageContext.AcquireFrameAsync).
+    /// The region selector does not wait for either read (CapturePageContext.AcquireFrameAsync):
+    /// the ceiling bounds how late a capture's page is known, and the synchronous advanced
+    /// captures (window, fixed size, previous region), which still wait for their reads.
     /// </summary>
     internal static readonly TimeSpan DefaultBudget = TimeSpan.FromMilliseconds(900);
 
     public BrowserPageUrlService() : this(ReadNative, DefaultBudget, SharedProbeGate) { }
 
+    /// <param name="waitForBusyProbe">
+    /// Wait, within the same deadline, for a probe that still owns the provider (the previous
+    /// capture's) instead of returning nothing at once. For readers nothing on screen waits for.
+    /// </param>
+    public BrowserPageUrlService(bool waitForBusyProbe)
+        : this(ReadNative, DefaultBudget, SharedProbeGate, waitForBusyProbe) { }
+
     internal BrowserPageUrlService(
         Func<IReadOnlyList<WindowCandidate>, CancellationToken,
             IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> probe,
         TimeSpan budget,
-        SemaphoreSlim gate)
+        SemaphoreSlim gate,
+        bool waitForBusyProbe = false)
     {
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
         if (budget <= TimeSpan.Zero || budget > TimeSpan.FromSeconds(2))
             throw new ArgumentOutOfRangeException(nameof(budget));
         _budget = budget;
         _gate = gate ?? throw new ArgumentNullException(nameof(gate));
+        _waitForBusyProbe = waitForBusyProbe;
     }
 
     public async Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> ReadAsync(
         IReadOnlyList<WindowCandidate> candidates)
     {
         ArgumentNullException.ThrowIfNull(candidates);
-        if (candidates.Count == 0 || !_gate.Wait(0)) return Empty;
+        if (candidates.Count == 0) return Empty;
+        TimeSpan remaining = await BoundedNativeProbe.EnterAsync(_gate, _budget, _waitForBusyProbe).ConfigureAwait(false);
+        if (remaining <= TimeSpan.Zero) return Empty;
 
         var completion = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -94,7 +106,7 @@ public sealed class BrowserPageUrlService
             return Empty;
         }
 
-        Task winner = await Task.WhenAny(completion.Task, Task.Delay(_budget)).ConfigureAwait(false);
+        Task winner = await Task.WhenAny(completion.Task, Task.Delay(remaining)).ConfigureAwait(false);
         if (winner == completion.Task) return await completion.Task.ConfigureAwait(false);
         try { cancellation.Cancel(); }
         catch (ObjectDisposedException) { /* The provider finished concurrently with the deadline. */ }

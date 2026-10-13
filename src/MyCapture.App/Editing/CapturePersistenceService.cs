@@ -48,6 +48,10 @@ internal sealed class CapturePersistenceService
     private readonly Dictionary<Guid, BlockReason> _blockedReasons = [];
     private readonly Dictionary<Guid, IDisposable> _blockedEvictionLeases = [];
     private readonly ConcurrentDictionary<Guid, int> _activeEditSessions = new();
+    private readonly ConcurrentDictionary<Guid, Task> _sourceBackfills = new();
+
+    /// <summary>How long a late source waits for a write of its capture (an original, an editor save).</summary>
+    internal static readonly TimeSpan SourceBackfillWriteWait = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Test-only fault-injection point invoked immediately before each staged file swap.
@@ -149,6 +153,164 @@ internal sealed class CapturePersistenceService
         finally { _busyRecords.TryRemove(record.Id, out _); }
         return record;
     }
+
+    /// <summary>
+    /// Adds the page and application/folder of a capture that was saved while they were still being
+    /// read. Returns whether they were applied. Fields the capture already has are never replaced,
+    /// and a capture that left the library meanwhile is never written again.
+    /// </summary>
+    /// <remarks>
+    /// The record, its recovery metadata and the index receive exactly what an immediate selection
+    /// would have stored: the page (also embedded in original.png and rendered.png, as a direct save
+    /// does), the application and folder (library metadata only, never the image files) and the
+    /// webpage tag when the capture has no tags yet. Must run on the queue's owner context. While it
+    /// writes, the capture counts as busy and an editor save of it waits for it.
+    /// </remarks>
+    /// <param name="unpublished">
+    /// The capture never reached the library (its original could not be saved). Its fields are then
+    /// set in memory only, so a later save of the same capture writes them; nothing is written now.
+    /// </param>
+    internal async Task<bool> BackfillSourceAsync(CaptureRecord record, string sourcePageUrl,
+        MyCapture.Core.Capture.CaptureSourceDetails? sourceDetails, string webpageTag, bool unpublished = false)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        string url = MyCapture.Core.Capture.SourcePageUrl.Normalize(sourcePageUrl);
+        MyCapture.Core.Capture.CaptureSourceDetails details = sourceDetails is null
+            ? MyCapture.Core.Capture.CaptureSourceDetails.Empty
+            : MyCapture.Core.Capture.CaptureSourceDetails.Create(sourceDetails.AppName, sourceDetails.AppPath,
+                sourceDetails.DocumentPath);
+        if (url.Length == 0 && details.IsEmpty) return false;
+
+        // An original still being written, or an editor save in flight, finishes first.
+        long waitStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        while (_busyRecords.ContainsKey(record.Id))
+        {
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(waitStarted) > SourceBackfillWriteWait) return false;
+            await Task.Delay(25);
+        }
+
+        if (!HasNoSource(record)) return false;
+        if (!ReferenceEquals(_queue.Find(record.Id), record))
+        {
+            // Deleted (or replaced) meanwhile: never written back. Only a capture that never reached
+            // the library keeps the details, in memory, for its own later save.
+            if (!unpublished) return false;
+            ApplySourceFields(record, url, details, webpageTag);
+            return true;
+        }
+
+        IDisposable lease;
+        try
+        {
+            // The lease keeps the capture in the library until its metadata is written.
+            lease = _queue.AcquireEvictionLease(record.Id);
+        }
+        catch (IOException)
+        {
+            return false; // Being moved to the Recycle Bin.
+        }
+
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_busyRecords.TryAdd(record.Id, 0))
+        {
+            lease.Dispose();
+            return false;
+        }
+
+        _sourceBackfills[record.Id] = completion.Task;
+        bool applied = false;
+        try
+        {
+            long addedBytes = 0;
+            if (url.Length > 0)
+            {
+                string directory = _queue.GetDirectory(record);
+                addedBytes = await Task.Run(() => AddSourceUrlToImages(directory, url));
+            }
+
+            using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync();
+            if (!ReferenceEquals(_queue.Find(record.Id), record)) return false;
+            ApplySourceFields(record, url, details, webpageTag);
+            if (addedBytes != 0) _queue.UpdateByteCount(record.Id, record.TotalBytes + addedBytes);
+            applied = true;
+            await _queue.PublishRecordAsync(record, reservation);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Optional metadata: the capture itself is already safe. When only the metadata write
+            // failed, the record keeps the details and its next save writes them. Paths and
+            // addresses are never logged.
+            _log.LogWarning(ex, "Could not add late source details to capture {Id}", record.Id);
+        }
+        finally
+        {
+            _busyRecords.TryRemove(record.Id, out _);
+            _sourceBackfills.TryRemove(record.Id, out _);
+            lease.Dispose();
+            completion.TrySetResult();
+        }
+
+        if (applied) ImagePersisted?.Invoke(this, record);
+        return applied;
+    }
+
+    private static bool HasNoSource(CaptureRecord record) =>
+        string.IsNullOrEmpty(record.SourcePageUrl) && record.SourceDetails.IsEmpty;
+
+    private static void ApplySourceFields(CaptureRecord record, string url,
+        MyCapture.Core.Capture.CaptureSourceDetails details, string webpageTag)
+    {
+        record.SourcePageUrl = url;
+        record.SetSourceDetails(details);
+        // Same rule as a capture whose page was known at once; tags the user typed are kept.
+        if (url.Length > 0 && string.IsNullOrEmpty(record.Tags) && !string.IsNullOrEmpty(webpageTag))
+            record.Tags = webpageTag;
+    }
+
+    /// <summary>
+    /// Embeds <paramref name="url"/> in original.png and rendered.png when they do not carry a page
+    /// yet, exactly as a save with a known page writes them. Pixels are untouched; each file is
+    /// replaced atomically without a backup copy. Returns the bytes added.
+    /// </summary>
+    private long AddSourceUrlToImages(string directory, string url)
+    {
+        long added = 0;
+        foreach (string name in new[] { CaptureFileNames.Original, CaptureFileNames.Rendered })
+        {
+            string path = Path.Combine(directory, name);
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    if (!File.Exists(path)) break;
+                    byte[] png = File.ReadAllBytes(path);
+                    if (PngSourceUrlMetadata.TryReadSourceUrl(png).Length != 0) break;
+                    byte[] withUrl = PngSourceUrlMetadata.WithSourceUrl(png, url);
+                    if (withUrl.Length == png.Length) break;
+                    AtomicFile.WriteExportBytes(path, withUrl);
+                    added += withUrl.Length - png.Length;
+                    break;
+                }
+                catch (IOException ex) when (attempt < 4)
+                {
+                    // A reader (thumbnail, drag export) can hold the file for a moment.
+                    _log.LogDebug(ex, "Retrying the page link for {File}", name);
+                    Thread.Sleep(50);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // The record still receives the page; only this file keeps its earlier bytes.
+                    _log.LogWarning(ex, "Could not embed the page link in {File}", name);
+                    break;
+                }
+            }
+        }
+
+        return added;
+    }
+
+    private Task WaitForSourceBackfillAsync(Guid recordId) =>
+        _sourceBackfills.TryGetValue(recordId, out Task? backfill) ? backfill : Task.CompletedTask;
 
     internal bool IsBusy(Guid recordId) =>
         _busyRecords.ContainsKey(recordId)
@@ -406,6 +568,8 @@ internal sealed class CapturePersistenceService
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(assetBitmaps);
 
+        // A late page link being added to this capture's images finishes first (BackfillSourceAsync).
+        await WaitForSourceBackfillAsync(record.Id);
         if (!_busyRecords.TryAdd(record.Id, 0))
         {
             throw new InvalidOperationException($"Capture {record.Id} is already being finalized.");

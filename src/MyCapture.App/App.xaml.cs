@@ -1102,6 +1102,8 @@ public partial class App : Application
         if (_overlay?.IsSelecting == true || _activeCountdown is not null || _scrollCancellation is not null
             || _preparingAdvancedCapture || _pasteToScreenInFlight || _gitHubUploadInFlight) return false;
         await _capturePersistenceTask;
+        // Late page/application details normally land within the readers' deadlines; never hold exit longer.
+        await Task.WhenAny(_sourceBackfillTask, Task.Delay(3000));
         if (_libraryRecovery is not null) await _libraryRecovery.WaitForPendingOperationsAsync();
         // Let the coordinator finish its awaited selection transition before enumerating editors.
         await Dispatcher.Yield(DispatcherPriority.Background);
@@ -1155,10 +1157,17 @@ public partial class App : Application
         // Keep one identity through original persistence, retries, and edited saves. The
         // coordinator awaits this handler before opening the editor, so Esc cannot discard
         // an otherwise successfully captured image from the library.
+        // Page and application details still being read never hold back the save: they are added
+        // to this same capture once read (BackfillSourceAsync).
+        Task<CaptureSelectionSource>? lateSource = e.PendingSource;
+        CaptureSelectionSource source = lateSource is { IsCompletedSuccessfully: true } read
+            ? read.Result
+            : new CaptureSelectionSource(e.SourceTitle, e.SourcePageUrl, e.SourceDetails);
+        if (lateSource?.IsCompleted == true) lateSource = null;
         _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
             e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty,
             initialRenderShowsSourceWindowTitle: _settings?.Export.ShowSourceWindowTitle == true,
-            sourcePageUrl: e.SourcePageUrl, sourceDetails: e.SourceDetails);
+            sourcePageUrl: source.PageUrl, sourceDetails: source.Details);
         if (_pendingRecord.SourcePageUrl.Length > 0)
             _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
         Task<bool>? automaticClipboardCopy = _commit is not null
@@ -1187,6 +1196,9 @@ public partial class App : Application
                 LibrarySaveFailureMessage(_settings?.General.AfterCapture ?? AfterCaptureAction.Editor, ex),
                 TrayBalloonKind.Error);
         }
+
+        if (lateSource is not null)
+            _sourceBackfillTask = BackfillLateSourceAsync(_pendingRecord, published: _currentRecord is not null, lateSource);
 
         try
         {
@@ -1299,6 +1311,29 @@ public partial class App : Application
                 }
                 finally { pendingReceipt?.Dispose(); }
             }));
+        }
+    }
+
+    private Task _sourceBackfillTask = Task.CompletedTask;
+
+    /// <summary>
+    /// Adds the page and application details that were still being read when the capture was saved.
+    /// The read ends within its own deadlines; deleted captures are never written again.
+    /// </summary>
+    private async Task BackfillLateSourceAsync(CaptureRecord record, bool published, Task<CaptureSelectionSource> lateSource)
+    {
+        try
+        {
+            CaptureSelectionSource source = await lateSource.ConfigureAwait(false);
+            if (source.HasNoDetails) return;
+            await Dispatcher.InvokeAsync(() => _persistence is { } persistence
+                ? persistence.BackfillSourceAsync(record, source.PageUrl, source.Details,
+                    UiText.Get("Capture.WebpageTag"), unpublished: !published)
+                : Task.FromResult(false)).Task.Unwrap().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log?.LogWarning(ex, "Could not add late source details to the capture");
         }
     }
 
