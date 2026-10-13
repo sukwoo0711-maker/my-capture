@@ -11,6 +11,7 @@ using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 
 namespace MyCapture.App.Editing;
 
@@ -45,18 +46,21 @@ internal partial class AnnotationEditorWindow : Window
         SetResourceReference(ForegroundProperty, "Text.Primary");
         FontFamily = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");
-        WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ShowInTaskbar = true;
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
-        MinWidth = 680;
-        MinHeight = 460;
 
-        Rect work = SystemParameters.WorkArea;
-        double desiredWidth = Math.Max(980, selectedBitmap.PixelWidth + 360);
-        double desiredHeight = Math.Max(620, selectedBitmap.PixelHeight + 156);
-        Width = Math.Min(desiredWidth, Math.Max(MinWidth, work.Width - 64));
-        Height = Math.Min(desiredHeight, Math.Max(MinHeight, work.Height - 64));
+        _desiredSize = new Size(Math.Max(980, selectedBitmap.PixelWidth + 360), Math.Max(620, selectedBitmap.PixelHeight + 156));
+        // CenterScreen opens an ownerless window on the pointer's monitor, so it is sized for that
+        // monitor, not the primary one. A capture moves it to its own monitor (PlaceOnMonitor).
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        MonitorInfo pointerMonitor = MonitorEnumerator.GetFromCursor();
+        MonitorWindowPlacement.WindowFit fit = MonitorWindowPlacement.Fit(pointerMonitor.WorkArea,
+            pointerMonitor.ScaleFactor, _desiredSize, MinimumSize, WorkAreaMargin);
+        MinWidth = fit.Minimum.Width;
+        MinHeight = fit.Minimum.Height;
+        Width = fit.Size.Width;
+        Height = fit.Size.Height;
 
         AutomationProperties.SetName(this, UiText.Get("Text_53DCBAF22F42"));
         // The window itself never takes text; while it briefly holds focus a Hangul-mode IME
@@ -79,6 +83,21 @@ internal partial class AnnotationEditorWindow : Window
         ContentRendered += OnContentRendered;
         InitializeDraftRecovery();
     }
+
+    private readonly Size _desiredSize;
+
+    /// <summary>Smallest editor that still shows its tool rows and a usable canvas (DIPs).</summary>
+    internal static readonly Size MinimumSize = new(680, 460);
+
+    /// <summary>Space kept free around the editor across each dimension of the work area (DIPs).</summary>
+    internal const double WorkAreaMargin = 64;
+
+    /// <summary>
+    /// Opens the editor centred in <paramref name="monitor"/>'s work area, sized for that monitor at its
+    /// DPI, landscape or portrait. Call before <see cref="Window.Show"/>.
+    /// </summary>
+    internal void PlaceOnMonitor(MonitorInfo monitor) =>
+        MonitorWindowPlacement.CenterOn(this, monitor, _desiredSize, MinimumSize, WorkAreaMargin);
 
     internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested
     {

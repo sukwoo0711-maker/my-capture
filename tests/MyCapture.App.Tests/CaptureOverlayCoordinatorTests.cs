@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -325,6 +326,40 @@ public sealed class CaptureOverlayCoordinatorTests
         Assert.False(coordinator.IsActive);
         Assert.Equal(2, closed);
     });
+
+    [Fact]
+    public void EditorOpensWholeOnThePortraitSecondaryTheSelectionWasTakenOn() => RunSta(() =>
+    {
+        // The reported layout, moved far off the real desktop so the window never shows on screen:
+        // an ultrawide primary with a 768 x 1366 portrait display on its right.
+        const double x = -30000, y = -20000;
+        var primary = new MonitorInfo(@"\\.\DISPLAY1", new RectD(x, y, 3440, 1440), new RectD(x, y, 3440, 1392), 96, true);
+        var portrait = new MonitorInfo(@"\\.\DISPLAY2", new RectD(x + 3440, y, 768, 1366), new RectD(x + 3440, y, 768, 1318), 96, false);
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadMonitors = () => [primary, portrait];
+        var frame = new FrozenFrame(Solid(32, 20), new RectD(x + 3500, y + 100, 32, 20), null, 0);
+
+        Assert.True(coordinator.StartWithSelection(frame, new RectD(0, 0, 32, 20)));
+        PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted && coordinator.CurrentEditor?.IsLoaded == true);
+        System.Windows.Window editor = System.Windows.Window.GetWindow(coordinator.CurrentEditor!)!;
+        Assert.True(GetWindowRect(new System.Windows.Interop.WindowInteropHelper(editor).Handle, out NativeRect rect));
+        try
+        {
+            // Before: 980 wide from the primary work area, spilling onto the primary and off the right edge.
+            Assert.Equal((x + 3472, y + 349, x + 4176, y + 969), ((double)rect.Left, (double)rect.Top, (double)rect.Right, (double)rect.Bottom));
+        }
+        finally
+        {
+            coordinator.Cancel();
+        }
+    });
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr window, out NativeRect rect);
 
     private static CaptureOverlayCoordinator Coordinator(Func<bool, FrozenFrame> acquire) => new(
         new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),

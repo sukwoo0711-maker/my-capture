@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
+using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
@@ -625,6 +626,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 privacyRedactionService: PrivacyRedactionService,
                 sourceWindowTitle: selection.SourceTitle);
             _activeEditor = editor;
+            if (CaptureMonitor(selection) is { } monitor) editor.PlaceOnMonitor(monitor);
             editor.DraftRecordSource = DraftRecord;
             if (OriginalNeedsRecovery()) editor.MarkUnpersistedCapture();
             editor.CommitRequested = CommitRequested;
@@ -669,6 +671,26 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
             transition.Dispose();
             EndSessionIfIdle();
+        }
+    }
+
+    /// <summary>Reads the displays when the editor opens. Tests replace it.</summary>
+    internal Func<IReadOnlyList<MonitorInfo>> ReadMonitors { get; set; } = MonitorEnumerator.GetAll;
+
+    /// <summary>The monitor the selection was taken on: the one showing most of it.</summary>
+    private MonitorInfo? CaptureMonitor(CaptureSelectionCompletedEventArgs selection)
+    {
+        RectD frame = selection.Frame.ScreenBounds;
+        var region = new RectD(frame.Left + selection.BitmapRegion.Left, frame.Top + selection.BitmapRegion.Top,
+            selection.BitmapRegion.Width, selection.BitmapRegion.Height);
+        try
+        {
+            return MonitorWindowPlacement.MonitorFor(ReadMonitors(), region) ?? selection.Frame.Monitor;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.LogWarning(ex, "Could not read the displays for the editor; it opens on the pointer's monitor");
+            return selection.Frame.Monitor;
         }
     }
 

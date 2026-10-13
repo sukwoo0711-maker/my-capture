@@ -50,6 +50,7 @@ internal sealed partial class OcrResultWindow : Window
         MinWidth = 760;
         MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        MonitorWindowPlacement.KeepOnPointerMonitor(this, marginDip: 48);
         ShowInTaskbar = true;
         AutomationProperties.SetName(this, UiText.Get("Text_E5F541120733"));
 
