@@ -242,11 +242,5 @@ internal sealed class GalleryVideoPlayerWindow : Window
     private void UpdateTime() =>
         _time.Text = $"{Format(_video.Position.TotalMilliseconds)} / {Format(_seek.Maximum)}";
 
-    private static string Format(double ms)
-    {
-        TimeSpan v = TimeSpan.FromMilliseconds(Math.Max(0, ms));
-        return v.TotalHours >= 1
-            ? v.ToString(@"hh\:mm\:ss", System.Globalization.CultureInfo.InvariantCulture)
-            : v.ToString(@"mm\:ss", System.Globalization.CultureInfo.InvariantCulture);
-    }
+    private static string Format(double ms) => VideoTimecode.Format(ms);
 }

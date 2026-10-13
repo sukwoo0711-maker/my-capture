@@ -229,6 +229,7 @@ internal sealed partial class VideoEditorWindow : Window
         _layerCanvas.BoundsChanged += (_, _) => { _overlayPreview.InvalidateVisual(); _draftSession?.Changed(); };
         _layerCanvas.InteractionCompleted += (_, _) => CompleteLayerInteraction();
         _layerCanvas.LayerActivated += (_, _) => EditSelectedOverlay();
+        _layerCanvas.SelectionViewBoundsChanged += (_, _) => PlacePositionChip();
         _previewEngine = new MediaElementPreviewEngine(_media);
         _previewSeeks = new PreviewSeekCoordinator(_previewEngine, recording.Fps);
         _previewSeeks.PreviewPresented += OnPreviewPresented;
@@ -273,7 +274,7 @@ internal sealed partial class VideoEditorWindow : Window
             Visibility = Visibility.Collapsed,
             Child = _trimPreviewBadgeText,
         };
-        _positionLabel = BuildMono("00:00.000 / 00:00.000");
+        _positionLabel = BuildMono(UiText.Format("VideoEditorUx_PositionTime", VideoTimecode.Format(0), VideoTimecode.Format(0)));
         _statusLabel = new TextBlock
         {
             Text = UiText.Get("Text_831103D5C64B"),
@@ -570,7 +571,12 @@ internal sealed partial class VideoEditorWindow : Window
         // A small preview keeps the time and drops the frame count, which the status line
         // still reports for frame steps.
         previewStack.SizeChanged += (_, _) =>
+        {
             _positionFrameLabel.Visibility = previewStack.ActualWidth >= 440 ? Visibility.Visible : Visibility.Collapsed;
+            PlacePositionChip();
+        };
+        positionChip.SizeChanged += (_, _) => PlacePositionChip();
+        _trimPreviewBadge.IsVisibleChanged += (_, _) => PlacePositionChip();
         previewStack.Children.Add(positionChip);
         previewStack.Children.Add(_loadingOverlay);
 
@@ -1800,8 +1806,8 @@ internal sealed partial class VideoEditorWindow : Window
     private void RefreshTrimInputs()
     {
         if (_trimInInput is null) return;
-        _trimInInput.Text = SourceTimeInput.Format(_timeline.InMs);
-        _trimOutInput.Text = SourceTimeInput.Format(_timeline.OutMs);
+        _trimInInput.Text = VideoTimecode.Format(_timeline.InMs);
+        _trimOutInput.Text = VideoTimecode.Format(_timeline.OutMs);
         RefreshTrimSummary();
     }
 
@@ -1810,8 +1816,8 @@ internal sealed partial class VideoEditorWindow : Window
         // A focus change can also mean the window is closing; never touch a closed media
         // element, and do not stop playback just because the field lost focus.
         if (!_mediaReady || _operationRunning || _closing) return;
-        if (!SourceTimeInput.TryParse(_trimInInput.Text, out double start)
-            || !SourceTimeInput.TryParse(_trimOutInput.Text, out double end)
+        if (!TryReadTrimInput(_trimInInput.Text, _timeline.InMs, out double start)
+            || !TryReadTrimInput(_trimOutInput.Text, _timeline.OutMs, out double end)
             || !_timeline.SetTrimRange(start, end))
         {
             _statusLabel.Text = UiText.Get("Video.TrimInputInvalid");
@@ -1819,6 +1825,32 @@ internal sealed partial class VideoEditorWindow : Window
             return;
         }
         RefreshTrimInputs();
+    }
+
+    /// <summary>
+    /// Reads a trim field. The fields show whole milliseconds, so an unedited field keeps the
+    /// exact value it shows, and the shown clip end (rounded up by up to half a millisecond)
+    /// still means the end.
+    /// </summary>
+    private bool TryReadTrimInput(string text, double currentMs, out double ms)
+    {
+        if (string.Equals(text.Trim(), VideoTimecode.Format(currentMs), StringComparison.Ordinal))
+        {
+            ms = currentMs;
+            return true;
+        }
+
+        if (!VideoTimecode.TryParse(text, out ms))
+        {
+            return false;
+        }
+
+        if (ms > _durationMs && ms - _durationMs <= 0.5)
+        {
+            ms = _durationMs;
+        }
+
+        return true;
     }
 
     private void RestoreEdit(bool redo)
@@ -2792,13 +2824,72 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetName(_positionChip, UiText.Format("Text_D8A09D5BCDCB", FormatMs(positionMs), FormatMs(_durationMs), frame, total));
     }
 
+    /// <summary>The corner of the preview the time readout sits in; bottom left unless a selected layer is there.</summary>
+    internal (HorizontalAlignment Horizontal, VerticalAlignment Vertical) PositionChipCornerForTest =>
+        (_positionChip.HorizontalAlignment, _positionChip.VerticalAlignment);
+
+    /// <summary>
+    /// Keeps the time readout off the selected layer. It sits bottom left, like a player's
+    /// readout; while the selected layer's outline or handles would be under it, it moves to
+    /// the first other corner that leaves them free (top left only while the trim badge, which
+    /// lives there, is hidden), or else to the corner that covers the least of them.
+    /// </summary>
+    private void PlacePositionChip()
+    {
+        if (_positionChip is null)
+        {
+            return;
+        }
+
+        (HorizontalAlignment Horizontal, VerticalAlignment Vertical) chosen = (HorizontalAlignment.Left, VerticalAlignment.Bottom);
+        if (_layerCanvas.SelectionViewBounds is { } layer && !layer.IsEmpty)
+        {
+            Size area = _layerCanvas.RenderSize;
+            Thickness margin = _positionChip.Margin;
+            Size chip = _positionChip.IsMeasureValid && _positionChip.DesiredSize.Width > 0
+                ? _positionChip.DesiredSize
+                : new Size(_positionChip.ActualWidth + margin.Left + margin.Right, _positionChip.ActualHeight + margin.Top + margin.Bottom);
+            double leastCovered = double.PositiveInfinity;
+            foreach ((HorizontalAlignment h, VerticalAlignment v) corner in new[]
+            {
+                (HorizontalAlignment.Left, VerticalAlignment.Bottom),
+                (HorizontalAlignment.Left, VerticalAlignment.Top),
+                (HorizontalAlignment.Right, VerticalAlignment.Bottom),
+                (HorizontalAlignment.Right, VerticalAlignment.Top),
+            })
+            {
+                if (corner == (HorizontalAlignment.Left, VerticalAlignment.Top) && _trimPreviewBadge.IsVisible)
+                {
+                    continue;
+                }
+
+                var spot = new Rect(
+                    corner.h == HorizontalAlignment.Left ? 0 : Math.Max(0, area.Width - chip.Width),
+                    corner.v == VerticalAlignment.Top ? 0 : Math.Max(0, area.Height - chip.Height),
+                    chip.Width,
+                    chip.Height);
+                Rect overlap = Rect.Intersect(spot, layer);
+                double covered = overlap.IsEmpty ? 0 : overlap.Width * overlap.Height;
+                if (covered < leastCovered)
+                {
+                    leastCovered = covered;
+                    chosen = corner;
+                }
+
+                if (covered == 0)
+                {
+                    break;
+                }
+            }
+        }
+
+        _positionChip.HorizontalAlignment = chosen.Horizontal;
+        _positionChip.VerticalAlignment = chosen.Vertical;
+    }
+
     private int TotalFrameCount() => FrameStepCalculator.LastFrameIndex(_recording.Fps, _durationMs) + 1;
 
-    private static string FormatMs(double ms)
-    {
-        TimeSpan t = TimeSpan.FromMilliseconds(Math.Max(0, ms));
-        return t.ToString(@"mm\:ss\.fff", CultureInfo.InvariantCulture);
-    }
+    private static string FormatMs(double ms) => VideoTimecode.Format(ms);
 
     private void OnClosingInternal(object? sender, CancelEventArgs e)
     {

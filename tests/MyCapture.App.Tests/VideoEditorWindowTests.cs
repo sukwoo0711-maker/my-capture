@@ -399,15 +399,15 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
         Assert.Equal(0, timeline.ViewStartMs, precision: 1);
         Assert.Equal(timeline.CoarseIntervalMs, timeline.VisibleSpanMs, precision: 1);
         Assert.Contains("굵은 눈금", timeline.OverviewRangeText, StringComparison.Ordinal);
-        Assert.Contains("시작 00:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
-        Assert.Contains("끝 00:01.000", timeline.DetailRangeText, StringComparison.Ordinal);
+        Assert.Contains("시작 0:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
+        Assert.Contains("끝 0:01.000", timeline.DetailRangeText, StringComparison.Ordinal);
         Assert.Contains("15프레임", timeline.DetailRangeText, StringComparison.Ordinal);
         Assert.InRange(timeline.DesiredSize.Height, 100, 155); // Compact guide leaves room for spatial-layer tracks.
 
         timeline.SeekFromOverview(6_000);
         Assert.InRange(timeline.PlayheadMs, timeline.ViewStartMs, timeline.ViewEndMs);
         Assert.InRange(6_000, timeline.ViewStartMs, timeline.ViewEndMs);
-        Assert.DoesNotContain("시작 00:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
+        Assert.DoesNotContain("시작 0:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
     });
 
     [Fact]

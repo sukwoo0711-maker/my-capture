@@ -1833,19 +1833,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         return caption;
     }
 
-    private static string FormatMs(double ms)
-    {
-        TimeSpan value = TimeSpan.FromMilliseconds(Math.Max(0, ms));
-        return value.ToString(@"mm\:ss\.fff", CultureInfo.InvariantCulture);
-    }
+    private static string FormatMs(double ms) => VideoTimecode.Format(ms);
 
-    private static string FormatTickLabel(double ms)
-    {
-        TimeSpan value = TimeSpan.FromMilliseconds(Math.Max(0, ms));
-        return value.TotalMinutes >= 1
-            ? value.ToString(@"mm\:ss", CultureInfo.InvariantCulture)
-            : string.Create(CultureInfo.InvariantCulture, $"{value.TotalSeconds:0.0}s");
-    }
+    private static string FormatTickLabel(double ms) => VideoTimecode.FormatTick(ms);
 
     private static Brush ResolveBrush(string key, Color fallback) =>
         Application.Current?.TryFindResource(key) as Brush ?? FrozenBrush(fallback);

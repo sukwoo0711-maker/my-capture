@@ -738,12 +738,8 @@ internal sealed class VideoExportDialog : Window
         ? UiText.Format("MediaExport_SizeMb", bytes / 1_000_000d)
         : UiText.Format("MediaExport_SizeKb", Math.Max(1, bytes / 1_000d));
 
-    /// <summary>mm:ss.t of a duration, as the summary line shows the kept range.</summary>
-    internal static string FormatClock(double milliseconds)
-    {
-        var time = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
-        return string.Create(CultureInfo.InvariantCulture, $"{(int)time.TotalMinutes:00}:{time.Seconds:00}.{time.Milliseconds / 100}");
-    }
+    /// <summary>The kept range's length in the editor's time format, as the summary line shows it.</summary>
+    internal static string FormatClock(double milliseconds) => VideoTimecode.Format(milliseconds);
 
     /// <summary>
     /// The MP4 size the summary line promises before anything is encoded: the standard bitrate

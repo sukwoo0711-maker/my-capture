@@ -23,6 +23,13 @@ internal sealed class VideoLayerCanvas : FrameworkElement
     internal event EventHandler? InteractionCompleted;
     internal event EventHandler? LayerActivated;
 
+    /// <summary>The selected layer's outline and handles, in this element's coordinates, while it shows.</summary>
+    internal Rect? SelectionViewBounds { get; private set; }
+
+    /// <summary>Raised when <see cref="SelectionViewBounds"/> changes: a new selection, a move or resize,
+    /// the layer starting or ending at the playhead, or a new element size.</summary>
+    internal event EventHandler? SelectionViewBoundsChanged;
+
     internal VideoLayerCanvas()
     {
         Focusable = true;
@@ -78,13 +85,25 @@ internal sealed class VideoLayerCanvas : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         dc.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize));
-        if (SelectedId is not { } id || !ActiveBounds().TryGetValue(id, out Rect bounds)) { return; }
-        Rect view = ToView(bounds);
-        var pen = new Pen(Brushes.DeepSkyBlue, IsKeyboardFocused ? 2 : 1);
-        dc.DrawRectangle(null, pen, view);
-        foreach (Point corner in Corners(view))
+        Rect? shown = null;
+        if (SelectedId is { } id && ActiveBounds().TryGetValue(id, out Rect bounds))
         {
-            dc.DrawRectangle(Brushes.White, pen, new Rect(corner.X - 4, corner.Y - 4, 8, 8));
+            Rect view = ToView(bounds);
+            var pen = new Pen(Brushes.DeepSkyBlue, IsKeyboardFocused ? 2 : 1);
+            dc.DrawRectangle(null, pen, view);
+            foreach (Point corner in Corners(view))
+            {
+                dc.DrawRectangle(Brushes.White, pen, new Rect(corner.X - 4, corner.Y - 4, 8, 8));
+            }
+
+            // The handles reach 4 px past the outline, plus the pen.
+            shown = Rect.Inflate(view, 5, 5);
+        }
+
+        if (shown != SelectionViewBounds)
+        {
+            SelectionViewBounds = shown;
+            SelectionViewBoundsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

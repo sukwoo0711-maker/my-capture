@@ -33,7 +33,7 @@ public sealed class VideoEditorUxLayoutTests
             var bar = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
             TextBlock[] texts = Descendants(bar).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
             Assert.Contains(texts, text => text.Text == "동영상 편집");
-            Assert.Contains(texts, text => text.Text == "동영상 00:10.0 · 640×360 · 30fps");
+            Assert.Contains(texts, text => text.Text == "동영상 0:10.000 · 640×360 · 30fps");
         }
         finally
         {
