@@ -1333,7 +1333,10 @@ public partial class App : Application
                 actions.PinAsync,
                 actions.SaveAsync,
                 () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
-                actions.ExportAsync, capturedRegion: region, targetMonitor: monitor);
+                actions.ExportAsync, capturedRegion: region, targetMonitor: monitor,
+                copyText: _textCapture is { } textCapture
+                    ? async () => await textCapture.RecognizeAndCopyAsync(await Render(), CancellationToken.None)
+                    : null);
             card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
             _quickAccess = card;
             card.Show();

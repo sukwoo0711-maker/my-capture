@@ -163,9 +163,9 @@ public sealed class ReleaseUxInteractionTests
             var card = new QuickAccessWindow(Image(), () => { copied++; return Task.FromResult(true); }, () => { },
                 () => { pinned++; return Task.CompletedTask; }, () => { saved++; return Task.FromResult(true); }, () => { }, () => Task.FromResult("unused.png"));
             var panel = Assert.IsType<StackPanel>(Assert.IsType<Border>(card.Content).Child);
-            var actions = panel.Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
+            IReadOnlyList<Button> actions = card.ActionButtonsForTest;
             foreach (int index in new[] { 0, 2, 3 })
-                ((Button)actions.Children[index]).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                actions[index].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.Equal((1, 1, 1), (copied, pinned, saved));
             var progress = panel.Children.OfType<ProgressBar>().Single();
             card.Advance(TimeSpan.FromSeconds(9), interacting: true);

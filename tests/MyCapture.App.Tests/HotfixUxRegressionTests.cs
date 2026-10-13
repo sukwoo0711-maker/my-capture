@@ -86,9 +86,9 @@ public sealed class HotfixUxRegressionTests
             Assert.False(card.IsActive);
             Assert.Same(before, Keyboard.FocusedElement);
             Assert.NotEqual(0, GetWindowLongPtrW(new WindowInteropHelper(card).Handle, -20).ToInt64() & 0x08000000L);
-            var actions = ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
-            Assert.Equal(4, actions.Columns);
-            Assert.All(actions.Children.OfType<Button>(), button => Assert.False(button.Focusable));
+            Assert.Equal(5, card.ActionButtonsForTest.Count);
+            Assert.All(card.ActionButtonsForTest, button => Assert.False(button.Focusable));
+            Assert.False(card.KeepToggleForTest.Focusable);
             card.Advance(TimeSpan.FromSeconds(9), false);
             Assert.False(card.IsVisible);
         }
@@ -191,7 +191,7 @@ public sealed class HotfixUxRegressionTests
         Exception error = new InvalidOperationException("private diagnostic detail");
         if (userFacing) error = UserFacingError.Mark(new InvalidOperationException(UiText.Get("Text_D0FD12A01E4A")));
         card.RunAsync("Copy", () => Task.FromException<bool>(error), "QuickAccess.Copying", "QuickAccess.Copied").GetAwaiter().GetResult();
-        Assert.Equal(UiText.Get(userFacing ? "Text_D0FD12A01E4A" : "QuickAccess.Failed"), card.StatusForTest.Text);
+        Assert.Equal(userFacing ? UiText.Get("Text_D0FD12A01E4A") : QuickAccessWindow.FailureText("Copy"), card.StatusForTest.Text);
         Assert.Equal(FeedbackKind.ActionRequired, card.StatusForTest.Kind);
         card.Close();
     });

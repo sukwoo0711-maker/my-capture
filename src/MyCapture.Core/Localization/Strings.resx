@@ -3257,6 +3257,17 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="QuickAccess.Saving" xml:space="preserve"><value>저장 중…</value></data>
   <data name="QuickAccess.Sound" xml:space="preserve"><value>캡처 완료 소리</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>캡처 빠른 작업</value></data>
+  <data name="QuickAccess.CopyText" xml:space="preserve"><value>텍스트 복사</value></data>
+  <data name="QuickAccess.CopyingText" xml:space="preserve"><value>텍스트 인식 중…</value></data>
+  <data name="QuickAccess.TextCopied" xml:space="preserve"><value>텍스트 복사됨</value></data>
+  <data name="QuickAccess.CopyFailed" xml:space="preserve"><value>복사하지 못했습니다 · {0}로 다시 시도</value></data>
+  <data name="QuickAccess.EditFailed" xml:space="preserve"><value>편집기를 열지 못했습니다 · {0}로 다시 시도</value></data>
+  <data name="QuickAccess.PinFailed" xml:space="preserve"><value>핀으로 띄우지 못했습니다 · {0}로 다시 시도</value></data>
+  <data name="QuickAccess.SaveFailed" xml:space="preserve"><value>저장하지 못했습니다 · {0}로 다시 시도</value></data>
+  <data name="QuickAccess.CopyTextFailed" xml:space="preserve"><value>텍스트를 복사하지 못했습니다 · {0}로 다시 시도</value></data>
+  <data name="QuickAccess.DragFailed" xml:space="preserve"><value>파일을 준비하지 못했습니다 · 다시 끌어서 시도</value></data>
+  <data name="QuickAccess.KeepLabel" xml:space="preserve"><value>유지</value></data>
+  <data name="QuickAccess.KeepName" xml:space="preserve"><value>카드 유지</value></data>
   <data name="Hotkey.Clear" xml:space="preserve"><value>지우기</value></data>
   <data name="Hotkey.Delay" xml:space="preserve"><value>지연 캡처</value></data>
   <data name="Hotkey.Record" xml:space="preserve"><value>단축키 기록</value></data>

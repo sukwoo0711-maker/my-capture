@@ -3257,6 +3257,17 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.Saving" xml:space="preserve"><value>Saving…</value></data>
   <data name="QuickAccess.Sound" xml:space="preserve"><value>Play capture sound</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>Capture quick access</value></data>
+  <data name="QuickAccess.CopyText" xml:space="preserve"><value>Copy text</value></data>
+  <data name="QuickAccess.CopyingText" xml:space="preserve"><value>Recognizing text…</value></data>
+  <data name="QuickAccess.TextCopied" xml:space="preserve"><value>Text copied</value></data>
+  <data name="QuickAccess.CopyFailed" xml:space="preserve"><value>Could not copy · Press {0} to retry</value></data>
+  <data name="QuickAccess.EditFailed" xml:space="preserve"><value>Could not open the editor · Press {0} to retry</value></data>
+  <data name="QuickAccess.PinFailed" xml:space="preserve"><value>Could not pin · Press {0} to retry</value></data>
+  <data name="QuickAccess.SaveFailed" xml:space="preserve"><value>Could not save · Press {0} to retry</value></data>
+  <data name="QuickAccess.CopyTextFailed" xml:space="preserve"><value>Could not copy text · Press {0} to retry</value></data>
+  <data name="QuickAccess.DragFailed" xml:space="preserve"><value>Could not prepare the file · Drag again to retry</value></data>
+  <data name="QuickAccess.KeepLabel" xml:space="preserve"><value>Keep</value></data>
+  <data name="QuickAccess.KeepName" xml:space="preserve"><value>Keep card open</value></data>
   <data name="Hotkey.Clear" xml:space="preserve"><value>Clear</value></data>
   <data name="Hotkey.Delay" xml:space="preserve"><value>Delayed capture</value></data>
   <data name="Hotkey.Record" xml:space="preserve"><value>Record shortcut</value></data>

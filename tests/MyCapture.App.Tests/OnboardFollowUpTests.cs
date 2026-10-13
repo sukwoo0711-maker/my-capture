@@ -13,13 +13,14 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-/// <summary>The quick access card names its actions and says plainly what the lock does.</summary>
+/// <summary>The quick access card names its actions and says plainly what keeping it does.</summary>
 public sealed class QuickAccessCardLabelTests
 {
     [Theory]
-    [InlineData("ko", new[] { "복사", "편집", "핀", "저장" }, "자동으로 닫지 않기")]
-    [InlineData("en", new[] { "Copy", "Edit", "Pin", "Save" }, "Keep open")]
-    public void ActionsShowAShortNameUnderTheIconAndTheLockSaysKeepOpen(string language, string[] names, string keep) =>
+    [InlineData("ko", new[] { "복사", "편집", "핀", "저장", "텍스트 복사" }, "유지", "카드 유지", "자동으로 닫지 않기")]
+    [InlineData("en", new[] { "Copy", "Edit", "Pin", "Save", "Copy text" }, "Keep", "Keep card open", "Keep open")]
+    public void ActionsShowAShortNameUnderTheIconAndKeepIsAWord(string language, string[] names, string keep,
+        string keepName, string keepTip) =>
         StaTestHost.Run(() =>
         {
             using var culture = UiText.UseLanguage(language);
@@ -28,14 +29,20 @@ public sealed class QuickAccessCardLabelTests
                 () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"));
             try
             {
-                var row = ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().First();
-                Button[] actions = row.Children.OfType<UniformGrid>().Single().Children.OfType<Button>().ToArray();
+                IReadOnlyList<Button> actions = card.ActionButtonsForTest;
                 Assert.Equal(names, actions.Select(button => LogicalText(button)));
                 // The key is not written on the face; it is the tooltip's and the accelerator key's.
                 Assert.All(actions, button => Assert.False(string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))));
-                ToggleButton lockButton = row.Children.OfType<ToggleButton>().Single();
-                Assert.Equal(keep, lockButton.ToolTip);
-                Assert.Equal(keep, AutomationProperties.GetName(lockButton));
+                // A word, not a padlock glyph; the visible word is part of its accessible name.
+                ToggleButton keepToggle = card.KeepToggleForTest;
+                Assert.Equal(keep, keepToggle.Content);
+                Assert.Equal(keepTip, keepToggle.ToolTip);
+                Assert.Equal(keepName, AutomationProperties.GetName(keepToggle));
+                Assert.Contains(keep, keepName, StringComparison.Ordinal);
+                Assert.Equal(keepTip, AutomationProperties.GetHelpText(keepToggle));
+                // It sits beside close, in the row that decides how long the card stays.
+                var header = ((StackPanel)((Border)card.Content).Child).Children.OfType<Grid>().First();
+                Assert.Same(header, keepToggle.Parent);
                 // The card's own tooltip is one short line, not a paragraph of keys.
                 Assert.True(((string)card.ToolTip).Length <= 40, (string)card.ToolTip);
             }
@@ -56,8 +63,9 @@ public sealed class QuickAccessCardLabelTests
             Ocr410Fixture.LoadTheme(card);
             card.Show();
             card.UpdateLayout();
-            var row = ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().First();
-            foreach (Button button in row.Children.OfType<UniformGrid>().Single().Children.OfType<Button>())
+            // The card keeps its width with five actions.
+            Assert.Equal(344, card.ActualWidth);
+            foreach (Button button in card.ActionButtonsForTest)
             {
                 TextBlock name = FaceName(button)!;
                 var probe = new TextBlock

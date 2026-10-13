@@ -226,7 +226,7 @@ internal static class HotfixUxSelfTest
                         Check($"Alt+Q available to a separate registration iff kept={kept}", available == kept);
                     }
                     var mouseRow = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().First();
-                    var mouseActions = mouseRow.Children.OfType<UniformGrid>().Single().Children.OfType<Button>().ToArray();
+                    var mouseActions = keyboardCard.ActionButtonsForTest.ToArray();
                     Click(inputHandle, mouseActions[0]);
                     Check("copy click preserves external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && copies == 1);
                     Check("card writes actual Windows image clipboard", lastCopy is not null && Await(lastCopy));
@@ -258,7 +258,7 @@ internal static class HotfixUxSelfTest
                     DragToExternal(inputHandle, preview);
                     Check($"native thumbnail file drop reaches external app and preserves foreground; text={external.Text}; foreground={GetForegroundWindow()}",
                         external.Text.EndsWith("[drop:" + dragPath + "]", StringComparison.Ordinal) && GetForegroundWindow() == inputHandle && !keyboardCard.IsActive);
-                    var keepButton = mouseRow.Children.OfType<ToggleButton>().Single();
+                    var keepButton = keyboardCard.KeepToggleForTest;
                     Click(inputHandle, keepButton); Click(inputHandle, keepButton);
                     Check("keep toggle clicks preserve external foreground", GetForegroundWindow() == inputHandle && keyboardCard.IsKept && !keyboardCard.IsActive);
                     foreach (bool library in new[] { false, true })
@@ -302,9 +302,8 @@ internal static class HotfixUxSelfTest
                     SendKey(cardHandle, 0x53); Pump(80);
                     Check("focused card S invokes save", saves == 2);
                     // Observe real pointer-triggered tooltips on this owned foreground HWND.
-                    var cardRow = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().First();
-                    var tooltipTargets = cardRow.Children.OfType<UniformGrid>().Single().Children.OfType<ButtonBase>()
-                        .Concat(cardRow.Children.OfType<ToggleButton>()).ToArray();
+                    var tooltipTargets = keyboardCard.ActionButtonsForTest.Cast<ButtonBase>()
+                        .Append(keyboardCard.KeepToggleForTest).ToArray();
                     foreach (ButtonBase target in tooltipTargets)
                     {
                         Point center = target.PointToScreen(new Point(target.ActualWidth / 2, target.ActualHeight / 2));
@@ -356,16 +355,13 @@ internal static class HotfixUxSelfTest
                 ThemeService.Apply(theme);
                 var receipt = Card(sample); owned.Add(receipt); receipt.IsKept = true;
                 receipt.Show(); Pump(70); receipt.UpdateLayout();
-                var keep = ((StackPanel)((Border)receipt.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<ToggleButton>().Single();
-                string locked = ((SymbolIcon)keep.Content).Data!.ToString();
+                var keep = receipt.KeepToggleForTest;
+                object kept = keep.Content;
                 receipt.IsKept = false;
-                string unlocked = ((SymbolIcon)keep.Content).Data!.ToString();
-                Check($"{language}/{theme}: keep on/off glyphs differ from each other and screen pin",
-                    locked != unlocked && locked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString()
-                    && unlocked != ((Geometry)receipt.FindResource("Icon.Pin")).ToString());
+                Check($"{language}/{theme}: keep is a word and its checked state shows the choice",
+                    Equals(kept, UiText.Get("QuickAccess.KeepLabel")) && ReferenceEquals(kept, keep.Content) && keep.IsChecked == false);
                 receipt.IsKept = true;
-                var grid = ((StackPanel)((Border)receipt.Content).Child).Children.OfType<DockPanel>().First().Children.OfType<UniformGrid>().Single();
-                foreach (Button button in grid.Children.OfType<Button>())
+                foreach (Button button in receipt.ActionButtonsForTest)
                 {
                     // Each action shows an icon, its name and (when hints are on) its shortcut.
                     var content = (FrameworkElement)button.Content;

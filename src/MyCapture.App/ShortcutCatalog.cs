@@ -36,7 +36,7 @@ internal static class ShortcutCatalog
             Add(ShortcutScope.Crop, command, key, hint);
             Add(ShortcutScope.Crop, command + "Fast", key, "Shift+" + hint, ModifierKeys.Shift);
         }
-        foreach (var (command, key) in new[] { ("Copy", Key.C), ("Edit", Key.E), ("Pin", Key.P), ("Save", Key.S) })
+        foreach (var (command, key) in new[] { ("Copy", Key.C), ("Edit", Key.E), ("Pin", Key.P), ("Save", Key.S), ("CopyText", Key.T) })
             Add(ShortcutScope.QuickAccess, command, key, key.ToString());
         Add(ShortcutScope.QuickAccess, "Close", Key.Escape, "Esc");
         Add(ShortcutScope.QuickAccess, "Activate", Key.Q, "Alt+Q", ModifierKeys.Alt);
