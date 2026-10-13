@@ -80,6 +80,15 @@ internal static partial class NativeMethods
     /// <summary>DIB_RGB_COLORS.</summary>
     internal const uint DIB_RGB_COLORS = 0;
 
+    [LibraryImport("gdi32.dll", SetLastError = true)]
+    internal static partial IntPtr CreateDIBSection(
+        IntPtr hdc, ref BITMAPINFO bmi, uint usage, out IntPtr bits, IntPtr section, uint offset);
+
+    /// <summary>Completes this thread's batched GDI calls, so a DIB section's memory holds their result.</summary>
+    [LibraryImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GdiFlush();
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct BITMAPINFOHEADER
     {

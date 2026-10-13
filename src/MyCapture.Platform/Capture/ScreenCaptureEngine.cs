@@ -100,7 +100,7 @@ public sealed class ScreenCaptureEngine
     /// </summary>
     /// <returns>Elapsed warm-up time in milliseconds.</returns>
     /// <remarks>
-    /// The first call into GDI plus <see cref="WriteableBitmap"/> pays JIT, DLL-load
+    /// The first call into GDI plus WPF imaging pays JIT, DLL-load
     /// and WPF imaging initialisation costs. On the test workstation that made the
     /// first 3440x1440 capture take 827ms while subsequent captures took 21-51ms.
     /// A one-pixel capture performs the same initialisation without allocating a
@@ -161,7 +161,131 @@ public sealed class ScreenCaptureEngine
     /// </summary>
     public BitmapSource CaptureRegion(RectD screenBounds, bool includeCursor)
     {
-        return CaptureRegionCore(screenBounds, includeCursor, ToBitmapSource);
+        // BitBlt straight into a DIB section: its memory already holds top-down BGRX rows, so the
+        // frame is copied once into the frozen bitmap instead of read back with GetDIBits first.
+        return CaptureRegionToDibSection(screenBounds, includeCursor)
+            ?? CaptureRegionCore(screenBounds, includeCursor, ToBitmapSource);
+    }
+
+    /// <summary>
+    /// The still-capture path. Returns null only when GDI cannot create the DIB section, and the
+    /// caller then uses the compatible-bitmap readback.
+    /// </summary>
+    private BitmapSource? CaptureRegionToDibSection(RectD screenBounds, bool includeCursor)
+    {
+        RectD pixels = screenBounds.ToPixelBounds();
+        int width = Math.Max(1, (int)pixels.Width);
+        int height = Math.Max(1, (int)pixels.Height);
+        int originX = (int)pixels.Left;
+        int originY = (int)pixels.Top;
+        int stride = checked(width * 4);
+        _ = checked(stride * height);
+
+        IntPtr desktopWindow = NativeMethods.GetDesktopWindow();
+        IntPtr screenDc = NativeMethods.GetWindowDC(desktopWindow);
+        if (screenDc == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Could not obtain a device context for the desktop.");
+        }
+
+        IntPtr memoryDc = IntPtr.Zero;
+        IntPtr section = IntPtr.Zero;
+        IntPtr previousObject = IntPtr.Zero;
+        try
+        {
+            memoryDc = NativeMethods.CreateCompatibleDC(screenDc);
+            if (memoryDc == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Could not create a memory device context.");
+            }
+
+            NativeMethods.BITMAPINFO info = TopDownBgrx(width, height);
+            section = NativeMethods.CreateDIBSection(screenDc, ref info, NativeMethods.DIB_RGB_COLORS, out IntPtr bits,
+                IntPtr.Zero, 0);
+            if (section == IntPtr.Zero || bits == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            previousObject = NativeMethods.SelectObject(memoryDc, section);
+            if (IsInvalidGdiHandle(previousObject))
+            {
+                throw new InvalidOperationException(
+                    $"Could not select bitmap into memory device context (Win32 error {Marshal.GetLastWin32Error()}).");
+            }
+
+            if (!NativeMethods.BitBlt(memoryDc, 0, 0, width, height, screenDc, originX, originY,
+                NativeMethods.SRCCOPY | NativeMethods.CAPTUREBLT))
+            {
+                throw new InvalidOperationException(
+                    $"BitBlt failed with Win32 error {Marshal.GetLastWin32Error()}.");
+            }
+
+            if (includeCursor)
+            {
+                DrawCursor(memoryDc, originX, originY, width, height);
+            }
+
+            // GDI batches per thread; the section memory is complete only after a flush.
+            _ = NativeMethods.GdiFlush();
+            return FromTopDownBgrx(bits, width, height);
+        }
+        finally
+        {
+            if (!IsInvalidGdiHandle(previousObject) && memoryDc != IntPtr.Zero)
+            {
+                NativeMethods.SelectObject(memoryDc, previousObject);
+            }
+
+            if (section != IntPtr.Zero)
+            {
+                NativeMethods.DeleteObject(section);
+            }
+
+            if (memoryDc != IntPtr.Zero)
+            {
+                NativeMethods.DeleteDC(memoryDc);
+            }
+
+            NativeMethods.ReleaseDC(desktopWindow, screenDc);
+        }
+    }
+
+    private static NativeMethods.BITMAPINFO TopDownBgrx(int width, int height) => new()
+    {
+        bmiHeader = new NativeMethods.BITMAPINFOHEADER
+        {
+            biSize = (uint)Marshal.SizeOf<NativeMethods.BITMAPINFOHEADER>(),
+            biWidth = width,
+            // Negative height is a top-down DIB, the row order WPF bitmaps use.
+            biHeight = -height,
+            biPlanes = 1,
+            biBitCount = 32,
+            biCompression = 0, // BI_RGB
+        },
+    };
+
+    /// <summary>
+    /// Copies top-down 32-bit BGRX rows into a frozen <see cref="PixelFormats.Bgr32"/> bitmap.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="BitmapSource.Create(int, int, double, double, PixelFormat, BitmapPalette, IntPtr, int, int)"/>
+    /// owns its copy and needs no WPF compositor. A <see cref="WriteableBitmap"/> built here would
+    /// give every capture worker thread its own dispatcher media context, and copy the frame again
+    /// when frozen.
+    /// </remarks>
+    internal static BitmapSource FromTopDownBgrx(IntPtr bits, int width, int height)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        if (bits == IntPtr.Zero) throw new ArgumentNullException(nameof(bits));
+        int stride = checked(width * 4);
+        int size = checked(stride * height);
+        // Desktop alpha is undefined. Bgr32 deliberately ignores that byte, keeping
+        // captures opaque without a second pass over the pixels.
+        BitmapSource bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr32, null, bits, size, stride);
+        bitmap.Freeze();
+        return bitmap;
     }
 
     /// <summary>
@@ -537,7 +661,8 @@ public sealed class ScreenCaptureEngine
     }
 
     /// <summary>
-    /// Copies a GDI bitmap into a frozen WPF bitmap.
+    /// Copies a GDI bitmap into a frozen WPF bitmap. The still capture reads a DIB section
+    /// directly; this readback serves a compatible bitmap when no section can be created.
     /// </summary>
     /// <remarks>
     /// <c>Imaging.CreateBitmapSourceFromHBitmap</c> is avoided deliberately: it leaks
@@ -550,43 +675,18 @@ public sealed class ScreenCaptureEngine
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         int stride = checked(width * 4);
-        _ = checked(stride * height);
+        int size = checked(stride * height);
 
-        var info = new NativeMethods.BITMAPINFO
-        {
-            bmiHeader = new NativeMethods.BITMAPINFOHEADER
-            {
-                biSize = (uint)Marshal.SizeOf<NativeMethods.BITMAPINFOHEADER>(),
-                biWidth = width,
-
-                // Negative height requests a top-down DIB, matching the row order
-                // WriteableBitmap expects. Requesting bottom-up would mean copying the
-                // buffer a second time just to flip it.
-                biHeight = -height,
-                biPlanes = 1,
-                biBitCount = 32,
-                biCompression = 0, // BI_RGB
-            },
-        };
-
-        // Desktop alpha is undefined. Bgr32 deliberately ignores that byte, keeping
-        // captures opaque without a second pass over the pixels.
-        var bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, palette: null);
-        bitmap.Lock();
+        // Top-down rows, the order WPF bitmaps use; bottom-up would need a second copy to flip.
+        NativeMethods.BITMAPINFO info = TopDownBgrx(width, height);
+        IntPtr buffer = Marshal.AllocHGlobal(size);
         try
         {
-            // GetDIBits has no destination-stride parameter. A 32-bit BI_RGB DIB
-            // has DWORD-aligned rows of exactly width * 4 bytes; accepting a larger
-            // WPF stride would silently place subsequent rows at the wrong offsets.
-            if (bitmap.BackBuffer == IntPtr.Zero || bitmap.BackBufferStride != stride)
-            {
-                throw new InvalidOperationException("The WPF back buffer does not match the requested DIB layout.");
-            }
-
-            // CaptureRegionCore has already deselected bitmapHandle. WPF owns this
-            // pointer: use it only while locked, and never free or retain it.
+            // GetDIBits has no destination-stride parameter: a 32-bit BI_RGB DIB has
+            // DWORD-aligned rows of exactly width * 4 bytes, the stride used below.
+            // CaptureRegionCore has already deselected bitmapHandle.
             int scanLines = NativeMethods.GetDIBits(
-                memoryDc, bitmapHandle, 0, (uint)height, bitmap.BackBuffer, ref info,
+                memoryDc, bitmapHandle, 0, (uint)height, buffer, ref info,
                 NativeMethods.DIB_RGB_COLORS);
             if (scanLines != height)
             {
@@ -594,17 +694,13 @@ public sealed class ScreenCaptureEngine
                     $"GetDIBits returned {scanLines} of {height} scan lines (Win32 error {Marshal.GetLastWin32Error()}).");
             }
 
-            bitmap.AddDirtyRect(new Int32Rect(0, 0, width, height));
+            // Publish only a complete frame; failed readbacks stay local.
+            return FromTopDownBgrx(buffer, width, height);
         }
         finally
         {
-            bitmap.Unlock();
+            Marshal.FreeHGlobal(buffer);
         }
-
-        // Publish only a complete, unlocked frame; failed readbacks stay local.
-        bitmap.Freeze();
-
-        return bitmap;
     }
 
     private static void CopyTopDownBgra(
