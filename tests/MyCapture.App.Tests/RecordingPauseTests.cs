@@ -187,8 +187,8 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             sink.WaitForCount(1);
             Assert.Equal(Visibility.Visible, pause.Visibility);
             Assert.True(pause.IsEnabled && pause.Focusable && pause.IsTabStop);
-            Assert.Equal("일시정지", RecordingControlWindow.ButtonLabel(pause));
-            Assert.Equal("녹화 일시정지", AutomationProperties.GetName(pause));
+            Assert.Equal("일시 정지", RecordingControlWindow.ButtonLabel(pause));
+            Assert.Equal("녹화 일시 정지", AutomationProperties.GetName(pause));
             Assert.Contains("동영상에 포함되지 않습니다", AutomationProperties.GetHelpText(pause), StringComparison.Ordinal);
             Brush recordingBrush = frame.BorderBrush;
 
@@ -202,9 +202,9 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             Assert.True(window.IsRecording); // Ctrl+Shift+X routes to RequestStop while paused
             Assert.Equal("재개", RecordingControlWindow.ButtonLabel(pause));
             Assert.Equal("녹화 재개", AutomationProperties.GetName(pause));
-            Assert.StartsWith("일시정지됨", status.Text, StringComparison.Ordinal);
+            Assert.StartsWith("일시 정지됨", status.Text, StringComparison.Ordinal);
             Assert.Equal(status.Text, AutomationProperties.GetName(status));
-            Assert.Equal("일시정지됨", AutomationProperties.GetItemStatus(frame));
+            Assert.Equal("일시 정지됨", AutomationProperties.GetItemStatus(frame));
             Assert.IsType<LinearGradientBrush>(frame.BorderBrush);
             Assert.NotSame(recordingBrush, frame.BorderBrush);
             Assert.True(clock.IsPaused);
@@ -220,7 +220,7 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             PumpUntil(() => !window.IsPaused && !window.IsPauseTransitionPending);
             Assert.False(recorder.IsPaused);
             Assert.False(clock.IsPaused);
-            Assert.Equal("일시정지", RecordingControlWindow.ButtonLabel(pause));
+            Assert.Equal("일시 정지", RecordingControlWindow.ButtonLabel(pause));
             Assert.Equal(string.Empty, AutomationProperties.GetItemStatus(frame));
             Assert.IsNotType<LinearGradientBrush>(frame.BorderBrush);
             sink.WaitForCount(framesAtPause + 2);
@@ -334,8 +334,8 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             window.SetPaused(true);
             Assert.True(window.IsPaused);
             Assert.Equal(Visibility.Visible, window.PausedBadge.Visibility);
-            Assert.Equal("일시정지됨", window.PausedBadge.Text);
-            Assert.Equal("일시정지됨", AutomationProperties.GetItemStatus(window.Container));
+            Assert.Equal("일시 정지됨", window.PausedBadge.Text);
+            Assert.Equal("일시 정지됨", AutomationProperties.GetItemStatus(window.Container));
             Assert.Equal("녹화 시계", AutomationProperties.GetName(window.Container));
             Assert.True(window.Width > runningWidth);
             Assert.True(window.PhysicalWidth <= region.Width);

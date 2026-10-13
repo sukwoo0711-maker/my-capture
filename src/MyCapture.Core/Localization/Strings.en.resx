@@ -29,7 +29,7 @@
     <comment>Language selection</comment>
   </data>
   <data name="Text_00480581AAB5" xml:space="preserve">
-    <value>Settings </value>
+    <value>Settings</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_009548FC2109" xml:space="preserve">
@@ -41,7 +41,7 @@
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_0226F79FE6FB" xml:space="preserve">
-    <value>Update cancelled.</value>
+    <value>Update canceled</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_03151E566E1D" xml:space="preserve">
@@ -57,7 +57,7 @@
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_04B54A7BED01" xml:space="preserve">
-    <value>Scrolling capture was cancelled.</value>
+    <value>Scrolling capture canceled</value>
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
   </data>
   <data name="Text_05184F5EA537" xml:space="preserve">
@@ -65,7 +65,7 @@
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_060B5907DA2C" xml:space="preserve">
-    <value>{0} text layers, {1} frame layers. {2}</value>
+    <value>{0} text {0:plural:layer|layers}, {1} frame {1:plural:layer|layers}. {2}</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_0642E2D15469" xml:space="preserve">
@@ -81,7 +81,7 @@
     <comment>src\MyCapture.App\Recording\TimedTextOverlayDialog.cs</comment>
   </data>
   <data name="Text_06F58809C083" xml:space="preserve">
-    <value>Save did not complete</value>
+    <value>Not saved</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_071DBD0C6E2C" xml:space="preserve">
@@ -97,7 +97,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_07E499DBBB2A" xml:space="preserve">
-    <value>Delayed capture cancelled</value>
+    <value>Delayed capture canceled</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_08269F2F1B3F" xml:space="preserve">
@@ -129,7 +129,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_0CC5375DCF91" xml:space="preserve">
-    <value>Choose Quick Save folder</value>
+    <value>Choose quick save folder</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
   </data>
   <data name="Text_0D0920B35583" xml:space="preserve">
@@ -430,7 +430,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_26FF7226E337" xml:space="preserve">
-    <value>{0} text layers, {1} frame layers</value>
+    <value>{0} text {0:plural:layer|layers}, {1} frame {1:plural:layer|layers}</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_271908EF0BBE" xml:space="preserve">
@@ -482,7 +482,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_2C20ADDA2018" xml:space="preserve">
-    <value>Region capture </value>
+    <value>Region capture</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_2C4E0E8262AF" xml:space="preserve">
@@ -510,7 +510,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_2D8B0244F4F4" xml:space="preserve">
-    <value>No changes; keeping the current video</value>
+    <value>No changes · Keeping the current video</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_2DC82774E99B" xml:space="preserve">
@@ -526,7 +526,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_3024E9CAD0E5" xml:space="preserve">
-    <value>Finalizing file… This window will close when finished</value>
+    <value>Finalizing file · Closes automatically when done</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_302BAE127938" xml:space="preserve">
@@ -586,7 +586,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_35114A85CCCE" xml:space="preserve">
-    <value>Starting in {0} seconds</value>
+    <value>Starting in {0} {0:plural:second|seconds}</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_35151C153089" xml:space="preserve">
@@ -654,7 +654,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_38FF9B0AA541" xml:space="preserve">
-    <value>Delayed capture </value>
+    <value>Delayed capture</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_39B10B03FD99" xml:space="preserve">
@@ -666,7 +666,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_39EFEAD98C7D" xml:space="preserve">
-    <value>Skip</value>
+    <value>Large step</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_3B5DD12EE3D1" xml:space="preserve">
@@ -682,7 +682,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_3D1E714B56CA" xml:space="preserve">
-    <value>Copy to clipboard did not complete</value>
+    <value>Not copied to the clipboard</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_3DEFBAD62044" xml:space="preserve">
@@ -714,7 +714,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_41216A109463" xml:space="preserve">
-    <value>Click-through on · Turn off: {0}</value>
+    <value>Click through to windows behind: on · Turn off: {0}</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_41F81C272691" xml:space="preserve">
@@ -806,7 +806,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_4AF6F7075C61" xml:space="preserve">
-    <value>Image insertion cancelled</value>
+    <value>Image insertion canceled</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_4B4B0D333A67" xml:space="preserve">
@@ -838,7 +838,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_4C561D57BFCE" xml:space="preserve">
-    <value>Browse Quick Save folder</value>
+    <value>Browse quick save folder</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_4D5F7094119C" xml:space="preserve">
@@ -858,7 +858,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_4DBA30197C0A" xml:space="preserve">
-    <value>Scrolling capture </value>
+    <value>Scrolling capture</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_4DCACB688866" xml:space="preserve">
@@ -938,7 +938,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_542965B456C7" xml:space="preserve">
-    <value>Recording stopped · Finalising the video file…</value>
+    <value>Recording stopped · Finalizing the video file…</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_5461D9E26042" xml:space="preserve">
@@ -962,7 +962,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
   </data>
   <data name="Text_5626DD9C2F6A" xml:space="preserve">
-    <value>{0} · Recognition cancelled.</value>
+    <value>{0} · Recognition canceled</value>
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_563638D54DBC" xml:space="preserve">
@@ -982,7 +982,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_57950AFF46BC" xml:space="preserve">
-    <value>Save As</value>
+    <value>Save as</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_579BAB6C0833" xml:space="preserve">
@@ -1022,7 +1022,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_5A932820414F" xml:space="preserve">
-    <value>Quick Save folder</value>
+    <value>Quick save folder</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_5B59BB806FB5" xml:space="preserve">
@@ -1054,7 +1054,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5DBC2621FC1E" xml:space="preserve">
-    <value>No personal information found to redact</value>
+    <value>No personal information to redact</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5DD4908475B6" xml:space="preserve">
@@ -1086,7 +1086,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_608AF5822E3A" xml:space="preserve">
-    <value>MyCapture — {0} · {1:N0} captures</value>
+    <value>MyCapture — {0} · {1:N0} {1:plural:capture|captures}</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_60CBF2E08D0D" xml:space="preserve">
@@ -1152,7 +1152,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_64A5A9D59A21" xml:space="preserve">
-    <value>Frame edits added as a separate layer · {0}</value>
+    <value>Frame edit layer added · {0}</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_651505CC0499" xml:space="preserve">
@@ -1160,7 +1160,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Capture\CountdownWindow.cs</comment>
   </data>
   <data name="Text_65BB6610ACA0" xml:space="preserve">
-    <value>Full-screen capture </value>
+    <value>Full-screen capture</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_66069CEAD9AE" xml:space="preserve">
@@ -1184,7 +1184,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_67FE4AF7D334" xml:space="preserve">
-    <value>Toggle click-through</value>
+    <value>Toggle click through to windows behind</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_684786FB2840" xml:space="preserve">
@@ -1200,7 +1200,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_6953A4195620" xml:space="preserve">
-    <value>Width</value>
+    <value>Stroke width</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
   </data>
   <data name="Text_695F77F44D69" xml:space="preserve">
@@ -1234,7 +1234,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
   </data>
   <data name="Text_6AE98E57E121" xml:space="preserve">
-    <value>Personal information search cancelled</value>
+    <value>Personal information search canceled</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_6B4EE4E6C8FF" xml:space="preserve">
@@ -1282,7 +1282,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_6EB131FB1810" xml:space="preserve">
-    <value>Cancelling scrolling capture</value>
+    <value>Canceling scrolling capture</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_6F025107D313" xml:space="preserve">
@@ -1298,7 +1298,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_70534261ED6C" xml:space="preserve">
-    <value>Delayed capture was cancelled.</value>
+    <value>Delayed capture was canceled.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_70EC2D232B4F" xml:space="preserve">
@@ -1322,7 +1322,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_7116B7156511" xml:space="preserve">
-    <value>Toggle click-through shortcut</value>
+    <value>Toggle click through to windows behind shortcut</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_71FBF04B7201" xml:space="preserve">
@@ -1354,7 +1354,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_72B6DBA8AAC5" xml:space="preserve">
-    <value>Exit </value>
+    <value>Exit</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_733011719B1C" xml:space="preserve">
@@ -1454,7 +1454,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_7C7E6C9D8CD7" xml:space="preserve">
-    <value>You can recover the image using Save As or Copy to Clipboard.</value>
+    <value>You can recover the image using Save as or Copy to clipboard.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_7C821231A673" xml:space="preserve">
@@ -1502,11 +1502,11 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Capture\AdvancedCaptureService.cs</comment>
   </data>
   <data name="Text_82B423E5AFB8" xml:space="preserve">
-    <value>To cancel, choose Cancel Scrolling Capture from the tray menu.</value>
+    <value>To cancel, choose Cancel scrolling capture from the tray menu.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_8300472A5BE3" xml:space="preserve">
-    <value>Save a PNG at its original resolution in the configured Quick Save folder.</value>
+    <value>Save a PNG at its original resolution in the configured quick save folder.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_831103D5C64B" xml:space="preserve">
@@ -1542,7 +1542,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_8739F6684453" xml:space="preserve">
-    <value>Library </value>
+    <value>Library</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_875917AFD6EF" xml:space="preserve">
@@ -1558,7 +1558,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_878A28AF568C" xml:space="preserve">
-    <value>Repeat last region </value>
+    <value>Repeat last region</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_87B0ACEF85A7" xml:space="preserve">
@@ -1610,7 +1610,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_8BDB6F46B7FF" xml:space="preserve">
-    <value>Empty text cancelled</value>
+    <value>Empty text canceled</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_8C99A8AB9C4C" xml:space="preserve">
@@ -1834,7 +1834,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_9F05CC6FEDE5" xml:space="preserve">
-    <value>Video save cancelled</value>
+    <value>Video save canceled</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_A00997F45D07" xml:space="preserve">
@@ -1898,7 +1898,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_A81F975C401F" xml:space="preserve">
-    <value>Save As…</value>
+    <value>Save as…</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_A862C01DBF76" xml:space="preserve">
@@ -1945,7 +1945,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_AAED78A6EA00" xml:space="preserve">
-    <value>Prepared {0} images for search.</value>
+    <value>Search ready for {0} {0:plural:image|images}</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_AB71749112CF" xml:space="preserve">
@@ -1993,7 +1993,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_B007F71CC3B2" xml:space="preserve">
-    <value>GIF export cancelled</value>
+    <value>GIF export canceled</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_B09611FF35C1" xml:space="preserve">
@@ -2113,7 +2113,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5F3A9C8D1E21" xml:space="preserve">
-    <value>Font size changed to {0:0}pt.</value>
+    <value>Font size changed to {0:0} pt</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_6B2C41A9E530" xml:space="preserve">
@@ -2121,7 +2121,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
   </data>
   <data name="Text_6B2C41A9E531" xml:space="preserve">
-    <value>Image rotated.</value>
+    <value>Image rotated</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_6B2C41A9E532" xml:space="preserve">
@@ -2187,7 +2187,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_BE08A8230E51" xml:space="preserve">
-    <value>{0} captures are not searchable</value>
+    <value>{0} {0:plural:capture is|captures are} not searchable</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_BE3D621D8A32" xml:space="preserve">
@@ -2247,7 +2247,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_C315173385E0" xml:space="preserve">
-    <value>Quick Save folder path</value>
+    <value>Quick save folder path</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_C4043E16721A" xml:space="preserve">
@@ -2335,7 +2335,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.Core\Annotations\PolylineAnnotation.cs</comment>
   </data>
   <data name="Text_CC2687CDFC63" xml:space="preserve">
-    <value>Cancelling and cleaning up temporary files…</value>
+    <value>Canceling and cleaning up temporary files…</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_CDC04935B675" xml:space="preserve">
@@ -2587,7 +2587,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
   </data>
   <data name="Text_DFC084A111D0" xml:space="preserve">
-    <value>Quick Save</value>
+    <value>Quick save</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_DFCA22AB9F61" xml:space="preserve">
@@ -2635,7 +2635,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml.cs</comment>
   </data>
   <data name="Text_E22E2C953A8B" xml:space="preserve">
-    <value>A pin. Ctrl+C copies the image; Ctrl+double-click copies text. Ctrl+S saves the original PNG; Ctrl+Shift+S lets you choose where. Drag to move, scroll to zoom, Ctrl+scroll to change opacity, and Esc or Delete to close. Turn off click-through: {0}</value>
+    <value>A pin. Ctrl+C copies the image; Ctrl+double-click copies text. Ctrl+S saves the original PNG; Ctrl+Shift+S lets you choose where. Drag to move, scroll to zoom, Ctrl+scroll to change opacity, and Esc or Delete to close. Turn off click through to windows behind: {0}</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_E2395EBF6C65" xml:space="preserve">
@@ -2695,7 +2695,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_E68817537C75" xml:space="preserve">
-    <value>Redacted {0} items of personal information · Review them; Ctrl+Z undoes the batch</value>
+    <value>Redacted {0} {0:plural:item|items} of personal information · Review them; Ctrl+Z undoes the batch</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_E6A0E3D10B47" xml:space="preserve">
@@ -2723,7 +2723,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_E8B876F98CD8" xml:space="preserve">
-    <value>Cancel scrolling capture </value>
+    <value>Cancel scrolling capture</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_E8DF95164C87" xml:space="preserve">
@@ -2735,7 +2735,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_EA1FBABE64F3" xml:space="preserve">
-    <value>Window capture </value>
+    <value>Window capture</value>
     <comment>src\MyCapture.Platform\Shell\TrayIconService.cs</comment>
   </data>
   <data name="Text_EA33C8FF45A0" xml:space="preserve">
@@ -2823,7 +2823,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_F122632462DF" xml:space="preserve">
-    <value>Save cancelled</value>
+    <value>Save canceled</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_F1A864DCBEC4" xml:space="preserve">
@@ -2887,7 +2887,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_F6C51786B910" xml:space="preserve">
-    <value>Available languages: {0}. All processing runs offline on this PC.</value>
+    <value>Available languages: {0}. Text recognition runs on this PC; images are not sent anywhere.</value>
     <comment>src\MyCapture.Ocr\OcrAvailability.cs</comment>
   </data>
   <data name="Text_F73E8EBF6CE0" xml:space="preserve">
@@ -2907,7 +2907,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_FA24C3FC395F" xml:space="preserve">
-    <value>Click-through off</value>
+    <value>Click through to windows behind: off</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_FA2ADD387F12" xml:space="preserve">
@@ -2974,7 +2974,7 @@ This cannot be undone.</value>
   <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · Pixel precision</value></data>
   <data name="CaptureSelectionStart" xml:space="preserve"><value>Start</value></data>
   <data name="ExportReduction_Title" xml:space="preserve"><value>Export a smaller file…</value></data>
-  <data name="ExportReduction_Save" xml:space="preserve"><value>Save As…</value></data>
+  <data name="ExportReduction_Save" xml:space="preserve"><value>Save as…</value></data>
   <data name="ExportReduction_Drag" xml:space="preserve"><value>Drag to a folder</value></data>
   <data name="ExportReduction_Cancel" xml:space="preserve"><value>Close</value></data>
   <data name="ExportReduction_Description" xml:space="preserve"><value>The baseline is the current edited image saved as PNG, which may differ from the original file size. Changing the target recalculates the result automatically. Opaque images may use JPEG; pixel dimensions stay the same.</value></data>
@@ -3045,11 +3045,11 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_Result" xml:space="preserve"><value>Standard MP4: {0:N0} bytes → result: {1:N0} bytes ({2:N1}% actual reduction)</value></data>
   <data name="MediaExport_Ready" xml:space="preserve"><value>The result is ready to save as a new file.</value></data>
   <data name="MediaExport_Unmet" xml:space="preserve"><value>The target was not reached. Save the measured result or change the target.</value></data>
-  <data name="MediaExport_Cancelled" xml:space="preserve"><value>Export cancelled. Change the settings or export again.</value></data>
+  <data name="MediaExport_Cancelled" xml:space="preserve"><value>Export canceled. Change the settings or export again.</value></data>
   <data name="MediaExport_Error" xml:space="preserve"><value>Could not export: {0}</value></data>
   <data name="MediaExport_Saved" xml:space="preserve"><value>Saved · {0}</value></data>
   <data name="MediaExport_SavingCopy" xml:space="preserve"><value>Saving… {0}%</value></data>
-  <data name="VideoEdit_Finalizing" xml:space="preserve"><value>Finalising the saved video…</value></data>
+  <data name="VideoEdit_Finalizing" xml:space="preserve"><value>Finalizing the saved video…</value></data>
   <data name="VideoEdit_ImageLayerPreparing" xml:space="preserve"><value>Preparing the image layer…</value></data>
   <data name="MediaExport_Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="MediaExport_SaveEdits" xml:space="preserve"><value>Save to library</value></data>
@@ -3086,7 +3086,7 @@ Actual reduction {2}% · {3}</value></data>
 <data name="Shell.Help" xml:space="preserve"><value>How to use MyCapture</value></data>
 <data name="Shell.HelpText" xml:space="preserve"><value>Capture a region / retake: use your configured capture shortcut
 Drag to select a region, then edit shapes and text.
-Select Done or Save to add the capture to the library. Cancelled or replaced drafts are not saved.
+Select Done or Save to add the capture to the library. Canceled or replaced drafts are not saved.
 Hold Shift for precise pixel selection.
 Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.Theme" xml:space="preserve"><value>Theme</value></data>
@@ -3097,7 +3097,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.ThemeDaylight" xml:space="preserve"><value>Daylight</value></data>
   <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>High contrast</value></data>
   <data name="Settings.GitHubIssueUrl" xml:space="preserve"><value>GitHub issue URL</value></data>
-  <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F9 pastes the clipboard image into this issue’s Write box. Use an issue you can comment on. Empty values use a safe default.</value></data>
+  <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F9 pastes the clipboard image into this issue’s Write box. Use an issue you can comment on. If blank, MyCapture's public support repository is used, and uploaded images are public.</value></data>
   <data name="Settings.GitHubIssueUrlInvalid" xml:space="preserve"><value>Use https://host/owner/repo/issues/number or /issues/new.</value></data>
   <data name="Settings.RetentionHours" xml:space="preserve"><value>Library image retention (hours)</value></data>
   <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>Images that are not kept are deleted after this many hours. The default is 168 hours (7 days). Videos and kept items are excluded.</value></data>
@@ -3156,20 +3156,20 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Workspace.Properties" xml:space="preserve"><value>Layer properties</value></data>
   <data name="Text_3F8046019B32" xml:space="preserve"><value>Mosaic</value></data>
   <data name="Text_3F8046019B33" xml:space="preserve"><value>Drag over the area to pixelate (M)</value></data>
-  <data name="Text_3F8046019B34" xml:space="preserve"><value>Area pixelated.</value></data>
+  <data name="Text_3F8046019B34" xml:space="preserve"><value>Mosaic applied</value></data>
   <data name="Tools_ColorPicker" xml:space="preserve"><value>Color picker</value></data>
-  <data name="Tools_ColorPickerHint" xml:space="preserve"><value>Copies the colour under the click to the clipboard.</value></data>
+  <data name="Tools_ColorPickerHint" xml:space="preserve"><value>Copies the color under the click to the clipboard.</value></data>
   <data name="Tools_ColorCopied" xml:space="preserve"><value>{0} copied</value></data>
   <data name="Tools_Ruler" xml:space="preserve"><value>Screen ruler</value></data>
   <data name="Tools_RulerHint" xml:space="preserve"><value>Shows an on-screen ruler. Drag an edge to rotate.</value></data>
   <data name="Tools_Crop" xml:space="preserve"><value>Crop</value></data>
   <data name="Tools_CropHint" xml:space="preserve"><value>Adjust to the area to keep, press Enter to apply.</value></data>
-  <data name="Tools_CropApplied" xml:space="preserve"><value>Crop applied.</value></data>
+  <data name="Tools_CropApplied" xml:space="preserve"><value>Crop applied</value></data>
   <data name="Settings_Export" xml:space="preserve"><value>Export settings</value></data>
   <data name="Settings_Import" xml:space="preserve"><value>Import settings</value></data>
   <data name="Settings_ImportDone" xml:space="preserve"><value>Settings loaded. Select Apply to save.</value></data>
   <data name="Settings_ImportFailed" xml:space="preserve"><value>Could not read the settings file.</value></data>
-  <data name="Settings_ExportDone" xml:space="preserve"><value>Settings exported.</value></data>
+  <data name="Settings_ExportDone" xml:space="preserve"><value>Settings exported</value></data>
   <data name="GitHub_TokenMode" xml:space="preserve"><value>Upload with token (experimental)</value></data>
   <data name="GitHub_TokenLabel" xml:space="preserve"><value>Personal access token (repo scope)</value></data>
   <data name="GitHub_TokenHint" xml:space="preserve"><value>With a token the image uploads without opening a browser. The token stays on this PC.</value></data>
@@ -3184,19 +3184,19 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Recording_Fixed720" xml:space="preserve"><value>1280×720</value></data>
   <data name="Recording_Fixed1080" xml:space="preserve"><value>1920×1080</value></data>
   <data name="Ocr_ExportText" xml:space="preserve"><value>Export text</value></data>
-  <data name="Ocr_ExportDone" xml:space="preserve"><value>Text saved.</value></data>
-  <data name="Ocr_ExportNone" xml:space="preserve"><value>No recognised text to export.</value></data>
+  <data name="Ocr_ExportDone" xml:space="preserve"><value>Text saved:</value></data>
+  <data name="Ocr_ExportNone" xml:space="preserve"><value>No recognized text to export.</value></data>
   <data name="GitHub.TokenFailed" xml:space="preserve"><value>Token upload failed — falling back to the browser flow.</value></data>
   <data name="Recording_PresetWidth" xml:space="preserve"><value>Fixed width (pixels)</value></data>
   <data name="Recording_PresetHeight" xml:space="preserve"><value>Fixed height (pixels)</value></data>
   <data name="Recording_CursorHighlight" xml:space="preserve"><value>Highlight the cursor on recordings (red while clicking)</value></data>
   <data name="Library.Organize.Title" xml:space="preserve"><value>Organize capture</value></data>
   <data name="Library.Organize.Action" xml:space="preserve"><value>Title &amp; tags</value></data>
-  <data name="Library.Organize.Hint" xml:space="preserve"><value>Find this capture again by your own words. Stored on this PC; the image and recognized text are unchanged.</value></data>
+  <data name="Library.Organize.Hint" xml:space="preserve"><value>Add a title and tags to find it with search. Stored on this PC; the image and recognized text are unchanged.</value></data>
   <data name="Library.Organize.Name" xml:space="preserve"><value>Title</value></data>
   <data name="Library.Organize.Tags" xml:space="preserve"><value>Tags</value></data>
   <data name="Library.Organize.TagsHint" xml:space="preserve"><value>Separate tags with commas. Up to 12 tags, 32 characters each. A title or tag does not prevent automatic cleanup; use Keep to retain important captures.</value></data>
-  <data name="Library.Organize.Saved" xml:space="preserve"><value>Title and tags saved. Search now includes your labels.</value></data>
+  <data name="Library.Organize.Saved" xml:space="preserve"><value>Title and tags saved · Included in search</value></data>
   <data name="Library.Organize.Missing" xml:space="preserve"><value>This capture is no longer in the library. Your draft has not been discarded.</value></data>
   <data name="Library.Organize.Invalid" xml:space="preserve"><value>Use a title up to 140 characters and up to 12 tags of 32 characters. Control characters are not allowed.</value></data>
   <data name="Library.Organize.Failed" xml:space="preserve"><value>Could not save. Check disk space and folder access, then try again. Your draft is still here.</value></data>
@@ -3206,13 +3206,13 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Archive.Action" xml:space="preserve"><value>Export ZIP</value></data>
   <data name="Library.Archive.Hint" xml:space="preserve"><value>Edited PNG and current MP4 only. No original images, recognized text, titles, tags or settings. Choose a new filename.</value></data>
   <data name="Library.Archive.Preparing" xml:space="preserve"><value>Preparing protected copies of the selected captures…</value></data>
-  <data name="Library.Archive.Progress" xml:space="preserve"><value>Exporting {0} of {1} files…</value></data>
-  <data name="Library.Archive.Done" xml:space="preserve"><value>Exported {0} files. Original captures remain in your library.</value></data>
-  <data name="Library.Archive.Cancelled" xml:space="preserve"><value>Export cancelled. No archive was published.</value></data>
+  <data name="Library.Archive.Progress" xml:space="preserve"><value>Exporting {0} of {1} {1:plural:file|files}…</value></data>
+  <data name="Library.Archive.Done" xml:space="preserve"><value>Exported {0} {0:plural:file|files}. Original captures remain in your library.</value></data>
+  <data name="Library.Archive.Cancelled" xml:space="preserve"><value>Export canceled. No archive was published.</value></data>
   <data name="Library.Archive.Failed" xml:space="preserve"><value>Could not export. Choose a new filename and check disk space and access. Existing files were not replaced.</value></data>
-  <data name="Library.Search.Count" xml:space="preserve"><value>{0} of {1} items</value></data>
+  <data name="Library.Search.Count" xml:space="preserve"><value>{0} of {1} {1:plural:item|items}</value></data>
   <data name="Library.Search.Reset" xml:space="preserve"><value>Clear search and filters</value></data>
-  <data name="Library.Empty.Start" xml:space="preserve"><value>Your capture workspace</value></data>
+  <data name="Library.Empty.Start" xml:space="preserve"><value>Your library is empty</value></data>
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>No matching captures</value></data>
   <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>Could not save to the library. Use Save in the editor to try again. {0}</value></data>
   <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>Show cursor guides before selecting</value></data>
@@ -3220,7 +3220,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.SourcePage.Open" xml:space="preserve"><value>Open page</value></data>
   <data name="Library.SourcePage.Copy" xml:space="preserve"><value>Copy URL</value></data>
   <data name="Library.SourcePage.ShowFull" xml:space="preserve"><value>Show full URL</value></data>
-  <data name="Library.SourcePage.Copied" xml:space="preserve"><value>Webpage URL copied.</value></data>
+  <data name="Library.SourcePage.Copied" xml:space="preserve"><value>Webpage URL copied</value></data>
   <data name="Library.SourcePage.OpenFailed" xml:space="preserve"><value>Could not open the webpage.</value></data>
   <data name="Library.SourcePage.CopyFailed" xml:space="preserve"><value>Could not copy the webpage URL. Please try again.</value></data>
   <data name="Capture.WebpageTag" xml:space="preserve"><value>Webpage</value></data>
@@ -3235,7 +3235,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Source.ShowFullPath" xml:space="preserve"><value>Show full path</value></data>
   <data name="Library.Source.ShowAll" xml:space="preserve"><value>Show all</value></data>
   <data name="Library.Source.ShowLess" xml:space="preserve"><value>Show less</value></data>
-  <data name="Library.Source.PathCopied" xml:space="preserve"><value>Path copied.</value></data>
+  <data name="Library.Source.PathCopied" xml:space="preserve"><value>Path copied</value></data>
   <data name="Library.Source.CopyPathFailed" xml:space="preserve"><value>Could not copy the path. Please try again.</value></data>
   <data name="Library.Source.OpenFolderFailed" xml:space="preserve"><value>Could not open the folder.</value></data>
   <data name="Library.Source.FolderMissing" xml:space="preserve"><value>The folder could not be found. It may have been moved or deleted.</value></data>
@@ -3322,13 +3322,13 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Hotkey.Twice" xml:space="preserve"><value>{0} twice</value></data>
   <data name="Hotkey.TrayRestore" xml:space="preserve"><value>Hide all pins from the tray, then show them again</value></data>
   <data name="Hotkey.ModifierRequired" xml:space="preserve"><value>Use Ctrl, Alt, or Win with typing and navigation keys. F1–F24 and PrintScreen also support no modifier or Shift alone.</value></data>
-  <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>Click the card background or press Alt+Q, then use C/E/P/S/Esc. For a card kept open, click the background.</value></data>
+  <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>Click the card background or press Alt+Q, then use C/E/P/S/T/Esc. For a card kept open, click the background.</value></data>
   <data name="Video.InvalidImage" xml:space="preserve"><value>The image could not be read. Select a valid PNG, JPEG or BMP file.</value></data>
   <data name="Hotkey.MigratedTitle" xml:space="preserve"><value>Shortcuts updated</value></data>
   <data name="Hotkey.Migrated" xml:space="preserve"><value>Unsafe shortcuts and restored-capture conflicts were cleared. Capture was reset to Ctrl+Shift+C if needed.</value></data>
   <data name="Capture.AfterAction" xml:space="preserve"><value>After capture</value></data>
   <data name="Capture.AfterEditor" xml:space="preserve"><value>Open editor</value></data>
-  <data name="Capture.AfterCard" xml:space="preserve"><value>Quick Access card</value></data>
+  <data name="Capture.AfterCard" xml:space="preserve"><value>Quick access card</value></data>
   <data name="Capture.AfterClipboard" xml:space="preserve"><value>Copy to clipboard only</value></data>
   <data name="Capture.CopiedAndSaved" xml:space="preserve"><value>Copied to clipboard · Saved to library</value></data>
   <data name="Capture.Saved" xml:space="preserve"><value>Saved to library</value></data>
@@ -3340,7 +3340,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Crop.Height" xml:space="preserve"><value>Height (px)</value></data>
   <data name="Crop.Apply" xml:space="preserve"><value>Apply</value></data>
   <data name="Crop.Applied" xml:space="preserve"><value>Crop applied</value></data>
-  <data name="Crop.Cancelled" xml:space="preserve"><value>Pending crop cancelled</value></data>
+  <data name="Crop.Cancelled" xml:space="preserve"><value>Pending crop canceled</value></data>
   <data name="Crop.Instruction" xml:space="preserve"><value>Move the frame or drag a handle to resize.</value></data>
   <data name="Crop.TooSmall" xml:space="preserve"><value>Set the width and height to at least 2px.</value></data>
   <data name="QuickAccess.ActivationUnavailable" xml:space="preserve"><value>Alt+Q is already in use. Click the card background to use its shortcuts.</value></data>
@@ -3351,9 +3351,9 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Capture410.CropHint" xml:space="preserve"><value>Drag an image edge to adjust the crop.</value></data>
   <data name="Capture410.AutoTrim" xml:space="preserve"><value>Auto trim margins</value></data>
   <data name="Capture410.AutoTrimHint" xml:space="preserve"><value>Find edge margins and preview a crop.</value></data>
-  <data name="Capture410.AutoTrimWorking" xml:space="preserve"><value>Finding margins.</value></data>
+  <data name="Capture410.AutoTrimWorking" xml:space="preserve"><value>Finding margins…</value></data>
   <data name="Capture410.AutoTrimPreview" xml:space="preserve"><value>Margin trim preview</value></data>
-  <data name="Capture410.AutoTrimNoMargin" xml:space="preserve"><value>No margins to remove.</value></data>
+  <data name="Capture410.AutoTrimNoMargin" xml:space="preserve"><value>No margins to remove</value></data>
   <data name="Capture410.AutoTrimFailed" xml:space="preserve"><value>Could not inspect the margins. Try again.</value></data>
   <data name="Capture410.GuideColor" xml:space="preserve"><value>Capture guide color</value></data>
   <data name="Capture410.GuideColorTheme" xml:space="preserve"><value>Theme default</value></data>
@@ -3409,18 +3409,18 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Folder410.DeleteDate" xml:space="preserve"><value>Delete all captures for this date</value></data>
   <data name="Folder410.DeleteTitle" xml:space="preserve"><value>Delete folder</value></data>
   <data name="Folder410.DeleteConfirm" xml:space="preserve"><value>{0}
-Delete {1} subfolders, {2} images and {3} videos.</value></data>
-  <data name="Folder410.DeleteResult" xml:space="preserve"><value>Deleted {0} folders and {1} captures; {2} captures remain</value></data>
+Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3} {3:plural:video|videos}.</value></data>
+  <data name="Folder410.DeleteResult" xml:space="preserve"><value>Deleted {0} {0:plural:folder|folders} and {1} {1:plural:capture|captures} · {2} {2:plural:capture remains|captures remain}</value></data>
   <data name="Folder410.FolderExport" xml:space="preserve"><value>Export to folder…</value></data>
   <data name="Folder410.ZipExport" xml:space="preserve"><value>Export as ZIP…</value></data>
   <data name="Folder410.ExportDestination" xml:space="preserve"><value>Export destination</value></data>
   <data name="Folder410.ExportPreparing" xml:space="preserve"><value>Preparing export</value></data>
   <data name="Folder410.ExportProgress" xml:space="preserve"><value>Exporting {0} of {1}</value></data>
-  <data name="Folder410.ExportDone" xml:space="preserve"><value>Exported {0} captures</value></data>
+  <data name="Folder410.ExportDone" xml:space="preserve"><value>Exported {0} {0:plural:capture|captures}</value></data>
   <data name="Folder410.ExportFailed" xml:space="preserve"><value>Export failed. Check the captures and destination.</value></data>
   <data name="Folder410.NameInvalid" xml:space="preserve"><value>Check the folder name. Duplicate names and path characters are not allowed.</value></data>
   <data name="Folder410.OperationFailed" xml:space="preserve"><value>Could not save the changes. Try again.</value></data>
-  <data name="Folder410.MoveDone" xml:space="preserve"><value>Moved {0} captures</value></data>
+  <data name="Folder410.MoveDone" xml:space="preserve"><value>Moved {0} {0:plural:capture|captures}</value></data>
   <data name="Folder410.SearchInFolder" xml:space="preserve"><value>Search in {0}</value></data>
   <data name="Folder410.TreeAll" xml:space="preserve"><value>All dates</value></data>
   <data name="Folder410.Count" xml:space="preserve"><value>{0} ({1})</value></data>
@@ -3442,7 +3442,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Folder410.DeleteChanged" xml:space="preserve"><value>The folder contents changed after confirmation. Review them and try again.</value></data>
   <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>Includes folders, unassigned captures, and kept captures for this date.</value></data>
   <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>Folders and captures move to the Windows Recycle Bin. You can bring them back from Restore recently deleted.</value></data>
-  <data name="Folder410.Storage" xml:space="preserve"><value>{0} folders · {1}</value></data>
+  <data name="Folder410.Storage" xml:space="preserve"><value>{0} {0:plural:folder|folders} · {1}</value></data>
   <data name="Folder410.StorageInfo" xml:space="preserve"><value>Folder storage exceeds the ordinary capture limit. Folder contents are kept until you delete them.</value></data>
   <data name="Folder410.ExportPathTooLong" xml:space="preserve"><value>The destination is too deep. Choose a shorter path.</value></data>
   <data name="Folder410.ExportNameExists" xml:space="preserve"><value>A file with this name exists. Choose another name.</value></data>
@@ -3516,12 +3516,12 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="ColorPick_FormatRgb" xml:space="preserve"><value>RGB (rgb(r, g, b))</value></data>
   <data name="ColorPick_FormatHsl" xml:space="preserve"><value>HSL (hsl(h, s%, l%))</value></data>
   <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color while selecting</value></data>
-  <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>Click Select window</value></data>
+  <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>Click: select window</value></data>
   <data name="WindowDetect_Setting" xml:space="preserve"><value>Highlight the window under the pointer · Click to select it</value></data>
   <data name="RecordingPauseHotkey_Command" xml:space="preserve"><value>Pause/resume recording</value></data>
   <data name="RecordingPauseHotkey_HotkeyName" xml:space="preserve"><value>Pause/resume recording shortcut</value></data>
   <data name="RecordingPauseHotkey_Description" xml:space="preserve"><value>While recording, pauses or resumes the recording like the Pause button. Does nothing when no recording is running.</value></data>
-  <data name="RecordingPauseHotkey_HelpWithShortcut" xml:space="preserve"><value>{0} Shortcut: {1}</value></data>
+  <data name="RecordingPauseHotkey_HelpWithShortcut" xml:space="preserve"><value>{0} shortcut: {1}</value></data>
   <data name="GifPreview_Heading" xml:space="preserve"><value>Preview sample</value></data>
   <data name="GifPreview_Preparing" xml:space="preserve"><value>Creating sample…</value></data>
   <data name="GifPreview_Failed" xml:space="preserve"><value>Could not create the sample: {0}</value></data>
@@ -3601,10 +3601,10 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="StoreUpdate_StateFailed" xml:space="preserve"><value>Could not process the update. Check Microsoft Store.</value></data>
   <data name="StoreUpdate_StateBlocked" xml:space="preserve"><value>Update deferred</value></data>
   <data name="LegacyImport.Title" xml:space="preserve"><value>Import existing data</value></data>
-  <data name="LegacyImport.Description" xml:space="preserve"><value>Copy photos, videos and folders from your previous MyCapture into this library. Original files are kept.</value></data>
+  <data name="LegacyImport.Description" xml:space="preserve"><value>Copy images, videos, and folders from your previous MyCapture into this library. Original files are kept.</value></data>
   <data name="LegacyImport.Source" xml:space="preserve"><value>Existing data folder</value></data>
   <data name="LegacyImport.ChooseFolder" xml:space="preserve"><value>Choose another folder</value></data>
-  <data name="LegacyImport.Counts" xml:space="preserve"><value>{0} photos · {1} videos · {2} folders</value></data>
+  <data name="LegacyImport.Counts" xml:space="preserve"><value>{0} {0:plural:image|images} · {1} {1:plural:video|videos} · {2} {2:plural:folder|folders}</value></data>
   <data name="LegacyImport.IncludeSettings" xml:space="preserve"><value>Import settings too</value></data>
   <data name="LegacyImport.KeepLibrary" xml:space="preserve"><value>Storage locations and current library settings are kept.</value></data>
   <data name="LegacyImport.SettingsDraft" xml:space="preserve"><value>Imported settings are saved only when you choose Apply.</value></data>
@@ -3620,11 +3620,11 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LegacyImport.Recovering" xml:space="preserve"><value>Recovering imported data</value></data>
   <data name="LegacyImport.Canceling" xml:space="preserve"><value>Canceling import</value></data>
   <data name="LegacyImport.Canceled" xml:space="preserve"><value>Import canceled</value></data>
-  <data name="LegacyImport.Completed" xml:space="preserve"><value>{0} items imported · {1} previously imported items</value></data>
+  <data name="LegacyImport.Completed" xml:space="preserve"><value>{0} {0:plural:item|items} imported · {1} previously imported {1:plural:item|items}</value></data>
   <data name="LegacyImport.InvalidSource" xml:space="preserve"><value>Could not read the existing data folder. Choose another folder.</value></data>
   <data name="LegacyImport.InvalidTarget" xml:space="preserve"><value>Check the current library's storage location.</value></data>
   <data name="LegacyImport.SourceChanged" xml:space="preserve"><value>The existing data changed. Exit the previous MyCapture and try again.</value></data>
-  <data name="LegacyImport.MissingPayload" xml:space="preserve"><value>An existing photo or video file is missing. Check the existing data folder.</value></data>
+  <data name="LegacyImport.MissingPayload" xml:space="preserve"><value>An existing image or video file is missing. Check the existing data folder.</value></data>
   <data name="LegacyImport.Failed" xml:space="preserve"><value>Could not import existing data. Check storage locations and access permissions.</value></data>
   <data name="LegacyImport.FailedDetail" xml:space="preserve"><value>Could not import existing data. {0}</value></data>
   <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>Settings loaded · Choose Apply to save them.</value></data>
@@ -3640,8 +3640,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LegacyImport.PublishingNoCancel" xml:space="preserve"><value>Adding to library · This step cannot be canceled until it finishes.</value></data>
   <data name="LegacyImport.PublishingAfterCancel" xml:space="preserve"><value>Adding to library · This step already started and cannot be canceled. The window closes when it finishes.</value></data>
   <data name="LegacyImport.CompletedBeforeCancel" xml:space="preserve"><value>The import finished before it could be canceled. Settings were not loaded.</value></data>
-  <data name="LegacyImport.CompletedWithUnusable" xml:space="preserve"><value>{0} items imported · {1} previously imported items · {2} items could not be imported</value></data>
-  <data name="LegacyImport.Unusable" xml:space="preserve"><value>{0} items with missing or damaged files are left in the existing data folder and not imported.</value></data>
+  <data name="LegacyImport.CompletedWithUnusable" xml:space="preserve"><value>{0} {0:plural:item|items} imported · {1} previously imported {1:plural:item|items} · {2} {2:plural:item|items} could not be imported</value></data>
+  <data name="LegacyImport.Unusable" xml:space="preserve"><value>{0} {0:plural:item with a missing or damaged file is|items with missing or damaged files are} left in the existing data folder and not imported.</value></data>
   <data name="LegacyImport.SettingsUnreadable" xml:space="preserve"><value>The existing settings file cannot be read, so settings cannot be imported.</value></data>
   <data name="LegacyImport.MissingIndex" xml:space="preserve"><value>No library list was found in the existing data folder. Choose the data folder from your previous MyCapture.</value></data>
   <data name="LegacyImport.InsufficientSpace" xml:space="preserve"><value>Not enough storage space. Free up space and try again.</value></data>
@@ -3798,7 +3798,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="SettingsUx_SaveFilesHeading" xml:space="preserve"><value>Saving files</value></data>
   <data name="SettingsUx_AdvancedHeading" xml:space="preserve"><value>Advanced</value></data>
   <data name="SettingsUx_AdvancedHint" xml:space="preserve"><value>Settings for the shortcut that uploads the clipboard image to a GitHub issue.</value></data>
-  <data name="SettingsUx_GitHubIssueUrlHint" xml:space="preserve"><value>The issue the GitHub upload shortcut pastes the clipboard image into. Use an issue you can comment on. Leave blank to use a safe default.</value></data>
+  <data name="SettingsUx_GitHubIssueUrlHint" xml:space="preserve"><value>If blank, MyCapture's public support repository is used. Uploaded images are public.</value></data>
   <data name="SettingsUx_EditingDefaultsHeading" xml:space="preserve"><value>Editing tool defaults</value></data>
   <data name="SettingsUx_PinCopy" xml:space="preserve"><value>Copying from a pin</value></data>
   <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Ctrl+C copies a pin's image; Ctrl+double-click copies its original text, or for an image, the text recognized on this PC.</value></data>
@@ -3824,7 +3824,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LibraryUx_NavAllHint" xml:space="preserve"><value>Shows folders and the captures that are not in a folder. Open a folder or search to find the captures inside it. Drop captures here to remove them from their folder.</value></data>
   <data name="LibraryUx_NavKept" xml:space="preserve"><value>Kept</value></data>
   <data name="LibraryUx_NavKeptHint" xml:space="preserve"><value>Captures kept from automatic cleanup. Keep a capture from its More menu.</value></data>
-  <data name="LibraryUx_NavItemName" xml:space="preserve"><value>{0}, {1} items</value></data>
+  <data name="LibraryUx_NavItemName" xml:space="preserve"><value>{0}, {1} {1:plural:item|items}</value></data>
   <data name="LibraryUx_FoldersHint" xml:space="preserve"><value>Captures in folders are excluded from automatic cleanup. Drag captures onto a folder to organize them.</value></data>
   <data name="LibraryUx_NewFolderHint" xml:space="preserve"><value>New folder (Ctrl+Shift+N)</value></data>
   <data name="LibraryUx_DatesHeader" xml:space="preserve"><value>Dates</value></data>
@@ -3841,11 +3841,11 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LibraryUx_StatusName" xml:space="preserve"><value>Library status</value></data>
   <data name="LibraryUx_CardKind" xml:space="preserve"><value>Folder</value></data>
   <data name="LibraryUx_CardEmpty" xml:space="preserve"><value>Empty folder</value></data>
-  <data name="LibraryUx_DropMoveTo" xml:space="preserve"><value>Move {1} to {0}</value></data>
-  <data name="LibraryUx_DropRemoveFromFolder" xml:space="preserve"><value>Remove {0} from folder</value></data>
+  <data name="LibraryUx_DropMoveTo" xml:space="preserve"><value>Move {1} {1:plural:item|items} to {0}</value></data>
+  <data name="LibraryUx_DropRemoveFromFolder" xml:space="preserve"><value>Remove {0} {0:plural:item|items} from folder</value></data>
   <data name="LibraryUx_DropFolderInto" xml:space="preserve"><value>Move into {0}</value></data>
   <data name="LibraryUx_DropFolderTop" xml:space="preserve"><value>Move to top level</value></data>
-  <data name="LibraryUx_MovedTo" xml:space="preserve"><value>Moved {1} captures to {0}.</value></data>
+  <data name="LibraryUx_MovedTo" xml:space="preserve"><value>Moved {1} {1:plural:capture|captures} to {0}</value></data>
   <data name="LibraryUx_TileDragImage" xml:space="preserve"><value>Drop on a library folder to move it there. Drop on the desktop or in File Explorer to export a PNG file.</value></data>
   <data name="LibraryUx_TileDragVideo" xml:space="preserve"><value>Drop on a library folder to move it there. Drop on the desktop or in File Explorer to export an MP4 file.</value></data>
   <data name="LibraryUx_Keep" xml:space="preserve"><value>Keep</value></data>
@@ -3855,7 +3855,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, kept</value></data>
   <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, in folder {0}</value></data>
   <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More — keep, export and recognize text</value></data>
-  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, apps, image text</value></data>
+  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, window names, image text</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
   <data name="LibraryUx_NavImages" xml:space="preserve"><value>Images</value></data>
   <data name="LibraryUx_NavVideos" xml:space="preserve"><value>Videos</value></data>
@@ -3909,7 +3909,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Onboard_BarRecordHelp" xml:space="preserve"><value>Switches to choosing an area to record.</value></data>
   <data name="Onboard_BarMore" xml:space="preserve"><value>More captures</value></data>
   <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>Delayed capture, scrolling capture or the previous region.</value></data>
-  <data name="Onboard_DelayCapture" xml:space="preserve"><value>Capture in {0} seconds</value></data>
+  <data name="Onboard_DelayCapture" xml:space="preserve"><value>Capture in {0} {0:plural:second|seconds}</value></data>
   <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>Drag over the area to record</value></data>
   <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — Select an area to record</value></data>
   <data name="Onboard_RecordStop" xml:space="preserve"><value>Stop</value></data>
@@ -3928,8 +3928,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+wheel up</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>Click through to windows behind</value></data>
   <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Turn off: {0}</value></data>
-  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click-through on · Turn off: {0}</value></data>
-  <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>Click-through off</value></data>
+  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click through to windows behind: on · Turn off: {0}</value></data>
+  <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>Click through to windows behind: off</value></data>
   <data name="Onboard_CaptureFromTray" xml:space="preserve"><value>No shortcut is assigned. Choose Region capture from the tray icon menu.</value></data>
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>Keep open</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q or click the card: use the keys</value></data>
@@ -3977,7 +3977,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. Start a delayed capture.</value></data>
   <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. Prepare the screen during the countdown.</value></data>
   <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. When the selector appears, drag to select the capture area.</value></data>
-  <data name="Tutorial.quick-access.Step1" xml:space="preserve"><value>1. When a capture appears in the quick-access card, press Alt+Q.</value></data>
+  <data name="Tutorial.quick-access.Step1" xml:space="preserve"><value>1. When a capture appears in the quick access card, press Alt+Q.</value></data>
   <data name="Tutorial.quick-access.Step2" xml:space="preserve"><value>2. Click Copy in the card or press C.</value></data>
   <data name="Tutorial.quick-access.Step3" xml:space="preserve"><value>3. Press Ctrl+V in the destination to use the capture.</value></data>
   <data name="Tutorial.color-copy.Step1" xml:space="preserve"><value>1. Start a region capture.</value></data>
@@ -4008,7 +4008,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.image-mosaic.Step2" xml:space="preserve"><value>2. Select Mosaic and drag over the area to cover.</value></data>
   <data name="Tutorial.image-mosaic.Step3" xml:space="preserve"><value>3. Review the mosaic area, then save.</value></data>
   <data name="Tutorial.image-blur.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
-  <data name="Tutorial.image-blur.Step2" xml:space="preserve"><value>2. Select Blur and drag over the area to soften.</value></data>
+  <data name="Tutorial.image-blur.Step2" xml:space="preserve"><value>2. Select Blur and drag over the area to blur.</value></data>
   <data name="Tutorial.image-blur.Step3" xml:space="preserve"><value>3. Review the blurred area, then save.</value></data>
   <data name="Tutorial.image-crop.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-crop.Step2" xml:space="preserve"><value>2. Select Crop and adjust the area to keep.</value></data>
@@ -4032,7 +4032,7 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="Tutorial.library-move.Step2" xml:space="preserve"><value>2. Press M and choose the destination folder.</value></data>
   <data name="Tutorial.library-move.Step3" xml:space="preserve"><value>3. Click Move to folder, then find the captures in that folder.</value></data>
   <data name="Tutorial.library-delete.Step1" xml:space="preserve"><value>1. Select an item to delete in the library.</value></data>
-  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Press Del and click OK in the confirmation dialog.</value></data>
+  <data name="Tutorial.library-delete.Step2" xml:space="preserve"><value>2. Press Del and confirm the deletion in the dialog.</value></data>
   <data name="Tutorial.library-delete.Step3" xml:space="preserve"><value>3. Review the list. Bring items back with Restore recently deleted in the library.</value></data>
   <data name="Tutorial.video-play.Step1" xml:space="preserve"><value>1. Open a recording from the library.</value></data>
   <data name="Tutorial.video-play.Step2" xml:space="preserve"><value>2. Press Space to play.</value></data>

@@ -94,7 +94,7 @@ public sealed class FeatureTutorialTests
     });
 
     [Theory]
-    [InlineData("ko-KR", "영역 캡처 사용법", "이미지 편집기 · 복사 사용법", "핀 · 저장 사용법", "텍스트 복사 사용법", "블러 사용법 영상")]
+    [InlineData("ko-KR", "영역 캡처 사용법", "이미지 편집기 · 복사 사용법", "핀 · 저장 사용법", "텍스트 복사 사용법", "블러 사용법 동영상")]
     [InlineData("en-US", "Region capture tutorial", "Image editor · Copy tutorial", "Pins · Save tutorial", "Copy text tutorial", "Blur tutorial video")]
     public void TutorialNamesSayWhichFeatureTheyTeachAndQualifySharedTitles(string language, string region, string imageCopy,
         string pinSave, string textCopy, string blurVideo) => StaTestHost.Run(() =>

@@ -52,7 +52,9 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
 
         Assert.True(a.IsAvailable);
         Assert.Contains("ko-KR", a.Detail);
-        Assert.Contains("오프라인", a.Detail);
+        // Models may be downloaded, so the detail promises only that images stay on this PC.
+        Assert.Contains("이미지는 전송하지 않습니다", a.Detail);
+        Assert.DoesNotContain("오프라인", a.Detail);
     }
 
     // ---- OcrIndexingService outcomes ----

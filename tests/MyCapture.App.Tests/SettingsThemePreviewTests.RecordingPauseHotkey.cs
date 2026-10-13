@@ -55,7 +55,7 @@ public sealed partial class SettingsThemePreviewTests
             HotkeyRecorder recorder = Descendants(window).OfType<HotkeyRecorder>().Single(control =>
                 control.GetBindingExpression(HotkeyRecorder.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.PauseRecordingHotkey));
             Assert.True(recorder.IsVisible);
-            Assert.Equal("녹화 일시정지/재개 단축키", AutomationProperties.GetName(recorder));
+            Assert.Equal("녹화 일시 정지/재개 단축키", AutomationProperties.GetName(recorder));
             Assert.Contains("녹화 중이 아닐 때는 동작하지 않습니다", AutomationProperties.GetHelpText(recorder), StringComparison.Ordinal);
             Assert.Equal(string.Empty, recorder.Text);
 

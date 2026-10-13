@@ -265,7 +265,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             timeline.FitAll();
             Assert.True(timeline.IsFitAll, "fit-all did not restore the complete overview");
 
-            Button play = Descendants(layout).OfType<Button>().Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == "재생 또는 일시정지");
+            Button play = Descendants(layout).OfType<Button>().Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == "재생 또는 일시 정지");
             var playbackTimer = (DispatcherTimer)typeof(VideoEditorWindow).GetField("_playbackTimer", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(editor)!;
             play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             DateTime playbackDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
