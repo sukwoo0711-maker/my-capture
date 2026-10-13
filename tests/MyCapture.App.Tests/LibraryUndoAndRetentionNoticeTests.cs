@@ -156,7 +156,8 @@ public sealed class LibraryUndoAndRetentionNoticeTests
         Assert.Equal("3개를 휴지통으로 옮김", GalleryWindow.DeleteStatus(3, new CaptureBatchRemovalResult(3, 0), null));
         Assert.Equal("3개를 휴지통으로 옮김 · 1개 유지", GalleryWindow.DeleteStatus(4, new CaptureBatchRemovalResult(3, 0), null));
         using var english = UiText.UseLanguage("en-US");
-        Assert.Equal("Moved 2 item(s) to the Recycle Bin", GalleryWindow.DeleteStatus(2, new CaptureBatchRemovalResult(2, 0), null));
+        Assert.Equal("Moved 2 items to the Recycle Bin", GalleryWindow.DeleteStatus(2, new CaptureBatchRemovalResult(2, 0), null));
+        Assert.Equal("Moved 1 item to the Recycle Bin", GalleryWindow.DeleteStatus(1, new CaptureBatchRemovalResult(1, 0), null));
     }
 
     [Fact]

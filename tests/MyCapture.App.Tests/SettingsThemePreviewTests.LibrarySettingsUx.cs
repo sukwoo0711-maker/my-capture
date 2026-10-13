@@ -73,7 +73,8 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(UiText.Format("SettingsUx_RetentionSummary", SettingsUxText.Duration(36)),
                 ((TextBlock)window.FindName("RetentionSummary")).Text);
             Assert.Equal(UiText.Get("Retention_Label"), AutomationProperties.GetName(retention));
-            Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.IsVisible && text.Text == UiText.Get("Settings_LibraryMaxItems"));
+            Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.IsVisible
+                && MyCapture.App.Themes.KoreanWordWrap.Strip(text.Text) == UiText.Get("Settings_LibraryMaxItems"));
 
             // Choosing "never" is a pending change; choosing 36 again is not.
             retention.SelectedValue = never;
