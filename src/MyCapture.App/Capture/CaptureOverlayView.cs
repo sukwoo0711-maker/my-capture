@@ -43,6 +43,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private const double MinimumSelectionPixels = 2;
     private const int MagnifierSourcePixels = 15;
     private const double MagnifierDestinationPixels = 150;
+    private const double CrosshairReach = 11;
 
     internal static string InstructionText => UiText.Get("Text_798E080A9262");
 
@@ -180,14 +181,21 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private Pen _magnifierBorderPen = null!;
     private Pen _magnifierGridPen = null!;
     private Brush? _magnifierGridQuarterBrush;
+    private Brush? _pointerOuterHalfBrush;
+    private Brush? _pointerInnerHalfBrush;
     internal int StaticRenderCount { get; private set; }
     internal int DimmerRenderCount { get; private set; }
     internal int FeedbackRenderCount { get; private set; }
     internal int MagnifierUpdateCount { get; private set; }
     internal int MagnifierGridFillCount { get; private set; }
 
-    /// <summary>Tests turn this off to draw the strokes that the pixel fills stand in for.</summary>
+    internal int CrosshairFillCount { get; private set; }
+
+    /// <summary>Tests turn these off to draw the strokes that the pixel fills stand in for.</summary>
     internal bool MagnifierGridFills { get; set; } = true;
+
+    /// <inheritdoc cref="MagnifierGridFills"/>
+    internal bool CrosshairFills { get; set; } = true;
     internal bool HasPendingFeedback => _feedbackScheduler.IsPending;
     internal BitmapSource? MagnifierBitmapForTest => _magnifierCrop;
     internal string SampleLabelForTest => _sampleLabel;
@@ -1105,10 +1113,18 @@ internal sealed class CaptureOverlayView : FrameworkElement
         void Target(PointD pixel)
         {
             Point p = ToDipPoint(pixel);
+            if (!anchor && CrosshairFills && _pointerOuterHalfBrush is { } outerHalf && _pointerInnerHalfBrush is { } innerHalf
+                && CrosshairOnDevicePixels(p))
+            {
+                CrosshairFillCount++;
+                CrossFills(p, _pointerOuterPen, outerHalf, 3);
+                CrossFills(p, _pointerInnerPen, innerHalf, 1);
+                return;
+            }
             void Cross(Pen pen)
             {
-                dc.DrawLine(pen, new Point(p.X - 11, p.Y), new Point(p.X + 11, p.Y));
-                dc.DrawLine(pen, new Point(p.X, p.Y - 11), new Point(p.X, p.Y + 11));
+                dc.DrawLine(pen, new Point(p.X - CrosshairReach, p.Y), new Point(p.X + CrosshairReach, p.Y));
+                dc.DrawLine(pen, new Point(p.X, p.Y - CrosshairReach), new Point(p.X, p.Y + CrosshairReach));
                 if (anchor) dc.DrawEllipse(null, pen, p, 5, 5);
             }
             Cross(_pointerOuterPen);
@@ -1123,6 +1139,39 @@ internal sealed class CaptureOverlayView : FrameworkElement
             }
         }
         Target(anchor ? _dragAnchor : _cursorPixel);
+
+        // A stroke centred on a device-pixel edge and an odd number of pixels wide covers whole
+        // pixels in its middle and exactly half of the one pixel row or column on each side of
+        // them. Those pixels are filled with the stroke colour and half its alpha, horizontal
+        // stroke first, as the two strokes were drawn.
+        void CrossFills(Point p, Pen pen, Brush half, int width)
+        {
+            double px = GuidePixelSizeX, py = GuidePixelSizeY, inner = (width - 1) / 2.0;
+            if (inner > 0)
+                dc.DrawRectangle(pen.Brush, null, new Rect(p.X - CrosshairReach, p.Y - (inner * py), 2 * CrosshairReach, 2 * inner * py));
+            dc.DrawRectangle(half, null, new Rect(p.X - CrosshairReach, p.Y - ((inner + 1) * py), 2 * CrosshairReach, py));
+            dc.DrawRectangle(half, null, new Rect(p.X - CrosshairReach, p.Y + (inner * py), 2 * CrosshairReach, py));
+            if (inner > 0)
+                dc.DrawRectangle(pen.Brush, null, new Rect(p.X - (inner * px), p.Y - CrosshairReach, 2 * inner * px, 2 * CrosshairReach));
+            dc.DrawRectangle(half, null, new Rect(p.X - ((inner + 1) * px), p.Y - CrosshairReach, px, 2 * CrosshairReach));
+            dc.DrawRectangle(half, null, new Rect(p.X + (inner * px), p.Y - CrosshairReach, px, 2 * CrosshairReach));
+        }
+    }
+
+    /// <summary>
+    /// Whether the pointer crosshair's strokes lie on device pixels: centred on a pixel corner (the
+    /// real cursor always is), ending on pixel edges, and one and three device pixels wide. The
+    /// crosshair is redrawn on every pointer frame; as antialiased strokes it took about a fifth of
+    /// the render thread while moving.
+    /// </summary>
+    private bool CrosshairOnDevicePixels(Point p)
+    {
+        double scaleX = _guideDpi.DpiScaleX, scaleY = _guideDpi.DpiScaleY;
+        return Math.Abs(scaleX - scaleY) <= 0.000001
+            && IsWhole(p.X * scaleX) && IsWhole(p.Y * scaleY)
+            && IsWhole(CrosshairReach * scaleX) && IsWhole(CrosshairReach * scaleY)
+            && Math.Abs((_pointerOuterPen.Thickness * scaleX) - 3) <= 0.000001
+            && Math.Abs((_pointerInnerPen.Thickness * scaleX) - 1) <= 0.000001;
     }
 
     private void DrawSelection(DrawingContext dc, RectD pixelRect)
@@ -2200,7 +2249,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _chipBorderPen = Create("CaptureGuide.ChipBorder", 1);
         _magnifierBorderPen = Create("CaptureGuide.MagnifierBorder", 1);
         _magnifierGridPen = Create("CaptureGuide.MagnifierGrid", 0.5);
-        _magnifierGridQuarterBrush = QuarterAlpha(_guidePalette["CaptureGuide.MagnifierGrid"]);
+        _magnifierGridQuarterBrush = CoverageBrush(_guidePalette["CaptureGuide.MagnifierGrid"], 0.25f);
+        _pointerOuterHalfBrush = CoverageBrush(_pointerOuterPen.Brush, 0.5f);
+        _pointerInnerHalfBrush = CoverageBrush(_pointerInnerPen.Brush, 0.5f);
         _recordingPen = new Pen(_recordingBrush, 2 * pixel);
         _recordingPen.Freeze();
         _recordingEdgePen = new Pen(_recordingBrush, 3 * pixel);
@@ -2208,22 +2259,24 @@ internal sealed class CaptureOverlayView : FrameworkElement
     }
 
     /// <summary>
-    /// The grid colour with a quarter of its alpha, for whole pixels a half-pixel stroke covers by a
-    /// quarter. Only the alpha changes: brushes reach the hardware renderer as scRGB floats, where
-    /// multiplying by 0.25 is exact, so the fill carries what the stroke's coverage would. The
-    /// software renderer premultiplies in bytes, where the two orders round alike only for an opaque
-    /// colour or one whose channels are all 0 or 255; that covers the black or white grid of the
-    /// themes and the high-contrast text colour. Anything else returns null and keeps the strokes.
+    /// A stroke colour with its alpha scaled by the <paramref name="coverage"/> (a quarter or a half)
+    /// with which a stroke on device-pixel edges covers whole pixels. Only the alpha changes: brushes
+    /// reach the hardware renderer as scRGB floats, where scaling by a power of two is exact, so the
+    /// fill carries what the stroke's coverage would. The software renderer premultiplies in bytes,
+    /// where the two orders round alike only for an opaque colour or one whose channels are all 0 or
+    /// 255; that covers the theme grid, crosshair and high-contrast colours. Anything else returns
+    /// null and keeps the strokes.
     /// </summary>
-    internal static Brush? QuarterAlpha(Brush brush)
+    internal static Brush? CoverageBrush(Brush brush, float coverage)
     {
+        if (coverage is not (0.25f or 0.5f)) throw new ArgumentOutOfRangeException(nameof(coverage));
         if (brush is not SolidColorBrush { Opacity: 1 } solid) return null;
         Color color = solid.Color;
         if (color.A != 255 && !(Extreme(color.R) && Extreme(color.G) && Extreme(color.B))) return null;
-        color.ScA = solid.Color.ScA * 0.25f;
-        var quarter = new SolidColorBrush(color);
-        quarter.Freeze();
-        return quarter;
+        color.ScA = solid.Color.ScA * coverage;
+        var scaled = new SolidColorBrush(color);
+        scaled.Freeze();
+        return scaled;
 
         static bool Extreme(byte channel) => channel is 0 or 255;
     }

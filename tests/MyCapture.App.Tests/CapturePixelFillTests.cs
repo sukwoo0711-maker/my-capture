@@ -9,7 +9,7 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-public sealed class CaptureMagnifierGridTests
+public sealed class CapturePixelFillTests
 {
     private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.NonPublic;
 
@@ -19,7 +19,7 @@ public sealed class CaptureMagnifierGridTests
     [InlineData(1.5)]
     [InlineData(1.75)]
     [InlineData(2.0)]
-    public void PixelFills_MatchTheHalfPixelStrokes_WhereverTheMagnifierLands(double scale) => StaTestHost.Run(() =>
+    public void GridFills_MatchTheHalfPixelStrokes_WhereverTheMagnifierLands(double scale) => StaTestHost.Run(() =>
     {
         // The token grid (black or white at alpha 50) and a high-contrast window-text colour.
         Color[] colors = [Color.FromArgb(50, 0, 0, 0), Color.FromArgb(50, 255, 255, 255), Color.FromArgb(255, 0x12, 0x34, 0x56)];
@@ -30,7 +30,7 @@ public sealed class CaptureMagnifierGridTests
             foreach (PointD cursor in cursors)
             {
                 var fills = new CaptureOverlayView(NoiseFrame(), showSelectionGrid: false);
-                var strokes = new CaptureOverlayView(NoiseFrame(), showSelectionGrid: false) { MagnifierGridFills = false };
+                var strokes = new CaptureOverlayView(NoiseFrame(), showSelectionGrid: false) { MagnifierGridFills = false, CrosshairFills = false };
                 try
                 {
                     foreach (CaptureOverlayView view in new[] { fills, strokes })
@@ -51,6 +51,47 @@ public sealed class CaptureMagnifierGridTests
                     AssertSamePixels(expected, actual, $"colour {color}, scale {scale}, cursor {cursor}");
                 }
                 finally { fills.ReleaseResources(); strokes.ReleaseResources(); }
+            }
+        }
+    });
+
+    [Theory]
+    [InlineData(1.0, true)]
+    [InlineData(2.0, true)]
+    [InlineData(1.25, false)]
+    [InlineData(1.5, false)]
+    public void CrosshairFills_MatchTheStrokes_AndOnlyWhereTheyEndOnDevicePixels(double scale, bool fills) => StaTestHost.Run(() =>
+    {
+        // Theme crosshairs: the accent over a black or white keyline, and high-contrast colours.
+        (Color Line, Color Shadow)[] colors = [(Color.FromRgb(0x97, 0x89, 0xFF), Colors.White), (Color.FromRgb(0x20, 0xD0, 0x60), Colors.Black),
+            (Color.FromRgb(0xFF, 0xFF, 0x00), Color.FromRgb(0x10, 0x10, 0x10))];
+        PointD[] cursors = [new(120, 100), new(0, 0), new(639, 359), new(5, 350), new(333, 207)];
+        foreach ((Color line, Color shadow) in colors)
+        {
+            foreach (PointD cursor in cursors)
+            {
+                // The magnifier is off so the comparison sees the crosshair over the frozen desktop.
+                var actual = new CaptureOverlayView(NoiseFrame(), showMagnifier: false, showSelectionGrid: false);
+                var expected = new CaptureOverlayView(NoiseFrame(), showMagnifier: false, showSelectionGrid: false) { CrosshairFills = false };
+                try
+                {
+                    foreach (CaptureOverlayView view in new[] { actual, expected })
+                    {
+                        UsePalette(view, ("CaptureGuide.Crosshair", line), ("CaptureGuide.CrosshairShadow", shadow));
+                        view.ReadCursor = () => cursor;
+                        SetMouseOver(view, true);
+                        view.InitializePointer();
+                        Render(view, scale);
+                    }
+                    byte[] reference = Pixels(Render(expected, scale));
+                    byte[] obtained = Pixels(Render(actual, scale));
+                    Assert.Equal(fills, actual.CrosshairFillCount > 0);
+                    Assert.Equal(0, expected.CrosshairFillCount);
+                    Assert.Equal(fills ? 0 : 4, Lines(Visual(actual, "_pointerVisual").Drawing));
+                    Assert.Equal(4, Lines(Visual(expected, "_pointerVisual").Drawing));
+                    AssertSamePixels(reference, obtained, $"crosshair {line}/{shadow}, scale {scale}, cursor {cursor}");
+                }
+                finally { actual.ReleaseResources(); expected.ReleaseResources(); }
             }
         }
     });
@@ -80,17 +121,19 @@ public sealed class CaptureMagnifierGridTests
     });
 
     [Fact]
-    public void QuarterAlpha_OnlyForSolidColoursWhoseQuarterRoundsExactly()
+    public void CoverageBrush_OnlyForSolidColoursWhoseScaledAlphaRoundsExactly()
     {
         StaTestHost.Run(() =>
         {
             Assert.Equal(Color.FromArgb(50, 0, 0, 0).ScA * 0.25f,
-                ((SolidColorBrush)CaptureOverlayView.QuarterAlpha(Solid(Color.FromArgb(50, 0, 0, 0)))!).Color.ScA);
-            Assert.NotNull(CaptureOverlayView.QuarterAlpha(Solid(Color.FromArgb(50, 255, 255, 255))));
-            Assert.NotNull(CaptureOverlayView.QuarterAlpha(Solid(Color.FromArgb(255, 0x12, 0x34, 0x56))));
-            Assert.Null(CaptureOverlayView.QuarterAlpha(Solid(Color.FromArgb(77, 200, 100, 30))));
-            Assert.Null(CaptureOverlayView.QuarterAlpha(new SolidColorBrush(Colors.Black) { Opacity = 0.5 }));
-            Assert.Null(CaptureOverlayView.QuarterAlpha(new LinearGradientBrush(Colors.Black, Colors.White, 0)));
+                ((SolidColorBrush)CaptureOverlayView.CoverageBrush(Solid(Color.FromArgb(50, 0, 0, 0)), 0.25f)!).Color.ScA);
+            Assert.Equal(Color.FromArgb(255, 0x12, 0x34, 0x56).ScA * 0.5f,
+                ((SolidColorBrush)CaptureOverlayView.CoverageBrush(Solid(Color.FromArgb(255, 0x12, 0x34, 0x56)), 0.5f)!).Color.ScA);
+            Assert.NotNull(CaptureOverlayView.CoverageBrush(Solid(Color.FromArgb(50, 255, 255, 255)), 0.25f));
+            Assert.Null(CaptureOverlayView.CoverageBrush(Solid(Color.FromArgb(77, 200, 100, 30)), 0.25f));
+            Assert.Null(CaptureOverlayView.CoverageBrush(new SolidColorBrush(Colors.Black) { Opacity = 0.5 }, 0.5f));
+            Assert.Null(CaptureOverlayView.CoverageBrush(new LinearGradientBrush(Colors.Black, Colors.White, 0), 0.5f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => CaptureOverlayView.CoverageBrush(Solid(Colors.Black), 0.3f));
         });
     }
 
@@ -101,9 +144,12 @@ public sealed class CaptureMagnifierGridTests
         return brush;
     }
 
-    private static void UseGridColor(CaptureOverlayView view, Color color)
+    private static void UseGridColor(CaptureOverlayView view, Color color) => UsePalette(view, ("CaptureGuide.MagnifierGrid", color));
+
+    private static void UsePalette(CaptureOverlayView view, params (string Key, Color Color)[] colors)
     {
-        var palette = new Dictionary<string, Brush>(view.GuidePalette) { ["CaptureGuide.MagnifierGrid"] = Solid(color) };
+        var palette = new Dictionary<string, Brush>(view.GuidePalette);
+        foreach ((string key, Color color) in colors) palette[key] = Solid(color);
         typeof(CaptureOverlayView).GetField("_guidePalette", Instance)!.SetValue(view, palette);
         typeof(CaptureOverlayView).GetField("_staticDirty", Instance)!.SetValue(view, true);
     }
