@@ -248,13 +248,7 @@ internal sealed class ThemedDialog : Window
     }
 
     /// <summary>Opens a folder in File Explorer. Tests replace it so nothing is launched.</summary>
-    internal static Action<string> OpenFolder { get; set; } = folder =>
-    {
-        string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
-        var start = new ProcessStartInfo(explorer) { UseShellExecute = false };
-        start.ArgumentList.Add(folder);
-        Process.Start(start)?.Dispose();
-    };
+    internal static Action<string> OpenFolder { get; set; } = MyCapture.App.Settings.ExplorerLauncher.OpenFolder;
 
     /// <summary>[Open save location]: shows the folder and leaves the dialog open.</summary>
     internal static DialogCommand OpenSaveLocationCommand(string folder) => new(UiText.Get("Dialog.OpenSaveLocation"), () =>
@@ -264,7 +258,7 @@ internal sealed class ThemedDialog : Window
             OpenFolder(folder);
             return null;
         }
-        catch (Exception error) when (error is Win32Exception or InvalidOperationException or IOException)
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException or IOException or ArgumentException)
         {
             return UiText.Get("Dialog.OpenSaveLocationFailed");
         }

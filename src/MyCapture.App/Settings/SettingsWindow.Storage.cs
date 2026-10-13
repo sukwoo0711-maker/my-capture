@@ -117,11 +117,18 @@ internal sealed partial class SettingsWindow
     }
 }
 
-/// <summary>Opens folders in File Explorer by passing the path as an argument, never shell-executing it.</summary>
+/// <summary>
+/// Opens folders in File Explorer by passing the path as one argument, never shell-executing it.
+/// Only a fully qualified path to an existing directory is accepted: such a path cannot contain
+/// quotes (invalid in Windows names) or start with '/', so it can never become an explorer switch.
+/// </summary>
 internal static class ExplorerLauncher
 {
     internal static void OpenFolder(string folder)
     {
+        if (!Path.IsPathFullyQualified(folder)) throw new ArgumentException("The folder path must be fully qualified.", nameof(folder));
+        folder = Path.GetFullPath(folder);
+        if (!Directory.Exists(folder)) throw new DirectoryNotFoundException("The folder does not exist.");
         string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
         var start = new System.Diagnostics.ProcessStartInfo(explorer) { UseShellExecute = false };
         start.ArgumentList.Add(folder);
