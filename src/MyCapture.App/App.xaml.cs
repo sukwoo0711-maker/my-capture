@@ -225,7 +225,9 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
 
         _ocrService = _services.GetRequiredService<IOcrService>();
-        StartOcrModelDownload();
+        // Only the Accurate and Most accurate qualities use the downloaded model. Everyone else never
+        // downloads it; a later switch to those qualities downloads it on first use (NeuralOcrEngine).
+        if (OcrQualityProfile.UseNeuralModel(_settings.Ocr.Quality)) StartOcrModelDownload();
         _automaticIndexer = new OcrIndexingService(
             _galleryController!, _ocrService, record => _queue!.GetDirectory(record),
             () => _settings!.Ocr, _services.GetRequiredService<ILogger<OcrIndexingService>>(), Dispatcher);
