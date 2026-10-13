@@ -1506,11 +1506,13 @@ internal sealed partial class VideoEditorWindow : Window
         }
         catch (OperationCanceledException)
         {
-            await Dispatcher.InvokeAsync(() => { if (version == _playRequestVersion) { _playRequested = false; UpdatePlayButton(); } });
+            // The seek was superseded, or the editor closed and its dispatcher shut down while
+            // the start was queued; either way only a still-current request is undone.
+            if (!Dispatcher.HasShutdownStarted && version == _playRequestVersion) { _playRequested = false; UpdatePlayButton(); }
         }
         catch (Exception ex)
         {
-            await Dispatcher.InvokeAsync(() => { if (version == _playRequestVersion) { PausePlayback(); OnPreviewSeekFailed(ex); } });
+            if (!Dispatcher.HasShutdownStarted && version == _playRequestVersion) { PausePlayback(); OnPreviewSeekFailed(ex); }
         }
     }
     private void Seek(double positionMs)
