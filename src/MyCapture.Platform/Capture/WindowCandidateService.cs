@@ -152,8 +152,11 @@ public sealed class WindowCandidateService
             return false;
         }
 
-        foreach (WindowCandidate other in snapshot)
+        // The selector asks on every pointer move over the desktop: index the list instead of boxing
+        // an enumerator.
+        for (int index = 0; index < snapshot.Count; index++)
         {
+            WindowCandidate other = snapshot[index];
             if (other.ProcessId == candidate.ProcessId &&
                 string.Equals(other.ClassName, DesktopWindowClass, StringComparison.OrdinalIgnoreCase))
             {

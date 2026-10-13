@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using MyCapture.App.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -299,6 +300,41 @@ public sealed class CaptureOverlayPerformanceTests
             }
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             Assert.True(allocated == 0, $"400 pointer moves allocated {allocated} bytes.");
+
+            // Over the desktop shell (Progman, or a WorkerW of the same process) the highlight is the
+            // monitor under the pointer; the moves below cross from one monitor to the other.
+            IReadOnlyList<MonitorInfo> monitors =
+            [
+                new MonitorInfo("DISPLAY1", new RectD(0, 0, 320, 360), new RectD(0, 0, 320, 340), 96, true),
+                new MonitorInfo("DISPLAY2", new RectD(320, 0, 320, 360), new RectD(320, 0, 320, 340), 96, false),
+            ];
+            view.ReadMonitors = () => monitors;
+            foreach (IReadOnlyList<WindowCandidate> shell in new IReadOnlyList<WindowCandidate>[]
+            {
+                [new WindowCandidate(new IntPtr(41), new RectD(0, 0, 640, 360), "", ProcessId: 77, ClassName: "Progman")],
+                [
+                    new WindowCandidate(new IntPtr(42), new RectD(0, 0, 640, 360), "", ProcessId: 77, ClassName: "WorkerW"),
+                    new WindowCandidate(new IntPtr(41), new RectD(0, 0, 640, 360), "", ProcessId: 77, ClassName: "Progman"),
+                ],
+            })
+            {
+                view.WindowCandidates = shell;
+                // Warm: the first move over the desktop reads the monitor layout once.
+                for (int i = 0; i < 2; i++)
+                {
+                    pointer = new PointD(100 + (i * 300), 80);
+                    view.UpdatePointer(false, false);
+                }
+                Assert.True(view.HoverWholeMonitorForTest);
+                before = GC.GetAllocatedBytesForCurrentThread();
+                for (int i = 0; i < 400; i++)
+                {
+                    pointer = new PointD(30 + (i * 7 % 580), 30 + (i % 300));
+                    view.UpdatePointer(false, false);
+                }
+                allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                Assert.True(allocated == 0, $"400 pointer moves over {shell[0].ClassName} allocated {allocated} bytes.");
+            }
         }
         finally { view.ReleaseResources(); host.Close(); }
     });

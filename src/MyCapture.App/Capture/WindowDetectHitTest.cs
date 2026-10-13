@@ -98,9 +98,10 @@ internal static class WindowDetectHitTest
         ArgumentNullException.ThrowIfNull(monitors);
         RectD? nearest = null;
         double nearestDistance = double.PositiveInfinity;
-        foreach (MonitorInfo monitor in monitors)
+        // Runs on every pointer move over the desktop: index the list instead of boxing an enumerator.
+        for (int index = 0; index < monitors.Count; index++)
         {
-            RectD bounds = monitor.Bounds.Normalized();
+            RectD bounds = monitors[index].Bounds.Normalized();
             if (bounds.IsEmpty) continue;
             if (screenPoint.X >= bounds.Left && screenPoint.X < bounds.Right &&
                 screenPoint.Y >= bounds.Top && screenPoint.Y < bounds.Bottom)
