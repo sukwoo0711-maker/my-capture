@@ -1,6 +1,6 @@
 # Microsoft Store 배포
 
-MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서는 `package.ps1`이 만든 self-contained 게시본을 MSIX로 묶어 Microsoft Store에 제출하는 절차입니다. Store는 인증을 통과한 패키지를 Microsoft 인증서로 다시 서명합니다. 그래서 Store에서 설치하면 SmartScreen과 "알 수 없는 게시자" 경고가 표시되지 않습니다. GitHub 릴리스는 4.0.2를 마지막으로 게시하지 않으며, 사용자 지원과 개인정보처리방침은 공개 [지원 저장소](https://github.com/sukwoo0711-maker/mycapture-support)에서 관리합니다.
+MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서는 `package.ps1`이 만든 self-contained 게시본을 MSIX로 묶어 Microsoft Store에 제출하는 절차입니다. Store는 인증을 통과한 패키지를 Microsoft 인증서로 다시 서명합니다. 그래서 Store에서 설치하면 SmartScreen과 "알 수 없는 게시자" 경고가 표시되지 않습니다. GitHub 릴리스에는 4.1.2부터 포터블 zip을 함께 게시하지만, 앱 안 업데이트는 Store 설치본만 받습니다. 사용자 지원과 개인정보처리방침은 공개 [지원 저장소](https://github.com/sukwoo0711-maker/mycapture-support)에서 관리합니다.
 
 ## Store 빌드에서 달라지는 동작
 
