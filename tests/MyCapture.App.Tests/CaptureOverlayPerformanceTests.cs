@@ -239,6 +239,36 @@ public sealed class CaptureOverlayPerformanceTests
     });
 
     [Fact]
+    public void Dragging_MovesOnlyTheRevealClip_WithoutRedrawingTheDimmerOrDesktop() => StaTestHost.Run(() =>
+    {
+        PointD pointer = new(100, 80);
+        var view = new CaptureOverlayView(Frame()) { SimulatedPointerInside = true };
+        view.ReadCursor = () => pointer;
+        try
+        {
+            view.InitializePointer();
+            Render(view, 640, 360);
+            int dimmer = view.DimmerRenderCount;
+            int desktop = view.StaticRenderCount;
+            Geometry clip = Visual(view, "_revealVisual").Clip;
+            view.SimulatePointerDown();
+            foreach (PointD next in new[] { new PointD(300, 200), new PointD(420, 260), new PointD(60, 30), new PointD(101, 81) })
+            {
+                pointer = next;
+                view.SimulatePointerMove();
+                Render(view, 640, 360);
+                // A viewport-sized redraw on every drag frame made WPF re-render the whole desktop.
+                Assert.Equal(dimmer, view.DimmerRenderCount);
+                Assert.Equal(desktop, view.StaticRenderCount);
+                Assert.Same(clip, Visual(view, "_revealVisual").Clip);
+                RectD selection = view.Selection!.Value;
+                Assert.Equal(new Rect(selection.Left, selection.Top, selection.Width, selection.Height), ((RectangleGeometry)clip).Rect);
+            }
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Fact]
     public void LostCaptureAndCancel_ClearRetainedGuidesAndFeedback() => StaTestHost.Run(() =>
     {
         var view = new CaptureOverlayView(Frame());

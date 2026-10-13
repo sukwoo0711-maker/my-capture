@@ -90,7 +90,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private readonly DrawingVisual _desktopVisual = new();
     private readonly DrawingVisual _dimmerVisual = new();
     private readonly DrawingVisual _revealVisual = new();
-    private bool _dimmerOutsideSelection;
+    private readonly RectangleGeometry _revealClip = new(new Rect(0, 0, 0, 0));
     private readonly DrawingVisual _horizontalGuideVisual = new();
     private readonly DrawingVisual _verticalGuideVisual = new();
     private readonly RectangleGeometry _horizontalGuideClip = new();
@@ -175,6 +175,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private Pen _magnifierBorderPen = null!;
     private Pen _magnifierGridPen = null!;
     internal int StaticRenderCount { get; private set; }
+    internal int DimmerRenderCount { get; private set; }
     internal int FeedbackRenderCount { get; private set; }
     internal int MagnifierUpdateCount { get; private set; }
     internal bool HasPendingFeedback => _feedbackScheduler.IsPending;
@@ -655,6 +656,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _instructionVisual, _anchorVisual, _pointerVisual, _magnifierVisual, _toastVisual,
         };
         _feedbackScheduler = new CompositionFrameScheduler(Dispatcher, RenderLayers);
+        _revealVisual.Clip = _revealClip;
         _horizontalGuideVisual.Clip = _horizontalGuideClip;
         _verticalGuideVisual.Clip = _verticalGuideClip;
         _horizontalGuideVisual.Opacity = _verticalGuideVisual.Opacity = 0;
@@ -964,7 +966,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 if (_frame?.Bitmap is { } bitmap) dc.DrawImage(bitmap, new Rect(RenderSize));
             using (DrawingContext dc = _dimmerVisual.RenderOpen())
                 dc.DrawRectangle(_dimmerBrush, null, new Rect(RenderSize));
-            _dimmerOutsideSelection = false;
+            DimmerRenderCount++;
             // Both image visuals share exactly one source; there is no rasterized cache.
             using (DrawingContext dc = _revealVisual.RenderOpen())
                 if (_frame?.Bitmap is { } revealBitmap) dc.DrawImage(revealBitmap, new Rect(RenderSize));
@@ -1049,50 +1051,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
     }
 
+    /// <summary>
+    /// Uncovers the selected or highlighted region: the full-screen dimmer never changes after the
+    /// static build, and only the clip of the desktop drawn over it moves.
+    /// </summary>
+    /// <remarks>
+    /// WPF redraws every visual that meets a changed visual's old or new bounds. A dimmer redrawn
+    /// around each new selection changed a viewport-sized visual, so every drag frame and every new
+    /// highlighted window re-rendered the whole desktop, including the mode bar and the instruction
+    /// chips. Moving only this clip limits the redraw to the old and new region. Inside the clip
+    /// the opaque desktop covers the dimmer, so the pixels match the dimmer drawn outside the
+    /// region; fractional physical edges keep the clip's own antialiasing as they always had.
+    /// </remarks>
     private void UpdateRevealedRegion(RectD? revealed)
     {
         Rect visible = revealed is { } selected
             ? ToDipRect(selected.ClampTo(FrameBounds)) : new Rect(0, 0, 0, 0);
-        Rect viewport = new(RenderSize);
-        // Desktop capture is opaque Bgr32. Leave its selected pixels uncovered instead of
-        // painting the same desktop a second time over a full-screen dimmer. Fractional
-        // physical edges retain the original clip composition: antialias coverage at a
-        // corner is not equivalent to independently blended outside rectangles.
-        bool outside = _frame?.Bitmap.Format == PixelFormats.Bgr32
-            && PixelAligned(viewport) && PixelAligned(visible);
-        _revealVisual.Opacity = outside ? 0 : 1;
-        if (outside)
-        {
-            using DrawingContext dc = _dimmerVisual.RenderOpen();
-            if (visible.Width <= 0 || visible.Height <= 0)
-                dc.DrawRectangle(_dimmerBrush, null, viewport);
-            else
-            {
-                Dim(new Rect(0, 0, viewport.Width, visible.Top));
-                Dim(new Rect(0, visible.Bottom, viewport.Width, Math.Max(0, viewport.Height - visible.Bottom)));
-                Dim(new Rect(0, visible.Top, visible.Left, visible.Height));
-                Dim(new Rect(visible.Right, visible.Top, Math.Max(0, viewport.Width - visible.Right), visible.Height));
-            }
-            void Dim(Rect rect)
-            {
-                if (rect.Width > 0 && rect.Height > 0) dc.DrawRectangle(_dimmerBrush, null, rect);
-            }
-        }
-        else
-        {
-            if (_dimmerOutsideSelection)
-            {
-                using DrawingContext dc = _dimmerVisual.RenderOpen();
-                dc.DrawRectangle(_dimmerBrush, null, viewport);
-            }
-            _revealVisual.Clip = new RectangleGeometry(visible);
-        }
-        _dimmerOutsideSelection = outside;
-
-        bool PixelAligned(Rect rect) => Integer(rect.Left * _guideDpi.DpiScaleX)
-            && Integer(rect.Right * _guideDpi.DpiScaleX)
-            && Integer(rect.Top * _guideDpi.DpiScaleY) && Integer(rect.Bottom * _guideDpi.DpiScaleY);
-        static bool Integer(double value) => Math.Abs(value - Math.Round(value)) <= 0.000001;
+        if (_revealClip.Rect != visible) _revealClip.Rect = visible;
     }
 
     /// <summary>Short confirmation chip above and to the right of the pointer, clear of the magnifier.</summary>
