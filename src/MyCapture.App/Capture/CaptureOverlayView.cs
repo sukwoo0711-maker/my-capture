@@ -158,6 +158,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private PointD? _drawnMagnifierPointer;
     private bool _drawnMagnifierMouseOver;
     private bool _guideGeometryReady;
+    private bool _guideStripsArePixels;
     private bool _guidesVisible;
     private FormattedText? _instructionText;
     private FormattedText? _anchorText;
@@ -1240,18 +1241,26 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _guidesVisible = false;
             return;
         }
-        if (rebuild || !_guideGeometryReady)
+        Point p = ToDipPoint(_cursorPixel);
+        bool pixelStrips = GuideStripsOnDevicePixels;
+        if (rebuild || !_guideGeometryReady || pixelStrips != _guideStripsArePixels)
         {
             GuideGeometryBuildCount++;
             // Retain two narrow strips rather than redrawing one viewport-sized visual.
             // Their order preserves the original horizontal-then-vertical intersection.
             using (DrawingContext dc = _horizontalGuideVisual.RenderOpen())
-                DrawGuide(dc, new Point(0, 0), new Point(ActualWidth, 0));
+            {
+                if (pixelStrips) DrawStrip(dc, horizontal: true);
+                else DrawGuide(dc, new Point(0, 0), new Point(ActualWidth, 0));
+            }
             using (DrawingContext dc = _verticalGuideVisual.RenderOpen())
-                DrawGuide(dc, new Point(0, 0), new Point(0, ActualHeight));
+            {
+                if (pixelStrips) DrawStrip(dc, horizontal: false);
+                else DrawGuide(dc, new Point(0, 0), new Point(0, ActualHeight));
+            }
             _guideGeometryReady = true;
+            _guideStripsArePixels = pixelStrips;
         }
-        Point p = ToDipPoint(_cursorPixel);
         _horizontalGuideVisual.Offset = new Vector(0, p.Y);
         _verticalGuideVisual.Offset = new Vector(p.X, 0);
         double halfStroke = _guideShadowPen.Thickness / 2;
@@ -1276,7 +1285,38 @@ internal sealed class CaptureOverlayView : FrameworkElement
             dc.DrawLine(_guideShadowPen, from, to);
             dc.DrawLine(_guideLinePen, from, to);
         }
+
+        // The bitmap covers the pixel on each side of the cursor's pixel edge, so it lands on the
+        // device pixels the strokes would paint. The visual's offset moves it with the pointer.
+        void DrawStrip(DrawingContext dc, bool horizontal)
+        {
+            Brush shadow = _guidePalette["CaptureGuide.LineShadow"], line = _guidePalette["CaptureGuide.Line"];
+            if (horizontal)
+            {
+                dc.DrawImage(CaptureGuideStrip.Get(shadow, line, PixelWidth, horizontal: true),
+                    new Rect(0, -DipPerPixelY, ActualWidth, CaptureGuideStrip.Thickness * DipPerPixelY));
+            }
+            else
+            {
+                dc.DrawImage(CaptureGuideStrip.Get(shadow, line, PixelHeight, horizontal: false),
+                    new Rect(-DipPerPixelX, 0, CaptureGuideStrip.Thickness * DipPerPixelX, ActualHeight));
+            }
+        }
     }
+
+    /// <summary>
+    /// Whether the guides fall on device-pixel edges: the pointer is on a whole pixel (always true for
+    /// the real cursor) and one frame pixel is one device pixel. Only then do the cached strips match
+    /// the strokes pixel for pixel; anything else draws the strokes themselves.
+    /// </summary>
+    private bool GuideStripsOnDevicePixels =>
+        IsWhole(_cursorPixel.X) && IsWhole(_cursorPixel.Y)
+        && Math.Abs((DipPerPixelX * _guideDpi.DpiScaleX) - 1) <= 0.0001
+        && Math.Abs((DipPerPixelY * _guideDpi.DpiScaleY) - 1) <= 0.0001;
+
+    private static bool IsWhole(double value) => Math.Abs(value - Math.Round(value)) <= 0.000001;
+
+    internal bool GuideStripsArePixelsForTest => _guideStripsArePixels;
 
     private void DrawDimensionLabel(DrawingContext dc, RectD pixels, Rect selectionDip)
     {
@@ -2060,18 +2100,17 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         GuidePenBuildCount++;
         double pixel = GuidePixelSizeX;
-        Pen Create(string key, double width, DashStyle? dash = null)
+        Pen Create(string key, double width)
         {
             var pen = new Pen(_guidePalette[key], width * pixel);
-            if (dash is not null) pen.DashStyle = dash;
             pen.Freeze();
             return pen;
         }
         _pointerOuterPen = Create("CaptureGuide.CrosshairShadow", 3);
         _pointerInnerPen = Create("CaptureGuide.Crosshair", 1);
         _anchorPen = Create("CaptureGuide.StartPoint", 1);
-        _guideShadowPen = Create("CaptureGuide.LineShadow", 2, new DashStyle([1.5, 1.5], 0));
-        _guideLinePen = Create("CaptureGuide.Line", 1, new DashStyle([3, 3], 0));
+        _guideShadowPen = CaptureGuideStrip.ShadowPen(_guidePalette["CaptureGuide.LineShadow"], pixel);
+        _guideLinePen = CaptureGuideStrip.LinePen(_guidePalette["CaptureGuide.Line"], pixel);
         _selectionBorderPen = Create("CaptureGuide.SelectionBorder", 1);
         _accentChipPen = Create("CaptureGuide.SelectionBorder", 2);
         _detectedBorderPen = Create("CaptureGuide.SelectionBorder", 3);

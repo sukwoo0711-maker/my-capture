@@ -160,6 +160,38 @@ public sealed class CaptureOverlayPerformanceTests
         }
     });
 
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public void WholePixelPointer_DrawsCachedStrips_FractionalPointerDrawsStrokes(double scale) => StaTestHost.Run(() =>
+    {
+        PointD cursor = new(120, 80);
+        var view = new CaptureOverlayView(Frame(), showMagnifier: false);
+        view.ReadCursor = () => cursor;
+        try
+        {
+            view.InitializePointer();
+            // The second pass settles the size change the first layout reports.
+            Render(view, 640, 360, scale);
+            Render(view, 640, 360, scale);
+            Assert.True(view.GuideStripsArePixelsForTest);
+            int builds = view.GuideGeometryBuildCount;
+            // Moving along whole pixels only moves the retained strips.
+            cursor = new PointD(300, 200);
+            view.UpdatePointer(false, false);
+            Render(view, 640, 360, scale);
+            Assert.True(view.GuideStripsArePixelsForTest);
+            Assert.Equal(builds, view.GuideGeometryBuildCount);
+            // A sub-pixel position (not produced by the real cursor) keeps the exact strokes.
+            cursor = new PointD(300.5, 200.25);
+            view.UpdatePointer(false, false);
+            Render(view, 640, 360, scale);
+            Assert.False(view.GuideStripsArePixelsForTest);
+            Assert.Equal(builds + 1, view.GuideGeometryBuildCount);
+        }
+        finally { view.ReleaseResources(); }
+    });
+
     [Fact]
     public void Selector_HasNoSystemFocusRectangle() => StaTestHost.Run(() =>
     {
