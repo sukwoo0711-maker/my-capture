@@ -274,6 +274,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
             Top = -32000,
         };
         window.SetResourceReference(Window.ForegroundProperty, "Text.Primary");
+        // The implicit window style turns the modern chrome on, which paints Surface.Base over
+        // the transparent background and makes the shadow margin an opaque frame.
+        ModernWindowChrome.SetEnabled(window, false);
         return window;
     }
 
