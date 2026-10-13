@@ -26,7 +26,7 @@ public sealed class CapturePersistenceTests
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {
@@ -357,7 +357,7 @@ public sealed class CaptureCommitServiceTests
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

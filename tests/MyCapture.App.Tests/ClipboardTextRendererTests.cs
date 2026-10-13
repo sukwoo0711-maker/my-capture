@@ -82,7 +82,7 @@ public sealed class ClipboardTextRendererTests
         ArgumentNullException.ThrowIfNull(action);
         T? result = default;
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

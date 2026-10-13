@@ -89,8 +89,10 @@ public sealed class StaThreadTaskTests
     {
         var actionFailure = new ArgumentException("action failed");
         var cleanupFailure = new InvalidOperationException("cleanup failed");
+        Thread? worker = null;
         Task<int> operation = StaThreadTask.RunAsync(() =>
         {
+            worker = Thread.CurrentThread;
             Dispatcher.CurrentDispatcher.ShutdownStarted += (_, _) => throw cleanupFailure;
             if (actionFails) throw actionFailure;
             return 42;
@@ -106,6 +108,12 @@ public sealed class StaThreadTaskTests
             Assert.Same(cleanupFailure, Assert.Throws<InvalidOperationException>(() =>
                 operation.WaitAsync(HangCeiling).GetAwaiter().GetResult()));
         }
+
+        // The failed shutdown left the dispatcher's windows alive, so the worker keeps pumping
+        // them instead of exiting and letting its teardown call their managed window procedures.
+        Assert.NotNull(worker);
+        Assert.False(worker!.Join(TimeSpan.FromMilliseconds(300)), "the worker exited with a live dispatcher");
+        Assert.False(Dispatcher.FromThread(worker)!.HasShutdownFinished);
     }
 
     [Fact]

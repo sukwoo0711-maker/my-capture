@@ -85,7 +85,7 @@ public sealed class WicGifFrameEncoderTests(ITestOutputHelper output)
         var failures = new List<Exception>();
         using var stop = new CancellationTokenSource();
         int wpfIterations = 0;
-        var wpfThread = new Thread(() =>
+        var wpfThread = WpfTestThread.Create(() =>
         {
             try
             {
@@ -229,7 +229,7 @@ public sealed class WicGifFrameEncoderTests(ITestOutputHelper output)
     {
         T result = default!;
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

@@ -203,7 +203,7 @@ public sealed class ReleaseUxInteractionTests
     private static void Sta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() => { try { action(); } catch (Exception error) { failure = error; } });
+        var thread = WpfTestThread.Create(() => { try { action(); } catch (Exception error) { failure = error; } });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
         if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }

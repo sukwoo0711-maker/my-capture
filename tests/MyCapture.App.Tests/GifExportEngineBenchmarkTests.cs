@@ -498,7 +498,7 @@ internal static class BenchmarkSta
     internal static void Run(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

@@ -3,6 +3,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
+using MyCapture.App.Threading;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Recording;
 
@@ -58,7 +59,15 @@ internal sealed class TimelineFilmstrip : IDisposable
         _tilesPublished = tilesPublished;
         _log = log;
         _tiles = new BitmapSource?[layout.TileCount];
-        _decode = Task.Run(Decode);
+        // The tiles are WPF bitmaps, which give the decoding thread a Dispatcher. A thread-pool
+        // thread would keep it until the pool retires the thread; the STA worker shuts it down.
+        _decode = StaThreadTask.RunAsync(
+            () =>
+            {
+                Decode();
+                return true;
+            },
+            "MyCapture filmstrip decoder");
     }
 
     internal FilmstripLayout Layout { get; }

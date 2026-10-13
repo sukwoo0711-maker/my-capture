@@ -498,7 +498,7 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try { action(); }
             catch (Exception ex) { failure = ex; }
@@ -754,7 +754,7 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         Exception? threadFailure = null;
         bool cacheRanOnOwnerDispatcher = false;
         using var ready = new ManualResetEventSlim(initialState: false);
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

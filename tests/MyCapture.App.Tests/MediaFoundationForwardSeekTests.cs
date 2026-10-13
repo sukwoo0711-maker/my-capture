@@ -301,7 +301,7 @@ public sealed class MediaFoundationForwardSeekTests
     {
         T result = default!;
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try { result = action(); }
             catch (Exception ex) { failure = ex; }

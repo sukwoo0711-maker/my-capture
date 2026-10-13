@@ -369,7 +369,7 @@ public sealed class GifExportEngineTests
             VideoEditDocument document = VideoEditDocument.CreateFor(160, 90, recording.DurationMs);
             string destination = Path.Combine(root, "mta.gif");
             Exception? failure = null;
-            var thread = new Thread(() =>
+            var thread = WpfTestThread.Create(() =>
             {
                 try
                 {
@@ -961,7 +961,7 @@ public sealed class GifExportEngineTests
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

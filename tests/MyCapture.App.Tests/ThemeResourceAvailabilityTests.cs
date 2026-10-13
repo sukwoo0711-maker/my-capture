@@ -517,31 +517,3 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
     {
     }
 }
-
-/// <summary>Runs WPF resource and visual assertions on a dedicated STA thread.</summary>
-internal static class StaTestHost
-{
-    public static void Run(Action action)
-    {
-        Exception? failure = null;
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                action();
-            }
-            catch (Exception ex)
-            {
-                failure = ex;
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-
-        if (failure is not null)
-        {
-            throw new Xunit.Sdk.XunitException($"STA body threw: {failure}");
-        }
-    }
-}
