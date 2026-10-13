@@ -113,6 +113,7 @@ public sealed class CaptureOverlayRenderingTests
     public void KeysBeforeTheSelectorHasFocus_ReachItThroughTheWindow_Once() => StaTestHost.Run(() =>
     {
         var window = new CaptureOverlayWindow(Frame(PixelFormats.Bgr32), false, true) { ShowActivated = false };
+        window.IsForeground = () => true;
         var view = Assert.IsType<CaptureOverlayView>(window.Content);
         int cursorReads = 0;
         view.ReadCursor = () => { cursorReads++; return new PointD(20, 30); };
@@ -141,6 +142,35 @@ public sealed class CaptureOverlayRenderingTests
             Assert.True(cancelled);
         }
         finally { window.Close(); }
+    });
+
+    [Fact]
+    public void Activation_AsksForTheForeground_OnlyWhileAnotherProgramHasIt() => StaTestHost.Run(() =>
+    {
+        var window = new CaptureOverlayWindow(Frame(PixelFormats.Bgr32), false, true) { ShowActivated = false };
+        int requests = 0;
+        bool foreground = false;
+        window.IsForeground = () => foreground;
+        // The test never takes the real foreground from whatever the user is doing.
+        window.TakeForeground = () => { };
+        try
+        {
+            window.Show();
+            // A re-entrant activation while the request is still being made asks only once.
+            window.TakeForeground = () => { requests++; ActivateNow(window); foreground = true; };
+            requests = 0;
+            foreground = false;
+            ActivateNow(window);
+            Assert.Equal(1, requests);
+            // Already in the foreground (an Alt+Tab back, the coordinator's own Activate): nothing to ask.
+            ActivateNow(window);
+            Assert.Equal(1, requests);
+        }
+        finally { window.Close(); }
+
+        static void ActivateNow(CaptureOverlayWindow window) => typeof(CaptureOverlayWindow)
+            .GetMethod("OnActivated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+                [typeof(object), typeof(EventArgs)])!.Invoke(window, [window, EventArgs.Empty]);
     });
 
     private static Window Host(CaptureOverlayView view) => new()

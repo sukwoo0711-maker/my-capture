@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -67,6 +68,8 @@ internal sealed class CaptureOverlayWindow : Window
         DpiChanged += OnDpiChanged;
         Deactivated += OnDeactivated;
         Activated += OnActivated;
+        IsForeground = () => GetForegroundWindow() == new WindowInteropHelper(this).Handle;
+        TakeForeground = () => _ = Activate();
     }
 
     private void ConfigureWindowChrome(RectD screenBounds)
@@ -305,7 +308,33 @@ internal sealed class CaptureOverlayWindow : Window
         _view.InitializePointer();
     }
 
-    private void OnActivated(object? sender, EventArgs e) => _view.InitializePointer();
+    /// <summary>
+    /// On the first capture after launch Windows activates the new window inside its own thread but
+    /// leaves the other program in the foreground until the coordinator activates it after
+    /// <see cref="Window.Show"/> returns, 30 to 60 ms later, and keys pressed meanwhile went to that
+    /// program. Asking for the foreground here, as the window becomes visible, closes that gap.
+    /// </summary>
+    private void OnActivated(object? sender, EventArgs e)
+    {
+        if (!_completed && IsVisible && !_takingForeground && !IsForeground())
+        {
+            _takingForeground = true;
+            try { TakeForeground(); }
+            finally { _takingForeground = false; }
+        }
+        _view.InitializePointer();
+    }
+
+    private bool _takingForeground;
+
+    /// <summary>Whether this window is the system foreground window; replaced in tests.</summary>
+    internal Func<bool> IsForeground { get; set; }
+
+    /// <summary>Brings this window to the foreground; replaced in tests.</summary>
+    internal Action TakeForeground { get; set; }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
 
     /// <summary>
     /// The selector takes keyboard focus in <see cref="OnContentRendered"/>, after its first frame:
