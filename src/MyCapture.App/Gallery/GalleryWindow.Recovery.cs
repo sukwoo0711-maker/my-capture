@@ -36,10 +36,9 @@ internal sealed partial class GalleryWindow
     private Func<Task>? _statusAction;
     private string? _statusActionText;
 
+    // The shared confirmation names the real outcome ("휴지통으로 이동") on a danger button.
     private bool ConfirmDeleteWithDialog(int count, bool entireLibrary) =>
-        ThemedDialog.Show(this, UiText.Format(entireLibrary ? "LibrarySelection_ClearConfirm" : "LibrarySelection_DeleteConfirm", count),
-            UiText.Get("LibrarySelection_Delete"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel)
-        == MessageBoxResult.OK;
+        LibraryPermanentDeletion.ConfirmRecycle(this, count, entireLibrary);
 
     private static void OpenRetentionSettingsInApp()
     {
