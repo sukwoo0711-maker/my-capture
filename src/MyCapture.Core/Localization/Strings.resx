@@ -3847,6 +3847,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorFlow_CancelHint" xml:space="preserve"><value>편집기 닫기</value></data>
   <data name="EditorFlow_Copied" xml:space="preserve"><value>클립보드에 복사됨</value></data>
   <data name="EditorFlow_CropHint" xml:space="preserve"><value>이미지 자르기와 회전</value></data>
+  <data name="EditorFlow_CopyText" xml:space="preserve"><value>텍스트 복사</value></data>
+  <data name="EditorFlow_CopyTextHint" xml:space="preserve"><value>편집한 이미지의 텍스트 인식</value></data>
   <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>자르기 적용</value></data>
   <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>자르기 취소</value></data>
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>편집 명령</value></data>

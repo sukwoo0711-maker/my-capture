@@ -108,6 +108,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     private Border _cropRotationHost = null!;
     private Button _deleteButton = null!;
     private Button _redactButton = null!;
+    private Button _copyTextButton = null!;
+    private bool _textRecognitionInProgress;
     private Slider _thicknessSlider = null!;
     private ComboBox _strokeStyleComboBox = null!;
     private Slider _fillTransparencySlider = null!;
@@ -1532,6 +1534,16 @@ internal sealed partial class AnnotationEditorControl : Grid
                 : UiText.Get("Text_39E626945336"));
         left.Children.Add(_redactButton);
 
+        // Text recognition of what the editor shows now, beside the other text-reading command.
+        _copyTextButton = TextButton(
+            UiText.Get("EditorFlow_CopyText"),
+            UiText.Get("EditorFlow_CopyTextHint"),
+            "Button.GhostCompact",
+            () => _ = RecognizeCurrentTextAsync());
+        AutomationProperties.SetAutomationId(_copyTextButton, "EditorFlowCopyText");
+        RefreshCopyTextAvailability();
+        left.Children.Add(_copyTextButton);
+
         var right = CommandRow();
         Button save = BuildSaveOverflowMenu();
         Button copy = IconTextButton(
@@ -1560,6 +1572,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         CommandButton(cancel, borderless: true);
+        CommandButton(_copyTextButton, borderless: true);
         var panel = new CommandGroupsPanel { Children = { left, right } };
         AutomationProperties.SetName(panel, UiText.Get("EditorFlow_CommandBarName"));
         return panel;
@@ -3115,6 +3128,48 @@ internal sealed partial class AnnotationEditorControl : Grid
             _redactionInProgress = false;
             _redactButton.IsEnabled = _privacyRedactionService.IsAvailable;
         }
+    }
+
+    /// <summary>
+    /// Recognises the text in the image as edited so far (marks, covers, crop and rotation
+    /// included) and opens it in the shared text recognition window.
+    /// </summary>
+    internal async Task RecognizeCurrentTextAsync()
+    {
+        if (_textRecognitionInProgress || _commitInProgress || _completed) return;
+        if (!TextRecognitionRoute.CanShow || TextRecognitionRoute.Show is not { } show)
+        {
+            SetStatus(UiText.Get("TextCapture_Unavailable"));
+            RefreshCopyTextAvailability();
+            return;
+        }
+
+        CommitActiveText();
+        _textRecognitionInProgress = true;
+        _copyTextButton.IsEnabled = false;
+        try
+        {
+            BitmapSource image = await RenderCurrentImageAsync();
+            if (_completed) return;
+            show(image, string.IsNullOrWhiteSpace(_sourceWindowTitle) ? UiText.Get("EditorFlow_CopyText") : _sourceWindowTitle);
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            SetStatus(UiText.Get("TextCapture_Failed"));
+        }
+        finally
+        {
+            _textRecognitionInProgress = false;
+            RefreshCopyTextAvailability();
+        }
+    }
+
+    private void RefreshCopyTextAvailability()
+    {
+        bool available = TextRecognitionRoute.CanShow;
+        _copyTextButton.IsEnabled = available && !_textRecognitionInProgress;
+        AutomationProperties.SetHelpText(_copyTextButton,
+            UiText.Get(available ? "EditorFlow_CopyTextHint" : "TextCapture_Unavailable"));
     }
 
     private void RaiseStatusAutomationEvent()

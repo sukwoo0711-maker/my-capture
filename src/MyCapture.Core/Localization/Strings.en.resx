@@ -3847,6 +3847,8 @@ Delete {1} subfolders, {2} images and {3} videos.</value></data>
   <data name="EditorFlow_CancelHint" xml:space="preserve"><value>Close the editor</value></data>
   <data name="EditorFlow_Copied" xml:space="preserve"><value>Copied to clipboard</value></data>
   <data name="EditorFlow_CropHint" xml:space="preserve"><value>Crop and rotate the image</value></data>
+  <data name="EditorFlow_CopyText" xml:space="preserve"><value>Copy text</value></data>
+  <data name="EditorFlow_CopyTextHint" xml:space="preserve"><value>Recognize the text in the edited image</value></data>
   <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>Apply the crop</value></data>
   <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>Cancel the crop</value></data>
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>Editing commands</value></data>

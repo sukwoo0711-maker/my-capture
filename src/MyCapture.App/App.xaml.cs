@@ -249,6 +249,10 @@ public partial class App : Application
             Dispatcher,
             SetOcrBusy,
             _services.GetRequiredService<ILogger<OcrResultPresenter>>());
+        // The editor's text command recognises its current image in the shared result window.
+        TextRecognitionRoute.IsAvailable = () => _ocrService?.IsAvailable == true;
+        TextRecognitionRoute.Show = (image, context) => _ocrPresenter?.ShowRecognized(
+            () => OcrRequestFactory.FromBitmap(image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings()), context);
         _privacyRedactionService = new PrivacyRedactionService(
             _ocrService,
             new PrivacyDetector(),
@@ -2219,6 +2223,8 @@ public partial class App : Application
         ShortcutPresentation.ReadEnabled = null;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = null;
         AnnotationEditorPreferences.Write = null;
+        TextRecognitionRoute.Show = null;
+        TextRecognitionRoute.IsAvailable = null;
         _shellPresenter?.Dispose();
         // Invalidate pending frame acquisition before tearing down tray/persistence services.
         // Native capture cannot be interrupted, but its late result must never open a window.
