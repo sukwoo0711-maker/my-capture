@@ -107,10 +107,10 @@ public sealed record VideoEncoderOptions(
 
     /// <summary>
     /// Converts RGB input to full-range (0–255) Y'CbCr and declares that range in the stream,
-    /// instead of the studio range (16–235) recordings use. WPF's MediaElement shows decoded
-    /// samples without expanding studio range, so studio-range video looks washed out in it
-    /// (white at 235, black at 16); the feature tutorial clips, which only the app's own player
-    /// shows, use full range. Has no effect on NV12 input.
+    /// instead of the studio range (16–235) recordings use. WPF's MediaElement presents studio
+    /// range as studio-range RGB (white at 235, black at 16): the recording players expand it
+    /// back on the GPU, while the feature tutorial clips, which only the tutorial player shows,
+    /// are encoded full range instead. Has no effect on NV12 input.
     /// </summary>
     public bool FullRange { get; init; }
 

@@ -57,3 +57,10 @@ public enum DecodedVideoPixelFormat
 
 /// <summary>Y'CbCr matrix and range a decoded NV12 stream declares (or the decoder assumes).</summary>
 public readonly record struct VideoYuvEncoding(bool Bt709, bool FullRange);
+
+/// <summary>
+/// What a player needs to know about a clip before it presents it: the exact container duration
+/// (0 when none is advertised) and whether the video is studio range (16–235), which WPF's
+/// MediaElement presents without expanding to full range.
+/// </summary>
+public readonly record struct VideoSourceInfo(double DurationMs, bool StudioRange);

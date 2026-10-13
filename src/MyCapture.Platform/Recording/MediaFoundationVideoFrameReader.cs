@@ -224,6 +224,76 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
     }
 
     /// <summary>
+    /// Reads the container duration and the nominal Y'CbCr range of the first video stream. The
+    /// range comes from the container's declaration, or else from the decoder's output type (the
+    /// H.264 sequence header's full-range flag), which needs the decoder but no decoded sample.
+    /// A stream that declares nothing is studio range, the H.264 default and what recordings use.
+    /// </summary>
+    public static VideoSourceInfo ReadSourceInfo(string sourcePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        string fullPath = Path.GetFullPath(sourcePath);
+        // Same contract as the constructor: the caller selected this exact local file.
+        // codeql[cs/path-injection]
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("The source video is unavailable.", fullPath);
+        }
+
+        Check(MFStartup(MfVersion, MfStartupFull), nameof(MFStartup));
+        IMFSourceReader? reader = null;
+        try
+        {
+            Check(MFCreateSourceReaderFromURL(fullPath, null, out reader), nameof(MFCreateSourceReaderFromURL));
+            double durationMs = ReadDurationMs(reader);
+            Check(reader.SetStreamSelection(AllStreams, false), "IMFSourceReader.SetStreamSelection(all)");
+            Check(reader.SetStreamSelection(FirstVideoStream, true), "IMFSourceReader.SetStreamSelection(video)");
+            uint? declared = ReadNominalRange(reader, native: true);
+            if (declared is null && TrySetOutputSubtype(reader, VideoFormatNv12) >= 0)
+            {
+                declared = ReadNominalRange(reader, native: false);
+            }
+
+            return new VideoSourceInfo(durationMs, declared != NominalRangeFull);
+        }
+        finally
+        {
+            if (reader is not null)
+            {
+                Marshal.ReleaseComObject(reader);
+            }
+
+            _ = MFShutdown();
+        }
+    }
+
+    /// <summary>The declared <c>MF_MT_VIDEO_NOMINAL_RANGE</c>, or null when it is absent or unknown.</summary>
+    private static uint? ReadNominalRange(IMFSourceReader reader, bool native)
+    {
+        IMFMediaType? type = null;
+        try
+        {
+            int result = native
+                ? reader.GetNativeMediaType(FirstVideoStream, 0, out type)
+                : reader.GetCurrentMediaType(FirstVideoStream, out type);
+            if (result < 0 || type is null)
+            {
+                return null;
+            }
+
+            Guid rangeKey = MediaTypeNominalRange;
+            return type.GetUINT32(ref rangeKey, out uint range) >= 0 && range != 0 ? range : null;
+        }
+        finally
+        {
+            if (type is not null)
+            {
+                Marshal.ReleaseComObject(type);
+            }
+        }
+    }
+
+    /// <summary>
     /// Returns the frame presented at <paramref name="sourceTimeMs"/>. The reader retains at most
     /// one previous frame and one decoded look-ahead frame, so long exports stay memory bounded.
     /// </summary>

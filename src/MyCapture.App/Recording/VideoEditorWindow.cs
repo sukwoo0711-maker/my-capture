@@ -110,7 +110,7 @@ internal sealed partial class VideoEditorWindow : Window
     private DispatcherTimer? _openTimeoutTimer;
     private readonly DispatcherTimer _playbackTimer;
     private CancellationTokenSource? _operationCts;
-    private Task<double>? _containerDuration;
+    private Task<VideoSourceInfo>? _sourceInfo;
 
     private double _durationMs;
     private bool _mediaReady;
@@ -138,6 +138,11 @@ internal sealed partial class VideoEditorWindow : Window
     internal TwoLineTimeline TimelineForTest => _timeline;
 
     internal PreviewSeekCoordinator PreviewSeekCoordinatorForTest => _previewSeeks;
+
+    internal MediaElement MediaForTest => _media;
+
+    /// <summary>The frame the preview shows, as a frame edit captures it.</summary>
+    internal BitmapSource? RenderCurrentFrameForTest() => TryRenderCurrentFrame();
 
     internal int ControlRowCountForTest => _controlRows.RowDefinitions.Count;
 
@@ -204,6 +209,8 @@ internal sealed partial class VideoEditorWindow : Window
             ScrubbingEnabled = true,
             Stretch = Stretch.Uniform,
         };
+        // Recordings are studio range; the source probe removes the expansion for a full-range clip.
+        StudioRangeVideoEffect.Apply(_media, studioRange: true);
         _media.MediaOpened += OnMediaOpened;
         _media.MediaFailed += OnMediaFailed;
         _media.MediaEnded += OnMediaEnded;
@@ -442,7 +449,7 @@ internal sealed partial class VideoEditorWindow : Window
         // never raise MediaOpened for a short clip — the reported "2s video won't load" case.
         // The exact container duration is read in parallel: MediaElement's NaturalDuration
         // comes from Windows Media Player and is truncated to whole seconds.
-        _containerDuration = VideoDurationProbe.ReadContainerDurationAsync(_recording.OutputPath, _log);
+        _sourceInfo = VideoSourceProbe.ReadAsync(_recording.OutputPath, _log);
         try
         {
             _media.Source = new Uri(_recording.OutputPath, UriKind.Absolute);
@@ -494,7 +501,7 @@ internal sealed partial class VideoEditorWindow : Window
             if (!_mediaReady && !_mediaFailed)
             {
                 _log.LogWarning("MediaOpened did not fire within 5s; opening with the container or recorded duration");
-                double containerMs = _containerDuration is { IsCompletedSuccessfully: true } probe ? probe.Result : 0;
+                double containerMs = _sourceInfo is { IsCompletedSuccessfully: true } probe ? probe.Result.DurationMs : 0;
                 CompleteOpen(VideoDurationResolver.Resolve(containerMs, null, _recording.DurationMs), fromFallback: true);
             }
         };
@@ -1334,11 +1341,14 @@ internal sealed partial class VideoEditorWindow : Window
             ? _media.NaturalDuration.TimeSpan.TotalMilliseconds
             : null;
         // The probe never faults and normally finishes before MediaOpened.
-        double containerMs = _containerDuration is null ? 0 : await _containerDuration;
+        VideoSourceInfo source = _sourceInfo is null ? new VideoSourceInfo(0, StudioRange: true) : await _sourceInfo;
         if (_closing)
         {
             return;
         }
+
+        StudioRangeVideoEffect.Apply(_media, source.StudioRange);
+        double containerMs = source.DurationMs;
 
         double durationMs = VideoDurationResolver.Resolve(containerMs, playerMs, _recording.DurationMs);
         _log.LogDebug(
