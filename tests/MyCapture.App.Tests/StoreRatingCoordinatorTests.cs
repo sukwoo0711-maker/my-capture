@@ -28,6 +28,7 @@ public sealed class StoreRatingCoordinatorTests
         public readonly StoreRatingTestClock Clock = new(Start.AddDays(4));
         public readonly List<string> Events = [];
         public bool Busy;
+        public bool Active = true;
         public Func<Task<string>> Request = () => Task.FromResult("Succeeded");
 
         public StoreRatingCoordinator Create(bool isPackaged = true) => new(
@@ -38,7 +39,7 @@ public sealed class StoreRatingCoordinatorTests
             new Requester(this),
             NullLogger.Instance,
             isPackaged,
-            Clock);
+            Clock, () => Active, () => Events.Add("invite"));
 
         public int Requests => Events.Count(e => e == "request");
 
@@ -72,7 +73,7 @@ public sealed class StoreRatingCoordinatorTests
     }
 
     [Fact]
-    public void StoreRating_TenthSuccessArmsAndTheIdleFlowEndAsksExactlyOnce()
+    public void StoreRating_TenthSuccessOffersOnReturnAndExplicitReviewAsksExactlyOnce()
     {
         StaTestHost.Run(() =>
         {
@@ -91,12 +92,15 @@ public sealed class StoreRatingCoordinatorTests
 
             // An overlay, editor, recording or card on screen defers it to the next flow end.
             harness.Busy = true;
-            Assert.False(coordinator.TryRequestNow());
+            Assert.False(coordinator.NotifyUserReturned());
             Assert.True(coordinator.IsPending);
             Assert.Equal(0, harness.Requests);
 
             harness.Busy = false;
             Assert.True(coordinator.TryRequestNow());
+            Assert.Equal(0, harness.Requests);
+            Assert.Equal(1, harness.Events.Count(e => e == "invite"));
+            Assert.True(coordinator.AcceptInvitation());
             Assert.Equal(1, harness.Requests);
             Assert.Equal(harness.Clock.Now, harness.Settings.StoreRating.RequestAttemptedUtc);
             // The attempt is persisted before the dialog is requested.
@@ -143,7 +147,8 @@ public sealed class StoreRatingCoordinatorTests
 
         coordinator.RecordCapture(succeeded: true);
         Assert.True(coordinator.IsPending);
-        Assert.True(coordinator.TryRequestNow());
+        Assert.True(coordinator.NotifyUserReturned());
+        Assert.True(coordinator.AcceptInvitation());
         Assert.Equal(1, harness.Requests);
     }
 
@@ -153,13 +158,49 @@ public sealed class StoreRatingCoordinatorTests
         var harness = new Harness { Request = () => Task.FromException<string>(new InvalidOperationException("Store unavailable")) };
         StoreRatingCoordinator coordinator = harness.Create();
         Succeed(coordinator, 10);
-        Assert.True(coordinator.TryRequestNow());
+        Assert.True(coordinator.NotifyUserReturned());
+        Assert.True(coordinator.AcceptInvitation());
         await coordinator.LastRequest!;
         Assert.NotNull(harness.Settings.StoreRating.RequestAttemptedUtc);
 
         Succeed(coordinator, 3);
         Assert.False(coordinator.TryRequestNow());
         Assert.Equal(1, harness.Requests);
+    }
+
+    [Fact]
+    public void StoreRating_FlowEndAndOtherAppFocusNeverShowNativeUiOrInvitation() => StaTestHost.Run(() =>
+    {
+        var harness = new Harness();
+        StoreRatingCoordinator coordinator = harness.Create();
+        Succeed(coordinator, 10);
+        coordinator.NotifyFlowEnded();
+        Assert.False(coordinator.TryRequestNow());
+        harness.Active = false;
+        Assert.False(coordinator.NotifyUserReturned());
+        Assert.False(coordinator.AcceptInvitation());
+        Assert.DoesNotContain("invite", harness.Events);
+        Assert.Equal(0, harness.Requests);
+        harness.Active = true;
+        Assert.True(coordinator.NotifyUserReturned());
+        Assert.Equal(0, harness.Requests);
+        Assert.NotNull(harness.Settings.StoreRating.InvitationShownUtc);
+        harness.Clock.Now = harness.Clock.Now.AddYears(1);
+        Succeed(coordinator, 20);
+        Assert.False(harness.Create().NotifyUserReturned());
+        Assert.Equal(1, harness.Events.Count(e => e == "invite"));
+    });
+
+    [Fact]
+    public void StoreRating_FailureAfterInvitationPreventsChosenNativeRequest()
+    {
+        var harness = new Harness();
+        StoreRatingCoordinator coordinator = harness.Create();
+        Succeed(coordinator, 10);
+        Assert.True(coordinator.NotifyUserReturned());
+        coordinator.RecordCapture(false);
+        Assert.False(coordinator.AcceptInvitation());
+        Assert.Equal(0, harness.Requests);
     }
 
     [Fact]
@@ -251,12 +292,14 @@ public sealed class StoreRatingAndPrtScGuideApplyTests : KoreanCaptionTest
             DateTimeOffset attempted = new(2026, 10, 9, 0, 0, 0, TimeSpan.Zero);
             live().StoreRating.SuccessfulCaptureCount = 8;
             live().StoreRating.RequestAttemptedUtc = attempted;
+            live().StoreUpdate.CompletionNoticeVersion = "4.1.2.0";
 
             SettingsApplyResult result = apply.Apply(draft.ToAppSettings());
             Assert.True(result.Saved);
             Assert.Equal(450, live().Queue.MaxItems);
             Assert.Equal(8, live().StoreRating.SuccessfulCaptureCount);
             Assert.Equal(attempted, live().StoreRating.RequestAttemptedUtc);
+            Assert.Equal("4.1.2.0", store.Load().StoreUpdate.CompletionNoticeVersion);
             StoreRatingState persisted = store.Load().StoreRating;
             Assert.Equal(8, persisted.SuccessfulCaptureCount);
             Assert.Equal(attempted, persisted.RequestAttemptedUtc);

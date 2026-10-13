@@ -33,8 +33,15 @@ public sealed class WindowSourceService
 
     public WindowSourceService() : this(new SourceAppResolver(), new ExplorerFolderService()) { }
 
-    internal WindowSourceService(SourceAppResolver apps, ExplorerFolderService folders)
-        : this(CreateAppReader(apps ?? throw new ArgumentNullException(nameof(apps))),
+    /// <param name="waitForBusyProbe">
+    /// Wait, within each read's own deadline, for a probe that still owns its provider (the previous
+    /// capture's) instead of returning nothing at once. For readers nothing on screen waits for.
+    /// </param>
+    public WindowSourceService(bool waitForBusyProbe)
+        : this(new SourceAppResolver(), new ExplorerFolderService(waitForBusyProbe), waitForBusyProbe) { }
+
+    internal WindowSourceService(SourceAppResolver apps, ExplorerFolderService folders, bool waitForBusyProbe = false)
+        : this(CreateAppReader(apps ?? throw new ArgumentNullException(nameof(apps)), waitForBusyProbe),
             (folders ?? throw new ArgumentNullException(nameof(folders))).ReadAsync) { }
 
     internal WindowSourceService(
@@ -112,9 +119,10 @@ public sealed class WindowSourceService
     }
 
     private static Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, AppObservation>>> CreateAppReader(
-        SourceAppResolver apps)
+        SourceAppResolver apps, bool waitForBusyProbe)
     {
-        var probe = new BoundedNativeProbe(SharedAppGate, AppBudget, ApartmentState.MTA, "MyCapture source application");
+        var probe = new BoundedNativeProbe(SharedAppGate, AppBudget, ApartmentState.MTA, "MyCapture source application",
+            waitForBusyProbe);
         return candidates => probe.RunAsync(cancellation =>
         {
             var result = new Dictionary<IntPtr, AppObservation>();

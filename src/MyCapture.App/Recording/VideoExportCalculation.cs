@@ -111,6 +111,10 @@ internal sealed class VideoExportCalculation : IDisposable
         if (!string.Equals(Path.GetExtension(selected), _extension, StringComparison.OrdinalIgnoreCase))
             throw new IOException(UiText.Format("MediaExport_Extension", _extension));
         string parent = Path.GetDirectoryName(selected) ?? throw new IOException("Missing export directory.");
+        // Resolve a user-selected junction before creating the owned sibling, so the
+        // staged copy and its cleanup always address the real directory.
+        parent = ResolveExportDirectory(parent);
+        selected = Path.Combine(parent, Path.GetFileName(selected));
         // Hold the immutable source against writes/deletion until the atomic commit is
         // finished. Windows applies this sharing contract to the file itself, so an
         // alternate path through a directory junction or hard link cannot replace it.
@@ -155,12 +159,28 @@ internal sealed class VideoExportCalculation : IDisposable
         }
         finally
         {
+            // The staged sibling is this export's own partial copy, never the user's file.
             if (File.Exists(temporary)) File.Delete(temporary);
         }
     }
 
+    private static string ResolveExportDirectory(string parent)
+    {
+        string fullPath = Path.GetFullPath(parent);
+        string resolved = Path.GetPathRoot(fullPath) ?? throw new IOException("Missing export root.");
+        foreach (string segment in fullPath[resolved.Length..].Split(
+                     [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var directory = new DirectoryInfo(Path.Combine(resolved, segment));
+            resolved = directory.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? directory.FullName;
+        }
+        if (!Directory.Exists(resolved)) throw new DirectoryNotFoundException("The export directory does not exist.");
+        return MyCapture.Core.Storage.ValidatedFilePaths.DirectoryRoot(resolved);
+    }
+
     public void Dispose()
     {
+        // Size-calculation renders are app-owned scratch files: delete them, do not recycle.
         try
         {
             File.Delete(OwnedPath("standard"));

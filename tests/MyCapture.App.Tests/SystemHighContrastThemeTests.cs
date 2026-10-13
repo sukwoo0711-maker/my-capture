@@ -57,6 +57,9 @@ public sealed class SystemHighContrastThemeTests
 
         Assert.Equal(NightSky[SystemColorRole.GrayText], Brush(resources, "Text.Disabled").Color);
         Assert.Equal(NightSky[SystemColorRole.Highlight], Brush(resources, "Border.Hover").Color);
+        // The folder card's hover edge takes Highlight and its wash, which would dim that edge, turns clear.
+        Assert.Equal(NightSky[SystemColorRole.Highlight], Brush(resources, "Border.FolderHover").Color);
+        Assert.Equal(0, Brush(resources, "Surface.FolderHoverWash").Color.A);
         Assert.Equal(new Thickness(2), (Thickness)resources["Focus.RingThickness"]);
         Assert.Equal(2d, (double)resources["Focus.RingWidth"]);
         Assert.Equal(0, Assert.IsType<DropShadowEffect>(consumer.Effect).Opacity);
@@ -72,6 +75,9 @@ public sealed class SystemHighContrastThemeTests
         foreach ((string key, ThemeColor color) in ThemeCatalog.ColorsFor(theme))
             Assert.Equal(ToColor(color), Brush(resources, key).Color);
         Assert.Equal(0, Brush(resources, "Border.Hover").Color.A);
+        // App palettes alias the very Accent.Folder and Surface.Hover brushes, so the card looks as before.
+        Assert.Same(resources["Accent.Folder"], resources["Border.FolderHover"]);
+        Assert.Same(resources["Surface.Hover"], resources["Surface.FolderHoverWash"]);
         bool appContrast = theme == AppTheme.HighContrast;
         Assert.Equal(new Thickness(appContrast ? 2 : 1), (Thickness)resources["Focus.RingThickness"]);
         Assert.Equal(ToColor(ThemeCatalog.ColorsFor(theme)["Surface.Raised"]), ((SolidColorBrush)consumer.Background).Color);
@@ -86,6 +92,8 @@ public sealed class SystemHighContrastThemeTests
         Color inline = (Color)ColorConverter.ConvertFromString(WorkspaceTheme.WorkspaceOverrides(WorkspaceRole.Gallery)["Surface.Base"]);
         Assert.Equal(inline, Brush(gallery, "Surface.Base").Color);
         Assert.Equal((Color)ColorConverter.ConvertFromString("#7a8d86"), Brush(gallery, "Border.Control").Color);
+        // The workspace's own Surface.Hover replaces the palette's; the folder card's wash follows it.
+        Assert.Same(gallery["Surface.Hover"], gallery["Surface.FolderHoverWash"]);
 
         WorkspaceTheme.Apply(gallery, WorkspaceRole.Gallery, AppTheme.Workspace, systemHighContrast: true);
         Assert.Equal(NightSky[SystemColorRole.Window], Brush(gallery, "Surface.Base").Color);

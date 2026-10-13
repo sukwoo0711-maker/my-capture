@@ -29,8 +29,8 @@ internal sealed class GalleryFolderEditDialog : Window
         content.Children.Add(new TextBlock { Text = UiText.Get(labelKey), Margin = new Thickness(0, 0, 0, 8) });
         AutomationProperties.SetName(input, UiText.Get(labelKey));
         content.Children.Add(input);
-        if (hintKey is not null) content.Children.Add(new TextBlock { Text = UiText.Get(hintKey),
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) });
+        if (hintKey is not null) content.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 10, 0, 0) }, UiText.Get(hintKey)));
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) };
         AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Polite);
         content.Children.Add(error);
@@ -106,16 +106,15 @@ internal sealed class GalleryFolderDeletionDialog : Window
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var content = new StackPanel { Margin = new Thickness(24) };
-        content.Children.Add(new TextBlock { Text = UiText.Format("Folder410.DeleteConfirm", name,
-            preview.SubfolderCount, preview.ImageCount, preview.VideoCount), TextWrapping = TextWrapping.Wrap });
-        if (isDate) content.Children.Add(new TextBlock { Text = UiText.Get("Folder410.DeleteDateIncludes"),
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) });
-        content.Children.Add(new TextBlock { Text = UiText.Get("Folder410.DeleteIrreversible"),
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) });
+        content.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, UiText.Format("Folder410.DeleteConfirm", name,
+            preview.SubfolderCount, preview.ImageCount, preview.VideoCount)));
+        if (isDate) content.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) },
+            UiText.Get("Folder410.DeleteDateIncludes")));
+        content.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) },
+            UiText.Get("Folder410.DeleteIrreversible")));
         // Delete comes first like any confirming action, but Enter and Esc both cancel: a
         // destructive command is never the default. As in ThemedDialog, the default carries the fill.
-        DeleteButton = ThemedDialog.CreateActionButton(UiText.Get("Folder410.Delete"), primary: false);
-        DeleteButton.SetResourceReference(ForegroundProperty, "State.DangerHover");
+        DeleteButton = ThemedDialog.CreateDangerButton(UiText.Get("Folder410.Delete"));
         DeleteButton.Click += (_, _) => DialogResult = true;
         CancelButton = ThemedDialog.CreateActionButton(UiText.Get("Library.Action.Cancel"), primary: true);
         CancelButton.IsCancel = true;

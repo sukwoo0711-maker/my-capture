@@ -29,7 +29,7 @@ public sealed class MediaFoundationEncodeRoundTripTests
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try { action(); }
             catch (Exception ex) { failure = ex; }
@@ -141,6 +141,57 @@ public sealed class MediaFoundationEncodeRoundTripTests
             Assert.True(TopLeftR > 150, $"top-left not bright (R={TopLeftR}) — frame may be blank/failed");
             Assert.True(TopLeftR > BottomLeftR + 40, $"vertical FLIP detected: top-left R={TopLeftR} vs bottom-left R={BottomLeftR}");
             Assert.True(TopLeftR > TopRightR + 40, $"horizontal MIRROR detected: top-left R={TopLeftR} vs top-right R={TopRightR}");
+        }
+        finally
+        {
+            try { TestRecycleBin.DeleteDirectory(dir, recursive: true); } catch (IOException) { }
+        }
+    });
+
+    [Theory]
+    [InlineData(false, 235, 16)]
+    [InlineData(true, 255, 0)]
+    public void FullRangeOptionStoresFullRangeLumaThatWpfShowsAsTrueWhiteAndBlack(bool fullRange, int whiteLuma, int blackLuma) => RunSta(() =>
+    {
+        // Left half white, right half black.
+        const int width = 160, height = 120, fps = 15, frames = 15;
+        string dir = TestRecycleBin.CreateTempSubdirectory("mc-range-").FullName;
+        string path = Path.Combine(dir, "range.mp4");
+        try
+        {
+            int stride = width * 4;
+            byte[] frame = new byte[stride * height];
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    int p = y * stride + x * 4;
+                    byte level = x < width / 2 ? (byte)255 : (byte)0;
+                    frame[p] = frame[p + 1] = frame[p + 2] = level;
+                    frame[p + 3] = 255;
+                }
+            var options = new VideoEncoderOptions(path, width, height, fps, VideoEncoderOptions.DeriveBitrate(width, height, fps)) { FullRange = fullRange };
+            using (var encoder = new MediaFoundationVideoEncoder(options, NullLogger.Instance))
+            {
+                for (int i = 0; i < frames; i++) encoder.WriteFrame(new EncoderFrame(frame, width, height, stride, i * 1000.0 / fps));
+                encoder.Complete();
+            }
+
+            // The stored samples: full range reaches 0 and 255, studio range stops at 16 and 235.
+            using (var reader = new MediaFoundationVideoFrameReader(path, new MediaFoundationVideoFrameReaderOptions { OutputFormat = DecodedVideoPixelFormat.Nv12 }))
+            {
+                DecodedVideoFrame decoded = reader.ReadFrameAt(0);
+                Assert.InRange(decoded.Pixels[height / 2 * decoded.Stride + width / 4], whiteLuma - 3, whiteLuma + 3);
+                Assert.InRange(decoded.Pixels[height / 2 * decoded.Stride + width * 3 / 4], Math.Max(0, blackLuma - 3), blackLuma + 3);
+            }
+
+            // WPF's player shows the samples without expanding studio range, so only full range
+            // reaches true white and black there.
+            if (fullRange)
+            {
+                BitmapSource shown = RenderMiddleFrame(path, width, height) ?? throw new Xunit.Sdk.XunitException("WPF could not open the clip");
+                Assert.True(SampleR(shown, width / 4, height / 2) >= 248, $"white shows as {SampleR(shown, width / 4, height / 2)}");
+                Assert.True(SampleR(shown, width * 3 / 4, height / 2) <= 8, $"black shows as {SampleR(shown, width * 3 / 4, height / 2)}");
+            }
         }
         finally
         {

@@ -138,6 +138,118 @@ public sealed class CaptureSourceFlowTests
     });
 
     [Theory]
+    [InlineData("clicked")]
+    [InlineData("drag")]
+    public void SelectionMadeBeforeSourceDetailsAreReadCompletesAtOnceAndResolvesTheSameWindowLater(string how) =>
+        StaTestHost.Run(() =>
+    {
+        var page = new WindowCandidate(new IntPtr(21), new RectD(0, 0, 640, 360), "Docs", ProcessId: 42,
+            ClassName: "Chrome_WidgetWin_1");
+        var behind = new WindowCandidate(new IntPtr(22), new RectD(0, 0, 640, 360), "Behind", ProcessId: 43,
+            ClassName: "CabinetWClass");
+        var overlay = new CaptureOverlayWindow(WindowDetectOverlayTests.Frame(), abortOnFocusLoss: false)
+        { SourceWindows = [page, behind] };
+        var selections = new List<CaptureSelectionCompletedEventArgs>();
+        overlay.SelectionCompleted += (_, e) => selections.Add(e);
+        var reading = new TaskCompletionSource<IReadOnlyList<WindowCandidate>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        overlay.AwaitSourceDetails(reading.Task);
+        Assert.True(overlay.SourceDetailsPendingForTest);
+
+        overlay.CompleteSelection(new RectD(20, 20, 200, 120), how == "clicked" ? page : null, textCapture: false);
+        // Nothing waits for the read: the selection is handed on with its hotkey-time title.
+        CaptureSelectionCompletedEventArgs selection = Assert.Single(selections);
+        Assert.Equal(new RectD(20, 20, 200, 120), selection.BitmapRegion);
+        Assert.Equal("Docs", selection.SourceTitle);
+        Assert.Empty(selection.SourcePageUrl);
+        Assert.True(selection.SourceDetails.IsEmpty);
+        Task<CaptureSelectionSource> pending = Assert.IsAssignableFrom<Task<CaptureSelectionSource>>(selection.PendingSource);
+        Assert.False(pending.IsCompleted);
+
+        reading.SetResult([
+            page with
+            {
+                SourcePageUrl = "https://example.com/doc",
+                Source = new CaptureSourceDetails("Microsoft Edge", @"C:\Edge\msedge.exe"),
+            },
+            behind with { Source = new CaptureSourceDetails("Windows 탐색기", ExplorerPath, Folder) },
+        ]);
+        CaptureSelectionSource late = pending.GetAwaiter().GetResult();
+        // Exactly what an immediate selection over the confirmed list stores: the front window's details.
+        Assert.Equal(new CaptureSelectionSource("Docs", "https://example.com/doc",
+            new CaptureSourceDetails("Microsoft Edge", @"C:\Edge\msedge.exe")), late);
+    });
+
+    [Fact]
+    public void SourceDetailsThatArriveWhileTheSelectorIsOpenReachLaterSelectionsDirectly() => StaTestHost.Run(() =>
+    {
+        var page = new WindowCandidate(new IntPtr(21), new RectD(0, 0, 640, 360), "Docs", ProcessId: 42);
+        var overlay = new CaptureOverlayWindow(WindowDetectOverlayTests.Frame(), abortOnFocusLoss: false)
+        { SourceWindows = [page] };
+        var selections = new List<CaptureSelectionCompletedEventArgs>();
+        overlay.SelectionCompleted += (_, e) => selections.Add(e);
+        var reading = new TaskCompletionSource<IReadOnlyList<WindowCandidate>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        overlay.AwaitSourceDetails(reading.Task);
+        reading.SetResult([page with { SourcePageUrl = "https://example.com/doc" }]);
+        PumpUntil(() => !overlay.SourceDetailsPendingForTest);
+
+        Assert.Equal("https://example.com/doc", Assert.Single(overlay.SourceWindows).SourcePageUrl);
+        overlay.CompleteSelection(new RectD(20, 20, 200, 120));
+        CaptureSelectionCompletedEventArgs selection = Assert.Single(selections);
+        Assert.Equal("https://example.com/doc", selection.SourcePageUrl);
+        Assert.Null(selection.PendingSource);
+    });
+
+    [Fact]
+    public void ClosingWhileSourceDetailsArePendingIgnoresTheLateRead() => StaTestHost.Run(() =>
+    {
+        var overlay = new CaptureOverlayWindow(WindowDetectOverlayTests.Frame(), abortOnFocusLoss: false);
+        int completed = 0;
+        overlay.SelectionCompleted += (_, _) => completed++;
+        var reading = new TaskCompletionSource<IReadOnlyList<WindowCandidate>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        overlay.AwaitSourceDetails(reading.Task);
+        overlay.Close();
+        reading.SetResult([new WindowCandidate(new IntPtr(21), new RectD(0, 0, 64, 64), "Docs", "https://example.com/")]);
+        PumpUntil(() => true);
+        Assert.Equal(0, completed);
+        Assert.Empty(overlay.SourceWindows);
+    });
+
+    [Fact]
+    public void AlreadyReadSourceDetailsAndTextCaptureCarryNoPendingSource() => StaTestHost.Run(() =>
+    {
+        var page = new WindowCandidate(new IntPtr(21), new RectD(0, 0, 640, 360), "Docs", "https://example.com/doc", 42);
+        var selections = new List<CaptureSelectionCompletedEventArgs>();
+        var ready = new CaptureOverlayWindow(WindowDetectOverlayTests.Frame(), abortOnFocusLoss: false);
+        ready.SelectionCompleted += (_, e) => selections.Add(e);
+        ready.AwaitSourceDetails(Task.FromResult<IReadOnlyList<WindowCandidate>>([page]));
+        Assert.False(ready.SourceDetailsPendingForTest);
+        ready.CompleteSelection(new RectD(4, 4, 32, 24));
+        Assert.Equal("https://example.com/doc", selections[^1].SourcePageUrl);
+        Assert.Null(selections[^1].PendingSource);
+
+        var text = new CaptureOverlayWindow(WindowDetectOverlayTests.Frame(), abortOnFocusLoss: false) { SourceWindows = [page] };
+        text.SelectionCompleted += (_, e) => selections.Add(e);
+        text.AwaitSourceDetails(new TaskCompletionSource<IReadOnlyList<WindowCandidate>>().Task);
+        text.CompleteSelection(new RectD(4, 4, 32, 24), null, textCapture: true);
+        Assert.True(selections[^1].TextCapture);
+        Assert.Null(selections[^1].PendingSource);
+    });
+
+    private static void PumpUntil(Func<bool> condition)
+    {
+        var timeout = System.Diagnostics.Stopwatch.StartNew();
+        do
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            _ = System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Background, new Action(() => frame.Continue = false));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+            if (timeout.Elapsed > TimeSpan.FromSeconds(5)) throw new TimeoutException("The overlay did not settle.");
+        }
+        while (!condition());
+    }
+
+    [Theory]
     [InlineData("window")]
     [InlineData("fixed")]
     [InlineData("repeat")]

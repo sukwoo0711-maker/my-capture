@@ -136,6 +136,15 @@ public sealed class VideoExportCalculationTests
             result.SaveCopy(Path.Combine(link, "export.mp4"), source, CancellationToken.None);
             Assert.Equal(new byte[] { 1, 2, 3, 4 }, File.ReadAllBytes(Path.Combine(folder, "export.mp4")));
             Assert.Equal(new byte[] { 7, 8, 9 }, File.ReadAllBytes(source));
+            Assert.Equal(2, Directory.GetFiles(folder).Length);
+
+            // Cancellation also stages beside the resolved physical parent, then
+            // recycles only that owned sibling. The chosen destination stays intact.
+            Assert.Throws<OperationCanceledException>(() => result.SaveCopy(
+                Path.Combine(link, "export.mp4"), source, new CancellationToken(true)));
+            Assert.Equal(new byte[] { 1, 2, 3, 4 }, File.ReadAllBytes(Path.Combine(folder, "export.mp4")));
+            Assert.Equal(new byte[] { 7, 8, 9 }, File.ReadAllBytes(source));
+            Assert.Equal(2, Directory.GetFiles(folder).Length);
         }
         finally
         {

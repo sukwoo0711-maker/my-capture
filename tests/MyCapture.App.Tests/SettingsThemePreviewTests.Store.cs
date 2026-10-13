@@ -24,6 +24,68 @@ public sealed partial class SettingsThemePreviewTests
     public Task UpdateTab_OpensTheMicrosoftStoreListing_InEveryBuild() =>
         RunIsolated(nameof(UpdateTab_OpensTheMicrosoftStoreListing_InEveryBuild), VerifyStoreUpdateTab);
 
+    [Fact]
+    public Task StoreUpdate_RejectsPreviousProgressAndResetsFailedAttempts() =>
+        RunIsolated(nameof(StoreUpdate_RejectsPreviousProgressAndResetsFailedAttempts), VerifyStoreUpdateOperationBoundaries);
+
+    [Fact]
+    public Task EngagementNotice_IsInlineDismissibleAndOnlyChosenReviewRequests() =>
+        RunIsolated(nameof(EngagementNotice_IsInlineDismissibleAndOnlyChosenReviewRequests), VerifyEngagementNotice);
+
+    private static void VerifyEngagementNotice()
+    {
+        Application application = CreateThemedApplication();
+        try
+        {
+            foreach (string locale in new[] { "ko-KR", "en-US" })
+            {
+                using var language = UiText.UseLanguage(locale);
+                SettingsWindow window = CreateOffscreenSettingsWindow(new AppSettings());
+                try
+                {
+                    UIElement original = (UIElement)window.Content;
+                    var notice = new EngagementNotice();
+                    // The shell's overlay: the card floats over the content and never moves it.
+                    EngagementNoticeHost.Attach(window, notice, bottomInset: 76);
+                    int requests = 0; notice.ReviewChosen = () => requests++;
+                    window.Show();
+                    var apply = Assert.IsType<Button>(window.FindName("ApplyButton"));
+                    foreach ((double width, double height, string theme) in new[] { (940d, 700d, AppThemeNames.Glass), (780d, 560d, AppThemeNames.HighContrast) })
+                    {
+                        ThemeService.ApplyFromSettings(theme); window.Width = width; window.Height = height;
+                        notice.Dismiss(); Drain(window);
+                        Point before = original.TranslatePoint(new Point(), window);
+                        notice.ShowInvitation(); Drain(window);
+                        Assert.Equal(before, original.TranslatePoint(new Point(), window));
+                        Assert.Equal(0, requests);
+                        AssertFits(window, notice);
+                        foreach (Button button in Descendants(notice).OfType<Button>()) AssertFits(window, button);
+                        // It sits above the Apply row, so Apply and Cancel stay reachable.
+                        Rect card = notice.TransformToAncestor(window).TransformBounds(new Rect(notice.RenderSize));
+                        Rect applyBounds = apply.TransformToAncestor(window).TransformBounds(new Rect(apply.RenderSize));
+                        Assert.True(card.Bottom <= applyBounds.Top, $"{card} covers Apply {applyBounds}");
+                        SaveStoreUpdateEvidence(window, $"rating-invitation-{locale}-{theme}-{width}x{height}.png");
+                    }
+                    Button close = Descendants(notice).OfType<Button>().Single(button => (string)button.Content == UiText.Get("Dialog.Close"));
+                    close.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                    Assert.Equal(Visibility.Collapsed, notice.Visibility);
+                    Assert.Equal(0, requests);
+                    notice.ShowInvitation();
+                    Button review = Descendants(notice).OfType<Button>().Single(button => (string)button.Content == UiText.Get("StoreRating_InviteAction"));
+                    review.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                    Assert.Equal(1, requests);
+                    Assert.Equal(Visibility.Collapsed, notice.Visibility);
+                    notice.ShowUpdateCompleted("4.1.2.0"); Drain(window);
+                    Assert.Equal(Visibility.Collapsed, review.Visibility);
+                    Assert.Single(Descendants(notice).OfType<TextBlock>(), text => text.Text == UiText.Format("StoreUpdate_CompletedVersion", "4.1.2"));
+                    SaveStoreUpdateEvidence(window, $"update-completed-{locale}-high-contrast-780x560.png");
+                }
+                finally { window.CloseForExit(); }
+            }
+        }
+        finally { application.Shutdown(); }
+    }
+
     private static void VerifyStoreUpdateTab()
     {
         Application application = CreateThemedApplication();
@@ -58,7 +120,7 @@ public sealed partial class SettingsThemePreviewTests
             tabs.SelectedItem = window.FindName("UpdateTab");
             Drain(window);
 
-            // The download, progress and cancel controls of the GitHub updater are gone.
+            // Legacy GitHub updater controls remain absent; progress belongs to the Store adapter.
             Assert.Null(window.FindName("UpdateCancel"));
             Assert.Null(window.FindName("UpdateDownloadProgress"));
             Assert.Null(window.FindName("UpdateStatus"));
@@ -67,27 +129,48 @@ public sealed partial class SettingsThemePreviewTests
             var action = Assert.IsType<Button>(window.FindName("UpdateAction"));
             var rating = Assert.IsType<Button>(window.FindName("StoreRatingButton"));
             string expectedDescription = packaged
-                ? UiText.Get("StoreUpdate_StoreDescription")
+                ? UiText.Get("StoreUpdate_ObservedDescription")
                 : UiText.Get("StoreUpdate_UnpackagedDescription") + Environment.NewLine + Environment.NewLine
                     + UiText.Get("StoreUpdate_UnpackagedNote");
-            string expectedLabel = UiText.Get(packaged ? "StoreUpdate_CheckInStore" : "StoreUpdate_OpenStore");
-            string expectedHelp = UiText.Get(packaged ? "StoreUpdate_CheckInStoreHelp" : "StoreUpdate_OpenStoreHelp");
+            string expectedLabel = UiText.Get(packaged ? "StoreUpdate_Check" : "StoreUpdate_OpenStore");
+            string expectedHelp = UiText.Get(packaged ? "StoreUpdate_CheckHelp" : "StoreUpdate_OpenStoreHelp");
             Assert.Equal(expectedDescription, description.Text);
             Assert.Equal(expectedLabel, action.Content);
             Assert.Equal(expectedLabel, AutomationProperties.GetName(action));
             Assert.Equal(expectedHelp, AutomationProperties.GetHelpText(action));
             Assert.True(action.IsVisible && action.IsEnabled && action.Focusable);
             Assert.Equal(packaged, rating.IsVisible);
-            // The Store page action and the review action share one row that wraps when narrow.
-            Assert.Same(VisualTreeHelper.GetParent(action), VisualTreeHelper.GetParent(rating));
+            // Checking for updates heads the update section; rating sits with reporting a problem in
+            // the feedback section. Each row wraps when narrow.
             Assert.IsType<WrapPanel>(VisualTreeHelper.GetParent(action));
+            Assert.IsType<WrapPanel>(VisualTreeHelper.GetParent(rating));
+            Assert.Same(VisualTreeHelper.GetParent(rating), VisualTreeHelper.GetParent((Button)window.FindName("SupportReport")));
             AssertUpdateTabFits(window, description, action, rating);
             SaveStoreUpdateEvidence(window, $"update-tab-{build}-{locale}-glass-940x700.png");
 
-            // A click hands over to the Store app; nothing is reported in the window.
+            var fake = new ObservableStoreUpdates();
+            window.StoreUpdates = fake;
+            var checkedAt = new DateTimeOffset(2026, 10, 13, 14, 2, 0, TimeSpan.Zero);
+            window.StoreCheckClock = () => checkedAt;
+            if (packaged)
+            {
+                // Checking Store availability does not open a page or install anything; the
+                // result carries the time of the check.
+                Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+                Assert.Equal(1, fake.Checks);
+                Assert.Equal(0, fake.Installs);
+                Assert.Equal(SettingsWindow.UpdateCheckSummary(StoreUpdatePhase.Current, checkedAt),
+                    ((TextBlock)window.FindName("UpdateObservedStatus")).Text);
+                Assert.EndsWith(" · " + UiText.Get("About_UpToDate"), ((TextBlock)window.FindName("UpdateObservedStatus")).Text,
+                    StringComparison.Ordinal);
+                // The listing button repeats Check and Rate; it waits for a failed check.
+                Assert.Equal(Visibility.Collapsed, ((Button)window.FindName("StorePageAction")).Visibility);
+            }
+            // The distinct listing action keeps the Store/browser fallback.
+            Button linkAction = packaged ? (Button)window.FindName("StorePageAction") : action;
             var opened = new List<string>();
             window.StoreLink = new StoreUpdateLink(opened.Add);
-            action.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            linkAction.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Drain(window);
             Assert.Equal(new[] { StoreUpdateLink.StoreAppUri }, opened);
             var status = Assert.IsType<TextBlock>(window.FindName("SettingsStatus"));
@@ -101,7 +184,7 @@ public sealed partial class SettingsThemePreviewTests
                 opened.Add(uri);
                 throw new Win32Exception(2);
             });
-            action.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            linkAction.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Drain(window);
             Assert.Equal(new[] { StoreUpdateLink.StoreAppUri, StoreUpdateLink.WebUri }, opened);
             Assert.Equal(UiText.Format("StoreUpdate_OpenFailed", StoreUpdateLink.WebUri), status.Text);
@@ -119,11 +202,220 @@ public sealed partial class SettingsThemePreviewTests
             AssertUpdateTabFits(window, description, action, rating);
             AssertStatusFits(window, status);
             SaveStoreUpdateEvidence(window, $"update-tab-{build}-{locale}-high-contrast-780x560.png");
+            if (packaged) VerifyObservedStoreDeployment(window, fake, locale);
+            VerifySupportPreview(window, build, locale);
+
         }
         finally
         {
             window.CloseForExit();
         }
+    }
+
+    private sealed class ObservableStoreUpdates : IStorePackageUpdateService
+    {
+        public int Checks, Installs;
+        public bool Available;
+        public IProgress<StoreUpdateSnapshot>? Progress;
+        public TaskCompletionSource<StoreUpdatePhase>? Completion;
+        public TaskCompletionSource<bool>? CheckCompletion;
+        public Task<bool> CheckAsync()
+        {
+            Checks++;
+            return CheckCompletion?.Task ?? Task.FromResult(Available);
+        }
+        public Task<StoreUpdatePhase> InstallAsync(IProgress<StoreUpdateSnapshot> progress)
+        {
+            Installs++; Progress = progress;
+            Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            return Completion.Task;
+        }
+    }
+
+    private static void VerifyStoreUpdateOperationBoundaries()
+    {
+        Application application = CreateThemedApplication();
+        AppPackage.IsPackagedOverride = true;
+        try
+        {
+            foreach (string locale in new[] { "ko-KR", "en-US" })
+            {
+                using var language = UiText.UseLanguage(locale);
+                var settings = new AppSettings();
+                SettingsWindow window = CreateOffscreenSettingsWindow(settings);
+                SynchronizationContext? previous = SynchronizationContext.Current;
+                SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(window.Dispatcher));
+                try
+                {
+                    window.Show();
+                    var state = (TextBlock)window.FindName("UpdateObservedStatus");
+                    var action = (Button)window.FindName("UpdateAction");
+                    var progress = (ProgressBar)window.FindName("UpdateProgress");
+                    var fake = new ObservableStoreUpdates { Available = true };
+                    window.StoreUpdates = fake;
+                    int released = 0;
+                    window.PrepareStoreUpdate = () => Task.FromResult(true);
+                    window.FinishStoreUpdate = () => released++;
+                    Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+                    Assert.Equal(UiText.Get("StoreUpdate_InstallHelp"), AutomationProperties.GetHelpText(action));
+
+                    Task failed = window.RunStoreUpdateActionAsync();
+                    IProgress<StoreUpdateSnapshot> failedObserver = fake.Progress!;
+                    fake.Completion!.SetException(new IOException("Store transport failure"));
+                    PumpUntil(window, failed);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
+                    Assert.Equal(1, released);
+                    Assert.True(window.IsEnabled);
+                    Assert.Equal(UiText.Get("StoreUpdate_Check"), action.Content);
+                    Assert.Equal(UiText.Get("StoreUpdate_CheckHelp"), AutomationProperties.GetHelpText(action));
+
+                    // A prior observer must not overwrite the next asynchronous check, even when busy.
+                    fake.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    Task check = window.RunStoreUpdateActionAsync();
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
+                    failedObserver.Report(new(StoreUpdatePhase.Installing));
+                    Task.Run(() => failedObserver.Report(new(StoreUpdatePhase.Downloading, .91))).GetAwaiter().GetResult();
+                    Drain(window);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
+                    fake.CheckCompletion.SetResult(true);
+                    PumpUntil(window, check);
+                    Assert.Equal(2, fake.Checks); // Failure resets availability, so retry checks again.
+                    Assert.Equal(UiText.Get("StoreUpdate_InstallHelp"), AutomationProperties.GetHelpText(action));
+
+                    Task install = window.RunStoreUpdateActionAsync();
+                    IProgress<StoreUpdateSnapshot> completedObserver = fake.Progress!;
+                    completedObserver.Report(new(StoreUpdatePhase.Downloading, .21));
+                    Task.Run(() => failedObserver.Report(new(StoreUpdatePhase.Downloading, .99))).GetAwaiter().GetResult();
+                    Drain(window);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateDownloading"), state.Text);
+                    Assert.Equal(21, progress.Value);
+                    fake.Completion!.SetResult(StoreUpdatePhase.RestartRequired);
+                    PumpUntil(window, install);
+                    completedObserver.Report(new(StoreUpdatePhase.Installing));
+                    Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), state.Text);
+
+                    // Completion's observer is also invalid during a new check, not merely on failure.
+                    fake.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    check = window.RunStoreUpdateActionAsync();
+                    Task.Run(() => completedObserver.Report(new(StoreUpdatePhase.Installing))).GetAwaiter().GetResult();
+                    Drain(window);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
+                    fake.CheckCompletion.SetException(new IOException("Check unavailable after successful deployment"));
+                    PumpUntil(window, check);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
+                    Assert.Equal(UiText.Get("StoreUpdate_Check"), action.Content);
+                    Assert.Equal(2, released);
+                    Assert.True(window.IsEnabled && action.IsEnabled);
+                }
+                finally
+                {
+                    window.CloseForExit();
+                    SynchronizationContext.SetSynchronizationContext(previous);
+                }
+            }
+        }
+        finally { application.Shutdown(); AppPackage.IsPackagedOverride = null; }
+    }
+
+    private static void VerifyObservedStoreDeployment(SettingsWindow window, ObservableStoreUpdates fake, string locale)
+    {
+        // StaTestHost does not run Application.Run; install the same WPF continuation context as button input.
+        SynchronizationContext? previousContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(window.Dispatcher));
+        try
+        {
+            var state = (TextBlock)window.FindName("UpdateObservedStatus");
+            var progress = (ProgressBar)window.FindName("UpdateProgress");
+            fake.Available = true;
+            Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+            Assert.EndsWith(" · " + UiText.Get("StoreUpdate_StateAvailable"), state.Text, StringComparison.Ordinal);
+            Assert.True(window.IsEnabled);
+            Assert.Empty(((TextBlock)window.FindName("SettingsStatus")).Text);
+            Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+            Assert.Equal(0, fake.Installs); // Save/discard/cancel protection must allow installation first.
+            Assert.Equal(UiText.Get("StoreUpdate_StateBlocked"), state.Text);
+            Assert.True(window.IsEnabled);
+            int protectionReleased = 0;
+            window.PrepareStoreUpdate = () => Task.FromResult(true);
+            window.FinishStoreUpdate = () => protectionReleased++;
+            Task install = window.RunStoreUpdateActionAsync();
+            Assert.False(install.IsCompleted);
+            Assert.False(window.IsEnabled);
+            Assert.False(((Button)window.FindName("ApplyButton")).IsEnabled);
+            Assert.Equal(1, fake.Installs);
+            Assert.Equal(0, protectionReleased);
+            Assert.Equal(UiText.Get("StoreUpdate_StateAwaitingConsent"), state.Text);
+            Assert.True(progress.IsIndeterminate);
+            fake.Progress!.Report(new(StoreUpdatePhase.Downloading, .42));
+            state.BringIntoView(); Drain(window);
+            Assert.False(progress.IsIndeterminate);
+            Assert.Equal(42, progress.Value);
+            Assert.Equal(UiText.Get("StoreUpdate_StateDownloading"), state.Text);
+            Assert.False(window.IsEnabled);
+            SaveStoreUpdateEvidence(window, $"update-downloading-{locale}-high-contrast-780x560.png");
+            fake.Progress.Report(new(StoreUpdatePhase.Installing, .95));
+            Drain(window);
+            Assert.True(progress.IsIndeterminate); // Download percentage cannot describe deployment.
+            Assert.Equal(UiText.Get("StoreUpdate_StateInstalling"), state.Text);
+            Assert.False(window.IsEnabled);
+            SaveStoreUpdateEvidence(window, $"update-installing-{locale}-high-contrast-780x560.png");
+            fake.Completion!.SetResult(StoreUpdatePhase.Canceled);
+            PumpUntil(window, install);
+            Assert.Equal(1, protectionReleased);
+            Assert.Equal(UiText.Get("StoreUpdate_StateCanceled"), state.Text);
+            Assert.True(window.IsEnabled);
+            Assert.Equal(Visibility.Collapsed, progress.Visibility);
+            Assert.True(((Button)window.FindName("UpdateAction")).IsEnabled);
+            // Completed SDK deployment is restart-required; only next-launch version observation confirms completion.
+            Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+            Task completed = window.RunStoreUpdateActionAsync();
+            fake.Completion!.SetResult(StoreUpdatePhase.RestartRequired);
+            PumpUntil(window, completed);
+            Assert.Equal(2, protectionReleased);
+            Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), state.Text);
+            Assert.True(window.IsEnabled);
+
+            // A transport failure must release work admission just like cancellation.
+            Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
+            Task failed = window.RunStoreUpdateActionAsync();
+            Assert.False(window.IsEnabled);
+            fake.Completion!.SetException(new IOException("Store unavailable"));
+            PumpUntil(window, failed);
+            Assert.Equal(3, protectionReleased);
+            Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
+            Assert.True(window.IsEnabled);
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
+    }
+
+    private static void PumpUntil(Window window, Task task)
+    {
+        var until = DateTime.UtcNow.AddSeconds(5);
+        while (!task.IsCompleted && DateTime.UtcNow < until) Drain(window);
+        Assert.True(task.IsCompletedSuccessfully, task.Exception?.ToString());
+    }
+
+    /// <summary>Reporting a problem is one step: the diagnostics go to the clipboard, then the page opens.</summary>
+    private static void VerifySupportPreview(SettingsWindow window, string build, string locale)
+    {
+        var report = (Button)window.FindName("SupportReport");
+        string? copied = null;
+        var opened = new List<string>();
+        window.CopySupportText = value =>
+        {
+            Assert.Empty(opened); // copied before the page opens, so it is ready to paste
+            copied = value;
+        };
+        window.OpenSupportPage = opened.Add;
+        report.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Assert.Contains("DPI:", copied, StringComparison.Ordinal);
+        Assert.Contains("Windows:", copied, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://", copied, StringComparison.Ordinal);
+        Assert.DoesNotContain("C:\\", copied, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(new[] { SupportDiagnostics.IssueUri }, opened);
+        Assert.Equal(UiText.Get("About_ReportCopied"), ((TextBlock)window.FindName("SettingsStatus")).Text);
+        report.BringIntoView(); Drain(window); AssertFits(window, report);
+        SaveStoreUpdateEvidence(window, $"support-report-{build}-{locale}-high-contrast-780x560.png");
     }
 
     private static void AssertUpdateTabFits(SettingsWindow window, TextBlock description, Button action, Button rating)

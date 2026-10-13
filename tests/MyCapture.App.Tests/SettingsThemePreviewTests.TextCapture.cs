@@ -67,6 +67,24 @@ public sealed partial class SettingsThemePreviewTests
             var recorder = Assert.IsType<HotkeyRecorder>(window.FindName("CaptureTextHotkeyRecorder"));
             Assert.Equal("Ctrl+Alt+T", recorder.Text);
             Assert.Equal(UiText.Get("TextCapture_Title"), AutomationProperties.GetName(recorder));
+            tabs.SelectedIndex = 4;
+            Drain(window);
+            var tutorialButton = Assert.IsType<Button>(window.FindName("TextCopyTutorialButton"));
+            Assert.True(tutorialButton.IsVisible && tutorialButton.IsEnabled && tutorialButton.IsTabStop);
+            Assert.Equal(UiText.Get("TextCapture_TutorialOpen"), tutorialButton.Content);
+            Assert.Equal("텍스트 복사 사용법 보기", AutomationProperties.GetName(tutorialButton));
+            // Every other "View tutorial" button names the feature it teaches, as the shortcut help does.
+            Button[] featureTutorials = Descendants(window).OfType<Button>().Where(button => button.Tag is string id
+                && TutorialCatalog.All.Any(feature => feature.Id == id)).ToArray();
+            Assert.Equal(12, featureTutorials.Length);
+            Assert.All(featureTutorials, button =>
+            {
+                FeatureTutorial feature = TutorialCatalog.Get((string)button.Tag);
+                Assert.Equal(UiText.Get("TextCapture_TutorialOpen"), button.Content);
+                Assert.Equal(FeatureTutorialWindow.OpenButtonName(feature), AutomationProperties.GetName(button));
+                Assert.EndsWith(" 사용법 보기", AutomationProperties.GetName(button), StringComparison.Ordinal);
+            });
+            Assert.Contains(featureTutorials, button => AutomationProperties.GetName(button) == "영역 캡처 사용법 보기");
             Assert.True(saved.Capture.AutoDetectWindows);
 
             SettingsWindow.ApplyCommand.Execute(null, window);
@@ -79,6 +97,16 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal("Ctrl+Alt+T", reloaded.Hotkeys.CaptureText.ToString());
 
             window.ShowSettings();
+            Drain(window);
+            tabs.SelectedIndex = 4;
+            Drain(window);
+            tutorialButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            TextCopyTutorialWindow tutorial = Assert.Single(window.OwnedWindows.OfType<TextCopyTutorialWindow>());
+            Assert.True(tutorial.IsVisible);
+            Assert.Contains(FirstRunWelcomeTests.Descendants(tutorial).OfType<TextBlock>(),
+                text => text.Text == UiText.Format("TextCapture_TutorialDirect", "Ctrl+Alt+T"));
+            tutorial.Close();
+            tabs.SelectedIndex = 1;
             Drain(window);
             Assert.False(detect.IsChecked);
             Assert.Equal(ColorFormat.Hsl, format.SelectedValue);

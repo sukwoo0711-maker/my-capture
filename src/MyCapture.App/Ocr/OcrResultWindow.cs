@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -49,6 +50,7 @@ internal sealed partial class OcrResultWindow : Window
         MinWidth = 760;
         MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        MonitorWindowPlacement.KeepOnPointerMonitor(this, marginDip: 48);
         ShowInTaskbar = true;
         AutomationProperties.SetName(this, UiText.Get("Text_E5F541120733"));
 
@@ -116,6 +118,9 @@ internal sealed partial class OcrResultWindow : Window
             Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x08, 0x0C, 0x12))),
             BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
         };
+        // Recognition results are read-only. Avoid TSF querying and formatting every selected
+        // line; the native TextBox still provides selection, copying and UI Automation.
+        InputMethod.SetIsInputMethodEnabled(_textBox, false);
         _textBox.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");
         _textBox.SetResourceReference(Control.BorderBrushProperty, "Border.Subtle");
         AutomationProperties.SetName(_textBox, UiText.Get("Text_B75AA3DC8AFB"));
@@ -144,25 +149,27 @@ internal sealed partial class OcrResultWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
         };
 
-        // Rerun stays a quiet secondary: a ghost button that recedes so it never rivals Copy.
-        _rerunButton = MakeButton(UiText.Get("Text_7245B7D87A08"), UiText.Get("Text_613230F07E18"));
-        _rerunButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
-        _rerunButton.Margin = new Thickness(0, 0, 8, 0);
-        _rerunButton.Click += (_, _) => RerunRequested?.Invoke(this, EventArgs.Empty);
-        buttons.Children.Add(_rerunButton);
-        AddAdvancedActions(buttons);
-
-        // The active extraction mode determines the copy and export actions.
+        // One decision group, strongest first: Copy (primary), export (secondary), then the
+        // quiet rerun. The active extraction mode determines the copy and export actions.
         _copyButton = MakeButton(UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_20CF6A996B4D"));
         _copyButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
+        _copyButton.Margin = new Thickness(0, 0, 8, 0);
         _copyButton.Click += (_, _) => CopyText();
         buttons.Children.Add(_copyButton);
 
         // Export writes the same text to a picked .txt file (UTF-8, no BOM).
         var exportButton = MakeButton(UiText.Get("Ocr_ExportText"), UiText.Get("Ocr_ExportText"));
-        exportButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
+        exportButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
+        exportButton.Margin = new Thickness(0, 0, 8, 0);
         exportButton.Click += (_, _) => ExportText();
         buttons.Children.Add(exportButton);
+        AddAdvancedActions(buttons);
+
+        // Rerun stays a quiet ghost button that recedes so it never rivals Copy.
+        _rerunButton = MakeButton(UiText.Get("Text_7245B7D87A08"), UiText.Get("Text_613230F07E18"));
+        _rerunButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
+        _rerunButton.Click += (_, _) => RerunRequested?.Invoke(this, EventArgs.Empty);
+        buttons.Children.Add(_rerunButton);
 
         // The footer shares the uniform surface — no raised bar or divider — keeping the window
         // text-first with the actions quietly anchored bottom-right.
@@ -253,8 +260,7 @@ internal sealed partial class OcrResultWindow : Window
             case OcrStatus.Success:
                 _textBox.Text = result.Text;
                 _copyButton.IsEnabled = true;
-                _status.Text =
-                    UiText.Format("OCR410_ResultStatus", contextLabel, result.LanguageTag);
+                _status.Text = ResultSummary(result);
                 break;
 
             case OcrStatus.NoText:
@@ -285,6 +291,59 @@ internal sealed partial class OcrResultWindow : Window
                 break;
         }
         ApplyAdvancedResult(result);
+    }
+
+    // Languages with a name of their own in the UI resources; others use the culture's name.
+    private static readonly Dictionary<string, string> LanguageNameKeys = new(StringComparer.Ordinal)
+    {
+        ["ko"] = "Ocr_LanguageName_ko",
+        ["en"] = "Ocr_LanguageName_en",
+        ["ja"] = "Ocr_LanguageName_ja",
+        ["zh-Hans"] = "Ocr_LanguageName_zh-Hans",
+        ["zh-Hant"] = "Ocr_LanguageName_zh-Hant",
+    };
+
+    /// <summary>
+    /// The line under the heading for recognised text: its language in words and how many
+    /// lines it has (한국어 · 5줄), instead of a raw language tag.
+    /// </summary>
+    internal static string ResultSummary(OcrResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        int lines = result.Text.Split('\n').Count(line => !string.IsNullOrWhiteSpace(line));
+        string count = lines == 1 ? UiText.Get("Ocr_LineCountOne") : UiText.Format("Ocr_LineCount", lines);
+        return LanguageName(result.LanguageTag) is { } language ? UiText.Format("Ocr_ResultSummary", language, count) : count;
+    }
+
+    /// <summary>A recognition language tag (ko, en-US, zh-Hans-CN) as a name in the UI language.</summary>
+    internal static string? LanguageName(string? tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return null;
+        CultureInfo culture;
+        try
+        {
+            culture = CultureInfo.GetCultureInfo(tag.Trim());
+        }
+        catch (CultureNotFoundException)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(culture.Name)) return null;
+        string language = culture.TwoLetterISOLanguageName;
+        if (language == "zh")
+        {
+            string name = culture.Name;
+            bool traditional = name.Contains("Hant", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("-TW", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("-HK", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("-MO", StringComparison.OrdinalIgnoreCase);
+            language = traditional ? "zh-Hant" : "zh-Hans";
+        }
+
+        if (LanguageNameKeys.TryGetValue(language, out string? key)) return UiText.Get(key);
+        CultureInfo neutral = culture.IsNeutralCulture || culture.Parent == CultureInfo.InvariantCulture ? culture : culture.Parent;
+        return UiText.Culture.TwoLetterISOLanguageName == "en" ? neutral.EnglishName : neutral.NativeName;
     }
 
     private void CopyText() => CopyValue(_textBox.Text);

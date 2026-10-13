@@ -35,10 +35,11 @@
              selection are layers over the rest chrome whose opacity triggers move through
              FluidMotion.FadeTo (hover and press over Motion.Fast, selection over Motion.Normal),
              snapping when Windows animation effects are off. Brushes are never animated. -->
-        <!-- Local washes retain the library's existing transparent edges in contrast themes. -->
-        <Style x:Key="LibraryUx.HoverWash" TargetType="Border" BasedOn="{StaticResource StateLayer.Hover}">
-            <Setter Property="BorderBrush" Value="Transparent" />
-        </Style>
+        <!-- The library's hover wash. A Windows contrast theme draws Surface.Hover in the Window
+             colour, so the hover shows through StateLayer's Border.Hover edge (Highlight there,
+             transparent in every app palette). A layer without a BorderThickness pairs it with a
+             separate StateLayer outline. -->
+        <Style x:Key="LibraryUx.HoverWash" TargetType="Border" BasedOn="{StaticResource StateLayer.Hover}" />
         <!-- A selected navigation row keeps its wash and accent pill without a card outline. -->
         <Style x:Key="LibraryUx.SelectedWash" TargetType="Border" BasedOn="{StaticResource StateLayer}">
             <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
@@ -639,12 +640,16 @@
                             <Path x:Name="Edge" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Style="{StaticResource LibraryUx.RestEdge}"
                                   Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" SnapsToDevicePixels="True" />
+                            <!-- Border.FolderHover and Surface.FolderHoverWash are Accent.Folder and Surface.Hover
+                                 in every app palette. A Windows contrast theme draws the rest and hover edges both
+                                 in WindowText, so the hover edge takes Highlight there and the wash, which would
+                                 dim it, turns clear (ThemeService.ApplyFolderHoverResources). -->
                             <Grid x:Name="HoverEdge" Opacity="0" IsHitTestVisible="False">
                                 <Path Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
-                                      Stroke="{DynamicResource Accent.Folder}" StrokeThickness="1" SnapsToDevicePixels="True" />
+                                      Stroke="{DynamicResource Border.FolderHover}" StrokeThickness="1" SnapsToDevicePixels="True" />
                             </Grid>
                             <Path x:Name="Wash" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
-                                  Fill="{DynamicResource Surface.Hover}" Opacity="0" IsHitTestVisible="False" />
+                                  Fill="{DynamicResource Surface.FolderHoverWash}" Opacity="0" IsHitTestVisible="False" />
                             <Path x:Name="DropRing" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Stroke="{DynamicResource Accent.Folder}" StrokeThickness="2" StrokeDashArray="3 2"
                                   Opacity="0" IsHitTestVisible="False" />
@@ -1453,8 +1458,11 @@
                 </Grid>
             </Grid>
 
+            <!-- Right side: the library commands or the selection's commands, then More, which stays
+                 in place either way so restoring and the library folder are reachable with a selection. -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
             <!-- Library commands (nothing selected). -->
-            <StackPanel x:Name="LibraryCommands" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel x:Name="LibraryCommands" Orientation="Horizontal" VerticalAlignment="Center">
                 <StackPanel.Style>
                     <Style TargetType="StackPanel">
                         <Style.Triggers>
@@ -1479,22 +1487,10 @@
                     <ComboBoxItem Content="{loc:Text Folder410.Oldest}" />
                     <ComboBoxItem Content="{loc:Text Folder410.ByName}" />
                 </ComboBox>
-                <Button x:Name="MoreCommandsButton" Style="{StaticResource LibraryUx.CommandIcon}" Margin="0"
-                        ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
-                        Click="OnMoreCommandsClick">
-                    <themes:SymbolIcon Size="20" Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
-                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
-                                      Foreground="{DynamicResource State.DangerHover}" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
             </StackPanel>
 
             <!-- Selection commands, in the same place. -->
-            <StackPanel x:Name="SelectionCommands" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+            <StackPanel x:Name="SelectionCommands" Orientation="Horizontal" VerticalAlignment="Center"
                         AutomationProperties.Name="{loc:Text LibraryUx_SelectionBarName}"
                         Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
                 <Button x:Name="ClearSelectionButton" Style="{StaticResource LibraryUx.CommandIcon}"
@@ -1517,6 +1513,22 @@
                 <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource LibraryUx.CommandButton}" Margin="0"
                         DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick"
                         Visibility="{Binding DataContext.CanGifSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+            <Button x:Name="MoreCommandsButton" Style="{StaticResource LibraryUx.CommandIcon}" Margin="2,0,0,0"
+                    ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
+                    Click="OnMoreCommandsClick">
+                <themes:SymbolIcon Size="20" Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
+                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem x:Name="RestoreDeletedMenu" Header="{loc:Text LibraryRecovery_Recent}" />
+                        <MenuItem x:Name="OpenLibraryFolderMenu" Header="{loc:Text LibraryFolder_OpenLibrary}" Click="OnOpenLibraryFolderClick" />
+                        <Separator />
+                        <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
+                                  Foreground="{DynamicResource State.DangerHover}" />
+                    </ContextMenu>
+                </Button.ContextMenu>
+            </Button>
             </StackPanel>
         </Grid>
 
@@ -1888,11 +1900,15 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="ToggleButton">
-                                                        <!-- Hover and press washes fade over the whole chip. -->
+                                                        <!-- Hover and press washes fade over the whole chip; the contrast-theme
+                                                             hover outline (Border.Hover, transparent otherwise) fades with them. The
+                                                             outline is its own layer so the washes keep filling the whole chip. -->
                                                         <Grid>
                                                             <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Radius.Sm}" />
                                                             <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" CornerRadius="{DynamicResource Radius.Sm}" />
                                                             <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}" CornerRadius="{DynamicResource Radius.Sm}" />
+                                                            <Border x:Name="HoverOutline" Style="{StaticResource StateLayer}" BorderThickness="1"
+                                                                    CornerRadius="{DynamicResource Radius.Sm}" />
                                                             <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                             <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
                                                                     CornerRadius="{DynamicResource Radius.Sm}" IsHitTestVisible="False" Opacity="0" />
@@ -1900,6 +1916,7 @@
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsMouseOver" Value="True">
                                                                 <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                                                                <Setter TargetName="HoverOutline" Property="themes:FluidMotion.FadeTo" Value="1" />
                                                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                                                             </Trigger>
                                                             <Trigger Property="IsPressed" Value="True">
@@ -1996,6 +2013,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock x:Name="SummaryLabel" Text="{Binding SummaryText}" Style="{StaticResource StatusBar.Text}"
@@ -2026,7 +2044,16 @@
                        HorizontalAlignment="Right" VerticalAlignment="Center"
                        Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}"
                        AutomationProperties.LiveSetting="Polite" />
-            <Button x:Name="ArchiveCancelButton" Grid.Column="2" Content="{loc:Text Library.Action.Cancel}"
+            <!-- The result's own follow-up (Undo after a delete, Change after the first automatic
+                 deletion); hidden whenever the line shows anything else. -->
+            <StackPanel x:Name="LibraryStatusActionPanel" Grid.Column="2" Orientation="Horizontal" Visibility="Collapsed"
+                        VerticalAlignment="Center">
+                <TextBlock Text="·" Margin="6,0,2,0" VerticalAlignment="Center" Foreground="{DynamicResource Text.Muted}"
+                           FontSize="{StaticResource FontSize.Caption}" />
+                <Button x:Name="LibraryStatusAction" Style="{StaticResource Button.GhostCompact}"
+                        VerticalAlignment="Center" FontWeight="SemiBold" Click="OnStatusActionClick" />
+            </StackPanel>
+            <Button x:Name="ArchiveCancelButton" Grid.Column="3" Content="{loc:Text Library.Action.Cancel}"
                     Style="{StaticResource Button.GhostCompact}" Click="OnCancelArchiveClick" Visibility="Collapsed" Margin="8,0,0,0" />
         </Grid>
 

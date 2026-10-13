@@ -643,7 +643,7 @@ public sealed class AnimatedGifWriterTests
     private static GifEncodedCandidate?[] EncodeOnMta(byte[][] frames, int width, int height, bool read)
     {
         var candidates = new GifEncodedCandidate?[frames.Length];
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             for (int index = 0; index < frames.Length; index++)
             {
@@ -896,7 +896,7 @@ public sealed class AnimatedGifWriterTests
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

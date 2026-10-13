@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -195,6 +196,171 @@ public sealed class CaptureOverlayCoordinatorTests
         Assert.Equal(1, closed);
     });
 
+    [Fact]
+    public void ReadsStartWithTheGrabAndNeitherTheSelectorNorTheSaveWaitsForThem() => RunSta(() =>
+    {
+        const string url = "https://example.com/confirmed";
+        var first = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var confirming = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var events = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        int reads = 0;
+        IReadOnlyList<WindowCandidate> asked = [];
+        CaptureOverlayWindow? overlay = null;
+        CaptureSelectionCompletedEventArgs? persisted = null;
+        using var coordinator = Coordinator(_ => { events.Enqueue("pixels"); return Frame(); });
+        coordinator.ReadWindowSources = null;
+        coordinator.ApplyCaptureExclusion = window => { events.Enqueue("selector built"); overlay = (CaptureOverlayWindow)window; return true; };
+        coordinator.OpenEditorAfterCapture = () => false;
+        coordinator.SelectionPersistRequested = selection => { persisted = selection; return Task.CompletedTask; };
+        coordinator.ReadPageUrls = candidates =>
+        {
+            events.Enqueue("read");
+            if (Interlocked.Increment(ref reads) > 1) return confirming.Task;
+            asked = candidates;
+            return first.Task;
+        };
+
+        coordinator.Start(false, false, false);
+        // The first read is asked at the hotkey, before the grab and before the selector window is built.
+        Assert.Equal("read", events.First());
+        Assert.True(events.ToList().IndexOf("read") < events.ToList().IndexOf("selector built"));
+        PumpUntil(() => overlay?.IsVisible == true);
+        Assert.Equal(1, reads); // Shown while the first read is still walking.
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        Assert.True(overlay!.SourceDetailsPendingForTest);
+        Assert.False(coordinator.LastSourceDetailsForTest.IsCompleted);
+
+        overlay.CompleteSelection(new RectD(4, 4, 16, 10));
+        PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted && persisted is not null);
+        Assert.Equal(new RectD(4, 4, 16, 10), persisted!.BitmapRegion);
+        Assert.Empty(persisted.SourcePageUrl);
+        Task<CaptureSelectionSource> late = Assert.IsAssignableFrom<Task<CaptureSelectionSource>>(persisted.PendingSource);
+        Assert.False(overlay.IsVisible);
+        Assert.False(coordinator.IsActive); // The session ends with the selector, not with the reads.
+
+        // Every exposed window reports one stable page: the confirming read runs after the first one.
+        first.SetResult(asked.ToDictionary(candidate => candidate.Handle,
+            candidate => new BrowserDocumentSnapshot(candidate.ProcessId, candidate.Title, "document", url)));
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref reads) == 2, TimeSpan.FromSeconds(5)));
+        Assert.False(late.IsCompleted);
+        confirming.SetResult(first.Task.Result);
+        Assert.True(late.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(coordinator.LastSourceDetailsForTest.IsCompletedSuccessfully);
+        Assert.Contains(coordinator.LastSourceDetailsForTest.Result, window => window.SourcePageUrl == url);
+        // The late source is the selection's window resolved from that confirmed list.
+        Assert.Equal(CaptureOverlayWindow.ResolveSelectionSource(coordinator.LastSourceDetailsForTest.Result,
+            new RectD(4, 4, 16, 10), null, wholeMonitor: false), late.Result);
+    });
+
+    [Fact]
+    public void HotkeysOverAShownSelectorActAsOpenWhileThePageReadIsConfirming() => RunSta(() =>
+    {
+        var confirming = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        int reads = 0, acquisitions = 0;
+        CaptureOverlayWindow? overlay = null;
+        using var coordinator = Coordinator(_ => { Interlocked.Increment(ref acquisitions); return Frame(); });
+        coordinator.ReadWindowSources = null;
+        coordinator.TextCaptureRequested = _ => { };
+        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        coordinator.ReadPageUrls = candidates => Interlocked.Increment(ref reads) > 1
+            ? confirming.Task
+            : Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(candidates.ToDictionary(
+                candidate => candidate.Handle,
+                candidate => new BrowserDocumentSnapshot(candidate.ProcessId, candidate.Title, "document", "https://example.com/")));
+
+        coordinator.Start(false, false, false);
+        PumpUntil(() => overlay?.IsVisible == true);
+        Assert.False(overlay!.TextCaptureMode);
+        // The text capture command over the shown selector switches it, exactly as once it is ready.
+        coordinator.Start(false, false, false, textCapture: true);
+        Assert.True(overlay.TextCaptureMode);
+        Assert.False(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8)));
+        Assert.Equal(1, acquisitions);
+        Assert.Equal(2, reads);
+
+        confirming.SetResult(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        Assert.True(overlay.IsVisible);
+        coordinator.Cancel();
+        Assert.False(coordinator.IsActive);
+    });
+
+    [Fact]
+    public void SelectorClosedWhileThePageReadIsConfirmingEndsTheSessionAndTheNextCaptureStarts() => RunSta(() =>
+    {
+        var confirming = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        int reads = 0;
+        int closed = 0;
+        int acquisitions = 0;
+        CaptureOverlayWindow? overlay = null;
+        using var coordinator = Coordinator(_ => { Interlocked.Increment(ref acquisitions); return Frame(); });
+        coordinator.ReadWindowSources = null;
+        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        coordinator.OverlayClosed += (_, _) => closed++;
+        coordinator.ReadPageUrls = candidates => Interlocked.Increment(ref reads) == 2
+            ? confirming.Task
+            : Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(candidates.ToDictionary(
+                candidate => candidate.Handle,
+                candidate => new BrowserDocumentSnapshot(candidate.ProcessId, candidate.Title, "document", "https://example.com/")));
+
+        coordinator.Start(false, false, false);
+        PumpUntil(() => overlay?.IsVisible == true);
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref reads) == 2, TimeSpan.FromSeconds(5)));
+        overlay!.Close();
+        Assert.Equal(1, closed);
+        Assert.False(coordinator.IsActive);
+
+        // The reader itself serializes native probes (waiting within its deadline); the capture does not.
+        CaptureOverlayWindow first = overlay;
+        coordinator.Start(false, false, false);
+        PumpUntil(() => overlay is { IsVisible: true } next && !ReferenceEquals(next, first));
+        Assert.Equal(2, acquisitions);
+        Assert.True(Volatile.Read(ref reads) >= 3);
+        confirming.SetResult(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.Cancel();
+        Assert.False(coordinator.IsActive);
+        Assert.Equal(2, closed);
+    });
+
+    [Fact]
+    public void EditorOpensWholeOnThePortraitSecondaryTheSelectionWasTakenOn() => RunSta(() =>
+    {
+        // The reported layout, moved far off the real desktop so the window never shows on screen:
+        // an ultrawide primary with a 768 x 1366 portrait display on its right.
+        const double x = -30000, y = -20000;
+        var primary = new MonitorInfo(@"\\.\DISPLAY1", new RectD(x, y, 3440, 1440), new RectD(x, y, 3440, 1392), 96, true);
+        var portrait = new MonitorInfo(@"\\.\DISPLAY2", new RectD(x + 3440, y, 768, 1366), new RectD(x + 3440, y, 768, 1318), 96, false);
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadMonitors = () => [primary, portrait];
+        var frame = new FrozenFrame(Solid(32, 20), new RectD(x + 3500, y + 100, 32, 20), null, 0);
+
+        Assert.True(coordinator.StartWithSelection(frame, new RectD(0, 0, 32, 20)));
+        PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted && coordinator.CurrentEditor?.IsLoaded == true);
+        System.Windows.Window editor = System.Windows.Window.GetWindow(coordinator.CurrentEditor!)!;
+        Assert.True(GetWindowRect(new System.Windows.Interop.WindowInteropHelper(editor).Handle, out NativeRect rect));
+        try
+        {
+            // Before: 980 wide from the primary work area, spilling onto the primary and off the right edge.
+            Assert.Equal((x + 3472, y + 349, x + 4176, y + 969), ((double)rect.Left, (double)rect.Top, (double)rect.Right, (double)rect.Bottom));
+        }
+        finally
+        {
+            coordinator.Cancel();
+        }
+    });
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr window, out NativeRect rect);
+
     private static CaptureOverlayCoordinator Coordinator(Func<bool, FrozenFrame> acquire) => new(
         new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
         new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
@@ -296,7 +462,7 @@ public sealed class CaptureOverlayCoordinatorTests
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

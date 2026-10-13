@@ -52,12 +52,21 @@ public static class SettingsRanges
     public static readonly Range<double> FontSize = new(6, 400);
     public static readonly Range<int> MosaicBlockSize = new(2, 128);
     public static readonly Range<int> HighlighterAlpha = new(0, 255);
+
+    /// <summary>
+    /// The highlighter opacity as the settings window shows it. The file keeps the 0–255 alpha of
+    /// <see cref="HighlighterAlpha"/>; the window converts at the boundary.
+    /// </summary>
+    public static readonly Range<int> HighlighterOpacityPercent = new(0, 100);
     public static readonly Range<int> BlurRadius = new(
         MyCapture.Core.Annotations.BlurAnnotation.MinimumRadius, MyCapture.Core.Annotations.BlurAnnotation.MaximumRadius);
 
     public static readonly Range<double> UpscaleFactor = new(1.0, 4.0);
 
-    /// <summary>Gallery image TTL in hours. Floor 1 hour; ceiling one year.</summary>
+    /// <summary>
+    /// Gallery image TTL in hours. Floor 1 hour; ceiling one year. Turning automatic deletion off
+    /// is stored as <see cref="MyCapture.Core.Queue.CaptureRetention.NeverHours"/>, outside this range.
+    /// </summary>
     public static readonly Range<int> ImageRetentionHours = new(1, 24 * 365);
 
     /// <summary>1 GiB expressed in bytes, the unit the storage cap is shown in.</summary>
@@ -71,6 +80,7 @@ public readonly record struct Range<T>(T Min, T Max)
     public bool Contains(T value) =>
         value.CompareTo(Min) >= 0 && value.CompareTo(Max) <= 0;
 
+    /// <summary>"1–64": an en dash between the bounds, the style of the settings range hints.</summary>
     public string Describe() => string.Format(
-        CultureInfo.InvariantCulture, "{0} ~ {1}", Min, Max);
+        CultureInfo.InvariantCulture, "{0}–{1}", Min, Max);
 }

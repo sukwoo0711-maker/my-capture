@@ -36,6 +36,38 @@ internal sealed class OcrResultPresenter : IDisposable
     private Action<OcrResult>? _onFreshResult;
     private bool _disposed;
     private long _presentationVersion;
+    private int _mutationSuspensions;
+
+    /// <summary>Invalidates both running and already queued record-writing callbacks.</summary>
+    internal async Task<IDisposable> AcquireMutationLeaseAsync(CancellationToken cancellationToken)
+    {
+        _dispatcher.VerifyAccess();
+        _mutationSuspensions++;
+        CancelInFlight();
+        _currentRequestFactory = null;
+        _onFreshResult = null;
+        _setBusy(false);
+        var lease = new MutationLease(this);
+        try
+        {
+            // Earlier Normal callbacks drain; later completions retain their invalidated owner.
+            await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background, cancellationToken);
+            return lease;
+        }
+        catch { lease.Dispose(); throw; }
+    }
+
+    private sealed class MutationLease(OcrResultPresenter owner) : IDisposable
+    {
+        private OcrResultPresenter? _owner = owner;
+        public void Dispose()
+        {
+            OcrResultPresenter? presenter = Interlocked.Exchange(ref _owner, null);
+            if (presenter is null) return;
+            presenter._dispatcher.VerifyAccess();
+            presenter._mutationSuspensions--;
+        }
+    }
 
     internal OcrResultPresenter(
         IOcrService service,
@@ -74,6 +106,7 @@ internal sealed class OcrResultPresenter : IDisposable
         Func<OcrRequest> requestFactory,
         Action<OcrResult>? onFreshResult = null)
     {
+        if (_disposed || _mutationSuspensions != 0) return;
         // A cached result replaces the current request just as decisively as a new recognition.
         // Clear ownership before changing callbacks so a late result from A can never be rendered
         // under B's label or persisted through B's callback.
@@ -97,6 +130,7 @@ internal sealed class OcrResultPresenter : IDisposable
         string contextLabel,
         Action<OcrResult>? onFreshResult = null)
     {
+        if (_disposed || _mutationSuspensions != 0) return;
         _currentRequestFactory = requestFactory ?? throw new ArgumentNullException(nameof(requestFactory));
         _currentContext = contextLabel ?? string.Empty;
         _onFreshResult = onFreshResult;
@@ -113,7 +147,7 @@ internal sealed class OcrResultPresenter : IDisposable
 
     private void Run(bool preserveSelection = false)
     {
-        if (_currentRequestFactory is null)
+        if (_disposed || _mutationSuspensions != 0 || _currentRequestFactory is null)
         {
             return;
         }
@@ -170,7 +204,7 @@ internal sealed class OcrResultPresenter : IDisposable
         _ = _dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
         {
             // Only the newest request updates the UI; a superseded/cancelled one is ignored.
-            if (!ReferenceEquals(_inFlight, cts))
+            if (_disposed || _mutationSuspensions != 0 || !ReferenceEquals(_inFlight, cts))
             {
                 cts.Dispose();
                 return;
@@ -182,7 +216,7 @@ internal sealed class OcrResultPresenter : IDisposable
             {
                 _window.ShowResult(result, _currentContext, source, preserveSelection);
 
-                if (result.Status == OcrStatus.Success)
+                if (result.Status == OcrStatus.Success && _mutationSuspensions == 0 && ReferenceEquals(_inFlight, cts))
                 {
                     _onFreshResult?.Invoke(result);
                 }

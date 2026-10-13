@@ -41,7 +41,10 @@ internal sealed partial class GalleryWindow
         if (path.Length == 0) return;
         // A disconnected network share can take seconds to answer; never ask on the UI thread.
         SourceFolderTarget target = await Task.Run(() => ResolveFolderTarget(path));
-        if (target.Kind == SourceFolderTargetKind.Missing)
+        // The recorded path came from another application's window. Only an existing, fully
+        // qualified path is handed to Explorer: it cannot contain quotes or start with '/', so it
+        // can never become a switch beyond the fixed "/select," prefix.
+        if (target.Kind == SourceFolderTargetKind.Missing || !Path.IsPathFullyQualified(target.Path))
         {
             LibraryActionStatus.Text = UiText.Get("Library.Source.FolderMissing");
             return;

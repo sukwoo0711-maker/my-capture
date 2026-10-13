@@ -49,7 +49,7 @@ namespace MyCapture.App.Editing;
 /// title bar, Alt+F4 or Cancel asks before dropping unsaved edits.
 /// </para>
 /// </remarks>
-internal sealed class AnnotationEditorControl : Grid
+internal sealed partial class AnnotationEditorControl : Grid
 {
     private EditorTool _preferredTool = EditorTool.Rectangle;
     private bool _preferencesReady;
@@ -108,6 +108,8 @@ internal sealed class AnnotationEditorControl : Grid
     private Border _cropRotationHost = null!;
     private Button _deleteButton = null!;
     private Button _redactButton = null!;
+    private Button _copyTextButton = null!;
+    private bool _textRecognitionInProgress;
     private Slider _thicknessSlider = null!;
     private ComboBox _strokeStyleComboBox = null!;
     private Slider _fillTransparencySlider = null!;
@@ -121,6 +123,7 @@ internal sealed class AnnotationEditorControl : Grid
     private ColumnDefinition _inspectorColumn = null!;
     private Border _inspectorPanel = null!;
     private WrapPanel _swatchPanel = null!;
+    private TextBox _customColorInput = null!;
     private FrameworkElement _colorSection = null!;
     private FrameworkElement _thicknessSection = null!;
     private TextBlock _inspectorTitle = null!;
@@ -144,6 +147,9 @@ internal sealed class AnnotationEditorControl : Grid
     private TextAnnotation? _editingText;
     // Distance from the live box's outer edge to its first glyph (see PlaceTextBox).
     private Point _liveTextInset;
+    private double _liveTextWidth;
+    // The live box's left edge with the scroll bar on its right (see UpdateLiveTextViewport).
+    private double _liveTextLeft;
     private bool _completed;
     private bool _commitInProgress;
     private bool _redactionInProgress;
@@ -366,8 +372,9 @@ internal sealed class AnnotationEditorControl : Grid
     internal bool IsPointerCaptured => _viewport.IsMouseCaptured;
 
     internal bool IsCommitInProgress => _commitInProgress && !_completed;
+    internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress;
 
-    internal bool CapturePointer() => _viewport.CaptureMouse();
+    internal bool CapturePointer() => !_simulatingPointer && _viewport.CaptureMouse();
 
     internal void ReleasePointer()
     {
@@ -508,6 +515,7 @@ internal sealed class AnnotationEditorControl : Grid
         if (crop.Region.Width < 2 || crop.Region.Height < 2) { SetStatus(UiText.Get("Crop.TooSmall")); return; }
         RectD region = crop.Region;
         _crop = null; _surface.PendingCrop = null;
+        DraftChanged?.Invoke(this, EventArgs.Empty);
         ReleasePointer();
         ApplyCrop(region);
         SelectTool(EditorTool.Select);
@@ -523,6 +531,7 @@ internal sealed class AnnotationEditorControl : Grid
     }
     private void RefreshCrop()
     {
+        DraftChanged?.Invoke(this, EventArgs.Empty);
         _surface.PendingCrop = _crop;
         _surface.InvalidateVisual();
         UpdateCommandMode();
@@ -592,59 +601,89 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void OnSurfaceMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_completed || _commitInProgress) return;
+        if (SurfacePointerDown(e.GetPosition(_surface), e.ClickCount)) e.Handled = true;
+    }
+
+    /// <summary>
+    /// Plays a canvas gesture from code, at <paramref name="viewportPoint"/> in
+    /// <see cref="PointerInputElement"/> coordinates, through the same handling as the mouse.
+    /// The tutorial clip generator uses it; the real mouse is never captured meanwhile.
+    /// </summary>
+    internal void SimulatePointerDown(Point viewportPoint, int clickCount = 1) =>
+        Simulate(() => SurfacePointerDown(_viewport.TranslatePoint(viewportPoint, _surface), clickCount));
+
+    /// <inheritdoc cref="SimulatePointerDown"/>
+    internal void SimulatePointerMove(Point viewportPoint, bool leftPressed) =>
+        Simulate(() => { SurfacePointerMove(_viewport.TranslatePoint(viewportPoint, _surface), leftPressed, shift: false); return true; });
+
+    /// <inheritdoc cref="SimulatePointerDown"/>
+    internal void SimulatePointerUp(Point viewportPoint) =>
+        Simulate(() => SurfacePointerUp(_viewport.TranslatePoint(viewportPoint, _surface), shift: false));
+
+    /// <summary>Where image pixel <paramref name="image"/> shows, in <see cref="PointerInputElement"/> coordinates.</summary>
+    internal Point ViewportPointOf(PointD image) => _surface.TranslatePoint(_surface.ToSurfacePoint(image), _viewport);
+
+    /// <summary>The rail button that selects <paramref name="tool"/>.</summary>
+    internal ToggleButton ToolButton(EditorTool tool) => _toolButtons[tool];
+
+    private void Simulate(Func<bool> gesture)
+    {
+        _simulatingPointer = true;
+        try { gesture(); }
+        finally { _simulatingPointer = false; }
+    }
+
+    private bool _simulatingPointer;
+
+    /// <summary>A left press on the canvas at <paramref name="dip"/> (surface coordinates); true when handled.</summary>
+    private bool SurfacePointerDown(Point dip, int clickCount)
+    {
+        if (_completed || _commitInProgress) return false;
         _autoTrimCts?.Cancel();
         if (_activeTextBox is not null)
         {
             CommitActiveText();
-            return;
+            return false;
         }
 
         Focus();
-        Point dip = e.GetPosition(_surface);
         PointD image = _surface.ToImagePoint(dip);
 
         if (TryBeginEdgeCrop(image))
         {
             CapturePointer();
-            e.Handled = true;
-            return;
+            return true;
         }
 
         switch (_controller.Tool)
         {
             case EditorTool.Text:
                 PlaceTextBox(image);
-                e.Handled = true;
-                return;
+                return true;
             case EditorTool.Image:
                 InsertImage(image);
-                e.Handled = true;
-                return;
+                return true;
             case EditorTool.Mosaic:
                 _mosaicDragging = true;
                 _mosaicStart = image;
                 CapturePointer();
-                e.Handled = true;
-                return;
+                return true;
             case EditorTool.Crop:
                 if (_crop is not null)
                 {
-                    if (e.ClickCount == 2 && _crop.Contains(image)) { ApplyPendingCrop(); e.Handled = true; return; }
+                    if (clickCount == 2 && _crop.Contains(image)) { ApplyPendingCrop(); return true; }
                     double scale = Math.Max(double.Epsilon, _surface.DipPerPixel);
                     _crop.Begin(image, 7 / scale, SystemParameters.MinimumHorizontalDragDistance / scale,
                         SystemParameters.MinimumVerticalDragDistance / scale);
                     RefreshCrop();
                     CapturePointer();
                 }
-                e.Handled = true;
-                return;
+                return true;
             default:
                 _controller.HitTolerance = 6 / Math.Max(double.Epsilon, _surface.DipPerPixel);
                 _controller.PointerDown(image);
                 CapturePointer();
-                e.Handled = true;
-                break;
+                return true;
         }
     }
 
@@ -853,33 +892,35 @@ internal sealed class AnnotationEditorControl : Grid
         }
     }
 
-    private void OnSurfaceMouseMove(object sender, MouseEventArgs e)
+    private void OnSurfaceMouseMove(object sender, MouseEventArgs e) =>
+        SurfacePointerMove(e.GetPosition(_surface), e.LeftButton == MouseButtonState.Pressed, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+
+    private void SurfacePointerMove(Point dip, bool leftPressed, bool shift)
     {
         if (_activeTextBox is not null)
         {
             return;
         }
 
-        Point dip = e.GetPosition(_surface);
         PointD image = _surface.ToImagePoint(dip);
 
         if (_edgeCropStart is not null)
         {
-            if (e.LeftButton == MouseButtonState.Pressed) ContinueEdgeCrop(image, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            if (leftPressed) ContinueEdgeCrop(image, shift);
             else { _edgeCropStart = null; ReleasePointer(); }
             return;
         }
         if (_crop is not null)
         {
-            if (e.LeftButton == MouseButtonState.Pressed && _crop.IsDragging)
+            if (leftPressed && _crop.IsDragging)
             {
-                _crop.Drag(image, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+                _crop.Drag(image, shift);
                 RefreshCrop();
             }
             ApplyCursor(new EditorPointerTarget(CropGrip: _crop.HitTest(image, 7 / Math.Max(double.Epsilon, _surface.DipPerPixel))));
             return;
         }
-        if (e.LeftButton == MouseButtonState.Pressed)
+        if (leftPressed)
         {
             _controller.PointerMove(image);
         }
@@ -899,41 +940,43 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void OnSurfaceMouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (SurfacePointerUp(e.GetPosition(_surface), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))) e.Handled = true;
+    }
+
+    /// <summary>A left release on the canvas at <paramref name="dip"/> (surface coordinates); true when handled.</summary>
+    private bool SurfacePointerUp(Point dip, bool shift)
+    {
         if (_activeTextBox is not null)
         {
-            return;
+            return false;
         }
 
         if (_edgeCropStart is not null)
         {
-            CompleteEdgeCropGesture(_surface.ToImagePoint(e.GetPosition(_surface)), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            CompleteEdgeCropGesture(_surface.ToImagePoint(dip), shift);
         }
 
         if (_mosaicDragging)
         {
             _mosaicDragging = false;
             ReleasePointer();
-            Point mosaicDip = e.GetPosition(_surface);
-            PointD mosaicEnd = _surface.ToImagePoint(mosaicDip);
+            PointD mosaicEnd = _surface.ToImagePoint(dip);
             ApplyMosaic(
                 new RectD(_mosaicStart.X, _mosaicStart.Y, mosaicEnd.X - _mosaicStart.X, mosaicEnd.Y - _mosaicStart.Y),
                 _mosaicBlockSize);
-            e.Handled = true;
-            return;
+            return true;
         }
 
         if (_crop is { IsDragging: true })
         {
-            _crop.Drag(_surface.ToImagePoint(e.GetPosition(_surface)), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            _crop.Drag(_surface.ToImagePoint(dip), shift);
             _crop.End(); ReleasePointer(); RefreshCrop();
-            e.Handled = true;
-            return;
+            return true;
         }
 
         EditorTool toolBeforeCommit = _controller.Tool;
         int itemsBefore = _controller.Document.Items.Count;
 
-        Point dip = e.GetPosition(_surface);
         PointD image = _surface.ToImagePoint(dip);
         _controller.PointerUp(image);
         ReleasePointer();
@@ -953,6 +996,8 @@ internal sealed class AnnotationEditorControl : Grid
                 SetStatus(UiText.Format("EditorFlow_Added", selected.DisplayName));
             }
         }
+
+        return false;
     }
 
     private void OnSurfaceRightDown(object sender, MouseButtonEventArgs e)
@@ -1030,6 +1075,7 @@ internal sealed class AnnotationEditorControl : Grid
             BorderThickness = new Thickness(1),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Padding = new Thickness(4, 2, 4, 2),
         };
         // The committed caption is drawn with ideal glyph metrics (FormattedText). The editor
@@ -1045,12 +1091,50 @@ internal sealed class AnnotationEditorControl : Grid
             textBox.BorderThickness.Top + textBox.Padding.Top);
         _overlayCanvas.Children.Add(textBox);
         _activeTextBox = textBox;
+        SizeChangedEventHandler resize = (_, _) => UpdateLiveTextViewport(textBox);
+        ScrollChangedEventHandler scroll = (_, e) =>
+        {
+            if (e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0 || e.ViewportWidthChange != 0)
+                UpdateLiveTextViewport(textBox);
+        };
+        ScrollViewer? contentHost = null;
+        bool connected = false;
+        void ConnectViewport()
+        {
+            if (connected) return;
+            connected = true;
+            _overlayCanvas.SizeChanged += resize;
+            textBox.ApplyTemplate();
+            contentHost = textBox.Template.FindName("PART_ContentHost", textBox) as ScrollViewer;
+            if (contentHost is not null)
+            {
+                // Set before the host first applies a template, so the text view is never re-parented
+                // once the user types or composes.
+                contentHost.Template = CaptionScrollHostTemplate.Value;
+                contentHost.ApplyTemplate();
+                contentHost.ScrollChanged += scroll;
+            }
+            UpdateLiveTextViewport(textBox);
+        }
+        textBox.Loaded += (_, _) => ConnectViewport();
+        textBox.Unloaded += (_, _) =>
+        {
+            if (!connected) return;
+            connected = false;
+            _overlayCanvas.SizeChanged -= resize;
+            if (contentHost is not null) contentHost.ScrollChanged -= scroll;
+            contentHost = null;
+        };
         LayoutLiveTextBox(textBox);
+        ConnectViewport();
         MeasureLiveTextInset(textBox);
         SetStatus(UiText.Get("Text_230D26DEB9AE"));
 
         textBox.TextChanged += OnLiveTextBoxTextChanged;
-        textBox.LostKeyboardFocus += (_, _) => CommitActiveText();
+        // A box placed by a simulated gesture lives in a window that never takes keyboard focus;
+        // it commits on the next canvas press instead.
+        bool simulated = _simulatingPointer;
+        textBox.LostKeyboardFocus += (_, _) => { if (!simulated) CommitActiveText(); };
         _ = textBox.Focus();
     }
 
@@ -1078,6 +1162,7 @@ internal sealed class AnnotationEditorControl : Grid
 
     private void OnLiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
     {
+        DraftChanged?.Invoke(this, EventArgs.Empty);
         if (sender is TextBox box)
         {
             LayoutLiveTextBox(box);
@@ -1105,16 +1190,107 @@ internal sealed class AnnotationEditorControl : Grid
         {
             box.TextWrapping = TextWrapping.NoWrap;
             // Room for the caret after the last glyph, so the line never scrolls sideways.
-            box.Width = target.Width + chrome + 2;
+            _liveTextWidth = target.Width + chrome + 2;
         }
         else
         {
             box.TextWrapping = TextWrapping.Wrap;
-            box.Width = target.Width + chrome;
+            _liveTextWidth = target.Width + chrome;
         }
 
-        Canvas.SetLeft(box, target.Left - _liveTextInset.X);
+        // UpdateLiveTextViewport places the box horizontally, once the bar's side is known.
+        _liveTextLeft = target.Left - _liveTextInset.X;
         Canvas.SetTop(box, target.Top - _liveTextInset.Y);
+        UpdateLiveTextViewport(box);
+    }
+
+    internal enum CaptionScrollBarSide { Right, Left, Overlay }
+
+    /// <summary>
+    /// Where the live caption's vertical bar stays visible. The text viewport neither moves nor
+    /// narrows (its width is the committed wrapping width), so the bar takes the side with room
+    /// inside the visible canvas: right of the caption, else left of it, else over its right edge
+    /// when the caption spans the whole width.
+    /// </summary>
+    internal static CaptionScrollBarSide ChooseCaptionScrollBarSide(double boxLeft, double boxWidth, double barWidth, double visibleWidth) =>
+        barWidth <= 0 || !(visibleWidth > 0) || boxLeft + boxWidth + barWidth <= visibleWidth + 0.5 ? CaptionScrollBarSide.Right
+        : boxLeft - barWidth >= -0.5 ? CaptionScrollBarSide.Left
+        : CaptionScrollBarSide.Overlay;
+
+    /// <summary>
+    /// The live caption's scroll host: the text viewport between two bar slots, so the vertical bar
+    /// can sit right of the caption, left of it, or over its right edge (see
+    /// <see cref="ChooseCaptionScrollBarSide"/>) without changing the text view or its width. The
+    /// bar keeps the application's ScrollBar style. Sealed once, so any editor thread may use it.
+    /// </summary>
+    private static readonly Lazy<ControlTemplate> CaptionScrollHostTemplate = new(() =>
+    {
+        var template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(
+            """
+            <ControlTemplate TargetType="ScrollViewer"
+                             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                <Grid Background="{TemplateBinding Background}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Column="1"
+                                            Margin="{TemplateBinding Padding}"
+                                            CanContentScroll="{TemplateBinding CanContentScroll}"
+                                            Content="{TemplateBinding Content}"
+                                            ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Column="2" Orientation="Vertical" Cursor="Arrow"
+                               AutomationProperties.AutomationId="VerticalScrollBar"
+                               Maximum="{TemplateBinding ScrollableHeight}"
+                               ViewportSize="{TemplateBinding ViewportHeight}"
+                               Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}"
+                               Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                </Grid>
+            </ControlTemplate>
+            """);
+        template.Seal();
+        return template;
+    });
+
+    private void UpdateLiveTextViewport(TextBox box)
+    {
+        if (!ReferenceEquals(_activeTextBox, box)) return;
+        // Canvas measures its children with infinite height. Keep the editing viewport inside
+        // the visible canvas so TextBoxView formats and draws visible lines, while FitText and
+        // the committed annotation continue to measure and retain the complete document.
+        double height = _overlayCanvas.ActualHeight;
+        if (height > 0)
+        {
+            double minimum = box.FontSize * 1.4 + box.Padding.Top + box.Padding.Bottom
+                + box.BorderThickness.Top + box.BorderThickness.Bottom;
+            box.MaxHeight = Math.Max(minimum, height - Canvas.GetTop(box));
+        }
+        var host = box.Template?.FindName("PART_ContentHost", box) as ScrollViewer;
+        var bar = host?.Template?.FindName("PART_VerticalScrollBar", host) as ScrollBar;
+        double scrollWidth = 0;
+        if (host?.ComputedVerticalScrollBarVisibility == Visibility.Visible && bar is not null)
+        {
+            scrollWidth = bar.ActualWidth > 0 ? bar.ActualWidth
+                : double.IsFinite(bar.Width) ? bar.Width : SystemParameters.VerticalScrollBarWidth;
+        }
+        // The scrollbar occupies chrome, not the caption's wrapping width. Keep the same text
+        // viewport width and place as FitText, so neither scrolling nor the bar's side can change
+        // the saved line breaks or move a glyph; the bar takes a side the canvas does not clip.
+        double visibleWidth = _overlayCanvas.ActualWidth;
+        CaptionScrollBarSide side = ChooseCaptionScrollBarSide(_liveTextLeft, _liveTextWidth, scrollWidth, visibleWidth);
+        if (bar is not null)
+        {
+            bool overlay = side == CaptionScrollBarSide.Overlay;
+            Grid.SetColumn(bar, side switch { CaptionScrollBarSide.Left => 0, CaptionScrollBarSide.Overlay => 1, _ => 2 });
+            bar.HorizontalAlignment = overlay ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
+            // Over the right edge, pull the bar in from the box's clipped chrome to the canvas edge.
+            double clipped = _liveTextLeft + _liveTextWidth - box.BorderThickness.Right - visibleWidth;
+            bar.Margin = overlay && clipped > 0 ? new Thickness(0, 0, clipped, 0) : default;
+        }
+        box.Width = _liveTextWidth + (side == CaptionScrollBarSide.Overlay ? 0 : scrollWidth);
+        Canvas.SetLeft(box, _liveTextLeft - (side == CaptionScrollBarSide.Left ? scrollWidth : 0));
     }
 
     internal AnnotationDocument CreateCurrentImageSnapshot()
@@ -1358,6 +1534,16 @@ internal sealed class AnnotationEditorControl : Grid
                 : UiText.Get("Text_39E626945336"));
         left.Children.Add(_redactButton);
 
+        // Text recognition of what the editor shows now, beside the other text-reading command.
+        _copyTextButton = TextButton(
+            UiText.Get("EditorFlow_CopyText"),
+            UiText.Get("EditorFlow_CopyTextHint"),
+            "Button.GhostCompact",
+            () => _ = RecognizeCurrentTextAsync());
+        AutomationProperties.SetAutomationId(_copyTextButton, "EditorFlowCopyText");
+        RefreshCopyTextAvailability();
+        left.Children.Add(_copyTextButton);
+
         var right = CommandRow();
         Button save = BuildSaveOverflowMenu();
         Button copy = IconTextButton(
@@ -1386,6 +1572,7 @@ internal sealed class AnnotationEditorControl : Grid
         }
 
         CommandButton(cancel, borderless: true);
+        CommandButton(_copyTextButton, borderless: true);
         var panel = new CommandGroupsPanel { Children = { left, right } };
         AutomationProperties.SetName(panel, UiText.Get("EditorFlow_CommandBarName"));
         return panel;
@@ -1937,26 +2124,27 @@ internal sealed class AnnotationEditorControl : Grid
                 Height = 40,
                 Margin = new Thickness(0, 0, 8, 8),
                 Padding = new Thickness(0),
-                ToolTip = UiText.Format("Text_151C77170A94", swatchColor.ToHex()),
+                ToolTip = UiText.Format("Text_151C77170A94", ColorCode(swatchColor)),
                 BorderThickness = new Thickness(1),
                 // A control boundary, so a dark swatch stays outlined on a dark panel.
                 BorderBrush = Brush("Border.Control", Colors.Gray),
                 Background = swatchColor.ToBrush(),
             };
-            AutomationName(swatchButton, UiText.Format("Text_151C77170A94", swatchColor.ToHex()));
+            AutomationName(swatchButton, UiText.Format("Text_151C77170A94", ColorCode(swatchColor)));
             PreserveEditorMouseFocus(swatchButton);
             swatchButton.Click += (_, _) =>
             {
                 _controller.ApplyStrokeColor(swatchColor);
                 RememberPreferences();
                 RefreshStepFeedback();
-                SetStatus(UiText.Format("Text_67CAE5B118A3", swatchColor.ToHex()));
+                SetStatus(UiText.Format("Text_67CAE5B118A3", ColorCode(swatchColor)));
             };
             _swatchPanel.Children.Add(swatchButton);
         }
 
         panel.Children.Add(_swatchPanel);
-        var custom = new TextBox { Text = _controller.StrokeColor.ToHex(), MinHeight = 32, Margin = new Thickness(0, 4, 0, 4) };
+        var custom = new TextBox { Text = ColorCode(_controller.StrokeColor), MinHeight = 32, Margin = new Thickness(0, 4, 0, 4) };
+        _customColorInput = custom;
         AutomationName(custom, UiText.Get("Tools.CustomColor"));
         InputMethod.SetIsInputMethodEnabled(custom, true);
         // Enter applies and Esc restores; both hand the keyboard back to the canvas so the next
@@ -1973,7 +2161,7 @@ internal sealed class AnnotationEditorControl : Grid
             else if (e.Key == Key.Escape)
             {
                 e.Handled = true;
-                custom.Text = _controller.StrokeColor.ToHex();
+                custom.Text = ColorCode(_controller.StrokeColor);
                 Focus();
             }
         };
@@ -2018,9 +2206,22 @@ internal sealed class AnnotationEditorControl : Grid
         _controller.ApplyStrokeColor(color);
         RememberPreferences();
         RefreshStepFeedback();
-        SetStatus(UiText.Format("Text_67CAE5B118A3", color.ToHex()));
+        // Short and lower-case forms read back in the one form the editor shows.
+        if (_customColorInput is not null) _customColorInput.Text = ColorCode(color);
+        SetStatus(UiText.Format("Text_67CAE5B118A3", ColorCode(color)));
         return true;
     }
+
+    /// <summary>The color input, for tests.</summary>
+    internal TextBox CustomColorInputForTest => _customColorInput;
+
+    /// <summary>
+    /// The color as people write it: <c>#RRGGBB</c> when opaque, and <c>#AARRGGBB</c> only when it
+    /// is see-through. The input accepts either form.
+    /// </summary>
+    internal static string ColorCode(ColorRgba color) => color.A == byte.MaxValue
+        ? string.Create(CultureInfo.InvariantCulture, $"#{color.R:X2}{color.G:X2}{color.B:X2}")
+        : color.ToHex();
 
     /// <summary>
     /// After a mouse pick from <paramref name="combo"/>'s list, returns the keyboard to the
@@ -2597,6 +2798,7 @@ internal sealed class AnnotationEditorControl : Grid
     private void OnHistoryChanged()
     {
         _documentRevision++;
+        DraftChanged?.Invoke(this, EventArgs.Empty);
         _autoTrimCts?.Cancel();
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncBaseBitmapWithDocument();
@@ -2926,6 +3128,48 @@ internal sealed class AnnotationEditorControl : Grid
             _redactionInProgress = false;
             _redactButton.IsEnabled = _privacyRedactionService.IsAvailable;
         }
+    }
+
+    /// <summary>
+    /// Recognises the text in the image as edited so far (marks, covers, crop and rotation
+    /// included) and opens it in the shared text recognition window.
+    /// </summary>
+    internal async Task RecognizeCurrentTextAsync()
+    {
+        if (_textRecognitionInProgress || _commitInProgress || _completed) return;
+        if (!TextRecognitionRoute.CanShow || TextRecognitionRoute.Show is not { } show)
+        {
+            SetStatus(UiText.Get("TextCapture_Unavailable"));
+            RefreshCopyTextAvailability();
+            return;
+        }
+
+        CommitActiveText();
+        _textRecognitionInProgress = true;
+        _copyTextButton.IsEnabled = false;
+        try
+        {
+            BitmapSource image = await RenderCurrentImageAsync();
+            if (_completed) return;
+            show(image, string.IsNullOrWhiteSpace(_sourceWindowTitle) ? UiText.Get("EditorFlow_CopyText") : _sourceWindowTitle);
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            SetStatus(UiText.Get("TextCapture_Failed"));
+        }
+        finally
+        {
+            _textRecognitionInProgress = false;
+            RefreshCopyTextAvailability();
+        }
+    }
+
+    private void RefreshCopyTextAvailability()
+    {
+        bool available = TextRecognitionRoute.CanShow;
+        _copyTextButton.IsEnabled = available && !_textRecognitionInProgress;
+        AutomationProperties.SetHelpText(_copyTextButton,
+            UiText.Get(available ? "EditorFlow_CopyTextHint" : "TextCapture_Unavailable"));
     }
 
     private void RaiseStatusAutomationEvent()

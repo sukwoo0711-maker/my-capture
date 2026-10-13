@@ -81,6 +81,40 @@ public sealed record VideoEncoderOptions(
     public VideoEncoderInputFormat InputFormat { get; init; }
 
     /// <summary>
+    /// Lets Media Foundation pick a GPU H.264 encoder when one is present (the default). The
+    /// tutorial clip generator turns it off so every machine produces the software encoder's
+    /// output for the same frames.
+    /// </summary>
+    public bool AllowHardwareEncoder { get; init; } = true;
+
+    /// <summary>
+    /// The H.264 profile to request (Media Foundation eAVEncH264VProfile, for example 100 for
+    /// High); null keeps the encoder's default.
+    /// </summary>
+    public int? H264Profile { get; init; }
+
+    /// <summary>
+    /// Constant-quality rate control from 1 to 100 instead of the average bitrate; null keeps the
+    /// bitrate mode recordings use. Static screen content then costs almost nothing.
+    /// </summary>
+    public int? ConstantQuality { get; init; }
+
+    /// <summary>
+    /// Encoder effort for <see cref="ConstantQuality"/> from 0 (fastest) to 100 (best); null keeps
+    /// the encoder's default. A higher value also clears faint residue where content disappears.
+    /// </summary>
+    public int? QualityVsSpeed { get; init; }
+
+    /// <summary>
+    /// Converts RGB input to full-range (0–255) Y'CbCr and declares that range in the stream,
+    /// instead of the studio range (16–235) recordings use. WPF's MediaElement presents studio
+    /// range as studio-range RGB (white at 235, black at 16): the recording players expand it
+    /// back on the GPU, while the feature tutorial clips, which only the tutorial player shows,
+    /// are encoded full range instead. Has no effect on NV12 input.
+    /// </summary>
+    public bool FullRange { get; init; }
+
+    /// <summary>
     /// A frame-size- and rate-aware default bitrate when none is specified.
     /// </summary>
     /// <remarks>

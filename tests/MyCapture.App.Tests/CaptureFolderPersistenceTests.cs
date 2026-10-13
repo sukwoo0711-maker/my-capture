@@ -92,7 +92,7 @@ public sealed class CaptureFolderPersistenceTests
     private static Task RunStaAsync(Func<Task> action)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));

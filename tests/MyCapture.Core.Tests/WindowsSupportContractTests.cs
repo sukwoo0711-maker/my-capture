@@ -19,10 +19,29 @@ public sealed class WindowsSupportContractTests
     /// Matches Windows 10 *support claims*, not the Windows SDK target moniker. The TFM
     /// "net10.0-windows10.0.22000.0" only selects the WinRT projection surface and is
     /// deliberately not treated as a support statement.
+    /// Numeric release tokens exclude ASCII identifiers and hashes, while Korean suffixes
+    /// such as "1809이상" still count as a support claim.
     /// </summary>
     private static readonly Regex Windows10Claim = new(
-        @"Windows\s+10\b|(?<![.\d])1809(?![.\d])|(?<![.\d])17763(?![.\d])|(?<![.\d])19045(?![.\d])",
+        @"Windows\s+10\b|(?<![.A-Za-z0-9_])(?:1809|17763|19045)(?![.A-Za-z0-9_])",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    [Theory]
+    [InlineData("Windows 10 or later", true)]
+    [InlineData("Windows release 1809", true)]
+    [InlineData("MinimumWindowsBuild = 17763", true)]
+    [InlineData("\"minimumBuild\": 19045", true)]
+    [InlineData("1809이상 지원", true)]
+    [InlineData("최소 빌드17763", true)]
+    [InlineData("net10.0-windows10.0.22000.0", false)]
+    [InlineData("10.0.17763.0", false)]
+    [InlineData("B25409A18643DB2081CE2B1809CD5DC87997C85498AB1FF5DFBB81BD060C0931", false)]
+    [InlineData("AA17763BB", false)]
+    [InlineData("AA19045BB", false)]
+    public void SupportClaimMatcherDistinguishesVersionTokensFromSdkMonikersAndHashes(string text, bool expected)
+    {
+        Assert.Equal(expected, Windows10Claim.IsMatch(text));
+    }
 
     private static string RepositoryRoot()
     {

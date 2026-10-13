@@ -123,6 +123,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _fontFamily = string.Empty;
     private string _mosaicBlockSize = string.Empty;
     private string _highlighterAlpha = string.Empty;
+    private string _highlighterOpacityPercent = string.Empty;
+    private int _loadedHighlighterAlpha;
     private string _blurRadius = string.Empty;
 
     /// <summary>
@@ -390,10 +392,16 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     public bool FolderDestinationEdited { get; private set; }
 
+    /// <summary>
+    /// Hours before an unpinned library image is deleted automatically, or
+    /// <see cref="MyCapture.Core.Queue.CaptureRetention.NeverHours"/> for never. The settings
+    /// window offers the presets of <see cref="MyCapture.Core.Queue.CaptureRetention.PresetHours"/>
+    /// and keeps any other stored hour count as a custom choice.
+    /// </summary>
     public string ImageRetentionHours
     {
         get => _imageRetentionHours;
-        set { if (Set(ref _imageRetentionHours, value)) ValidateInt(value, SettingsRanges.ImageRetentionHours); }
+        set { if (Set(ref _imageRetentionHours, value)) ValidateRetention(value); }
     }
 
     public string GitHubIssueUrl
@@ -534,11 +542,52 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _mosaicBlockSize, value)) ValidateInt(value, SettingsRanges.MosaicBlockSize); }
     }
 
+    /// <summary>The stored 0–255 highlighter alpha. The window edits <see cref="HighlighterOpacityPercent"/>.</summary>
     public string HighlighterAlpha
     {
         get => _highlighterAlpha;
-        set { if (Set(ref _highlighterAlpha, value)) ValidateInt(value, SettingsRanges.HighlighterAlpha); }
+        set
+        {
+            if (!Set(ref _highlighterAlpha, value)) return;
+            ValidateInt(value, SettingsRanges.HighlighterAlpha);
+            if (TryParseInt(value, out int alpha) && SettingsRanges.HighlighterAlpha.Contains(alpha)
+                && _highlighterOpacityPercent != Int(AlphaToPercent(alpha)))
+            {
+                _highlighterOpacityPercent = Int(AlphaToPercent(alpha));
+                RaisePropertyChanged(nameof(HighlighterOpacityPercent));
+                ValidateInt(_highlighterOpacityPercent, SettingsRanges.HighlighterOpacityPercent, nameof(HighlighterOpacityPercent));
+            }
+        }
     }
+
+    /// <summary>
+    /// The highlighter opacity in percent (0–100), converted to the stored alpha at this boundary.
+    /// A percentage that the current or the loaded alpha already rounds to keeps that alpha, so
+    /// opening the window, or typing a value and typing the original back, never rewrites it.
+    /// </summary>
+    public string HighlighterOpacityPercent
+    {
+        get => _highlighterOpacityPercent;
+        set
+        {
+            if (!Set(ref _highlighterOpacityPercent, value ?? string.Empty)) return;
+            ValidateInt(_highlighterOpacityPercent, SettingsRanges.HighlighterOpacityPercent);
+            if (!TryParseInt(_highlighterOpacityPercent, out int percent)
+                || !SettingsRanges.HighlighterOpacityPercent.Contains(percent)) return;
+            if (TryParseInt(_highlighterAlpha, out int current) && AlphaToPercent(current) == percent) return;
+            _highlighterAlpha = Int(AlphaToPercent(_loadedHighlighterAlpha) == percent ? _loadedHighlighterAlpha : PercentToAlpha(percent));
+            RaisePropertyChanged(nameof(HighlighterAlpha));
+            ValidateInt(_highlighterAlpha, SettingsRanges.HighlighterAlpha, nameof(HighlighterAlpha));
+        }
+    }
+
+    /// <summary>0–255 alpha to the nearest whole percent.</summary>
+    public static int AlphaToPercent(int alpha) =>
+        (int)Math.Round(Math.Clamp(alpha, 0, 255) * 100.0 / 255, MidpointRounding.AwayFromZero);
+
+    /// <summary>A whole percent to the nearest 0–255 alpha; it converts back to the same percent.</summary>
+    public static int PercentToAlpha(int percent) =>
+        (int)Math.Round(Math.Clamp(percent, 0, 100) * 255.0 / 100, MidpointRounding.AwayFromZero);
 
     public string BlurRadius
     {
@@ -665,6 +714,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _fontFamily = s.Annotation.FontFamily;
         _mosaicBlockSize = Int(s.Annotation.MosaicBlockSize);
         _highlighterAlpha = Int(s.Annotation.HighlighterAlpha);
+        _loadedHighlighterAlpha = s.Annotation.HighlighterAlpha;
+        _highlighterOpacityPercent = Int(AlphaToPercent(s.Annotation.HighlighterAlpha));
         _blurRadius = Int(s.Annotation.BlurRadius);
 
         // Preserve members not surfaced in the UI so mapping back is lossless.
@@ -716,7 +767,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         B(_closeOnDoubleClick), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
         _preferredLanguages, _ocrQuality, B(_cacheResults),
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
-        _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _blurRadius,
+        _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _highlighterOpacityPercent, _blurRadius,
         _preservedStrokeColor.ToString(), _preservedTextColor.ToString(),
         string.Join(";", _preservedRecentColors.Select(color => color.ToString())),
     ];
@@ -916,7 +967,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ValidateInt(_maxItems, SettingsRanges.MaxItems, nameof(MaxItems));
         ValidateMaxGiB(_maxGiB);
         ValidateInt(_thumbnailLongEdge, SettingsRanges.ThumbnailLongEdge, nameof(ThumbnailLongEdge));
-        ValidateInt(_imageRetentionHours, SettingsRanges.ImageRetentionHours, nameof(ImageRetentionHours));
+        ValidateRetention(_imageRetentionHours);
         ValidateFolderFilePrefix(_folderFilePrefix);
         ValidateOptionalDirectory(_capturesDirectoryOverride, nameof(CapturesDirectoryOverride));
         ValidateOptionalDirectory(_quickSaveDirectoryOverride, nameof(QuickSaveDirectoryOverride));
@@ -932,6 +983,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         ValidateNonEmpty(_fontFamily, nameof(FontFamily), UiText.Get("Text_B64CA1BE6711"));
         ValidateInt(_mosaicBlockSize, SettingsRanges.MosaicBlockSize, nameof(MosaicBlockSize));
         ValidateInt(_highlighterAlpha, SettingsRanges.HighlighterAlpha, nameof(HighlighterAlpha));
+        ValidateInt(_highlighterOpacityPercent, SettingsRanges.HighlighterOpacityPercent, nameof(HighlighterOpacityPercent));
         ValidateInt(_blurRadius, SettingsRanges.BlurRadius, nameof(BlurRadius));
         ValidateAllHotkeys();
     }
@@ -946,6 +998,23 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
         SetErrorState(property!, range.Contains(parsed), UiText.Format("Text_CF32FE576AE7", range.Describe()));
     }
+
+    /// <summary>An hour count in range, or the stored "never" value the window offers.</summary>
+    private void ValidateRetention(string value)
+    {
+        Range<int> range = SettingsRanges.ImageRetentionHours;
+        if (!TryParseInt(value, out int hours))
+        {
+            SetError(nameof(ImageRetentionHours), UiText.Format("Text_9A6259D8B7CF", range.Describe()));
+            return;
+        }
+
+        SetErrorState(nameof(ImageRetentionHours), MyCapture.Core.Queue.CaptureRetention.IsValidHours(hours),
+            UiText.Format("Text_CF32FE576AE7", range.Describe()));
+    }
+
+    private static bool TryParseInt(string? value, out int parsed) =>
+        int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed);
 
     /// <summary>
     /// Validates the size boxes only while the fixed size is chosen; with the dragged size they

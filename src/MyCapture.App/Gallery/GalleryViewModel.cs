@@ -213,7 +213,10 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
     public string ResultCountText => UiText.Format("Library.Search.Count", ReachableCount, _controller.Count);
     public string EmptyStateTitle => UiText.Get(IsBrowsingFolderWithoutQuery
-        ? "Folder410.EmptyFolder" : QueueIsEmpty ? "Library.Empty.Start" : "Library.Empty.NoResults");
+        ? "Folder410.EmptyFolder" : QueueIsEmpty ? "Library.Empty.NoCaptures" : "Library.Empty.NoResults");
+
+    /// <summary>The region capture shortcut as the empty library names it; empty while none is assigned.</summary>
+    internal Func<string> CaptureShortcutText { get; set; } = static () => string.Empty;
 
     /// <summary>
     /// True when the empty state comes from a search or filter that resetting can clear; an
@@ -230,8 +233,13 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             ? UiText.Get(NewCaptureFolderId is { } destination && destination == _scope.FolderId
                 ? "LibraryFolder_EmptyFolderSavesHere" : "Folder410.EmptyFolderHint")
             : QueueIsEmpty
-            ? UiText.Get("Text_1FC9ECE11C93")
+            ? EmptyLibraryText()
             : UiText.Get("Text_58726BF27E70");
+
+    /// <summary>"Ctrl+Shift+C로 캡처하면 여기에 표시됩니다." with the shortcut that is set now.</summary>
+    private string EmptyLibraryText() => CaptureShortcutText() is { Length: > 0 } shortcut
+        ? UiText.Format("Library.Empty.ShortcutHint", shortcut)
+        : UiText.Get("Library.Empty.Hint");
 
     /// <summary>Count and storage summary, for example "캡처 12개 · 34.5 MB".</summary>
     public string SummaryText

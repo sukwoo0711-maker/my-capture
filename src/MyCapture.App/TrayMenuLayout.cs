@@ -16,12 +16,28 @@ internal sealed record TrayMenuCommands(
     Action Library,
     Action Settings,
     Action Shortcuts,
-    Action Exit);
+    Action Exit,
+    Action? PinClipboard = null,
+    Action? HideOrShowAllPins = null);
+
+/// <summary>What the tray menu reflects at the moment it opens. Read cheaply on every open.</summary>
+/// <param name="CanRestoreClosedPin">A closed pin can come back.</param>
+/// <param name="ScrollingActive">A scrolling capture is running, so its entry cancels it.</param>
+/// <param name="ClipboardHasContent">The clipboard holds an image or text a pin can show.</param>
+/// <param name="PinCount">Open pins, shown or hidden.</param>
+/// <param name="PinsHidden">The pins are hidden by "Hide all pins".</param>
+internal sealed record TrayMenuState(
+    bool CanRestoreClosedPin = false,
+    bool ScrollingActive = false,
+    bool ClipboardHasContent = true,
+    int PinCount = 0,
+    bool PinsHidden = false);
 
 /// <summary>
 /// The tray menu's order, kept apart from the shell so it can be checked without a tray icon.
-/// The two things people come for sit on top (region capture and screen recording), the rarer
-/// capture types share one branch, the destinations follow, and Exit is always last. The display
+/// The first group holds what people come for: region capture, screen recording, text capture,
+/// the rarer capture types in one branch, and the pin commands (pin the clipboard, hide or show
+/// every pin, reopen a closed pin). The destinations follow, and Exit is always last. The display
 /// language lives in Settings only.
 /// </summary>
 internal static class TrayMenuLayout
@@ -30,7 +46,11 @@ internal static class TrayMenuLayout
     internal const string ShortcutsGesture = "F1";
 
     internal static IReadOnlyList<ThemedShellPresenter.MenuEntry> Build(
-        TrayMenuCommands commands, HotkeySettings keys, bool canRestoreClosedPin, bool scrollingActive)
+        TrayMenuCommands commands, HotkeySettings keys, bool canRestoreClosedPin, bool scrollingActive) =>
+        Build(commands, keys, new TrayMenuState(canRestoreClosedPin, scrollingActive));
+
+    internal static IReadOnlyList<ThemedShellPresenter.MenuEntry> Build(
+        TrayMenuCommands commands, HotkeySettings keys, TrayMenuState state)
     {
         ArgumentNullException.ThrowIfNull(commands);
         ArgumentNullException.ThrowIfNull(keys);
@@ -38,20 +58,35 @@ internal static class TrayMenuLayout
         {
             new(UiText.Get("Text_2C20ADDA2018"), commands.Capture, Gesture: Gesture(keys.Capture)),
             new(UiText.Get("Text_4F5AF20FAA6E"), commands.Record, Gesture: Gesture(keys.RecordRegion)),
+            new(UiText.Get("Onboard_TrayCopyText"), commands.CopyText, Gesture: Gesture(keys.CaptureText)),
             new(UiText.Get("Onboard_TrayMoreCaptures"), null,
             [
                 new(UiText.Get("Text_EA1FBABE64F3"), commands.CaptureWindow, Gesture: Gesture(keys.CaptureWindow)),
                 new(UiText.Get("Text_65BB6610ACA0"), commands.CaptureFullScreen, Gesture: Gesture(keys.CaptureFullScreen)),
-                new(UiText.Get(scrollingActive ? "Text_E8B876F98CD8" : "Text_4DBA30197C0A"), commands.ScrollingCapture,
+                new(UiText.Get(state.ScrollingActive ? "Text_E8B876F98CD8" : "Text_4DBA30197C0A"), commands.ScrollingCapture,
                     Gesture: Gesture(keys.ScrollingCapture)),
                 new(UiText.Get("Text_38FF9B0AA541"), commands.DelayedCapture, Gesture: Gesture(keys.DelayedCapture)),
                 new(UiText.Get("Text_878A28AF568C"), commands.RepeatLastRegion, Gesture: Gesture(keys.RepeatLastRegion)),
-                new(UiText.Get("Onboard_TrayCopyText"), commands.CopyText, Gesture: Gesture(keys.CaptureText)),
             ]),
         };
 
+        // Reachable without a shortcut: a new installation leaves Paste to screen unassigned.
+        if (commands.PinClipboard is { } pinClipboard)
+        {
+            entries.Add(new(UiText.Get("Tray_PinClipboard"), pinClipboard, Gesture: Gesture(keys.PasteToScreen),
+                IsEnabled: state.ClipboardHasContent,
+                ToolTip: state.ClipboardHasContent ? string.Empty : UiText.Get("Tray_ClipboardEmpty")));
+        }
+
+        // The way back from click-through: hiding and showing again clears it on every pin.
+        if (commands.HideOrShowAllPins is { } hideOrShow && state.PinCount > 0)
+        {
+            entries.Add(new(UiText.Get(state.PinsHidden ? "Tray_ShowAllPins" : "Tray_HideAllPins"), hideOrShow,
+                Gesture: Gesture(keys.HideAllPins)));
+        }
+
         // Only while a closed pin can come back; the menu is rebuilt on every open.
-        if (canRestoreClosedPin)
+        if (state.CanRestoreClosedPin)
             entries.Add(new(UiText.Get("Onboard_TrayReopenPin"), commands.RestoreClosedPin, Gesture: Gesture(keys.RestoreClosedPin)));
 
         entries.Add(ThemedShellPresenter.MenuEntry.Separator);

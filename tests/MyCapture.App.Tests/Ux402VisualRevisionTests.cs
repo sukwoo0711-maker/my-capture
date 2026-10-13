@@ -15,10 +15,10 @@ namespace MyCapture.App.Tests;
 public sealed class Ux402VisualRevisionTests
 {
     [Theory]
-    [InlineData("ko", "복사 (C)", "편집 (E)", "핀 (P)", "저장 (S)", "자동으로 닫지 않기")]
-    [InlineData("en", "Copy (C)", "Edit (E)", "Pin (P)", "Save (S)", "Keep open")]
+    [InlineData("ko", "복사 (C)", "편집 (E)", "핀 (P)", "저장 (S)", "텍스트 복사 (T)", "카드 유지", "자동으로 닫지 않기")]
+    [InlineData("en", "Copy (C)", "Edit (E)", "Pin (P)", "Save (S)", "Copy text (T)", "Keep card open", "Keep open")]
     public void CardActionsExposeMatchingShortTooltipsAndAccessibleToggleState(string language,
-        string copy, string edit, string pin, string save, string keep) => StaTestHost.Run(() =>
+        string copy, string edit, string pin, string save, string copyText, string keep, string keepTip) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         var image = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
@@ -26,9 +26,9 @@ public sealed class Ux402VisualRevisionTests
             () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"));
         try
         {
-            var row = ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().First();
-            var actions = row.Children.OfType<UniformGrid>().Single().Children.OfType<Button>().ToArray();
-            foreach (var (button, expected) in actions.Zip(new[] { copy, edit, pin, save }))
+            IReadOnlyList<Button> actions = card.ActionButtonsForTest;
+            Assert.Equal(5, actions.Count);
+            foreach (var (button, expected) in actions.Zip(new[] { copy, edit, pin, save, copyText }))
             {
                 Assert.Equal(expected, button.ToolTip);
                 Assert.Equal(expected[..expected.LastIndexOf(" (", StringComparison.Ordinal)], new ButtonAutomationPeer(button).GetName());
@@ -36,17 +36,19 @@ public sealed class Ux402VisualRevisionTests
                 Assert.InRange(ToolTipService.GetInitialShowDelay(button), 0, 150);
                 Assert.Equal(0, ToolTipService.GetBetweenShowDelay(button));
             }
-            var toggle = row.Children.OfType<ToggleButton>().Single();
-            Assert.Equal(keep, toggle.ToolTip);
+            ToggleButton toggle = card.KeepToggleForTest;
+            Assert.Equal(keepTip, toggle.ToolTip);
+            Assert.InRange(ToolTipService.GetInitialShowDelay(toggle), 0, 150);
             var peer = new ToggleButtonAutomationPeer(toggle);
             Assert.Equal(keep, peer.GetName());
             var provider = (IToggleProvider)peer.GetPattern(PatternInterface.Toggle)!;
             Assert.Equal(ToggleState.Off, provider.ToggleState);
-            object unlocked = toggle.Content;
+            object word = toggle.Content;
             provider.Toggle();
             Assert.True(card.IsKept);
             Assert.Equal(ToggleState.On, provider.ToggleState);
-            Assert.NotSame(unlocked, toggle.Content);
+            // The word stays; the toggle's checked state carries the change.
+            Assert.Same(word, toggle.Content);
             provider.Toggle();
             Assert.False(card.IsKept);
             Assert.Equal(ToggleState.Off, provider.ToggleState);

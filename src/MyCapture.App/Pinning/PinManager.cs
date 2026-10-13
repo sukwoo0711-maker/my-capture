@@ -613,7 +613,7 @@ internal sealed class PinManager
             // Catch every unexpected failure inside the task retained at the WPF event
             // boundary, so a bad path or encoder failure can never terminate the tray.
             _log.LogError(ex, "Pinned-image save failed unexpectedly");
-            result = new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: ex.Message);
+            result = new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: ex.Message, Error: ex);
         }
 
         if (pin.IsClosed)
@@ -630,15 +630,19 @@ internal sealed class PinManager
         string detail = string.IsNullOrWhiteSpace(result.ErrorMessage)
             ? UiText.Get("Text_B651C2B6BDA9")
             : result.ErrorMessage;
+        // A known cause (full disk, file in use) says what to do; [Open save location] shows the
+        // folder so space can be freed or the other program found.
+        string? folder = result.Error is { } error ? MyCapture.App.Themes.ThemedDialog.SaveLocationFor(error, result.Path) : null;
         _ = MyCapture.App.Themes.ThemedDialog.Show(
             pin,
-            UiText.Get("Dialog.Storage"),
+            MyCapture.App.Themes.ThemedDialog.SaveFailureMessage(result.Error, result.Path),
             UiText.Get("Text_A97A3B71F038"),
             MessageBoxButton.OK,
             MessageBoxImage.Warning,
             details: detail,
             recovery: () => LastSaveOperationForTest = SavePinAsync(pin, new PinSaveRequestedEventArgs(PinSaveMode.SaveAs, e.Image, e.SourcePageUrl)),
-            recoveryLabel: UiText.Get("Dialog.ChooseLocation"));
+            recoveryLabel: UiText.Get("Dialog.ChooseLocation"),
+            commands: folder is null ? null : [MyCapture.App.Themes.ThemedDialog.OpenSaveLocationCommand(folder)]);
         return result;
     }
 

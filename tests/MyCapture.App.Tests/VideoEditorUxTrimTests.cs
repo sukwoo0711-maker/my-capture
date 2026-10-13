@@ -25,12 +25,12 @@ public sealed class VideoEditorUxTrimTests
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
     [Theory]
-    [InlineData(0, "00:00.0")]
-    [InlineData(7_233.333, "00:07.2")]
-    [InlineData(7_250, "00:07.3")]
-    [InlineData(59_960, "01:00.0")]
-    [InlineData(3_723_400, "1:02:03.4")]
-    public void ClockRoundsToTenthsForGlanceableTimes(double milliseconds, string expected) =>
+    [InlineData(0, "0:00.000")]
+    [InlineData(7_233.333, "0:07.233")]
+    [InlineData(7_250, "0:07.250")]
+    [InlineData(59_960, "0:59.960")]
+    [InlineData(3_723_400, "1:02:03.400")]
+    public void ClockUsesTheEditorsOneTimeFormat(double milliseconds, string expected) =>
         Assert.Equal(expected, TrimPresentation.Clock(milliseconds));
 
     [Fact]
@@ -38,17 +38,17 @@ public sealed class VideoEditorUxTrimTests
     {
         using (UiText.UseLanguage("ko-KR"))
         {
-            Assert.Equal("남는 길이 00:07.2", TrimPresentation.KeptLength(1_200, 8_400));
-            Assert.Equal("잘림 00:02.8", TrimPresentation.RemovedLength(10_000, 1_200, 8_400));
+            Assert.Equal("남는 길이 0:07.200", TrimPresentation.KeptLength(1_200, 8_400));
+            Assert.Equal("잘림 0:02.800", TrimPresentation.RemovedLength(10_000, 1_200, 8_400));
             Assert.Equal("자르지 않음", TrimPresentation.RemovedLength(10_000, 0, 10_000));
-            Assert.Equal("시작 00:01.2", TrimPresentation.StartChip(1_200));
-            Assert.Equal("끝 00:08.4", TrimPresentation.EndChip(8_400));
+            Assert.Equal("시작 0:01.200", TrimPresentation.StartChip(1_200));
+            Assert.Equal("끝 0:08.400", TrimPresentation.EndChip(8_400));
         }
 
         using (UiText.UseLanguage("en-US"))
         {
-            Assert.Equal("Kept 00:07.2", TrimPresentation.KeptLength(1_200, 8_400));
-            Assert.Equal("Cut 00:02.8", TrimPresentation.RemovedLength(10_000, 1_200, 8_400));
+            Assert.Equal("Kept 0:07.200", TrimPresentation.KeptLength(1_200, 8_400));
+            Assert.Equal("Cut 0:02.800", TrimPresentation.RemovedLength(10_000, 1_200, 8_400));
             Assert.Equal("Not trimmed", TrimPresentation.RemovedLength(10_000, 0, 10_000));
         }
     }
@@ -134,7 +134,7 @@ public sealed class VideoEditorUxTrimTests
             TextBlock removed = Field<TextBlock>(editor, "_removedLengthLabel");
             Button reset = Field<Button>(editor, "_resetTrimButton");
             Border badge = Field<Border>(editor, "_trimPreviewBadge");
-            Assert.Equal("남는 길이 00:10.0", kept.Text);
+            Assert.Equal("남는 길이 0:10.000", kept.Text);
             Assert.Equal("자르지 않음", removed.Text);
             Assert.False(reset.IsEnabled);
 
@@ -144,15 +144,15 @@ public sealed class VideoEditorUxTrimTests
             timeline.MoveTrimDragForTest(1_000);
             timeline.MoveTrimDragForTest(2_016);
             Assert.Equal(Visibility.Visible, badge.Visibility);
-            Assert.Equal("시작 00:02.0", ((TextBlock)badge.Child).Text);
+            Assert.Equal("시작 0:02.000", ((TextBlock)badge.Child).Text);
             Assert.Equal(2_000, timeline.PlayheadMs, precision: 3);
             Assert.Equal(2_000, editor.PreviewSeekCoordinatorForTest.IntentPositionMs, precision: 3);
             timeline.EndTrimDragForTest();
             Assert.Equal(Visibility.Collapsed, badge.Visibility);
             Assert.Single(undo);
             AssertRange(2_000, 10_000, Document().TrimInMs, Document().TrimOutMs);
-            Assert.Equal("남는 길이 00:08.0", kept.Text);
-            Assert.Equal("잘림 00:02.0", removed.Text);
+            Assert.Equal("남는 길이 0:08.000", kept.Text);
+            Assert.Equal("잘림 0:02.000", removed.Text);
             Assert.True(reset.IsEnabled);
 
             // 2. O at the playhead sets the end of the same model.
@@ -168,8 +168,8 @@ public sealed class VideoEditorUxTrimTests
             Invoke(editor, "ApplyTrimInputs");
             Assert.Equal(3, undo.Count);
             AssertRange(1_500, 6_000, Document().TrimInMs, Document().TrimOutMs);
-            Assert.Equal("남는 길이 00:04.5", kept.Text);
-            Assert.Equal("잘림 00:05.5", removed.Text);
+            Assert.Equal("남는 길이 0:04.500", kept.Text);
+            Assert.Equal("잘림 0:05.500", removed.Text);
             Assert.Equal(TrimPresentation.TimelineStatus(1_500, 6_000),
                 AutomationProperties.GetItemStatus(TrimStrip(timeline)));
 
@@ -183,7 +183,7 @@ public sealed class VideoEditorUxTrimTests
             AssertRange(0, 10_000, Document().TrimInMs, Document().TrimOutMs);
             Invoke(editor, "RestoreEdit", true);
             AssertRange(2_000, 10_000, Document().TrimInMs, Document().TrimOutMs);
-            Assert.Equal("남는 길이 00:08.0", kept.Text);
+            Assert.Equal("남는 길이 0:08.000", kept.Text);
 
             // 5. "Full length" removes the trim as one more undoable change.
             int before = undo.Count;

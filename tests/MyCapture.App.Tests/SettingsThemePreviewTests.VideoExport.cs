@@ -68,7 +68,7 @@ public sealed partial class SettingsThemePreviewTests
             Drain(mp4);
             Assert.StartsWith(korean ? "예상 크기 약" : "Estimated size about", mp4.EstimateText, StringComparison.Ordinal);
             Assert.Contains("MB", mp4.EstimateText, StringComparison.Ordinal);
-            Assert.Contains("00:12.0", mp4.EstimateText, StringComparison.Ordinal);
+            Assert.Contains("0:12.000", mp4.EstimateText, StringComparison.Ordinal);
             Assert.False(mp4.IsProgressVisible);
             Assert.True(mp4.CanExport);
             Image preview = Descendants(mp4).OfType<Image>().Single(image => AutomationProperties.GetName(image) == UiText.Get("MediaExport_SourcePreview"));

@@ -52,10 +52,53 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
 
         Assert.True(a.IsAvailable);
         Assert.Contains("ko-KR", a.Detail);
-        Assert.Contains("오프라인", a.Detail);
+        // Models may be downloaded, so the detail promises only that images stay on this PC.
+        Assert.Contains("이미지는 전송하지 않습니다", a.Detail);
+        Assert.DoesNotContain("오프라인", a.Detail);
     }
 
     // ---- OcrIndexingService outcomes ----
+
+    [Fact]
+    public async Task MigrationLeaseBlocksQueuedIndexingUntilDisposedAndOnlyReleasesOnce()
+    {
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-indexing-lease-").FullName;
+        try
+        {
+            var queue = new CaptureQueue(AppPaths.CreateForRoot(root), new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+            var service = new OcrIndexingService(new GalleryController(queue, NullLogger<GalleryController>.Instance),
+                new FakeOcr(true), queue.GetDirectory, () => new OcrSettings(), NullLogger<OcrIndexingService>.Instance);
+            IDisposable lease = await service.AcquireIdleLeaseAsync();
+            Task<OcrIndexingOutcome> waiting = service.IndexMissingAsync();
+            Assert.False(waiting.IsCompleted);
+            lease.Dispose(); lease.Dispose();
+            Assert.Equal(OcrIndexingOutcome.NothingToDo, await waiting.WaitAsync(TimeSpan.FromSeconds(5)));
+            using IDisposable next = await service.AcquireIdleLeaseAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally { TestRecycleBin.DeleteDirectory(root, true); }
+    }
+
+    [Fact]
+    public async Task CanceledMigrationLeaseWaitDoesNotLeakOrReleaseTheCurrentLease()
+    {
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-indexing-lease-cancel-").FullName;
+        try
+        {
+            var queue = new CaptureQueue(AppPaths.CreateForRoot(root), new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+            var service = new OcrIndexingService(new GalleryController(queue, NullLogger<GalleryController>.Instance),
+                new FakeOcr(true), queue.GetDirectory, () => new OcrSettings(), NullLogger<OcrIndexingService>.Instance);
+            using var cancel = new CancellationTokenSource();
+            IDisposable lease = await service.AcquireIdleLeaseAsync();
+            Task<IDisposable> canceled = service.AcquireIdleLeaseAsync(cancel.Token);
+            cancel.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await canceled);
+            Task<OcrIndexingOutcome> waiting = service.IndexMissingAsync();
+            Assert.False(waiting.IsCompleted);
+            lease.Dispose();
+            Assert.Equal(OcrIndexingOutcome.NothingToDo, await waiting.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+        finally { TestRecycleBin.DeleteDirectory(root, true); }
+    }
 
     private sealed class FakeOcr : IOcrService
     {
@@ -415,10 +458,47 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
 
     // ---- Indexer happy path over a REAL persisted capture ----
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Presenter_MigrationLeaseInvalidatesQueuedAndLateRecordWrites(bool completeBeforeLease) => RunSta(() =>
+    {
+        var service = new CancellationIgnoringOcr();
+        int writes = 0;
+        using var presenter = new OcrResultPresenter(service, Dispatcher.CurrentDispatcher, _ => { },
+            NullLogger<OcrResultPresenter>.Instance);
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        using var cancellation = new CancellationTokenSource();
+        typeof(OcrResultPresenter).GetField("_inFlight", flags)!.SetValue(presenter, cancellation);
+        typeof(OcrResultPresenter).GetField("_onFreshResult", flags)!.SetValue(presenter, (Action<OcrResult>)(_ => writes++));
+        var recognition = (Task)typeof(OcrResultPresenter).GetMethod("RecognizeAsync", flags)!.Invoke(presenter,
+            [OcrRequest.FromBitmap(SolidBitmap(20, 20)), cancellation, false])!;
+        if (completeBeforeLease)
+        {
+            service.Complete("queued result");
+            Assert.True(SpinWait.SpinUntil(() => recognition.IsCompleted, TimeSpan.FromSeconds(5)));
+        }
+        Task<IDisposable> acquiring = presenter.AcquireMutationLeaseAsync(CancellationToken.None);
+        PumpDispatcherOnce();
+        using IDisposable lease = acquiring.GetAwaiter().GetResult();
+        Assert.True(service.ObservedToken.IsCancellationRequested);
+        if (!completeBeforeLease)
+        {
+            service.Complete("late result");
+            Assert.True(SpinWait.SpinUntil(() => recognition.IsCompleted, TimeSpan.FromSeconds(5)));
+        }
+        PumpDispatcherOnce();
+        Assert.Equal(0, writes);
+        // Blocked admission does not even construct a new request or show an OCR window.
+        presenter.ShowRecognized(() => throw new InvalidOperationException("Must remain blocked"), "blocked", _ => writes++);
+        Assert.Null(typeof(OcrResultPresenter).GetField("_currentRequestFactory", flags)!.GetValue(presenter));
+        Assert.Equal(0, writes);
+    });
+
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try { action(); }
             catch (Exception ex) { failure = ex; }
@@ -674,7 +754,7 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         Exception? threadFailure = null;
         bool cacheRanOnOwnerDispatcher = false;
         using var ready = new ManualResetEventSlim(initialState: false);
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

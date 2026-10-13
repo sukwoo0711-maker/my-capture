@@ -282,14 +282,17 @@ internal sealed class AnnotationRenderer
         }
 
         Pen strokePen = StrokePen(color, pen.StrokeThickness);
-        var figure = new PathFigure { StartPoint = ToPoint(points[0]), IsClosed = false, IsFilled = false };
-        for (int i = 1; i < points.Count; i++)
+        // Ink can contain hundreds of thousands of points. Stream the same stroked
+        // segments without allocating a mutable Freezable for every point on every pass.
+        var geometry = new StreamGeometry();
+        using (StreamGeometryContext context = geometry.Open())
         {
-            figure.Segments.Add(new LineSegment(ToPoint(points[i]), isStroked: true));
+            context.BeginFigure(ToPoint(points[0]), isFilled: false, isClosed: false);
+            for (int i = 1; i < points.Count; i++)
+            {
+                context.LineTo(ToPoint(points[i]), isStroked: true, isSmoothJoin: false);
+            }
         }
-
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(figure);
         geometry.Freeze();
         dc.DrawGeometry(null, strokePen, geometry);
     }

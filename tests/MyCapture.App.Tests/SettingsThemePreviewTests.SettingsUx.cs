@@ -155,12 +155,32 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(5, asked);
             Assert.False(window.IsVisible);
 
-            // An explicit application exit never blocks on the prompt.
+            // The shared exit/update gate preserves a canceled or invalid draft and keeps
+            // the Store consent owner visible after a successful apply.
+            window.ShowSettings();
+            Draft(window).MaxItems = "555";
+            answers.Enqueue(SettingsCloseChoice.Cancel);
+            Assert.False(window.PrepareForAppExit(keepVisible: true));
+            Assert.Equal("555", Draft(window).MaxItems);
+            Draft(window).MaxItems = "5";
+            answers.Enqueue(SettingsCloseChoice.Apply);
+            Assert.False(window.PrepareForAppExit(keepVisible: true));
+            Assert.True(window.IsVisible);
+            answers.Enqueue(SettingsCloseChoice.Discard);
+            Assert.True(window.PrepareForAppExit(keepVisible: true));
+            Assert.Equal("450", Draft(window).MaxItems);
+            Draft(window).MaxItems = "555";
+            answers.Enqueue(SettingsCloseChoice.Apply);
+            Assert.True(window.PrepareForAppExit(keepVisible: true));
+            Assert.Equal(555, fixture.Saved().Queue.MaxItems);
+            Assert.True(window.IsVisible);
+
+            // After the shared guard, the final close does not prompt again.
             window.ShowSettings();
             Draft(window).MaxItems = "999";
             window.CloseForExit();
             closed = true;
-            Assert.Equal(5, asked);
+            Assert.Equal(9, asked);
         }
         finally
         {
@@ -225,7 +245,8 @@ public sealed partial class SettingsThemePreviewTests
                     // Labels carry no key notation; keys are in tooltips and accelerator properties.
                     Assert.Equal(UiText.Get("Text_6A1C963D5BC5"), primary.Content);
                     Assert.Equal("Ctrl+S", AutomationProperties.GetAcceleratorKey(primary));
-                    Assert.Equal(UiText.Get("Text_BE876433993A"), Assert.IsType<Button>(window.FindName("CancelButton")).Content);
+                    // Nothing is pending, so the secondary command closes instead of cancelling.
+                    Assert.Equal(UiText.Get("Dialog.Close"), Assert.IsType<Button>(window.FindName("CancelButton")).Content);
 
                     // Settings backup moved off the command bar onto the About page.
                     var export = Assert.IsType<Button>(window.FindName("ExportSettingsButton"));

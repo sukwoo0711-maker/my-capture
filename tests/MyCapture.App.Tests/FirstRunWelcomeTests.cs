@@ -22,20 +22,24 @@ public sealed class FirstRunWelcomeTests
         LaunchPresentation first = FirstRunPlan.ForLaunch(isFirstRun: true, quietLaunch: false, openSettings: false);
         Assert.True(first.ShowWelcome);
         Assert.False(first.OpenLibrary);
-        Assert.False(first.ShowReadyNotification);
 
         LaunchPresentation later = FirstRunPlan.ForLaunch(isFirstRun: false, quietLaunch: false, openSettings: false);
-        Assert.Equal(new LaunchPresentation(false, true, true), later);
+        Assert.Equal(new LaunchPresentation(false, true), later);
         // A sign-in launch stays quiet and the settings switch opens settings instead.
         Assert.False(FirstRunPlan.ForLaunch(false, quietLaunch: true, openSettings: false).OpenLibrary);
         Assert.False(FirstRunPlan.ForLaunch(false, quietLaunch: false, openSettings: true).OpenLibrary);
-        Assert.True(FirstRunPlan.ForLaunch(false, quietLaunch: true, openSettings: false).ShowReadyNotification);
 
         // Closing the welcome is what opens the library; the other ways out open their own thing.
         Assert.Equal(AfterWelcome.OpenLibrary, FirstRunPlan.Next(WelcomeOutcome.Closed));
         Assert.Equal(AfterWelcome.StartCapture, FirstRunPlan.Next(WelcomeOutcome.TryCapture));
         Assert.Equal(AfterWelcome.OpenSettings, FirstRunPlan.Next(WelcomeOutcome.OpenSettings));
         Assert.Equal(AfterWelcome.Nothing, FirstRunPlan.Next(WelcomeOutcome.DismissedForCapture));
+
+        // "Ready" follows the welcome, unless a capture starts instead; a later launch never shows it.
+        Assert.True(FirstRunPlan.AnnouncesReady(WelcomeOutcome.Closed));
+        Assert.True(FirstRunPlan.AnnouncesReady(WelcomeOutcome.OpenSettings));
+        Assert.False(FirstRunPlan.AnnouncesReady(WelcomeOutcome.TryCapture));
+        Assert.False(FirstRunPlan.AnnouncesReady(WelcomeOutcome.DismissedForCapture));
     }
 
     [Fact]
@@ -67,6 +71,14 @@ public sealed class FirstRunWelcomeTests
 
             // Step 2 says what happens to a capture as the setting makes it true; step 3 where the icon is.
             Assert.Equal("캡처하면 클립보드에 복사되고 라이브러리에 저장되며 편집기가 열립니다.", welcome.AfterCaptureText);
+            Assert.Equal("이미지는 7일 뒤 자동 삭제됩니다. 보관하거나 폴더에 넣은 항목은 유지됩니다.", welcome.RetentionText);
+            Assert.Contains(Descendants(cards[1]).OfType<TextBlock>(), text => AutomationProperties.GetName(text) == welcome.RetentionText
+                || text.Text == welcome.RetentionText);
+            // Step 3 offers starting at sign-in, checked by default.
+            Assert.Same(welcome.StartAtSignInCheck, Descendants(cards[2]).OfType<CheckBox>().Single());
+            Assert.True(welcome.StartAtSignIn);
+            Assert.Equal("Windows에 로그인하면 MyCapture 실행", welcome.StartAtSignInCheck.Content);
+            Assert.Equal("Windows에 로그인하면 MyCapture 실행", AutomationProperties.GetName(welcome.StartAtSignInCheck));
             Assert.Contains("^", string.Concat(Descendants(cards[2]).OfType<TextBlock>().Select(text => text.Text)), StringComparison.Ordinal);
             Assert.Equal("캡처하면 클립보드에 복사되고 라이브러리에 저장되며 빠른 작업 카드가 나타납니다.",
                 WelcomeWindow.AfterCaptureSentence(AfterCaptureAction.QuickAccess));

@@ -137,8 +137,16 @@ public static class ModernWindowChrome
 
     private static void OnEnabledChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs e)
     {
-        if (dependencyObject is not Window window || e.NewValue is not true)
+        if (dependencyObject is not Window window)
         {
+            return;
+        }
+
+        if (e.NewValue is not true)
+        {
+            // A window that opts out after the implicit style turned the chrome on (a transparent,
+            // layered notification) must not have its own background painted over on init.
+            window.SourceInitialized -= OnWindowSourceInitialized;
             return;
         }
 
@@ -167,7 +175,10 @@ public static class ModernWindowChrome
         if (sender is Window window)
         {
             window.SourceInitialized -= OnWindowSourceInitialized;
-            Apply(window);
+            if (GetEnabled(window))
+            {
+                Apply(window);
+            }
         }
     }
 

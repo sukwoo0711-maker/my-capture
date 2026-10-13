@@ -114,7 +114,7 @@ public sealed class VideoEditorNarrowLayoutTests
             var item = Assert.IsType<ListBoxItem>(list.Items[0]);
             TextBlock[] lines = Descendants(item).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
             Assert.Equal(2, lines.Length);
-            Assert.Matches(@"^\d\d:\d\d\.\d{3}–\d\d:\d\d\.\d{3}$", lines[1].Text);
+            Assert.Matches(@"^\d+:\d\d\.\d{3}–\d+:\d\d\.\d{3}$", lines[1].Text);
             // Edit and delete for the selected row sit above the list.
             foreach (string key in new[] { "Text_AEB8B9AA4E6F", "Text_9163C86EDB22" })
                 Assert.True(Assert.Single(Descendants(panel).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key)).IsVisible, key);

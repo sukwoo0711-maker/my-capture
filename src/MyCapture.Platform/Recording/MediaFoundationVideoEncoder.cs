@@ -47,8 +47,15 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     private static readonly Guid MF_MT_PIXEL_ASPECT_RATIO = new("c6376a1e-8d0a-4027-be45-6d9a0ad39bb6");
     private static readonly Guid MF_MT_ALL_SAMPLES_INDEPENDENT = new("c9173739-5e56-461c-b713-46fb995cb95f");
     private static readonly Guid MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS = new("a634a91c-822b-41b9-a494-4de4643612b0");
+    private static readonly Guid MF_MT_MPEG2_PROFILE = new("ad76a80b-2d5c-4e0b-b375-64e520137036");
+    private static readonly Guid CODECAPI_AVEncCommonRateControlMode = new("1c0608e9-370c-4710-8a58-cb6181c42423");
+    private static readonly Guid CODECAPI_AVEncCommonQuality = new("fcbf57a3-7ea5-4b0c-9644-69b40c39c391");
+    private static readonly Guid CODECAPI_AVEncCommonQualityVsSpeed = new("98332df8-03cd-476b-89fa-3f9e442dec9f");
+    private static readonly Guid MF_MT_VIDEO_NOMINAL_RANGE = new("c21b8ee5-b956-4071-8daf-325edf5cab11");
 
     private const uint MFVideoInterlace_Progressive = 2;
+    private const uint MFNominalRange_0_255 = 1;
+    private const uint eAVEncCommonRateControlMode_Quality = 3;
 
     private readonly ILogger _log;
     private readonly VideoEncoderOptions _options;
@@ -101,7 +108,7 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
         {
             Guid hwKey = MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS;
             Check(
-                attributes.SetUINT32(ref hwKey, 1),
+                attributes.SetUINT32(ref hwKey, _options.AllowHardwareEncoder ? 1u : 0u),
                 "IMFAttributes.SetUINT32(hardware transforms)");
 
             Check(
@@ -124,6 +131,17 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             SetFrameSize(outType, (uint)_options.Width, (uint)_options.Height);
             SetRatio(outType, MF_MT_FRAME_RATE, (uint)fps, 1);
             SetRatio(outType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+            if (_options.H264Profile is { } profile)
+            {
+                SetU32(outType, MF_MT_MPEG2_PROFILE, (uint)profile);
+            }
+
+            if (_options.FullRange && _options.InputFormat == VideoEncoderInputFormat.Bgra32)
+            {
+                // The Sink Writer's RGB to NV12 converter follows the encoder's range, and the
+                // file declares it, so decoders that honour the declaration show true black and white.
+                SetU32(outType, MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255);
+            }
 
             Check(_writer!.AddStream(outType, out _streamIndex), nameof(IMFSinkWriter.AddStream));
         }
@@ -147,7 +165,7 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             SetRatio(inType, MF_MT_FRAME_RATE, (uint)fps, 1);
             SetRatio(inType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
 
-            Check(_writer!.SetInputMediaType(_streamIndex, inType, IntPtr.Zero), nameof(IMFSinkWriter.SetInputMediaType));
+            SetInputMediaType(inType);
         }
         finally
         {
@@ -155,6 +173,41 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
         }
 
         Check(_writer!.BeginWriting(), nameof(IMFSinkWriter.BeginWriting));
+    }
+
+    /// <summary>
+    /// Connects the input type; a constant-quality request travels as encoder parameters, which the
+    /// Sink Writer hands to the H.264 encoder's ICodecAPI.
+    /// </summary>
+    private void SetInputMediaType(IMFMediaType inType)
+    {
+        if (_options.ConstantQuality is not { } quality)
+        {
+            Check(_writer!.SetInputMediaType(_streamIndex, inType, IntPtr.Zero), nameof(IMFSinkWriter.SetInputMediaType));
+            return;
+        }
+
+        Check(MFCreateAttributes(out IMFAttributes parameters, 2), nameof(MFCreateAttributes));
+        IntPtr pointer = IntPtr.Zero;
+        try
+        {
+            Guid mode = CODECAPI_AVEncCommonRateControlMode;
+            Guid level = CODECAPI_AVEncCommonQuality;
+            Check(parameters.SetUINT32(ref mode, eAVEncCommonRateControlMode_Quality), "IMFAttributes.SetUINT32(rate control)");
+            Check(parameters.SetUINT32(ref level, (uint)Math.Clamp(quality, 1, 100)), "IMFAttributes.SetUINT32(quality)");
+            if (_options.QualityVsSpeed is { } effort)
+            {
+                Guid speed = CODECAPI_AVEncCommonQualityVsSpeed;
+                Check(parameters.SetUINT32(ref speed, (uint)Math.Clamp(effort, 0, 100)), "IMFAttributes.SetUINT32(quality vs speed)");
+            }
+            pointer = Marshal.GetComInterfaceForObject(parameters, typeof(IMFAttributes));
+            Check(_writer!.SetInputMediaType(_streamIndex, inType, pointer), nameof(IMFSinkWriter.SetInputMediaType));
+        }
+        finally
+        {
+            if (pointer != IntPtr.Zero) Marshal.Release(pointer);
+            Marshal.ReleaseComObject(parameters);
+        }
     }
 
     public void WriteFrame(in EncoderFrame frame)

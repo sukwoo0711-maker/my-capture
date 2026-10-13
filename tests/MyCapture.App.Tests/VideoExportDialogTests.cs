@@ -38,10 +38,10 @@ public sealed class VideoExportDialogTests
     }
 
     [Theory]
-    [InlineData(6_000, "00:06.0")]
-    [InlineData(65_250, "01:05.2")]
-    [InlineData(0, "00:00.0")]
-    public void FormatClock_ShowsMinutesSecondsAndTenths(double milliseconds, string expected) =>
+    [InlineData(6_000, "0:06.000")]
+    [InlineData(65_250, "1:05.250")]
+    [InlineData(0, "0:00.000")]
+    public void FormatClock_UsesTheEditorsOneTimeFormat(double milliseconds, string expected) =>
         Assert.Equal(expected, VideoExportDialog.FormatClock(milliseconds));
 
     [Fact]
@@ -79,11 +79,11 @@ public sealed class VideoExportDialogTests
             Assert.True(dialog.CanExport);
             Assert.False(dialog.IsProgressVisible);
             Assert.Equal(UiText.Get("MediaExport_Hint"), dialog.StatusText);
-            Assert.Equal("예상 크기 약 2.1MB · 00:06.0 · 1280×720", dialog.EstimateText);
+            Assert.Equal("예상 크기 약 2.1MB · 0:06.000 · 1280×720", dialog.EstimateText);
 
             dialog.SizePresetIndex = 2;
             Assert.Equal(70, dialog.TargetReductionPercent);
-            Assert.Equal("예상 크기 약 622KB · 00:06.0 · 1280×720", dialog.EstimateText);
+            Assert.Equal("예상 크기 약 622KB · 0:06.000 · 1280×720", dialog.EstimateText);
 
             // A custom slider value belongs to no preset; a preset value re-selects its button.
             dialog.TargetReductionPercent = 55;

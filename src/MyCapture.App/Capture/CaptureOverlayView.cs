@@ -562,7 +562,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         PointD cursor = ClampSamplePoint(local);
         bool changed = _staticDirty || !_pointerInitialized || _cursorPixel != cursor || _drawnPointer != cursor
             || wasPrecision != _precisionPointer.IsPrecision || _drawnPrecision != _precisionPointer.IsPrecision
-            || _drawnMagnifierMouseOver != IsMouseOver;
+            || _drawnMagnifierMouseOver != PointerInside;
         _cursorPixel = cursor;
         _pointerInitialized = true;
         bool overBar = IsOverModeBar(cursor);
@@ -1002,7 +1002,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             using DrawingContext dc = _pointerVisual.RenderOpen();
             if (pointer.HasValue) DrawPointerFeedback(dc, anchor: false);
         }
-        bool mouseOver = IsMouseOver;
+        bool mouseOver = PointerInside;
         bool magnifierOn = ShowsMagnifier;
         if (_drawnMagnifierOn && !magnifierOn)
         {
@@ -1501,7 +1501,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     private void DrawMagnifier(DrawingContext dc)
     {
-        if (!ShowsMagnifier || _magnifierCrop is null || !IsMouseOver)
+        if (!ShowsMagnifier || _magnifierCrop is null || !PointerInside)
         {
             return;
         }
@@ -1560,6 +1560,32 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+        PointerMoved();
+    }
+
+    /// <summary>
+    /// Plays a pointer gesture from code at the position <see cref="ReadCursor"/> reports,
+    /// through the same handling as the mouse, without capturing the real mouse. The tutorial
+    /// clip generator uses it.
+    /// </summary>
+    internal void SimulatePointerDown() => PointerPressed(source: null, capture: false);
+
+    /// <inheritdoc cref="SimulatePointerDown"/>
+    internal void SimulatePointerMove() => PointerMoved();
+
+    /// <inheritdoc cref="SimulatePointerDown"/>
+    internal void SimulatePointerUp() => PointerReleased(releaseCapture: false);
+
+    /// <summary>
+    /// Whether the pointer is over the selector, for a simulated gesture that has no real mouse
+    /// over the window; null (the default) uses <see cref="UIElement.IsMouseOver"/>.
+    /// </summary>
+    internal bool? SimulatedPointerInside { get; set; }
+
+    private bool PointerInside => SimulatedPointerInside ?? IsMouseOver;
+
+    private void PointerMoved()
+    {
         if (_ended) return;
         PointD rawPixel = UpdatePointer();
         RectD? previous = _selection;
@@ -1596,26 +1622,30 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
+        if (PointerPressed(e.OriginalSource as DependencyObject, capture: true)) e.Handled = true;
+    }
+
+    /// <summary>A left press at the current pointer; true when handled.</summary>
+    private bool PointerPressed(DependencyObject? source, bool capture)
+    {
         if (_ended)
         {
-            return;
+            return false;
         }
 
         DismissStartGuide();
         PointD rawPoint = UpdatePointer();
         // The mode bar's own buttons handle their presses; its padding and gaps must not start a capture.
-        if (_pointerOverBar || _modeBar?.Holds(e.OriginalSource as DependencyObject) == true)
+        if (_pointerOverBar || _modeBar?.Holds(source) == true)
         {
-            e.Handled = true;
-            return;
+            return true;
         }
 
         Focus();
         if (_colorPickMode)
         {
             _ = CopyColorAtPointerAsync();
-            e.Handled = true;
-            return;
+            return true;
         }
 
         PointD point = ClampEdgePoint(rawPoint);
@@ -1627,17 +1657,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
         // click threshold; otherwise the free-region drag starts exactly as before.
         _selection = _hoverRegion.HasValue ? null : new RectD(point.X, point.Y, 0, 0);
         _interaction = InteractionMode.Create;
-        _ = Mouse.Capture(this);
-        e.Handled = true;
+        if (capture) _ = Mouse.Capture(this);
         QueueFeedback();
+        return true;
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonUp(e);
+        if (PointerReleased(releaseCapture: true)) e.Handled = true;
+    }
+
+    /// <summary>A left release at the current pointer; true when handled.</summary>
+    private bool PointerReleased(bool releaseCapture)
+    {
         if (_interaction != InteractionMode.Create || _ended)
         {
-            return;
+            return false;
         }
 
         PointD rawPoint = UpdatePointer();
@@ -1657,14 +1693,15 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _selection = ResolveCompletedDrag(_dragAnchor, point, FrameBounds);
         }
         _interaction = InteractionMode.None;
-        Mouse.Capture(null);
-        e.Handled = true;
+        if (releaseCapture) Mouse.Capture(null);
         QueueFeedback();
 
         if (_selection.HasValue)
         {
             _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(ConfirmSelection));
         }
+
+        return true;
     }
 
     protected override void OnMouseRightButtonDown(MouseButtonEventArgs e)

@@ -7,6 +7,7 @@ using MyCapture.App.Capture;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Recording;
+using MyCapture.Platform.Recording;
 
 namespace MyCapture.App.Gallery;
 
@@ -41,7 +42,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
     private bool _mediaReady;
     private bool _autoPlayPending;
     private Guid _videoId;
-    private Task<double>? _durationProbe;
+    private Task<VideoSourceInfo>? _sourceProbe;
 
     internal event EventHandler? PlayerClosed;
 
@@ -95,6 +96,8 @@ internal sealed class GalleryVideoPlayerWindow : Window
         SetResourceReference(Window.BackgroundProperty, "Surface.Base");
         SetResourceReference(Window.ForegroundProperty, "Text.Primary");
 
+        // Library videos are recordings, which are studio range; the probe corrects a full-range clip.
+        StudioRangeVideoEffect.Apply(_video, studioRange: true);
         _video.MediaOpened += OnMediaOpened;
         _video.MediaEnded += OnMediaEnded;
         _video.MediaFailed += OnMediaFailed;
@@ -103,7 +106,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _timer.Tick += (_, _) => UpdatePosition();
         SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(this);
         // Clearing the probe also tells a MediaOpened still awaiting it that the window is gone.
-        Closed += (_, _) => { _durationProbe = null; _timer.Stop(); _video.Close(); PlayerClosed?.Invoke(this, EventArgs.Empty); };
+        Closed += (_, _) => { _sourceProbe = null; _timer.Stop(); _video.Close(); PlayerClosed?.Invoke(this, EventArgs.Empty); };
     }
 
     internal Guid VideoId => _videoId;
@@ -129,7 +132,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _mediaReady = false;
         _playing = false;
         _video.Stop();
-        _durationProbe = VideoDurationProbe.ReadContainerDurationAsync(path);
+        _sourceProbe = VideoSourceProbe.ReadAsync(path);
         _video.Source = new Uri(path);
         _video.Play();
         SetStatusPlaying(false);
@@ -149,23 +152,35 @@ internal sealed class GalleryVideoPlayerWindow : Window
         // NaturalDuration is Windows Media Player's whole-second value (a sub-second clip has
         // none), so the seek range comes from the container duration read in Open.
         double? playerMs = _video.NaturalDuration.HasTimeSpan ? _video.NaturalDuration.TimeSpan.TotalMilliseconds : null;
-        Task<double>? probe = _durationProbe;
+        Task<VideoSourceInfo>? probe = _sourceProbe;
         if (probe is null)
         {
             return; // The window closed; Open always starts a probe before setting the source.
         }
 
-        double containerMs = await probe;
-        if (!ReferenceEquals(probe, _durationProbe))
+        VideoSourceInfo source = await probe;
+        if (!ReferenceEquals(probe, _sourceProbe))
         {
             return; // Another video was opened, or the window closed, while the probe ran.
         }
 
+        StudioRangeVideoEffect.Apply(_video, source.StudioRange);
+        double containerMs = source.DurationMs;
+
         _mediaReady = true;
         _seek.Maximum = Math.Max(1, VideoDurationResolver.Resolve(containerMs, playerMs, 0));
         UpdateTime();
-        if (_autoPlayPending) SetPlayback(true);
-        else SetStatusPlaying(false);
+        if (_autoPlayPending)
+        {
+            SetPlayback(true);
+        }
+        else
+        {
+            // Open plays to make MediaOpened arrive; a selected (not played) video waits on its
+            // first frame instead of running unseen to its end and showing nothing.
+            _video.Position = TimeSpan.Zero;
+            SetPlayback(false);
+        }
     }
 
     private void OnMediaEnded(object sender, RoutedEventArgs e)
@@ -227,11 +242,5 @@ internal sealed class GalleryVideoPlayerWindow : Window
     private void UpdateTime() =>
         _time.Text = $"{Format(_video.Position.TotalMilliseconds)} / {Format(_seek.Maximum)}";
 
-    private static string Format(double ms)
-    {
-        TimeSpan v = TimeSpan.FromMilliseconds(Math.Max(0, ms));
-        return v.TotalHours >= 1
-            ? v.ToString(@"hh\:mm\:ss", System.Globalization.CultureInfo.InvariantCulture)
-            : v.ToString(@"mm\:ss", System.Globalization.CultureInfo.InvariantCulture);
-    }
+    private static string Format(double ms) => VideoTimecode.Format(ms);
 }

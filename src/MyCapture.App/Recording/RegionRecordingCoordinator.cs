@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
+using MyCapture.App.Threading;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Storage;
@@ -103,6 +104,22 @@ internal sealed class RegionRecordingCoordinator
 
     // Starting a new still and protecting a window during a stop transition are different decisions.
     internal bool RequiresCaptureExclusion => _controls?.IsRecording == true;
+
+    /// <summary>Finish a recording before app exit; do not dispose an unfinished encoder.</summary>
+    internal async Task<bool> PrepareForAppExitAsync()
+    {
+        _dispatcher.VerifyAccess();
+        CancelRegionSelection();
+        if (_controls is { IsRecording: true } running)
+        {
+            _finishing = true;
+            running.RequestStop();
+        }
+        DateTime deadline = DateTime.UtcNow.AddSeconds(60);
+        while ((_finishing || _completionInProgress || _controls is not null) && DateTime.UtcNow < deadline)
+            await Task.Delay(50);
+        return !_finishing && !_completionInProgress && _controls is null;
+    }
 
     internal bool IsActive =>
         _selectionPreparation is not null
@@ -234,13 +251,15 @@ internal sealed class RegionRecordingCoordinator
             // Reserve the session while tray/help windows finish disappearing, as still
             // capture does. Do not wait for dispatcher idle: native acquisition is off-thread.
             await Task.Delay(100).ConfigureAwait(false);
-            frame = await Task.Run(() =>
+            // The frame is a WPF bitmap; a short-lived STA worker shuts down the Dispatcher it
+            // creates, where a thread-pool thread would keep it until the pool retires the thread.
+            frame = await StaThreadTask.RunAsync(() =>
             {
                 if (preparation.Cancelled) throw new OperationCanceledException();
                 FrozenFrame acquired = AcquireSelectionFrame?.Invoke() ?? _captureEngine.CaptureVirtualDesktop(false);
                 if (!acquired.Bitmap.IsFrozen) throw new InvalidOperationException("Selection frame must be frozen.");
                 return acquired;
-            }).ConfigureAwait(false);
+            }, "MyCapture recording selection frame").ConfigureAwait(false);
         }
         catch (Exception ex) { failure = ex; }
         if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return;

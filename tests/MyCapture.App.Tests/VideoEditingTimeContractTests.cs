@@ -42,9 +42,10 @@ public sealed class VideoEditingTimeContractTests
     [InlineData("2.5", 2500)]
     [InlineData("00:00:02.500", 2500)]
     [InlineData("01:02:03.004", 3723004)]
+    [InlineData("0:02.500", 2500)]
     public void SourceInput_AcceptsSecondsAndPreciseTimecode(string text, double expected)
     {
-        Assert.True(SourceTimeInput.TryParse(text, out double value));
+        Assert.True(VideoTimecode.TryParse(text, out double value));
         Assert.Equal(expected, value);
     }
 
@@ -53,16 +54,16 @@ public sealed class VideoEditingTimeContractTests
     [InlineData("Infinity")]
     [InlineData("-1")]
     [InlineData("00:80:00")]
-    public void SourceInput_RejectsInvalidTime(string text) => Assert.False(SourceTimeInput.TryParse(text, out _));
+    public void SourceInput_RejectsInvalidTime(string text) => Assert.False(VideoTimecode.TryParse(text, out _));
 
     [Theory]
-    [InlineData(86_400_001)]
-    [InlineData(90_000_000)]
-    public void SourceInput_LongDurationRoundtripPreservesDays(double milliseconds)
+    [InlineData(86_400_001, "24:00:00.001")]
+    [InlineData(90_000_000, "25:00:00.000")]
+    public void SourceInput_LongDurationRoundtripPreservesDays(double milliseconds, string expected)
     {
-        string formatted = SourceTimeInput.Format(milliseconds);
-        Assert.DoesNotContain(":", formatted);
-        Assert.True(SourceTimeInput.TryParse(formatted, out double parsed));
+        string formatted = VideoTimecode.Format(milliseconds);
+        Assert.Equal(expected, formatted);
+        Assert.True(VideoTimecode.TryParse(formatted, out double parsed));
         Assert.Equal(milliseconds, parsed);
     }
 

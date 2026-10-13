@@ -42,6 +42,36 @@ public static class ValidatedFilePaths
         return DirectoryRoot(path);
     }
 
+    /// <summary>
+    /// <see cref="DirectoryWithinRoot"/> for many children of one root that <see cref="DirectoryRoot"/>
+    /// already returned. Only the segments below that root are checked for links, so a bulk scan
+    /// does not walk every ancestor of the root again for each child.
+    /// </summary>
+    public static string DirectoryWithinValidatedRoot(string validatedRoot, string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(validatedRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if (!HasUnambiguousSegments(path)) throw new IOException("Ambiguous directory name.");
+        if (Path.IsPathRooted(path) && !Path.IsPathFullyQualified(path))
+            throw new IOException("Drive-relative paths are not permitted.");
+        string fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path, validatedRoot));
+        if (!IsWithinRoot(validatedRoot, fullPath) || !IsUnambiguousPath(fullPath))
+            throw new IOException("The directory must remain within its approved root.");
+        bool leaf = true;
+        for (string? current = fullPath; current is not null && current.Length > validatedRoot.Length;
+             current = Path.GetDirectoryName(current), leaf = false)
+        {
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(current); }
+            catch (FileNotFoundException) { continue; }
+            catch (DirectoryNotFoundException) { continue; }
+            if ((attributes & (FileAttributes.ReparsePoint | FileAttributes.Device)) != 0
+                || (attributes & FileAttributes.Directory) == 0)
+                throw new IOException(leaf ? "The directory must not be a link or a file." : "The directory must remain within its approved root without reparse points.");
+        }
+        return fullPath;
+    }
+
     /// <summary>Confines a child directory to its approved root before creation or enumeration.</summary>
     public static string DirectoryWithinRoot(string directory, string path)
     {

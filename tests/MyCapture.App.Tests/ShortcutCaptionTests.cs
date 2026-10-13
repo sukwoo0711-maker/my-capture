@@ -184,9 +184,8 @@ public sealed class ShortcutCaptionTests
             Ocr410Fixture.LoadTheme(card);
             card.Show();
             card.UpdateLayout();
-            var row = ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().First();
-            Button[] actions = row.Children.OfType<UniformGrid>().Single().Children.OfType<Button>().ToArray();
-            Assert.Equal(4, actions.Length);
+            IReadOnlyList<Button> actions = card.ActionButtonsForTest;
+            Assert.Equal(5, actions.Count);
             foreach (Button button in actions)
             {
                 string key = AutomationProperties.GetAcceleratorKey(button);

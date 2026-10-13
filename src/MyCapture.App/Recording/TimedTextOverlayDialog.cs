@@ -176,8 +176,8 @@ internal sealed class TimedTextOverlayDialog : Window
             return;
         }
 
-        if (!SourceTimeInput.TryParse(_start.Text, out double startMs)
-            || !SourceTimeInput.TryParse(_end.Text, out double endMs))
+        if (!VideoTimecode.TryParse(_start.Text, out double startMs)
+            || !VideoTimecode.TryParse(_end.Text, out double endMs))
         {
             Fail(UiText.Get("Text_328D27BC4C06"), _start);
             return;

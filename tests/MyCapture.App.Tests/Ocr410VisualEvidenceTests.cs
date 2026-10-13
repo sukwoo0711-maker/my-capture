@@ -176,7 +176,7 @@ internal static class Ocr410Fixture
     internal static void RunSta(Action body)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try { body(); }
             catch (Exception error) { failure = error; }

@@ -141,7 +141,8 @@ public static class AtomicFile
         finally
         {
             // A denied destination or failed volume swap must not leave an opaque .tmp beside
-            // the user's chosen file. Settings recovery still uses the separate .bak path.
+            // the user's chosen file. The temp is this write's own sibling, never user content,
+            // so it is deleted directly. Settings recovery still uses the separate .bak path.
             TryDelete(tempPath);
         }
     }
@@ -255,6 +256,7 @@ public static class AtomicFile
     {
         try
         {
+            // File.Delete removes a link itself, never its target.
             if (File.Exists(path))
             {
                 File.Delete(path);

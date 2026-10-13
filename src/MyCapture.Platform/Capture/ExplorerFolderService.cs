@@ -33,9 +33,15 @@ public sealed class ExplorerFolderService
     private readonly Func<CancellationToken, IReadOnlyList<ExplorerTabSnapshot>> _readTabs;
     private readonly Func<IntPtr, IntPtr> _activeTab;
 
-    public ExplorerFolderService()
+    public ExplorerFolderService() : this(waitForBusyProbe: false) { }
+
+    /// <param name="waitForBusyProbe">
+    /// Wait, within the same deadline, for a shell read that is still running (the previous
+    /// capture's) instead of returning nothing at once. For readers nothing on screen waits for.
+    /// </param>
+    public ExplorerFolderService(bool waitForBusyProbe)
         : this(ReadShellTabs, FindActiveTab, new BoundedNativeProbe(SharedGate, DefaultBudget, ApartmentState.STA,
-            "MyCapture Explorer folder")) { }
+            "MyCapture Explorer folder", waitForBusyProbe)) { }
 
     internal ExplorerFolderService(Func<CancellationToken, IReadOnlyList<ExplorerTabSnapshot>> readTabs,
         Func<IntPtr, IntPtr> activeTab, BoundedNativeProbe probe)

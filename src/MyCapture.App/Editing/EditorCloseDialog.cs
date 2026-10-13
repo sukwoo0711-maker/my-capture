@@ -62,20 +62,19 @@ internal sealed class EditorCloseDialog : Window
         AutomationProperties.SetName(this, title);
 
         var panel = new StackPanel { Margin = new Thickness(24) };
-        Heading = new TextBlock
+        // Korean text wraps between words, not inside one (KoreanWordWrap).
+        Heading = KoreanWordWrap.Show(new TextBlock
         {
-            Text = title,
             FontSize = 20,
             FontWeight = FontWeights.SemiBold,
             TextWrapping = TextWrapping.Wrap,
-        };
+        }, title);
         panel.Children.Add(Heading);
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(KoreanWordWrap.Show(new TextBlock
         {
-            Text = message,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 12, 0, 20),
-        });
+        }, message));
 
         var actions = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
         SaveButton = AddChoice(actions, saveLabel, EditorCloseChoice.SaveAndClose, "Button.Primary");
@@ -105,7 +104,13 @@ internal sealed class EditorCloseDialog : Window
     {
         var dialog = new EditorCloseDialog();
         if (owner.IsVisible) dialog.Owner = owner;
-        else dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        else
+        {
+            // Without a visible owner the question needs its own taskbar button, or it can wait
+            // unseen behind other windows.
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            dialog.ShowInTaskbar = true;
+        }
         _ = dialog.ShowDialog();
         return dialog.Choice;
     }

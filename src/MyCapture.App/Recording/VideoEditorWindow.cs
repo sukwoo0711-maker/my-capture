@@ -44,7 +44,7 @@ namespace MyCapture.App.Recording;
 /// (Shift = 10); otherwise they move a normal-editor "coarse" step.
 /// </para>
 /// </remarks>
-internal sealed class VideoEditorWindow : Window
+internal sealed partial class VideoEditorWindow : Window
 {
     private readonly Dictionary<string, Action> _shortcutActions = [];
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _shortcutActions;
@@ -110,7 +110,7 @@ internal sealed class VideoEditorWindow : Window
     private DispatcherTimer? _openTimeoutTimer;
     private readonly DispatcherTimer _playbackTimer;
     private CancellationTokenSource? _operationCts;
-    private Task<double>? _containerDuration;
+    private Task<VideoSourceInfo>? _sourceInfo;
 
     private double _durationMs;
     private bool _mediaReady;
@@ -138,6 +138,11 @@ internal sealed class VideoEditorWindow : Window
     internal TwoLineTimeline TimelineForTest => _timeline;
 
     internal PreviewSeekCoordinator PreviewSeekCoordinatorForTest => _previewSeeks;
+
+    internal MediaElement MediaForTest => _media;
+
+    /// <summary>The frame the preview shows, as a frame edit captures it.</summary>
+    internal BitmapSource? RenderCurrentFrameForTest() => TryRenderCurrentFrame();
 
     internal int ControlRowCountForTest => _controlRows.RowDefinitions.Count;
 
@@ -204,6 +209,8 @@ internal sealed class VideoEditorWindow : Window
             ScrubbingEnabled = true,
             Stretch = Stretch.Uniform,
         };
+        // Recordings are studio range; the source probe removes the expansion for a full-range clip.
+        StudioRangeVideoEffect.Apply(_media, studioRange: true);
         _media.MediaOpened += OnMediaOpened;
         _media.MediaFailed += OnMediaFailed;
         _media.MediaEnded += OnMediaEnded;
@@ -219,9 +226,10 @@ internal sealed class VideoEditorWindow : Window
             else if (_overlayList is not null) { _overlayList.SelectedItem = null; }
         };
         _layerCanvas.InteractionStarted += (_, _) => BeginLayerInteraction();
-        _layerCanvas.BoundsChanged += (_, _) => _overlayPreview.InvalidateVisual();
+        _layerCanvas.BoundsChanged += (_, _) => { _overlayPreview.InvalidateVisual(); _draftSession?.Changed(); };
         _layerCanvas.InteractionCompleted += (_, _) => CompleteLayerInteraction();
         _layerCanvas.LayerActivated += (_, _) => EditSelectedOverlay();
+        _layerCanvas.SelectionViewBoundsChanged += (_, _) => PlacePositionChip();
         _previewEngine = new MediaElementPreviewEngine(_media);
         _previewSeeks = new PreviewSeekCoordinator(_previewEngine, recording.Fps);
         _previewSeeks.PreviewPresented += OnPreviewPresented;
@@ -266,7 +274,7 @@ internal sealed class VideoEditorWindow : Window
             Visibility = Visibility.Collapsed,
             Child = _trimPreviewBadgeText,
         };
-        _positionLabel = BuildMono("00:00.000 / 00:00.000");
+        _positionLabel = BuildMono(UiText.Format("VideoEditorUx_PositionTime", VideoTimecode.Format(0), VideoTimecode.Format(0)));
         _statusLabel = new TextBlock
         {
             Text = UiText.Get("Text_831103D5C64B"),
@@ -333,6 +341,7 @@ internal sealed class VideoEditorWindow : Window
             () => _mediaReady && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase,
             HandleShortcut);
         Closing += OnClosingInternal;
+        InitializeDraftRecovery();
         Loaded += OnLoadedInternal;
         Closed += OnClosedInternal;
         IsVisibleChanged += (_, _) => { if (!IsVisible) { PausePlayback(); } };
@@ -416,8 +425,8 @@ internal sealed class VideoEditorWindow : Window
     internal bool HasUnsavedEditsForTest => HasUnsavedEdits();
 
     private bool HasUnsavedEdits() =>
-        _mediaReady && !_committed && _initialDocument is not null
-        && !DocumentsEquivalent(_initialDocument, BuildCurrentDocument());
+        !_committed && (_recoveredDraft || (_mediaReady && _initialDocument is not null
+        && !DocumentsEquivalent(_initialDocument, BuildCurrentDocument())));
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -441,7 +450,7 @@ internal sealed class VideoEditorWindow : Window
         // never raise MediaOpened for a short clip — the reported "2s video won't load" case.
         // The exact container duration is read in parallel: MediaElement's NaturalDuration
         // comes from Windows Media Player and is truncated to whole seconds.
-        _containerDuration = VideoDurationProbe.ReadContainerDurationAsync(_recording.OutputPath, _log);
+        _sourceInfo = VideoSourceProbe.ReadAsync(_recording.OutputPath, _log);
         try
         {
             _media.Source = new Uri(_recording.OutputPath, UriKind.Absolute);
@@ -493,7 +502,7 @@ internal sealed class VideoEditorWindow : Window
             if (!_mediaReady && !_mediaFailed)
             {
                 _log.LogWarning("MediaOpened did not fire within 5s; opening with the container or recorded duration");
-                double containerMs = _containerDuration is { IsCompletedSuccessfully: true } probe ? probe.Result : 0;
+                double containerMs = _sourceInfo is { IsCompletedSuccessfully: true } probe ? probe.Result.DurationMs : 0;
                 CompleteOpen(VideoDurationResolver.Resolve(containerMs, null, _recording.DurationMs), fromFallback: true);
             }
         };
@@ -562,7 +571,12 @@ internal sealed class VideoEditorWindow : Window
         // A small preview keeps the time and drops the frame count, which the status line
         // still reports for frame steps.
         previewStack.SizeChanged += (_, _) =>
+        {
             _positionFrameLabel.Visibility = previewStack.ActualWidth >= 440 ? Visibility.Visible : Visibility.Collapsed;
+            PlacePositionChip();
+        };
+        positionChip.SizeChanged += (_, _) => PlacePositionChip();
+        _trimPreviewBadge.IsVisibleChanged += (_, _) => PlacePositionChip();
         previewStack.Children.Add(positionChip);
         previewStack.Children.Add(_loadingOverlay);
 
@@ -1333,11 +1347,14 @@ internal sealed class VideoEditorWindow : Window
             ? _media.NaturalDuration.TimeSpan.TotalMilliseconds
             : null;
         // The probe never faults and normally finishes before MediaOpened.
-        double containerMs = _containerDuration is null ? 0 : await _containerDuration;
+        VideoSourceInfo source = _sourceInfo is null ? new VideoSourceInfo(0, StudioRange: true) : await _sourceInfo;
         if (_closing)
         {
             return;
         }
+
+        StudioRangeVideoEffect.Apply(_media, source.StudioRange);
+        double containerMs = source.DurationMs;
 
         double durationMs = VideoDurationResolver.Resolve(containerMs, playerMs, _recording.DurationMs);
         _log.LogDebug(
@@ -1364,6 +1381,7 @@ internal sealed class VideoEditorWindow : Window
         StopLoadTimers();
 
         _durationMs = durationMs > 0 ? durationMs : Math.Max(1, _recording.DurationMs);
+        _previewEngine.DurationMs = _durationMs;
         _mediaReady = true;
         RefreshIdentityDetails(_durationMs);
 
@@ -1387,7 +1405,7 @@ internal sealed class VideoEditorWindow : Window
 
         try
         {
-            _media.Position = TimeSpan.FromMilliseconds(_editDocument.TrimInMs);
+            _media.Position = TimeSpan.FromMilliseconds(_previewEngine.PresentationPositionMs(_editDocument.TrimInMs));
             _media.Pause();
         }
         catch (InvalidOperationException)
@@ -1494,11 +1512,13 @@ internal sealed class VideoEditorWindow : Window
         }
         catch (OperationCanceledException)
         {
-            await Dispatcher.InvokeAsync(() => { if (version == _playRequestVersion) { _playRequested = false; UpdatePlayButton(); } });
+            // The seek was superseded, or the editor closed and its dispatcher shut down while
+            // the start was queued; either way only a still-current request is undone.
+            if (!Dispatcher.HasShutdownStarted && version == _playRequestVersion) { _playRequested = false; UpdatePlayButton(); }
         }
         catch (Exception ex)
         {
-            await Dispatcher.InvokeAsync(() => { if (version == _playRequestVersion) { PausePlayback(); OnPreviewSeekFailed(ex); } });
+            if (!Dispatcher.HasShutdownStarted && version == _playRequestVersion) { PausePlayback(); OnPreviewSeekFailed(ex); }
         }
     }
     private void Seek(double positionMs)
@@ -1735,6 +1755,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void RememberEdit(VideoEditDocument? before = null)
     {
+        _draftSession?.Changed();
         _undo.Add(before ?? _editDocument.Clone());
         if (_undo.Count > 50) { _undo.RemoveAt(0); }
         _redo.Clear();
@@ -1754,6 +1775,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnTrimChanged()
     {
+        _draftSession?.Changed();
         if (_syncingTrim) return;
         bool changed = _editDocument.TrimInMs != _timeline.InMs || _editDocument.TrimOutMs != _timeline.OutMs;
         if (changed && _trimInteractionBefore is null) RememberEdit();
@@ -1784,8 +1806,8 @@ internal sealed class VideoEditorWindow : Window
     private void RefreshTrimInputs()
     {
         if (_trimInInput is null) return;
-        _trimInInput.Text = SourceTimeInput.Format(_timeline.InMs);
-        _trimOutInput.Text = SourceTimeInput.Format(_timeline.OutMs);
+        _trimInInput.Text = VideoTimecode.Format(_timeline.InMs);
+        _trimOutInput.Text = VideoTimecode.Format(_timeline.OutMs);
         RefreshTrimSummary();
     }
 
@@ -1794,8 +1816,8 @@ internal sealed class VideoEditorWindow : Window
         // A focus change can also mean the window is closing; never touch a closed media
         // element, and do not stop playback just because the field lost focus.
         if (!_mediaReady || _operationRunning || _closing) return;
-        if (!SourceTimeInput.TryParse(_trimInInput.Text, out double start)
-            || !SourceTimeInput.TryParse(_trimOutInput.Text, out double end)
+        if (!TryReadTrimInput(_trimInInput.Text, _timeline.InMs, out double start)
+            || !TryReadTrimInput(_trimOutInput.Text, _timeline.OutMs, out double end)
             || !_timeline.SetTrimRange(start, end))
         {
             _statusLabel.Text = UiText.Get("Video.TrimInputInvalid");
@@ -1803,6 +1825,32 @@ internal sealed class VideoEditorWindow : Window
             return;
         }
         RefreshTrimInputs();
+    }
+
+    /// <summary>
+    /// Reads a trim field. The fields show whole milliseconds, so an unedited field keeps the
+    /// exact value it shows, and the shown clip end (rounded up by up to half a millisecond)
+    /// still means the end.
+    /// </summary>
+    private bool TryReadTrimInput(string text, double currentMs, out double ms)
+    {
+        if (string.Equals(text.Trim(), VideoTimecode.Format(currentMs), StringComparison.Ordinal))
+        {
+            ms = currentMs;
+            return true;
+        }
+
+        if (!VideoTimecode.TryParse(text, out ms))
+        {
+            return false;
+        }
+
+        if (ms > _durationMs && ms - _durationMs <= 0.5)
+        {
+            ms = _durationMs;
+        }
+
+        return true;
     }
 
     private void RestoreEdit(bool redo)
@@ -1819,6 +1867,7 @@ internal sealed class VideoEditorWindow : Window
         RefreshOverlayList(selected);
         RefreshTextPreview();
         UpdateStatusForMode();
+        _draftSession?.Changed();
     }
 
     private bool CanAddGraphic() => _mediaReady && !_operationRunning
@@ -2014,6 +2063,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnLayerTimingChanged(object? sender, EventArgs e)
     {
+        _draftSession?.Changed();
         _overlayPreview.SetOverlays(_editDocument.TextOverlays);
         _overlayPreview.SetFrameLayers(_editDocument.FrameEditLayers);
         _overlayPreview.SetSourceTime(CurrentMs());
@@ -2445,8 +2495,9 @@ internal sealed class VideoEditorWindow : Window
 
         if (!TryValidateLayerResources(_editDocument.FrameEditLayers)) { return; }
         VideoEditDocument document = BuildCurrentDocument();
-        if (_initialDocument is not null && DocumentsEquivalent(_initialDocument, document))
+        if (!_recoveredDraft && _initialDocument is not null && DocumentsEquivalent(_initialDocument, document))
         {
+            if (!await RetireDraftBeforeCloseAsync()) return;
             _statusLabel.Text = UiText.Get("Text_2D8B0244F4F4");
             _committed = true;
             Close();
@@ -2493,6 +2544,7 @@ internal sealed class VideoEditorWindow : Window
                 await VideoCommitHandler(document, outputPath, cancellationToken);
             }
 
+            if (!await RetireDraftBeforeCloseAsync()) return;
             _editDocument = document;
             _statusLabel.Text = UiText.Format("Text_0DA5C524F6BB", emitted);
             _committed = true;
@@ -2538,6 +2590,13 @@ internal sealed class VideoEditorWindow : Window
 
     private VideoExportDialog? _exportDialog;
 
+    /// <summary>
+    /// Shows the export dialog instead of the modal <see cref="Window.ShowDialog"/>. Null in the
+    /// product, so the dialog always opens modally; the tutorial video generator sets it to host
+    /// the dialog offscreen, without activating it, while it records frames.
+    /// </summary>
+    internal Action<VideoExportDialog>? ExportDialogHostForTest { get; set; }
+
     private void OpenExport(bool gif = false)
     {
         if (_exportDialog is not null || !IsVisible || !_mediaReady || _operationRunning
@@ -2546,7 +2605,8 @@ internal sealed class VideoEditorWindow : Window
         try
         {
             _exportDialog = new VideoExportDialog(_recording, BuildCurrentDocument(), _loggerFactory, gif) { Owner = this };
-            _ = _exportDialog.ShowDialog();
+            if (ExportDialogHostForTest is { } host) host(_exportDialog);
+            else _ = _exportDialog.ShowDialog();
         }
         catch (Exception error)
         {
@@ -2764,24 +2824,82 @@ internal sealed class VideoEditorWindow : Window
         AutomationProperties.SetName(_positionChip, UiText.Format("Text_D8A09D5BCDCB", FormatMs(positionMs), FormatMs(_durationMs), frame, total));
     }
 
-    private int TotalFrameCount()
+    /// <summary>The corner of the preview the time readout sits in; bottom left unless a selected layer is there.</summary>
+    internal (HorizontalAlignment Horizontal, VerticalAlignment Vertical) PositionChipCornerForTest =>
+        (_positionChip.HorizontalAlignment, _positionChip.VerticalAlignment);
+
+    /// <summary>
+    /// Keeps the time readout off the selected layer. It sits bottom left, like a player's
+    /// readout; while the selected layer's outline or handles would be under it, it moves to
+    /// the first other corner that leaves them free (top left only while the trim badge, which
+    /// lives there, is hidden), or else to the corner that covers the least of them.
+    /// </summary>
+    private void PlacePositionChip()
     {
-        double frameMs = FrameStepCalculator.FrameDurationMs(_recording.Fps);
-        return frameMs > 0
-            ? Math.Max(1, (int)Math.Ceiling(_durationMs / frameMs))
-            : 1;
+        if (_positionChip is null)
+        {
+            return;
+        }
+
+        (HorizontalAlignment Horizontal, VerticalAlignment Vertical) chosen = (HorizontalAlignment.Left, VerticalAlignment.Bottom);
+        if (_layerCanvas.SelectionViewBounds is { } layer && !layer.IsEmpty)
+        {
+            Size area = _layerCanvas.RenderSize;
+            Thickness margin = _positionChip.Margin;
+            Size chip = _positionChip.IsMeasureValid && _positionChip.DesiredSize.Width > 0
+                ? _positionChip.DesiredSize
+                : new Size(_positionChip.ActualWidth + margin.Left + margin.Right, _positionChip.ActualHeight + margin.Top + margin.Bottom);
+            double leastCovered = double.PositiveInfinity;
+            foreach ((HorizontalAlignment h, VerticalAlignment v) corner in new[]
+            {
+                (HorizontalAlignment.Left, VerticalAlignment.Bottom),
+                (HorizontalAlignment.Left, VerticalAlignment.Top),
+                (HorizontalAlignment.Right, VerticalAlignment.Bottom),
+                (HorizontalAlignment.Right, VerticalAlignment.Top),
+            })
+            {
+                if (corner == (HorizontalAlignment.Left, VerticalAlignment.Top) && _trimPreviewBadge.IsVisible)
+                {
+                    continue;
+                }
+
+                var spot = new Rect(
+                    corner.h == HorizontalAlignment.Left ? 0 : Math.Max(0, area.Width - chip.Width),
+                    corner.v == VerticalAlignment.Top ? 0 : Math.Max(0, area.Height - chip.Height),
+                    chip.Width,
+                    chip.Height);
+                Rect overlap = Rect.Intersect(spot, layer);
+                double covered = overlap.IsEmpty ? 0 : overlap.Width * overlap.Height;
+                if (covered < leastCovered)
+                {
+                    leastCovered = covered;
+                    chosen = corner;
+                }
+
+                if (covered == 0)
+                {
+                    break;
+                }
+            }
+        }
+
+        _positionChip.HorizontalAlignment = chosen.Horizontal;
+        _positionChip.VerticalAlignment = chosen.Vertical;
     }
 
-    private static string FormatMs(double ms)
-    {
-        TimeSpan t = TimeSpan.FromMilliseconds(Math.Max(0, ms));
-        return t.ToString(@"mm\:ss\.fff", CultureInfo.InvariantCulture);
-    }
+    private int TotalFrameCount() => FrameStepCalculator.LastFrameIndex(_recording.Fps, _durationMs) + 1;
+
+    private static string FormatMs(double ms) => VideoTimecode.Format(ms);
 
     private void OnClosingInternal(object? sender, CancelEventArgs e)
     {
         bool userClose = _userRequestedClose;
         _userRequestedClose = false;
+        if (_discardCloseTask is { IsCompleted: false } && !_discardedDraft)
+        {
+            e.Cancel = true;
+            return;
+        }
         if (userClose && !_operationRunning && HasUnsavedEdits())
         {
             // Closing from the title bar with edits: save to the library, drop them, or stay.
@@ -2799,6 +2917,14 @@ internal sealed class VideoEditorWindow : Window
                 CommitTrim();
                 return;
             }
+            if (_draftSession is null)
+            {
+                _discardedDraft = true;
+                return;
+            }
+            e.Cancel = true;
+            _discardCloseTask = DiscardAndCloseAsync();
+            return;
         }
 
         if (!_operationRunning || _committed)
@@ -2831,6 +2957,7 @@ internal sealed class VideoEditorWindow : Window
 
     private void OnClosedInternal(object? sender, EventArgs e)
     {
+        FinishDraftRecovery();
         _closing = true;
         CancellationTokenSource? operation = Interlocked.Exchange(ref _operationCts, null);
         try

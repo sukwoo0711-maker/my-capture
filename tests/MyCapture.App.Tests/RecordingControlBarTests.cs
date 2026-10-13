@@ -75,11 +75,11 @@ public sealed class RecordingControlBarTests
             Assert.True(window.IsRecording);
 
             // While recording: ■ Stop and ❚❚ Pause; cancel would only have stopped, so it is gone.
-            Assert.Equal("정지", RecordingControlWindow.ButtonLabel(primary));
-            Assert.Equal("녹화 정지", AutomationProperties.GetName(primary));
+            Assert.Equal("중지", RecordingControlWindow.ButtonLabel(primary));
+            Assert.Equal("녹화 중지", AutomationProperties.GetName(primary));
             Assert.Equal(Visibility.Collapsed, cancel.Visibility);
             Assert.Equal(Visibility.Visible, pause.Visibility);
-            Assert.Equal("일시정지", RecordingControlWindow.ButtonLabel(pause));
+            Assert.Equal("일시 정지", RecordingControlWindow.ButtonLabel(pause));
 
             ContextMenu during = window.CreateMoreMenu();
             ((MenuItem)during.Items[0]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));

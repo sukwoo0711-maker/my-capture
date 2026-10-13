@@ -30,7 +30,7 @@ public sealed class PinManagerTests : KoreanCaptionTest
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {
@@ -55,7 +55,7 @@ public sealed class PinManagerTests : KoreanCaptionTest
     {
         var completion = new TaskCompletionSource<object?>(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
             SynchronizationContext.SetSynchronizationContext(

@@ -39,6 +39,8 @@ public sealed class GalleryController
 
     internal CaptureQueue Queue => _queue;
 
+    public RecoverableLibraryService? Recovery { get; set; }
+
     public int Count => _queue.Count;
 
     public long TotalBytes => _queue.TotalBytes;
@@ -74,8 +76,11 @@ public sealed class GalleryController
         IEnumerable<CaptureRecord> matches = RecordsInView(scope, browsing: includeFolders);
         string? trimmed = query?.Trim();
         if (!string.IsNullOrEmpty(trimmed))
-            matches = matches.Where(record => Matches(record, trimmed)
+        {
+            Func<CaptureRecord, bool> matcher = CaptureTextSearch.CreateMatcher(trimmed);
+            matches = matches.Where(record => matcher(record)
                 || _queue.GetExportFileName(record).Contains(trimmed, StringComparison.CurrentCultureIgnoreCase));
+        }
         CaptureRecord[] ordered = (sort switch
         {
             GallerySortOrder.Oldest => matches.OrderBy(record => record.CreatedAt).ThenBy(record => record.Id),
@@ -143,7 +148,7 @@ public sealed class GalleryController
     /// </summary>
     public bool? TogglePin(Guid id)
     {
-        CaptureRecord? record = _queue.Find(id);
+        CaptureRecord? record = Find(id);
         if (record is null)
         {
             return null;
@@ -175,7 +180,7 @@ public sealed class GalleryController
         return true;
     }
 
-    public CaptureRecord? Find(Guid id) => _queue.Find(id);
+    public CaptureRecord? Find(Guid id) => _queue.IsRemovalPending(id) ? null : _queue.Find(id);
 
     /// <summary>Edits only user metadata; serializes publication with OCR and image edits.</summary>
     public async Task<bool> UpdateOrganizationAsync(Guid id, string? title, string? tags,

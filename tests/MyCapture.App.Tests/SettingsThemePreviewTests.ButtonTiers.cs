@@ -17,7 +17,7 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed partial class SettingsThemePreviewTests
 {
-    private enum ButtonTier { Filled, Bordered, Borderless }
+    private enum ButtonTier { Filled, Bordered, Borderless, Danger }
 
     private static readonly ThemeColor DarkMicaBackdrop = ThemeColor.Rgb(0x20, 0x20, 0x20);
     private static readonly ThemeColor LightMicaBackdrop = ThemeColor.Rgb(0xF3, 0xF3, 0xF3);
@@ -67,7 +67,7 @@ public sealed partial class SettingsThemePreviewTests
                 ("Button.Compact", ButtonTier.Bordered, null),
                 ("Button.Ghost", ButtonTier.Borderless, null),
                 ("Button.GhostCompact", ButtonTier.Borderless, null),
-                ("Button.Danger", ButtonTier.Borderless, null),
+                ("Button.Danger", ButtonTier.Danger, null),
                 ("Button.Icon", ButtonTier.Borderless, null),
                 // Editor buttons that carry a key caption keep the same rule. Only single keys are
                 // printed under a command, so the samples use Q, W and Del.
@@ -154,6 +154,12 @@ public sealed partial class SettingsThemePreviewTests
                                 Assert.Equal(Wpf(Token("Border.Control")), border);
                                 Assert.Equal(Wpf(Token("Surface.Overlay")), fill);
                                 break;
+                            case ButtonTier.Danger:
+                                // Destructive commands: the bordered shape with danger text and outline.
+                                Assert.Equal(Wpf(Token("State.Danger")), border);
+                                Assert.Equal(Wpf(Token("State.Danger")), ColorOf(enabled.Foreground));
+                                Assert.Equal(Wpf(Token("Surface.Overlay")), fill);
+                                break;
                             default:
                                 Assert.Equal(0, fill.A);
                                 Assert.Equal(0, border.A);
@@ -167,10 +173,10 @@ public sealed partial class SettingsThemePreviewTests
                         double disabledRatio = tier == ButtonTier.Filled
                             ? disabledFilledRatio
                             : ThemeContrast.Ratio(Fade(text, page), Fade(background, page));
-                        double borderRatio = tier == ButtonTier.Bordered ? ThemeContrast.Ratio(Over(Theme(border), page), page) : double.NaN;
-                        if (style != "Button.Danger")
-                            Assert.True(enabledRatio >= 4.5, $"{label}: label contrast {enabledRatio:0.00}");
-                        if (tier == ButtonTier.Bordered)
+                        bool outlined = tier is ButtonTier.Bordered or ButtonTier.Danger;
+                        double borderRatio = outlined ? ThemeContrast.Ratio(Over(Theme(border), page), page) : double.NaN;
+                        Assert.True(enabledRatio >= 4.5, $"{label}: label contrast {enabledRatio:0.00}");
+                        if (outlined)
                             Assert.True(borderRatio >= 3.0, $"{label}: outline contrast {borderRatio:0.00}");
                         Assert.True(disabledRatio < enabledRatio, $"{label}: disabled label is not dimmer");
                         table.AppendLine(string.Create(CultureInfo.InvariantCulture,

@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using MyCapture.App.Capture;
 using MyCapture.App.Themes;
+using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 
 namespace MyCapture.App;
@@ -34,14 +35,18 @@ internal enum WelcomeOutcome
 /// </summary>
 /// <remarks>
 /// The illustrations are vector drawings in theme brushes, so they follow all six themes and high
-/// contrast. The after-capture sentence follows the user's after-capture setting.
+/// contrast. The after-capture sentence follows the user's after-capture setting and the retention
+/// sentence the library's image retention. The third step offers starting at sign-in, checked by
+/// default; the shell applies the choice when the window closes, so nothing is registered unless
+/// the box is left checked.
 /// </remarks>
 internal sealed class WelcomeWindow : Window
 {
     private static readonly Geometry RegionGlyph = Geometry.Parse(
         "M3.5,7 L3.5,3.5 L7,3.5 M13,3.5 L16.5,3.5 L16.5,7 M16.5,13 L16.5,16.5 L13,16.5 M7,16.5 L3.5,16.5 L3.5,13 M8,8 L12,8 L12,12 L8,12 Z");
 
-    internal WelcomeWindow(HotkeySettings keys, AfterCaptureAction afterCapture)
+    internal WelcomeWindow(HotkeySettings keys, AfterCaptureAction afterCapture,
+        int imageRetentionHours = CaptureRetention.DefaultImageRetentionHours)
     {
         ArgumentNullException.ThrowIfNull(keys);
         Title = UiText.Get("Help.Welcome");
@@ -61,6 +66,7 @@ internal sealed class WelcomeWindow : Window
         TryNowButton.Click += (_, _) => CloseWith(WelcomeOutcome.TryCapture);
 
         AfterCaptureText = AfterCaptureSentence(afterCapture);
+        RetentionText = RetentionSentence(imageRetentionHours);
         var steps = new StackPanel();
         AutomationProperties.SetName(steps, UiText.Get("Onboard_StepsName"));
         // Only a key that is really assigned is shown; otherwise the tray menu is the way in.
@@ -68,10 +74,26 @@ internal sealed class WelcomeWindow : Window
             ? ShortcutHelpWindow.Keycaps(keys.Capture.ToString())
             : Sentence(UiText.Get("Onboard_CaptureFromTray"));
         steps.Children.Add(Step(1, CaptureIllustration(), UiText.Get("Text_096A13A757DB"), captureKeys, TryNowButton));
+        var afterCaptureBody = new StackPanel();
+        afterCaptureBody.Children.Add(Sentence(AfterCaptureText));
+        TextBlock retention = Sentence(RetentionText);
+        retention.Margin = new Thickness(0, 4, 0, 0);
+        afterCaptureBody.Children.Add(retention);
         steps.Children.Add(Step(2, AfterCaptureIllustration(afterCapture), UiText.Get("Onboard_AfterCaptureTitle"),
-            Sentence(AfterCaptureText), action: null));
-        steps.Children.Add(Step(3, TrayIllustration(), UiText.Get("Onboard_TrayTitle"),
-            Sentence(UiText.Get("Onboard_TrayBody")), action: null));
+            afterCaptureBody, action: null));
+
+        // Global shortcuts work only while MyCapture runs; without this they stop after a restart.
+        StartAtSignInCheck = new CheckBox
+        {
+            Content = UiText.Get("Onboard_StartAtSignIn"), IsChecked = true, Margin = new Thickness(0, 10, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Left, ToolTip = UiText.Get("Onboard_StartAtSignInHelp"),
+        };
+        AutomationProperties.SetName(StartAtSignInCheck, UiText.Get("Onboard_StartAtSignIn"));
+        AutomationProperties.SetHelpText(StartAtSignInCheck, UiText.Get("Onboard_StartAtSignInHelp"));
+        var trayBody = new StackPanel();
+        trayBody.Children.Add(Sentence(UiText.Get("Onboard_TrayBody")));
+        trayBody.Children.Add(StartAtSignInCheck);
+        steps.Children.Add(Step(3, TrayIllustration(), UiText.Get("Onboard_TrayTitle"), trayBody, action: null));
 
         var link = new Hyperlink(new Run(UiText.Get("Help.Settings")));
         link.SetResourceReference(TextElement.ForegroundProperty, "Accent.Cool");
@@ -105,6 +127,25 @@ internal sealed class WelcomeWindow : Window
 
     /// <summary>The second step's sentence, as the after-capture setting makes it true.</summary>
     internal string AfterCaptureText { get; }
+
+    /// <summary>The second step's retention sentence, as the library's image retention makes it true.</summary>
+    internal string RetentionText { get; }
+
+    /// <summary>"Start MyCapture when I sign in to Windows", checked by default.</summary>
+    internal CheckBox StartAtSignInCheck { get; }
+
+    /// <summary>The start-at-sign-in choice the window closes with.</summary>
+    internal bool StartAtSignIn => StartAtSignInCheck.IsChecked == true;
+
+    /// <summary>
+    /// "Images are deleted after {retention} unless kept or filed in a folder", with the
+    /// retention the library really applies (clamped to the accepted range).
+    /// </summary>
+    internal static string RetentionSentence(int imageRetentionHours)
+    {
+        int hours = (int)CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = imageRetentionHours }).TotalHours;
+        return UiText.Format("Onboard_RetentionNotice", MyCapture.App.Settings.SettingsUxText.Duration(hours));
+    }
 
     /// <summary>What happens to every capture, worded for the after-capture setting.</summary>
     internal static string AfterCaptureSentence(AfterCaptureAction action) => UiText.Get(action switch

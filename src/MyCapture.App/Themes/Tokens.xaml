@@ -150,6 +150,12 @@
     <SolidColorBrush x:Key="Surface.Folder" Color="#FF2A2213" />
     <SolidColorBrush x:Key="Border.Folder" Color="#FF8A6A2E" />
     <SolidColorBrush x:Key="Accent.Folder" Color="#FFF0B44C" />
+    <!-- A folder card's hover edge and wash: Accent.Folder and Surface.Hover's colours here, and the
+         very same brushes once ThemeService applies a palette; a Windows contrast theme gets a
+         Highlight edge and a clear wash. The defaults repeat the colours: StaticResource alias
+         entries here left Accent.Folder unresolvable in the merged theme. -->
+    <SolidColorBrush x:Key="Border.FolderHover" Color="#FFF0B44C" />
+    <SolidColorBrush x:Key="Surface.FolderHoverWash" Color="{StaticResource Primitive.Warm800}" />
 
     <!-- Video timeline semantics: layer identity, playhead, and destructive trim. -->
     <SolidColorBrush x:Key="Timeline.Background" Color="{StaticResource Primitive.Graphite950}" />

@@ -1,12 +1,15 @@
 using System.Reflection;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 using MyCapture.App.Editing;
 using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Recording;
+using MyCapture.Core.Storage;
 using Xunit;
 using static MyCapture.App.Tests.VideoEditorUxTrimTests;
 
@@ -297,6 +300,71 @@ public sealed class VideoEditorUxInteractionTests
             OwnedTestDirectory.Delete(root);
         }
     });
+
+    [Fact]
+    public void ClosingFromTheTitleBarWithRealDraftWaitsForRetirementWithoutBlockingTheDispatcher() => StaTestHost.Run(() =>
+    {
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-video-ux-draft-close-").FullName;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int retireCalls = 0, prompts = 0;
+        var store = new EditDraftStore(root, _ =>
+        {
+            if (Interlocked.Increment(ref retireCalls) == 1)
+            {
+                entered.TrySetResult();
+                release.Task.WaitAsync(TimeSpan.FromSeconds(30)).GetAwaiter().GetResult();
+            }
+        }); // Retain this fixture; the injected callback performs no Shell operation.
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true);
+            Guid id = Guid.NewGuid();
+            editor.AdoptRecoveredDraft(store, id, 1);
+            editor.UnsavedEditsPromptForTest = () => { prompts++; return EditorCloseChoice.DontSave; };
+            editor.MarkUserCloseRequestedForTest();
+            editor.Close();
+            Assert.True(editor.IsVisible);
+            Assert.False(editor.IsEnabled);
+            PumpUntil(() => entered.Task.IsCompleted);
+            editor.MarkUserCloseRequestedForTest();
+            editor.Close();
+            Assert.Equal(1, prompts);
+            Assert.True(editor.IsVisible);
+            Task<bool> exit = editor.PrepareForAppExitAsync();
+            Assert.False(exit.IsCompleted);
+            bool responsive = false;
+            editor.Dispatcher.BeginInvoke(new Action(() => responsive = true));
+            PumpUntil(() => responsive);
+            release.TrySetResult();
+            PumpUntil(() => exit.IsCompleted);
+            Assert.True(exit.GetAwaiter().GetResult());
+            Assert.False(editor.IsVisible);
+            Assert.True(store.IsRetired(id));
+            Assert.Equal(1, prompts);
+        }
+        finally
+        {
+            release.TrySetResult();
+            editor?.Close();
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    });
+
+    private static void PumpUntil(Func<bool> predicate)
+    {
+        var timer = Stopwatch.StartNew();
+        while (!predicate())
+        {
+            Assert.True(timer.Elapsed < TimeSpan.FromSeconds(5));
+            var frame = new DispatcherFrame();
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => frame.Continue = false));
+            Dispatcher.PushFrame(frame);
+        }
+    }
 
     private static KeyEventArgs KeyPress(Window window, Key key) =>
         new(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, key)

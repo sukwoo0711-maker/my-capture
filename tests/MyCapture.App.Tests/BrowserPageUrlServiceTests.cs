@@ -267,6 +267,51 @@ public sealed class BrowserPageUrlServiceTests
     }
 
     [Fact]
+    public async Task WaitingReaderUsesTheSlotOnceFreed_WithinItsOwnDeadline_AndNeverRunsTwoProbes()
+    {
+        using var gate = new SemaphoreSlim(1, 1);
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        int calls = 0, running = 0, overlapped = 0;
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> Probe(IReadOnlyList<WindowCandidate> _, CancellationToken token)
+        {
+            if (Interlocked.Increment(ref running) > 1) Interlocked.Increment(ref overlapped);
+            try
+            {
+                if (Interlocked.Increment(ref calls) == 1)
+                {
+                    entered.Set();
+                    if (!release.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("Test provider was not released.");
+                    return Result("https://previous.example/");
+                }
+                return Result("https://next.example/");
+            }
+            finally { Interlocked.Decrement(ref running); }
+        }
+
+        var previous = new BrowserPageUrlService(Probe, TimeSpan.FromSeconds(2), gate);
+        var tooShort = new BrowserPageUrlService(Probe, TimeSpan.FromMilliseconds(60), gate, waitForBusyProbe: true);
+        var waiting = new BrowserPageUrlService(Probe, TimeSpan.FromSeconds(2), gate, waitForBusyProbe: true);
+        Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> busy = previous.ReadAsync(Candidates);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(2)));
+
+        var stopwatch = Stopwatch.StartNew();
+        Assert.Empty(await tooShort.ReadAsync(Candidates)); // Its whole deadline passed waiting.
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
+        Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> next = waiting.ReadAsync(Candidates);
+        await Task.Delay(50);
+        Assert.False(next.IsCompleted);
+        Assert.Equal(1, Volatile.Read(ref calls));
+
+        release.Set();
+        Assert.Equal("https://previous.example/", Assert.Single(await busy).Value.Url);
+        Assert.Equal("https://next.example/", Assert.Single(await next).Value.Url);
+        Assert.Equal(2, calls);
+        Assert.Equal(0, overlapped);
+        Assert.True(SpinWait.SpinUntil(() => gate.CurrentCount == 1, TimeSpan.FromSeconds(3)));
+    }
+
+    [Fact]
     public async Task ProviderFailureReturnsNoMetadata_AndReleasesSlot()
     {
         using var gate = new SemaphoreSlim(1, 1);

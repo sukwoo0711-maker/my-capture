@@ -128,6 +128,23 @@ internal sealed class PinHoverBar : Window
         }
     }
 
+    /// <summary>
+    /// The bar's width with every name shown, in DIPs, without showing it.
+    /// </summary>
+    /// <remarks>
+    /// A window that has never been shown is collapsed, so measuring the window gives zero; its
+    /// content measures with the button templates and theme resources it will be shown with.
+    /// </remarks>
+    internal double MeasureLabeledWidth()
+    {
+        bool compact = _compact;
+        Compact = false;
+        _surface.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double width = _surface.DesiredSize.Width;
+        Compact = compact;
+        return width;
+    }
+
     /// <summary>Reads the pin's current opacity, shown as the checked entry of the opacity menu.</summary>
     internal Func<double> ReadOpacity { get; set; } = () => 1;
 

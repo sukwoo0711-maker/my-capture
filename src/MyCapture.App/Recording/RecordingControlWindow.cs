@@ -348,8 +348,8 @@ internal sealed class RecordingControlWindow : Window
     private bool _previewRecording;
 
     /// <summary>
-    /// Evidence hook: the bar exactly as recording shows it (paused or not), without starting a
-    /// recorder or showing the window.
+    /// Evidence hook: the bar and region outline exactly as recording shows them (paused or not),
+    /// without starting a recorder or showing the window.
     /// </summary>
     internal void PreviewRecordingForTest(bool paused, TimeSpan elapsed)
     {
@@ -360,6 +360,7 @@ internal sealed class RecordingControlWindow : Window
         _statusText.Text = UiText.Get(paused ? "RecordingPause_Status" : "Text_38B12BA58C48");
         _statusText.Foreground = paused ? TryBrush("Text.Primary", Colors.White) : TryBrush("State.Danger", Colors.OrangeRed);
         _timerText.Text = elapsed.ToString(@"mm\:ss", CultureInfo.InvariantCulture);
+        UpdateRegionFrameBrush(_regionFrame);
     }
 
     private void UpdateSessionButtons()

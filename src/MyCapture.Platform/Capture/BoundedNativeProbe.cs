@@ -12,8 +12,15 @@ internal sealed class BoundedNativeProbe
     private readonly TimeSpan _budget;
     private readonly ApartmentState _apartment;
     private readonly string _threadName;
+    private readonly bool _waitForBusyGate;
 
-    internal BoundedNativeProbe(SemaphoreSlim gate, TimeSpan budget, ApartmentState apartment, string threadName)
+    /// <param name="waitForBusyGate">
+    /// Wait for a probe that still owns the gate (for example the previous capture's) instead of
+    /// returning the fallback at once. The wait counts against the same deadline, so a read still ends
+    /// within <paramref name="budget"/>. Only callers that nothing on screen waits for should wait.
+    /// </param>
+    internal BoundedNativeProbe(SemaphoreSlim gate, TimeSpan budget, ApartmentState apartment, string threadName,
+        bool waitForBusyGate = false)
     {
         _gate = gate ?? throw new ArgumentNullException(nameof(gate));
         if (budget <= TimeSpan.Zero || budget > TimeSpan.FromSeconds(2))
@@ -21,12 +28,14 @@ internal sealed class BoundedNativeProbe
         _budget = budget;
         _apartment = apartment;
         _threadName = threadName ?? throw new ArgumentNullException(nameof(threadName));
+        _waitForBusyGate = waitForBusyGate;
     }
 
     internal async Task<T> RunAsync<T>(Func<CancellationToken, T> probe, T fallback)
     {
         ArgumentNullException.ThrowIfNull(probe);
-        if (!_gate.Wait(0)) return fallback;
+        TimeSpan remaining = await EnterAsync(_gate, _budget, _waitForBusyGate).ConfigureAwait(false);
+        if (remaining <= TimeSpan.Zero) return fallback;
 
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
         var cancellation = new CancellationTokenSource();
@@ -62,10 +71,27 @@ internal sealed class BoundedNativeProbe
             return fallback;
         }
 
-        Task winner = await Task.WhenAny(completion.Task, Task.Delay(_budget)).ConfigureAwait(false);
+        Task winner = await Task.WhenAny(completion.Task, Task.Delay(remaining)).ConfigureAwait(false);
         if (winner == completion.Task) return await completion.Task.ConfigureAwait(false);
         try { cancellation.Cancel(); }
         catch (ObjectDisposedException) { /* The probe finished concurrently with the deadline. */ }
         return fallback;
+    }
+
+    /// <summary>
+    /// Takes <paramref name="gate"/> and returns how much of <paramref name="budget"/> is left for the
+    /// probe, or zero (gate not taken) when it is busy and waiting is off or did not get it in time.
+    /// </summary>
+    internal static async Task<TimeSpan> EnterAsync(SemaphoreSlim gate, TimeSpan budget, bool waitForBusyGate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if (gate.Wait(0)) return budget;
+        if (!waitForBusyGate) return TimeSpan.Zero;
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (!await gate.WaitAsync(budget).ConfigureAwait(false)) return TimeSpan.Zero;
+        TimeSpan remaining = budget - System.Diagnostics.Stopwatch.GetElapsedTime(started);
+        if (remaining > TimeSpan.Zero) return remaining;
+        gate.Release();
+        return TimeSpan.Zero;
     }
 }

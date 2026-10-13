@@ -60,6 +60,7 @@ public partial class App : Application
     private readonly CancellationTokenSource _indexingCancellation = new();
     private bool _indexingRunning;
     private bool _indexingRequested;
+    private CancellationTokenSource? _automaticIndexingPassCancellation;
     private CapturePersistenceService? _persistence;
     private CaptureCommitService? _commit;
     private MyCapture.App.Recording.VideoLibraryService? _videoLibrary;
@@ -82,7 +83,7 @@ public partial class App : Application
     private CaptureRecord? _currentRecord;
     private CaptureEditSession? _currentEditSession;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         UiText.Configure(null);
@@ -142,6 +143,7 @@ public partial class App : Application
             _services = BuildServiceProvider();
             _log = _services.GetRequiredService<ILogger<App>>();
             _log.LogInformation("MyCapture starting up");
+            await RecoverLegacyImportBeforeLoadAsync();
             InitializeShell();
             StartActivationListener();
         }
@@ -166,6 +168,7 @@ public partial class App : Application
             // A first run opens the library only after its welcome window closes.
             _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
         }
+        _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
     }
 
     /// <summary>The settings said first run when this process started; the welcome window was shown.</summary>
@@ -222,7 +225,9 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
 
         _ocrService = _services.GetRequiredService<IOcrService>();
-        StartOcrModelDownload();
+        // Only the Accurate and Most accurate qualities use the downloaded model. Everyone else never
+        // downloads it; a later switch to those qualities downloads it on first use (NeuralOcrEngine).
+        if (OcrQualityProfile.UseNeuralModel(_settings.Ocr.Quality)) StartOcrModelDownload();
         _automaticIndexer = new OcrIndexingService(
             _galleryController!, _ocrService, record => _queue!.GetDirectory(record),
             () => _settings!.Ocr, _services.GetRequiredService<ILogger<OcrIndexingService>>(), Dispatcher);
@@ -246,6 +251,10 @@ public partial class App : Application
             Dispatcher,
             SetOcrBusy,
             _services.GetRequiredService<ILogger<OcrResultPresenter>>());
+        // The editor's text command recognises its current image in the shared result window.
+        TextRecognitionRoute.IsAvailable = () => _ocrService?.IsAvailable == true;
+        TextRecognitionRoute.Show = (image, context) => _ocrPresenter?.ShowRecognized(
+            () => OcrRequestFactory.FromBitmap(image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings()), context);
         _privacyRedactionService = new PrivacyRedactionService(
             _ocrService,
             new PrivacyDetector(),
@@ -258,13 +267,16 @@ public partial class App : Application
 
         _shellPresenter = new ThemedShellPresenter(() => _overlay?.IsActive == true || _recorder?.IsActive == true);
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
-        // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return.
+        // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return,
+        // and Pin clipboard is enabled only while the clipboard announces an image or text.
         var trayCommands = new TrayMenuCommands(HandleCaptureRequested, HandleRecordRegion, HandleCaptureWindow,
             HandleCaptureFullScreen, HandleScrollingCapture, () => HandleDelayedCapture(), HandleRepeatLastRegion,
             HandleCaptureTextRequested, HandleRestoreClosedPin, HandleGalleryRequested, HandleSettingsRequested,
-            ShortcutHelpWindow.ShowHelp, () => Shutdown(0));
+            ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync(),
+            PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll());
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
-            _pins?.CanRestoreClosed == true, _scrollCancellation is not null));
+            new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
+                ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true)));
         // A capture started from the tray menu races the menu's dismissal; the coordinator
         // uses this to decide whether the frozen frame must wait it out.
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
@@ -281,10 +293,11 @@ public partial class App : Application
         _tray.RecordRegionRequested += (_, _) => HandleRecordRegion();
         _tray.GalleryRequested += (_, _) => HandleGalleryRequested();
         _tray.SettingsRequested += (_, _) => HandleSettingsRequested();
-        _tray.ExitRequested += (_, _) => Shutdown(0);
+        _tray.ExitRequested += async (_, _) => await RequestSafeShutdownAsync();
         InitializeTextCapture();
         ShortcutHelpWindow.ReadHotkeys = () => _settings!.Hotkeys;
         ShortcutHelpWindow.OpenSettings = HandleSettingsRequested;
+        FeatureTutorialWindow.OpenShortcutSetting = HandleShortcutSettingsRequested;
         ShortcutHelpWindow.CanShowHelp = () => !_preparingAdvancedCapture && _overlay?.IsSelecting != true;
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent, new System.Windows.Input.KeyEventHandler(ShortcutHelpWindow.OnWindowKey));
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent,
@@ -294,11 +307,13 @@ public partial class App : Application
         _launchedFirstRun = launch.ShowWelcome;
         if (launch.ShowWelcome)
         {
-            var welcome = new WelcomeWindow(_settings.Hotkeys, _settings.General.AfterCapture);
+            var welcome = new WelcomeWindow(_settings.Hotkeys, _settings.General.AfterCapture, _settings.Queue.ImageRetentionHours);
             welcome.Closed += (_, _) =>
             {
+                StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
                 try { _services?.GetRequiredService<SettingsStore>().CompleteFirstRun(_settings!); }
                 catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
+                AnnounceAfterWelcome(welcome.Outcome, startup);
                 switch (FirstRunPlan.Next(welcome.Outcome))
                 {
                     case AfterWelcome.OpenLibrary:
@@ -317,8 +332,11 @@ public partial class App : Application
             welcome.Show();
         }
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
-        _overlay.SelectionPersistRequested = OnCaptureSelectionCompletedAsync;
+        _overlay.SelectionPersistRequested = e => _capturePersistenceTask = OnCaptureSelectionCompletedAsync(e);
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
+        _overlay.OriginalNeedsRecovery = () => _currentRecord is null && _pendingRecord is not null;
+        _overlay.DraftRecord = () => _currentRecord is { } record && _currentEditSession is { } session
+            && session.RecordId == record.Id ? (record.Id, session.ExpectedContentRevision) : null;
         _overlay.EditingCompleted += OnAnnotationEditingCompleted;
         _overlay.OverlayClosed += (_, _) =>
         {
@@ -328,6 +346,7 @@ public partial class App : Application
             _pendingRecord = null;
             RestoreTrayAfterCapture();
             _storeRating?.NotifyFlowEnded();
+            RequestLibraryMaintenance();
         };
         _overlay.CommitRequested = HandleCommitAsync;
         // The selector's record switch and ⋯ menu run the same commands as the tray and the hotkeys.
@@ -376,11 +395,12 @@ public partial class App : Application
         // Launch-at-login: reconcile a stale/moved Run entry to this build's path on
         // startup, best-effort. Never mutates the Run key on this machine during tests
         // because the self-test path returns before InitializeShell runs. Windows owns the
-        // Store build's startup task, so there the setting mirrors the task instead.
+        // Store build's startup task, so there the setting mirrors the task instead. A first
+        // run registers nothing here: the welcome's start-at-sign-in choice decides on close.
         _startupService = _services.GetRequiredService<IStartupRegistration>();
         try
         {
-            _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
+            if (!launch.ShowWelcome) _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
             if (_startupService is PackagedStartupRegistration)
             {
                 _settings.General.LaunchAtLogin = _startupService.IsEnabled();
@@ -394,12 +414,23 @@ public partial class App : Application
         _settingsApply = new SettingsApplyService(
             _services.GetRequiredService<SettingsStore>(),
             () => _settings!,
-            updated => { _settings = updated; ShortcutPresentation.Refresh(); _pins?.TrimClosedHistory(); },
+            updated =>
+            {
+                Hotkey previousCapture = _settings!.Hotkeys.Capture;
+                _settings = updated; ShortcutPresentation.Refresh(); _pins?.TrimClosedHistory();
+                AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
+            },
             _queue,
             _hotkeys,
             _startupService,
             _services.GetRequiredService<ILogger<SettingsApplyService>>());
         InitializeStoreRating();
+        PrepareCapturePersistenceForExitAsync = PreparePendingCaptureForExitAsync;
+        PrepareStoreUpdateProtection = PrepareAndHoldStoreUpdateAsync;
+        _initialLibraryRecoveryTask = RecoverLibraryStateAsync();
+        _initialEditRecoveryTask = InitializeEditRecoveryAsync();
+        _ = ResumeMaintenanceAfterInitialRecoveryAsync();
+        SessionEnding += (_, _) => { _ = PreserveDraftsForSessionEnding(); };
 
         if (_hotkeys.Failures.Count > 0)
         {
@@ -410,12 +441,10 @@ public partial class App : Application
                 ? string.Empty
                 : UiText.Format("Text_646F2DBF1852", _hotkeys.Failures.Count - 1);
 
-            _tray.ShowBalloon(
-                UiText.Get("Text_5564316AA7EB"),
+            ShowHotkeyConflict(first,
                 UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix)
                     + PrintScreenFailureLine(_hotkeys.Failures)
-                    + (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys ? "\n" + UiText.Get("Hotkey.Migrated") : string.Empty),
-                TrayBalloonKind.Warning);
+                    + (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys ? "\n" + UiText.Get("Hotkey.Migrated") : string.Empty));
         }
         else
         {
@@ -424,19 +453,17 @@ public partial class App : Application
                 if (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys)
                     _tray.ShowBalloon(UiText.Get("Hotkey.MigratedTitle"), UiText.Get("Hotkey.Migrated"),
                         TrayBalloonKind.Information, playSound: false);
-                else if (launch.ShowReadyNotification)
-                    _readyNotification.Notify(true, _settings.Hotkeys.Capture,
-                        (title, message) => _tray.ShowBalloon(title, message, TrayBalloonKind.Information, playSound: false));
             }
             catch (Exception ex)
             {
-                _log?.LogWarning(ex, "Could not show resident-ready notification");
+                _log?.LogWarning(ex, "Could not show the shortcut migration notification");
             }
         }
     }
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
     {
+        if (_storeInstallationPending || _preparingExit) return;
         if (HotkeyRecorder.Active is { } recorder && _hotkeys?.GetAssigned(e.Command) is { } recorded)
         {
             recorder.Accept(recorded);
@@ -658,6 +685,7 @@ public partial class App : Application
     /// </summary>
     private async void HandlePasteToScreen()
     {
+        if (_storeInstallationPending || _preparingExit) return;
         if (_pins is null || _pasteToScreenInFlight)
         {
             return;
@@ -725,7 +753,7 @@ public partial class App : Application
         catch (Exception ex) { _log?.LogWarning(ex, "Could not save editor preferences"); }
     }
 
-    private void HandleCaptureRequested()
+    private async void HandleCaptureRequested()
     {
         DismissQuickAccessForCapture();
         _log?.LogInformation("Region capture requested");
@@ -736,9 +764,9 @@ public partial class App : Application
 
         try
         {
-            if (!TryPrepareCapture(_overlay.CanRetake,
+            if (!await TryPrepareCaptureAsync(_overlay.CanRetake,
                 allowRetake => GuardStillCapture(UiText.Get("Text_096A13A757DB"), allowRetake),
-                _overlay.CloseEditorForRetake)) return;
+                _overlay.CloseEditorForRetakeAsync)) return;
             _tray?.SetState(TrayIconState.Capturing);
             // Start reserves the session immediately; full-desktop acquisition runs off the UI
             // thread and reports asynchronous failures through TransitionFailed on this dispatcher.
@@ -984,8 +1012,18 @@ public partial class App : Application
         return guard(false);
     }
 
+    internal static async Task<bool> TryPrepareCaptureAsync(bool canRetake, Func<bool, bool> guard,
+        Func<Task<bool>> closeEditor)
+    {
+        if (!guard(canRetake)) return false;
+        if (!canRetake) return true;
+        if (!await closeEditor()) return false;
+        return guard(false);
+    }
+
     private bool GuardStillCapture(string mode, bool allowRetake = false)
     {
+        if (_storeInstallationPending || _preparingExit) return false;
         DismissQuickAccessForCapture();
         _shellPresenter?.DismissForCapture();
         if (_preparingAdvancedCapture || (_overlay?.IsActive == true && !(allowRetake && _overlay.CanRetake)) ||
@@ -1056,6 +1094,23 @@ public partial class App : Application
     }
 
     private CaptureRecord? _pendingRecord;
+    private Task _capturePersistenceTask = Task.CompletedTask;
+    private Task _initialEditRecoveryTask = Task.CompletedTask;
+
+    private async Task<bool> PreparePendingCaptureForExitAsync()
+    {
+        await _initialEditRecoveryTask;
+        await _initialLibraryRecoveryTask;
+        if (_overlay?.IsSelecting == true || _activeCountdown is not null || _scrollCancellation is not null
+            || _preparingAdvancedCapture || _pasteToScreenInFlight || _gitHubUploadInFlight) return false;
+        await _capturePersistenceTask;
+        // Late page/application details normally land within the readers' deadlines; never hold exit longer.
+        await Task.WhenAny(_sourceBackfillTask, Task.Delay(3000));
+        if (_libraryRecovery is not null) await _libraryRecovery.WaitForPendingOperationsAsync();
+        // Let the coordinator finish its awaited selection transition before enumerating editors.
+        await Dispatcher.Yield(DispatcherPriority.Background);
+        return true;
+    }
     private QuickAccessWindow? _quickAccess;
     private Guid? _latestReceipt;
     private bool _preparingAdvancedCapture;
@@ -1104,10 +1159,17 @@ public partial class App : Application
         // Keep one identity through original persistence, retries, and edited saves. The
         // coordinator awaits this handler before opening the editor, so Esc cannot discard
         // an otherwise successfully captured image from the library.
+        // Page and application details still being read never hold back the save: they are added
+        // to this same capture once read (BackfillSourceAsync).
+        Task<CaptureSelectionSource>? lateSource = e.PendingSource;
+        CaptureSelectionSource source = lateSource is { IsCompletedSuccessfully: true } read
+            ? read.Result
+            : new CaptureSelectionSource(e.SourceTitle, e.SourcePageUrl, e.SourceDetails);
+        if (lateSource?.IsCompleted == true) lateSource = null;
         _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
             e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty,
             initialRenderShowsSourceWindowTitle: _settings?.Export.ShowSourceWindowTitle == true,
-            sourcePageUrl: e.SourcePageUrl, sourceDetails: e.SourceDetails);
+            sourcePageUrl: source.PageUrl, sourceDetails: source.Details);
         if (_pendingRecord.SourcePageUrl.Length > 0)
             _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
         Task<bool>? automaticClipboardCopy = _commit is not null
@@ -1136,6 +1198,9 @@ public partial class App : Application
                 LibrarySaveFailureMessage(_settings?.General.AfterCapture ?? AfterCaptureAction.Editor, ex),
                 TrayBalloonKind.Error);
         }
+
+        if (lateSource is not null)
+            _sourceBackfillTask = BackfillLateSourceAsync(_pendingRecord, published: _currentRecord is not null, lateSource);
 
         try
         {
@@ -1251,6 +1316,29 @@ public partial class App : Application
         }
     }
 
+    private Task _sourceBackfillTask = Task.CompletedTask;
+
+    /// <summary>
+    /// Adds the page and application details that were still being read when the capture was saved.
+    /// The read ends within its own deadlines; deleted captures are never written again.
+    /// </summary>
+    private async Task BackfillLateSourceAsync(CaptureRecord record, bool published, Task<CaptureSelectionSource> lateSource)
+    {
+        try
+        {
+            CaptureSelectionSource source = await lateSource.ConfigureAwait(false);
+            if (source.HasNoDetails) return;
+            await Dispatcher.InvokeAsync(() => _persistence is { } persistence
+                ? persistence.BackfillSourceAsync(record, source.PageUrl, source.Details,
+                    UiText.Get("Capture.WebpageTag"), unpublished: !published)
+                : Task.FromResult(false)).Task.Unwrap().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log?.LogWarning(ex, "Could not add late source details to the capture");
+        }
+    }
+
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
         Core.Primitives.RectD region, MonitorInfo monitor)
     {
@@ -1289,7 +1377,10 @@ public partial class App : Application
                 actions.PinAsync,
                 actions.SaveAsync,
                 () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
-                actions.ExportAsync, capturedRegion: region, targetMonitor: monitor);
+                actions.ExportAsync, capturedRegion: region, targetMonitor: monitor,
+                copyText: _textCapture is { } textCapture
+                    ? async () => await textCapture.RecognizeAndCopyAsync(await Render(), CancellationToken.None)
+                    : null);
             card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
             _quickAccess = card;
             card.Show();
@@ -1378,6 +1469,7 @@ public partial class App : Application
     /// </summary>
     private void HandleRecordRegion()
     {
+        if (_storeInstallationPending || _preparingExit) return;
         _shellPresenter?.DismissForCapture();
         if (_recorder is null || (!_recorder.IsActive && (_preparingAdvancedCapture || _overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)))
         {
@@ -1502,9 +1594,14 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<CaptureQueue>>());
         using IDisposable startupEviction = queue.SuspendEviction();
 
-        // Deleting evicted directories is the shell's job: the queue stays a pure index so a
-        // deletion failure can never desynchronise it from the filesystem.
-        queue.Evicted += OnCaptureEvicted;
+        _libraryRecovery = new RecoverableLibraryService(queue, paths, new WindowsRecycleBin(),
+            _services.GetRequiredService<ILogger<RecoverableLibraryService>>());
+        _libraryRecovery.ConnectAutomaticMaintenance(CanAutomaticallyRemoveCapture, result =>
+        {
+            if (result.RemovedCount <= 0) return;
+            _galleryWindow?.RefreshFromQueue();
+            if (_tray?.IsInitialized == true) _tray.SetCaptureCount(queue.Count);
+        });
         queue.Load();
 
         _queue = queue;
@@ -1535,57 +1632,17 @@ public partial class App : Application
 
         _galleryController = new GalleryController(
             queue,
-            _services.GetRequiredService<ILogger<GalleryController>>());
+            _services.GetRequiredService<ILogger<GalleryController>>()) { Recovery = _libraryRecovery };
         _reeditLoader = new GalleryReeditLoader(
             queue,
             _services.GetRequiredService<ILogger<GalleryReeditLoader>>());
-    }
-
-    private void OnCaptureEvicted(object? sender, CaptureEvictedEventArgs e)
-    {
-        if (_queue is null)
-        {
-            return;
-        }
-
-        string directory = _queue.GetDirectory(e.Record);
-        try
-        {
-            if (Directory.Exists(directory))
-            {
-                Directory.Delete(directory, recursive: true);
-                _log?.LogInformation(
-                    "Deleted evicted capture directory {Directory} ({Reason})",
-                    LogText.SingleLine(directory),
-                    e.Reason);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Losing the index entry is what enforces the cap; reclaiming the bytes can wait.
-            // The orphaned directory is harmless — it is not re-indexed on a normal load — and
-            // can be cleaned up by a later maintenance pass.
-            _log?.LogWarning(
-                ex,
-                "Could not delete evicted capture directory {Directory}",
-                LogText.SingleLine(directory));
-        }
     }
 
     private void MaintainHistory()
     {
         try
         {
-            if (_queue?.ExpireHistory(DateTimeOffset.UtcNow) > 0)
-            {
-                _galleryWindow?.RefreshFromQueue();
-                // Startup expires history before the tray icon exists; InitializeShell sets the
-                // count right after adding the icon.
-                if (_tray?.IsInitialized == true)
-                {
-                    _tray.SetCaptureCount(_queue.Count);
-                }
-            }
+            _queue?.RequestAutomaticMaintenance();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1601,17 +1658,20 @@ public partial class App : Application
     private async void RunAutomaticIndexing()
     {
         _indexingRequested = true;
-        if (_indexingRunning || _automaticIndexer is null || _indexingCancellation.IsCancellationRequested)
+        if (_indexingRunning || _automaticIndexer is null || _indexingCancellation.IsCancellationRequested || _legacyImportPreparing)
         {
             return;
         }
         _indexingRunning = true;
         try
         {
-            while (_indexingRequested && !_indexingCancellation.IsCancellationRequested)
+            while (_indexingRequested && !_indexingCancellation.IsCancellationRequested && !_legacyImportPreparing)
             {
                 _indexingRequested = false;
-                await _automaticIndexer.IndexMissingAsync(cancellationToken: _indexingCancellation.Token);
+                using var passCancellation = CancellationTokenSource.CreateLinkedTokenSource(_indexingCancellation.Token);
+                _automaticIndexingPassCancellation = passCancellation;
+                try { await _automaticIndexer.IndexMissingAsync(cancellationToken: passCancellation.Token); }
+                finally { _automaticIndexingPassCancellation = null; }
                 _galleryWindow?.RefreshFromQueue();
             }
         }
@@ -1687,6 +1747,7 @@ public partial class App : Application
 
     private void HandleGalleryRequested()
     {
+        if (_storeInstallationPending || _preparingExit) return;
         _log?.LogInformation("Gallery activation requested");
 
         GalleryWindow? window = EnsureGalleryWindow();
@@ -1744,6 +1805,7 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<GalleryWindow>>());
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
+        ConfigureEngagementWindow(window);
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
         window.FloatRequested += (_, image) => _pins?.PinImage(image);
         // Header toolbar commands mirror the tray entries so capture/recording are reachable
@@ -1758,6 +1820,18 @@ public partial class App : Application
 
     private void HandleSettingsRequested()
     {
+        if (_preparingExit) return;
+        if (_storeInstallationPending)
+        {
+            // Reopen the existing progress surface without creating/reloading a settings draft.
+            if (_settingsWindow is { } progress)
+            {
+                progress.Show();
+                if (progress.WindowState == WindowState.Minimized) progress.WindowState = WindowState.Normal;
+                _ = progress.Activate();
+            }
+            return;
+        }
         _log?.LogInformation("Settings window requested");
 
         SettingsWindow? window = EnsureSettingsWindow();
@@ -1787,6 +1861,8 @@ public partial class App : Application
             () => _services.GetRequiredService<SettingsStore>(),
             applyDraft: (next, edited) => _settingsApply!.Apply(next, edited));
 
+        ConfigureEngagementWindow(window);
+        ConfigureLegacyImportWindow(window);
         window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
@@ -2084,10 +2160,12 @@ public partial class App : Application
         {
             builder.SetMinimumLevel(LogLevel.Debug);
             builder.AddDebug();
+            builder.AddProvider(new MyCapture.App.Diagnostics.RecentErrorLogProvider(MyCapture.App.Diagnostics.RecentErrorLog.Shared));
         });
 
         services.AddSingleton(ResolveAppPaths());
         services.AddSingleton<SettingsStore>();
+        services.AddSingleton<ILegacyLibraryMigrationService, LegacyLibraryMigrationService>();
         services.AddSingleton<ScreenCaptureEngine>();
         services.AddSingleton<WindowCandidateService>();
         services.AddSingleton<WindowTitleService>();
@@ -2192,6 +2270,8 @@ public partial class App : Application
         ShortcutPresentation.ReadEnabled = null;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = null;
         AnnotationEditorPreferences.Write = null;
+        TextRecognitionRoute.Show = null;
+        TextRecognitionRoute.IsAvailable = null;
         _shellPresenter?.Dispose();
         // Invalidate pending frame acquisition before tearing down tray/persistence services.
         // Native capture cannot be interrupted, but its late result must never open a window.

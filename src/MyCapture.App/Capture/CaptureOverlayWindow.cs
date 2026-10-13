@@ -18,6 +18,7 @@ internal sealed class CaptureOverlayWindow : Window
     private readonly CaptureOverlayView _view;
     private readonly bool _abortOnFocusLoss;
     private bool _completed;
+    private Task<IReadOnlyList<WindowCandidate>>? _pendingSourceWindows;
     private bool _placingPhysicalBounds;
     private RectD? _pendingSelection;
     private RegionSelectionEventArgs? _pendingSelectionDetails;
@@ -102,14 +103,55 @@ internal sealed class CaptureOverlayWindow : Window
             PlacePhysicalBounds();
         }
 
-        if (_pendingSelection is RectD pending)
+        CompletePendingSelection();
+    }
+
+    /// <summary>
+    /// The window list's geometry, z-order and titles are final, but the page and application details
+    /// are still being read. A selection never waits for them: it completes at once with its title and
+    /// carries the details as <see cref="CaptureSelectionCompletedEventArgs.PendingSource"/>, resolved for
+    /// the same window from <paramref name="confirmed"/> exactly as an immediate selection would be.
+    /// When the read finishes while the selector is still open, its list is replaced, so later
+    /// selections carry the details directly.
+    /// </summary>
+    internal void AwaitSourceDetails(Task<IReadOnlyList<WindowCandidate>> confirmed)
+    {
+        ArgumentNullException.ThrowIfNull(confirmed);
+        if (_completed) return;
+        if (confirmed.IsCompletedSuccessfully)
         {
-            RegionSelectionEventArgs? details = _pendingSelectionDetails;
-            _pendingSelection = null;
-            _pendingSelectionDetails = null;
-            CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true,
-                details?.WholeMonitor == true);
+            ConfirmSourceDetails(confirmed.Result);
+            return;
         }
+
+        _pendingSourceWindows = confirmed;
+        _ = confirmed.ContinueWith(task => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!ReferenceEquals(_pendingSourceWindows, task)) return;
+            if (task.IsCompletedSuccessfully) ConfirmSourceDetails(task.Result);
+            else _pendingSourceWindows = null;
+        })), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+    }
+
+    /// <summary>Replaces the window list with its confirmed details.</summary>
+    internal void ConfirmSourceDetails(IReadOnlyList<WindowCandidate> windows)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+        if (_completed) return;
+        SourceWindows = windows;
+        _pendingSourceWindows = null;
+    }
+
+    internal bool SourceDetailsPendingForTest => _pendingSourceWindows is not null;
+
+    private void CompletePendingSelection()
+    {
+        if (_frame is null || _pendingSelection is not RectD pending) return;
+        RegionSelectionEventArgs? details = _pendingSelectionDetails;
+        _pendingSelection = null;
+        _pendingSelectionDetails = null;
+        CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true,
+            details?.WholeMonitor == true);
     }
 
     /// <summary>Raised after a valid drag is cropped and the overlay has been hidden.</summary>
@@ -314,38 +356,17 @@ internal sealed class CaptureOverlayWindow : Window
         System.Windows.Media.Imaging.BitmapSource crop = ScreenCaptureEngine.Crop(frame, bitmapRegion);
         var selectedScreenRegion = new RectD(_screenBounds.Left + bitmapRegion.Left, _screenBounds.Top + bitmapRegion.Top,
             bitmapRegion.Width, bitmapRegion.Height);
-        WindowCandidate? sourceWindow = WindowCandidateService.ResolveSourceWindow(SourceWindows, selectedScreenRegion);
-        string sourceTitle = sourceWindow?.Title ?? string.Empty;
-        string sourcePageUrl = WindowCandidateService.ResolveSourcePageUrl(SourceWindows, selectedScreenRegion);
-        // Application and folder always come from the same window as the title.
-        CaptureSourceDetails sourceDetails = sourceWindow?.Source ?? CaptureSourceDetails.Empty;
-        if (wholeMonitor)
+        // The window is chosen from the hotkey-time geometry, z-order and titles, which the confirmed
+        // list keeps unchanged; only its page and application details can still be on the way.
+        CaptureSelectionSource source = ResolveSelectionSource(SourceWindows, selectedScreenRegion, detectedWindow,
+            wholeMonitor);
+        Task<CaptureSelectionSource>? pendingSource = !textCapture && _pendingSourceWindows is { IsCompleted: false } pending
+            ? ResolveWhenConfirmedAsync(pending, selectedScreenRegion, detectedWindow, wholeMonitor)
+            : null;
+        if (!textCapture && _pendingSourceWindows is { IsCompletedSuccessfully: true } confirmed)
         {
-            // The full-screen button, like a desktop click, captures a monitor rather than a window.
-            sourceTitle = string.Empty;
-            sourcePageUrl = string.Empty;
-            sourceDetails = CaptureSourceDetails.Empty;
-        }
-        else if (detectedWindow is not null)
-        {
-            // A clicked window is the source even when another window overlaps its centre.
-            // Prefer the latest candidate snapshot, which may carry a page URL read after the freeze.
-            WindowCandidate window = SourceWindows.FirstOrDefault(candidate => candidate.Handle == detectedWindow.Handle)
-                ?? detectedWindow;
-            if (WindowCandidateService.IsDesktopShell(window, SourceWindows))
-            {
-                // A desktop click captures one whole monitor. Neither the shell's caption nor a
-                // window that happens to cover the monitor centre is that capture's source.
-                sourceTitle = string.Empty;
-                sourcePageUrl = string.Empty;
-                sourceDetails = CaptureSourceDetails.Empty;
-            }
-            else if (!string.IsNullOrWhiteSpace(window.Title))
-            {
-                sourceTitle = window.Title;
-                sourcePageUrl = MyCapture.Core.Capture.SourcePageUrl.Normalize(window.SourcePageUrl);
-                sourceDetails = window.Source ?? CaptureSourceDetails.Empty;
-            }
+            // Read finished, but its dispatcher turn to replace the list has not run yet.
+            source = ResolveSelectionSource(confirmed.Result, selectedScreenRegion, detectedWindow, wholeMonitor);
         }
 
         // Remove the dimmed overlay before the normal editor window is created. The original
@@ -355,17 +376,62 @@ internal sealed class CaptureOverlayWindow : Window
         {
             SelectionCompleted?.Invoke(
                 this,
-                new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop, sourceTitle,
-                    sourcePageUrl: sourcePageUrl)
+                new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop, source.Title,
+                    sourcePageUrl: source.PageUrl)
                 {
                     TextCapture = textCapture,
-                    SourceDetails = sourceDetails,
+                    SourceDetails = source.Details,
+                    PendingSource = pendingSource,
                 });
         }
         finally
         {
             Close();
         }
+    }
+
+    /// <summary>
+    /// The title, page and application of the window a selection captures. Application and folder
+    /// always come from the same window as the title.
+    /// </summary>
+    internal static CaptureSelectionSource ResolveSelectionSource(IReadOnlyList<WindowCandidate> windows,
+        RectD selectedScreenRegion, WindowCandidate? detectedWindow, bool wholeMonitor)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+        // The full-screen button, like a desktop click, captures a monitor rather than a window.
+        if (wholeMonitor) return CaptureSelectionSource.Empty;
+        WindowCandidate? sourceWindow = WindowCandidateService.ResolveSourceWindow(windows, selectedScreenRegion);
+        string sourceTitle = sourceWindow?.Title ?? string.Empty;
+        string sourcePageUrl = WindowCandidateService.ResolveSourcePageUrl(windows, selectedScreenRegion);
+        CaptureSourceDetails sourceDetails = sourceWindow?.Source ?? CaptureSourceDetails.Empty;
+        if (detectedWindow is not null)
+        {
+            // A clicked window is the source even when another window overlaps its centre.
+            // Prefer the latest candidate snapshot, which may carry a page URL read after the freeze.
+            WindowCandidate window = windows.FirstOrDefault(candidate => candidate.Handle == detectedWindow.Handle)
+                ?? detectedWindow;
+            // A desktop click captures one whole monitor. Neither the shell's caption nor a
+            // window that happens to cover the monitor centre is that capture's source.
+            if (WindowCandidateService.IsDesktopShell(window, windows)) return CaptureSelectionSource.Empty;
+            if (!string.IsNullOrWhiteSpace(window.Title))
+            {
+                sourceTitle = window.Title;
+                sourcePageUrl = MyCapture.Core.Capture.SourcePageUrl.Normalize(window.SourcePageUrl);
+                sourceDetails = window.Source ?? CaptureSourceDetails.Empty;
+            }
+        }
+
+        return new CaptureSelectionSource(sourceTitle, sourcePageUrl, sourceDetails);
+    }
+
+    private static async Task<CaptureSelectionSource> ResolveWhenConfirmedAsync(
+        Task<IReadOnlyList<WindowCandidate>> confirmed, RectD selectedScreenRegion, WindowCandidate? detectedWindow,
+        bool wholeMonitor)
+    {
+        IReadOnlyList<WindowCandidate> windows;
+        try { windows = await confirmed.ConfigureAwait(false); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return CaptureSelectionSource.Empty; }
+        return ResolveSelectionSource(windows, selectedScreenRegion, detectedWindow, wholeMonitor);
     }
 
     private void OnCancelRequested(object? sender, EventArgs e) => Cancel();
@@ -407,6 +473,7 @@ internal sealed class CaptureOverlayWindow : Window
         _frame = null;
         _pendingSelection = null;
         _pendingSelectionDetails = null;
+        _pendingSourceWindows = null;
         Content = null;
         GeometrySelectionCompleted = null;
         SourceWindows = [];
@@ -465,8 +532,25 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
     private readonly CaptureSourceDetails _sourceDetails = CaptureSourceDetails.Empty;
 
     /// <summary>
+    /// Page and application of the selected window while they were still being read when the
+    /// selection completed; null when <see cref="SourcePageUrl"/> and <see cref="SourceDetails"/> are
+    /// already final. It resolves within the readers' deadlines and never faults. The selection is
+    /// saved without waiting for it, and the details are added to the saved capture when it resolves.
+    /// </summary>
+    internal Task<CaptureSelectionSource>? PendingSource { get; init; }
+
+    /// <summary>
     /// The selection was made in text capture mode: recognise and copy its text instead of
     /// persisting the image and opening the editor.
     /// </summary>
     internal bool TextCapture { get; init; }
+}
+
+/// <summary>The window a selection captured: its title, page and application, each possibly empty.</summary>
+internal sealed record CaptureSelectionSource(string Title, string PageUrl, CaptureSourceDetails Details)
+{
+    internal static CaptureSelectionSource Empty { get; } = new(string.Empty, string.Empty, CaptureSourceDetails.Empty);
+
+    /// <summary>True when there is neither a page nor an application/folder to record.</summary>
+    internal bool HasNoDetails => PageUrl.Length == 0 && Details.IsEmpty;
 }

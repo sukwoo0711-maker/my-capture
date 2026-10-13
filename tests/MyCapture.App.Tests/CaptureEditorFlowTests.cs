@@ -211,7 +211,7 @@ public sealed class CaptureEditorFlowTests
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try
             {

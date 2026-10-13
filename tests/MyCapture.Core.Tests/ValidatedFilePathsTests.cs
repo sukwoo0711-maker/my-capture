@@ -56,6 +56,33 @@ public sealed class ValidatedFilePathsTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(root));
     }
 
+    [Theory]
+    [InlineData(@"..\outside")]
+    [InlineData(@"nested\..\..\outside")]
+    [InlineData("C:relative")]
+    [InlineData(@"\volume-relative")]
+    [InlineData("blocked:stream")]
+    [InlineData("blocked.")]
+    [InlineData("NUL")]
+    [InlineData(".")]
+    public void ValidatedRootChildRejectsTheSameEscapesAndAmbiguity(string candidate)
+    {
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
+        Assert.Throws<IOException>(() => ValidatedFilePaths.DirectoryWithinValidatedRoot(root, candidate));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(root));
+    }
+
+    [Fact]
+    public void ValidatedRootChildAllowsMissingFoldersAndRejectsFilesOnItsPath()
+    {
+        string root = ValidatedFilePaths.CreateTemporaryDirectory();
+        Assert.Equal(Path.Combine(root, "2026-10", "capture"), ValidatedFilePaths.DirectoryWithinValidatedRoot(root, @"2026-10\capture"));
+        File.WriteAllText(Path.Combine(root, "keep.txt"), "keep");
+        Assert.Throws<IOException>(() => ValidatedFilePaths.DirectoryWithinValidatedRoot(root, "keep.txt"));
+        Assert.Throws<IOException>(() => ValidatedFilePaths.DirectoryWithinValidatedRoot(root, @"keep.txt\child"));
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(root, "keep.txt")));
+    }
+
     [Fact]
     public void DirectoryChildRejectsExistingFileLeaf()
     {

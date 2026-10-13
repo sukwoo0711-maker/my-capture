@@ -28,7 +28,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
     private static void RunSta(Action action)
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             try { action(); }
             catch (Exception ex) { failure = ex; }
@@ -265,7 +265,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             timeline.FitAll();
             Assert.True(timeline.IsFitAll, "fit-all did not restore the complete overview");
 
-            Button play = Descendants(layout).OfType<Button>().Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == "재생 또는 일시정지");
+            Button play = Descendants(layout).OfType<Button>().Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == "재생 또는 일시 정지");
             var playbackTimer = (DispatcherTimer)typeof(VideoEditorWindow).GetField("_playbackTimer", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(editor)!;
             play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             DateTime playbackDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
@@ -344,6 +344,49 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
     });
 
     [Fact]
+    public void ExportDialogHost_ReceivesTheGifExportDialogInsteadOfAModalShow() => RunSta(() =>
+    {
+        string dir = TestRecycleBin.CreateTempSubdirectory("mc-vew-host-").FullName;
+        try
+        {
+            byte[] pixels = new byte[320 * 240 * 4];
+            for (int i = 0; i < pixels.Length; i += 4) { pixels[i] = 0x50; pixels[i + 1] = 0x80; pixels[i + 2] = 0xC0; pixels[i + 3] = 0xFF; }
+            var image = System.Windows.Media.Imaging.BitmapSource.Create(320, 240, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, pixels, 320 * 4);
+            RecordingResult rec = UxReviewSelfTest.CreateFixtureVideo(Path.Combine(dir, "fixture.mp4"), image);
+            VideoExportDialog? hosted = null;
+            var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), NullLoggerFactory.Instance)
+            {
+                ExportDialogHostForTest = dialog => hosted = dialog,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -10000,
+                Top = -10000,
+                ShowActivated = false,
+                ShowInTaskbar = false,
+            };
+            editor.Show();
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (!editor.IsMediaReadyForTest && !editor.HasMediaFailedForTest && DateTime.UtcNow < deadline)
+            {
+                PumpFor(TimeSpan.FromMilliseconds(25));
+            }
+
+            Assert.True(editor.IsMediaReadyForTest, "editor did not become ready: " + editor.MediaFailureForTest);
+            Assert.True(editor.HandleShortcut(System.Windows.Input.Key.G, System.Windows.Input.ModifierKeys.None));
+            // G returned without a modal loop: the host received the GIF form, owned by the editor and not shown.
+            Assert.NotNull(hosted);
+            Assert.True(hosted.IsGif);
+            Assert.Same(editor, hosted.Owner);
+            Assert.False(hosted.IsVisible);
+            hosted.Close();
+            editor.Close();
+        }
+        finally
+        {
+            try { TestRecycleBin.DeleteDirectory(dir, true); } catch (IOException) { }
+        }
+    });
+
+    [Fact]
     public void LongClip_TimelineStartsWithOneCoarseInterval_AndShowsExplicitRange() => RunSta(() =>
     {
         var timeline = new TwoLineTimeline();
@@ -356,15 +399,15 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
         Assert.Equal(0, timeline.ViewStartMs, precision: 1);
         Assert.Equal(timeline.CoarseIntervalMs, timeline.VisibleSpanMs, precision: 1);
         Assert.Contains("굵은 눈금", timeline.OverviewRangeText, StringComparison.Ordinal);
-        Assert.Contains("시작 00:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
-        Assert.Contains("끝 00:01.000", timeline.DetailRangeText, StringComparison.Ordinal);
+        Assert.Contains("시작 0:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
+        Assert.Contains("끝 0:01.000", timeline.DetailRangeText, StringComparison.Ordinal);
         Assert.Contains("15프레임", timeline.DetailRangeText, StringComparison.Ordinal);
         Assert.InRange(timeline.DesiredSize.Height, 100, 155); // Compact guide leaves room for spatial-layer tracks.
 
         timeline.SeekFromOverview(6_000);
         Assert.InRange(timeline.PlayheadMs, timeline.ViewStartMs, timeline.ViewEndMs);
         Assert.InRange(6_000, timeline.ViewStartMs, timeline.ViewEndMs);
-        Assert.DoesNotContain("시작 00:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
+        Assert.DoesNotContain("시작 0:00.000", timeline.DetailRangeText, StringComparison.Ordinal);
     });
 
     [Fact]

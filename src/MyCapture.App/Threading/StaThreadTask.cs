@@ -34,12 +34,13 @@ internal static class StaThreadTask
                 failure = ex;
             }
 
+            Dispatcher? dispatcher = null;
             try
             {
                 // Imaging can lazily create a Dispatcher/MediaContext even without a
                 // message loop. Thread exit alone does not run their shutdown callbacks.
                 // Inspect only this worker; never create a dispatcher just for cleanup.
-                Dispatcher? dispatcher = Dispatcher.FromThread(Thread.CurrentThread);
+                dispatcher = Dispatcher.FromThread(Thread.CurrentThread);
                 if (dispatcher is { HasShutdownFinished: false }) dispatcher.InvokeShutdown();
             }
             catch (Exception cleanupFailure)
@@ -51,6 +52,16 @@ internal static class StaThreadTask
             // Consumers cannot start another operation before native WPF teardown completes.
             if (failure is null) completion.TrySetResult(result);
             else completion.TrySetException(failure);
+
+            if (dispatcher is { HasShutdownFinished: false })
+            {
+                // A ShutdownStarted handler that throws stops WPF before it destroys the
+                // dispatcher's windows, and a dispatcher never starts shutting down twice.
+                // Ending the thread now would let its teardown hand pending messages to their
+                // managed window procedures after the runtime released the thread, which
+                // aborts the process. This background thread pumps them until the process ends.
+                Dispatcher.Run();
+            }
         })
         {
             IsBackground = true,

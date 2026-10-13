@@ -78,12 +78,16 @@ internal sealed class QuickAccessWindow : Window
     /// <summary>Test hook: the progress reveal delay passing while an action still runs.</summary>
     internal void ElapseProgressDelayForTest() => RevealProgress();
 
+    /// <param name="copyText">
+    /// Recognises the capture's text and copies it. Without one, the action reports that text
+    /// recognition is unavailable.
+    /// </param>
     internal QuickAccessWindow(BitmapSource bitmap, Func<Task<bool>> copy, Action edit,
         Func<Task> pin, Func<Task<bool>> save, Action library, Func<Task<string>> export, bool excludeFromCapture = true,
-        RectD? capturedRegion = null, MonitorInfo? targetMonitor = null)
+        RectD? capturedRegion = null, MonitorInfo? targetMonitor = null, Func<Task<TextCaptureOutcome>>? copyText = null)
     {
         Title = UiText.Get("QuickAccess.Title");
-        // Wide enough for an icon with its short name on each of the four actions.
+        // Wide enough for an icon with its short name on each of the five actions.
         Width = 344;
         _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
         SizeToContent = SizeToContent.Height;
@@ -104,8 +108,10 @@ internal sealed class QuickAccessWindow : Window
         close.VerticalAlignment = VerticalAlignment.Top;
         close.SetResourceReference(StyleProperty, "Button.Ghost");
         // The status shares the close button's row, so a one-line message never moves the actions.
+        // Keep sits beside close: both decide how long the card stays.
         var header = new Grid();
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         _status.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
@@ -113,16 +119,25 @@ internal sealed class QuickAccessWindow : Window
         _statusRow.Children.Add(_statusGlyph);
         _statusRow.Children.Add(_status);
         header.Children.Add(_statusRow);
-        Grid.SetColumn(close, 1);
+        // A word says what the toggle does; a padlock read as a lock on the capture itself.
+        _keep = new ToggleButton
+        {
+            Content = UiText.Get("QuickAccess.KeepLabel"), Height = 26, MinWidth = 0, MinHeight = 0,
+            Padding = new Thickness(8, 0, 8, 0), Margin = new Thickness(0, 0, 2, 0), Focusable = false,
+            VerticalAlignment = VerticalAlignment.Top, ToolTip = UiText.Get("Onboard_QuickKeep"),
+        };
+        _keep.SetResourceReference(FontSizeProperty, "FontSize.Caption");
+        _keyboardTargets.Add(_keep);
+        AutomationProperties.SetName(_keep, UiText.Get("QuickAccess.KeepName"));
+        AutomationProperties.SetHelpText(_keep, UiText.Get("Onboard_QuickKeep"));
+        ShortToolTip(_keep);
+        // Close stays ahead of keep in the tab order, as before; keep is drawn left of it.
+        Grid.SetColumn(close, 2);
         header.Children.Add(close);
+        Grid.SetColumn(_keep, 1);
+        header.Children.Add(_keep);
         panel.Children.Add(header);
         var row = new DockPanel { LastChildFill = true };
-        _keep = new ToggleButton { Content = Glyph("Icon.Unlock"), Width = 24, Height = 30, MinWidth = 0, MinHeight = 0,
-            Padding = new Thickness(2), Focusable = false, ToolTip = UiText.Get("Onboard_QuickKeep") };
-        _keyboardTargets.Add(_keep);
-        AutomationProperties.SetName(_keep, UiText.Get("Onboard_QuickKeep"));
-        ShortToolTip(_keep);
-        DockPanel.SetDock(_keep, Dock.Right); row.Children.Add(_keep);
         var preview = _preview = new Image { Source = bitmap, Width = 52, Height = 48, Stretch = Stretch.Uniform,
             ToolTip = UiText.Get("QuickAccess.Drag"), Margin = new Thickness(0, 0, 6, 0) };
         DockPanel.SetDock(preview, Dock.Left); row.Children.Add(preview);
@@ -147,18 +162,36 @@ internal sealed class QuickAccessWindow : Window
             }, "QuickAccess.Preparing", "QuickAccess.Ready");
         };
         _actions["Copy"] = async () => await RunAsync("Copy", copy, "QuickAccess.Copying", "QuickAccess.Copied");
-        _actions["Edit"] = () => { edit(); Close(); };
+        _actions["Edit"] = () =>
+        {
+            try { edit(); }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                // The card stays with the reason, so the user can retry instead of losing it.
+                ShowStatus(UserFacingError.GetMessage(error) ?? FailureText("Edit"), FeedbackKind.ActionRequired);
+                return;
+            }
+            Close();
+        };
         _actions["Pin"] = async () => await RunAsync("Pin", async () => { await pin(); return true; }, "QuickAccess.Pinning", "QuickAccess.Pinned");
         _actions["Save"] = async () => await RunAsync("Save", save, "QuickAccess.Saving", "QuickAccess.Saved");
+        _actions["CopyText"] = async () => await RunCoreAsync("CopyText",
+            async () => DescribeTextOutcome(copyText is null ? new TextCaptureOutcome(TextCaptureStatus.Unavailable, null, 0) : await copyText()),
+            "QuickAccess.CopyingText");
         _actions["Close"] = Close;
         _actions["Activate"] = () => ActivateForKeyboard();
-        var actions = new UniformGrid { Columns = 4, VerticalAlignment = VerticalAlignment.Center };
-        foreach (string action in new[] { "Copy", "Edit", "Pin", "Save" })
+        // Four equal tiles and a wider one for the two-word name, so no name is cut at 12 px.
+        var actions = new Grid { VerticalAlignment = VerticalAlignment.Center };
+        foreach (string action in ActionOrder)
         {
+            actions.ColumnDefinitions.Add(new ColumnDefinition
+            {
+                Width = action == "CopyText" ? GridLength.Auto : new GridLength(1, GridUnitType.Star),
+            });
             Button button = Button("QuickAccess." + action, _actions[action]);
             // An icon over its short name; the key stays in the tooltip and the accelerator key.
             var face = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-            face.Children.Add(Glyph("Icon." + action));
+            face.Children.Add(Glyph(action == "CopyText" ? "Icon.Ocr" : "Icon." + action));
             // Names use the caption size, so the always-visible key letter is never larger than the name.
             var name = new TextBlock
             {
@@ -169,10 +202,12 @@ internal sealed class QuickAccessWindow : Window
             name.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
             face.Children.Add(name);
             button.Content = face;
-            button.MinWidth = 0; button.MinHeight = 46; button.Padding = new Thickness(1, 4, 1, 3); button.Margin = new Thickness(1);
+            button.MinWidth = 0; button.MinHeight = 46; button.Margin = new Thickness(1);
+            button.Padding = action == "CopyText" ? new Thickness(6, 4, 6, 3) : new Thickness(1, 4, 1, 3);
             ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action);
             ShortToolTip(button);
             _actionButtons[action] = button;
+            Grid.SetColumn(button, actions.Children.Count);
             actions.Children.Add(button);
         }
         row.Children.Add(actions); panel.Children.Add(row);
@@ -224,10 +259,10 @@ internal sealed class QuickAccessWindow : Window
         SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
         Closed += (_, _) => { _timer.Stop(); _progressReveal.Stop(); UpdateActivationHotkey(); _activationKey = null; };
         IsVisibleChanged += (_, _) => UpdateActivationHotkey();
-        _keep.Checked += (_, _) => { _keep.Content = Glyph("Icon.Lock"); _timer.Stop(); UpdateActivationHotkey(); };
+        // The toggle's own checked fill shows the state; its word stays the same.
+        _keep.Checked += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); };
         _keep.Unchecked += (_, _) =>
         {
-            _keep.Content = Glyph("Icon.Unlock");
             if (IsVisible) { _lastTick = Stopwatch.GetTimestamp(); _timer.Start(); }
             UpdateActivationHotkey();
         };
@@ -303,7 +338,7 @@ internal sealed class QuickAccessWindow : Window
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers) => ShortcutCatalog.Execute(ShortcutScope.QuickAccess, key, modifiers, _actions);
 
-    /// <summary>A command glyph on the shared 20x20 grid: close, keep and the four actions.</summary>
+    /// <summary>A command glyph on the shared 20x20 grid: close and the five actions.</summary>
     private SymbolIcon Glyph(string key)
     {
         Geometry geometry = TryFindResource(key) as Geometry ?? Geometry.Parse("M4,4 H16 V16 H4 Z");
@@ -415,7 +450,47 @@ internal sealed class QuickAccessWindow : Window
     /// once; work that outlasts <see cref="FeedbackTiming.ProgressRevealDelay"/> also runs the
     /// progress indicator. Other actions stay usable: each renders its own copy of the image.
     /// </summary>
-    internal async Task RunAsync(string action, Func<Task<bool>> work, string progress, string success)
+    internal Task RunAsync(string action, Func<Task<bool>> work, string progress, string success) =>
+        RunCoreAsync(action, async () => await work()
+            ? (UiText.Get(success), FeedbackKind.Confirmation)
+            : (FailureText(action), FeedbackKind.ActionRequired), progress);
+
+    /// <summary>The card's actions, left to right.</summary>
+    internal static IReadOnlyList<string> ActionOrder { get; } = ["Copy", "Edit", "Pin", "Save", "CopyText"];
+
+    /// <summary>Test hook: the action buttons, left to right.</summary>
+    internal IReadOnlyList<Button> ActionButtonsForTest => ActionOrder.Select(action => _actionButtons[action]).ToArray();
+
+    /// <summary>Test hook: the toggle that keeps the card open.</summary>
+    internal ToggleButton KeepToggleForTest => _keep;
+
+    /// <summary>
+    /// What failed and how to try again: the action's own key, or another drag for the preview.
+    /// </summary>
+    internal static string FailureText(string action)
+    {
+        string text = action == "Drag"
+            ? UiText.Get("QuickAccess.DragFailed")
+            : UiText.Format($"QuickAccess.{action}Failed", ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint);
+        // When the line wraps, it breaks before the retry hint rather than inside it.
+        int hint = text.LastIndexOf(" · ", StringComparison.Ordinal);
+        return hint < 0 ? text : text[..(hint + 3)] + text[(hint + 3)..].Replace(' ', ' ');
+    }
+
+    /// <summary>
+    /// The card's line for a text copy: copied, nothing to copy (retrying would not change that),
+    /// or a failure to retry with the key.
+    /// </summary>
+    internal static (string Message, FeedbackKind Kind) DescribeTextOutcome(TextCaptureOutcome outcome) => outcome.Status switch
+    {
+        TextCaptureStatus.Copied => (UiText.Get("QuickAccess.TextCopied"), FeedbackKind.Confirmation),
+        TextCaptureStatus.NoText => (UiText.Get("TextCapture_NoText"), FeedbackKind.Warning),
+        TextCaptureStatus.Unavailable => (string.IsNullOrWhiteSpace(outcome.Result?.Message)
+            ? UiText.Get("TextCapture_Unavailable") : outcome.Result.Message, FeedbackKind.Warning),
+        _ => (FailureText("CopyText"), FeedbackKind.ActionRequired),
+    };
+
+    private async Task RunCoreAsync(string action, Func<Task<(string Message, FeedbackKind Kind)>> work, string progress)
     {
         if (!_running.Add(action)) return;
         Button? button = _actionButtons.GetValueOrDefault(action);
@@ -427,13 +502,11 @@ internal sealed class QuickAccessWindow : Window
         FeedbackKind kind;
         try
         {
-            (message, kind) = await work()
-                ? (UiText.Get(success), FeedbackKind.Confirmation)
-                : (UiText.Get("QuickAccess.Failed"), FeedbackKind.ActionRequired);
+            (message, kind) = await work();
         }
         catch (Exception error)
         {
-            (message, kind) = (UserFacingError.GetMessage(error) ?? UiText.Get("QuickAccess.Failed"), FeedbackKind.ActionRequired);
+            (message, kind) = (UserFacingError.GetMessage(error) ?? FailureText(action), FeedbackKind.ActionRequired);
         }
         finally
         {

@@ -19,7 +19,8 @@ namespace MyCapture.App.Tests;
 /// Evidence only: renders the library's final hover and selection states, emulating hover by
 /// applying the template's own IsMouseOver trigger setters with trigger precedence, so the same
 /// code renders any template version. Set MYCAPTURE_LIBRARY_MOTION_EVIDENCE to an output
-/// directory and optionally MYCAPTURE_LIBRARY_MOTION_BASELINE to a previous output to diff.
+/// directory and optionally MYCAPTURE_LIBRARY_MOTION_BASELINE to a previous output to diff;
+/// MYCAPTURE_LIBRARY_MOTION_EXPECT_CHANGED names the renders a change is meant to alter.
 /// </summary>
 public sealed partial class SettingsThemePreviewTests
 {
@@ -130,12 +131,14 @@ public sealed partial class SettingsThemePreviewTests
                 try
                 {
                     using var scope = UiText.UseLanguage("ko-KR");
-                    foreach (AppTheme theme in new[] { AppTheme.Glass, AppTheme.Daylight, AppTheme.HighContrast })
+                    foreach (AppTheme theme in Enum.GetValues<AppTheme>())
                         RenderLibraryMotionStates(theme, AppThemeNames.ToSetting(theme));
-                    // A Windows contrast theme (Night sky) over the glass palette.
+                    // Windows contrast themes over the glass palette: dark Night sky and light Desert.
                     ThemeService.SystemHighContrastOverrideForTest = true;
                     ThemeService.SystemColorsOverrideForTest = role => SystemHighContrastThemeTests.NightSky[role];
                     RenderLibraryMotionStates(AppTheme.Glass, "windows-contrast");
+                    ThemeService.SystemColorsOverrideForTest = role => DesertContrast[role];
+                    RenderLibraryMotionStates(AppTheme.Glass, "windows-contrast-desert");
                 }
                 finally
                 {
@@ -146,6 +149,19 @@ public sealed partial class SettingsThemePreviewTests
                     application.Shutdown();
                 }
             });
+
+    // Windows 11 "Desert": a light contrast theme, so evidence covers both contrast polarities.
+    private static readonly IReadOnlyDictionary<SystemColorRole, Color> DesertContrast = new Dictionary<SystemColorRole, Color>
+    {
+        [SystemColorRole.Window] = Color.FromRgb(0xFF, 0xFA, 0xEF),
+        [SystemColorRole.WindowText] = Color.FromRgb(0x3D, 0x3D, 0x3D),
+        [SystemColorRole.ButtonFace] = Color.FromRgb(0xFF, 0xFA, 0xEF),
+        [SystemColorRole.ButtonText] = Color.FromRgb(0x20, 0x20, 0x20),
+        [SystemColorRole.Highlight] = Color.FromRgb(0x90, 0x39, 0x09),
+        [SystemColorRole.HighlightText] = Color.FromRgb(0xFF, 0xF5, 0xE3),
+        [SystemColorRole.GrayText] = Color.FromRgb(0x67, 0x67, 0x67),
+        [SystemColorRole.HotTrack] = Color.FromRgb(0x1C, 0x5E, 0x75),
+    };
 
     private static void RenderLibraryMotionStates(AppTheme theme, string file)
     {
@@ -364,6 +380,12 @@ public sealed partial class SettingsThemePreviewTests
         File.WriteAllText(report, changed == 0
             ? "identical"
             : $"{changed} pixels differ (max channel delta {maxDelta}); bounds x {left}-{right}, y {top}-{bottom}");
-        Assert.True(changed == 0, $"Library motion changed {changed} final-state pixels: {name}. See {report}.");
+        // Renders named in MYCAPTURE_LIBRARY_MOTION_EXPECT_CHANGED (comma-separated name parts) are the
+        // ones a change is meant to alter; every other render must stay pixel-identical.
+        bool expectChanged = (Environment.GetEnvironmentVariable("MYCAPTURE_LIBRARY_MOTION_EXPECT_CHANGED") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(part => name.Contains(part, StringComparison.Ordinal));
+        Assert.True(expectChanged ? changed > 0 : changed == 0,
+            $"Library render {(expectChanged ? "was expected to change" : "changed")}: {changed} final-state pixels in {name}. See {report}.");
     }
 }

@@ -140,9 +140,9 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                 Assert.True(pause.IsEnabled);
                 Assert.Equal("재개", RecordingControlWindow.ButtonLabel(pause));
                 Assert.Equal("녹화 재개", AutomationProperties.GetName(pause));
-                Assert.StartsWith("일시정지됨", status.Text, StringComparison.Ordinal);
+                Assert.StartsWith("일시 정지됨", status.Text, StringComparison.Ordinal);
                 Assert.Equal(status.Text, AutomationProperties.GetName(status));
-                Assert.Equal("일시정지됨", AutomationProperties.GetItemStatus(frame));
+                Assert.Equal("일시 정지됨", AutomationProperties.GetItemStatus(frame));
                 Assert.IsType<LinearGradientBrush>(frame.BorderBrush);
                 Assert.True(clock.IsPaused);
 
@@ -165,11 +165,11 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                 Assert.True(recorder.IsPaused);
                 PumpUntil(() => !controls.IsPaused && !controls.IsPauseTransitionPending);
                 Assert.False(recorder.IsPaused);
-                Assert.Equal("일시정지", RecordingControlWindow.ButtonLabel(pause));
-                Assert.Equal("녹화 일시정지", AutomationProperties.GetName(pause));
+                Assert.Equal("일시 정지", RecordingControlWindow.ButtonLabel(pause));
+                Assert.Equal("녹화 일시 정지", AutomationProperties.GetName(pause));
                 Assert.Equal(string.Empty, AutomationProperties.GetItemStatus(frame));
                 Assert.IsNotType<LinearGradientBrush>(frame.BorderBrush);
-                Assert.DoesNotContain("일시정지됨", status.Text, StringComparison.Ordinal);
+                Assert.DoesNotContain("일시 정지됨", status.Text, StringComparison.Ordinal);
             }
             finally
             {
@@ -214,7 +214,7 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
 
             Invoke(window, "OnPrimaryClicked");
             PumpUntil(() => window.CanCaptureStill);
-            const string pauseHelp = "녹화를 일시정지합니다. 일시정지한 구간은 동영상에 포함되지 않습니다.";
+            const string pauseHelp = "녹화를 일시 정지합니다. 일시 정지한 구간은 동영상에 포함되지 않습니다.";
             Assert.Equal(pauseHelp, pause.ToolTip);
             Assert.Equal(pauseHelp, AutomationProperties.GetHelpText(pause));
             Assert.Equal(string.Empty, AutomationProperties.GetAcceleratorKey(pause));
@@ -223,7 +223,7 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
             assigned = CtrlAltP;
             Assert.True(window.TogglePause());
             PumpUntil(() => window.IsPaused && !window.IsPauseTransitionPending);
-            const string resumeHelp = "녹화를 다시 시작합니다. 동영상은 일시정지한 지점에서 이어집니다. 단축키: Ctrl+Alt+P";
+            const string resumeHelp = "녹화를 다시 시작합니다. 동영상은 일시 정지한 지점에서 이어집니다. 단축키: Ctrl+Alt+P";
             Assert.Equal(resumeHelp, pause.ToolTip);
             Assert.Equal(resumeHelp, AutomationProperties.GetHelpText(pause));
             Assert.Equal("Ctrl+Alt+P", AutomationProperties.GetAcceleratorKey(pause));
@@ -265,7 +265,7 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                     int record = rows.FindIndex(row => Label(row) == "영역 녹화 시작/중지");
                     Assert.True(record >= 0);
                     UniformGrid pauseRow = rows[record + 1];
-                    Assert.Equal("녹화 일시정지/재개", Label(pauseRow));
+                    Assert.Equal("녹화 일시 정지/재개", Label(pauseRow));
                     Assert.Equal(expected, AutomationProperties.GetName(pauseRow.Children[1]));
                 }
                 finally

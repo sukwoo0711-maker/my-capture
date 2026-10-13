@@ -24,10 +24,13 @@ internal enum PinSaveStatus
     Failed,
 }
 
+/// <param name="Path">The saved file, or for a failure the file or folder the save used.</param>
+/// <param name="Error">The failure, so the dialog can say what to do (full disk, file in use).</param>
 internal readonly record struct PinSaveResult(
     PinSaveStatus Status,
     string? Path = null,
-    string? ErrorMessage = null);
+    string? ErrorMessage = null,
+    Exception? Error = null);
 
 internal sealed class PinSaveRequestedEventArgs(PinSaveMode mode, BitmapSource image, string sourcePageUrl = "") : EventArgs
 {
@@ -93,7 +96,7 @@ internal sealed class PinImageSaveService
             catch (Exception ex) when (IsExpectedSaveFailure(ex))
             {
                 _log.LogWarning(ex, "Could not prepare pinned-image Save As");
-                return new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: ex.Message);
+                return new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: ex.Message, Error: ex);
             }
 
             if (chosen is null)
@@ -118,12 +121,14 @@ string message = UiText.Get("Text_932DB1A4ED7F");
         ArgumentNullException.ThrowIfNull(image);
         return await ImageExportTransaction.RunAsync(async () =>
         {
+            string? directory = null;
             try
             {
                 AppSettings settings = _settings();
-                string directory = string.IsNullOrWhiteSpace(settings.Export.QuickSaveDirectoryOverride)
+                string target = string.IsNullOrWhiteSpace(settings.Export.QuickSaveDirectoryOverride)
                     ? _paths().QuickSaveRoot
                     : settings.Export.QuickSaveDirectoryOverride;
+                directory = target;
                 string stem = QuickSaveNaming.BuildStem(
                     settings.Export.FileNamePattern,
                     DateTimeOffset.Now);
@@ -132,7 +137,7 @@ string message = UiText.Get("Text_932DB1A4ED7F");
                 {
                     byte[] encoded = ImageCodec.EncodePng(frozen, sourcePageUrl);
                     string savedPath = QuickSaveNaming.WriteCollisionFreeExport(
-                        directory,
+                        target,
                         stem,
                         ".png",
                         encoded);
@@ -145,7 +150,7 @@ string message = UiText.Get("Text_932DB1A4ED7F");
             catch (Exception ex) when (IsExpectedSaveFailure(ex))
             {
                 _log.LogWarning(ex, "Could not prepare pinned-image quick save");
-                return new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: ex.Message);
+                return new PinSaveResult(PinSaveStatus.Failed, directory, ex.Message, ex);
             }
         });
     }
@@ -164,7 +169,7 @@ string message = UiText.Get("Text_932DB1A4ED7F");
         catch (Exception ex) when (IsExpectedSaveFailure(ex))
         {
             _log.LogWarning(ex, "Could not save pinned image to {Path}", LogText.SingleLine(path));
-            return new PinSaveResult(PinSaveStatus.Failed, path, ex.Message);
+            return new PinSaveResult(PinSaveStatus.Failed, path, ex.Message, ex);
         }
     }
 
