@@ -3366,6 +3366,14 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="OCR410_ExcelFailed" xml:space="preserve"><value>Could not open the Excel file.</value></data>
   <data name="OCR410_Copied" xml:space="preserve"><value>Copied</value></data>
   <data name="OCR410_ResultStatus" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="Ocr_ResultSummary" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="Ocr_LineCount" xml:space="preserve"><value>{0} lines</value></data>
+  <data name="Ocr_LineCountOne" xml:space="preserve"><value>1 line</value></data>
+  <data name="Ocr_LanguageName_ko" xml:space="preserve"><value>Korean</value></data>
+  <data name="Ocr_LanguageName_en" xml:space="preserve"><value>English</value></data>
+  <data name="Ocr_LanguageName_ja" xml:space="preserve"><value>Japanese</value></data>
+  <data name="Ocr_LanguageName_zh-Hans" xml:space="preserve"><value>Chinese (Simplified)</value></data>
+  <data name="Ocr_LanguageName_zh-Hant" xml:space="preserve"><value>Chinese (Traditional)</value></data>
   <data name="Folder410.Title" xml:space="preserve"><value>Folders</value></data>
   <data name="Folder410.NewFolder" xml:space="preserve"><value>New folder</value></data>
   <data name="Folder410.Name" xml:space="preserve"><value>Folder name</value></data>

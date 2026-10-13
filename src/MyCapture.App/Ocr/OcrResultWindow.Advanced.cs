@@ -162,13 +162,14 @@ internal sealed partial class OcrResultWindow
 
     private void AddAdvancedActions(Panel buttons)
     {
+        // In table mode these replace Copy and export, with the same order: the primary copy first.
         _tableActions = new WrapPanel { Visibility = Visibility.Collapsed };
         foreach (var action in new (string Key, Action Execute)[]
         {
-            ("OCR410_OpenExcel", OpenExcel),
+            ("OCR410_CopyTsv", () => CopyValue(_currentExtraction is null ? "" : OcrTableExport.Tsv(CurrentTable()))),
             ("OCR410_CopyCsv", () => CopyValue(_currentExtraction is null ? "" : OcrTableExport.Csv(CurrentTable()))),
             ("OCR410_CopyMarkdown", () => CopyValue(_currentExtraction is null ? "" : OcrTableExport.Markdown(CurrentTable()))),
-            ("OCR410_CopyTsv", () => CopyValue(_currentExtraction is null ? "" : OcrTableExport.Tsv(CurrentTable()))),
+            ("OCR410_OpenExcel", OpenExcel),
         })
         {
             var button = MakeButton(UiText.Get(action.Key), UiText.Get(action.Key));

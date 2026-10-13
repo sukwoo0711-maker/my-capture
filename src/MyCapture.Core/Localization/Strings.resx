@@ -3366,6 +3366,14 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="OCR410_ExcelFailed" xml:space="preserve"><value>Excel 파일을 열지 못했습니다.</value></data>
   <data name="OCR410_Copied" xml:space="preserve"><value>복사됨</value></data>
   <data name="OCR410_ResultStatus" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="Ocr_ResultSummary" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="Ocr_LineCount" xml:space="preserve"><value>{0}줄</value></data>
+  <data name="Ocr_LineCountOne" xml:space="preserve"><value>1줄</value></data>
+  <data name="Ocr_LanguageName_ko" xml:space="preserve"><value>한국어</value></data>
+  <data name="Ocr_LanguageName_en" xml:space="preserve"><value>영어</value></data>
+  <data name="Ocr_LanguageName_ja" xml:space="preserve"><value>일본어</value></data>
+  <data name="Ocr_LanguageName_zh-Hans" xml:space="preserve"><value>중국어(간체)</value></data>
+  <data name="Ocr_LanguageName_zh-Hant" xml:space="preserve"><value>중국어(번체)</value></data>
   <data name="Folder410.Title" xml:space="preserve"><value>폴더</value></data>
   <data name="Folder410.NewFolder" xml:space="preserve"><value>새 폴더</value></data>
   <data name="Folder410.Name" xml:space="preserve"><value>폴더 이름</value></data>
