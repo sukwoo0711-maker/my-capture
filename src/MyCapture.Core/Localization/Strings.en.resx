@@ -1329,6 +1329,7 @@ This cannot be undone.</value>
     <value>Maximum retained items</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="Settings_LibraryMaxItems" xml:space="preserve"><value>Maximum library items</value></data>
   <data name="Text_72147902C22E" xml:space="preserve">
     <value>Filename pattern</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -2282,6 +2283,10 @@ This cannot be undone.</value>
     <value>Browse</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="Storage_OpenFolder" xml:space="preserve"><value>Open folder</value></data>
+  <data name="Storage_OpenCaptureFolderName" xml:space="preserve"><value>Open capture folder</value></data>
+  <data name="Storage_OpenFolderFailed" xml:space="preserve"><value>Could not open the folder. Check that it exists.</value></data>
+  <data name="Storage_DefaultRemovedOnUninstall" xml:space="preserve"><value>The default location is removed when you uninstall MyCapture.</value></data>
   <data name="Text_C5AC44062ACA" xml:space="preserve">
     <value>The recording and its recovery marker were retained, but could not be added to the library. MyCapture will retry recovery on the next start.
 
@@ -2922,6 +2927,26 @@ This cannot be undone.</value>
     <value>Highlighter opacity (alpha)</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="Settings_HighlighterOpacity" xml:space="preserve"><value>Highlighter opacity</value></data>
+  <data name="Settings_FontName" xml:space="preserve"><value>Font</value></data>
+  <data name="SettingsRange_Seconds0To60" xml:space="preserve"><value>0–60 s</value></data>
+  <data name="SettingsRange_Seconds1To10" xml:space="preserve"><value>1–10 s</value></data>
+  <data name="SettingsRange_RegionHistory" xml:space="preserve"><value>1–200</value></data>
+  <data name="SettingsRange_MaxItems" xml:space="preserve"><value>10–5000</value></data>
+  <data name="SettingsRange_MaxStorage" xml:space="preserve"><value>0.125–512 GB</value></data>
+  <data name="SettingsRange_PreviewSize" xml:space="preserve"><value>Long edge 96–1024 px</value></data>
+  <data name="SettingsRange_StrokeWidth" xml:space="preserve"><value>1–64 px</value></data>
+  <data name="SettingsRange_FontSize" xml:space="preserve"><value>6–400 pt</value></data>
+  <data name="SettingsRange_Mosaic" xml:space="preserve"><value>2–128 px</value></data>
+  <data name="SettingsRange_Percent" xml:space="preserve"><value>0–100%</value></data>
+  <data name="SettingsRange_Blur" xml:space="preserve"><value>2–64 px</value></data>
+  <data name="SettingsRange_InitialOpacity" xml:space="preserve"><value>0.2–1.0 (1 is opaque)</value></data>
+  <data name="SettingsRange_ClosedPins" xml:space="preserve"><value>0–100</value></data>
+  <data name="SettingsRange_ZoomStep" xml:space="preserve"><value>0.02–0.5</value></data>
+  <data name="Settings_ZoomStepNote" xml:space="preserve"><value>How much one mouse wheel step changes the zoom.</value></data>
+  <data name="Settings_RegionHistoryNote" xml:space="preserve"><value>Previous regions kept for repeat capture.</value></data>
+  <data name="Settings_ClosedPinsNote" xml:space="preserve"><value>Closed pins remembered so they can be reopened; 0 turns it off. Cleared when the app exits; never saved to disk.</value></data>
+  <data name="Settings_RecordingSizeHint" xml:space="preserve"><value>With a fixed size, dragging only places the recording area. Width and height: 96–7680 px.</value></data>
   <data name="Text_FA67EC449E04" xml:space="preserve">
     <value>Edit video layer position and size</value>
     <comment>src\MyCapture.App\Recording\VideoLayerCanvas.cs</comment>
@@ -3008,11 +3033,30 @@ Actual reduction {2}% · {3}</value></data>
   <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>Delete all {0} {0:plural:item|items} from the entire library, including kept items and videos, regardless of search? Items added after this confirmation will remain. Items move to the Windows Recycle Bin.</value></data>
   <data name="LibrarySelection_DeleteConfirm" xml:space="preserve"><value>Move {0} selected {0:plural:item|items} to the Recycle Bin?</value></data>
   <data name="LibraryRecovery_Recent" xml:space="preserve"><value>Restore recently deleted</value></data>
+  <data name="LibraryRestore_Last" xml:space="preserve"><value>Undo last delete ({0})</value></data>
+  <data name="LibraryRestore_Entry" xml:space="preserve"><value>{0} · deleted {1}</value></data>
+  <data name="LibraryRestore_Image" xml:space="preserve"><value>Image</value></data>
+  <data name="LibraryRestore_Video" xml:space="preserve"><value>Video</value></data>
+  <data name="LibraryRestore_JustNow" xml:space="preserve"><value>just now</value></data>
+  <data name="LibraryRestore_MinutesAgo" xml:space="preserve"><value>{0} min ago</value></data>
+  <data name="LibraryRestore_HoursAgo" xml:space="preserve"><value>{0} hr ago</value></data>
+  <data name="LibraryRestore_Yesterday" xml:space="preserve"><value>yesterday</value></data>
+  <data name="LibraryRestore_DaysAgo" xml:space="preserve"><value>{0} days ago</value></data>
+  <data name="LibraryRestore_OnDate" xml:space="preserve"><value>on {0:yyyy-MM-dd}</value></data>
+  <data name="LibraryFolder_OpenLibrary" xml:space="preserve"><value>Open library folder</value></data>
   <data name="LibraryRecovery_Empty" xml:space="preserve"><value>No items to restore</value></data>
   <data name="LibraryRecovery_Loading" xml:space="preserve"><value>Loading</value></data>
   <data name="LibraryRecovery_Restored" xml:space="preserve"><value>Restored to the library</value></data>
   <data name="LibraryRecovery_Failed" xml:space="preserve"><value>Could not restore. Check the file at the original location or the item in the Recycle Bin.</value></data>
   <data name="LibrarySelection_Removed" xml:space="preserve"><value>Removed {0} {0:plural:item|items} from the library · Kept {1} unavailable or in-use {1:plural:item|items}</value></data>
+  <data name="LibraryUndo_Moved" xml:space="preserve"><value>Moved {0} {0:plural:item|items} to the Recycle Bin</value></data>
+  <data name="LibraryUndo_DeletedPermanently" xml:space="preserve"><value>Permanently deleted {0} {0:plural:item|items}</value></data>
+  <data name="LibraryUndo_Kept" xml:space="preserve"><value>{0} kept</value></data>
+  <data name="LibraryUndo_Action" xml:space="preserve"><value>Undo</value></data>
+  <data name="LibraryUndo_ActionName" xml:space="preserve"><value>Undo delete</value></data>
+  <data name="LibraryUndo_Restoring" xml:space="preserve"><value>Restoring</value></data>
+  <data name="LibraryUndo_Restored" xml:space="preserve"><value>Restored {0} {0:plural:item|items} to the library</value></data>
+  <data name="LibraryUndo_PartlyRestored" xml:space="preserve"><value>Restored {0} {0:plural:item|items} to the library · {1} {1:plural:remains|remain} in the Recycle Bin.</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>Could not save the deletion. Check the library and try again.</value></data>
   <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>{0} removed {0:plural:item still has|items still have} files awaiting cleanup. No disk space recovery is confirmed for {0:plural:it|those items}.</value></data>
   <data name="LibrarySelection_RecycleUnavailableTitle" xml:space="preserve"><value>Recycle Bin unavailable</value></data>
@@ -3113,6 +3157,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Gallery.RetentionKept" xml:space="preserve"><value>Kept</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>No expiry</value></data>
   <data name="Gallery.RetentionExpired" xml:space="preserve"><value>Awaiting auto-delete</value></data>
+  <data name="Gallery.RetentionNever" xml:space="preserve"><value>No auto-delete</value></data>
   <data name="Gallery.FloatFailed" xml:space="preserve"><value>Could not pin this image to the screen.</value></data>
   <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F9.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>Opening the GitHub issue and pasting the image…</value></data>
@@ -3214,6 +3259,9 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Search.Count" xml:space="preserve"><value>{0} of {1} {1:plural:item|items}</value></data>
   <data name="Library.Search.Reset" xml:space="preserve"><value>Clear search and filters</value></data>
   <data name="Library.Empty.Start" xml:space="preserve"><value>Your library is empty</value></data>
+  <data name="Library.Empty.NoCaptures" xml:space="preserve"><value>No captures yet</value></data>
+  <data name="Library.Empty.ShortcutHint" xml:space="preserve"><value>Captures you take with {0} appear here.</value></data>
+  <data name="Library.Empty.Hint" xml:space="preserve"><value>Your captures appear here.</value></data>
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>No matching captures</value></data>
   <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>Could not save to the library. Use Save in the editor to try again. {0}</value></data>
   <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>Show cursor guides before selecting</value></data>
@@ -3777,7 +3825,25 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_TabShortcutsHelp" xml:space="preserve"><value>Global shortcuts, keys under buttons</value></data>
   <data name="SettingsUx_TabStorage" xml:space="preserve"><value>Storage</value></data>
   <data name="SettingsUx_TabStorageHelp" xml:space="preserve"><value>Library retention, save folders, advanced</value></data>
+  <data name="SettingsUx_TabStorageHelp2" xml:space="preserve"><value>Library size, automatic deletion, save folders, advanced</value></data>
   <data name="SettingsUx_TabAbout" xml:space="preserve"><value>About</value></data>
+  <data name="About_UpdatesHeading" xml:space="preserve"><value>Updates</value></data>
+  <data name="About_LastChecked" xml:space="preserve"><value>Last checked {0:HH:mm} · {1}</value></data>
+  <data name="About_UpToDate" xml:space="preserve"><value>Up to date</value></data>
+  <data name="About_PrivacyHeading" xml:space="preserve"><value>Privacy</value></data>
+  <data name="About_PrivacyLocal" xml:space="preserve"><value>Captures and text recognition are processed on this PC.</value></data>
+  <data name="About_PrivacyModel" xml:space="preserve"><value>The text recognition model (about {0} MB) is downloaded from ModelScope the first time you use Accurate or Most accurate quality. Most accurate also downloads an upscaling model (about {1} MB) from Qualcomm AI Hub. Images are never sent.</value></data>
+  <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub upload posts to a public issue only when you run it.</value></data>
+  <data name="About_FeedbackHeading" xml:space="preserve"><value>Feedback</value></data>
+  <data name="About_ReportProblem" xml:space="preserve"><value>Report a problem</value></data>
+  <data name="About_ReportProblemHelp" xml:space="preserve"><value>Copies diagnostics to the clipboard and opens the GitHub report page.</value></data>
+  <data name="About_ReportCopied" xml:space="preserve"><value>Diagnostics copied. Paste them into the report page.</value></data>
+  <data name="About_ReportCopyFailed" xml:space="preserve"><value>Could not copy diagnostics. Describe the problem on the report page.</value></data>
+  <data name="About_ReportNote" xml:space="preserve"><value>Requires a GitHub account. Reports are public.</value></data>
+  <data name="About_DataHeading" xml:space="preserve"><value>Data</value></data>
+  <data name="About_LegacyImport" xml:space="preserve"><value>Import data from an earlier version</value></data>
+  <data name="About_LegacyImportHint" xml:space="preserve"><value>Copies images, videos and folders from an earlier MyCapture into this library. The originals stay where they are.</value></data>
+  <data name="About_SettingsBackupHint" xml:space="preserve"><value>Export settings to a file or import them. Imported settings are saved when you select Apply. The GitHub token is never exported.</value></data>
   <data name="SettingsUx_TabAboutHelp" xml:space="preserve"><value>Version, updates, settings backup</value></data>
   <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>Other shortcuts</value></data>
   <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>Assign only the ones you need, using combinations other apps do not use.</value></data>
@@ -3789,6 +3855,18 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_PreviewSize" xml:space="preserve"><value>Preview image size (pixels)</value></data>
   <data name="SettingsUx_PreviewSizeRange" xml:space="preserve"><value>Longest edge, 96–1024 pixels.</value></data>
   <data name="SettingsUx_Retention" xml:space="preserve"><value>Image retention (hours)</value></data>
+  <data name="Retention_Label" xml:space="preserve"><value>Delete images automatically after</value></data>
+  <data name="Retention_Day1" xml:space="preserve"><value>1 day</value></data>
+  <data name="Retention_Day7" xml:space="preserve"><value>7 days</value></data>
+  <data name="Retention_Day30" xml:space="preserve"><value>30 days</value></data>
+  <data name="Retention_Day90" xml:space="preserve"><value>90 days</value></data>
+  <data name="Retention_Year1" xml:space="preserve"><value>1 year</value></data>
+  <data name="Retention_Never" xml:space="preserve"><value>Never</value></data>
+  <data name="Retention_Custom" xml:space="preserve"><value>Custom ({0} hours)</value></data>
+  <data name="Retention_SummaryNever" xml:space="preserve"><value>Library images are not deleted after a set time. When the library goes over its maximum number of items or storage, the oldest items are deleted first.</value></data>
+  <data name="Retention_Notice" xml:space="preserve"><value>Deleted {0} images past the retention period</value></data>
+  <data name="Retention_NoticeAction" xml:space="preserve"><value>Change</value></data>
+  <data name="Retention_NoticeActionName" xml:space="preserve"><value>Change when images are deleted automatically</value></data>
   <data name="SettingsUx_RetentionSummary" xml:space="preserve"><value>Library images are deleted automatically, oldest first, {0} after they are created. Kept images, images being edited, videos, and files you saved or exported separately are never deleted.</value></data>
   <data name="SettingsUx_RetentionRange" xml:space="preserve"><value>Enter 1–8760 hours (365 days).</value></data>
   <data name="SettingsUx_DurationDay" xml:space="preserve"><value>{0} day</value></data>
@@ -3816,6 +3894,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>Settings backup</value></data>
   <data name="SettingsUx_BackupHint" xml:space="preserve"><value>Export your settings to a file or import them. Imported settings are saved when you select Apply. The GitHub token is never exported.</value></data>
   <data name="SettingsUx_CancelTip" xml:space="preserve"><value>Discards your changes and closes.</value></data>
+  <data name="SettingsUx_CloseTip" xml:space="preserve"><value>Closes the settings window.</value></data>
   <data name="SettingsUx_CloseTitle" xml:space="preserve"><value>Unapplied changes</value></data>
   <data name="SettingsUx_CloseMessage" xml:space="preserve"><value>Your changes have not been applied. Closing without applying discards them.</value></data>
   <data name="SettingsUx_CloseApply" xml:space="preserve"><value>Apply and close</value></data>

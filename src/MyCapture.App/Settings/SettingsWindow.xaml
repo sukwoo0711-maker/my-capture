@@ -624,13 +624,14 @@
                                   IsChecked="{Binding AbortOnFocusLoss}" />
 
                         <settings:SettingsField Margin="0,6,0,12"
-                                                Header="{loc:Text Text_8839D136ACA2}" Hint="{loc:Text Text_85C1E3734392}">
+                                                Header="{loc:Text Text_8839D136ACA2}" Hint="{loc:Text SettingsRange_Seconds0To60}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_8839D136ACA2}"
                                      Text="{Binding DelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_337B5BC36C27}" Note="{loc:Text Text_C4656CD904CA}">
+                        <settings:SettingsField Header="{loc:Text Text_337B5BC36C27}" Hint="{loc:Text SettingsRange_RegionHistory}"
+                                                Note="{loc:Text Settings_RegionHistoryNote}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_337B5BC36C27}"
                                      Text="{Binding RegionHistoryLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
@@ -703,7 +704,7 @@
                                 </StackPanel>
                             </Grid>
                             <TextBlock Style="{StaticResource Settings.Description}" Margin="0,4,0,0"
-                                       Text="{loc:Text Recording_SizeHint}" />
+                                       Text="{loc:Text Settings_RecordingSizeHint}" />
                         </StackPanel>
 
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
@@ -712,7 +713,7 @@
                                   IsChecked="{Binding UseRecordingStartDelay}" />
 
                         <settings:SettingsField Margin="0,6,0,12" IsEnabled="{Binding UseRecordingStartDelay}"
-                                                Header="{loc:Text Text_1D9A98A69018}" Hint="{loc:Text Text_94A8B744467B}">
+                                                Header="{loc:Text Text_1D9A98A69018}" Hint="{loc:Text SettingsRange_Seconds1To10}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_1C856E8BF798}"
                                      Text="{Binding RecordingStartDelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
@@ -752,37 +753,51 @@
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Margin="0,0,0,8"
                                    Text="{loc:Text SettingsUx_EditingDefaultsHeading}" />
 
-                        <settings:SettingsField Header="{loc:Text Text_70EC2D232B4F}" Hint="{loc:Text SettingsUx_RangeStrokeWidth}">
+                        <settings:SettingsField Header="{loc:Text Text_70EC2D232B4F}" Hint="{loc:Text SettingsRange_StrokeWidth}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_70EC2D232B4F}"
                                      Text="{Binding StrokeThickness, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_A51DCD82F2A1}" Hint="{loc:Text SettingsUx_RangeFontSize}">
+                        <settings:SettingsField Header="{loc:Text Text_A51DCD82F2A1}" Hint="{loc:Text SettingsRange_FontSize}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_A51DCD82F2A1}"
                                      Text="{Binding FontSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_4E8DBEEA67E4}">
-                            <TextBox Style="{StaticResource Settings.TextBox}" Width="200" HorizontalAlignment="Left"
-                                     AutomationProperties.Name="{loc:Text Text_4E8DBEEA67E4}"
-                                     Text="{Binding FontFamily, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        <!-- Installed fonts. The list is read when the page first appears, not when the
+                             window opens; a stored font that is not installed stays listed and selected. -->
+                        <settings:SettingsField Header="{loc:Text Settings_FontName}">
+                            <ComboBox x:Name="FontFamilyBox" Width="220" HorizontalAlignment="Left"
+                                      DisplayMemberPath="Label" SelectedValuePath="Value"
+                                      IsTextSearchEnabled="True" TextSearch.TextPath="Label"
+                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                                      ScrollViewer.CanContentScroll="True" MaxDropDownHeight="360"
+                                      AutomationProperties.Name="{loc:Text Settings_FontName}"
+                                      IsVisibleChanged="OnFontFamilyBoxShown" DropDownOpened="OnFontFamilyBoxLoaded"
+                                      SelectionChanged="OnFontFamilyChanged">
+                                <ComboBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel />
+                                    </ItemsPanelTemplate>
+                                </ComboBox.ItemsPanel>
+                            </ComboBox>
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_9B59CBE34062}" Hint="{loc:Text Text_A91B71C5A3C7}">
+                        <settings:SettingsField Header="{loc:Text Text_9B59CBE34062}" Hint="{loc:Text SettingsRange_Mosaic}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_9B59CBE34062}"
                                      Text="{Binding MosaicBlockSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_FA5045A86267}" Hint="{loc:Text SettingsUx_RangeHighlighterAlpha}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text Text_22A29FBD57AD}"
-                                     Text="{Binding HighlighterAlpha, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        <!-- Shown in percent; the file keeps its 0–255 alpha (SettingsDraft converts). -->
+                        <settings:SettingsField Header="{loc:Text Settings_HighlighterOpacity}" Hint="{loc:Text SettingsRange_Percent}">
+                            <TextBox x:Name="HighlighterOpacityBox" Style="{StaticResource Settings.NumberBox}"
+                                     AutomationProperties.Name="{loc:Text Settings_HighlighterOpacity}"
+                                     Text="{Binding HighlighterOpacityPercent, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text EditorBlur_Strength}" Hint="{loc:Text EditorBlur_StrengthRange}">
+                        <settings:SettingsField Header="{loc:Text EditorBlur_Strength}" Hint="{loc:Text SettingsRange_Blur}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text EditorBlur_Strength}"
                                      Text="{Binding BlurRadius, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
@@ -796,19 +811,21 @@
                                   IsChecked="{Binding CloseOnDoubleClick}" />
 
                         <settings:SettingsField Margin="0,6,0,12"
-                                                Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text Text_2C6314D22377}">
+                                                Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text SettingsRange_InitialOpacity}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_9165ADFF8EF8}"
                                      Text="{Binding InitialOpacity, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_7AF81E702151}" Note="{loc:Text Text_9900FB36633B}">
+                        <settings:SettingsField Header="{loc:Text Text_7AF81E702151}" Hint="{loc:Text SettingsRange_ZoomStep}"
+                                                Note="{loc:Text Settings_ZoomStepNote}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_628CA8F9904F}"
                                      Text="{Binding ZoomStep, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text PinRestore_LimitLabel}" Note="{loc:Text PinRestore_LimitDescription}">
+                        <settings:SettingsField Header="{loc:Text PinRestore_LimitLabel}" Hint="{loc:Text SettingsRange_ClosedPins}"
+                                                Note="{loc:Text Settings_ClosedPinsNote}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text PinRestore_LimitLabel}"
                                      Text="{Binding ClosedWindowRestoreLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
@@ -1026,35 +1043,38 @@
             </TabItem>
 
             <!-- Storage: library, then files saved elsewhere, then the advanced upload options. -->
-            <TabItem Header="{loc:Text SettingsUx_TabStorage}" AutomationProperties.Name="{loc:Text SettingsUx_TabStorage}"
-                     ToolTip="{loc:Text SettingsUx_TabStorageHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabStorageHelp}"
+            <TabItem x:Name="StorageTab"
+                     Header="{loc:Text SettingsUx_TabStorage}" AutomationProperties.Name="{loc:Text SettingsUx_TabStorage}"
+                     ToolTip="{loc:Text SettingsUx_TabStorageHelp2}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabStorageHelp2}"
                      Tag="{StaticResource Icon.Storage}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
                     <StackPanel Grid.IsSharedSizeScope="True">
-                        <settings:SettingsField Header="{loc:Text Text_71FBF04B7201}" Hint="{loc:Text Text_80FD8A8BF5F2}">
+                        <settings:SettingsField Header="{loc:Text Settings_LibraryMaxItems}" Hint="{loc:Text SettingsRange_MaxItems}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text Text_71FBF04B7201}"
+                                     AutomationProperties.Name="{loc:Text Settings_LibraryMaxItems}"
                                      Text="{Binding MaxItems, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text SettingsUx_MaxStorage}" Hint="{loc:Text SettingsUx_MaxStorageRange}">
+                        <settings:SettingsField Header="{loc:Text SettingsUx_MaxStorage}" Hint="{loc:Text SettingsRange_MaxStorage}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text SettingsUx_MaxStorage}"
                                      Text="{Binding MaxGiB, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text SettingsUx_PreviewSize}" Hint="{loc:Text SettingsUx_PreviewSizeRange}">
+                        <settings:SettingsField Header="{loc:Text SettingsUx_PreviewSize}" Hint="{loc:Text SettingsRange_PreviewSize}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text SettingsUx_PreviewSize}"
                                      Text="{Binding ThumbnailLongEdge, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <!-- The note reads the typed value, so it always states the period that will
-                             apply instead of a fixed number of days. -->
-                        <settings:SettingsField Header="{loc:Text SettingsUx_Retention}">
-                            <TextBox x:Name="RetentionHoursBox" Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text SettingsUx_Retention}"
-                                     Text="{Binding ImageRetentionHours, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        <!-- A fixed set of periods plus "never"; an hour count saved by an earlier version
+                             stays as a custom choice. Code-behind fills the list and keeps it on the draft,
+                             and the note states the period that will apply. -->
+                        <settings:SettingsField Header="{loc:Text Retention_Label}">
+                            <ComboBox x:Name="RetentionChoiceBox" MinWidth="160" HorizontalAlignment="Left"
+                                      DisplayMemberPath="Label" SelectedValuePath="Hours"
+                                      AutomationProperties.Name="{loc:Text Retention_Label}"
+                                      SelectionChanged="OnRetentionChoiceChanged" />
                             <settings:SettingsField.Note>
                                 <TextBlock x:Name="RetentionSummary" Style="{StaticResource Settings.Description}" Margin="0"
                                            AutomationProperties.LiveSetting="Polite" />
@@ -1073,11 +1093,20 @@
                                 <TextBox Grid.Column="0" Style="{StaticResource Settings.TextBox}"
                                          AutomationProperties.Name="{loc:Text Text_F6C3295E346E}"
                                          Text="{Binding CapturesDirectoryOverride, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                                <Button Grid.Column="1" Style="{StaticResource Settings.BrowseButton}"
-                                        Content="{loc:Text Text_C536D125279E}"
-                                        AutomationProperties.Name="{loc:Text Text_1145FCF19412}"
-                                        Click="OnBrowseCapturesDirectory" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Style="{StaticResource Settings.BrowseButton}"
+                                            Content="{loc:Text Text_C536D125279E}"
+                                            AutomationProperties.Name="{loc:Text Text_1145FCF19412}"
+                                            Click="OnBrowseCapturesDirectory" />
+                                    <Button x:Name="OpenCapturesFolderButton" Style="{StaticResource Settings.BrowseButton}"
+                                            Content="{loc:Text Storage_OpenFolder}"
+                                            AutomationProperties.Name="{loc:Text Storage_OpenCaptureFolderName}"
+                                            Click="OnOpenCapturesDirectory" />
+                                </StackPanel>
                             </Grid>
+                            <!-- The Store build's default folder lives in the package and goes with it. -->
+                            <TextBlock x:Name="CaptureFolderDefaultNote" Style="{StaticResource Settings.Description}" Margin="0,4,0,0"
+                                       Text="{loc:Text Storage_DefaultRemovedOnUninstall}" Visibility="Collapsed" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
@@ -1160,7 +1189,9 @@
                 </ScrollViewer>
             </TabItem>
 
-            <!-- About: version and updates, then the settings backup. -->
+            <!-- About: four sections 24 apart. Updates (version, check, last result), privacy (what
+                 stays on this PC and what is downloaded), feedback (report a problem in one step, rate)
+                 and data (import an earlier version's library, settings backup). -->
             <TabItem x:Name="UpdateTab"
                      Header="{loc:Text SettingsUx_TabAbout}" AutomationProperties.Name="{loc:Text SettingsUx_TabAbout}"
                      ToolTip="{loc:Text SettingsUx_TabAboutHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabAboutHelp}"
@@ -1168,55 +1199,91 @@
                 <!-- The unpackaged guidance and the status line can outgrow the minimum window. -->
                 <ScrollViewer x:Name="UpdateScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="4,12,12,4">
-                        <TextBlock x:Name="UpdateVersionLabel" Style="{StaticResource Settings.Label}" />
-                        <TextBlock x:Name="UpdateDescription" TextWrapping="Wrap" Margin="0,6,0,12"
-                                   Foreground="{DynamicResource Text.Secondary}" />
-                        <!-- Secondary: the window's one filled button is Apply. -->
-                        <WrapPanel>
-                            <Button x:Name="UpdateAction" Style="{StaticResource Button.Secondary}" Click="OnUpdateAction" MinWidth="140" Margin="0,0,8,8" />
-                            <Button x:Name="StoreRatingButton" Style="{StaticResource Button.Secondary}" Visibility="Collapsed"
-                                    MinWidth="140" Margin="0,0,8,8"
-                                    Content="{loc:Text StoreRating_Button}"
-                                    AutomationProperties.Name="{loc:Text StoreRating_Button}"
-                                    AutomationProperties.HelpText="{loc:Text StoreRating_ButtonHelp}"
-                                    Click="OnStoreRatingClick" />
-                        </WrapPanel>
+                        <StackPanel.Resources>
+                            <Style x:Key="About.Section" TargetType="StackPanel">
+                                <Setter Property="Margin" Value="0,0,0,24" />
+                            </Style>
+                            <Style x:Key="About.Heading" TargetType="TextBlock" BasedOn="{StaticResource Settings.GroupHeading}">
+                                <Setter Property="Margin" Value="0,0,0,8" />
+                            </Style>
+                            <Style x:Key="About.Body" TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+                                <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+                                <Setter Property="TextWrapping" Value="Wrap" />
+                                <Setter Property="Margin" Value="0,0,0,6" />
+                            </Style>
+                        </StackPanel.Resources>
 
-                        <TextBlock x:Name="UpdateObservedStatus" TextWrapping="Wrap" Margin="0,0,0,6" Foreground="{DynamicResource Text.Secondary}" />
-                        <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Height="4" Margin="0,0,0,12" Visibility="Collapsed" />
-                        <Button x:Name="StorePageAction" Content="{loc:Text StoreUpdate_OpenStore}" Style="{StaticResource Button.Secondary}"
-                                HorizontalAlignment="Left" Margin="0,0,0,16" Click="OnStoreUpdatePage" />
+                        <!-- Updates -->
+                        <StackPanel x:Name="AboutUpdatesSection" Style="{StaticResource About.Section}">
+                            <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_UpdatesHeading}" />
+                            <TextBlock x:Name="UpdateVersionLabel" Style="{StaticResource Settings.Label}" Margin="0,0,0,8" />
+                            <!-- Secondary: the window's one filled button is Apply. -->
+                            <WrapPanel>
+                                <Button x:Name="UpdateAction" Style="{StaticResource Button.Secondary}" Click="OnUpdateAction" MinWidth="140" Margin="0,0,12,8" />
+                                <TextBlock x:Name="UpdateObservedStatus" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,0,8"
+                                           Foreground="{DynamicResource Text.Secondary}" AutomationProperties.LiveSetting="Polite" />
+                            </WrapPanel>
+                            <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Height="4" Margin="0,0,0,8" Visibility="Collapsed" />
+                            <!-- Shown only after a failed check, as the way to reach the listing anyway. -->
+                            <Button x:Name="StorePageAction" Content="{loc:Text StoreUpdate_OpenStore}" Style="{StaticResource Button.Secondary}"
+                                    HorizontalAlignment="Left" Margin="0,0,0,8" Click="OnStoreUpdatePage" Visibility="Collapsed" />
+                            <TextBlock x:Name="UpdateDescription" Style="{StaticResource Settings.Description}" />
+                        </StackPanel>
 
-                        <Button x:Name="LegacyImportAction" Content="{loc:Text LegacyImport.Title}"
-                                AutomationProperties.Name="{loc:Text LegacyImport.Title}"
-                                Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"
-                                Margin="0,0,0,16" Click="OnLegacyImport" Visibility="Collapsed" />
+                        <!-- Privacy -->
+                        <StackPanel x:Name="AboutPrivacySection" Style="{StaticResource About.Section}">
+                            <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_PrivacyHeading}" />
+                            <TextBlock x:Name="PrivacyLocalText" Style="{StaticResource About.Body}" Text="{loc:Text About_PrivacyLocal}" />
+                            <TextBlock x:Name="PrivacyModelText" Style="{StaticResource About.Body}" />
+                            <TextBlock x:Name="PrivacyGitHubText" Style="{StaticResource About.Body}" Margin="0" Text="{loc:Text About_PrivacyGitHub}" />
+                        </StackPanel>
 
-                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text Support_Heading}" />
-                        <WrapPanel>
-                            <Button x:Name="SupportReport" Content="{loc:Text Support_Report}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,8" Click="OnSupportReport" />
-                            <Button x:Name="SupportPreview" Content="{loc:Text Support_Preview}" Style="{StaticResource Button.Secondary}" Margin="0,0,8,8" Click="OnDiagnosticsPreview" />
-                            <Button x:Name="DiagnosticsCopy" Content="{loc:Text Support_Copy}" Style="{StaticResource Button.Secondary}" Visibility="Collapsed" Margin="0,0,8,8" Click="OnDiagnosticsCopy" />
-                        </WrapPanel>
-                        <TextBox x:Name="DiagnosticsPreview" IsReadOnly="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="180"
-                                 Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16"
-                                 AutomationProperties.Name="{loc:Text Support_Preview}" />
+                        <!-- Feedback -->
+                        <StackPanel x:Name="AboutFeedbackSection" Style="{StaticResource About.Section}">
+                            <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_FeedbackHeading}" />
+                            <WrapPanel>
+                                <Button x:Name="SupportReport" Content="{loc:Text About_ReportProblem}" Style="{StaticResource Button.Secondary}"
+                                        MinWidth="140" Margin="0,0,8,8"
+                                        AutomationProperties.Name="{loc:Text About_ReportProblem}"
+                                        AutomationProperties.HelpText="{loc:Text About_ReportProblemHelp}"
+                                        ToolTip="{loc:Text About_ReportProblemHelp}"
+                                        Click="OnSupportReport" />
+                                <Button x:Name="StoreRatingButton" Style="{StaticResource Button.Secondary}" Visibility="Collapsed"
+                                        MinWidth="140" Margin="0,0,8,8"
+                                        Content="{loc:Text StoreRating_Button}"
+                                        AutomationProperties.Name="{loc:Text StoreRating_Button}"
+                                        AutomationProperties.HelpText="{loc:Text StoreRating_ButtonHelp}"
+                                        Click="OnStoreRatingClick" />
+                            </WrapPanel>
+                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{loc:Text About_ReportNote}" />
+                        </StackPanel>
 
-                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_BackupHeading}" />
-                        <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,10"
-                                   Text="{loc:Text SettingsUx_BackupHint}" />
-                        <WrapPanel>
-                            <Button x:Name="ExportSettingsButton" Style="{StaticResource Button.Secondary}"
-                                    Content="{loc:Text Settings_Export}"
-                                    MinWidth="140" Margin="0,0,8,8"
-                                    AutomationProperties.Name="{loc:Text Settings_Export}"
-                                    Click="OnExportSettings" />
-                            <Button x:Name="ImportSettingsButton" Style="{StaticResource Button.Secondary}"
-                                    Content="{loc:Text Settings_Import}"
-                                    MinWidth="140" Margin="0,0,8,8"
-                                    AutomationProperties.Name="{loc:Text Settings_Import}"
-                                    Click="OnImportSettings" />
-                        </WrapPanel>
+                        <!-- Data -->
+                        <StackPanel x:Name="AboutDataSection" Margin="0">
+                            <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_DataHeading}" />
+                            <StackPanel x:Name="LegacyImportPanel" Margin="0,0,0,12" Visibility="Collapsed">
+                                <Button x:Name="LegacyImportAction" Content="{loc:Text About_LegacyImport}"
+                                        AutomationProperties.Name="{loc:Text About_LegacyImport}"
+                                        AutomationProperties.HelpText="{loc:Text About_LegacyImportHint}"
+                                        Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left" MinWidth="140"
+                                        Margin="0,0,0,6" Click="OnLegacyImport" />
+                                <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{loc:Text About_LegacyImportHint}" />
+                            </StackPanel>
+                            <WrapPanel>
+                                <Button x:Name="ExportSettingsButton" Style="{StaticResource Button.Secondary}"
+                                        Content="{loc:Text Settings_Export}"
+                                        MinWidth="140" Margin="0,0,8,6"
+                                        AutomationProperties.Name="{loc:Text Settings_Export}"
+                                        Click="OnExportSettings" />
+                                <Button x:Name="ImportSettingsButton" Style="{StaticResource Button.Secondary}"
+                                        Content="{loc:Text Settings_Import}"
+                                        MinWidth="140" Margin="0,0,8,6"
+                                        AutomationProperties.Name="{loc:Text Settings_Import}"
+                                        Click="OnImportSettings" />
+                            </WrapPanel>
+                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{loc:Text About_SettingsBackupHint}" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -1268,8 +1335,9 @@
         </Border>
 
         <!-- ===================== Command bar =====================
-             One filled button (Apply). Keys live in tooltips and accelerator properties, not in
-             the labels. Cancel discards deliberately; Esc and the title bar close ask first when
+             One filled button (Apply), enabled only while something is unapplied. Keys live in
+             tooltips and accelerator properties, not in the labels. Cancel discards deliberately and
+             reads Close when there is nothing to discard; Esc and the title bar close ask first when
              something is unapplied. -->
         <Grid Grid.Row="3" Margin="0,14,0,0">
             <Grid.ColumnDefinitions>
@@ -1299,14 +1367,15 @@
                         AutomationProperties.HelpText="{loc:Text Text_B89071D80D8F}"
                         AutomationProperties.AcceleratorKey="Ctrl+S"
                         Click="OnApply" />
+                <!-- Cancel while something is unapplied, Close otherwise (RefreshCommandState). -->
                 <Button x:Name="CancelButton"
                         Style="{StaticResource Button.Secondary}"
-                        Content="{loc:Text Text_BE876433993A}"
+                        Content="{loc:Text Dialog.Close}"
                         MinWidth="88"
                         Margin="8,0,0,0"
-                        ToolTip="{loc:Text SettingsUx_CancelTip}"
-                        AutomationProperties.Name="{loc:Text Text_BE876433993A}"
-                        AutomationProperties.HelpText="{loc:Text SettingsUx_CancelTip}"
+                        ToolTip="{loc:Text SettingsUx_CloseTip}"
+                        AutomationProperties.Name="{loc:Text Dialog.Close}"
+                        AutomationProperties.HelpText="{loc:Text SettingsUx_CloseTip}"
                         Click="OnCancel" />
             </StackPanel>
         </Grid>

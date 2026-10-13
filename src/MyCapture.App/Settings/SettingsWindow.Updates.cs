@@ -25,6 +25,12 @@ internal sealed partial class SettingsWindow
     private long _storeUpdateOperation;
     private bool _storeUpdateProgressActive;
 
+    /// <summary>When this window last asked the Store for an update; shown beside the result.</summary>
+    private DateTimeOffset? _lastStoreCheck;
+
+    /// <summary>The time a finished check is stamped with. Tests pin it.</summary>
+    internal Func<DateTimeOffset> StoreCheckClock { get; set; } = () => DateTimeOffset.Now;
+
     private static UpdateVersion CurrentUpdateVersion => UpdateVersion.FromVersion(
         Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0));
 
@@ -51,7 +57,9 @@ internal sealed partial class SettingsWindow
         }
 
         AutomationProperties.SetName(UpdateAction, (string)UpdateAction.Content);
-        StorePageAction.Visibility = AppPackage.IsPackaged ? Visibility.Visible : Visibility.Collapsed;
+        // The listing button repeats what Check and Rate already open; it appears only after a
+        // failed check, as the way to reach the Store anyway.
+        StorePageAction.Visibility = Visibility.Collapsed;
         if (AppPackage.IsPackaged) ShowStoreUpdate(new(StoreUpdatePhase.Idle));
     }
 
@@ -81,6 +89,7 @@ internal sealed partial class SettingsWindow
             {
                 ShowStoreUpdate(new(StoreUpdatePhase.Checking));
                 _storeUpdateAvailable = await StoreUpdates.CheckAsync();
+                _lastStoreCheck = StoreCheckClock();
                 ShowStoreUpdate(new(_storeUpdateAvailable ? StoreUpdatePhase.Available : StoreUpdatePhase.Current));
                 SetStoreUpdateAction(_storeUpdateAvailable);
             }
@@ -143,13 +152,27 @@ internal sealed partial class SettingsWindow
 
     private void ShowStoreUpdate(StoreUpdateSnapshot snapshot)
     {
-        UpdateObservedStatus.Text = StoreUpdateStatusText(snapshot.Phase);
+        UpdateObservedStatus.Text = UpdateCheckSummary(snapshot.Phase, _lastStoreCheck);
+        StorePageAction.Visibility = StoreUpdatePackaged && snapshot.Phase == StoreUpdatePhase.Failed
+            ? Visibility.Visible : Visibility.Collapsed;
         UpdateProgress.Visibility = snapshot.Phase is StoreUpdatePhase.Checking or StoreUpdatePhase.AwaitingConsent
             or StoreUpdatePhase.Downloading or StoreUpdatePhase.Installing ? Visibility.Visible : Visibility.Collapsed;
         // TotalDownloadProgress is download progress, not a made-up installation percentage.
         UpdateProgress.IsIndeterminate = snapshot.Phase != StoreUpdatePhase.Downloading || snapshot.Progress is null;
         if (snapshot.Progress is { } value && snapshot.Phase == StoreUpdatePhase.Downloading) UpdateProgress.Value = value * 100;
         AutomationProperties.SetName(UpdateProgress, UpdateObservedStatus.Text);
+    }
+
+    /// <summary>
+    /// The update line: a check's result carries its time, "마지막 확인 14:02 · 최신 버전"; every
+    /// other phase shows its state alone.
+    /// </summary>
+    internal static string UpdateCheckSummary(StoreUpdatePhase phase, DateTimeOffset? lastCheck)
+    {
+        if (lastCheck is not { } checkedAt || phase is not (StoreUpdatePhase.Current or StoreUpdatePhase.Available))
+            return StoreUpdateStatusText(phase);
+        string state = phase == StoreUpdatePhase.Current ? UiText.Get("About_UpToDate") : StoreUpdateStatusText(phase);
+        return UiText.Format("About_LastChecked", checkedAt.ToLocalTime().DateTime, state);
     }
 
     internal static string StoreUpdateStatusText(StoreUpdatePhase phase) => phase switch

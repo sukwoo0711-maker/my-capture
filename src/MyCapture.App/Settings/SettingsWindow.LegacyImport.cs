@@ -29,8 +29,12 @@ internal sealed partial class SettingsWindow
         set { _legacyImportPackaged = value; InitializeLegacyImport(); }
     }
 
-    private void InitializeLegacyImport() => LegacyImportAction.Visibility =
-        _legacyImportPackaged ? Visibility.Visible : Visibility.Collapsed;
+    private void InitializeLegacyImport()
+    {
+        Visibility shown = _legacyImportPackaged ? Visibility.Visible : Visibility.Collapsed;
+        LegacyImportPanel.Visibility = shown;
+        LegacyImportAction.Visibility = shown;
+    }
 
     private void OnLegacyImport(object sender, RoutedEventArgs e) => OpenLegacyImport();
 

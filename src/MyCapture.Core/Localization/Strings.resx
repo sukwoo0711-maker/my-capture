@@ -1329,6 +1329,7 @@
     <value>최대 보관 개수</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="Settings_LibraryMaxItems" xml:space="preserve"><value>라이브러리 최대 항목 수</value></data>
   <data name="Text_72147902C22E" xml:space="preserve">
     <value>파일명 패턴</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -2282,6 +2283,10 @@
     <value>찾아보기</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="Storage_OpenFolder" xml:space="preserve"><value>폴더 열기</value></data>
+  <data name="Storage_OpenCaptureFolderName" xml:space="preserve"><value>캡처 저장 폴더 열기</value></data>
+  <data name="Storage_OpenFolderFailed" xml:space="preserve"><value>폴더를 열지 못했습니다. 폴더가 있는지 확인하십시오.</value></data>
+  <data name="Storage_DefaultRemovedOnUninstall" xml:space="preserve"><value>기본 위치는 앱을 제거하면 함께 삭제됩니다.</value></data>
   <data name="Text_C5AC44062ACA" xml:space="preserve">
     <value>녹화 파일은 복구 표식과 함께 보존했지만 라이브러리 등록을 완료하지 못했습니다. MyCapture를 다시 시작하면 복구를 시도합니다.
 
@@ -2922,6 +2927,26 @@
     <value>형광펜 투명도(알파)</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="Settings_HighlighterOpacity" xml:space="preserve"><value>형광펜 불투명도</value></data>
+  <data name="Settings_FontName" xml:space="preserve"><value>글꼴</value></data>
+  <data name="SettingsRange_Seconds0To60" xml:space="preserve"><value>0–60초</value></data>
+  <data name="SettingsRange_Seconds1To10" xml:space="preserve"><value>1–10초</value></data>
+  <data name="SettingsRange_RegionHistory" xml:space="preserve"><value>1–200개</value></data>
+  <data name="SettingsRange_MaxItems" xml:space="preserve"><value>10–5000개</value></data>
+  <data name="SettingsRange_MaxStorage" xml:space="preserve"><value>0.125–512 GB</value></data>
+  <data name="SettingsRange_PreviewSize" xml:space="preserve"><value>긴 변 96–1024 px</value></data>
+  <data name="SettingsRange_StrokeWidth" xml:space="preserve"><value>1–64 px</value></data>
+  <data name="SettingsRange_FontSize" xml:space="preserve"><value>6–400 pt</value></data>
+  <data name="SettingsRange_Mosaic" xml:space="preserve"><value>2–128 px</value></data>
+  <data name="SettingsRange_Percent" xml:space="preserve"><value>0–100%</value></data>
+  <data name="SettingsRange_Blur" xml:space="preserve"><value>2–64 px</value></data>
+  <data name="SettingsRange_InitialOpacity" xml:space="preserve"><value>0.2–1.0 (1은 불투명)</value></data>
+  <data name="SettingsRange_ClosedPins" xml:space="preserve"><value>0–100개</value></data>
+  <data name="SettingsRange_ZoomStep" xml:space="preserve"><value>0.02–0.5</value></data>
+  <data name="Settings_ZoomStepNote" xml:space="preserve"><value>마우스 휠 한 칸에 바뀌는 배율입니다.</value></data>
+  <data name="Settings_RegionHistoryNote" xml:space="preserve"><value>다시 캡처에 사용할 이전 선택 영역 개수입니다.</value></data>
+  <data name="Settings_ClosedPinsNote" xml:space="preserve"><value>다시 열 수 있게 기억할 닫은 핀 개수입니다. 0이면 기억하지 않습니다. 앱을 종료하면 지워지며 디스크에 저장하지 않습니다.</value></data>
+  <data name="Settings_RecordingSizeHint" xml:space="preserve"><value>고정 크기를 고르면 녹화 영역을 지정할 때 드래그로 위치만 정합니다. 가로·세로 96–7680 px.</value></data>
   <data name="Text_FA67EC449E04" xml:space="preserve">
     <value>동영상 레이어 위치 및 크기 편집</value>
     <comment>src\MyCapture.App\Recording\VideoLayerCanvas.cs</comment>
@@ -3008,11 +3033,30 @@
   <data name="LibrarySelection_ClearConfirm" xml:space="preserve"><value>검색 결과와 관계없이 전체 라이브러리의 {0}개 항목을 삭제하시겠습니까? 보관 항목과 동영상도 포함됩니다. 이후 새로 추가된 항목은 유지됩니다. 항목은 Windows 휴지통으로 이동합니다.</value></data>
   <data name="LibrarySelection_DeleteConfirm" xml:space="preserve"><value>선택한 {0}개 항목을 휴지통으로 이동하시겠습니까?</value></data>
   <data name="LibraryRecovery_Recent" xml:space="preserve"><value>최근 삭제 복원</value></data>
+  <data name="LibraryRestore_Last" xml:space="preserve"><value>마지막 삭제 되돌리기 ({0}개)</value></data>
+  <data name="LibraryRestore_Entry" xml:space="preserve"><value>{0} · {1} 삭제</value></data>
+  <data name="LibraryRestore_Image" xml:space="preserve"><value>이미지</value></data>
+  <data name="LibraryRestore_Video" xml:space="preserve"><value>동영상</value></data>
+  <data name="LibraryRestore_JustNow" xml:space="preserve"><value>방금</value></data>
+  <data name="LibraryRestore_MinutesAgo" xml:space="preserve"><value>{0}분 전</value></data>
+  <data name="LibraryRestore_HoursAgo" xml:space="preserve"><value>{0}시간 전</value></data>
+  <data name="LibraryRestore_Yesterday" xml:space="preserve"><value>어제</value></data>
+  <data name="LibraryRestore_DaysAgo" xml:space="preserve"><value>{0}일 전</value></data>
+  <data name="LibraryRestore_OnDate" xml:space="preserve"><value>{0:yyyy-MM-dd}</value></data>
+  <data name="LibraryFolder_OpenLibrary" xml:space="preserve"><value>라이브러리 폴더 열기</value></data>
   <data name="LibraryRecovery_Empty" xml:space="preserve"><value>복원할 항목 없음</value></data>
   <data name="LibraryRecovery_Loading" xml:space="preserve"><value>불러오는 중</value></data>
   <data name="LibraryRecovery_Restored" xml:space="preserve"><value>라이브러리에 복원됨</value></data>
   <data name="LibraryRecovery_Failed" xml:space="preserve"><value>복원하지 못했습니다. 원래 위치의 파일 또는 휴지통 항목을 확인하십시오.</value></data>
   <data name="LibrarySelection_Removed" xml:space="preserve"><value>라이브러리에서 {0}개 삭제 · 사용 중인 항목 등 {1}개 유지</value></data>
+  <data name="LibraryUndo_Moved" xml:space="preserve"><value>{0}개를 휴지통으로 옮김</value></data>
+  <data name="LibraryUndo_DeletedPermanently" xml:space="preserve"><value>{0}개를 완전히 삭제함</value></data>
+  <data name="LibraryUndo_Kept" xml:space="preserve"><value>{0}개 유지</value></data>
+  <data name="LibraryUndo_Action" xml:space="preserve"><value>되돌리기</value></data>
+  <data name="LibraryUndo_ActionName" xml:space="preserve"><value>삭제 되돌리기</value></data>
+  <data name="LibraryUndo_Restoring" xml:space="preserve"><value>되돌리는 중</value></data>
+  <data name="LibraryUndo_Restored" xml:space="preserve"><value>라이브러리에 {0}개 복원됨</value></data>
+  <data name="LibraryUndo_PartlyRestored" xml:space="preserve"><value>라이브러리에 {0}개 복원됨 · {1}개는 휴지통에 남아 있습니다.</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>삭제를 저장하지 못했습니다. 라이브러리를 확인한 후 다시 시도하십시오.</value></data>
   <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>삭제된 {0}개 항목의 파일 정리가 아직 완료되지 않았습니다. 해당 항목의 디스크 공간 확보는 확인되지 않았습니다.</value></data>
   <data name="LibrarySelection_RecycleUnavailableTitle" xml:space="preserve"><value>휴지통 사용 불가</value></data>
@@ -3113,6 +3157,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Gallery.RetentionKept" xml:space="preserve"><value>보관</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>만료 없음</value></data>
   <data name="Gallery.RetentionExpired" xml:space="preserve"><value>자동 삭제 대기 중</value></data>
+  <data name="Gallery.RetentionNever" xml:space="preserve"><value>자동 삭제 안 함</value></data>
   <data name="Gallery.FloatFailed" xml:space="preserve"><value>이 이미지를 핀으로 띄우지 못했습니다.</value></data>
   <data name="GitHub.NeedImage" xml:space="preserve"><value>먼저 이미지를 복사한 뒤 F9를 누르십시오.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>GitHub 이슈를 열고 이미지를 붙이는 중…</value></data>
@@ -3214,6 +3259,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Search.Count" xml:space="preserve"><value>전체 {1}개 중 {0}개</value></data>
   <data name="Library.Search.Reset" xml:space="preserve"><value>검색·필터 초기화</value></data>
   <data name="Library.Empty.Start" xml:space="preserve"><value>라이브러리가 비어 있음</value></data>
+  <data name="Library.Empty.NoCaptures" xml:space="preserve"><value>아직 캡처가 없습니다</value></data>
+  <data name="Library.Empty.ShortcutHint" xml:space="preserve"><value>{0}로 캡처하면 여기에 표시됩니다.</value></data>
+  <data name="Library.Empty.Hint" xml:space="preserve"><value>캡처하면 여기에 표시됩니다.</value></data>
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>일치하는 캡처가 없습니다</value></data>
   <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 편집창에서 저장을 눌러 다시 시도하십시오. {0}</value></data>
   <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>드래그 전 커서 보조선 표시</value></data>
@@ -3777,7 +3825,25 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_TabShortcutsHelp" xml:space="preserve"><value>전역 단축키, 버튼 아래 단축키 표시</value></data>
   <data name="SettingsUx_TabStorage" xml:space="preserve"><value>저장 공간</value></data>
   <data name="SettingsUx_TabStorageHelp" xml:space="preserve"><value>라이브러리 보관, 저장 폴더, 고급</value></data>
+  <data name="SettingsUx_TabStorageHelp2" xml:space="preserve"><value>라이브러리 용량, 자동 삭제, 저장 폴더, 고급</value></data>
   <data name="SettingsUx_TabAbout" xml:space="preserve"><value>정보</value></data>
+  <data name="About_UpdatesHeading" xml:space="preserve"><value>업데이트</value></data>
+  <data name="About_LastChecked" xml:space="preserve"><value>마지막 확인 {0:HH:mm} · {1}</value></data>
+  <data name="About_UpToDate" xml:space="preserve"><value>최신 버전</value></data>
+  <data name="About_PrivacyHeading" xml:space="preserve"><value>개인정보</value></data>
+  <data name="About_PrivacyLocal" xml:space="preserve"><value>캡처와 텍스트 인식은 이 PC에서 처리합니다.</value></data>
+  <data name="About_PrivacyModel" xml:space="preserve"><value>텍스트 인식 모델(약 {0} MB)은 정확 또는 가장 정확 품질을 처음 사용할 때 ModelScope에서 내려받습니다. 가장 정확 품질은 확대 모델(약 {1} MB)도 Qualcomm AI Hub에서 내려받습니다. 이미지는 전송하지 않습니다.</value></data>
+  <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub 업로드는 실행할 때만 공개 이슈에 올립니다.</value></data>
+  <data name="About_FeedbackHeading" xml:space="preserve"><value>피드백</value></data>
+  <data name="About_ReportProblem" xml:space="preserve"><value>문제 신고</value></data>
+  <data name="About_ReportProblemHelp" xml:space="preserve"><value>진단 정보를 클립보드에 복사하고 GitHub 신고 페이지를 엽니다.</value></data>
+  <data name="About_ReportCopied" xml:space="preserve"><value>진단 정보를 복사했습니다. 신고 페이지에 붙여 넣으십시오.</value></data>
+  <data name="About_ReportCopyFailed" xml:space="preserve"><value>진단 정보를 복사하지 못했습니다. 신고 페이지에 문제 상황을 직접 적어 주십시오.</value></data>
+  <data name="About_ReportNote" xml:space="preserve"><value>GitHub 계정이 필요하며 신고 내용은 공개됩니다.</value></data>
+  <data name="About_DataHeading" xml:space="preserve"><value>데이터</value></data>
+  <data name="About_LegacyImport" xml:space="preserve"><value>이전 버전 데이터 가져오기</value></data>
+  <data name="About_LegacyImportHint" xml:space="preserve"><value>이전 MyCapture의 이미지·동영상·폴더를 이 라이브러리로 복사합니다. 원본은 그대로 둡니다.</value></data>
+  <data name="About_SettingsBackupHint" xml:space="preserve"><value>설정을 파일로 내보내거나 가져옵니다. 가져온 설정은 적용을 눌러야 저장합니다. GitHub 토큰은 내보내지 않습니다.</value></data>
   <data name="SettingsUx_TabAboutHelp" xml:space="preserve"><value>버전, 업데이트, 설정 백업</value></data>
   <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>그 밖의 단축키</value></data>
   <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>필요한 기능에만 지정하십시오. 다른 프로그램이 쓰는 키와 겹치지 않는 조합을 고르십시오.</value></data>
@@ -3789,6 +3855,18 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_PreviewSize" xml:space="preserve"><value>미리보기 이미지 크기(픽셀)</value></data>
   <data name="SettingsUx_PreviewSizeRange" xml:space="preserve"><value>긴 변 기준, 96 ~ 1024픽셀.</value></data>
   <data name="SettingsUx_Retention" xml:space="preserve"><value>이미지 보관 기간(시간)</value></data>
+  <data name="Retention_Label" xml:space="preserve"><value>이미지 자동 삭제</value></data>
+  <data name="Retention_Day1" xml:space="preserve"><value>1일</value></data>
+  <data name="Retention_Day7" xml:space="preserve"><value>7일</value></data>
+  <data name="Retention_Day30" xml:space="preserve"><value>30일</value></data>
+  <data name="Retention_Day90" xml:space="preserve"><value>90일</value></data>
+  <data name="Retention_Year1" xml:space="preserve"><value>1년</value></data>
+  <data name="Retention_Never" xml:space="preserve"><value>삭제 안 함</value></data>
+  <data name="Retention_Custom" xml:space="preserve"><value>사용자 지정 ({0}시간)</value></data>
+  <data name="Retention_SummaryNever" xml:space="preserve"><value>라이브러리 이미지를 기간에 따라 자동으로 삭제하지 않습니다. 라이브러리 최대 항목 수나 최대 저장 용량을 넘으면 오래된 항목부터 삭제합니다.</value></data>
+  <data name="Retention_Notice" xml:space="preserve"><value>보관 기간이 지난 이미지 {0}개를 삭제했습니다</value></data>
+  <data name="Retention_NoticeAction" xml:space="preserve"><value>기간 변경</value></data>
+  <data name="Retention_NoticeActionName" xml:space="preserve"><value>이미지 자동 삭제 기간 변경</value></data>
   <data name="SettingsUx_RetentionSummary" xml:space="preserve"><value>만든 지 {0}이 지난 라이브러리 이미지를 오래된 것부터 자동으로 지웁니다. 보관한 이미지, 편집 중인 이미지, 동영상, 따로 저장하거나 내보낸 파일은 지우지 않습니다.</value></data>
   <data name="SettingsUx_RetentionRange" xml:space="preserve"><value>1 ~ 8760시간(365일) 사이로 입력하십시오.</value></data>
   <data name="SettingsUx_DurationDay" xml:space="preserve"><value>{0}일</value></data>
@@ -3816,6 +3894,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>설정 백업</value></data>
   <data name="SettingsUx_BackupHint" xml:space="preserve"><value>설정을 파일로 내보내거나 가져옵니다. 가져온 설정은 적용을 눌러야 저장합니다. GitHub 토큰은 내보내지 않습니다.</value></data>
   <data name="SettingsUx_CancelTip" xml:space="preserve"><value>변경 사항을 버리고 닫습니다.</value></data>
+  <data name="SettingsUx_CloseTip" xml:space="preserve"><value>설정 창을 닫습니다.</value></data>
   <data name="SettingsUx_CloseTitle" xml:space="preserve"><value>적용하지 않은 변경 사항</value></data>
   <data name="SettingsUx_CloseMessage" xml:space="preserve"><value>바꾼 설정을 아직 적용하지 않았습니다. 적용하지 않고 닫으면 바꾼 값이 사라집니다.</value></data>
   <data name="SettingsUx_CloseApply" xml:space="preserve"><value>적용하고 닫기</value></data>

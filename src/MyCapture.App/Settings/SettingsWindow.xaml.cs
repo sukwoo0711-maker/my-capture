@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
+using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -68,6 +69,7 @@ internal sealed partial class SettingsWindow : Window
             MessageBoxImage.Warning, details: message));
 
         InitializeComponent();
+        InitializeAbout();
         InitializeUpdates();
         InitializeStoreRating();
         InitializePrintScreenGuide();
@@ -89,9 +91,13 @@ internal sealed partial class SettingsWindow : Window
         InputBindings.Add(new KeyBinding(CloseCommand, Key.Escape, ModifierKeys.None));
         ConfirmUnappliedChanges = () => UnappliedChangesDialog.Ask(this);
 
+        _loadedRetentionHours = _draft.ImageRetentionHours;
         RefreshErrorSummary();
         SyncGitHubTokenBox();
-        RefreshRetentionSummary();
+        RefreshRetention();
+        SyncFontFamilyBox();
+        RefreshCaptureFolderNote();
+        RefreshCommandState();
     }
 
     internal static readonly RoutedUICommand ApplyCommand =
@@ -187,9 +193,13 @@ internal sealed partial class SettingsWindow : Window
         DataContext = _draft;
         ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
         SetStatusMessage(string.Empty);
+        _loadedRetentionHours = _draft.ImageRetentionHours;
         RefreshErrorSummary();
         SyncGitHubTokenBox();
-        RefreshRetentionSummary();
+        RefreshRetention();
+        SyncFontFamilyBox();
+        RefreshCaptureFolderNote();
+        RefreshCommandState();
     }
 
     private void AttachDraftEvents()
@@ -214,7 +224,29 @@ internal sealed partial class SettingsWindow : Window
             or nameof(SettingsDraft.CaptureGuideColorMode) or nameof(SettingsDraft.CaptureGuideColorHex))
             ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
         if (all || e.PropertyName == nameof(SettingsDraft.GitHubToken)) SyncGitHubTokenBox();
-        if (all || e.PropertyName == nameof(SettingsDraft.ImageRetentionHours)) RefreshRetentionSummary();
+        if (all || e.PropertyName == nameof(SettingsDraft.ImageRetentionHours)) RefreshRetention();
+        if (all || e.PropertyName == nameof(SettingsDraft.FontFamily)) SyncFontFamilyBox();
+        if (all || e.PropertyName == nameof(SettingsDraft.CapturesDirectoryOverride)) RefreshCaptureFolderNote();
+        RefreshCommandState();
+    }
+
+    /// <summary>
+    /// Apply is enabled only while something is unapplied; with nothing to discard, Cancel reads
+    /// Close. Runs on every draft change, which only compares the draft's current values.
+    /// </summary>
+    private void RefreshCommandState()
+    {
+        bool pending = _draft.HasUnappliedChanges;
+        ApplyButton.IsEnabled = pending;
+        string label = UiText.Get(pending ? "Text_BE876433993A" : "Dialog.Close");
+        string help = UiText.Get(pending ? "SettingsUx_CancelTip" : "SettingsUx_CloseTip");
+        if (!Equals(CancelButton.Content, label))
+        {
+            CancelButton.Content = label;
+            CancelButton.ToolTip = help;
+            AutomationProperties.SetName(CancelButton, label);
+            AutomationProperties.SetHelpText(CancelButton, help);
+        }
     }
 
     /// <summary>Reports settings file operations independently of the selected category.</summary>
@@ -243,6 +275,7 @@ internal sealed partial class SettingsWindow : Window
         _legacyProtectedBaseline = null;
         _draft.ResetToDefaults();
         RefreshErrorSummary();
+        RefreshCommandState();
     }
 
     private void OnExportSettings(object sender, RoutedEventArgs e)
@@ -442,11 +475,6 @@ internal sealed partial class SettingsWindow : Window
         _draft.GitHubToken = GitHubTokenBox.Password;
     }
 
-    // ---- Retention summary ----------------------------------------------------------
-
-    private void RefreshRetentionSummary() =>
-        RetentionSummary.Text = SettingsUxText.RetentionSummary(_draft.ImageRetentionHours);
-
     // ---- Folder browse -------------------------------------------------------------
 
     private void OnBrowseCapturesDirectory(object sender, RoutedEventArgs e) =>
@@ -474,15 +502,15 @@ internal sealed partial class SettingsWindow : Window
         {
             ErrorSummary.Visibility = Visibility.Collapsed;
             ErrorList.ItemsSource = null;
-            ApplyButton.IsEnabled = true;
+            RefreshCommandState();
             return;
         }
 
         ErrorList.ItemsSource = errors;
         ErrorSummary.Visibility = Visibility.Visible;
-        // Keep Apply pressable so a keyboard user can trigger the announce-and-focus path;
-        // Apply itself refuses to close while errors exist.
-        ApplyButton.IsEnabled = true;
+        // An invalid entry is an unapplied change, so Apply stays pressable and a keyboard user
+        // reaches the announce-and-focus path; Apply itself refuses to close while errors exist.
+        RefreshCommandState();
     }
 
     private void AnnounceErrors()

@@ -267,12 +267,16 @@ public sealed class SettingsStore
         s.Queue.ThumbnailLongEdge = ClampWithWarning(
             s.Queue.ThumbnailLongEdge, 96, 1024, nameof(QueueSettings.ThumbnailLongEdge), warnings);
 
-        s.Queue.ImageRetentionHours = ClampWithWarning(
-            s.Queue.ImageRetentionHours,
-            SettingsRanges.ImageRetentionHours.Min,
-            SettingsRanges.ImageRetentionHours.Max,
-            nameof(QueueSettings.ImageRetentionHours),
-            warnings);
+        // "Never" is stored above the hour range on purpose (see CaptureRetention.NeverHours).
+        if (!MyCapture.Core.Queue.CaptureRetention.IsNever(s.Queue.ImageRetentionHours))
+        {
+            s.Queue.ImageRetentionHours = ClampWithWarning(
+                s.Queue.ImageRetentionHours,
+                SettingsRanges.ImageRetentionHours.Min,
+                SettingsRanges.ImageRetentionHours.Max,
+                nameof(QueueSettings.ImageRetentionHours),
+                warnings);
+        }
 
         // --- Export ---
         if (string.IsNullOrWhiteSpace(s.Export.FileNamePattern))

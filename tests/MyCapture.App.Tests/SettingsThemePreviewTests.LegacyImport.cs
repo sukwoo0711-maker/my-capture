@@ -513,6 +513,8 @@ public sealed partial class SettingsThemePreviewTests
                     settings.Show();
                     ((TabControl)settings.FindName("CategoryTabs")).SelectedItem = settings.FindName("UpdateTab"); Drain(settings);
                     Button entry = (Button)settings.FindName("LegacyImportAction");
+                    // The import sits in the About page's data section, below the fold at this size.
+                    entry.BringIntoView(); Drain(settings);
                     Assert.True(entry.IsVisible); AssertFits(settings, entry);
                     SaveStoreUpdateEvidence(settings, $"legacy-information-{locale}-{theme}-780x560.png");
                     settings.LegacyImportPackaged = false; Assert.Equal(Visibility.Collapsed, entry.Visibility);

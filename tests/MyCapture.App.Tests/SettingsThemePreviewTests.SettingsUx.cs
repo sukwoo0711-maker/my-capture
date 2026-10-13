@@ -245,7 +245,8 @@ public sealed partial class SettingsThemePreviewTests
                     // Labels carry no key notation; keys are in tooltips and accelerator properties.
                     Assert.Equal(UiText.Get("Text_6A1C963D5BC5"), primary.Content);
                     Assert.Equal("Ctrl+S", AutomationProperties.GetAcceleratorKey(primary));
-                    Assert.Equal(UiText.Get("Text_BE876433993A"), Assert.IsType<Button>(window.FindName("CancelButton")).Content);
+                    // Nothing is pending, so the secondary command closes instead of cancelling.
+                    Assert.Equal(UiText.Get("Dialog.Close"), Assert.IsType<Button>(window.FindName("CancelButton")).Content);
 
                     // Settings backup moved off the command bar onto the About page.
                     var export = Assert.IsType<Button>(window.FindName("ExportSettingsButton"));
