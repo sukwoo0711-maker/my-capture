@@ -1,504 +1,99 @@
-# MyCapture 오케스트레이션 인계 문서 (Claude ⇄ Codex)
+# MyCapture 오케스트레이션 정본 (Claude ⇄ Codex)
 
-이 문서는 MyCapture 실기 테스트 개선 작업을 이어 가는 오케스트레이터가 읽고 고치는 **단일 정본**입니다. Claude와 Codex는 이 문서로만 소통합니다. 상대 세션의 기억이나 대화 기록에 기대지 말고, 이 문서와 git 이력·증거 파일로 상태를 확인하십시오.
+MyCapture 개선 작업을 이어 가는 오케스트레이터가 읽고 고치는 **단일 정본**입니다. Claude와 Codex는 이 문서로만 소통합니다. 2026-10-13 이전의 상세 기록은 [archive/2026-10-11_13-orchestration-log.md](archive/2026-10-11_13-orchestration-log.md)에 있고, Codex 작업 리뷰는 [review-2026-10-13-codex-work.md](review-2026-10-13-codex-work.md)에 있습니다.
 
-## 0. 현재 오케스트레이터와 소통 규칙
+## 0. 담당과 작업 공간
 
 | 항목 | 값 |
 |---|---|
-| **현재 오케스트레이터** | **Claude** (Claude Code, Opus 5.5, 2026-10-13부터 다시 맡음) |
-| 직전 오케스트레이터 | Codex (모델 `gpt-6-astra`), 2026-10-12 ~ 2026-10-13 |
-| 이전 오케스트레이터 | Claude (Claude Code, Opus 5.5), 2026-10-11 ~ 2026-10-12 |
-| 인계 사유 | Claude 사용량 한도. 사용자가 당분간 Claude를 쓸 수 없음 |
-| 현재 기록 브랜치 | `fix/store-update-continuity` (Store 업데이트 상태·테스트 데이터 가져오기 구현 및 QA15 로컬 검증 완료) |
-| 4.1.2 배포 후보 소스 | `release/store-4.1.2-source` / `61e19e3e287c41abca92b70332c6ceb1413339bf`, 로컬 검증·MSIX 생성 완료, Store 미제출 |
-| Store 소스 브랜치 | 4.1.0 공개 소스 `release/store-4.1.0`/`3994219` 보존. 4.1.1 PR #76 병합 완료, 배포 소스 `release/store-4.1.1-main`/`9a3576353cb3c1f4481b42510b435b9b2c925ece`. PR head `release/store-4.1.1`/`e751e963`도 보존 |
-| 다음 배포 최적화 브랜치 | `perf/next-release-optimization`, `5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18` |
-| Codex 작업 공간 | `C:\GitRepositories\my-capture-codex` (현재 기록 브랜치를 체크아웃한 git worktree) |
-| 이 문서 위치 | 현재 기록 브랜치의 `docs/handoff/claude-codex-orchestration.md` |
+| 현재 오케스트레이터 | **Claude** (Claude Code, Opus 5.5), 2026-10-13부터 |
+| 이전 | Claude(10-11 ~ 10-12) → Codex `gpt-6-astra`(10-12 ~ 10-13) → Claude |
+| 통합 브랜치 | `fix/store-update-continuity` (로컬 전용, 원격에 push하지 않음) |
+| 통합 작업 공간 | `C:\GitRepositories\my-capture-codex` |
+| 백업 | `backup/pre-gif-rewrite-2026-10-13` (GIF 이력 제거 직전 상태) |
+| 원격 main | 9a35763 = Store 4.1.1 소스 (PR #76) |
 
 **소통 규칙**
+1. 오케스트레이터만 §0~§4를 고칩니다. §7 로그는 아래로 추가만 합니다.
+2. 로그 한 줄에는 날짜·담당·한 일·결과를 평이한 한국어로 적습니다. 커밋은 7자리로 적고, 명령은 실패했거나 재현에 필요할 때만 적습니다. 세션 번호·PID·창 번호는 적지 않습니다.
+3. 넘길 때는 §6 체크리스트를 따릅니다. 사용자 지시가 이 문서와 다르면 사용자 지시가 우선이고, 그 차이를 §7에 남깁니다.
 
-1. 오케스트레이터만 §0 표와 §3 상태를 고칩니다. 작업 이력은 §8 로그에 **아래로 추가만** 합니다. 기존 줄은 지우지 않고, 바뀐 사실은 새 줄로 정정합니다.
-2. 커밋·테스트·빌드·사용자 결정이 생기면 그때마다 §8에 날짜, 커밋 SHA, 명령, 종료 코드, 결과를 한 줄로 남깁니다.
-3. 오케스트레이션을 넘길 때는 §9의 체크리스트를 끝내고 §0의 "현재 오케스트레이터"를 바꾼 뒤 커밋합니다. 받는 쪽은 §8 마지막 항목부터 읽고, 받았다는 줄을 §8에 남깁니다.
-4. 사용자 지시가 이 문서와 다르면 사용자 지시가 우선합니다. 다르게 처리한 내용은 §8에 기록합니다.
+## 1. 목표와 상시 규칙
 
-## 1. 목표와 사용자 요청 이력
+사용자는 MyCapture(Windows 11 WPF .NET 10 캡처 앱, Microsoft Store 전용)를 실제 PC에서 테스트하며 라운드마다 피드백을 줍니다. 테스트 PC는 3440×1440 울트라와이드와 세로 보조 화면(768×1366 가상 디스플레이)을 함께 씁니다. 목표는 감성품질(UI·UX·사용성)과 **성능**이 만족스러운 빌드를 Store에 내는 것입니다. 사용자는 성능을 반드시 확인하라고 했습니다.
 
-사용자는 MyCapture(Windows 11 전용 WPF .NET 10 캡처 앱)를 직접 실기 테스트하며 라운드마다 피드백을 줍니다. 최종 목표는 **실기 테스트에서 감성품질(UI·UX·사용성)이 만족스러운 빌드**를 만드는 것입니다. 그다음 사용자가 요청하면 PR로 main에 넣습니다.
+- **문구:** 레이블·버튼·상태는 명사형(저장, 저장 중, 저장됨)이고, 문장은 합니다/하십시오체입니다. 해요체·느낌표·감탄사·이모지와 핀테크식 말투는 쓰지 않습니다. 새 문자열은 `Strings.resx`와 `Strings.en.resx`에 같은 키로, 관련 항목 바로 뒤에 넣습니다.
+- **디자인:** 동종 앱(Snipping Tool, ShareX, PixPin, Snipaste, Snagit)처럼 담백하게 만듭니다. 고급 브랜딩이나 구호형 카피는 쓰지 않습니다. 대화상자는 `[확정][취소]` 순서이고, 결정 묶음마다 주 동작은 하나입니다.
+- **브러시:** 공유 테마 브러시를 제자리에서 바꾸거나 애니메이션하지 않습니다(WPF 렌더 스레드 충돌 원인). 모션은 FluidMotion 토큰을 쓰고 Windows 애니메이션 끄기 설정을 따릅니다.
+- **삭제:** 휴지통은 사용자가 라이브러리에서 직접 지운 캡처·폴더에만 씁니다. 앱이 만든 파일은 직접 삭제합니다. 테스트는 가짜 휴지통을 씁니다.
+- **실제 데이터 보호:** 앱이나 테스트 호스트를 실제 사용자 데이터(`%APPDATA%\MyCapture`, Store LocalState)로 실행하지 않습니다. 항상 `MYCAPTURE_DATA_ROOT`를 임시 폴더로 지정합니다. 사용자가 실행한 MyCapture는 종료하지 않습니다.
+- **검증:** 성능에 닿는 변경은 전후 수치(중앙값, 최악값, 회차, 부하)를 남깁니다. 자체 검사 판정을 느슨하게 바꿔 통과시키지 않습니다.
+- **원격·Store:** push·PR·병합·Store 제출은 사용자가 요청할 때만 합니다. Partner Center 설정 변경도 사용자 승인을 받습니다. ExecutionPolicy는 바꾸지 않습니다. 파일 영구 삭제나 휴지통 비우기는 사용자에게 맡깁니다.
 
-| 라운드 | 사용자 요청 (요약) | 결과 |
-|---|---|---|
-| R0 | `--selftest-ux-review` 간헐 네이티브 크래시(0xC0000409, wpfgfx_cor3 AV) 원인 규명. 제약: ExecutionPolicy 변경 금지, 사용자의 MyCapture 종료 금지, 명령·종료 코드·근거로 보고 | 원인 규명. 공유 SolidColorBrush를 제자리에서 다시 칠하면 WPF 합성 엔진의 `CPtrMultisetBase` 정렬 플래그 버그 때문에 리스너가 남아 UAF가 발생. 브러시 교체 방식으로 수정. **PR #74 열림, CI 통과, 미병합** (`fix/theme-brush-swap-crash`, 커밋 753773f). 기록: `docs/maintenance/2026-10-11-ux-review-native-crash.md` |
-| R4 | 실기 피드백 6개: 폴더 저장 칩, 편집기 Ctrl+C = 완료, 단계 번호, 폴더에 넣은 캡처, 출처 메타데이터, "화면 고정" → "핀", 캡처 안내 | 완료(70aeca6 ~ f58e2a7). 단계 번호는 유지하기로 결정 |
-| R5 | 토글에 애니메이션이 없음, 감성품질이 낮음, 동영상 편집기 저장·내보내기 위치와 강조, 엑셀 표 F3 핀 모양, VS Code 코드 핀 모서리. 그리고 "Astra에게 감성품질 조사를 맡겨 결과를 받아올 것" | 완료(803d727, 6ce6d3c). Astra 조사 보고서: `docs/handoff/astra-ux-audit-2026-10-11/report.md` (17개 항목) |
-| R6 | "다고쳐": Astra 17개 항목 전부 수정 | 17개 완료·통합. Codex가 ⑫ 아이콘과 추가 라이브러리 모션 WIP를 완성하고 전체 검증·새 Release 실기 빌드까지 완료(§3) |
-| R7 | "자르기를 선택해야 화면회전이 가능한건 납득하기 어려운 배치구성" | 일반 편집 화면에 왼쪽·오른쪽 회전 노출, 최소 창에서 명령·모든 도구 표시 보장. 전체 검증 및 QA7 Release 빌드 완료(87192d8) |
+## 2. 현재 상태 (2026-10-13)
 
-**다음 사용자 접점:** 새 실기 테스트 빌드를 전달하면 사용자가 테스트하고 다음 피드백을 줍니다. 사용자는 "빠르게 대응"을 원합니다.
-
-## 2. 저장소·브랜치 지도
-
-- 저장소: `C:\GitRepositories\my-capture`, 원격 `sukwoo0711-maker/my-capture`, 기본 브랜치 `main`
-- **메인 체크아웃**(`C:\GitRepositories\my-capture`)은 `feat/library-workspace-aac1a031`에 있습니다. 여기에는 다른 세션의 미커밋 변경이 있습니다(README, CONTRIBUTING, docs/market, docs/design/visual-identity-2026-10-11, AGENTS.md). **건드리지 마십시오.**
-- **원 통합 브랜치** `fix/realdevice-qa-round4`
-  - 인계 당시 구성: `origin/main`(dbaff2f) + PR #74 커밋(753773f) + R4~R6 커밋 37개 + 이 인계 문서 커밋. 이후 R7·Store 설명·CI fixture 수정을 포함해 최종 `75dc4e3`까지 push했고 PR #75로 main에 squash 병합했습니다.
-  - 현재 Store 소스는 `release/store-4.1.0`의 `3994219`, 최신 상태 기록은 `chore/store-4.1.0-handoff`입니다. 원 통합 브랜치는 보존했습니다.
-- Claude 세션의 작업 공간 `C:\GitRepositories\my-capture\.claude\worktrees\beautiful-spence-49d55b`는 인계 때 detached HEAD로 두었습니다. 사용하지 마십시오.
-- 하위 작업 worktree(`.claude\worktrees\agent-*`): 통합이 끝난 브랜치(qa4-*, qa5-pins, qa6-settings, qa6-feedback, qa6-library-2, qa6-theme, qa6-editors)는 참고용입니다. WIP 두 개는 §3.3에 있습니다. 정리(삭제)는 사용자 확인 후에만 합니다.
-
-## 3. 현재 상태 (2026-10-12, Store 4.1.0 공개 완료, 최적화 포함 4.1.1 심사 제출 완료)
-
-### 로컬 검증 완료 — Store 교체 업데이트와 기존 테스트 데이터 보존 (2026-10-13)
-
-- 사용자 답변으로 **Store 버전과 테스트 실행본 데이터 모두 보존**하는 범위를 확정했습니다. 같은 패키지의 업데이트는 제거 없이 새 버전으로 교체하며, 별도 `%APPDATA%/MyCapture`의 테스트 데이터는 복사·병합하는 경로를 추가합니다. 사용자 지정 테스트 데이터 루트는 직접 선택할 수 있도록 합니다.
-- 기존 검증된 4.1.2 소스·실행 파일·MSIX는 아래 경로에 그대로 보존하며, 새 변경은 아직 해당 바이너리에 포함되지 않았습니다. 기존 폴더를 Explorer에서 열고 경로를 확인했습니다. 설치된 Store 패키지의 실제 버전은 4.0.3.0/PFN `sukwoo0711.MyCapture_n98e1tgx2qxb2`입니다.
-- 업데이트 진행 콜백 격리·예외 복구·접근성 도움말 수정은 `9305935`로 통합했습니다. worker 집중 App12/12·Localization13/13 PASS, 직접 diff/전후 PNG 및 독립 검토 완료. 같은 LocalState 기본/외부 captures 보존 회귀는 `8ae4956`, worker Core2/2 PASS입니다. 전체 통합 검증은 최종 이관 코드 뒤에 실행합니다.
-- 이관 계약 `b3bc471`: 원본 읽기 전용, 파일 복사·해시 검증, 기존 Store 항목 보존, 중복·충돌·중단 복구, 사진/영상/주석/폴더 보존. Core는 현재 설정을 저장하지 않으며 이전 설정 백업 경로만 반환합니다. 선택한 설정은 UI의 적용 전 초안으로 불러오고 기존 적용 절차를 사용합니다. Store 저장 위치·현재 라이브러리 정책·Store 관측·자격 증명은 유지합니다.
-- Core/API·회귀는 기존 icons worktree, App/설정/이관 화면·실기 호스트는 기존 tutorial_ui worktree, 독립 검토는 tutorial_asset에 배정했습니다. CPU/native 검사는 직렬입니다. 실제 명령·결과·승인 범위는 `artifacts/store-update-continuity/development-log.txt`에 기록합니다. 현재 Store 업로드·설치/제거는 수행하지 않았습니다.
-- 이관 Core `ec76558`·`c170b08`·`35e0cee`, App/복구/설정 보호 `cfc19b8`·`900a2e8`·`90f35a9`·`309a445`·`701c9e7`, 보관 폴더 현지화 `6cff914`를 통합했습니다. 제품 소스 **`93000688503b4a5c07245e8b1dc28aee29100170`**, 전체 Debug 경고0/오류0, **Core1153 PASS/App2387 PASS/실패0/기존 조건부11 skip**입니다. 처음 게시 명령의 전역 RuntimeFrameworkVersion 옵션은 Windows SDK 중복 NU1505로 실패했고 기존 PublishProfile+KnownFrameworkReference pin으로 수정한 게시 명령은 exit0입니다. 원본 실패와 수정 명령을 보존했습니다.
-- **QA15 실행 파일:** `artifacts/qa15-store-update/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. DLL SHA256 **`955B98F7CFD40B01911BBA4EC8577378871077A041DF713B31DE38CAD293B963`**. 독립353파일/381166645B/deps263누락0/제품4DLL/GIF76개 SHA·receipt 대조 PASS입니다. UX 자체 검사 session14945/93f948 exit0 RESULT PASS, 한영3테마 최소창 최종 렌더 검사810788 exit0입니다.
-- 사용자가 기존 앱을 종료했고 재조회3a6230에서 프로세스 없음 확인했습니다. 물리 Escape로 이전 화면자동화가 중단된 뒤 사용자가 명시적으로 재허용했습니다. 실제 QA15 DLL을 로드한 격리 host로 사진10개+기존2개, 설정 초안→Apply, 원본/기존파일/현재Queue/자격증명/Store필드 보존을 확인했습니다(session24829/4ac051 exit0). 설정 적용 전 snapshot의 SHA는 원래 백업과 일치합니다. 64MiB 합성 payload의 활성시간 표본 범위438~591ms/경계 포함 heartbeat최대90.33ms입니다. 128MiB 두 번째 host는 같은 원본 재실행에서 Imported0/Skipped10/최종12개를 확인했고 session70892/af4720 exit0입니다. 취소 버튼 시도는 복사가 먼저 완료되어 실제 취소 검증으로 집계하지 않습니다.
-- **최종 8종 gate 8/8 PASS:** 사용자 조작 중단 확인 뒤 진단 준비·CapsLock 관측을 `73099c8`, trace 읽기/쓰기 공유를 `b18a8c3`로 보완했습니다. root 통합 테스트 프로젝트 빌드 및 집중14/14 PASS(`e590e8` exit0), 독립 소스 검토 완료. 이전 고정 소문자·전경 상실·KeyDown P 기록 누락 실패는 보존했습니다. 읽기 공유가 기록 writer를 막는 경계는 회귀 검사로 재현했고, 이전 실패 당시의 stderr는 없어 해당 한 번의 예외 원인 자체는 미확인입니다. 입력 전경 안전 조건·정확한 키 순서·텍스트 검사는 유지했습니다. CapsLock은 원래 ON이며 변경하지 않았습니다.
-- **사용자 전달 최종 실행 파일:** `C:/GitRepositories/my-capture-codex/artifacts/qa15-store-update-ready/MyCapture.exe`. 제품 소스 **`b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6`**, DLL SHA256 **`0AD5DBAB85B0F0D5A2146D6AA12BD61407CC5FD8702DF232A7197E590ABF1592`**. fresh publish6833fd exit0, 독립 a6d141 exit0/353파일381178913B/deps263누락0/제품4DLL x64R2R/Core·Desktop10.0.11/GIF76 일치. 전체 회귀·실기 이관을 한9300068 이후 차이는 진단·전용검사·인계 문서만입니다.
-- 최종 native 실제 session40894/`3286d2` exit0, **8/8 PASS**. 출력은 `%LOCALAPPDATA%/Temp/mcux/q15-a074c144/checks/20261012T172001Z-6573b90fbb964a0bb222a65c8579f542`, receipt는 `artifacts/store-update-continuity/q15-a074c144-native-receipt.json`입니다. 실제 실행64초, 캡처·셸·고급 캡처·설정·OCR·녹화·동영상 편집·hotfix UX 모두 통과했습니다. 탐색기87166948에서 최종 폴더를 열고 MyCapture 응용 프로그램을 선택한 화면을 확인했습니다. 기존 산출물·작업 사본은 보존합니다.
-- 현재 완료 범위는 로컬 실행본 구현·검증·전달입니다. 새 변경을 포함한 Store MSIX 업로드·심사 제출·실제 Store 설치 교체는 아직 수행하지 않았습니다. Store에서 시작한 설치 진행은 Store가 표시하고, 앱에서 시작한 업데이트는 앱 종료 전까지 진행 상태를 표시합니다. 실제 사용자 Store·테스트 데이터에 이관을 실행하지 않았으며 격리 합성 데이터로 보존을 검증했습니다.
-
-### 다음 배포 4.1.2 — 작성·필수 검사·완성 파일 실기 성능 검사 완료
-
-- 사용자 요청: 다음 배포 버전을 작성하고 완료된 파일로 반드시 실기 성능 검사를 진행합니다. 버전은 **4.1.2 / Store 4.1.2.0**이며 QA14의 38기능·한영76GIF, QA11 작업 보호·복구·평가·업데이트 안내 및 QA12 최적화를 포함합니다. 변경 내역은 `docs/releases/4.1.2-release-notes.md`입니다. Store 업로드·심사 제출은 이번 요청에서 수행하지 않았습니다.
-- 제품 소스는 **`61e19e3e287c41abca92b70332c6ceb1413339bf`**, 보존 브랜치는 `release/store-4.1.2-source`입니다. 기록 브랜치의 이후 문서 커밋과 배포 소스를 구분합니다. 메타데이터는 `a053f8b`, 진단 개선은 `de5d777`·`7bd4026`·`f8f5977`·`61e19e3`입니다. 합성 입력 창의 IME/응답 관측, 제한된 전경 대기 및 영상 입력/릴리스 프레임 측정 범위를 보완했으며 제품 UI와 기존 검사 기대값·임계값은 유지했습니다. 독립 소스 검토 완료.
-- Debug 빌드 `5c62d4` exit0 경고0/오류0. 메타데이터 통합 `a053f8b`의 전체 회귀는 **Core1116 PASS**, **App2375 PASS/실패0/기존 조건부11 skip**(`1b7f22`·`5292ec` exit0)입니다. 그 뒤 진단 변경은 통합 빌드와 최종 실제 패키지8종으로 검증했습니다. TRX 결과별 집계 `be2916` exit0입니다.
-- `build/package.ps1 -Version 4.1.2 -StoreOnly` session86222/`77a218` exit0, **8/8 PASS**, publish357파일. 최종 실행은 `artifacts/store-publish/4.1.2/packaged-self-tests/20261012T142357Z-6152f3d64c4e419ebe67d497ca397416/`입니다. 앞선 전경 획득·합성 영문·영상302프레임·외부 붙여넣기 실패4회는 `4.1.2-attempt1-*`~`attempt4-*`에 모두 보존했습니다. 최종 외부 Ctrl+V에서 Control=True, ContainsImage=True, GetImage320×180 및 드롭까지 확인했습니다. 앞선 간헐 실패의 정확한 원인은 확정되지 않았습니다.
-- **실기 실행 파일:** `C:/GitRepositories/my-capture-codex/artifacts/store-publish/4.1.2/publish-win-x64/MyCapture.exe`. self-contained x64/R2R·Core/Desktop10.0.11, DLL SHA256 **`7CA62B8EF5C5FEEEBA389B80FB5E082AFE8930ED4A6D2D6D815F5533A7841F51`**. 테스트에는 폴더 전체가 필요합니다. **Store 후보:** `artifacts/store/4.1.2/sukwoo0711.MyCapture_4.1.2.0_x64.msix`, 236214038B, SHA256 **`1BD2D2B22D15416105EB05F06903B2487A162F65D6BCEB1BF124034725B12644`**. 생성 session38119/`29cbf6` exit0. Store 서명 전의 업로드용 파일이며 로컬 설치는 수행하지 않았습니다.
-- 독립 artifact 검사 `cd30dc` exit0: exact clean source/버전/제품4DLL R2R, publish357파일 bytes·SHA, deps263/누락0, GIF76파일 원본·receipt·배포 SHA와 개별3MiB 예산, 8종 report/result SHA, MSIX418entry/내부publish357파일·identity·minOS·startup disabled 확인. 실기 검사 후 전체 publish/MSIX 재대조 `0ab088` exit0. 근거는 `artifacts/release-4.1.2/independent-artifact-review.md`와 `performance-summary.json`입니다.
-- **완성 파일 실기 측정:** Ryzen7 9800X3D/메모리61.6GiB/Windows11 10.0.26200, .NET/WPF10.0.11에서 직렬 실행했습니다. root matrix session66405/`d84bbf` exit0(10개 명령), 별도 Search CPU `de55e8`·실제 Gallery session94643/`7e1cbd` exit0, 실제 캡처 coordinator host session98691/PID27048/`5b239c` exit0입니다. 모든 측정은 위 최종 DLL SHA를 사용했습니다.
-- 실제 화면에서 Sky 입력→선택 화면→편집기→취소를3회 완료했습니다. 선택 화면 표시 **366.65/273.64/300.85ms**, 선택 후 첫 편집기 표시 **244.70/133.30/113.22ms**입니다. 회차당 native mouse3개/drag1개이며 자동 인식된 창 범위2566×1016이 편집기에 표시됐습니다. 작은 드래그 영역의 정확성·연속 물리 마우스 지연은 이 입력 표본으로 확인되지 않았습니다. 계측 host는 App 시작/전역 단축키/저장/클립보드/트레이를 제외하며 캡처 픽셀·창 제목·URL을 파일에 저장하지 않았습니다.
-- **성능 잔존 한계:** 10만 자 여러 줄은 첫 layout576.13ms/선택 안정화2287.71ms, 긴 한 줄은1023.82/1329.10ms. 100만 자 여러 줄은 전체29.87초에 내용·undo/redo·commit 보존까지 완료됐지만 선택 안정화에 **20.87초**, 그 단계 누적 managed allocation4.4135GB가 필요했습니다(peak private258MB와 별개). 이전60초guard는 이번에 재현되지 않았으며 긴 지연은 남았습니다. OCR100만 자 여러 줄의 첫 결과 적용3653.11ms, 후속 전체 선택·안정화 약6.08ms입니다.
-- 8K entropy 이미지·1000주석/10만 ink points의 편집·undo/redo 묶음 최대135.87ms, heartbeat최대339.76ms, 원본/복구pixel SHA동일. 4K·1만 주석은 편집 묶음 최대291.67ms/heartbeat최대657.93ms입니다. 이 editor fixture는 HWND를 표시하지 않는 실제 제품 경로의 viewport 작업입니다. 실제 Gallery1만 항목/항목당OCR16384자 검색은 needle handler/render callback 중앙76.41/192.25ms, 정렬 callback최대865.91ms였습니다. 정확성 통과와 응답 시간의 평가는 구분합니다.
-- 영역 선택 synthetic desktop/HWND 부하에서 일반240개·burst7680개 입력 모두 유효한 최종 상태를 유지했습니다. 4.1.1과4.1.2의 일반 drag handler P95는0.0785/0.0747ms, dispatcher queue P95는0.1713/0.2142ms입니다. 큰 회귀는 이 한 쌍의 workload에서 재현되지 않았고 물리 표시 지연과는 다릅니다. 텍스트 복사 GIF40초 실제 decoder/player: decode143.05ms, 움직임callback 중앙45.13/P95 51.36ms, skipped43, 종료 후 player정지/image해제. 모든 프레임의40ms 표시를 의미하지 않습니다.
-- 정확한 명령·cwd·종료코드·실패·receipt는 root `artifacts/release-4.1.2/development-log.txt`, 검색은 기존 `C:/GitRepositories/my-capture-edit-recovery/artifacts/release-4.1.2/search-probe/verification-log.md`입니다. 기존 산출물·임시 자료·작업 사본과 사용자 프로세스를 보존했습니다. 측정용 소유 창은 모두 종료했습니다.
-
-### 부드러운 GIF·기능별 사용법 — QA14 구현·검증·전달 완료
-
-- 사용자 피드백: GIF의 움직임을 부드럽게 하고 기능마다 별도 튜토리얼을 만듭니다. 기준2bb6cd6/제품b4ae87e/QA13, root `feat/feature-tutorials`. 기존11프레임 한영 GIF와 설정/도움말 화면을 `artifacts/feature-tutorials/`에 AS-IS로 복사했습니다.
-- 움직임은25fps(4cs)와 가감속 cursor/drag, 읽기 구간은 hold로 구성했습니다. 텍스트 복사 pilot으로 화질·연속성·파일/프레임 메모리·실제 재생을 검토한 뒤 기능별 확장을 완료했습니다. 사용법 창의 지연 로딩·취소·모션 설정·정적 안내를 유지합니다.
-- 선택 질문에 추가 답변이 없어 기능별 사용 흐름을 기본으로 진행합니다. 현재 F1의42개 행을38개 기능별 GIF(한영76파일)로 연결합니다. 텍스트 복사의 두 진입, Q/W회전, I/O트림은 각각 같은 기능으로 묶고 핀 닫기는 기본 핀 사용법에 포함합니다. 전역 단축키는 현재 설정값을 표시합니다. 새 설치의 선택 단축키 미지정과 이미지 편집기 Ctrl+C의 완료 동작을 확인했습니다.
-- 텍스트 복사 pilot은156프레임/11.2초, ko1,908,377B/en1,986,202B, 디코딩 프레임35,942,400B입니다. root가 실제 QA13 decoder/player로40초 재생하고 화면을 확인했습니다. session6229/`851d95` exit0, callback 중앙41.06ms/P95 54.29ms, 닫기 후 player정지/image해제. GIF 모션 구간25fps이며 측정값은 물리 표시 지연이 아닙니다. 한영 디코딩 contact sheet 직접 검토 완료, 기존 QA13 payload는 보존했습니다.
-- 공통 renderer API `67f956e`를 `a606a69`로 통합했습니다. 기존 edit-recovery는 공통 생성기·캡처9개, a491은 공통 사용법 창·기능 선택·F1/설정 연결과 라이브러리/핀12개, aeae는 이미지/영상17개 기능을 담당합니다. 파일 소유권을 나누고 CPU/native 실행은 직렬로 관리합니다. 기존 실패한 Pro/Antigravity 경로는 반복하지 않고 동일한 공식 native 경로를 재사용합니다. 원격 배포·삭제는 범위에 없습니다.
-- 공통 UI를 `2e29e86`~`18dfe9f`로 통합했습니다. 38개 기능 선택, F1 42행·설정 단축키13개 사용법 진입, 현재 키 설정, 한영 단계 설명을 제공합니다. 독립 검토에서 찾은 동시 디코더·소유 창 이관·핀 클릭 통과 해제 안내를 수정했습니다. 전역 gate가 실제 디코드를 한 개씩 실행하고 취소된 대기는 건너뜁니다. worker 집중 App43/43·현지화13/13 PASS, 독립 재검토 완료. 이전 QA13 GIF를 사용한 UI 예비 검토 session13337/`860b26` exit0 CLOSED에 이어 아래 QA14 최종 자산 실기 검토를 완료했습니다.
-
-- 최종 제품 소스는 **`0fef3b302dea6ff2e09aa923165731fe52a3325f`**입니다. 38기능/한영76GIF를 통합했으며 각각640×360, 11.0–11.2초, 움직임25fps입니다. 총129,867,958B, 개별 최대3,014,188B/156프레임/35,942,400B decoded payload입니다. root 한국어38개와 독립 영어38개 시각 검토 완료. 녹화 버튼 전환·모자이크/흐림·회전fit·폴더 클릭/선택 좌표·핀/썸네일 비율을 교정했습니다. 실제 decoder/player receipt와 원본/복사 SHA76개 독립 대조`dde6e5` exit0 PASS. 경로는 `build/tools/TutorialGifGenerator/review-smooth-final/selected-source-manifest.json`입니다.
-- 통합 Debug `f1a0d5`/`3f7e1a` exit0 경고0/오류0. 첫 Core1104 PASS/1FAIL은 receipt의 SHA 내부1809를 Windows 지원 문구로 오판한 기존 정규식 문제였습니다. 원본 근거와 탐색 범위를 유지하고 ASCII 토큰 경계·실제 지원 문구/SDK/해시/한국어 인접 표현 회귀11개를 추가했습니다(`638836f`). 독립 재검토 완료. 최종 Core **1116/1116 PASS**, session23042/`d60d4b` exit0. 전체 App **2375 PASS/0 FAIL/기존 조건부11 skip**, session50896/`c74213` exit0,6분36초입니다.
-- **QA14 실기 파일:** `C:/GitRepositories/my-capture-codex/artifacts/qa14-feature-tutorials/MyCapture.exe`. self-contained win-x64/R2R·Core/Desktop10.0.11, 표시 버전 `4.1.1+0fef3b302dea6ff2e09aa923165731fe52a3325f`. publish session37348/`3d46e6` exit0, DLL SHA256 **`EB14DB0701149FB09C78174E57C621C41F23E610DF77F387FC13FCBA98A90D6D`**. 독립353파일/deps263누락0/제품source차이0/GIF76개SHA일치(`4ee5a1`), x64/R2R(`2d0d26`) PASS. 첫 검증 도구의 PowerShell 해시테이블 합계 집계 오류는 pscustomobject로 고쳐 재검사했으며 실패 근거를 보존했습니다.
-- UX 자체 검사 session29554/PID45868/`78aa0f` exit0·RESULT PASS, receipt `artifacts/next-product-readiness/ux-8af2d206/`. 밝고 어두운 F1, 고대비 단축키 설정 PNG 직접 확인. 실제 QA14 DLL/최종 GIF를 사용하는 격리 WPF host에서 Sky로 텍스트 복사 자동 재생·정지·다시보기, 회전/트림/핀 클릭 통과 전환, Esc, 별도 텍스트 입력 사용법 재열기·닫기를 확인했습니다. session37840/PID31628/`b2040b` exit0 CLOSED,191338ms. `native-final-ko.json` 최종 visible/frames/loading/playing 모두false 또는객체수거, runtime10.0.11·DLLSHA일치(`dac119` exit0). 합성 자료로 사용법 재생을 검사했고 사용자 프로필·클립보드 거래는 수행하지 않았습니다.
-- 기존 Explorer443353524를 QA14 폴더로 이동해 화면의 경로를 확인했습니다. 각 기능 GIF는 그 아래 `Assets/Tutorials/`에 있습니다. 실제 명령·실패·TRX·native 결과·전후 자료는 `artifacts/feature-tutorials/`에 보존했습니다. 재사용한 작업 사본과 모든 생성 시도/QA12/QA13도 보존했습니다. 이번 후속 작업의 Store 재배포·push·PR·병합·삭제는 없습니다.
-
-### 텍스트 복사 GIF 사용법 — QA13 구현·검증·전달 완료
-
-- 사용자 요청: 단축키의 텍스트 복사 같은 기능을 GIF로 쉽게 이해할 수 있게 만듭니다. 첫 적용은 텍스트 복사이며 설정 단축키와 F1 도움말의 해당 항목에서 엽니다.
-- 기준 `a8ef489`/제품 `33f6652`, root `feat/text-copy-tutorial`, 최종 제품 소스 **`b4ae87e2fab277e6db9234c4fc7818153c8fbed6`**. UI `bc25638`, GIF `57ef460`, 일반 도움말 행 회귀 수정 `b4ae87e`를 통합했습니다. 실제 흐름은 캡처 선택 중 T → 영역 드래그 → 자동 인식·복사 → Ctrl+V입니다. 별도 CaptureText 단축키는 기본 미지정이며 현재 저장된 사용자 설정을 안내에 반영합니다.
-- 설정 → 단축키 → 텍스트 복사 옆 **사용법 보기**, F1 도움말의 텍스트 복사/선택 중 텍스트 복사 행과 검색 결과에서 같은 창을 엽니다. 한영 GIF는640×360/11프레임/11.2초, ko138,368B/en144,217B, 디코딩 프레임 저장2,534,400B입니다. 실제 제품 선택 화면과 합성 예제의 렌더이며 사용자 화면·클립보드를 녹화 자료로 사용하지 않았습니다. 생성기와 디코딩한 검토 이미지는 `build/tools/TutorialGifGenerator/`에 보존합니다.
-- GIF 읽기·해독은 열 때 background STA에서 수행합니다. 재생/일시정지/다시보기, 정적3단계, 누락·손상 fallback, 시스템 모션 설정에 따른 초기 정지·설정 변경 시 일시정지를 지원합니다. 비활성화·최소화에서 정지하고 닫기·숨김·캡처 시작에서 취소·타이머·프레임을 해제합니다. decode 중 닫기 경쟁도 검사했습니다.
-- 첫 전체 App은2358 PASS/5 FAIL/11skip였으며 원인은 일반 도움말 행을 불필요하게 감싼 구조 변경이었습니다. 일반행의 직접 TextBlock 구조를 복원하고 기존 assertions를 유지했습니다. 최종 Debug 경고0/오류0(`e211c7`), 확장 집중31/31(`9d6416`), Core전체1105/1105(`8dd028`) PASS. 최종 전체 App은session8096/`c2f014` exit0, **2363 PASS/0 FAIL/기존 조건부11 skip**입니다. UI 독립 읽기 검토와 수정 후 기존 행 계약 재검토 완료.
-- **QA13 실기 파일:** `C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial/MyCapture.exe`. self-contained win-x64/R2R·Core/Desktop10.0.11, 표시 버전 `4.1.1+b4ae87e2fab277e6db9234c4fc7818153c8fbed6`. publish `17e2ba` exit0, DLL SHA256 **`73916DA5553DBB7D3A857BEF99D7675C9519CFD6400DDF3929D655C645D69D72`**. 독립279파일/deps263누락0/source차이0/GIF두개원본SHA일치(`e6f499`), x64/R2R(`5c91b1`) PASS.
-- 실제 제품 창·자산을 사용하는 격리 WPF host에서 Computer Use로 두 도움말 진입점, 자동 재생, 일시정지·재생·처음으로 다시보기·Esc·닫기를 확인했습니다. session46730/PID62020/`5e4cdf` exit0, 최종 두 튜토리얼 객체 GC 수거·프레임/타이머 해제·프로세스 종료. 사용자의 클립보드·프로필과 앱은 조작하지 않았습니다. UX 자체 검사 session94042/`f859f0` exit0·RESULT PASS, 실제780×560 설정 AS-IS/TO-BE 및 밝은/어두운 테마 직접 확인. 근거는 `artifacts/text-copy-tutorial/`과 UX receipt `artifacts/next-product-readiness/ux-2e223c72/`입니다.
-- 기존 작업 사본 a491(UI)·edit-recovery(자산)를 재사용하고 모든 실패·시도·산출물을 보존했습니다. 초기 Pro tunnel_unavailable/Antigravity validation_failed 근거를 재사용해 허용된 native Sol worker로 진행했습니다. root가 최종 통합·검증·인계를 완료하고 기존 Explorer를 QA13 폴더로 이동해 실제 경로를 확인했습니다. Store 재배포·push·PR·병합·파일 삭제는 없습니다.
-
-### 최악·과부하 조건 성능 개선 — QA12 검증·전달 완료
-
-- 사용자 요청인 10만 자 이상 텍스트, 대량 검색, 4K/8K 이미지·밀집 주석·PNG 초안, 영역 선택 입력 폭주를 측정하고 병목5종을 수정했습니다. 기준 QA11 소스 `73e0293`(제품 `2fc7fa4`), 최종 제품 소스 **`33f6652a9a4f6cc63862bf06e846c438e942ab27`**. 이후 커밋은 재현 도구와 기록입니다. 기존 작업 사본3개를 재사용했고 사용자 앱·프로필·클립보드는 조작하지 않았습니다.
-- 같은 PC(Ryzen7 9800X3D, RAM 약61.6GiB), Core/Desktop10.0.11에서 부하를 직렬 실행했습니다. 텍스트·OCR·PNG는 각 한 쌍, 검색·viewport 렌더는3회 중앙값입니다. 원본/실패/환경/receipt와 최종 `performance-summary-final.json`은 `artifacts/extreme-load-20261012/` 및 worker LOG에 보존합니다. 이전 incomplete `performance-summary.json`은 집계 실패 자료입니다.
-- 긴 텍스트의 입력 TextBox가 약7만DIP로 커지던 것을 화면 안의 스크롤 viewport로 제한하고 scrollbar 폭을 보정했습니다. 10만 자 여러 줄 삽입 후 첫 WPF 배치 **4402.58→486.71ms**, UI 누적 할당 약3.43GB→42.75MB. 전체 내용·문서Rect·줄바꿈·Undo·resize 유지. `text-before-100k.png`/`text-after-100k.png` 직접 확인 완료.
-- 읽기 전용 OCR TextBox에만 InputMethod 연동을 끊어 WPF TSF의 전체 선택 범위 재포맷을 줄였습니다. 자동 전체 선택·복사·UIA 유지, 편집 IME는 그대로입니다. 10만 자 표시/선택/스크롤/재열기/닫기 전체 **7527.39→1493.06ms**, 100만 자 기준60초guard→7788.40ms PASS. **100만 자 초기 표시7.37초는 남습니다.**
-- 검색당 matcher를 한 번 준비하고 불필요한 필드 검색·결과 생성을 줄였습니다. 항목당 OCR16,384자의1만 항목·8연속검색 **209.55→166.72ms**, 제목 검색14.63→2.45ms. 실제 Gallery 검색 handler 합계329.19→272.98ms이나 전체 창 시험은8.93→9.39초였습니다.
-- 밀집 잉크의 점별 geometry 객체를 StreamGeometry로 바꿨습니다. 4K/8K × 주석1천/1만 개·펜10만 좌표를 동일1280×720 viewport에 그린 시간 **228→125, 341→219, 205→103, 277→190ms**. 첫그림 pixel SHA4조건 동일, 1천 주석 렌더당 누적 할당32.8→5.2MB. 원본·초안·Undo·복구와 stroke 모양 유지. 전체4K/8K export 시간 측정과는 다릅니다.
-- 큰 PNG 저장: WPF 인코더의 원본 이미지 공유 잠금을 background STA의 독립 픽셀 backing으로 분리했습니다. 압축하기 어려운8K 이미지의113,458,630B PNG 저장과 겹친10회 편집 중 최악 응답 **2081.12→120.93ms**, Dispatcher heartbeat 최대2083.44→334.99ms. 원본·복구·PNG·viewport SHA 동일, alpha/palette/DPI/metadata/cache 포함 집중33/33 PASS. PNG 인코딩 자체는 약2초이며 일부 메모리·저장 flush·heartbeat는 개선되지 않았습니다.
-- 영역 선택은 독립 producer240배치×32=7,680입력/단계와 마지막 포인터 렌더 일치 PASS. hover/drag 전달 대기P95 0.298/0.145ms, 입력 handler P95 0.0055/0.0035ms. 4K/8K software raster도 측정했으나 물리 DWM/input-to-photon은 미측정입니다. 이 근거로 overlay 제품 코드를 추가 변경하지 않았습니다.
-- 전체 검증: Debug `fd9311` exit0 경고0/오류0, Core session96382/`ad1e0a` exit0 **1105/1105 PASS**, App session55381/`da1d9c` exit0 **2353 PASS/0 FAIL/기존 조건부11 skip**. FDD App testhost는 설치된10.0.12, paired stress와 QA12는 명시한10.0.11입니다. 최종 TRX/UX/PID 부재 재확인 `9b1d23` exit0.
-- 최종 파일 **`C:/GitRepositories/my-capture-codex/artifacts/qa12-extreme-load/MyCapture.exe`**. self-contained win-x64/R2R·Core/Desktop10.0.11, 표시 버전 `4.1.1+33f6652a9a4f6cc63862bf06e846c438e942ab27`, publish `442fa8` exit0. DLL SHA256 **`2BF9DE6DD22F39D67BA78F26BF78739CD98142AF0F4603D877D7337C24EF81F5`**. 독립277파일/deps263누락0/source diff0/x64/R2R 확인 `d27b17`/`bcb276` exit0. UX session65934/`501f0f` exit0·RESULT PASS, 밝은/어두운 편집창 PNG 직접 확인. 실제 모니터 둘 다96DPI로 혼합 물리DPI 검사는 포함되지 않았습니다.
-- 최종 payload 재검사: tracked EditorStressProbe `f1e9d9` exit0,8K entropy 원본·PNG exact/최악 편집109.63ms/heartbeat최대302.04ms. tracked TextStressProbe OCR10만 `8e3be2` exit0 PASS. 재현 도구는 `build/tools/OverlayStressProbe`, `EditorStressProbe`, `TextStressProbe`에 보존했습니다.
-- Computer Use 실기: synthetic OCR10만 자 전체 선택·Esc 종료 후 새 편집창에서 Ctrl+End/Home, 영문·한글·이모지 입력과 Ctrl+Z를 확인했습니다. 한글·이모지 입력 후100004자→Undo100000자/원본SHA728912…DA01 동일. session93413/PID59528/`7f0872` exit0 HOLD_CLOSED, 최종 창0·프로세스 종료. Hangul keysym 미지원/Alt_R 뒤 IME Off 유지여서 **실제 TSF 한글 조합은 미확인**입니다. literal Unicode 입력과 조합 입력을 구분합니다.
-- **남은 한계:** 편집100만 자 여러 줄은 첫 배치4.76초까지 개선됐지만 편집 burst 후 전체 선택 settle에서60초guard가 남습니다. 원본100만 자 긴 한 줄의 WPF FailFast(0x80131623)는 수정본의 동일1회 시나리오에서27.53초로 전체 완료했습니다. 전체 메모리·저장시간·Gallery 창·물리 표시 지연의 일관된 개선은 확인하지 못했습니다.
-- Codex가 총괄을 유지하며 직접 소스/PNG/원본 검토 및 독립 검토를 완료했습니다. 마지막 수치·native 결과 감사 `/root/library_motion` b31ad9/2ade73 exit0 지적 없음. 기존 Explorer에서 QA12 폴더를 열고 화면을 확인했습니다. 모든 실패 자료·빌드·작업 사본을 보존했습니다. Store 재배포·push·PR·병합·파일 삭제 없음.
-
-### 다음 버전 기본 동작 보강 — 구현·검증 완료, 드래그 지연 변동은 후속 조사 필요
-
-- 사용자 “좋아. 저거 진행해. 그리고 병목현상이 없도록 최적화되었는지 다시한번 실기검토해”로 앞선 제안을 구현하도록 승인했습니다. 범위는 방해 없는 평가 초대, 삭제 휴지통 이동·복원, 앱 종료 전 작업 보호, 실제 상태에 따른 업데이트 안내, 미저장 편집 초안 복구, 사용자 주도 문제 신고·진단 정보 복사, 영역 선택을 포함한 실기 성능 재검토입니다.
-- 기준은 `d3223ef`(4.1.1 제품 소스와 최신 인계 기록), root `feat/next-product-readiness`입니다. 심사 제출된 4.1.1과 MSIX는 보존합니다. 이번 요청으로 원격 배포를 새로 실행하지 않습니다.
-- 기존 작업 사본을 재사용: `agent-a491402ad82aa2759`/`feat/next-engagement-support`는 평가·업데이트·지원, `agent-aeae29401bfb142cf`/`feat/next-recoverable-library`는 삭제·복원. 편집 복구·종료 보호는 동시 수정 격리를 위해 `C:\GitRepositories\my-capture-edit-recovery`/`feat/next-edit-recovery`를 추가했습니다. 이전 성능 조사 untracked 파일은 그대로 보존합니다.
-- root가 실제 입력/화면/성능 검사를 직렬로 관리합니다. 사용자 MyCapture 프로세스는 착수 조회에서 없었으며, 새로 나타나는 사용자 앱은 종료하지 않습니다. 개발 근거는 `artifacts/next-product-readiness/`에 기록합니다.
-- 구현 통합 HEAD `c1401a0`: 평가·업데이트·지원, 초안·종료 보호에 더해 휴지통·복원 `55bebe8/24123af`, 자동 정리·시작 복구 연결 `483ade2`, 복구 디코딩·세션 종료 보호 `b6f6cb1/47bd5f7`, 삭제 중 편집 admission `bfbd3d1`, Store 상태 계약·설정 잠금 `09101f0/8225adf`, junction 내보내기 임시 정리 `653120f`, Shell IO 예외 계약 `8f30ded`, 실제 초안 폐기 완료 후 닫기·재촬영 `c1401a0`까지 통합했습니다. 마지막 전체 Debug 빌드는 경고0/오류0 PASS이며, Core 전체1092/1092 PASS입니다.
-- 독립 검토의 자동 정리 요청 유실·삭제/편집 경쟁·복구 마커/인덱스 순서·UI 동기 저널 조회를 수정했습니다. 실제 Windows 탐색기 owned canary도 복원 후 `$I`를 남겼지만 namespace 항목은 사라졌습니다. 이에 원본 identity/bytes·`$R` 부재·namespace 부재로 실제 OS 계약을 확인한 공용 Shell canary2/2 PASS를 통합했습니다. 사용자 항목에는 조작하지 않았습니다.
-- App 첫 전체2327건 검사에서는2307 PASS/9 FAIL/11 조건부 skip을 확인했습니다. 실패는 이미지·영상 편집의 비동기 버리기/닫기3건, junction 임시 파일1건, 잠긴 파일의 Shell COM 오류가 기존 IO 복구 경계를 벗어난5건입니다. 원본·저널 보존 assertion을 유지해 모두 수정했고, 폐기 실패와 동시 종료 시 창 비활성 상태가 남는 독립 검토 지적도 수정했습니다. root 최종 전체 App 재검사 session62858/130ecc exit0에서2325 PASS/0 FAIL/11 조건부 skip, 실제 Windows Shell canary4/4 PASS입니다. QA9 self-contained x64/R2R 게시와 UX 자체 검사도 exit0/PASS이며 runtime10.0.11·263개 dependency 누락0을 독립 확인했습니다.
-- QA9 실제 편집 crash/restart 복구·종료 보호 PASS: 격리된 합성 이미지에 주석을 그린 뒤 exact owned PID를 강제 종료하고 재실행했습니다. 실제 복구 대화상자의 Recover로 주석이 복원됐고, 종료 Cancel은 편집 기능을 다시 활성화했으며 Save and close는 주석1개가 포함된 새 캡처 저장·초안 퇴역·정상 exit0까지 완료했습니다(session45357/966d31). 원본 SHA와 기존 Run-key fingerprint는 동일합니다. 진단 host는 실제 App shell/복구/저장을 사용하되 Run-key·clipboard·mutex 경계를 격리하고, 도구에서 누락된 EditorCloseDialog에만 ShowInTaskbar를 켰습니다. 원본·시험 사본은 보존합니다.
-- 실기 추가 결함 수정 — 실제 복원 목록 데이터가 있어도 공통 MenuItem 템플릿에 PART_Popup/ItemsPresenter가 없어 하위 메뉴가 표시되지 않았습니다. `06d6a0f`로 popup을 복원한 뒤 QA10 전체 검사는2242 PASS/84 FAIL/11 skip이었고84개 모두 loose XAML의 새 화살표 이름 해석 실패였습니다. helper/assertion을 유지하며 native20px 격자·1.6stroke 화살표와 명시적 속성 참조로 수정한 `2fc7fa4`를 통합했습니다. 실제 loaded popup·Right/Left·빈/로딩/항목 상태 및 기존 VideoNarrow13/13, pure loose2/2 PASS입니다. root Debug243068·QA11 publish eae1e1은 exit0이며 최종 전체 App session65745/d132df에서2327 PASS/0 FAIL/11 조건부 skip,6분36초입니다. QA11 UX 자체 검사 session61639/a91861 exit0·RESULT PASS와 실제 생성 PNG를 확인했습니다. 최종 전달 빌드는 `artifacts/qa11-product-readiness/MyCapture.exe`이며 제품 소스는 `2fc7fa4b0de8fd4ac6c13c916c2b83d5b9f15402`, 버전 표시는4.1.1인 다음 버전 개발 사본입니다. self-contained Core/Desktop10.0.11·x64 R2R·277파일·263개 dependency 누락0·소스 일치를 독립 검증했습니다. QA9/QA10과 중간 실패 자료는 보존합니다.
-- QA11 실제 복원 메뉴 검증 PASS: owned 캡처859afe79를 실제 Windows 휴지통에서 메뉴로 복원해 라이브러리1→2개·주석 썸네일을 확인했습니다. 복원 후 빈 목록·Esc·바깥 클릭 닫힘과 보호된 정상 종료도 완료했습니다(session60154/93add4 exit0). 이미지3개와 layers.json의4파일 bytes/SHA 및 디렉터리 file ID는 보존됐습니다. 메타데이터는 RestoreRecord의 보관 기간 재시작으로 updatedAt/retentionStartedAt이 바뀌고 이전 meta.json은 .bak에 보존됐습니다. 초기6파일 전수동일 assertion 실패는 이 정상 갱신을 구분하지 않은 검증 오류로 원본을 남겼습니다. 실제 Store 설치·교체는 다음 패키지 배포 단계의 검증 대상으로 남습니다.
-- 정확한 Store4.1.1 DLL과 QA9의 실desktop 캡처/선택/편집기 각각3회가 정상 완료됐습니다. 새 선택 화면 첫 렌더는273.84/247.04/237.31ms, 기존308.13/307.35/255.60ms입니다. 입력이3개 mouse/1개 drag로 합쳐져 창 선택이 됐고 캡처 크기도 달라 연속 드래그·편집기 정량 비교로 사용하지 않습니다. 외부 host는 App 시작·실 hotkey·저장을 제외합니다.
-- 동일 synthetic native overlay 비교는 AB3쌍에서 drag 완료 중앙값1926.05→2067.59ms(+7.35%)였지만 추가 BA2쌍은 +24.72%/-0.37%로 변동했습니다. 긴 WPF callback 간격이 원인이며 제품 코드의 원인 귀속은 미확정입니다. renderer/input 소스는 기준 이후 동일하고 pointer handler는0.156ms 이하입니다. probe의120 callbacks는 실제 표시120프레임이 아니며 feedback약60회로 합쳐집니다. 병목 부재·일정한 개선율로 판정하지 않습니다. 실제4K 초안20주석 검사에서는 PNG blob1개/37711B를 재사용했고 오류0·복구20주석이 확인됐습니다. 원본·한계·명령은 artifacts/next-product-readiness와 개발 LOG에 보존했습니다.
-
-### Store 4.1.1 배포 요청
-
-- 사용자 요청: “4.1.1버전으로 배포해봐. 실조건에서 테스트할게.” 영역 선택·이미지 자르기·라이브러리 선택 최적화를 포함한 Store 업데이트를 심사 제출했습니다. 앱4.1.1/패키지4.1.1.0 버전과 한·영 변경 사항을 갱신했습니다. 기존 개발자를 위한 무료 캡처·핀 도구 설명은 유지합니다.
-- Partner Center를 새로 고쳐 Submission4의 **공개 완료**와 Start update 버튼을 확인했습니다. 4.1.0 심사 취소는 필요 없습니다. 공개4.1.0 소스·패키지를 보존하고 별도4.1.1을 검증해 제출합니다.
-- **다음 버전으로 유보:** Store 업데이트 중 앱 교체·설치 진행을 알 수 있는 화면. 사용자가 기존 앱 삭제 후 재설치로 느끼는 공백을 줄이는 것이 목적입니다. 실제 Store 업데이트 단계·앱 종료/재시작·데이터 보존과 앱이 관측할 수 있는 신호를 확인한 뒤 구현합니다. 4.1.1에는 포함하지 않습니다.
-- 4.1.1 버전 계약 9/9 PASS(exit0, chunk40ff65), root 전체 Release 빌드 경고0/오류0 PASS(session86582, exit0), 독립 diff 검토 완료. PR head `e751e963135598de492e785e8e3774cf7631b7fa`의 hosted CI run38199941458/38199939852 모두 SUCCESS: 각각 Core1066/App2274 통과, App 조건부7 건너뜀, 실패0, 필수 symlink gate PASS. [PR #76](https://github.com/sukwoo0711-maker/my-capture/pull/76)을 squash 병합했으며 main/배포 소스는 `9a3576353cb3c1f4481b42510b435b9b2c925ece`입니다. 병합 소스와 검사한 PR head의 전체 tree가 동일함을 확인했습니다.
-- Store **Submission5 (`1152921505702100136`) 심사 제출 완료**. 사용자가 “완료했어”라고 업로드 완료를 알린 뒤 실제 packages 화면에서4.1.1.0/101.1MB/x64/Windows.Desktop min22000을 확인했습니다. 자동 제거 예정이던4.1.0에는 Don't remove this package를 적용해4.0.3/4.1.0/4.1.1을 모두 보존하고 Save했습니다. Overview에서4.1.1을 포함한 세 패키지 Validated, Packages/Store listings Updated를 확인한 뒤 Submit for certification을 실행했습니다. 최종 화면은 **Update in certification / Submission Complete / Pre-processing In progress / Certification·Publishing Not started**이며 심사 통과 후 자동 게시 설정입니다. 아직 공개된4.1.1이나 실제 Store 설치 완료가 아닙니다. 브라우저2/tab977755822 overview를 결과 화면으로 보존했습니다. 증거: `artifacts/store-411-verification/store-411-submitted.jpg`.
-- 사용자 “응”으로 QA8 종료를 명시 승인했습니다. exact PID64500/QA8 실행 경로를 확인하고 종료했으며 MyCapture 부재를 확인했습니다. merged main9a35763의 clean release 소스에서 StoreOnly를 실행했습니다. 첫 시도는 hotfix-ux의 외부 fixture 키 입력 미반영으로 7/8 FAIL(exit1); 같은 EXE 단독 재실행과 새 전체 StoreOnly 재검사는 PASS(exit0), 최종 8/8입니다. assertion·제품 코드·입력 설정 변경은 없습니다. 첫 실패는 `artifacts/store-publish/4.1.1-attempt1-native-input-failure`로 이름을 바꿔 보존했고 최종본과 publish281개 전수 SHA256이 동일합니다. 정확한 입력 실패 원인은 미확정이며 이후 fixture 진단 보완 대상으로 남깁니다.
-- **4.1.1 제출 파일 검증 완료:** `C:\GitRepositories\my-capture-codex\artifacts\store\4.1.1\sukwoo0711.MyCapture_4.1.1.0_x64.msix`, 106021996 bytes, SHA256 `7a70cc128c38479fa9f3384e94ccbeb28ebf4340953723ba36a91785c6521e44`. package-store exit0, 독립 source·281 inventory·8종 report/result·MSIX342개 항목 검증 PASS. 실제 Core/Desktop runtime10.0.11, x64 R2R, source9a3576353cb3c1f4481b42510b435b9b2c925ece, exact Store identity와 startup disabled 확인. 이 파일은 unsigned Store 제출용이며 직접 설치 대상이 아닙니다. 실제 명령과 근거는 `artifacts/store-411-verification/`의 development-log.txt, artifact-review.md, hotfix-attempt1-diagnosis.md에 있습니다.
-- 다음 단계: Microsoft 인증·공개 결과 확인 → 사용자가 Store에서4.1.1로 업데이트한 뒤 영역 선택을 실조건으로 테스트 → 피드백 반영. 제출된4.1.1을 취소하거나 중복 제출하지 않습니다. 코드·CI·병합·패키지·8종·독립 검증·등록·심사 제출은 완료됐습니다. 기존 source/MSIX/작업 사본·첫 실패 근거를 보존합니다. 다음 버전의 업데이트 진행 안내는 위 유보 항목에 따라 별도 작업합니다.
-
-### 영역 선택 지연과 로컬 업데이트 창
-
-- 사용자 추가 설명: “캡처하려고 영역선택할때 느려. 그리고 내 화면에 지금 mycapture을 업데이트 하시겠습니까? 가 떠있는데 에러가 발생한것같아”. 영역 선택 중 포인터 피드백 경로에 집중했습니다. 선택 화면 진입·드래그 추적·선택 완료 중 더 세부적인 구간을 묻는 선택형 질문은 응답 대기이며, 현재 검증은 hover/drag에 해당합니다.
-- **업데이트 창 처리 완료:** 실제 Windows App Installer 화면에서 직접 연 Store 제출용 unsigned MSIX4.1.0.0과 인증서 체인 오류 **0x800B010A**, 비활성 업데이트 버튼을 확인했습니다. 원본 파일 SHA256은 제출 파일과 일치하고 AppxSignature.p7x가 없습니다. Store의 서명을 받기 전 제출 파일을 직접 설치하려다 막힌 경우입니다. 취소 후 창·프로세스 종료를 확인했으며 설치된 Store4.0.2.0은 그대로입니다. 인증서·보안 설정·제출 상태 변경 없이 해결했습니다.
-- **확인한 렌더링 비용과 수정:** 현재 창 자동 감지의 큰 밝은 영역과 조밀한 점선 가이드가 소프트웨어 렌더링 비용을 늘립니다. 입력 처리·drawing command 생성은 약0.1ms 이하로 큰 비용이 아니었습니다. 실제 desktop 캡처인 Bgr32에서 물리 픽셀 경계가 맞으면 화면을 한 번 그리고 선택 영역 밖만 어둡게 하도록 수정했습니다. alpha/비32bpp/null/소수 픽셀 경계는 기존 합성을 유지합니다. 작업자 `4b22814`를 검토 후 root **`ff7e46cb7e2a8e4ec9a7a796122b963f8fb59ae1`**로 통합했습니다.
-- **측정 범위:** 현재 화면과 같은4208×1440·확대경 켬의 synthetic Bgr32 소프트웨어 raster는 hover42.73→33.35ms(22.0% 감소), drag25.86→19.04ms(26.4% 감소)입니다. 실제 제품 HWND/Tier2에서 같은120개 hover+120개 drag를 버전별3프로세스로 비교한 완료 중앙값은 hover2312.8→2303.0ms, drag2048.9→2006.5ms이며 분포가 겹칩니다. 큰 native 개선·회귀는 확인되지 않았고, 사용자가 느낀 전체 지연의 해결 여부는 실기 확인이 남아 있습니다. 모니터120Hz+60Hz,96DPI, 설정 변경 없음. 실제 하드웨어 입력부터 표시까지의 지연은 이 probe의 측정 범위 밖입니다.
-- **검증 완료:** worker73/73 및 통합 root73/73 집중검사 PASS,0skip. root actual session55245 exit0에서 테스트 프로젝트 빌드까지 완료했습니다. 기존 합성 기준과100/150/200%DPI·경계·상태 전환 픽셀 검사를 포함합니다. 대표 기존/수정/최종 게시본 PNG3개 모두 SHA256 `F414CE2A209F09359628E8AB84EE983FCAE727BCEEA09543BFCC0230B2C3E476`로 일치합니다. root와 별도 작업자의 독립 소스 검토에 중대한 지적이 없습니다. 기존 raw-delete capture-performance CLI는 휴지통 정책상 NOT RUN이며 외부 no-persistence probe를 사용했습니다.
-- **사용자 실행 파일:** `C:\GitRepositories\my-capture-codex\artifacts\qa8-selection-performance\MyCapture.exe`. runtime10.0.11을 포함하는 self-contained/R2R 게시본입니다. 실제 publish chunkd0cf87 exit0, 독립 PE/source/runtime/deps263건 누락0 검사 PASS. 게시본 DLL을 외부 probe에서 직접 로드한 snapshot도 exit0/PASS입니다. 탐색기 창87166948에서 이 폴더를 열고 MyCapture 응용 프로그램을 선택한 화면을 확인했습니다. 테스트에는 폴더 전체가 필요합니다. MSIX 설치 없이 이 exe를 실행합니다. 이번 제품 변경은 Store에 재제출하지 않았습니다.
-- 실제 명령·종료 코드·실패 기록·비교 raw JSON·TRX·PNG·probe 소스·독립 검토는 **`artifacts/selection-lag-investigation/`**에 모았습니다. 기존 작업 사본·원본·산출물을 모두 보존했습니다.
-
-### 이전 버전 대비 속도 저하 조사
-
-- 사용자 질문: “속도가 이전버전대비 많이 느린것같은데 원인을찾았니?” 이후 느린 동작을 영역 선택으로 특정했습니다(위 최신 상태). 기존 자르기·전체 선택의 할당 감소와 영역 선택 지연을 구분하며, 큰 체감 저하의 전체 원인은 아직 미확정입니다. 아래는 그 이전에 수행한 범위별 비교 기록입니다.
-- 실제 설치된 이전 Store 앱은 **4.0.2.0 / source `c52a1bbf3e5f44de85cab6161223ff336b0132a1`**입니다. 태그나 중간 개발 커밋을 이전 앱으로 대신하지 않았습니다. 조사 대상 제품 소스는 `09cb3d8`(직전 개발 빌드 `caee5b8`와 제품 파일 동일)입니다.
-- **조건부 캡처 지연 경로 확인:** 새 앱·탐색기 폴더 출처를 pixels 전후에 기다립니다. 실제 production timeout 경로에 응답하지 않는 Explorer provider를 연결한 검사에서 최초 703.55ms 대기가 재현됐습니다. 다음 조회는 busy gate로 0.046ms에 끝나며 항상 두 번 700ms를 기다리는 것은 아닙니다. 현재 desktop의 고정 후보 목록·synthetic pixels 비교는 기존 page 조회 평균112.62ms, page+source126.98ms로 **추가14.36ms**입니다. 큰 실기 지연을 이 환경에서는 재현하지 못했습니다. 고급 캡처의 동기 source 조회도 UI 대기 후보이며 실제 명령 전체 시간은 아직 측정하지 않았습니다.
-- **편집기 자체의 큰 회귀 미재현:** 같은 .NET/WPF10.0.11, 실제 old/current DLL, 같은 640×480 이미지·Midnight·1000×620 창을 외부 STA host에서 비교했습니다. 버전별 별도 프로세스3개, 프로세스마다 첫 editor1회·반복4회입니다. constructor부터 첫 WPF Rendering까지 중앙값은 이전383.51ms / 기존 개발 빌드385.96ms / R2R 비교 빌드376.99ms, 반복 중앙값94.21 /81.77 /96.55ms입니다. App startup·캡처 단축키·저장·DWM presentation·입장 애니메이션 완료는 이 측정에 포함되지 않습니다. 최종9개 프로세스 모두 exit0, 총45개 editor sample, old lazy dependency copy0 확인. 파일 읽기만 가능한 WindowsApps DLL은 해시가 동일한 소유 복사본으로 비교했으며 ACL은 변경하지 않았습니다.
-- **라이브러리 반복 작업 증가 확인:** 실제 이전 Gallery 소스와 현재 모델을 같은 runtime/Core에서 비교하면 1000개 Refresh 추가0.385ms, 검색 추가0.199ms입니다. 캐시된 타일마다 metadata 알림25개가 추가된 원인을 찾았지만 바인딩 없는 모델 측정만으로 큰 체감 저하의 원인으로 확정하지 않습니다. 긴 상세 URL 전체 텍스트 측정은8192자에서4.63ms/회이며 일반 짧은 문자열·다른 앱 동작으로 일반화하지 않습니다. 가상화와 기존 창 표시 애니메이션은 유지됐습니다.
-- **비교용 배포 조건 정렬:** 앞서 전달한 일반 Release 개발 빌드는 FDD/noR2R이고 이전 Store 앱은 self-contained/R2R입니다. 같은 현재 제품을 기존 publish profile로 새 `artifacts/next-version-product-opt-r2r-10.0.11/`에 빌드했습니다. 별도 private targets로 NETCore/WPF runtime10.0.11만 고정하고 WindowsSDK10.0.22000.57을 유지했습니다. actual publish session97091 exit0, 독립 PE/hash/runtime/deps 검사 PASS입니다. compiler/targeting/crossgen은10.0.12여서 도구 전체가 과거와 동일하지는 않습니다. 이 빌드 방식 차이로 편집기가 크게 느려진 결과는 재현되지 않았습니다. Store 재제출은 하지 않았습니다.
-- 검증·소스 manifest·측정 원본·한계·실패 기록은 `artifacts/latency-regression/`입니다. source semantics 집중45/45 및 metadata 전후 집중45/45 통과(일부 기존 검사 중복), Gallery 진단2/2 통과. 기존 capture-performance CLI는 정상 처리 중 raw File.Delete/Directory.Delete를 사용하여 휴지통 정책상 미실행이며, 별도의 no-persistence editor probe를 사용했습니다. 이번 조사에서 제품 코드를 추측으로 변경하지 않았고 사용자 앱·기존 파일·작업 사본을 보존했습니다.
-
-### 다음 버전 제품 최적화
-
-- 사용자 요청: “이제 다음버전을 개발해야한다. 먼저 제품최적화 부터 진행한다”. 현재 제출한 4.1.0을 보존하고 앱 실행 중의 라이브러리·이미지 처리 비용을 조사해 개선합니다.
-- 통합 기준은 `968b7c7`입니다. 기존 선택 getter·Store 전용 패키징 최적화 `5e463c9`를 최신 인계 기록 `7668af3`에 병합했습니다. 이번 작업의 새 성과는 이 기준 이후 변경과 측정으로 구분합니다.
-- 제품 변경은 `0519a41`(자르기 영역 읽기), `caee5b8`(라이브러리 전체 선택)로 통합했습니다. 화면·문구·파일 형식 변경 없이 실제 중복 작업을 제거했습니다. 통합 Release 빌드 경고·오류 0, 전체 Core 1066·App 2262 통과(기존 조건부 9개 건너뜀), actual session `16420` exit0입니다.
-- 3840×2160 Bgra32에서 640×480 영역을 5회 처리한 실제 editor 경로: 자르기 할당 344,083,912→12,303,376 bytes, redo 172,043,680→6,155,560 bytes(각 약96.4% 감소). 회전·DPI·alpha·clipping·중첩 crop·undo/redo와 non32 fallback 검사 통과, 실제 결과 PNG 28쌍 bytes 동일. 비32bpp는 기존 처리 경로를 유지합니다.
-- 라이브러리 Ctrl+A는 기존 ID 선택·visible/anchor 정리·선택 알림을 유지하면서 폴더/검색/정렬/그룹 재구성을 제거했습니다. 100회 paired 측정: 300개 항목 40,564,000→3,275,200 bytes(91.9% 감소), 1000개 138,080,216→13,505,600 bytes(90.2% 감소). 메타데이터 알림 750,000/2,500,000→0, 그룹 변경 400→0. 필요한 첫 선택 알림 300/1000개는 유지하고, Rows 이벤트는 전후 모두 0입니다.
-- 집중 검증은 이미지 16/16, 라이브러리 신규12+기존22 =34/34 PASS. 독립 native 검토에서 수정 지적 없음. DeepSeek 추가 검토 1회는 출력 한도 소진(`length`, exit1)으로 공개 답변 없이 끝났으며, 완료된 검토로 집계하지 않았습니다. 통합 전체 회귀 검사와 개발 빌드의 UX 자체검사도 완료했습니다.
-- 전후 측정·TRX·PNG·독립 검토 근거는 `artifacts/product-optimization/`에 수집했습니다. 측정 대상은 정해진 호출의 관리 메모리 할당이며 전체 앱 메모리 사용량·응답 속도가 아닙니다. 시간 원본도 보존했으나 동시 offscreen 작업의 CPU 경합 가능성이 있어 속도 배수로 사용하지 않습니다.
-- 실기 확인용 개발 빌드: `artifacts/next-version-product-opt-build-1/MyCapture.exe`. 별도 Release 빌드 exit0, 경고·오류0. 짧은 새 profile `%LOCALAPPDATA%/Temp/mcux/popt1`에서 `--selftest-ux-review x` 실행, owned PID66652의 실제 종료코드0을 session `60013`에서 수집하고 `RESULT: PASS`를 확인했습니다. 라이브러리·이미지 편집기·고대비 대표 PNG 3장 직접 확인. 물리 mixed-DPI 테스트는 이번 fixture 검증에 포함되지 않습니다. 버전 메타데이터는 현재 개발 기준을 유지하며 다음 실제 배포 단계에서 갱신합니다. 이 개발 빌드는 Store에 제출하지 않았습니다.
-
-### 3.0 Store 4.1.0 및 다음 배포 준비
-
-- **4.1.0.0 심사 제출을 완료했습니다.** Partner Center Submission 4 (`1152921505702097950`)의 현재 상태는 `Update in certification` / `Product update: In certification`입니다. 제출 단계 Complete, Pre-processing In progress, Certification·Publishing Not started를 2026-10-12 08:50 KST에 직접 확인했습니다. 인증 통과 즉시 자동 공개 설정이며, 현재 공개 버전은 아직 4.0.3.0입니다. PR #74와 #75를 squash 병합했고, main `3994219`의 깨끗한 소스에서 검증된 4.1.0 배포 파일을 생성했습니다.
-- 최종 PR #75 CI 두 건(`38162513743`, `38162518261`) 모두 SUCCESS. 수집한 실제 CI 로그는 Core 1066 통과, App 2233 통과·실패 0·기존 조건부 7개 건너뜀입니다. 작은 CI 데스크톱에서 중단되던 라이브러리 폭 sweep은 같은 카드·최소폭·열 수 assertion을 유지하는 loaded client 폭 검사로 보완했고 재현검사도 추가했습니다.
-- `powershell.exe -NoProfile -File build\package.ps1 -Version 4.1.0` PASS(exit 0). `artifacts\release\4.1.0\publish-win-x64`의 281개 파일 전체 경로·크기·SHA256, manifest의 exact source commit/clean/version/runtime/self-contained, setup·portable 및 checksum 3개를 독립 검증했습니다. 이후 8종 자체검사와 Store MSIX 생성·독립 검증도 완료했습니다.
-- Partner Center 제품 `9PB33MC095VR`, Submission 4 초안 `1152921505702097950`에 한국어·영어 소개/짧은 설명/4.1.0 변경사항을 저장하고 다시 열어 확인했습니다. 첫 문장은 “MyCapture는 개발자를 위한 무료 Windows 11 캡처·핀 도구입니다.”이며 Snipaste·ShareX·Greenshot의 작업 중심 소개를 참고했습니다. 가격 0원, 240개 시장 공개, 인증 통과 즉시 공개 설정을 확인했습니다. 기존 스크린샷과 아이콘은 유지했습니다.
-- **앱 종료 조건 해결:** 사용자가 “진행해”로 종료와 제출 재개를 승인했습니다. 재조회에서는 앱이 이미 없어 종료 명령 없이 진행했습니다. 최종 8종 runner actual session `27603`, exit 0, `SELF_TESTS=PASS PASSES=8/8`. 앞선 native 키 입력/전경 획득 실패를 보존했고 UI 도구 중지 상태에서 동일 binary의 hotfix 단독 193개 검사 및 최종 전체 8종이 연속 통과했습니다. 초기 실패의 정확한 원인은 미확정이며 `native-input-diagnosis.md`에 기록했습니다. 검사 조건·Windows 설정은 변경하지 않았습니다.
-- **검증된 Store 파일:** `artifacts\store\4.1.0\sukwoo0711.MyCapture_4.1.0.0_x64.msix`, 106019168 bytes, SHA256 `89d6e223117163966c074d66060463a53e7c3ba889162635c8d4c37e185c2a7a`. 생성 session `56707`, exit 0. 독립 ZIP 검증 exit 0: 342개 entry = publish 281개 + 로고 PNG 57개 + metadata/PRI 4개, 모든 payload path/size/hash 일치. identity/version/minOS/capabilities/startup disabled/summary/checksum 확인.
-- **업로드 차단 해결:** 사용자의 “완료” 응답 뒤 기존 Partner Center 탭에서 이미 업로드된 4.1.0.0/x64/101.1MB, Windows.Desktop min22000, ko-kr/en-us를 확인했습니다. 사용자가 어떤 방식으로 업로드했는지는 따로 확인하지 않았고 확장 설정 변경을 추정하지 않습니다. 기존 4.0.3 자동 제거 제안은 `Don't remove this package`로 해제해 보존했고 새 4.1.0을 우선순위 1로 저장했습니다. Overview의 4.1.0 `Validated`, Packages·Store listings `Updated` 확인 후 `Submit for certification`을 실행해 접수 완료를 확인했습니다. 기존 runFullTrust 승인 안내는 인증 절차에서 다뤄집니다. 현재 사용자 추가 조치나 로컬 검증 작업은 남아 있지 않습니다.
-- 다음 배포 최적화는 별도 worktree `C:\GitRepositories\my-capture\.claude\worktrees\agent-aeae29401bfb142cf`의 `perf/next-release-optimization`에 완료했습니다. 선택 상태 getter의 반복 배열 생성을 줄였고, 8종 검증 정의·결과 증거·source/payload 무결성 계약을 공통화했으며 `-StoreOnly` 경로를 추가했습니다. Release 빌드 경고·오류 0, Core 1066·App 2233 통과(9개 건너뜀), 패키징 계약 15개 통과. 단일 선택 getter 2000회 fixture에서 할당 5,040,000→176,000 bytes(96.5% 감소), 전체 앱 성능 측정은 아닙니다. 마지막 main 이력 연결 `5e463c9`는 직전 검증 트리와 동일합니다. 실제 `-StoreOnly` 실행도 PASS(exit0,84.095초,8종8/8)이며 281개 inventory·각 report/result JSON hash·exact source/clean 검증 및 ZIP/IExpress 산출물 부재 확인을 완료했습니다. 후속 MSIX 생성 PASS(exit0,10.119초), 독립 ZIP 검증 PASS:342entries/281publish/340stage·blockmap파일/4037blocks/CRC·identity·hash 일치. 이 다음 배포 검증 사본은 현재 제출 파일과 별개로 보존했으며 업로드하지 않았습니다.
-- 현재 Store 근거: `artifacts\store-410-verification\`. 다음 배포 근거: `artifacts\next-release-optimization-verification\` 및 `%LOCALAPPDATA%\Temp\mcux\perf-next-release-app\verification-log.txt`. 기존 작업 사본·빌드·임시 근거는 보존했습니다.
-
-### 3.1 Astra 17개 항목
-
-| # | 내용 | 상태 | 주요 커밋 |
-|---|---|---|---|
-| 1 | 좁은 라이브러리에서 카드 잘림 | 완료. 최소 1열, 이후 카드 트랙이 폭을 나눠 채움(최소 208, 최대 약 320). 상세 창 숨기기 추가 | 81856fb, cf13921, bde352d |
-| 2 | Windows 고대비 일관성 | 완료. 모든 의미 토큰을 SystemColors에 연결하고 실시간 전환. 실제 OS 전환은 미확인(시뮬레이션만) | 7829492 |
-| 3 | 상세 패널 주요 동작이 정보 아래로 밀림 | 완료. 편집·핀·복사를 위에 고정하고 정보만 스크롤. URL·경로는 2줄 요약과 전체 보기 | 9c92841, 1786583 |
-| 4 | 빠른 작업 진행·결과 표시 | 완료. 즉시 "저장 중…", 200ms 뒤 진행 막대, 성공 후 4초 유지, 오류는 닫을 때까지 | 6faed95 |
-| 5 | 안내 표시 시간 정책 | 완료. `Themes/FeedbackTiming.cs`·`FeedbackCountdown.cs`, 호버·포커스 시 일시 정지, UIA 알림 | 8542e36 |
-| 6 | 단축키 도움말 검색 | 완료. 탭을 넘는 통합 결과, 결과 수, 빈 결과, Esc | b42f8d0 |
-| 7 | 녹화 크기 입력 | 완료. `0`의 실제 의미는 "매번 드래그". "드래그한 크기 / 고정 크기" 선택, 범위 96–7680 | 336f92f, 4b84ff6 |
-| 8 | 편집기 선 두께 1–24 제한 | 완료. 1–64 단일 출처. 글자 크기 6–400도 같은 버그라 함께 수정 | fc59359 |
-| 9 | 확인·취소 순서 | 완료. 앱 전체 `[확정][취소]`, 최소 폭 88, 간격 8 | 612862d, d7f26b2 |
-| 10 | 호버·선택 즉시 전환 | 완료. 라이브러리 자체 템플릿 페이드·날짜 회전과 공유 브러시·모션 축소·빠른 전환 검증 추가. 최종 상태 12쌍 픽셀 일치 | 4ba2358, 87fa325, 86464e9 |
-| 11 | glass 장식선이 강함 | 완료. `Border.Control` 토큰 분리(3:1 이상), 장식선은 `Border.Subtle` | 7829492, d2c91ce, d7f26b2 |
-| 12 | 아이콘 크기·굵기 불일치 | 완료. 고정 20×20 격자와 1.6 선을 함께 배율 조정하는 SymbolIcon, 메뉴 16·명령 20, 소비 화면 이전 및 48개 지오메트리 대조 | 4e59cc7 |
-| 13 | 단축키 글자 9px | 완료. 12px 보통 굵기, 조합 키는 툴팁으로, 프레임 이동은 글자 레이블 | 2069a9a, 5e080b3, c190597 |
-| 14 | 슬라이더 모양과 값 확인 | 완료. 공통 템플릿과 편집기 값 입력란(선 두께·글자 크기·흐림) | d84d00a, fc59359 |
-| 15 | 동영상 좁은 창 배치 | 완료. 자르기 두 줄, 중복 정보 제거, 미리보기 높이 증가 | 03d1983 |
-| 16 | 용량 줄이기 미리보기가 사라짐 | 완료. 이전 결과 유지, 250ms 뒤 자동 재계산 | 5c81d9b |
-| 17 | 설정 세로 밀도 | 완료. `Settings/SettingsField.cs`, 입력란 높이 32 | 4b84ff6, db2c738(TextBox 패딩 이중 적용, 앱 전체 53→36) |
-
-R5 항목: 폴더 저장 스위치 슬라이드 애니메이션(803d727), 동영상 편집기 `[내보내기][라이브러리에 저장(강조)]`(803d727), 엑셀 표 핀은 Excel이 넣는 셀 그림으로 표시(6ce6d3c), 코드 핀 모서리는 둥근 외곽선과 이미지 클립(6ce6d3c). 엑셀·VS Code 실제 클립보드로는 확인하지 못했으므로 실기 확인이 필요합니다.
-
-R7 회전 발견성: 일반 편집 명령행에 왼쪽·오른쪽 회전을 표시합니다. 같은 버튼을 자르기 명령행에서도 사용하며 회전·undo/redo·Q/W·선택 도구·크롭 취소 의미는 유지합니다. 최소 680×460에서는 명령 묶음을 두 줄로 배치하고, 필요한 경우 도구 레일의 세로 여백만 줄여 모든 40×38 도구 버튼을 표시합니다. 한/영 최소 창과 포커스 전환 검증, 1180/680 × Glass/고대비 전후 렌더, 독립 소스 검토를 완료했습니다(`87192d8`).
-
-### 3.2 최종 검증 결과 (코드 87192d8)
-
-| 검증 | 결과 |
+| 항목 | 상태 |
 |---|---|
-| `dotnet build MyCapture.slnx -c Debug -v q -nologo` | PASS, exit 0, 경고 0·오류 0 |
-| `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build` | PASS, exit 0, 통과 1066 / 실패 0 |
-| `dotnet test tests/MyCapture.App.Tests -c Debug --no-build` | PASS, exit 0, 통과 2230 / 실패 0 / 기존 조건부 검사 건너뜀 9, 5분 28초 |
-| UX 자체 테스트(통합 Debug exe) | PASS, exit 0, `RESULT: PASS`. 화면 PNG 446개, fixture 포함 재귀 PNG 606개. 회전 전후·최소 창 및 통합 편집기의 밝은 테마 144dpi·고대비 192dpi 직접 시각 확인 |
-| `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1` | PASS, exit 0, 경고 0·오류 0. 새 출력 폴더 생성 후 exe·DLL·deps·runtimeconfig 존재와 파일 크기 확인 |
+| Store 공개 | 4.1.0 |
+| Store 심사 | 4.1.1 제출됨(Partner Center에서 결과 확인 필요) |
+| 4.1.2 후보 MSIX(236MB, Codex) | **제출하지 않음.** 리뷰 결과로 대체 |
+| 통합 브랜치 | cb1d7a1. Codex 작업 + 리뷰 수정(휴지통 설계, 데이터 이관, 검사 판정, 고대비 호버, 다중 모니터 1차 성능, 사용법 MP4) |
+| 마지막 전체 검증 | Debug 빌드 경고 0. Core 1196/1196. App 2475 통과, 실패 0, 건너뜀 11. 첫 실행에서 테스트 호스트 충돌 1회(재현 안 됨, §4 참고) |
+| 사용법 영상 | 실제 UI로 렌더한 MP4 76개 + 정지 화면. 자산 21MB, MSIX 약 125MB |
+| 이력 | 4.1.0 이후 커밋에서 GIF 130MB와 절대 경로가 든 검토 폴더를 제거(이력 크기 198.7MB → 71.7MB, 최종 파일 구성은 동일) |
+| 사용자 실기 빌드 | 아직 새로 만들지 않음. 사용자가 마지막으로 받은 것은 Codex의 QA15 실행 파일 |
 
-검증 cwd는 `C:\GitRepositories\my-capture-codex`입니다. 최신 TRX·빌드 로그·UX report·대표 전후 PNG: `artifacts\qa7-rotation-verification\`. 최종 UX 전체 화면: `%LOCALAPPDATA%\Temp\mcux\qa7-codex-final-1\tmp\MyCapture-ux-review-w1j40ikd.akw\`. 이전 QA6 근거는 `artifacts\qa6-verification-20261012\`에 보존했습니다. 실제 Windows 고대비 전환과 Excel·VS Code 클립보드 경험은 다음 사용자 실기 피드백 대상입니다.
+## 3. 결정 사항
 
-**최신 실기 테스트 빌드:** `C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1\MyCapture.exe`. 같은 폴더의 의존 파일과 함께 실행합니다. 이전 QA4·QA6 빌드와 실행 중인 사용자 앱은 보존했습니다.
-
-### 3.3 인계 시 WIP의 완성·통합 기록
-
-1. **⑫ 아이콘 통일 — Codex 완료·통합**: 브랜치 `qa6-icons` 커밋 67377db → 4336b34 (worktree `.claude\worktrees\agent-aeae29401bfb142cf`, 기준 d7f26b2). 통합 커밋 `7cdfb8f`, `4e59cc7`.
-   - 진행분: 새 `Themes/SymbolIcon.cs`(20×20 고정 격자 렌더러), `Controls.xaml`의 `Icon.Glyph` 수정, `Symbols.xaml`(프레임 이동 아이콘 추가 추정), QuickAccessWindow·PinHoverBar 이전 시작.
-   - 완료: 나머지 소비 화면 이전, 렌더러·화면 회귀 32개 및 동영상 관련 38개 통과(공통 검사 6개 중복), 실제 동영상 화면 10쌍, 48개 지오메트리의 전후 대조표 8 PNG. RecordingWallClockWindow는 심볼 소비가 없는 텍스트 Viewbox이므로 유지함. 라이브러리 화살표 충돌 두 곳은 새 SymbolIcon과 StatePart.Normal·RotateTo를 함께 보존하여 통합함.
-   - 원칙: Symbols.xaml 글리프는 20×20 격자 그대로 그리고 격자 전체를 목표 크기(메뉴 16, 명령 20)로 축소·확대합니다. `Stretch=Uniform`으로 글리프 외곽을 상자에 맞추지 않습니다. 이미지·썸네일과 격자 밖 지오메트리는 예외입니다. 편집기(AnnotationEditorControl)의 Canvas+Viewbox 방식이 기준입니다.
-2. **⑩ 라이브러리 템플릿 페이드 — Codex 완료·통합**: 브랜치 `qa6-library-motion` 커밋 d7cd854 → d3481a6 (worktree `.claude\worktrees\agent-a491402ad82aa2759`, 기준 d2c91ce). 통합 커밋 `7ae945a`, `86464e9`.
-   - 진행분: `GalleryWindow.xaml` 템플릿(카드 외곽선, 폴더 카드, 보기 메뉴, 폴더 행, 목록 행, 날짜 펼침, 저장 스위치 호버, 상세 버튼)에 `FluidMotion.FadeTo` 상태 레이어 30곳, `FluidMotion.cs` 보조 변경, 증거 테스트 파일.
-   - 완료: Debug 빌드 경고·오류 0, 관련 22/22 통과, 4개 테마 × 루트·폴더·날짜 12쌍 픽셀 일치, 충돌 없이 cherry-pick. 전체 통합 검증은 §3.2와 §8의 최신 기록을 따릅니다.
-   - 패턴 참고: `Controls.xaml`의 `StateLayer*` 스타일, 87fa325의 설정 메뉴·모드 바 변환.
-
-## 4. 앞으로 할 일 (우선순위 순)
-
-**현재 우선순위:** §3의 Store 업데이트·기존 테스트 데이터 보존 구현, 전체 Debug/Core/App 회귀, 실기 이관·설정 초안/적용·중복 방지, 최종 QA15 8종 네이티브8/8, 실행 파일 폴더 전달을 완료했습니다. 사용자 테스트는 `artifacts/qa15-store-update-ready/MyCapture.exe`입니다. 다음 실제 Store 배포에서는 이 변경을 포함한 새 패키지를 생성·검증·제출하고 Store 설치 교체를 확인해야 합니다. 앞서 완료한4.1.2 MSIX는 보존하며 QA15 변경이 없는 이전 후보입니다. 아래 대량 처리 잔존 지연도 유지합니다.
-
-1. **완료 — 전체 회귀 검사:** Debug 경고0/오류0, Core1116 PASS, App2375 PASS/실패0/기존 조건부11 skip. 최종 제품소스0fef3b3의 기능별 사용법과 기존 성능 개선을 함께 검사했습니다. 지원 문구 검사 오탐 수정은638836f입니다.
-2. **완료 — QA14 실기 빌드·전달:** `artifacts/qa14-feature-tutorials/MyCapture.exe`, self-contained x64/R2R·Core/Desktop10.0.11. F1 해당 기능 → 사용법 보기 또는 설정 → 단축키의 사용법 보기에서 엽니다. 사용법 창 상단에38개 기능 선택이 있습니다. UX 자체 검사·최종GIF 실제재생/정지/다시보기/기능전환/종료·AS-IS/TO-BE·폴더 열기 완료.
-3. **후속 우선순위:** 최종4.1.2에서100만 자 편집은60초guard 없이 전체29.87초에 완료됐지만 전체 선택 안정화20.87초가 남았습니다. 10만 자 선택 안정화1.33~2.29초, OCR100만 자 여러 줄 첫 결과 적용3.65초, Gallery1만 항목 정렬 callback최대0.87초 및 연속 물리 드래그 검증을 후속 대상으로 유지합니다. 사용자 피드백을 함께 반영합니다. 다음 실제 Store 배포에서는 보존된4.1.2 후보 소스·MSIX 무결성 및 Store 설치·업데이트 교체를 확인합니다.
-
-**이전 작업 완료 이력:** 평가·업데이트·지원, 휴지통 삭제·복원, 종료 보호·편집 복구는 QA11에서 검증했습니다. 실제 Store 설치·교체·재실행 검증은 다음 패키지 배포 단계입니다. 아래 이전 배포 작업과4.1.1 제출 산출물은 보존합니다.
-
-1. **완료 — WIP 두 개 완성**: §3.3. 각 기존 worktree에서 완성하고 통합 브랜치로 cherry-pick했습니다. 독립 코드 검토와 직접 PNG 확인을 마쳤습니다.
-2. **완료 — 통합 검증**: QA7 회전 배치 수정 후 Debug 빌드 경고 0, Core 1066·App 2230 통과(기존 조건부 검사 9개 건너뜀), UX 자체 테스트 `RESULT: PASS`, 바뀐 화면 PNG 직접 확인. 결과는 §3.2입니다.
-3. **완료 — 실기 테스트 빌드**: 새 폴더 `artifacts\qa7-build-1`에 Release 빌드했습니다. 기존 빌드와 작업 사본을 보존했고, 사용자 MyCapture를 종료하지 않았습니다.
-   ```
-   dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1
-   ```
-   실행 파일은 `C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1\MyCapture.exe`입니다. 새 확인 포인트는 자르기 진입 없이 왼쪽·오른쪽 회전, 실행 취소, 최소 창에서 모든 도구 표시입니다. 이전 라운드 확인 포인트도 유지합니다: 폴더 스위치 애니메이션, 동영상 편집기 버튼, Excel 표 핀(고배율 모니터에서 크기 포함), VS Code 코드 핀 모서리, 좁은 라이브러리, 상세 패널, 대화상자 순서, 고대비, 호버 전환, 슬라이더·입력란 높이, 빠른 작업 진행 표시, 오류 안내 유지, 설정 녹화 크기, 단축키 검색, 용량 줄이기, 동영상 좁은 창.
-4. **완료 — 원격 소스 통합**: 사용자의 명시적 Store 배포 요청으로 PR #74와 #75를 병합했습니다. 최종 main은 `3994219`이며 현재 release 산출물의 source commit과 일치합니다.
-5. **완료 — Store MSIX 업로드·저장·심사 제출**: 8종 자체검사·MSIX 생성·독립 검증 및 source/hash 재대조 후 Submission 4를 심사 제출했습니다. 인증 결과와 실제 공개 여부는 이후 Partner Center에서 확인합니다. 제품 URL은 `https://apps.microsoft.com/detail/9PB33MC095VR`, overview는 `https://partner.microsoft.com/en-us/dashboard/products/9PB33MC095VR/overview`입니다. 기존 Edge ID `2`, 탭 `977755822`를 결과 화면으로 보존했습니다. source branch `release/store-4.1.0`의 `3994219`와 exact MSIX는 그대로 보존돼 있습니다. 심사 중 제출을 취소하거나 중복 제출하지 않습니다.
-6. **완료 — 다음 배포 최적화 실행 검증**: 별도 `perf/next-release-optimization` worktree에서 새 nopt1 데이터 경로로 `-StoreOnly`와 실제 8종 native/MSIX 경로 및 생성물을 검증했습니다. 현재 제출용 4.1.0 소스에는 다음 최적화를 섞지 않습니다. 다음 실제 배포를 시작할 때는 최적화 브랜치를 통합하고 새 버전으로 올린 뒤 해당 버전의 필수 검증·패키징을 수행합니다. 현재 next-opt MSIX는 4.1.0.0인 검증 사본이므로 이번 제출 파일로 대체하거나 후속 업데이트로 올리지 않습니다.
-7. **사용자 실기 피드백 반영**: QA7 회전 배치 수정과 Release 빌드 전달은 완료했습니다. 새로운 피드백은 이후 수정합니다.
-
-**미뤄 둔 작은 항목**
-- 라이브러리 상태 줄의 안내 종류를 문구 비교로 추정합니다(`GalleryWindow.xaml.cs` `ClassifyActionStatus`). 호출부에서 종류를 넘기는 방식이 더 견고합니다.
-- 동영상 편집기 `_statusLabel`은 LiveSetting만 있고 UIA 알림이 없습니다. 진행률 갱신이 잦으므로 결과성 문구만 알리도록 설계해야 합니다.
-- `CountdownWindow`·`RecordingControlWindow`·`TwoLineTimeline`·`VideoLayerTimeline`은 브러시를 한 번만 읽습니다. 고대비를 실시간으로 바꾸면 창을 다시 열어야 반영됩니다.
-- OCR 결과 창 텍스트 테두리는 아직 `Border.Subtle`입니다(판단 보류).
-- 설정 창의 로컬 우회 스타일(`Settings.TextBox` 템플릿, 단축키 도움말 `search.Loaded` 여백 초기화)은 db2c738 이후 필요 없으므로 지워도 됩니다.
-- 트레이에 "핀 모두 숨기기"가 없습니다.
-- Store 앱 이름이 "WinStore.App"으로 보이는 출처 표시 문제가 있습니다.
-- dotnet/wpf 업스트림 이슈 초안(크래시 문서 안)은 아직 게시하지 않았습니다.
-- 크래시 조사 덤프가 디스크를 차지합니다(Claude scratchpad loop 약 4.1GB, `%LOCALAPPDATA%\Temp\mcux` 약 0.6GB). 정리는 사용자 확인 후 합니다.
-
-## 5. 작업 규칙 (이번 작업에서 확립됨)
-
-- **문구**: 레이블·버튼·상태는 명사형(저장, 저장 중, 저장됨), 문장은 합니다/하십시오체. 해요체·느낌표·감탄사·이모지는 금지합니다. 새 문자열은 `src/MyCapture.Core/Localization/Strings.resx`(한국어)와 `Strings.en.resx`에 같은 키로 넣고, 파일 끝이 아니라 관련 항목 바로 뒤에 넣습니다. `LocalizationTests`가 키 일치를 검사합니다.
-- **브러시**: 리소스의 공유 `SolidColorBrush`를 제자리에서 바꾸거나 애니메이션하지 마십시오(R0 크래시 원인). `DynamicResource`, `SetResourceReference`, `ThemeBrushes.Follow`, `ThemeBrushes.Recolored`를 씁니다.
-- **모션**: `Themes/FluidMotion.cs`와 `Tokens.xaml`의 토큰을 씁니다. Fast 83ms는 호버·누름, Normal 167ms는 선택·토글, Deliberate 250ms는 패널입니다. `FluidMotion.AnimationsEnabled`(Windows 애니메이션 효과)를 지키고, 상태는 즉시 바꾸고 그림만 움직입니다. 상태 레이어는 `FadeTo`를 씁니다.
-- **경계 토큰**: 입력·버튼 경계는 `Border.Control`, 장식선은 `Border.Subtle`, 호버 강조는 `Border.Strong`, 포커스는 `Border.Focus`입니다.
-- **버튼 위계**: 결정 묶음마다 Primary는 하나입니다. 대화상자는 `[확정][취소]`, 이미지 편집기는 `[파일로 저장][복사][완료(강조)][취소]`, 동영상 편집기는 `[내보내기][라이브러리에 저장(강조)]`입니다.
-- **경로**: 하위 작업자는 절대 경로를 씁니다. PowerShell .NET API의 상대 경로가 다른 worktree 파일을 덮어쓴 사고가 있었습니다.
-- **병렬 작업**: 작업자마다 worktree를 따로 쓰고, 파일 소유 범위를 나눕니다. 결과는 오케스트레이터가 직접 diff와 PNG를 확인한 뒤 cherry-pick합니다. resx와 `SettingsThemePreviewTests` partial 클래스는 충돌·중복 정의가 잦습니다. 통합 후 테스트 프로젝트 빌드를 반드시 확인하십시오.
-- **금지**: ExecutionPolicy 변경, 사용자가 실행한 MyCapture 종료, 사용자 요청 없는 push·PR·병합, main 직접 커밋, 메인 체크아웃의 미커밋 변경 건드리기.
-- **커밋**: 한국어 Conventional 형식입니다(예: `fix(library): …`). 본문에 이유를 적습니다.
-
-### 검증 명령
-
-| 목적 | 명령 (작업 공간 루트) | 참고 |
+| 날짜 | 결정 | 근거 |
 |---|---|---|
-| 빌드 | `dotnet build MyCapture.slnx -c Debug -v q -nologo` | Release는 실행 중인 앱이 잠글 수 있음 |
-| Core 테스트 | `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build` | 약 10초 |
-| App 테스트 | `dotnet test tests/MyCapture.App.Tests -c Debug --no-build` | 약 6~7분. 동시 부하 시 타이밍 테스트가 흔들림(`RecordingFrameDelayTests`, `EditorUxTests` 키 입력, `LibraryUx_CommandBar` Esc, `VideoCompositionIntegrationTests` 휴지통 정리). 실패 시 단독 재실행으로 구분 |
-| UX 자체 테스트 | `MYCAPTURE_DATA_ROOT`, `TMP`, `TEMP`를 짧은 새 경로(예: `%LOCALAPPDATA%\Temp\mcux\<이름>\data`, `...\tmp`)로 두고 `src\MyCapture.App\bin\Debug\net10.0-windows10.0.22000.0\MyCapture.exe --selftest-ux-review x` | `%TMP%\MyCapture-ux-review-*\`에 PNG와 `ux-review-selftest-report.txt`(끝이 `RESULT: PASS`). 경로가 길면 Media Foundation이 실패. 바탕화면에 창을 띄움. 동영상 편집기 초기 폭은 커서가 있는 모니터를 따르므로 폭 차이는 환경 탓일 수 있음 |
-| 현지화 자체 테스트 | `MyCapture.exe --selftest-localization <출력 폴더>` | 영문 스크린샷 |
+| 10-13 | 리뷰 권장 순서대로 수정하고, 사용법은 MP4로 바꾸고, 이력에서 GIF를 제거 | 사용자 "네 의견대로 따를게" |
+| 10-13 | 성능을 반드시 확인. 다중 모니터 캡처 지연을 조사 | 사용자 지시 |
+| 10-13 | 정리 대상 38GB를 한 폴더로 모으고 사용자가 삭제한 뒤 `git worktree prune` | 사용자 "진행", "지웠어. prune 진행해" |
+| 10-13 | UI·UX·CX 개선 수행 | 사용자 지시 |
+| 10-13 | 로그인 시 자동 실행: 시작 창에서 기본 체크 | 사용자 선택 |
+| 10-13 | 이미지 보관 7일 유지, 시작 창·첫 자동 삭제·설정에서 안내 | 사용자 선택 |
+| 10-13 | 캡처 직후 편집기 유지 | 사용자 선택 |
+| 미정 | 메인 체크아웃의 옛 빌드 19GB(`C:\GitRepositories\my-capture\artifacts`) 정리 | 사용자 답 없음 |
 
-## 6. 증거·참고 자료
+## 4. 할 일
 
-- Astra 감성품질 조사: `docs/handoff/astra-ux-audit-2026-10-11/report.md`, 요청문 `prompt.md`
-- 크래시 조사 기록: `docs/maintenance/2026-10-11-ux-review-native-crash.md`
-- Codex QA7 최종 검증·대표 전후 렌더: `artifacts\qa7-rotation-verification\`
-- Codex QA7 최종 통합 전체 렌더: `%LOCALAPPDATA%\Temp\mcux\qa7-codex-final-1\tmp\MyCapture-ux-review-w1j40ikd.akw\`
-- Codex QA6 검증·대표 전후 렌더(보존): `artifacts\qa6-verification-20261012\`
-- Codex QA6 통합 전체 렌더(보존): `%LOCALAPPDATA%\Temp\mcux\qa6-codex-final-1\tmp\MyCapture-ux-review-usklf4wn.h2z\`
-- 인계 시 통합 상태 전체 렌더(보존): `%LOCALAPPDATA%\Temp\mcux\qa6-int\tmp\MyCapture-ux-review-xhaffrbt.u2w\`
-- 묶음별 전후 렌더(`%LOCALAPPDATA%\Temp\mcux\` 아래):
-  - 라이브러리: `lib-before`, `lib-final`, `evidence-final\libux`, `fluid-before`, `fluid-after`
-  - 테마·컨트롤: `theme-before`, `theme-after`, `tb-before`, `tb-after2\controls\controls-all.png`
-  - 피드백: `fb-before`, `fb-after\states`
-  - 설정·도움말: `qa6b`, `qa6a`, `qa6ev1`
-  - 편집기·동영상: `ed-before`, `ed-after2`, `qa6ev`
-- 핀 모서리 전후: Claude scratchpad `...\7f8b3ee5-f2e8-4aba-aa29-670db38bcd33\scratchpad\pin-frame-compare\`
-- Claude 세션 원본 기록(아주 자세한 이력이 필요할 때): `C:\Users\sukwo\.claude\projects\C--GitRepositories-my-capture--claude-worktrees-beautiful-spence-49d55b\7f8b3ee5-f2e8-4aba-aa29-670db38bcd33.jsonl`
+**진행 중 (기준 cb1d7a1, 각자 별도 작업 공간)**
+1. UX-A: 오류 문구 구분, 한국어 단어 단위 줄바꿈, 탭 잘림, 파괴적 버튼 통일, 기존 문구 정리(신뢰 문구·용어·영어)
+2. UX-B1: 트레이(클립보드 핀, 핀 모두 숨기기, 텍스트 복사), 로그인 시 자동 실행, 시작 창 보관 안내, 업데이트·평가 배너, 초안 복구 대화상자, 단축키 충돌 알림, 준비 완료 알림
+3. UX-B2: 빠른 작업 텍스트 복사·실패 문구, 편집기 텍스트 복사, OCR 창, 색 코드, 핀 호버 막대
+4. UX-C: 보관 기간 선택과 안내, 삭제 되돌리기·복원 목록, 설정 정보 탭(개인정보·피드백), 저장 공간 폴더 열기, 적용·닫기, 용어·단위, 빈 라이브러리
+5. 성능: 선택 화면이 출처 읽기를 기다리지 않게 하고, 보조 모니터 편집기 배치를 고침
+6. 미디어: 녹화 색 범위, 프레임 이동, 시간 표기, video-play 사용법 문구, 테스트 호스트 간헐 충돌
 
-## 7. 관련 세션 이관 요약 (my-capture)
+**그다음**
+- 통합 → 전체 검증(빌드, Core·App, UX 자체 검사, 성능 표) → 새 실기 빌드를 사용자에게 전달
+- 사용자 실기 피드백 반영
+- 사용자가 요청하면 4.1.2(또는 다음 번호)를 패키징하고 PR·Store 제출
 
-| 세션 | 상태 | Codex가 알아야 할 것 |
+## 5. 검증 명령 (작업 공간 루트)
+
+| 목적 | 명령 | 참고 |
 |---|---|---|
-| 크래시 조사·실기 테스트 R4~R6 (이 세션) | 인계 | 이 문서 전체 |
-| 동영상 편집화면 개선 | 완료 | PR #73 병합됨(2026-10-11). 남은 작업 없음. 동영상 편집기 명령 막대 순서 테스트는 `VideoEditorUxLayoutTests`에 있음(803d727에서 갱신) |
-| Microsoft Store 경쟁 제품 벤치마크 | 완료 | PR #67 병합됨. #72 병합됨. #71(시작 오류 수정)은 병합 없이 닫힘. 그 수정이 #72로 들어갔는지 확인한 기록은 없음 |
-| MyCapture Microsoft Store 경쟁사 분석 | 사용자 결정 대기 | Store 자산 v5(`docs/design/visual-identity-2026-10-11/store-v5/`: 캡처 장면, 27초 트레일러, MSIX 아이콘 68개, 벡터 마크, 소셜 프리뷰)가 **메인 체크아웃에 미커밋**(31MB, 트레일러 21MB). 커밋 여부는 사용자 결정. 영문 세트·영문 트레일러 없음. 메모리 규칙: Store 자산은 동종 앱처럼 수수하게(고급 브랜딩·구호형 카피는 AI 느낌으로 거부됨) |
-| Market open questions review | 사용자 결정 대기 | `docs/market/external-review-findings.md`(worktree `market-open-questions-review-d66b09`, 미커밋). 원 문서 3종을 고칠지(OCR 점수 하향, Snipping Tool 행 신설로 점수·P0 변동) 사용자 결정 대기 |
+| 빌드 | `dotnet build MyCapture.slnx -c Debug -v q -nologo` | |
+| Core | `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build` | 약 10초 |
+| App | `dotnet test tests/MyCapture.App.Tests -c Debug --no-build` | 약 9분. 충돌 추적이 필요하면 `--blame` |
+| UX 자체 검사 | `MYCAPTURE_DATA_ROOT`, `TMP`, `TEMP`를 짧은 임시 경로로 두고 `src\MyCapture.App\bin\Debug\net10.0-windows10.0.22000.0\MyCapture.exe --selftest-ux-review x` | 결과 끝이 `RESULT: PASS`여야 함. 경로가 길면 Media Foundation 실패 |
+| 사용법 영상 생성 | `dotnet run --project build/tools/TutorialVideoGenerator -c Release` | 약 7분. 실제 사용자 데이터에 쓰지 않는지 확인 |
 
-## 8. 작업 로그 (아래로 추가만)
+## 6. 인계 체크리스트
 
-- 2026-10-11 Claude: R0 크래시 조사 완료, PR #74 생성(CI 통과).
-- 2026-10-11 Claude: R4 통합(70aeca6~f58e2a7), Core 1047 / App 2070(건너뜀 9) 통과. 사용자 실기 테스트 빌드 `artifacts\qa4-build-2`.
-- 2026-10-11 Claude: R5 토글 애니메이션·동영상 버튼(803d727). Astra(`codex exec`, gpt-6-astra, 읽기 전용) 감성품질 조사 완료.
-- 2026-10-11 Claude: 사용자 "다고쳐". 하위 작업 5개 병렬 진행(library, theme, feedback, settings, editors)과 핀 작업.
-- 2026-10-12 Claude: 핀(6ce6d3c), 설정·도움말(336f92f, 4b84ff6, b42f8d0), 피드백(8542e36, 6faed95, eb96ca8; PinWindow 충돌 해결), 라이브러리(81856fb~67f6eb3, bde352d), 테마(7829492~db2c738), 편집기·동영상(fc59359~14b291d) 통합. 직접 수정: 87fa325, d2c91ce, 10d6dbb(중복 테스트 도우미 제거), d7f26b2.
-- 2026-10-12 Claude: 통합 검증. 빌드 경고 0. Core 1066/0. App 2211 통과 / 1 실패(EditorUxTests 단독 재실행 159/159 통과) / 9 건너뜀. UX 자체 테스트 PASS(607 PNG).
-- 2026-10-12 Claude: 사용량 한도로 ⑫ 아이콘, ⑩ 라이브러리 페이드 하위 작업을 중단하고 WIP 커밋(qa6-icons 67377db, qa6-library-motion d7cd854).
-- 2026-10-12 Claude: 이 인계 문서를 작성하고, 오케스트레이터를 Codex로 넘김. Codex 작업 공간 `C:\GitRepositories\my-capture-codex`를 만들고 Codex 대화형 세션을 시작함.
+**넘기는 쪽:** 진행 중인 하위 작업을 끝내거나 멈추고, 미완성 변경은 `wip:` 커밋으로 보존합니다. §2·§4를 최신으로 고치고 §7에 인계 줄을 남긴 뒤 §0의 담당을 바꿔 커밋합니다.
 
-- 2026-10-12 Codex: 인계받음. HEAD `434ee12`, 통합 worktree `C:\GitRepositories\my-capture-codex`의 clean 상태와 WIP 두 worktree를 확인함. `git rev-parse`, `git status`, `git worktree list`, `git log origin/main..fix/realdevice-qa-round4` 확인 완료(exit 0); `Get-Process MyCapture`에서 실행 중인 MyCapture 없음. §4.1부터 아이콘·라이브러리 모션 WIP 완성, 통합 검증, 별도 Release 실기 빌드 순서로 진행함.
+**받는 쪽:** 이 문서, `git log --oneline origin/main..fix/store-update-continuity`, §7 마지막 줄을 읽습니다. `git status`와 실행 중인 MyCapture를 확인하고, 받았다는 줄을 §7에 남깁니다.
 
-- 2026-10-12 Codex: 인수 기록 커밋 `91ff8b4` 완료(`git commit`, cwd 통합 worktree, exit 0). WebGPT 우선 위임 등록 `node C:/Users/sukwo/.codex/skills/webgpt/scripts/client.mjs register --cwd C:/GitRepositories/my-capture/.claude/worktrees/agent-aeae29401bfb142cf`는 `tunnel_unavailable`로 실패(exit 1, 과업 미등록·미전송). 읽기 전용 점검에서 저장 PID 31076 부재, `WebGPT-tunnel-sukwo` 작업의 LastTaskResult 1과 stale lock을 확인함. 설정 변경 없이 native Sol 작업자 `/root/icons`, `/root/library_motion`에 기존 각 WIP worktree를 배정함. Native 연결은 `model_provider=openai`, localhost 8768의 소유 프로세스 `Codexon.exe --model-proxy --upstream chatgpt --managed`로 확인함.
-- 2026-10-12 Codex: 전체 검증 준비 중 R4 출처 테스트의 직접 삭제 두 곳을 기존 `TestRecycleBin` 생성·정리로 교체함. cwd `C:\GitRepositories\my-capture-codex`; `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit 0, 경고 0·오류 0); `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --filter FullyQualifiedName~FolderActionTargetDistinguishesFoldersFilesAndMissingPaths --logger "trx;LogFileName=qa6-recycle-source.trx"` PASS(exit 0, 1/1). 별도 opt-in Explorer 실창 테스트는 기본 전체 테스트에서 건너뜀을 유지함.
+## 7. 로그 (아래로 추가만)
 
-- 2026-10-12 Codex: 테스트 정리 수정 커밋 `3583daf` 완료(exit 0). 독립 검토자 `/root/delegation_recovery`가 TestRecycleBin API·기존 테스트 의미·UX selftest 실행 경로를 읽고 지적 없음으로 반환함. 추적된 테스트의 직접 File/Directory.Delete 검색 결과 0개, 별도 녹화 벤치마크의 삭제 코드는 이번 UX 실행 경로 밖임을 확인함.
-- 2026-10-12 Codex: 라이브러리 모션 작업자 `/root/library_motion`의 `d7cd854`, `d3481a6`을 직접 diff·PNG 검토 후 `git cherry-pick d7cd854 d3481a6`으로 통합(exit 0; `7ae945a`, `86464e9`). 원 worktree cwd에서 Debug 빌드 경고·오류 0(exit 0), 관련 테스트 22/22(exit 0). 전후 최종 상태 12쌍은 동일. 명령·환경·중간 실패 및 수정 근거 LOG: `%LOCALAPPDATA%\Temp\mcux\qa6-library-motion-verified\library-motion-validation.md`; 실제 PNG·비교 보고서도 같은 폴더. AS-IS `qa6-library-motion-before`, 비 Git 기준 snapshot `qa6-library-motion-baseline-source`와 ZIP은 보존함. 통합 후 독립 읽기 전용 Antigravity 검토를 실제 session `59542`로 시작함(결과 대기).
-
-- 2026-10-12 Codex: 아이콘 작업자 `/root/icons`의 `67377db`, `4336b34` diff·실제 동영상 PNG·48개 글리프 대조표를 검토함. `git cherry-pick 67377db 4336b34` 첫 커밋은 `7cdfb8f`, 두 번째는 GalleryWindow.xaml 화살표 2곳 충돌(exit 1). 고정 격자 SymbolIcon과 Normal 회전 토큰을 함께 보존한 뒤 `git cherry-pick --continue`로 `4e59cc7` 완료(exit 0). 원 worktree 검증 LOG는 `artifacts/qa6-verification-20261012/icons-validation.txt`, 모션 LOG는 같은 폴더의 `library-motion-validation.md`에 수집함. 기존 모션 비교는 아이콘 이전 전 기준이며, 최종 통합 PNG에는 승인된 아이콘 차이가 포함됨.
-- 2026-10-12 Codex: 아이콘 독립 검토 `/root/delegation_recovery`가 `HotfixUxSelfTest.cs`의 이전 Path 형변환 2곳을 지적하여 SymbolIcon으로 수정함. 그 외 지적 없음. cwd 통합 worktree에서 `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit 0, 경고 0·오류 0); `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --logger "trx;LogFileName=qa6-core.trx" --results-directory C:\GitRepositories\my-capture-codex\artifacts\qa6-verification-20261012` PASS(exit 0, 1066/1066). App 전체 테스트는 actual session `92692`로 실행 중이며 결과 대기.
-
-- 2026-10-12 Codex: 통합 진단 수정과 상태 기록을 `47ef1e4`로 커밋(exit 0). `/root/delegation_recovery`가 수정된 진단 형변환과 화살표 2곳의 SymbolIcon·Normal·RotateTo 결합을 재검토해 지적 없음. Antigravity run `18ff6bff-054e-4a0f-b791-b53c09beddbf`는 process exit 0이나 wrapper exit 1, `validation_failed: Worker called an unexpected tool: finish`, `worker_report=null`로 검토 실패. 재호출하지 않았고 결과 JSON은 `artifacts/qa6-verification-20261012/antigravity-review-result.json`에 보존함. 해당 실패 worktree는 원본과 함께 보존. 이후 native 독립 모션 검토 완료, 지적 없음.
-- 2026-10-12 Codex: cwd `C:\GitRepositories\my-capture-codex`; `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger "trx;LogFileName=qa6-app.trx" --results-directory C:\GitRepositories\my-capture-codex\artifacts\qa6-verification-20261012` FAIL(exit 1, 통과 2212·실패 15·건너뜀 9, 5분 42초). TRX 직접 분석에서 15개 모두 `GalleryCaptionPreviewTests`·`GallerySourceDetailTests`의 격리 템플릿에 `LibraryUx.HoverWash` 리소스가 누락된 같은 원인임을 확인함. 원 작업자에게 실제 제품 리소스 의존성을 포함하는 테스트 구성 수정 요청, assertion 유지 후 재검증 진행.
-
-- 2026-10-12 Codex: 격리 fixture 리소스 수정 `272af1c`, `4d75f97`을 직접 diff 검토 후 `0a5964d`, `03cc9db`로 cherry-pick(exit 0). 제품 코드·검사 assertion 변경 없이 제품 XAML의 실제 HoverWash를 가져오도록 수정함. 원 worktree 집중 검증 15/15 PASS(exit 0); 기존 raw 삭제 테스트 1개는 이 원 worktree에서 제외했으며 통합에는 이미 휴지통 수정이 적용돼 전체 재실행 대상에 포함됨. 통합 `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit 0, 경고 0·오류 0). App 전체 재실행 actual session `99792`, 로그 `qa6-app-final.trx`, 결과 대기.
-- 2026-10-12 Codex: cwd 통합 worktree; `MYCAPTURE_DATA_ROOT=%LOCALAPPDATA%\Temp\mcux\qa6-codex-final-1\data`, `TMP=TEMP=...\tmp`; `Start-Process src\MyCapture.App\bin\Debug\net10.0-windows10.0.22000.0\MyCapture.exe -ArgumentList '--selftest-ux-review','x' -WindowStyle Hidden -PassThru` 후 `WaitForExit`로 PID 54448의 exit 0 확인. actual session `34229` 완료. 출력 `...\tmp\MyCapture-ux-review-usklf4wn.h2z\ux-review-selftest-report.txt`는 `RESULT: PASS`; 화면 PNG 446개, fixture 포함 재귀 PNG 606개. 이전 `qa6-int` 폴더도 현시점 직접 재집계하면 446/606개이며 §8의 과거 607개 기록과 구분함. 빠른 작업 전후·좁은 라이브러리·고대비 동영상·설정 144dpi PNG 직접 확인. 전후 대표 PNG와 report는 `artifacts/qa6-verification-20261012`에 수집함.
-
-- 2026-10-12 Codex: 코드 `03cc9db`, cwd `C:\GitRepositories\my-capture-codex`; `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger "trx;LogFileName=qa6-app-final.trx" --results-directory C:\GitRepositories\my-capture-codex\artifacts\qa6-verification-20261012` PASS(exit 0, actual session `99792` 완료, 통과 2227·실패 0·기존 조건부 검사 건너뜀 9, 5분 35초). TRX counters와 개별 outcome을 직접 대조함. 첫 실패 15건은 fixture 의존성 수정 후 모두 통과했고, assertion은 유지함.
-- 2026-10-12 Codex: 코드 `03cc9db`, cwd 통합 worktree; 출력 폴더 부재 확인 후 `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa6-build-1` PASS(exit 0, 경고 0·오류 0, 4.87초). `artifacts\qa6-verification-20261012\release-build.log` 저장. `Get-Item` 확인(exit 0): `MyCapture.exe` 220672 bytes, `MyCapture.dll` 2339328 bytes, `MyCapture.deps.json` 18448 bytes, `MyCapture.runtimeconfig.json` 567 bytes. §4.1~3 완료, 다음 단계는 사용자 실기 피드백. 기존 빌드·각 WIP worktree·기준 snapshot·증거·실패한 Antigravity 검토 worktree는 재현을 위해 보존하며 정리하지 않음.
-
-- 2026-10-12 Codex: `/root/delegation_recovery`의 최종 읽기 전용 독립 확인 완료. Release의 .NET 10·Windows Desktop 10 runtimeconfig, Core·Platform·Ocr·관리 종속 DLL, Windows x64 SkiaSharp·ONNX 네이티브 DLL, OCR 모델 3개·사전·트레이 아이콘·영문 리소스 존재와 유효 크기 확인(exit 0). `qa6-app-final.trx`는 Completed, 통과 2227·실패 0·NotExecuted 9로 보고와 일치하며 error·timeout·aborted 0. 앱 실행·원격 작업·정리 없음.
-
-- 2026-10-12 Codex: 직전 최종 인계 커밋 `cce23fd` 완료(`git commit`, cwd 통합 worktree, exit 0), `git status --short` clean 확인. 사용자 요청에 따라 Explorer에서 `artifacts\qa6-build-1\MyCapture.exe`를 선택해 열고 Shell.Application으로 열린 경로·선택 항목 확인(exit 0). 이후 사용자가 자르기를 선택해야 회전 버튼을 찾을 수 있는 배치 문제를 피드백함. `BuildEditCommands`·`BuildCropCommands` 직접 확인으로 회전 버튼의 crop 전용 노출을 확인했고 수정 착수. 기존 WebGPT 연결 및 Antigravity 검토 실패 상태를 재사용하여 native 작업자 `/root/icons` 구현·`/root/delegation_recovery` 독립 검토를 배정함. 아이콘 작업자의 기존 worktree를 재사용하며 기준은 `cce23fd`, 신규 브랜치 `qa7-rotation-discovery`; 기존 QA6 빌드·사용자 앱·이전 브랜치는 보존함.
-
-- 2026-10-12 Codex: QA7 회전 발견성 수정 `5bd3a3a`를 직접 diff·실제 전후 PNG 검토 후 `git cherry-pick 5bd3a3a48c72efadca4db5048f6a98a7ad72157c`으로 통합(exit 0, 통합 커밋 `87192d8`). 같은 회전 버튼을 일반/자르기 명령행에 표시하며 기존 동작·선택도구·Q/W·undo/redo를 유지함. 680×460에서 명령 두 줄을 허용하되 실제 검사에서 발견한 마지막 도구 잘림은 버튼 40×38 영역을 유지하며 높이 부족 시 여백만 축소해 해결. 독립 검토 `/root/delegation_recovery`가 일반 변경과 추가 여백 변경을 각각 확인해 지적 없음. 원 worktree Debug 빌드 PASS, 집중 26개 및 관련 198개 PASS, 동일 fixture 전후 각 22 PNG 생성 PASS(모두 exit 0); crop 명령행 4쌍 픽셀 일치. 실제 명령·중간 실패·재검증·커밋 메시지 인코딩 정정은 `artifacts\qa7-rotation-verification\worker-verification-log.txt`에 수집함.
-- 2026-10-12 Codex: 코드 `87192d8`, cwd `C:\GitRepositories\my-capture-codex`; `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit 0, 경고 0·오류 0, `artifacts\qa7-rotation-verification\debug-build.log`); `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --logger "trx;LogFileName=qa7-core.trx" --results-directory C:\GitRepositories\my-capture-codex\artifacts\qa7-rotation-verification` PASS(exit 0, 1066/1066, actual session `60089` 완료). UX 자체 테스트는 별도 `MYCAPTURE_DATA_ROOT=%LOCALAPPDATA%\Temp\mcux\qa7-codex-final-1\data`, `TMP=TEMP=...\tmp`에서 `Start-Process ...\Debug\net10.0-windows10.0.22000.0\MyCapture.exe -ArgumentList '--selftest-ux-review','x' -WindowStyle Hidden -PassThru`로 시작(PID 48264, actual session `9535`, 결과 대기). 사용자 QA6 앱 PID 55532는 종료하지 않음.
-
-- 2026-10-12 Codex: QA7 UX 자체 테스트 actual session `9535` 완료. `WaitForExit` 후 exit 0, 출력 `%LOCALAPPDATA%\Temp\mcux\qa7-codex-final-1\tmp\MyCapture-ux-review-w1j40ikd.akw\ux-review-selftest-report.txt`의 `RESULT: PASS` 확인. report를 `artifacts\qa7-rotation-verification`에 수집함. cwd 통합 worktree에서 `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger "trx;LogFileName=qa7-app.trx" --results-directory C:\GitRepositories\my-capture-codex\artifacts\qa7-rotation-verification` 시작(actual session `99233`, 결과 대기).
-
-- 2026-10-12 Codex: 코드 `87192d8`, cwd 통합 worktree; App 전체 검사 actual session `99233` 완료, `qa7-app.trx` PASS(exit 0, 통과 2230·실패 0·기존 조건부 검사 건너뜀 9, 5분 28초). UX 출력 직접 집계 446개 화면 PNG·606개 재귀 PNG, 밝은 테마 144dpi·고대비 192dpi 편집기 직접 시각 확인. 출력 폴더 부재 확인 후 `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\qa7-build-1` PASS(exit 0, 경고 0·오류 0, 4.62초). `Get-Item` 확인(exit 0): exe 220672 bytes, DLL 2340864 bytes, deps 18448 bytes, runtimeconfig 567 bytes. 실제 로그·TRX·report는 `artifacts\qa7-rotation-verification`에 보존. 이전 QA6 빌드·사용자 앱·qa6-icons 브랜치·재사용한 qa7-rotation-discovery worktree·전후 증거는 보존하고 정리하지 않음.
-
-- 2026-10-12 Codex: `qa7-app.trx`를 XML로 직접 집계해 total 2239 / Passed 2230 / Failed 0 / NotExecuted 9를 확인(exit 0). `git diff --check` PASS(exit 0). Explorer에서 `artifacts\qa7-build-1\MyCapture.exe`를 선택해 열고 Shell.Application으로 열린 폴더와 선택 항목을 확인(exit 0). §3·§4·§6을 최신 QA7 상태로 갱신했으며 사용자 실기 피드백 대기로 전환함.
-
-- 2026-10-12 Codex: 사용자 요청으로 Microsoft Store 배포와 다음 배포용 앱 내부·패키징 로직 최적화 모두 착수. 기존 §4.5의 원격 대기 조건은 이번 명시적 배포 요청으로 충족함. 현재 QA7 소스를 Store 4.1.0으로 제출하고 다음 최적화는 별도 브랜치로 유지함. 사용자 추가 요청에 따라 무료·개발자·캡처·핀을 앞세운 한/영 Store 설명 수정. Snipaste(https://www.snipaste.com/), ShareX(https://getsharex.com/), Greenshot(https://getgreenshot.org/) 공식 소개의 작업 중심 구성과 어투를 조사함. Partner Center에서 현재 공개 패키지 4.0.3.0과 신규 Submission 4 초안(1152921505702097950)을 확인함.
-- 2026-10-12 Codex: cwd 통합 worktree; PR #74 exact head 753773fcb32040155b5597e180ff4a233925919c의 CI 2개 SUCCESS 확인. `gh pr merge 74 --repo sukwoo0711-maker/my-capture --merge --match-head-commit 753773fcb32040155b5597e180ff4a233925919c` FAIL(exit 1, 저장소 merge commit 금지). 저장소 허용 방식 확인 후 같은 exact head에 `--squash`로 재실행 PASS(exit 0), main 46bf027359829bf7af990b8a77ebd143f81b0dcc 병합 확인. `git merge origin/main --no-edit`는 PinWindow·ThemeService 중복 변경 충돌로 exit 1. 이미 개선된 QA7 구현을 보존해 해결하고 `git diff --exit-code c437af1 -- .` PASS(exit 0, 전체 파일 트리 동일)를 확인 후 병합 커밋 2893a0d 완료(exit 0).
-- 2026-10-12 Codex: 사용자 QA6 MyCapture PID 55532 실행을 재확인함. Store 자체검사 runner의 실행 앱 부재 조건과 §5의 사용자 앱 종료 금지에 따라 종료 여부를 질문하고 응답 대기 중. 앱은 종료하지 않았으며 소스·설명·배포 준비를 계속함. 다음 최적화 작업은 기존 worktree를 재사용해 perf/next-release-app 및 perf/next-release-packaging에 분리하고, native 독립 검토와 실제 검증 근거를 수집 중임.
-- 2026-10-12 Codex: Store 제출 준비 커밋 dfc3000 및 PR #75 생성/원격 push PASS(exit 0). cwd 통합 worktree에서 `powershell.exe -NoProfile -File build\build.ps1 -Configuration Release -Test` PASS(exit 0, actual session 79938): 경고·오류 0, Core1066 통과, App2230 통과/기존 조건부9건 건너뜀. 원본 `artifacts/store-410-verification/release-build.log`, `release-test.log`. Partner Center Submission4 초안에 한국어·영어 설명/짧은소개/4.1.0변경사항과 pin/GIF 기능 문구를 저장하고 다시 열어 값 대조 및 JPG 증거 저장 완료. Store 공개/심사 제출은 아직 아님.
-- 2026-10-12 Codex: PR75 CI run38161277525/38161254064 FAIL(exit1): Core1066 통과, App2231 통과/1실패/7건 건너뜀. `LibraryColumns_NoCardIsClippedFromTheMinimumWidthUp`에서 width sweep이 요청/ActualWidth 불일치로 조기 종료되어 root/details open 2열만 관측함. 제품 변경 없이 테스트를 보완: 가능한 실제 창 폭은 기존 검사, 데스크톱 제한 이후는 실제 loaded LibraryRoot의 명시적 DIP 폭에서 같은 SizeChanged/카드/명령/전체행/최소폭 assertion 및 3개 이상 열 수 검사를 유지. MaxWidth=MinWidth인 별도 재현검사 추가. 독립 검토 지적 없음. 집중 `dotnet test tests/MyCapture.App.Tests -c Release --filter FullyQualifiedName~LibraryColumns_ --logger trx;LogFileName=ci-library-columns.trx --results-directory artifacts/store-410-verification` PASS(exit0, actual session77818, 2/2). 단조 증가 sweep에서 최소폭으로 매회 돌아가던 fixture 재구성을 줄인 후 같은 검사 `ci-library-columns-final.trx` PASS(exit0, actual session45014, 2/2,31초). 첫 CI 실패 로그와 두 TRX 모두 보존.
-- 2026-10-12 Codex: 다음 배포용 앱/패키징 최적화는 재사용 worktree agent-aeae29401bfb142cf의 perf/next-release-optimization에 분리. HEAD4d54fc8(앱690483f, 패키징원본a1ccabd/d607bf→d912bf4/4d54fc8), clean. 독립 검토 지적 해소, 15개 패키징 합성계약 PASS(exit0). `powershell.exe -NoProfile -File build/build.ps1 -Configuration Release -Test` PASS(exit0, actual session74880): Release 경고·오류0, Core1066, App2233통과/9건건너뜀. 선택getter 2000회 동일fixture 측정에서 단일선택 할당5,040,000→176,000 bytes,6조건checksum동일. 근거 `%LOCALAPPDATA%/Temp/mcux/perf-next-release-app/`. 실제 StoreOnly/8종 native 자체검사는 사용자앱 종료 조건 때문에 아직 미실행.
-- 2026-10-12 Codex: 최종 CI run38162513743/38162518261 모두 SUCCESS. `gh pr checks 75 --watch` actual session66682 완료(exit0). 다운로드한 CI 로그/ZIP을 `artifacts/store-410-verification`에 보존하고 Core1066/App2233 통과·실패0·조건부7건 건너뜀 및 hosted symlink 필수검사 PASS를 확인함. `gh pr merge 75 --squash --match-head-commit 75dc4e3a1377189f7e54d49ef56beeed142b1656` PASS(exit0), main39942191fbdc49d018ccfd01c975701f0d002532 병합 확인. `git diff --exit-code HEAD origin/main -- .` PASS(exit0, 파일 트리 동일) 후 clean release/store-4.1.0 브랜치로 이동함.
-- 2026-10-12 Codex: cwd `C:\GitRepositories\my-capture-codex`, source3994219 clean; `powershell.exe -NoProfile -File build\package.ps1 -Version 4.1.0` PASS(exit0, actual session99883). publish281개, setup/portable/release-manifest/SHA256SUMS 생성. `/root/delegation_recovery` 독립 PowerShell 읽기 검증 PASS(exit0): exactSourceCommit/clean/4.1.0/win-x64/x64/self-contained 일치, publish281개 총250621689 bytes의 경로·크기·SHA256 전수 일치, 중복·추가 없음, checksum3/3 일치. setup102338560 bytes SHA256 AA647F0F5C0462EA9C6FA3A18B8E4DF7743CA75B73A2D2DCFA8B0F277DCE8F15; portable104034509 bytes SHA256 D86DBD080ED3A267488E29316BEEF409EAD0A2F8068D0A2CBF5CC8CD7839116E. installer-stage와 모든 근거 보존, 삭제 없음.
-- 2026-10-12 Codex: 다음 배포 브랜치를 최종 main3994219 이력과 연결한 5e463c9a7b82ccb653f1a52ad05b737c6cb7ca18 완료(exit0, clean). 직전02f073d와 작업 파일/인덱스 diff 모두 exit0, tree SHA247976680015a6fe420c2f70be4bbdc89a2b36d3 동일. 직전 main 테스트 fixture 통합 뒤 Release 테스트 프로젝트 빌드 및 LibraryColumns 집중검사2/2 PASS(exit0, actual session93636). 최종 이력 연결은 파일 내용 변경이 없어 검사를 중복 실행하지 않음.
-- 2026-10-12 Codex: `Get-Process MyCapture`로 사용자 QA6 PID55532 및 경로 재확인(exit0). 종료 허용 질문은 아직 응답 대기이며 앱을 보존함. 8종 packaged selftest, MSIX 생성/업로드/심사 제출, 다음 StoreOnly 실경로 검증은 NOT RUN(exitN/A, §5 앱 종료 금지와 runner의 앱 부재 사전조건). Partner Center에는 새 한/영 설명이 저장된 Submission4 초안이 있으며 공개 버전은4.0.3.0. 배포 source3994219와 artifact provenance를 유지하도록 현재 상태 문서만 별도 chore/store-4.1.0-handoff 브랜치에 기록함.
-
-- 2026-10-12 Codex: 사용자가 직전 QA6 앱 종료 및 배포 재개 질문에 “진행해”로 승인함. 재개 시 Get-Process MyCapture 조회에서 실행 프로세스가 없어 종료 명령 없이 선행 조건 충족을 확인함. release/store-4.1.0의 exact source3994219로 돌아가 8종 패키지 자체검사와 MSIX/Store 제출을 진행함.
-
-- 2026-10-12 Codex: cwd `C:\GitRepositories\my-capture-codex`, release source3994219 clean. 사용자 앱 부재 확인 후 short profile `store410r1`로 `powershell.exe -NoProfile -File build\run-packaged-self-tests.ps1 -PublishRoot C:\GitRepositories\my-capture-codex\artifacts\release\4.1.0\publish-win-x64 -OutputRoot C:\Users\sukwo\AppData\Local\Temp\mcux\store410r1\out` 실행, actual session46275 FAIL(exit1,7/8). hotfix의 외부 C/E/P/S 입력이 c만 관측됨. 단독 h1 FAIL(exit1, 첫 입력 전 foreground guard), CUA 중지 상태의 full8 r2 actual session59354 FAIL(exit1,7/8, 같은 첫 foreground guard). read-only 확인에서 actual HWND984206은 msedge/PID19556, ForegroundLockTimeout200000. 정책·검사 조건 변경 없이 UI 도구 중지 상태를 유지한 동일binary h2 actual session51732 PASS(exit0,hotfix193개); 최종 full8 r3 actual session27603 PASS(exit0,8/8,각 단일정확한 RESULT:PASS). 초기 정확 원인은 미확정이며 원 보고서·진단 `artifacts/store-410-verification/native-input-diagnosis.md` 보존. 최종 raw log와 8개 report도 수집함.
-- 2026-10-12 Codex: cwd 위 source3994219 clean; `powershell.exe -NoProfile -File build\package-store.ps1 -Version 4.1.0 -IdentityName sukwoo0711.MyCapture -Publisher CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474 -PublisherDisplayName sukwoo0711` PASS(exit0,actual session56707). MSIX4.1.0.0 생성,106019168bytes,SHA25689d6e223117163966c074d66060463a53e7c3ba889162635c8d4c37e185c2a7a. `/root/delegation_recovery` ZIP stream 독립검증 PASS(exit0):342entries=281publish+57PNG+4metadata, 원본inventory와ZIPpayload path/size/SHA256 전수일치, identity/Publisher/version/x64/minOS/capabilities/startupdisabled/summary/checksum 일치. 실제 전체명령·출력 `artifacts/store-410-verification/msix-independent-verification.md`에 저장. 압축해제·삭제 없음.
-- 2026-10-12 Codex: 기존 Edge ID2/Partner Center 탭977755822의 Submission4 패키지 화면에서 filechooser를 열고 검증된 exact MSIX의 setFiles를 시도했으나 확장의 Allow access to file URLs 비활성으로 FAIL. 실제 업로드 안 됨. 사용자에게 직접 설정 또는 설정 허용을 질문한 뒤 edge://extensions 안내 페이지 열기를 시도했으나 브라우저 URL 보안 정책(HTTP/HTTPS만 허용)으로 거부됨. 우회하지 않고 사용자가 직접 설정해야 함을 즉시 정정 안내. 기존 초안과 live4.0.3.0 보존, 심사 제출 NOT RUN. 독립 작업으로 다음 최적화의 StoreOnly 실경로 검증 슬롯을 작업자에게 넘김; actual session47668, source5e463c9 clean, 새 nopt1 data/tmp, 결과 대기. 해당 native 검사 중 root CUA 작업 중지.
-
-- 2026-10-12 Codex: 다음 배포 최적화 source5e463c9 clean, cwd `C:\GitRepositories\my-capture\.claude\worktrees\agent-aeae29401bfb142cf`; 작업자 `powershell.exe -NoProfile -NonInteractive -File <cwd>\build\package.ps1 -Version 4.1.0 -StoreOnly` PASS(exit0,actual session47668,84.095초,8종8/8). nopt1 격리data/tmp, foreground실패 없음. 독립 Python 검증 exit0:manifest exactsource/clean/StoreOnly/x64/self-contained,8개 process exit0/단일PASS/reporthash/resultJSONhash,281개inventory path/size/hash,ZIP/IExpress 부재. 이어 `package-store.ps1 -PublishDir <cwd>\artifacts\store-publish\4.1.0\publish-win-x64 -OutputRoot <cwd>\artifacts\store\next-opt-5e463c9-4.1.0`와 기존Store identity인수로 PASS(exit0,session44644,10.119초). MSIX106019943bytes SHA25687a02e20ffcd6d58e2bfa3c8ef61a9bd72ba730d0b39d47c2a79fa0a37de682f. 독립 ZIP검증 exit0:342unique/CRC,281publish·340stage파일hash,340blockmap파일4037SHA블록,identity/source/manifesthash 일치. 최종sourceclean,추가코드변경/commit/remote 없음. 실제전체명령·exit LOG와 JSON을 `artifacts/next-release-optimization-verification/storeonly-msix`에 수집. Purpose=next-release-validation-only, 현재배포MSIX와별도보존,설치·업로드없음.
-- 2026-10-12 Codex: Store 업로드 설정 응답은 아직 없음. 권한 변경 없이 사용자가 Partner Center의 browse your files로 검증된 root MSIX를 직접 올리는 대안도 안내함. Edge tab977755822를 markHandoff하고 현재 패키지 화면 JPG를 `artifacts/store-410-verification/store-upload-awaiting-access.jpg`에 저장·직접확인함. 초안 패키지에는 아직4.0.3.0만 있으므로 제출하지 않았음. `git diff --check`와 상태 문서 검증 후 현재 기록 브랜치에 보존하며, 다음 재개는 사용자 fileURL설정 완료 또는 exact MSIX 직접 업로드 완료 확인부터 진행함.
-
-- 2026-10-12 Codex: 사용자 “완료” 응답 후 기존 Edge2/PartnerCenter977755822에서 업로드된4.1.0.0/x64/101.1MB, minWindows22000, ko-kr/en-us 확인. 기존4.0.3 자동제거제안은 Don't remove this package로 해제하고 보존, 새4.1.0 rank1로 Save. Overview의4.1.0 Validated와 Packages/Storelistings Updated 확인. `/root/delegation_recovery`가 실제제출MSIX106019168bytes/SHA25689d6e223117163966c074d66060463a53e7c3ba889162635c8d4c37e185c2a7a,source3994219/clean근거,최종8/8를 읽기전용 재대조 PASS(exit0)하여 기존독립LOG에추가함. 브라우저내부설정 변경은 수행하지 않음.
-- 2026-10-12 Codex: 08:50 KST(UTC2026-10-11T23:50경) Submit for certification 클릭 후 `Update in certification` 및 `Product update: In certification (Submission4)`를 직접확인. Submission Complete / Pre-processing In progress / Certification·Publishing Not started. `Your product will start publishing as soon as it passes certification` 확인. 선택적만족도설문은 Close로닫고응답전송없음. 결과화면을 markDeliverable, `artifacts/store-410-verification/store-certification-submitted.jpg` 저장. 현재공개4.0.3.0,새4.1.0.0은심사접수완료/공개대기. 사용자추가설정요청해소, 다음배포최적화실행검증도이미완료. 파일·기존패키지·작업사본·근거자료삭제없음.
-
-- 2026-10-12 Codex: 다음 버전 제품 최적화 착수. cwd `C:\GitRepositories\my-capture-codex`; `git switch -c perf/product-optimization`, `git merge --no-edit perf/next-release-optimization` PASS(exit0), 기준 `968b7c7`. WebGPT `node C:\Users\sukwo\.codex\skills\webgpt\scripts\client.mjs register --cwd C:\GitRepositories\my-capture-codex` FAIL(exit1, `tunnel_unavailable`, 과업 미등록·미전송). `/root/delegation_recovery`에 owned service 읽기 전용 점검, 기존 native 작업자 2명에 서로 다른 앱 경로 조사를 배정함. 기존 작업 사본·현재 Store 제출·사용자 메인 체크아웃을 보존함.
-
-- 2026-10-12 Codex: 작업자 `6a6de2a`(image), `9f4226a`(library) diff·실제 JSON/TRX·PNG 비교·독립 검토를 확인하고 root cwd에서 cherry-pick PASS(exit0), 통합 `0519a41`, `caee5b8`. 각 작업 사본 clean·기존 브랜치 보존. root `powershell.exe -NoProfile -NonInteractive -File build/build.ps1 -Configuration Release -Test` actual session `16420`: build 경고0·오류0 PASS, 전체 tests 실행 중. 상세 LOG와 근거는 `artifacts/product-optimization/`.
-
-- 2026-10-12 Codex: 통합 `caee5b8`의 전체 Release 명령 actual session `16420` PASS(exit0), build 경고0·오류0, Core1066/App2262 통과·기존9skip. `dotnet build src/MyCapture.App/MyCapture.App.csproj -c Release --no-restore -nologo -v:q -o C:\GitRepositories\my-capture-codex\artifacts\next-version-product-opt-build-1` PASS(exit0). 새 `%LOCALAPPDATA%\Temp\mcux\popt1`로 `MyCapture.exe --selftest-ux-review x` 실행 후 initial GUI launch wrapper와 실제 process 종료를 구분해 기록; owned PID66652 handle/WaitForExit actual session `60013` PASS(exit0), report `RESULT: PASS`. 대표 PNG3장 직접 확인, 파일·source hash는 `artifacts/product-optimization/development-build-evidence.json`. 제품 최적화 1차 완료, Store 변경·사용자 앱 종료·파일 삭제 없이 모든 작업 사본과 근거를 보존함.
-
-- 2026-10-12 Codex: 사용자 체감 속도 저하 질문으로 조사 범위 전환. 제품 source09cb3d8/직전 개발caee5b8, 실제 설치 Store4.0.2.0/sourcec52a1bb 확인. 현재 desktop의 production page/source 비교 및 의미 검증45/45 PASS(exit0, chunk7a7b33), default700ms hung Explorer·기존 source 의미45/45 PASS(exit0, chunk0d67ae); 큰 실desktop 지연은 미재현. Gallery 실제 이전 모델 비교2/2 PASS(exit0, session99431). 작업자별 명령·cwd·원본JSON·TRX를 `artifacts/latency-regression/capture`와 `gallery`에 수집. 이전 메모리 할당 최적화를 이 체감 지연의 원인 해결로 보고하지 않도록 §3 정정.
-- 2026-10-12 Codex: cwd `C:\GitRepositories\my-capture-codex`, 동일 현재 제품의 기존 profile publish PASS(exit0, runtime10.0.12). global RuntimeFrameworkVersion10.0.11 재시도 FAIL(exit1, NU1505 WindowsSDKRef 중복), private KnownFrameworkReference runtime metadata만 고정하는 방식으로 원인 해결. `dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:PublishProfile=win-x64-self-contained -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-codex/artifacts/latency-regression/pin-runtime-10.0.11.targets -o C:/GitRepositories/my-capture-codex/artifacts/next-version-product-opt-r2r-10.0.11 -p:SourceRevisionId=09cb3d806e555798d380d2c0a8cbf67f0607221f -nologo` PASS(exit0, session97091). 실제runtime10.0.11/WindowsSDK10.0.22000.57/R2R PE signature/deps 누락0 독립 확인 PASS. DLL SHA25649164BC4953D30B702C8E09B5643AA4EB95312333AEA16159BE6A3DE405F89A3. 원 실패·명령·private targets·검증 결과는 `artifacts/latency-regression` 보존.
-- 2026-10-12 Codex: 외부 STA host에서 actual old/FDD/R2R product editor 비교 최종9개 프로세스 exit0/45samples, 각 Core/WPF10.0.11 및 old dependency 복사0 확인. 첫 editor constructor→WPF Rendering 중앙값383.51/385.96/376.99ms, 반복94.21/81.77/96.55ms로 큰 편집기 회귀 미재현. 원본 WindowsApps mapping 및 host ResourceAssembly bootstrap 실패는 별도 보존 후 원인 수정, 제품DLL·ACL 변경 없음. 동일한 제품코드/다른source metadata는 caee5b8→09cb3d8 문서만 변경임을 독립 확인. 소스·측정해석 독립 검토 완료, Opacity 필드는 가시성 판정에서 제외. App startup/실 hotkey/저장은 측정 범위 밖이고 체감 저하의 전체 원인은 미확정. 현재 느린 동작에 관한 사용자 응답 대기, 제품 변경·원격 변경·파일 삭제 없음.
-
-- 2026-10-12 Codex: 사용자가 느린 동작을 캡처 영역 선택으로 특정하여 hover/drag 조사로 좁힘. Computer Use로 actual AppInstaller 창124914308의 unsigned Store MSIX4.1.0.0/0x800B010A/업데이트 비활성 확인. 독립 파일·프로세스 진단 exit0 및 제출hash일치, 설치 Store4.0.2.0 유지 확인. 관측한 취소 버튼 클릭 뒤 새 창 목록과 독립 프로세스 조회로 종료 확인. 앱 내부 오류와 구분했고 인증서·보안 설정·Store 제출 변경 없음. 근거 `artifacts/selection-lag-investigation/update-diagnostics/`.
-- 2026-10-12 Codex: 작업자 overlay commit4b228141d00b6470fa262b291a031e447539ca43의2파일 diff/테스트/대표PNG를 직접 검토하고 root cwd `C:\GitRepositories\my-capture-codex`에서 `git cherry-pick 4b228141d00b6470fa262b291a031e447539ca43` PASS(exit0,chunkb79dc5), 통합ff7e46cb7e2a8e4ec9a7a796122b963f8fb59ae1. Bgr32 정수물리경계에서 desktop1회+선택영역밖dim, 나머지는 기존합성. worker집중73/73 exit0, root `dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release --filter <9개 overlay 관련 클래스 OR; 정확 filter 개발LOG> --logger trx;LogFileName=root-overlay-focused.trx --results-directory artifacts/selection-lag-investigation -v minimal` actualsession55245 PASS(exit0,최종chunk5aaa0b),73/73·0skip·테스트프로젝트빌드완료. 독립검토중대한지적없음.
-- 2026-10-12 Codex: 실제4208×1440 Bgr32 software paired hover42.73→33.35ms/drag25.86→19.04ms. Native같은120+120 workload 버전별3프로세스 session37606 exit0, 완료medianhover2312.8→2303.0ms/drag2048.9→2006.5ms 분포중첩. 별도interaction유효성pair session49763 exit0, Create유지/Endedfalse/최종selection동일. 사용자체감해결은미확정. 원본측정·초기fixture실패·한계·최종73TRX·probe소스·독립검토를 root `artifacts/selection-lag-investigation/overlay` 등에수집. 기존/수정대표PNG SHA256 F414CE2A209F09359628E8AB84EE983FCAE727BCEEA09543BFCC0230B2C3E476 일치재확인(exit0,chunke437ee). 삭제·사용자설정변경없음.
-- 2026-10-12 Codex: root sourceff7e46c clean에서 `dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:PublishProfile=win-x64-self-contained -p:CustomAfterMicrosoftCommonTargets=C:/GitRepositories/my-capture-codex/artifacts/latency-regression/pin-runtime-10.0.11.targets -o C:/GitRepositories/my-capture-codex/artifacts/qa8-selection-performance -p:SourceRevisionId=ff7e46cb7e2a8e4ec9a7a796122b963f8fb59ae1 -nologo` PASS(exit0,chunkd0cf87). 독립source/runtime10.0.11/R2R/deps263누락0 PASS(exit0), DLL SHA256 E1D9C2ABF2EEE45B3E60D3194BCC26AF87FD9ED99E70B803C75B103000BC100C. 최종DLL을외부OverlayProbe로로드한syntheticsnapshot PASS(exit0,chunkc24349),PNG기존쌍과hash일치(chunkbe235f). Computer Use의 기존Explorer87166948에서새폴더열기·MyCapture응용프로그램선택화면확인. 실행파일은§3경로,Store변경없음. 모든작업사본·산출물보존.
-
-- 2026-10-12 Codex: 사용자4.1.1 Store배포명시승인,업데이트중진행상태화면은다음버전으로유보. cwd `C:\GitRepositories\my-capture-codex`에서 fetch origin PASS(exit0),origin/main3994219확인, `git switch -c release/store-4.1.1` PASS(exit0). 기존ebd1107최적화포함4.1.1버전·manifest·계약·배포예시·한영What'snew수정. PartnerCenter브라우저2/tab977755822새로고침으로Submission4공개완료직접확인. 사용자QA8PID64500보호,패키지검사전종료조건은남아있음. 진행LOG `artifacts/store-411-verification/`.
-
-- 2026-10-12 Codex: 4.1.1 release commit e751e963135598de492e785e8e3774cf7631b7fa, `git push -u origin release/store-4.1.1` PASS(exit0,chunkb3ac95), `gh pr create --repo sukwoo0711-maker/my-capture --base main --head release/store-4.1.1 --title <4.1.1배포제목> --body-file artifacts/store-411-verification/pr-body.md` PASS(exit0,chunkf1658e),PR76. 버전계약9/9 PASS(exit0,chunk40ff65), root `powershell.exe -NoProfile -NonInteractive -File build/build.ps1 -Configuration Release` PASS(exit0,session86582/최종44a91e),경고0/오류0. 독립검토 `release-review.md` materialfinding없음. hostedCI38199941458/38199939852실행중으로완료판정전,병합없음.
-- 2026-10-12 Codex: PartnerCenter Start update로Submission5(id1152921505702100136)생성, ko-KR/en-US의releaseNotes만4.1.1최적화내용으로변경후각Save→Overview확인. 기존개발자무료도구소개·스크린샷유지. 패키지4.1.1미생성/미업로드/심사미제출. 코드/검토준비뒤QA8PID64500종료확인질문,응답없고최근조회에도앱존재. §5사용자앱종료금지와8종residentguard유지. `packaging-preflight.md`읽기검토완료,성공fresh경로/IO실패cleanup한계/별도raw-delete성능CLI제외/짧은새data/tmp조건기록. release소스SHA를보존하도록상태만별도chore/store-4.1.1-handoff에기록. 실제명령·원격CI·검토·브라우저근거는 `artifacts/store-411-verification/`,파일/작업사본삭제없음.
-
-- 2026-10-12 Codex: PR76 head e751e963의 CI38199939852/38199941458 모두 completed/success, 각 Core1066/App2274 통과·조건부7·실패0 및 필수 symlink gate Passed 확인. actual artifact test.log/상태/원본 로그는 `artifacts/store-411-verification/ci/`, 독립 검토 후 root `gh pr view 76 --repo sukwoo0711-maker/my-capture --json headRefOid,baseRefOid,state,mergeStateStatus,statusCheckRollup` PASS(exit0, chunke6cde5). cwd `C:\GitRepositories\my-capture-codex`; `gh pr merge 76 --repo sukwoo0711-maker/my-capture --squash --match-head-commit e751e963135598de492e785e8e3774cf7631b7fa` PASS(exit0, chunka9996c). fetch 및 merged 상태 조회 PASS(exit0, chunk7fb523), main9a3576353cb3c1f4481b42510b435b9b2c925ece. `git branch release/store-4.1.1-main 9a3576353cb3c1f4481b42510b435b9b2c925ece`와 검사한 PR head 대비 `git diff --exit-code` PASS(exit0, chunkd6a636). 모든 기존 브랜치·작업 사본 보존. QA8 PID64500은 실행 중으로 사용자 종료 승인 대기, 4.1.1 패키지 검사·MSIX 생성·업로드·심사 제출은 미실행. Submission5 초안 증거 `artifacts/store-411-verification/store-411-draft-awaiting-app-close.jpg`.
-
-- 2026-10-12 Codex: 사용자 “응”으로 QA8 종료 명시 승인. cwd `C:\GitRepositories\my-capture-codex`, exactPID64500/QA8 Path 확인 후 Stop-Process/WaitForExit 및 resident0 확인, release/store-4.1.1-main clean9a35763 전환 PASS(exit0, chunkf92368). 새 s411-bb1b5ab8 profile에서 `powershell.exe -NoProfile -NonInteractive -File build/package.ps1 -Version 4.1.1 -StoreOnly` session99980 FAIL(exit1, final444007), hotfix 외부 ceps 입력 미반영으로7/8. 동일EXE `--selftest-hotfix-ux` 별도 profile/output 재실행 session62372/ownedPID62960 PASS(exit0, final33b0d5). 원인 후보는 childfocus/IME/키상태, 확정하지 않음. 첫 결과는 경로 경계·reparse·파일 수·result hash 확인 후 sibling4.1.1-attempt1-native-input-failure로 보존 rename(삭제없음). 새 s411r profile 전체 StoreOnly session16960 PASS(exit0, finalbc81c3),8/8/281files; source/assertion 변경없고 첫/최종281file hash 전수동일(chunk8ffa45 exit0).
-- 2026-10-12 Codex: 동일 cwd에서 `powershell.exe -NoProfile -NonInteractive -File build/package-store.ps1 -Version 4.1.1 -PublishDir C:\GitRepositories\my-capture-codex\artifacts\store-publish\4.1.1\publish-win-x64 -OutputRoot C:\GitRepositories\my-capture-codex\artifacts\store\4.1.1 -IdentityName sukwoo0711.MyCapture -Publisher CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474 -PublisherDisplayName sukwoo0711` session65525 PASS(exit0, final4fd26a). MSIX SHA2567a70cc128c38479fa9f3384e94ccbeb28ebf4340953723ba36a91785c6521e44/106021996bytes. 독립 검증 actual4361cb/19536b exit0, root검토4f1cd2: exactsourceclean/281payload/8종/342MSIXentry/hash/identity/R2R/runtime10.0.11 PASS. 상세 `artifacts/store-411-verification/artifact-review.md`.
-- 2026-10-12 Codex: Store Submission5 packages 페이지에서 input[type=file] chooser 첫 시도 timeout으로 runtime reset; observed browse your files 링크를 통한 실제 chooser 획득 후 setFiles는 Edge 확장 Allow access to file URLs 권한 부족 오류. 새 패키지 미업로드. Windows native 파일 picker 대체 확인에서 Computer Use가 현재 브라우저 URL을 확실히 판별할 수 없다는 정책 사유로 이번 turn 종료를 요구해 추가 UI 조작 중단. 권한/보안 설정 변경·우회·심사 제출 없음. 사용자가 exact 제출용 MSIX를 업로드한 뒤 현재 화면을 먼저 확인하고 이어서 Save/심사 제출해야 함. 상태 기록은 chore/store-4.1.1-handoff로 복귀해 보존, release 소스·산출물은 그대로 유지.
-
-- 2026-10-12 Codex: 사용자 “완료했어”로 직접 업로드 완료를 알림. 기존 Edge2/tab977755822의 Submission5 packages에서4.1.1.0/101.1MB/x64 확인.4.1.0 자동 제거 예정 링크 Don't remove this package를 눌러 보존, Save 후 overview에서4.0.3/4.1.0/4.1.1 세 패키지 Validated와 Packages/Store listings Updated 확인. 승인된 배포 범위로 Submit for certification 실행 후 actual 화면 **Update in certification**, Submission Complete, Pre-processing In progress, Certification/Publishing Not started 및 통과 후 자동 게시 문구 확인. 화면 `artifacts/store-411-verification/store-411-submitted.jpg` 저장 및 tab markDeliverable. 보안 설정·확장 권한 변경·패키지 삭제·중복 업로드 없음. 공개/사용자 설치는 아직 미확인. UI 작업의 shell exit는 N/A, 근거는 실제 브라우저 상태·JPEG·development-log.txt. 로컬 인계 branch clean06b0458에서 상태 갱신, source/MSIX SHA는 §3과 동일하게 보존.
-
-- 2026-10-12 Codex: 사용자 다음 버전 권고 전체 구현·실기 병목 재검토 승인. cwd `C:\GitRepositories\my-capture-codex`, identity/common-dir/remote와 clean d3223ef 확인. `git switch -c feat/next-product-readiness`, 기존 worker 두 경로 새 branch 전환, `git worktree add -b feat/next-edit-recovery C:\GitRepositories\my-capture-edit-recovery d3223efbb7a921fc5785fd57ae029bd2643488fd` PASS(exit0, chunkc40320). 기존 a491 worktree의 untracked CaptureLatencyInvestigationTests.cs 보존. WebGPT tunnel_unavailable/Antigravity validation_failed의 기존 실패와 native 공식 경로 근거를 재사용해 3개 native 작업자에 독립 구현 배정. Windows·개발·협업·worker-routing·creative·assembly·surface 정본 직접 확인. 삭제/원격 변경/사용자 앱 종료 없음. 착수 로컬 AGENTS.md 읽기는 파일 부재로 실패(exit1, fb5dba); 사용자 제공 공용 지침과 이 SSOT 규칙을 적용함.
-
-- 2026-10-12 Codex: root cwd에서 engagement/recovery 소스·실제 PNG 직접 검토와 native 독립 검토 후 `git cherry-pick` 완료(exit0): `01aa962/eace645/26a38b7/d94e661/d925ca8/f3667ab`; root 임시 정리 연결 `a6b0e12`, 종료·Store 보호 연결 `f45369e`. `dotnet test tests/MyCapture.Core.Tests -c Debug --filter FullyQualifiedName~AtomicFileTests --logger trx;LogFileName=atomic-recycle.trx --results-directory artifacts/next-product-readiness -v minimal` PASS(exit0,9/9,chunkde5128). 다른 계열 텍스트 검토 GLM/MiMo 각 1회는 HTTP200이나 length/빈 답변으로 FAIL(exit1, session18750/24785), 성공 검토에 포함하지 않음. 전체 빌드·최종 실기는 공용 휴지통 서비스 통합 대기. 상세 명령·source와 실패 근거는 `artifacts/next-product-readiness/development-log.txt` 및 작성자 LOG에 보존.
-- 2026-10-12 Codex: `powershell.exe -NoProfile -NonInteractive -File artifacts/next-product-readiness/run-live-probe.ps1 -Target <root>/artifacts/store-publish/4.1.1/publish-win-x64/MyCapture.dll -Output <root>/artifacts/next-product-readiness/live-baseline-411-v4.json -Label 4.1.1-baseline` PASS(exit0,session40436/final95a447). 실제4208×1440 desktop/Tier2/WPF10.0.11, 선택 화면 첫 표시308.13/307.35/255.60ms, 선택→편집기146.81/116.58/105.83ms. 3회 정상 닫기 완료. 각 입력3개/pressed1개만 관측되어 연속 드래그 지연·전체 앱 성능은 미확인. 사용자 앱 종료·화면 내용 저장·클립보드 변경 없음. 새 버전 비교 대기.
-
-- 2026-10-12 Codex: root에서 휴지통·라이브러리 `55bebe8/483ade2/24123af`, 복구·종료 `b6f6cb1/47bd5f7/bfbd3d1`, Store 계약·설정 잠금 `09101f0/8225adf` 통합. 마지막 `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit0,7a79f7,경고0/오류0). Core 재검사 `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --logger trx;LogFileName=readiness-core-final.trx --results-directory artifacts/next-product-readiness -v minimal` PASS(exit0,session79520/final36cd49,1092/1092). 같은 형식 App 전체 `readiness-app.trx`는 FAIL(exit1,session39301/finalf55d00,2307PASS/9FAIL/11조건부skip); 실패를 작성자별 재현·수정으로 이관. 원래 실패 자료 보존.
-- 2026-10-12 Codex: actual owned Explorer 복원 대조에서 original SHA/identity 일치, `$R` 부재, `$I` 잔존과 namespace 검색0 확인(exit0,9951fc/5110b5). 공용 Shell 최종 native canary는 이 OS 계약에 따라2/2 PASS(exit0,cb0acb). UI before/after 메뉴 PNG 직접 확인했지만 추가 offscreen submenu fixture는 timeout FAIL로 보존하고 실제 native 메뉴 동작은 최종 실기에 포함. owned Explorer만 정상 닫음, 사용자 항목 조작 없음.
-- 2026-10-12 Codex: junction export `da04e6f` 직접 diff 검토 후 `git cherry-pick` PASS(exit0,393e25)→`653120f`, worker 실제13/13 집중검사 PASS. Shell COM 예외의 원인/HRESULT를 유지해 기존 IO 복구 경계로 전달하는 `b07902c` 직접·독립 검토 후 cherry-pick PASS(exit0,ca758c)→`8f30ded`; worker VideoLibrary+Shell20PASS/2기존skip 및 persistence/library19PASS, 기존실패5건 모두Passed. 원본·저널 보존 assertion 유지. 전체재검증·최종실기대기, 상세실행근거는 development-log 및 각 worker LOG.
-
-- 2026-10-12 Codex: 실제 초안 discard/close/retake `a94c8b6`의 제품·회귀 diff와 독립 검토 지적 해소를 확인하고 root `git cherry-pick a94c8b6edf808353fbff4e9ab0840f5f95ea536f` PASS(exit0,0b83a6)→`c1401a0`. worker 최종36/36 및 순수guard3/3 PASS. root 전체 `dotnet build MyCapture.slnx -c Debug -v q -nologo` PASS(exit0,6dcf4a,경고0/오류0); `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger trx;LogFileName=readiness-app-final.trx --results-directory artifacts/next-product-readiness -v minimal` 실제session62858 진행 중(아직 최종판정전). Core 소스·검사 source는1092PASS 시점8225adf와 동일(diff없음). 실제 private App host는 사용자 Run 키를 메모리 backend로 격리한 dry검사 PASS이며, 실제 GUI 실행과4K초안 probe는 대기입니다.
-
-- 2026-10-12 Codex: c1401a0 통합 후 App 전체 session62858/130ecc exit0(2325 PASS/11 조건부 skip), Core1092 PASS, native Shell4/4 PASS, QA9 publish17b4c4 exit0·UX session94855/cd3ab1 exit0를 확인했습니다. 실제 캡처3회/live session77139 exit0,4K 초안20주석 session18538 exit0, owned crash/restart/Recover/Cancel/Saveexit session45357/966d31 exit0와 원본·Run-key 보존을 확인했습니다. 실제 복원 메뉴에서 하위 popup 누락 버그를 발견해 icons가 수정 중입니다. AB drag+7.35%와 BA+24.72%/-0.37% 변동을 보존하며 전체 병목 부재로 확정하지 않습니다. 명령·cwd·실제 종료·범위는 artifacts/next-product-readiness/development-log.txt, 관련 raw JSON/receipt에 기록했습니다. Store 재배포·파일 정리는 실행하지 않았습니다.
-
-- 2026-10-12 Codex: 메뉴 popup `06d6a0f` 뒤 QA10 App전체 session94606/736dfb exit1(2242 PASS/84 FAIL/11 skip)을 수집했고 ed66eb에서84개 모두 SubmenuArrow loose XAML 실패임을 확인했습니다. worker0093918을 root `2fc7fa4`로 통합해 native20px/1.6stroke 화살표와명시속성참조로 해결했고 helper/assertion은 유지했습니다. worker pure2/2·native/Video13/13 PASS, root Debug2430680warn/error exit0, QA11 self-contained/R2R publish eae1e1 exit0, App전체 session65745 진행 중입니다. native 메뉴 복원용 owned새캡처859afe79만 actual queue/Shell helper17cb9d exit0으로 실제휴지통에 준비했고6파일identity/hash·다른원본보존을 확인했습니다. 실제 메뉴복원·최종UX는 전체테스트 종료 후 직렬 실행합니다.
-
-- 2026-10-12 Codex: 최종 QA11 전체 App session65745/d132df exit0(2327 PASS/0 FAIL/11 조건부 skip), UX session61639/a91861 exit0·RESULT PASS와 생성 PNG를 확인했습니다. Core1092/1092·별도 native Shell4/4 PASS 및 최종 산출물277파일·263 dependency 누락0을 독립 재확인했습니다. 실제 메뉴 복원·빈 목록·Esc·바깥 클릭·보호된 정상 종료 session60154/93add4 exit0, 이미지/주석4파일 SHA·원본 file ID 보존을 확인했습니다. meta.json 전체동일 검사6b3088 exit1은 보관 기간 재시작의 정상 갱신2필드를 구분하지 않은 것으로4a1d5f/390f70 exit0 및 독립 검토로 대조했습니다. root에서 Explorer `/select,`로 최종 `artifacts/qa11-product-readiness/MyCapture.exe` 위치를 열고 실제 선택 화면을 확인했습니다(af9983 exit0). 제품 소스2fc7fa4 및4.1.1 개발 버전 표시 유지, Store 재배포·사용자 앱 종료·파일 정리 없음. 드래그 callback 지연 변동은 미해결로 유지하며 실제 명령·cwd·종료·근거는 `artifacts/next-product-readiness/development-log.txt`와 raw receipt/TRX에 보존합니다.
-
-- 2026-10-12 Codex: 사용자 최악·과부하 성능 시험·개선 요청 착수. root/common-dir/remote와 clean73e0293 확인286fd1 exit0, 사용자MyCapture 프로세스 없음. `git switch -c perf/extreme-load` PASS45d8e9 exit0. CPU Ryzen7 9800X3D/16logical, RAM 약61.6GiB/가용30.4GiB를 확인했습니다. 기존 worker3개에 파일 소유권·동일baseline·실행직렬화·owned프로세스bounded조건·휴지통골든룰을 전달하고 기존worktree재사용을 배정했습니다. 이 단계는 준비이며 과부하 결과는 아직 없습니다.
-
-- 2026-10-12 Codex: 대량 검색 준비 matcher와 boolean short-circuit `6a29df9`를 직접 diff/test 검토6c7019 뒤 root `0a697d8`로 cherry-pick PASS98db91 exit0. worker 동일10.0.11 CPU baseline/after bdbfbe/4718cb exit0, 실제 GalleryWindow b31053/bc260d exit0, Core41/App69 PASS77a745/b2f7e6. root overlay 독립 producer/raster harness build3c807a exit0,4조건 session25897/58adad exit0, 원본/receipt와해석677313을 `artifacts/extreme-load-20261012/`에 보존했습니다. text/ink 수정·전체통합검사는 진행 중입니다.
-
-- 2026-10-12 Codex: 잉크source/8pixeltests/4pair측정·독립검토를확인하고 `a2e3d60`→`1330fac` cherry-pick PASS4f0d1c exit0. 8K entropy초안2조건 worker36ea8a/1a1af2 exit0,113,458,630B blob·원본/복구SHA동일이나공유WIC/PNG동시렌더2초stall가설추가조사중입니다. 재현overlay도구 `b3878e2` build+nativeburst1c3e69 exit0(ownedPID59524정상종료),10.0.11·240배치/7,680입력/최종포인터PASS를1498b8로확인했습니다. 1m텍스트원본FailFast와before/after각guard를서로구분해LOG에보존하고불완전한case를PASS로처리하지않습니다.
-
-- 2026-10-12 Codex: text worker capacity 이후 root가 소유권을 인수해 readonly OCR TSF 최소 수정·UIA/전체 선택 회귀21/21 PASS(session98758/5410e5 exit0)를 완료하고5051d6e→06e19ae 통합81855e exit0. 실제10.0.11 OCR10만25950b/100만35b2e3 exit0·전체SHA동일·정상종료. PNG independent backing과9개형식검사를 직접/독립 검토한e772117→33f6652 통합5cda6c exit0; 실제entropy receipt/PID47704exit0와pixel/PNG동일을d4cc49로확인. root Debug fd9311 경고0/오류0, Core96382/ad1e0a 1105/1105 exit0. App전체55381 진행 중. actualcwd/commands/raw/한계는 development-log 및각 tracked maintenance LOG에보존.
-
-- 2026-10-12 Codex: root cwd `C:/GitRepositories/my-capture-codex`, 제품33f6652의 최종 App `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger "trx;LogFileName=extreme-app.trx" --results-directory artifacts/extreme-load-20261012 -v minimal` session55381/da1d9c exit0(2353PASS/0FAIL/11조건부skip), Core1105PASS. self-contained QA12 publish442fa8 exit0, UX `powershell.exe -NoProfile -NonInteractive -File artifacts/next-product-readiness/run-owned-check.ps1 -Payload C:/GitRepositories/my-capture-codex/artifacts/qa12-extreme-load -Mode ux` session65934/501f0f exit0·RESULT PASS·PNG직접확인. 독립d27b17/bcb276 exit0, DLL2BF9DE6D…81F5/277파일/deps263누락0/10.0.11/x64/R2R 확인. 정확한 publish 명령은 development-log에 보존.
-- 2026-10-12 Codex: 재현 도구78e30d5→527f9bc,6e75dbb→d7b5ec7 통합 뒤 root finalpayload 빌드d02dab/938df7 exit0 및 actual8K PNG f1e9d9/OCR100k8e3be2 exit0 PASS. Computer Use로 실제 OCR→편집100k 입력·선택·Home/End·Undo, session93413/PID59528/7f0872 exit0 HOLD_CLOSED. 한글😀100004자→CtrlZ100000자/원본SHA동일, native-editor-home.json/native-editor-unicode-undo.json 보존. Hangul 키 미지원/IMEOff 유지로 실제 한글조합 미확인. root9b1d23 TRX/UX/ownedPID부재 exit0, 독립b31ad9/2ade73 exit0 수치/해석검토. Explorer QA12폴더 화면확인, 파일실행·Store·원격변경·삭제 없음. 남은100만다수줄60초guard/OCR초기7.37초 포함 §3/§4 최종 갱신. 첫 문서 갱신 bc0cea exit1은 PowerShell→Python pipe의 문자열 인코딩으로 substring 미일치, 파일 쓰기 전 실패; UTF8 파일로 재실행.
-
-- 2026-10-12 Codex: 사용자 GIF 사용법 요청 착수. root a8ef489/제품33f6652 기준 identity/status882c0a exit0, `git switch -c feat/text-copy-tutorial` 48b239 exit0. 설정/F1의 텍스트 복사 항목에서 한영 GIF를 열고 현재 단축키·T전환·자동 복사·붙여넣기를 안내하는 범위 확정. native `/root/tutorial_ui`와 `/root/tutorial_asset`를 기존 a491/edit-recovery 작업 사본에 분리 배정. 이전 Pro tunnel_unavailable/Agy validation_failed와 공식 native 경로 확인을 재사용했고 재호출·권한 확장은 하지 않음. actual QA12 AS-IS PNG 복사·직접 확인 f8b1f3 exit0. 구현·최종 검증은 진행 중이며 LOG는 `artifacts/text-copy-tutorial/development-log.txt`.
-
-- 2026-10-12 Codex: 텍스트 복사 사용법 UI968039d→bc25638(`ac478a` exit0), 한영 GIF/생성기5576070→57ef460(`897ada` exit0), 검토LOG81fde02→834d663를 통합했습니다. 첫 App전체 session75172/836c69 exit1(2358PASS/5FAIL/11skip)의 일반 도움말 행 구조 회귀를7cf376d→b4ae87e(`f732c8` exit0)로 수정하고 기존assertions를 유지했습니다. root `dotnet build MyCapture.slnx -c Debug -v q -nologo` e211c7 exit0 경고0/오류0, 확장집중31/31 9d6416 exit0, Core1105/1105 8dd028 exit0. 수정 후 독립 읽기검토 통과. 최초실패/TRX·exactcommands는 `artifacts/text-copy-tutorial/development-log.txt`에 보존합니다.
-- 2026-10-12 Codex: sourceb4ae87e의 QA13 publish session91978/17e2ba exit0, DLL73916DA5…69D72·runtime10.0.11·279파일·deps263누락0·x64/R2R·한영GIFSHA일치 e6f499/5c91b1 exit0. 격리 WPF host에서 실제 제품 튜토리얼의 두 검색진입점/재생/정지/다시보기/Esc/닫기를 Computer Use로 확인, session46730/PID62020/5e4cdf exit0 및 두창GC수거·프레임/타이머해제·정상종료. UX 자체검사 session94042/f859f0 exit0·RESULT PASS, 실제 설정AS-IS/TO-BE·밝은/어두운 PNG 직접확인 f4a7d7. 사용자 프로필·클립보드·앱조작과 파일삭제·원격변경 없음. 최종 App전체 session8096 진행 중.
-
-- 2026-10-12 Codex: 최종 root `dotnet test tests/MyCapture.App.Tests -c Debug --no-build --logger 'trx;LogFileName=text-copy-app-final.trx' --results-directory artifacts/text-copy-tutorial/test-results` session8096/c2f014 exit0,2363PASS/0FAIL/11기존조건부skip(6분39초). Core1105PASS·집중31PASS·최종Debug/UX/native 결과를 확인하고 §0/§3/§4를 완료로 갱신했습니다. Computer Use에서 기존 Explorer443353524의 주소를 `C:/GitRepositories/my-capture-codex/artifacts/qa13-text-copy-tutorial`로 이동하고 QA13 경로·폴더 화면을 확인했습니다. 실행파일은 사용자 테스트를 위해 전달하며 Store 상태는 유지합니다. 모든 실패와 산출물·작업 사본을 보존했습니다.
-
-- 2026-10-12 Codex: 사용자 부드러운 GIF·기능별 독립 튜토리얼 요청 인수. root2bb6cd6/common-dir/remote/clean 확인0d905e(프로세스부재 Get-Process만exit1), `git switch -c feat/feature-tutorials`와 AS-IS 한영GIF/화면복사631cfc exit0. Windows/개발·창의성/웹쫀쿠·위임/조립·표면/worker routing/Antigravity 정본을 읽고 공식openai provider를 확인했습니다. 기존두작업자를 재사용해motionpilot과기능조사를 분리했습니다. 기능별 범위 비동기질문을 보내고 독립 작업을 진행합니다. 이 단계는 착수이며 새 구현·검증 완료가 아닙니다.
-
-- 2026-10-12 Codex: smooth pilot 공통API67f956e→a606a69(`60426d` exit0) 통합. generator build830def/renderd4aab1 exit0, root nativeprobe build0eeb83 exit0·실제 QA13 decoder/player 재생 session6229/851d95 exit0(156프레임/11.2초, callback P50 41.06/P95 54.29ms, 종료해제). Sky 실제창과 한영 decodedcontact sheet 검토 완료. 현재 F1 42행→38기능/한영76자산 범위로 UI·capture/library/pin·image/video 소유를 나누고 기존 a491/edit-recovery/aeae 작업 사본을 재사용합니다. 모든 원본·시도 보존, 실제 명령과 실패는 `artifacts/feature-tutorials/development-log.txt`에 기록합니다. 최종 기능별 구현·QA14 검증은 진행 중.
-
-- 2026-10-12 Codex: 공통 UI ade7334/8d0ab86/8178359/6ca410d/4734041→2e29e86/9637396/754f76b/e0a1084/a2add60 통합(`7ad7e3` exit0), resx 인접 정렬2e492c3→18dfe9f(`911f43` exit0). 독립 읽기 검토16f6dc에서 동시 디코더·Owner·핀 해제 안내 수정 확인. root 실제 UI 예비 검사 session13337/860b26 exit0 CLOSED, F1 검색→텍스트 복사→기능 목록→블러 누락 안내→닫기 확인. ui-layout-native-1.json 최종 visible/frames/loading/playing 모두false, 실패없음(c67d94 exit0). 최종 GIF 생성은 asset26기능과 UI의 Workspace12기능으로 분담 조정, 최종 전체 검증은 미완료입니다.
-
-- 2026-10-12 Codex: 기능별 소스16개를710235b~382cc00(`198ef8` exit0), 핀비율290619e→725eb50(`adcc87` exit0), 자산31f5e92→제품0fef3b3(`cab1a8` exit0), 문서874e0f2→3a1a500으로 통합. 최종38기능/76GIF 실제개별decoder/player검사, ko38/en38시각검토 및 원본/receipt/복사SHA독립검사dde6e5 exit0 PASS. Core첫회1104/1FAIL은SHA내부1809오탐; 범위유지ASCII경계/한국어포함11회귀·독립검토후638836f. `dotnet build MyCapture.slnx -c Debug -v q -nologo` f1a0d5/3f7e1a exit0, 전체Core1116(d60d4b)·App2375/0FAIL/11기존skip(c74213) exit0. 정확한명령과실패는root LOG보존.
-- 2026-10-12 Codex: QA14 `dotnet publish ... -p:SourceRevisionId=0fef3b302dea6ff2e09aa923165731fe52a3325f -o artifacts/qa14-feature-tutorials` session37348/3d46e6 exit0. 독립 source/runtime353files/deps263/GIF76검사4ee5a1 및 x64/R2R2d0d26 exit0 PASS, DLL EB14DB0701149FB09C78174E57C621C41F23E610DF77F387FC13FCBA98A90D6D. `run-owned-check.ps1 -Payload .../qa14-feature-tutorials -Mode ux` session29554/78aa0f exit0·RESULTPASS. 최종실제UI helper session37840/b2040b exit0 CLOSED, Sky로5기능재생·정지·다시보기·전환·재열기·닫기, 최종프레임/타이머해제dac119 exit0. Explorer443353524에QA14경로열기확인. 사용자앱·프로필·클립보드와기존산출물/작업사본보존, 원격변경/삭제없음. QA14요청범위완료.
-
-- 2026-10-12 Codex: 다음 배포본 작성·완료 후 실기 성능 검사 요청 인수. clean221328e/root/common-dir/remote 확인 f59cbc exit0, release/store-4.1.2 분기 b94964 exit0. 4.1.2 메타데이터·필수8종패키지검사·MSIX준비 후 동일완성payload의 영역선택/대량텍스트/8K저장/검색/사용법재생 성능을 직렬 실행합니다. WebGPT register2f81f0 exit1 tunnel_unavailable, 소유터널 LastTaskResult1. native오프라인검사0f88f7 exit1은 로컬비표준endpoint확인요구이며3a1608 exit0에서 model_provider=openai/Codexon--upstreamchatgpt를 확인했습니다. 기존작업사본 재사용, 사용자앱 종료·원격변경·삭제 없음. 결과는 artifacts/release-4.1.2/development-log.txt에 기록합니다.
-
-- 2026-10-12 Codex: 4.1.2 메타데이터·사용자 변경 내역3313271→a053f8b 통합. `dotnet build MyCapture.slnx -c Debug -v q -nologo` f70905 exit0, `dotnet test tests/MyCapture.Core.Tests -c Debug --no-build --logger trx;LogFileName=release-core.trx --results-directory artifacts/release-4.1.2/test-results` session36926/1b7f22 exit0 Core1116 PASS. App 대응 명령 session85058/5292ec exit0 2375 PASS/0 FAIL/기존11 skip. 실제 TRX 결과별 집계be2916 exit0. cwd는root이며 정확한 인수·명령·실패는 개발LOG에 보존합니다.
-- 2026-10-12 Codex: 패키지검사 초기4회 실패를 보존하고 진단 범위만 개선(de5d777/7bd4026/f8f5977/61e19e3). 실제 전경 안전 조건·키 재전송 없음·기존68assertion/영상임계값 유지, 합성fixture IME와 수신/클립보드 관측·WM_GETTEXT 제한, 영상필름스트립 준비와 입력/릴리스frame범위 분리. root직접diff+workers교차검토 완료. 통합 `dotnet build MyCapture.slnx -c Debug -v q -nologo` 5c62d4 exit0 경고0/오류0. 기존폴더·stdout는 경계 검증 후rename으로 보존(3b6f30/592ce9 exit0), 삭제없음.
-- 2026-10-12 Codex: 정확한clean소스61e19e3에서 `build/package.ps1 -Version 4.1.2 -StoreOnly` session86222/77a218 exit0 8/8 PASS357files. `build/package-store.ps1 -Version 4.1.2 -PublishDir .../publish-win-x64 -OutputRoot .../store/4.1.2` 및 기존Storeidentity로MSIX생성 session38119/29cbf6 exit0. MSIX236214038B/SHA1BD2D2B22D15416105EB05F06903B2487A162F65D6BCEB1BF124034725B12644, finalDLL7CA62B8EF5C5FEEEBA389B80FB5E082AFE8930ED4A6D2D6D815F5533A7841F51. 독립python검사cd30dc exit0:357inventory·76GIF·8reports·418MSIXentry·source/runtime/deps 전체 일치. 원격업로드·설치없음.
-- 2026-10-12 Codex: 완성된동일payload에서 `powershell.exe -NoProfile -NonInteractive -File artifacts/release-4.1.2/run-final-performance.ps1` session66405/d84bbf exit0,10개명령전부exit0. 100k lines layout576.13ms/selectionsettle2.2877s,1m lines whole29.8667s/selectionsettle20.8703s,내용/undo/redo보존. OCR1mlines첫적용3.6531s. 8K1k주석편집묶음최대135.87ms/heartbeat339.76ms,4K10k주석291.67/657.93ms,복구pixelSHA동일. 실제GIF40초decoder/player재생후정지/해제. Search CPUde55e8·Gallerysession94643/7e1cbd exit0,1만항목OCR검색callback중앙192.25ms/정렬최대865.91ms. 독립결과검토09bfdd/433edd/63038d/fa5aa6/d4ced6 완료, 정확성통과와잔존병목을구분했습니다.
-- 2026-10-12 Codex: `run-field-measurement.ps1` session98691/PID27048/5b239c exit0. Sky 실제화면3회coordinator획득·selector→editor→취소완료; 표시366.65/273.64/300.85ms,전환244.70/133.30/113.22ms. 실제3mouse/1drag씩이며 자동창2566×1016선택으로관측되어 연속물리드래그·작은영역정확성은별도미확인입니다. host종료와failure없음독립1d7d41/0e515e exit0. `python artifacts/release-4.1.2/finalize-evidence.py` 0ab088 exit0,성능검사후357파일·MSIX재대조완료. source보존branch release/store-4.1.2-source 생성4198ad exit0. Explorer443353524에서최종publish-win-x64폴더열기직접확인. 전체근거는 `artifacts/release-4.1.2/performance-summary.json`과개발LOG이며 기존자료/작업사본/사용자프로세스를보존했습니다.
-
-- 2026-10-13 Codex: 사용자의 실기 프로그램 위치 열기·Store 교체 업데이트·설치 상태 표시·사진/라이브러리/설정 보존 요청을 인수했습니다. 기존 검증된 4.1.2 폴더를 Sky로 활성화해 실제 경로를 확인했습니다. root/common-dir/HEAD `aa26eee`와 clean 상태를 확인한 뒤 `fix/store-update-continuity`로 분기했습니다(`696c3e`, branch 생성 성공). 설치된 Store 패키지는 `sukwoo0711.MyCapture` 4.0.3.0, PFN `sukwoo0711.MyCapture_n98e1tgx2qxb2`, Status Ok입니다(`48beaa`, exit 0). 기존 Store 상태/데이터 경로의 독립 조사를 시작했고 업데이트 예외·오래된 진행 콜백 문제의 수정은 기존 UI worker에 분리했습니다. 기존 후보·사용자 데이터·프로세스를 보존합니다.
-
-- 2026-10-13 Codex: 사용자가 Store·테스트 실행본 데이터를 모두 유지한다고 답변했습니다. `d68a580`을 `9305935`, 보존 검사 `852b3b8`을 `8ae4956`으로 통합(`7a21a5` exit0), 이관 API `cac9d1a`를 `b3bc471`로 통합(`402d13` exit0)했습니다. App 상태 worker baseline1/1·after12/12·Localization13/13 및 Core 보존2/2는 실제 exit0이며, 직접/독립 코드·전후 PNG 검토를 마쳤습니다. 이관은 원본 복사·병합과 중단 복구를 Core에서, 선택적 설정 초안·진행 UI·시작 연결을 App에서 맡습니다. 기존 후보 바이너리와 사용자 데이터는 보존하며 최종 이관·전체 검증은 진행 중입니다.
-
-- 2026-10-13 Codex: Core `ec76558`·`c170b08`·`35e0cee` 통합 cd9f27 exit0, worker 실제 Core37/37 TRX를 직접·독립 확인했습니다. UI97b2e97/36b30fc/a064b17/a5271a8/451a0c5와 Core5b4e1f0를 순서대로 `cfc19b8`~`6cff914`로 통합 d921be exit0. 최종 Refresh 예외/설정 오류 후 보존 3경계 독립 소스 검토에 추가 blocker 없음. 451 이후 전체 검사는 아직 미실행이며 새 QA15 빌드에서 확인합니다. 기존 사용자 PID59568 재확인53c806 exit0, 종료하지 않고 사용자 종료 확인을 기다립니다. 기록·실패·전후 PNG는 `artifacts/store-update-continuity/`와 `artifacts/legacy-import/`에 보존합니다.
-
-- 2026-10-13 Codex: source9300068 전체 검증 session38759 Debug/Core/App 각각exit0(Core1153/App2387+11skip), publish만NU1505로래퍼exit1(b18185). 수정게시 bc79ab exit0, independent034867/87ceb1/root3a6230 PASS. 사용자 종료·화면자동화 재승인 확인. nativegate session13874/4d2f66,21384/d77602,37627/31f18c 모두exit1/7of8; 첫CapsLock가정, 이후초기클릭전경0. 원래CapsLock ON복원161db0 exit0. 격리migration 실기24829/4ac051 및70892/af4720 exit0, UX14945/93f948 exit0, 최소창렌더810788 exit0. 실제경로·명령·SHA·원본실패는 `artifacts/store-update-continuity/development-log.txt`, independentartifact 및 native 각디렉터리에 보존합니다. Sky Explorer443353524에서QA15폴더열기확인, 제품실행은하지않았습니다. 최종8종과진단보완은진행중입니다.
-
-- 2026-10-13 Codex: 사용자 화면 자동화 재허용·조작 중단 확인을 받아 진단04bf389→73099c8, b9126b6→b18a8c3 통합. root `dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Debug --filter FullyQualifiedName~HotfixExternalInputObservationTests`(TRX/logger/result 인수는 development-log) 실제940962/session22940/e590e8 exit0,14/14 PASS. 원본 공유 충돌 회귀 및 gate 보존을 독립 검토함.
-- 2026-10-13 Codex: exact clean b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6에서 `powershell.exe -NoProfile -NonInteractive -File artifacts/store-update-continuity/publish-qa15-final.ps1 -ExpectedSource b18a8c3275c14e1c8505c8b0b1ceac10bb3d2ae6 -PayloadName qa15-store-update-ready -EvidenceName ready-diagnostic` 6833fd exit0. 독립 verifier a6d141 exit0,353파일·runtime10.0.11·R2R·deps·GIF·receipt 일치. 앞선951b15f/final 산출물과 실패근거 보존.
-- 2026-10-13 Codex: `powershell.exe -NoProfile -NonInteractive -File artifacts/store-update-continuity/run-qa15-native-gate.ps1 -PublishRoot C:/GitRepositories/my-capture-codex/artifacts/qa15-store-update-ready` session40894/3286d2 exit0 **SELF_TESTS=PASS PASSES=8/8**,64초. root a7dbbe에서 최종receipt/report 재확인. Sky로 Explorer87166948에 최종 폴더를 열고 MyCapture 응용 프로그램 선택 확인. 사용자 앱 종료 명령·사용자 데이터 이관·Store 업로드/설치·파일 삭제는 수행하지 않음.
-- 2026-10-13 Claude: 사용자 지시("codex에서 작업하던 세션을 네가 이제 이어서 오케스트레이션해. 코덱스가 한 작업내역을 리뷰해봐")로 오케스트레이션을 넘겨받음. Codex 대화형 세션(Claude 앱 터미널 탭 c2)은 QA15 전달 후 입력 대기 상태였고, 작업 공간은 깨끗함(HEAD 6f33333). origin/main(9a35763, 4.1.1) 대비 미병합 176커밋. Codex 작업 전체 리뷰 착수.
-- 2026-10-13 Claude: Codex 작업 리뷰 완료(5개 영역 병렬, 주요 지적 직접 재확인, 데이터 이관 4건 시험 재현). 결과는 `docs/handoff/review-2026-10-13-codex-work.md`. 4.1.2 후보 MSIX는 제출 보류 권고(휴지통 설계, 데이터 이관 P1 5건, GIF 130MB·모형 화면, 자체 검사 판정 완화). 출시분 회귀는 고대비 라이브러리 호버 1건.
-
-## 9. 인계 체크리스트
-
-**넘기는 쪽 (현재 오케스트레이터)**
-1. 진행 중인 하위 작업을 끝내거나 멈추고, 미완성 변경은 해당 브랜치에 `wip:` 커밋으로 보존합니다.
-2. §3 상태 표와 §4 할 일을 최신으로 고칩니다. 마지막 검증의 명령·결과도 적습니다.
-3. §8에 인계 줄을 추가하고 §0의 "현재 오케스트레이터"를 바꾼 뒤 통합 브랜치에 커밋합니다.
-4. 사용자에게 받는 쪽이 이 문서로 시작하면 된다고 알립니다.
-
-**받는 쪽**
-1. 이 문서, `git log --oneline origin/main..fix/realdevice-qa-round4`, §8 마지막 항목 순서로 읽습니다.
-2. `git status`, 진행 중 worktree, 사용자 실행 중 MyCapture(`Get-Process MyCapture`)를 확인합니다. 실행 중이면 종료하지 않습니다.
-3. §8에 "받음" 줄을 남기고 §4의 첫 항목부터 진행합니다.
-
-**Claude가 복귀할 때 추가로 할 일**
-- Claude의 메모리 `C:\Users\sukwo\.claude\projects\C--GitRepositories-my-capture\memory\`에 이 문서 위치가 기록되어 있습니다. 새 Claude 세션은 `C:\GitRepositories\my-capture-codex`(또는 그때의 통합 작업 공간)에서 이 문서를 먼저 읽습니다.
+- 2026-10-13 Claude: Codex에게서 오케스트레이션을 넘겨받아 다섯 영역 리뷰를 진행했습니다. 4.1.2 후보 제출을 보류하자고 권했습니다(리뷰 문서).
+- 2026-10-13 Claude: 휴지통 설계 수정 4커밋과 폴더 삭제 문구를 통합했습니다. 캡처 후 UI 대기 25.8 → 4.0ms, 내보내기 창 104.5 → 1.6ms.
+- 2026-10-13 Claude: 정리 대상 worktree 14개, 지난 QA 빌드, 덤프, 렌더(약 38GB)를 정리 폴더로 옮겼습니다. 사용자가 삭제한 뒤 `git worktree prune`을 실행했습니다. 휴지통에 26만여 항목(Codex 테스트가 넣은 것)이 있음을 알렸습니다.
+- 2026-10-13 Claude: UI·UX·CX 조사 결과 28개 항목을 받았습니다. 사용자가 자동 실행·보관 기간·캡처 직후 동작을 결정했습니다.
+- 2026-10-13 Claude: 검사 판정 복원·고대비 호버, 데이터 이관(2GB 가져오기 89 → 7초), 다중 모니터 1차(단축키→선택 화면 1.15~1.20 → 0.96~0.99초), 사용법 MP4(자산 130 → 21MB)를 통합했습니다. 전체 테스트 통과(위 §2).
+- 2026-10-13 Claude: MP4 생성기가 실제 사용자 데이터로 앱을 잠시 실행해 10월 6일 캡처 3개가 보관 기간 정리로 휴지통에 갔음을 확인하고 사용자에게 알렸습니다. 이후 모든 작업에 실제 데이터 사용 금지를 명시했습니다.
+- 2026-10-13 Claude: 4.1.0 이후 이력에서 GIF와 검토 폴더를 제거했습니다(filter-branch, 최종 파일 구성 동일 확인). HEAD cb1d7a1.
+- 2026-10-13 Claude: §4의 여섯 작업을 시작했습니다. 이 문서를 정본과 보관 파일로 나눴습니다.
