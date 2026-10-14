@@ -1439,15 +1439,18 @@
                              AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
                              TextChanged="OnSearchTextChanged" />
                     <TextBlock Grid.Column="1" IsHitTestVisible="False"
-                               Text="{Binding SearchPlaceholder}"
                                Foreground="{DynamicResource Text.Muted}"
                                Margin="10,0"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="{Binding SearchPlaceholder}" />
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                        <Setter Property="Text" Value="{loc:Text Text_4B8D541EBE6D}" />
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
                                         <Setter Property="Visibility" Value="Visible" />
                                     </DataTrigger>

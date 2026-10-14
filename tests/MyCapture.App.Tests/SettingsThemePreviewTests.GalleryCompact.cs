@@ -138,7 +138,10 @@ public sealed partial class SettingsThemePreviewTests
             SettleGalleryLayout(window);
             var selection = (Panel)window.FindName("SelectionCommands");
             Button[] visibleActions = selection.Children.OfType<Button>().Where(button => button.IsVisible).ToArray();
-            Assert.Equal(5, visibleActions.Length); // clear, ZIP, move, delete, reduce (GIF is video only)
+            SaveLibraryUxEvidence(window, AppTheme.Midnight, $"minimum-window-selection-{language}.png");
+            Assert.Equal(6, visibleActions.Length); // clear, ZIP, PDF, move, delete, reduce (GIF is video only)
+            Assert.Same(window.FindName("ContactSheetButton"), visibleActions[2]);
+            Assert.Equal(UiText.Get("Text_4B8D541EBE6D"), placeholder.Text);
             // More stays after them, so restoring deleted captures is reachable with a selection.
             foreach (FrameworkElement element in visibleActions.Append<FrameworkElement>(placeholder).Append(more))
                 AssertInsideClient(element, client, language);
@@ -166,6 +169,7 @@ public sealed partial class SettingsThemePreviewTests
             SaveLibraryUxEvidence(window, AppTheme.Glass, $"after-narrow-selection-glass-{language}.png");
             vm.ClearSelection();
             SettleGalleryLayout(window);
+            Assert.Equal(vm.SearchPlaceholder, placeholder.Text);
             int rootCardsInView = CardsFullyInView(rows, scroll);
 
             // Inside a folder the location header joins the content column. A date shows the same
