@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Fixtures\video-shorter-than-audio.mp4" CopyToOutputDirectory="PreserveNewest" />
     <!-- Use the exact product markup in isolated theme fixtures, with its static
          dependencies present at parse time and without a process-wide Application. -->
     <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Tokens.xaml" LogicalName="ThemeFixture.Tokens.xaml" />
