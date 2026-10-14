@@ -266,7 +266,9 @@ public partial class App : Application
         // window, but never cache the text — a pin has no backing capture record.
         _pins.OcrRequested += OnPinOcrRequested;
 
-        _shellPresenter = new ThemedShellPresenter(() => _overlay?.IsActive == true || _recorder?.IsActive == true);
+        _shellPresenter = new ThemedShellPresenter(
+            () => _overlay?.IsActive == true || _recorder?.IsActive == true,
+            () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill));
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
         // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return,
         // and Pin clipboard is enabled only while the clipboard announces an image or text.

@@ -97,6 +97,10 @@ public sealed class CaptureModeBarTests
         CaptureOverlayView view = BarView(Desktop(), () => pointer);
         view.CopyColorText = text => { copied.Add(text); return Task.FromResult(true); };
         int confirmed = 0;
+        int cancelled = 0;
+        ColorCopyFeedback? feedback = null;
+        view.ColorCopied = result => feedback = result;
+        view.CancelRequested += (_, _) => cancelled++;
         view.SelectionConfirmed += (_, _) => confirmed++;
         try
         {
@@ -111,12 +115,26 @@ public sealed class CaptureModeBarTests
 
             string expected = ColorSampleFormatter.Format(0xF7, 0xF8, 0xFA, ColorFormat.Hex);
             Assert.Equal([expected], copied);
-            Assert.Equal(UiText.Format("Tools_ColorCopied", expected), view.ToastMessageForTest);
+            Assert.Equal(UiText.Format("Tools_ColorCopied", expected), feedback?.Message);
+            Assert.Equal(1, cancelled);
             Assert.Null(view.Selection);
             Assert.Equal(0, confirmed);
             Assert.Equal(CaptureSelectorMode.Color, view.Mode);
 
-            // Without a colour handler the button is not offered and the mode cannot be chosen.
+            Assert.Null(view.CopyColorAtPointerAsync().Result);
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Fact]
+    public void ColorModeIsUnavailableWithoutACopyHandler() => StaTestHost.Run(() =>
+    {
+        CaptureOverlayView view = BarView(Desktop(), () => new PointD(300, 300));
+        try
+        {
+            Render(view);
+            view.ModeBarForTest!.ColorButton.IsChecked = true;
+            Assert.Equal(CaptureSelectorMode.Color, view.Mode);
             view.CopyColorText = null;
             Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
             view.SelectMode(CaptureSelectorMode.Color);

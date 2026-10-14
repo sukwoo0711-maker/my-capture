@@ -3565,11 +3565,11 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="TextCapture_TutorialStep3" xml:space="preserve"><value>3. After the Text copied notification appears, press Ctrl+V where you want to paste.</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>Could not copy the color.</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>Color copy format</value></data>
-  <data name="ColorPick_FormatHint" xml:space="preserve"><value>Press C while selecting a capture region to copy the color under the pointer in this format.</value></data>
+  <data name="ColorPick_FormatHint" xml:space="preserve"><value>Press C while selecting a capture region to copy the color under the pointer in this format and end the capture.</value></data>
   <data name="ColorPick_FormatHex" xml:space="preserve"><value>HEX (#RRGGBB)</value></data>
   <data name="ColorPick_FormatRgb" xml:space="preserve"><value>RGB (rgb(r, g, b))</value></data>
   <data name="ColorPick_FormatHsl" xml:space="preserve"><value>HSL (hsl(h, s%, l%))</value></data>
-  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color while selecting</value></data>
+  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color and end capture while selecting</value></data>
   <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>Click: select window</value></data>
   <data name="WindowDetect_Setting" xml:space="preserve"><value>Highlight the window under the pointer · Click to select it</value></data>
   <data name="RecordingPauseHotkey_Command" xml:space="preserve"><value>Pause/resume recording</value></data>
@@ -3733,7 +3733,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_Text" xml:space="preserve"><value>Copy text</value></data>
   <data name="CaptureGuide2_TextHelp" xml:space="preserve"><value>Recognizes the text in the window you click or the region you drag and copies it to the clipboard. The image is not saved.</value></data>
   <data name="CaptureGuide2_Color" xml:space="preserve"><value>Copy color</value></data>
-  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Copies the color code of the spot you click to the clipboard.</value></data>
+  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Click or press C to copy the color under the pointer and end the capture.</value></data>
   <data name="CaptureGuide2_Help" xml:space="preserve"><value>Help</value></data>
   <data name="CaptureGuide2_HelpTip" xml:space="preserve"><value>Shows how to capture again.</value></data>
   <data name="CaptureGuide2_Cancel" xml:space="preserve"><value>Cancel</value></data>
@@ -3744,7 +3744,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_DragText" xml:space="preserve"><value>Drag: Copy text from region</value></data>
   <data name="CaptureGuide2_ClickWindowText" xml:space="preserve"><value>Click: Copy text from window</value></data>
   <data name="CaptureGuide2_ClickMonitorText" xml:space="preserve"><value>Click: Copy text from monitor</value></data>
-  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click: Copy color</value></data>
+  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click or C: Copy color and end capture</value></data>
   <data name="CaptureGuide2_Esc" xml:space="preserve"><value>Esc: Cancel</value></data>
   <data name="CaptureGuide2_IntroTitle" xml:space="preserve"><value>How to capture</value></data>
   <data name="CaptureGuide2_IntroBody" xml:space="preserve"><value>Click a window to capture it, or drag to capture the region you want. Press Esc to cancel.</value></data>

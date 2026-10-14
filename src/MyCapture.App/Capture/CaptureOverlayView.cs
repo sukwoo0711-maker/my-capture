@@ -124,6 +124,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private Pen _recordingPen = null!;
     private Pen _recordingEdgePen = null!;
     private Func<string, Task<bool>>? _copyColorText;
+    private bool _copyingColor;
     private CaptureSelectorMode _drawnMode;
     private CaptureSelectorMode _drawnSelectionMode;
     private bool _drawnCueMonitor;
@@ -342,6 +343,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     }
 
     internal Func<ColorFormat> ReadColorFormat { get; set; } = () => ColorFormat.Hex;
+    internal Action<ColorCopyFeedback>? ColorCopied { get; set; }
 
     /// <summary>Lets T and the text button switch between image capture and text capture.</summary>
     internal bool TextCaptureAvailable
@@ -512,6 +514,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _hoverWholeMonitor = false;
         _monitors = null;
         _copyColorText = null;
+        ColorCopied = null;
         _startGuideTimer?.Stop();
         _startGuideTimer = null;
         _startGuideShown = false;
@@ -859,7 +862,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     /// <summary>The record switch or a ⋯ command: the selector ends without a capture and the owner runs it.</summary>
     private void OnBarActionRequested(CaptureSelectorRequest request)
     {
-        if (_ended || !OffersOtherActions) return;
+        if (_ended || _copyingColor || !OffersOtherActions) return;
         DismissStartGuide();
         _ended = true;
         EndPointerInteraction();
@@ -892,7 +895,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     /// </summary>
     internal bool CaptureFullScreen()
     {
-        if (_ended) return false;
+        if (_ended || _copyingColor) return false;
         RectD monitor = GuideArea.Bounds.ClampTo(FrameBounds).ToPixelBounds();
         if (monitor.Width < MinimumSelectionPixels || monitor.Height < MinimumSelectionPixels) return false;
         _selection = monitor;
@@ -1848,7 +1851,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (releaseCapture) Mouse.Capture(null);
         QueueFeedback();
 
-        if (_selection.HasValue)
+        if (_selection.HasValue && !_copyingColor)
         {
             _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(ConfirmSelection));
         }
@@ -2021,7 +2024,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     private void ConfirmSelection(bool wholeMonitor)
     {
-        if (_ended || _selection is not RectD selection)
+        if (_ended || _copyingColor || _selection is not RectD selection)
         {
             return;
         }
@@ -2047,17 +2050,18 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     /// <summary>
     /// Copies the frozen pixel under the pointer (the one the magnifier centres on) in the
-    /// configured format and shows a short confirmation inside the overlay. The overlay stays
-    /// open. Returns the copied value, or null when nothing was copied.
+    /// configured format, then ends the selector and hands confirmation to its owner.
+    /// A failed copy leaves the selector open. Returns the copied value, or null on failure.
     /// </summary>
     internal async Task<string?> CopyColorAtPointerAsync()
     {
-        if (_ended || _released || CopyColorText is not { } copy || !TrySampleColor(_cursorPixel, out byte red, out byte green, out byte blue))
+        if (_ended || _released || _copyingColor || CopyColorText is not { } copy || !TrySampleColor(_cursorPixel, out byte red, out byte green, out byte blue))
         {
             return null;
         }
 
         string value = ColorSampleFormatter.Format(red, green, blue, ReadColorFormat());
+        _copyingColor = true;
         bool copied;
         try
         {
@@ -2067,10 +2071,25 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             copied = false;
         }
+        void Complete()
+        {
+            // Keep capture confirmation blocked until the dispatcher handles the result.
+            _copyingColor = false;
+            if (_released || _ended) return;
+            if (!copied)
+            {
+                ShowToast(UiText.Get("ColorPick_CopyFailed"), copied: false);
+                return;
+            }
 
-        string message = copied ? UiText.Format("Tools_ColorCopied", value) : UiText.Get("ColorPick_CopyFailed");
-        if (Dispatcher.CheckAccess()) ShowToast(message, copied);
-        else _ = Dispatcher.BeginInvoke(new Action(() => ShowToast(message, copied)));
+            var feedback = new ColorCopyFeedback(value, red, green, blue);
+            Action<ColorCopyFeedback>? notify = ColorCopied;
+            RequestCancel();
+            notify?.Invoke(feedback);
+        }
+
+        if (Dispatcher.CheckAccess()) Complete();
+        else await Dispatcher.InvokeAsync(Complete);
         return copied ? value : null;
     }
 

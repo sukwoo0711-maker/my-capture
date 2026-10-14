@@ -16,6 +16,123 @@ namespace MyCapture.App.Tests;
 public sealed class CaptureOverlayCoordinatorTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PendingColorCopyBlocksReleasedDragAndQueuedConfirmationWithoutRecording(bool releaseBeforeCopy) => RunSta(() =>
+    {
+        CaptureOverlayWindow? overlay = null;
+        var pending = new TaskCompletionSource<bool>();
+        int persisted = 0;
+        int edited = 0;
+        int editorRequests = 0;
+        int confirmations = 0;
+        using var coordinator = new CaptureOverlayCoordinator(
+            new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
+            new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
+            NullLogger<CaptureOverlayCoordinator>.Instance,
+            _ => WindowDetectOverlayTests.Frame(),
+            () => new RectD(0, 0, 640, 360));
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ReadWindowSources = null;
+        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        coordinator.CopyColorText = _ => pending.Task;
+        coordinator.SelectionPersistRequested = _ => { persisted++; return Task.CompletedTask; };
+        coordinator.OpenEditorAfterCapture = () => { editorRequests++; return true; };
+        coordinator.EditingCompleted += (_, _) => edited++;
+        coordinator.ColorCopied = _ => confirmations++;
+
+        coordinator.Start(false, false, false);
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.NotNull(overlay);
+        var view = Assert.IsType<CaptureOverlayView>(overlay.Content);
+        PointD pointer = new(120, 180);
+        view.ReadCursor = () => pointer;
+        view.DetectWindows = false;
+        view.InitializePointer();
+        view.SimulatePointerDown();
+        pointer = new PointD(300, 280);
+        view.SimulatePointerMove();
+        if (releaseBeforeCopy) view.SimulatePointerUp(); // Confirmation is queued, but has not run.
+        Task<string?> copy = view.CopyColorAtPointerAsync();
+        if (!releaseBeforeCopy) view.SimulatePointerUp();
+        Assert.NotNull(view.Selection);
+        view.RaiseEvent(WindowDetectOverlayTests.KeyArgs(System.Windows.Input.Key.Enter));
+        Assert.False(view.CaptureFullScreen());
+        WindowDetectOverlayTests.Pump();
+        Assert.False(copy.IsCompleted);
+        Assert.True(coordinator.IsActive);
+        Assert.Equal(0, persisted);
+        Assert.Equal(0, editorRequests);
+
+        pending.SetResult(true);
+        PumpUntil(() => copy.IsCompleted);
+        Assert.True(copy.IsCompletedSuccessfully);
+        Assert.False(coordinator.IsActive);
+        Assert.False(overlay.IsVisible);
+        Assert.Equal(1, confirmations);
+        Assert.Equal(0, persisted);
+        Assert.Equal(0, editorRequests);
+        Assert.Equal(0, edited);
+        Assert.Null(coordinator.CurrentEditor);
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ColorCopyEndsOnlyOnSuccessAndNeverRecordsACapture(bool succeeds) => RunSta(() =>
+    {
+        CaptureOverlayWindow? overlay = null;
+        int closed = 0;
+        int persisted = 0;
+        int edited = 0;
+        ColorCopyFeedback? feedback = null;
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ReadWindowSources = null;
+        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        coordinator.CopyColorText = _ => Task.FromResult(succeeds);
+        coordinator.SelectionPersistRequested = _ => { persisted++; return Task.CompletedTask; };
+        coordinator.EditingCompleted += (_, _) => edited++;
+        coordinator.OverlayClosed += (_, _) => closed++;
+        coordinator.ColorCopied = result =>
+        {
+            Assert.False(coordinator.IsActive);
+            Assert.False(overlay!.IsVisible);
+            Assert.Equal(1, closed);
+            feedback = result;
+        };
+
+        coordinator.Start(false, false, true);
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.NotNull(overlay);
+        var view = Assert.IsType<CaptureOverlayView>(overlay.Content);
+        view.ReadCursor = () => new PointD(5, 5);
+        view.InitializePointer();
+        Task<string?> copy = view.CopyColorAtPointerAsync();
+        PumpUntil(() => copy.IsCompleted);
+        Assert.True(copy.IsCompletedSuccessfully);
+        Assert.Equal(succeeds ? "#7A7A7A" : null, copy.Result);
+        Assert.Equal(!succeeds, coordinator.IsActive);
+        Assert.Equal(!succeeds, overlay.IsVisible);
+        Assert.Equal(succeeds ? 1 : 0, closed);
+        Assert.Equal(0, persisted);
+        Assert.Equal(0, edited);
+        Assert.Null(coordinator.CurrentEditor);
+        if (succeeds)
+        {
+            Assert.NotNull(feedback);
+            Assert.Equal(Color.FromRgb(0x7A, 0x7A, 0x7A), feedback.ChipColor);
+        }
+        else
+        {
+            Assert.Null(feedback);
+            Assert.Equal(MyCapture.Core.Localization.UiText.Get("ColorPick_CopyFailed"), view.ToastMessageForTest);
+        }
+    });
+
+    [Theory]
     [InlineData(0L, long.MinValue, false)]
     [InlineData(12345678L, long.MinValue, false)]
     [InlineData(long.MaxValue, long.MinValue, false)]
