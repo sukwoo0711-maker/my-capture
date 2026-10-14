@@ -4,7 +4,7 @@
   Direction (design-system/mycapture/MASTER.md, "Iris"):
     * Captured pixels stay dominant on quiet graphite surfaces with clear depth hierarchy.
     * Electric iris is reserved for primary actions, selection, keyboard focus, and the playhead.
-    * Accent fills always use dark ink; white-on-iris is intentionally prohibited.
+    * Violet fills use dark ink; the optional red palette pairs deep fills with warm white.
     * Normal UI is flat and token-driven: no decorative gradients or unowned raw colours.
 
   Compatibility: every previously shipped resource key remains available. Legacy Warm,
@@ -113,6 +113,8 @@
     <!-- Accent and state                                              -->
     <!-- ============================================================= -->
     <SolidColorBrush x:Key="Accent.Default" Color="{StaticResource Primitive.Yellow400}" />
+    <!-- Bare text and glyphs retain the original violet; red uses the readable foreground ramp. -->
+    <SolidColorBrush x:Key="Accent.Foreground" Color="{StaticResource Primitive.Yellow400}" />
     <SolidColorBrush x:Key="Accent.Hover" Color="{StaticResource Primitive.Yellow300}" />
     <SolidColorBrush x:Key="Accent.Pressed" Color="{StaticResource Primitive.Yellow600}" />
     <SolidColorBrush x:Key="Accent.Subtle" Color="{StaticResource Primitive.Yellow900}" />

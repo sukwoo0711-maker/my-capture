@@ -6,9 +6,10 @@ namespace MyCapture.Core.Themes;
 /// <summary>Semantic guide tokens shared by all six palettes and the independent brand override.</summary>
 public static class CaptureGuideTokens
 {
-    public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme, string? customColor = null)
+    public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme, string? customColor = null,
+        AppAccent accentColor = AppAccent.Violet)
     {
-        IReadOnlyDictionary<string, ThemeColor> palette = ThemeCatalog.ColorsFor(theme);
+        IReadOnlyDictionary<string, ThemeColor> palette = ThemeCatalog.ColorsFor(theme, accentColor);
         ThemeColor accent = palette["Overlay.SelectionBorder"];
         if (CaptureGuideColorValue.TryNormalize(customColor, out string normalized))
         {

@@ -8,10 +8,10 @@ namespace MyCapture.App.Themes;
 internal static class CaptureGuidePalette
 {
     internal static IReadOnlyDictionary<string, Brush> Create(AppTheme theme, string? customColor,
-        bool systemHighContrast)
+        bool systemHighContrast, AppAccent accent = AppAccent.Violet)
     {
         var brushes = new Dictionary<string, Brush>(StringComparer.Ordinal);
-        foreach ((string key, ThemeColor value) in CaptureGuideTokens.ColorsFor(theme, customColor))
+        foreach ((string key, ThemeColor value) in CaptureGuideTokens.ColorsFor(theme, customColor, accent))
         {
             Color color = Color.FromArgb(value.A, value.R, value.G, value.B);
             if (systemHighContrast || theme == AppTheme.HighContrast)
@@ -35,16 +35,16 @@ internal static class CaptureGuidePalette
     }
 
     internal static void Apply(ResourceDictionary resources, AppTheme theme, string? customColor,
-        bool systemHighContrast)
+        bool systemHighContrast, AppAccent accent = AppAccent.Violet)
     {
-        foreach ((string key, Brush brush) in Create(theme, customColor, systemHighContrast))
+        foreach ((string key, Brush brush) in Create(theme, customColor, systemHighContrast, accent))
             resources[key] = brush;
     }
 
     internal static IReadOnlyDictionary<string, Brush> Resolve()
     {
         var resolved = new Dictionary<string, Brush>(
-            Create(ThemeService.Current, ThemeService.CaptureGuideColor, ThemeService.IsSystemHighContrast),
+            Create(ThemeService.Current, ThemeService.CaptureGuideColor, ThemeService.IsSystemHighContrast, ThemeService.CurrentAccent),
             StringComparer.Ordinal);
         if (ThemeService.IsSystemHighContrast || ThemeService.Current == AppTheme.HighContrast
             || Application.Current?.Resources is not { } resources) return resolved;

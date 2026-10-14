@@ -93,6 +93,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _gitHubIssueUrl = GitHubIssueImageUrl.DefaultIssueUrl;
     private string _gitHubToken = string.Empty;
     private string _theme = AppThemeNames.Midnight;
+    private string _accentColor = AppAccentNames.Violet;
     private string _captureGuideColorMode = "theme";
     private string _captureGuideColorHex = CaptureGuideColorValue.DefaultCustomColor;
 
@@ -426,6 +427,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set => Set(ref _theme, AppThemeNames.ToSetting(AppThemeNames.Parse(value)));
     }
 
+    public string AccentColor
+    {
+        get => _accentColor;
+        set => Set(ref _accentColor, AppAccentNames.ToSetting(AppAccentNames.Parse(value)));
+    }
+
     public string CaptureGuideColorMode
     {
         get => _captureGuideColorMode;
@@ -697,6 +704,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             : GitHubIssueImageUrl.DefaultIssueUrl;
         _gitHubToken = s.GitHub.Token ?? string.Empty;
         _theme = AppThemeNames.ToSetting(AppThemeNames.Parse(s.General.Theme));
+        _accentColor = AppAccentNames.ToSetting(AppAccentNames.Parse(s.General.AccentColor));
         bool customGuide = CaptureGuideColorValue.TryNormalize(s.General.CaptureGuideColor, out string guideColor);
         _captureGuideColorMode = customGuide ? "custom" : "theme";
         _captureGuideColorHex = customGuide ? guideColor : CaptureGuideColorValue.DefaultCustomColor;
@@ -762,7 +770,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string[] CaptureState() =>
     [
         B(_launchAtLogin), B(_notifyOnQuickSave), B(_playCaptureSound), _afterCapture.ToString(), B(_showShortcutHints),
-        _language, _theme, _captureGuideColorMode, IsCustomCaptureGuideColor ? _captureGuideColorHex : string.Empty,
+        _language, _theme, _accentColor, _captureGuideColorMode, IsCustomCaptureGuideColor ? _captureGuideColorHex : string.Empty,
         B(_includeCursor), B(_autoDetectWindows), B(_showMagnifier), B(_showSelectionGrid), B(_abortOnFocusLoss),
         _preservedColorFormat.ToString(), _delaySeconds, _regionHistoryLimit,
         _recordingFrameRate, B(_useRecordingStartDelay), _recordingStartDelaySeconds, B(_recordingIncludeCursor),
@@ -815,6 +823,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 ShowShortcutHints = _showShortcutHints,
                 Language = _language,
                 Theme = AppThemeNames.ToSetting(AppThemeNames.Parse(_theme)),
+                AccentColor = AppAccentNames.ToSetting(AppAccentNames.Parse(_accentColor)),
                 CaptureGuideColor = CaptureGuideColorSetting,
                 ThemeRevision = 1,
                 IsFirstRun = _preservedIsFirstRun,

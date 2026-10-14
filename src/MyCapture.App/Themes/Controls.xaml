@@ -4,7 +4,7 @@
   Direction (Focus Portal, with Windows-native glass palettes):
     * Quiet graphite hierarchy with one iris action/focus accent. Glass themes keep
       the same keys and let DWM Mica show through translucent Surface brushes.
-    * Accent fills always pair with Text.OnAccent dark ink, including checks and glyphs.
+    * Accent fills pair with Text.OnAccent from the chosen palette, including checks and glyphs.
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
       shown by recolouring the fixed chrome border and revealing an inset ring with no layout
       footprint, so keyboard navigation never shifts neighbouring content.
@@ -1274,7 +1274,7 @@
         <Setter Property="Stroke" Value="{DynamicResource Text.Muted}" />
     </Style>
     <Style x:Key="Icon.Symbol.Accent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
-        <Setter Property="Stroke" Value="{DynamicResource Accent.Default}" />
+        <Setter Property="Stroke" Value="{DynamicResource Accent.Foreground}" />
     </Style>
     <Style x:Key="Icon.Symbol.OnAccent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
         <Setter Property="Stroke" Value="{DynamicResource Text.OnAccent}" />

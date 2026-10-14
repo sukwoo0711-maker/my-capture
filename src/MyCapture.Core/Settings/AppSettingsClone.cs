@@ -157,6 +157,7 @@ public static class AppSettingsClone
         PlayCaptureSound = s.PlayCaptureSound,
         Language = s.Language,
         Theme = s.Theme,
+        AccentColor = s.AccentColor,
         CaptureGuideColor = s.CaptureGuideColor,
         ThemeRevision = s.ThemeRevision,
         IsFirstRun = s.IsFirstRun,

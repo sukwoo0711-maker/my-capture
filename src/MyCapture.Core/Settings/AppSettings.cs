@@ -389,6 +389,9 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     /// <summary>Chrome palette id: glass, glass-light, workspace, midnight, daylight, or high-contrast.</summary>
     public string Theme { get; set; } = MyCapture.Core.Themes.AppThemeNames.Glass;
 
+    /// <summary>Absent in older files: preserve the original violet accent.</summary>
+    public string AccentColor { get; set; } = MyCapture.Core.Themes.AppAccentNames.Violet;
+
     /// <summary>Independent capture-guide brand override. Empty follows the theme; otherwise #RRGGBB.</summary>
     public string CaptureGuideColor { get; set; } = string.Empty;
 
