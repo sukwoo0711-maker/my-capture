@@ -107,6 +107,66 @@ public sealed class CaptureTagTests
     }
 
     [Fact]
+    public async Task FailedBatch_CorrectsIndexAfterInterleavedOcrDespitePersistentMetadataFailure()
+    {
+        var (queue, paths) = Queue();
+        CaptureRecord[] selected = [Record("keep"), Record("keep"), Record("keep")];
+        var ocr = Record("other");
+        foreach (CaptureRecord record in selected.Append(ocr))
+        {
+            queue.Add(record);
+            queue.SaveRecordMetaOrThrow(record);
+            File.WriteAllText(queue.GetFilePath(record, CaptureFileNames.Original), "fixture");
+        }
+        queue.Save();
+        string lockedPath = queue.GetFilePath(selected[1], CaptureFileNames.Meta);
+        using var batchReachedLock = new ManualResetEventSlim();
+        using var releaseBatch = new ManualResetEventSlim();
+        var writes = new List<(string Path, string Content)>();
+        queue.BeforePublicationWriteForTest = (path, content) =>
+        {
+            writes.Add((path, content));
+            if (path != lockedPath) return;
+            batchReachedLock.Set();
+            if (!releaseBatch.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Batch was not released.");
+            throw new IOException("Persistent metadata failure.");
+        };
+        Task<CaptureBatchTagResult> batch = queue.UpdateTagsAsync(selected.Select(record => record.Id), [new("keep", false)]);
+        Task ocrPublication;
+        try
+        {
+            Assert.True(batchReachedLock.Wait(TimeSpan.FromSeconds(10)));
+            Assert.All(selected, record => Assert.Empty(record.Tags));
+            ocr.OcrText = "recognized text";
+            using CaptureWriteReservation reservation = await queue.ReservePublicationAsync();
+            ocrPublication = queue.PublishRecordAsync(ocr, reservation);
+        }
+        finally { releaseBatch.Set(); }
+
+        var failure = await Assert.ThrowsAsync<AggregateException>(() => batch);
+        await ocrPublication;
+        Assert.Equal(2, failure.Flatten().InnerExceptions.Count);
+        Assert.All(failure.Flatten().InnerExceptions, error => Assert.IsType<IOException>(error));
+        Assert.All(selected, record => Assert.Equal("keep", record.Tags));
+        Assert.Equal(2, writes.Count(write => write.Path == lockedPath));
+        var indexes = writes.Where(write => write.Path == paths.IndexFile).ToArray();
+        Assert.Equal(2, indexes.Length);
+        Assert.DoesNotContain("keep", indexes[0].Content);
+        Assert.Contains("keep", indexes[1].Content);
+        Assert.Equal(paths.IndexFile, writes[^1].Path);
+        foreach (CaptureRecord record in selected)
+        {
+            var meta = JsonSerializer.Deserialize<CaptureRecord>(File.ReadAllText(queue.GetFilePath(record, CaptureFileNames.Meta)), JsonDefaults.Readable);
+            Assert.Equal("keep", meta!.Tags);
+        }
+        Assert.Contains(writes, write => write.Path == queue.GetFilePath(selected[2], CaptureFileNames.Meta));
+        var reloaded = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+        reloaded.Load();
+        Assert.All(selected, record => Assert.Equal("keep", reloaded.Find(record.Id)!.Tags));
+        Assert.Equal("recognized text", reloaded.Find(ocr.Id)!.OcrText);
+    }
+
+    [Fact]
     public async Task InvalidBatch_DoesNotMutateOrWrite_AndCancellationReleasesAdmission()
     {
         var (queue, paths) = Queue();

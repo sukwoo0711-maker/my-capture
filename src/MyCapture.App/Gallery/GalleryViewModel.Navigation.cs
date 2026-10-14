@@ -78,9 +78,14 @@ public sealed partial class GalleryViewModel
     /// True when the view would list <paramref name="record"/> without a search term: browsing,
     /// only where it is filed; a media or kept view, anywhere under the location.
     /// </summary>
-    internal bool ListsLocation(CaptureRecord record) => _filter == GalleryFilter.All && _selectedTag is null
-        ? GalleryController.IsDirectlyIn(record, _scope)
-        : _controller.RecordsInView(_scope, browsing: false).Contains(record);
+    internal bool ListsLocation(CaptureRecord record)
+    {
+        if (_selectedTag is not null && !CaptureOrganization.SplitTags(record.Tags)
+            .Contains(_selectedTag, StringComparer.OrdinalIgnoreCase)) return false;
+        return _filter == GalleryFilter.All && _selectedTag is null
+            ? GalleryController.IsDirectlyIn(record, _scope)
+            : _controller.RecordsInView(_scope, browsing: false).Contains(record);
+    }
 
     /// <summary>Highlights the library root while captures dragged over it would leave their folder.</summary>
     public bool IsAllItemsDropTarget

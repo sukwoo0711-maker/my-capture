@@ -1,17 +1,80 @@
 using System.IO;
+using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Automation.Provider;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Editing;
 using MyCapture.App.Gallery;
+using MyCapture.App.Ocr;
+using MyCapture.App.Recording;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
+using MyCapture.Ocr;
 using Xunit;
 
 namespace MyCapture.App.Tests;
 
 public sealed class GalleryTagTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OpenCapture_ClearsExcludingTagAndSelectsUncachedCapture(bool inFolder)
+    {
+        StaTestHost.Run(() =>
+        {
+            if (Application.Current is null)
+            {
+                var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+                application.Resources["PinLabel"] = new PinLabelConverter();
+                application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+            }
+            var paths = AppPaths.CreateForRoot(Path.Combine(AppContext.BaseDirectory,
+                "tag-test-fixtures", Guid.NewGuid().ToString("N")));
+            var settings = new AppSettings();
+            var queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
+            Guid? folderId = inFolder ? queue.CreateFolderAsync("Folder").GetAwaiter().GetResult().Id : null;
+            queue.Add(Record("work", "existing"));
+            var controller = new GalleryController(queue, NullLogger<GalleryController>.Instance);
+            var model = new GalleryViewModel(controller, _ => "missing.jpg", 320);
+            model.ShowTag("work");
+            var target = Record("", "new capture", folderId);
+            queue.Add(target);
+            model.Refresh();
+            Assert.Null(model.FindTile(target.Id));
+
+            var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue,
+                NullLogger<CapturePersistenceService>.Instance);
+            var commit = new CaptureCommitService(persistence, () => settings, () => paths,
+                NullLogger<CaptureCommitService>.Instance, (_, _) => Task.FromResult(true));
+            var ocr = new NoOcr();
+            using var presenter = new OcrResultPresenter(ocr, Dispatcher.CurrentDispatcher, _ => { }, NullLogger.Instance);
+            var indexing = new OcrIndexingService(controller, ocr, queue.GetDirectory, () => settings.Ocr,
+                NullLogger<OcrIndexingService>.Instance, Dispatcher.CurrentDispatcher);
+            var window = new GalleryWindow(model, controller,
+                new GalleryReeditLoader(queue, NullLogger<GalleryReeditLoader>.Instance), commit, queue,
+                new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance), paths,
+                NullLoggerFactory.Instance, presenter, () => settings.Ocr, indexing, new NoPrivacy(), NullLogger.Instance)
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000,
+            };
+            try
+            {
+                window.OpenCapture(target.Id, edit: false);
+                Assert.Null(model.SelectedTag);
+                Assert.Equal(folderId is { } id ? CaptureFolderScope.ForFolder(id) : CaptureFolderScope.All, model.SelectedScope);
+                Assert.Equal(target.Id, model.Selection.SingleSelectedId);
+                Assert.Equal(target.Id, model.SingleSelectedTile!.Id);
+                Assert.NotNull(model.FindTile(target.Id));
+            }
+            finally { window.CloseForExit(); }
+        });
+    }
+
     [Fact]
     public async Task TagView_CrossesFolders_MatchesWholeTags_AndTogglesLikeAView()
     {
@@ -185,4 +248,19 @@ public sealed class GalleryTagTests
 
     private static GalleryViewModel Model(CaptureQueue queue) => new(
         new GalleryController(queue, NullLogger<GalleryController>.Instance), _ => "missing.jpg", 320);
+
+    private sealed class NoOcr : IOcrService
+    {
+        public bool IsAvailable => false;
+        public IReadOnlyList<string> SupportedLanguages => [];
+        public Task<OcrResult> RecognizeAsync(OcrRequest request, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Navigation must not run OCR.");
+    }
+
+    private sealed class NoPrivacy : IPrivacyRedactionService
+    {
+        public bool IsAvailable => false;
+        public Task<PrivacyRedactionResult> FindAsync(System.Windows.Media.Imaging.BitmapSource bitmap, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Navigation must not run OCR.");
+    }
 }

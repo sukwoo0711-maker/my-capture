@@ -49,7 +49,7 @@ public sealed partial class CaptureQueue
                 }
                 // A queued OCR/folder save may include tentative tags. Correct only tag state,
                 // after those jobs, while preserving their other metadata and new captures.
-                try { await PublishTagsAsync(updates.Select(update => update.Record), null); }
+                try { await CorrectTagsAsync(updates.Select(update => update.Record)); }
                 catch (Exception correctionFailure)
                 {
                     throw new AggregateException("Tag publication and its corrective write failed.",
@@ -75,5 +75,23 @@ public sealed partial class CaptureQueue
             writes.AddRange(BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
             return EnqueuePublication(reservation, writes.ToArray());
         }
+    }
+
+    private async Task CorrectTagsAsync(IEnumerable<CaptureRecord> records)
+    {
+        var corrections = new List<Task>();
+        lock (_writeGate)
+        {
+            // Each correction is ordered after existing jobs, but a locked sidecar must not
+            // prevent the remaining metadata or the restored index from being published.
+            foreach (CaptureRecord record in records)
+                corrections.Add(EnqueuePublication(null, [(GetFilePath(record, CaptureFileNames.Meta),
+                    JsonSerializer.Serialize(record, MetaSerializerOptions))]));
+            corrections.Add(EnqueuePublication(null,
+                BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions))));
+        }
+        Task completion = Task.WhenAll(corrections);
+        try { await completion; }
+        catch { throw completion.Exception!; }
     }
 }
