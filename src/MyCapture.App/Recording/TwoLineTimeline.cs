@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -56,6 +56,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private const double EdgeGrab = 14.0;
     private const double BrushGripWidth = 10.0;
     private const double TrimHandleWidth = 14.0;
+    internal const double TrackInset = 1.0;
 
     /// <summary>
     /// Half the pointer target around a trim handle. The 44 DIP target follows the Windows
@@ -74,32 +75,32 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private readonly FrameworkElement _detailPanel;
     private readonly CompositionFrameScheduler _renderScheduler;
 
-    private readonly Brush _surfaceSunken;
-    private readonly Brush _surfaceBase;
-    private readonly Brush _surfaceScrim;
-    private readonly Brush _textPrimary;
-    private readonly Brush _textSecondary;
-    private readonly Brush _textMuted;
-    private readonly Brush _borderSubtle;
-    private readonly Brush _accent;
-    private readonly Brush _accentSubtle;
-    private readonly Brush _playhead;
-    private readonly Brush _handleFill;
-    private readonly Brush _handleText;
-    private readonly Brush _cutFill;
-    private readonly Pen _majorTickPen;
-    private readonly Pen _minorTickPen;
-    private readonly Pen _overviewMajorTickPen;
-    private readonly Pen _overviewMinorTickPen;
-    private readonly Pen _detailGroupPen;
-    private readonly Pen _accentOutlinePen;
-    private readonly Pen _connectorPen;
-    private readonly Pen _playheadPen;
-    private readonly Pen _gripMarkPen;
-    private readonly Pen _cutHatchPen;
-    private readonly Pen _cutEdgePen;
-    private readonly Pen _focusPen;
-    private readonly Pen _laneSeparatorPen;
+    private Brush _surfaceSunken = null!;
+    private Brush _surfaceBase = null!;
+    private Brush _surfaceScrim = null!;
+    private Brush _textPrimary = null!;
+    private Brush _textSecondary = null!;
+    private Brush _textMuted = null!;
+    private Brush _borderSubtle = null!;
+    private Brush _accent = null!;
+    private Brush _accentSubtle = null!;
+    private Brush _playhead = null!;
+    private Brush _handleFill = null!;
+    private Brush _handleText = null!;
+    private Brush _cutFill = null!;
+    private Pen _majorTickPen = null!;
+    private Pen _minorTickPen = null!;
+    private Pen _overviewMajorTickPen = null!;
+    private Pen _overviewMinorTickPen = null!;
+    private Pen _detailGroupPen = null!;
+    private Pen _accentOutlinePen = null!;
+    private Pen _connectorPen = null!;
+    private Pen _playheadPen = null!;
+    private Pen _gripMarkPen = null!;
+    private Pen _cutHatchPen = null!;
+    private Pen _cutEdgePen = null!;
+    private Pen _focusPen = null!;
+    private Pen _laneSeparatorPen = null!;
     private readonly Typeface _regularTypeface;
     private readonly Typeface _semiBoldTypeface;
     private readonly StreamGeometry _playheadMarker;
@@ -126,6 +127,82 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// keys to the playhead; without this, every click turned ←/→ into handle nudges.
     /// </summary>
     private bool _handleArmed;
+    private double? _hoverMs;
+    private TimelineRenderSurface? _hoverStrip;
+    private TrimHandle? _hoverHandle;
+    private VideoSnapCandidate? _snapGuide;
+
+    internal event EventHandler? ViewportUpdated;
+    internal event EventHandler<double?>? HoverChanged;
+    internal TimelineViewport Viewport => _viewport;
+    internal string HoverText => _hoverMs.HasValue ? VideoTimecode.Format(_hoverMs.Value) : string.Empty;
+
+    internal void SetHover(double? timeMs)
+    {
+        _hoverMs = timeMs;
+        InvalidatePlayhead();
+    }
+
+    internal void SetSnapGuide(VideoSnapCandidate? snap)
+    {
+        _snapGuide = snap;
+        InvalidatePlayhead();
+    }
+
+    private void ClearHover()
+    {
+        _hoverStrip = null;
+        _hoverHandle = null;
+        _overview.ToolTip = null;
+        _detail.ToolTip = null;
+        SetHover(null);
+        InvalidateRange();
+        HoverChanged?.Invoke(this, null);
+    }
+
+    internal void HoverForTest(double x, double y, bool overview = true) =>
+        UpdateHover(overview ? _overview : _detail, new Point(x, y));
+
+    internal void ClearHoverForTest() => ClearHover();
+
+    private void UpdateHover(TimelineRenderSurface strip, Point point)
+    {
+        if (_drag != DragMode.None || strip.ActualWidth <= 0) return;
+        _hoverStrip = strip;
+        bool overview = ReferenceEquals(strip, _overview);
+        SetHover(overview ? OverviewPxToMs(point.X, strip.ActualWidth) : _viewport.PxToMs(point.X, strip.ActualWidth));
+        TrimHandle? handle = null;
+        if (overview)
+        {
+            handle = HitTestOverview(point.X, point.Y, strip.ActualWidth) switch
+            {
+                DragMode.TrimIn => TrimHandle.In, DragMode.TrimOut => TrimHandle.Out, _ => null,
+            };
+        }
+        else if (_trimModeEnabled)
+        {
+            double toIn = IsVisibleInDetail(_trim.InMs) ? Math.Abs(point.X - _viewport.MsToPx(_trim.InMs, strip.ActualWidth)) : double.PositiveInfinity;
+            double toOut = IsVisibleInDetail(_trim.OutMs) ? Math.Abs(point.X - _viewport.MsToPx(_trim.OutMs, strip.ActualWidth)) : double.PositiveInfinity;
+            if (Math.Min(toIn, toOut) <= TrimHandleGrab) handle = toIn <= toOut ? TrimHandle.In : TrimHandle.Out;
+        }
+        if (_hoverHandle != handle)
+        {
+            _hoverHandle = handle;
+            strip.ToolTip = handle.HasValue ? UiText.Get(handle == TrimHandle.In ? "VideoEditorUx_DragStart" : "VideoEditorUx_DragEnd") : null;
+            InvalidateRange();
+        }
+        HoverChanged?.Invoke(this, _hoverMs);
+    }
+
+    private void DrawPointerFeedback(DrawingContext dc, TimelineRenderSurface strip, double width, double height, bool overview)
+    {
+        double? time = _snapGuide?.TimeMs ?? _hoverMs;
+        if (!time.HasValue || (!overview && !IsVisibleInDetail(time.Value))) return;
+        double x = overview ? OverviewMsToPx(time.Value, width) : _viewport.MsToPx(time.Value, width);
+        string? label = _snapGuide is { } snap ? TimelineVisuals.SnapLabel(snap.Kind)
+            : ReferenceEquals(_hoverStrip, strip) ? HoverText : null;
+        TimelineVisuals.DrawMarker(this, dc, x, height, 0, width, _textSecondary, _surfaceBase, _textPrimary, label);
+    }
 
     /// <summary>Half the width of the handle itself; a press here drags at once.</summary>
     private const double HandleBodyGrab = 8.0;
@@ -152,37 +229,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
 
-        _surfaceSunken = ResolveBrush("Surface.Sunken", Color.FromRgb(0x08, 0x0C, 0x12));
-        _surfaceBase = ResolveBrush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
-        _surfaceScrim = ResolveBrush("Surface.Scrim", Color.FromArgb(0xC2, 0x08, 0x0C, 0x12));
-        _textPrimary = ResolveBrush("Text.Primary", Colors.White);
-        _textSecondary = ResolveBrush("Text.Secondary", Colors.LightGray);
-        _textMuted = ResolveBrush("Text.Secondary", Colors.Gray);
-        _borderSubtle = ResolveBrush("Border.Subtle", Colors.DimGray);
-        _accent = ResolveBrush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF));
-        _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromRgb(0x15, 0x2F, 0x3E));
-        _playhead = ResolveBrush("Timeline.Playhead", Color.FromRgb(0x97, 0x89, 0xFF));
-        // The kept range and its handles use the theme's accent pair (accent fill with its
-        // on-accent text), so every palette, high contrast included, keeps a tested contrast.
-        _handleFill = _accent;
-        _handleText = ResolveBrush("Text.OnAccent", Color.FromRgb(0x0A, 0x08, 0x18));
-        _cutFill = ResolveBrush("Surface.Scrim", Color.FromArgb(0xE6, 0x08, 0x0C, 0x12));
-
-        _majorTickPen = CreatePen(_textSecondary, 2.0);
-        _minorTickPen = CreatePen(_borderSubtle, 1.0);
-        // The trim strip's ticks sit over frame thumbnails: thin and translucent, so they
-        // still mark the ruler without hiding the frames.
-        _overviewMajorTickPen = CreatePen(WithOpacity(_textSecondary, 0.55), 1.0);
-        _overviewMinorTickPen = CreatePen(WithOpacity(_textSecondary, 0.35), 1.0);
-        _detailGroupPen = CreatePen(_textMuted, 1.6);
-        _accentOutlinePen = CreatePen(_accent, 2.0);
-        _connectorPen = CreatePen(_accent, 2.0);
-        _playheadPen = CreatePen(_playhead, 2.6);
-        _gripMarkPen = CreatePen(_handleText, 1.6);
-        _cutHatchPen = CreatePen(WithOpacity(_textSecondary, 0.38), 1.2);
-        _cutEdgePen = CreatePen(WithOpacity(_textSecondary, 0.55), 1.0);
-        _focusPen = CreatePen(ResolveBrush("Border.Focus", Color.FromRgb(0x97, 0x89, 0xFF)), 2.0);
-        _laneSeparatorPen = CreatePen(_borderSubtle, 1.0);
+        RefreshPalette();
 
         FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");
@@ -227,8 +274,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _detail.MouseMove += (_, e) => OnStripMove(_detail, e);
         _overview.MouseLeftButtonUp += (_, e) => EndDrag(_overview, e);
         _detail.MouseLeftButtonUp += (_, e) => EndDrag(_detail, e);
-        _overview.MouseLeave += (_, _) => { if (_drag == DragMode.None) { _overview.Cursor = Cursors.Hand; } };
-        _detail.MouseLeave += (_, _) => { if (_drag == DragMode.None) { _detail.Cursor = Cursors.Cross; } };
+        _overview.MouseLeave += (_, _) => { ClearHover(); if (_drag == DragMode.None) { _overview.Cursor = Cursors.Hand; } };
+        _detail.MouseLeave += (_, _) => { ClearHover(); if (_drag == DragMode.None) { _detail.Cursor = Cursors.Cross; } };
         _overview.LostMouseCapture += OnLostMouseCapture;
         _detail.LostMouseCapture += OnLostMouseCapture;
         _detail.MouseWheel += OnDetailWheel;
@@ -236,6 +283,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         // The keyboard-selected handle shows a focus ring only while the timeline has focus.
         IsKeyboardFocusWithinChanged += (_, _) => InvalidateRange();
         IsEnabledChanged += (_, _) => Opacity = IsEnabled ? 1.0 : 0.5;
+        TimelineVisuals.ObservePalette(this, () => { RefreshPalette(); InvalidateAll(); });
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -312,6 +360,42 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     internal void FlushRenderForTest() => _renderScheduler.FlushForTest();
 
+    private void RefreshPalette()
+    {
+        _surfaceSunken = ResolveBrush("Surface.Sunken", Color.FromRgb(0x08, 0x0C, 0x12));
+        _surfaceBase = ResolveBrush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
+        _surfaceScrim = ResolveBrush("Surface.Scrim", Color.FromArgb(0xC2, 0x08, 0x0C, 0x12));
+        _textPrimary = ResolveBrush("Text.Primary", Colors.White);
+        _textSecondary = ResolveBrush("Text.Secondary", Colors.LightGray);
+        _textMuted = ResolveBrush("Text.Secondary", Colors.Gray);
+        _borderSubtle = ResolveBrush("Border.Subtle", Colors.DimGray);
+        _accent = ResolveBrush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF));
+        _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromRgb(0x15, 0x2F, 0x3E));
+        _playhead = ResolveBrush("Timeline.Playhead", Color.FromRgb(0x97, 0x89, 0xFF));
+        // The kept range and its handles use the theme's accent pair (accent fill with its
+        // on-accent text), so every palette, high contrast included, keeps a tested contrast.
+        _handleFill = _accent;
+        _handleText = ResolveBrush("Text.OnAccent", Color.FromRgb(0x0A, 0x08, 0x18));
+        _cutFill = ResolveBrush("Surface.Scrim", Color.FromArgb(0xE6, 0x08, 0x0C, 0x12));
+
+        _majorTickPen = CreatePen(_textSecondary, 2.0);
+        _minorTickPen = CreatePen(_borderSubtle, 1.0);
+        // The trim strip's ticks sit over frame thumbnails: thin and translucent, so they
+        // still mark the ruler without hiding the frames.
+        _overviewMajorTickPen = CreatePen(WithOpacity(_textSecondary, 0.55), 1.0);
+        _overviewMinorTickPen = CreatePen(WithOpacity(_textSecondary, 0.35), 1.0);
+        _detailGroupPen = CreatePen(_textMuted, 1.6);
+        _accentOutlinePen = CreatePen(_accent, 2.0);
+        _connectorPen = CreatePen(_accent, 2.0);
+        _playheadPen = CreatePen(_playhead, 2.6);
+        _gripMarkPen = CreatePen(_handleText, 1.6);
+        _cutHatchPen = CreatePen(WithOpacity(_textSecondary, 0.38), 1.2);
+        _cutEdgePen = CreatePen(WithOpacity(_textSecondary, 0.55), 1.0);
+        _focusPen = CreatePen(ResolveBrush("Border.Focus", Color.FromRgb(0x97, 0x89, 0xFF)), 2.0);
+        _laneSeparatorPen = CreatePen(_borderSubtle, 1.0);
+
+    }
+
     internal void Initialize(double durationMs, int fps)
     {
         _durationMs = Math.Max(1, durationMs);
@@ -335,6 +419,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         UpdateTrimStatus();
         UpdateOverviewHelp();
         InvalidateAll();
+        ViewportUpdated?.Invoke(this, EventArgs.Empty);
         ScheduleFilmstrip(immediate: true);
     }
 
@@ -438,6 +523,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             return;
         }
 
+        ClearHover();
         _detailVisible = visible;
         Visibility detail = visible ? Visibility.Visible : Visibility.Collapsed;
         _overviewCaption.Visibility = detail;
@@ -446,6 +532,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _overview.Height = StripHeight();
         UpdateOverviewHelp();
         InvalidateAll();
+        ViewportUpdated?.Invoke(this, EventArgs.Empty);
     }
 
     private double StripHeight() => _detailVisible
@@ -577,6 +664,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         double centre = _viewport.PxToMs(e.GetPosition(_detail).X, _detail.ActualWidth);
         _viewport.Zoom(centre, e.Delta > 0 ? 0.8 : 1.25);
         InvalidateViewport();
+        UpdateHover(_detail, e.GetPosition(_detail));
         e.Handled = true;
     }
 
@@ -637,6 +725,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     private void OnStripDown(TimelineRenderSurface strip, MouseButtonEventArgs e, bool isOverview)
     {
+        ClearHover();
         Point position = e.GetPosition(strip);
         if (strip.ActualWidth <= 0)
         {
@@ -744,6 +833,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         if (_drag == DragMode.None)
         {
             UpdateCursor(eventStrip, e.GetPosition(eventStrip));
+            UpdateHover(eventStrip, e.GetPosition(eventStrip));
             return;
         }
 
@@ -1328,6 +1418,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     private void InvalidateViewport()
     {
+        ViewportUpdated?.Invoke(this, EventArgs.Empty);
         UpdateRangeCaptions();
         _overview.InvalidateLayers(TimelineRenderLayer.Range);
         _connector.InvalidateLayers(TimelineRenderLayer.Range);
@@ -1478,6 +1569,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
             case TimelineRenderLayer.Transient:
                 DrawPlayhead(dc, OverviewMsToPx(_playheadMs, width), trackTop, height);
+                DrawPointerFeedback(dc, _overview, width, height, overview: true);
                 break;
         }
     }
@@ -1607,6 +1699,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 {
                     DrawPlayhead(dc, _viewport.MsToPx(_playheadMs, width), 0, height);
                 }
+                DrawPointerFeedback(dc, _detail, width, height, overview: false);
                 break;
         }
     }
@@ -1658,7 +1751,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         double middle = top + ((bottom - top) / 2);
         DrawLine(dc, _gripMarkPen, x - 2.5, middle - 6, x - 2.5, middle + 6);
         DrawLine(dc, _gripMarkPen, x + 2.5, middle - 6, x + 2.5, middle + 6);
-        if (ShowsFocusOn(handle))
+        if (ShowsFocusOn(handle) || _hoverHandle == handle)
         {
             Rect ring = bounds;
             ring.Inflate(3, 0);
@@ -1811,11 +1904,11 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         panel.Children.Add(caption);
         var host = new Border
         {
-            BorderBrush = _borderSubtle,
-            BorderThickness = new Thickness(1),
+            BorderThickness = new Thickness(TrackInset),
             CornerRadius = new CornerRadius(6),
             Child = strip,
         };
+        host.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         AutomationProperties.SetName(strip, automationName);
         panel.Children.Add(host);
         return panel;
@@ -1837,8 +1930,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     private static string FormatTickLabel(double ms) => VideoTimecode.FormatTick(ms);
 
-    private static Brush ResolveBrush(string key, Color fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? FrozenBrush(fallback);
+    private Brush ResolveBrush(string key, Color fallback) =>
+        TryFindResource(key) as Brush ?? FrozenBrush(fallback);
 
     private static Brush WithOpacity(Brush brush, double opacity)
     {
