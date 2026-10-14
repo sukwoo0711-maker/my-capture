@@ -55,7 +55,8 @@ OCR로 이미지 속 글자를 텍스트로 복사하고, 표를 CSV·Markdown·
 
 - 필드별 검색과 조건 칩으로 캡처를 찾고, 여러 캡처의 태그를 한 번에 편집할 수 있습니다.
 - PNG·JPEG·MP4를 끌어 놓아 가져오며 중복은 건너뜁니다. 이미지를 PDF로 묶거나 두 장을 비교할 수 있습니다.
-- 확정한 텍스트를 다시 수정하고 굵기와 배경 판을 바꿀 수 있습니다.
+- 확정한 텍스트를 다시 수정하고 굵기와 배경 판을 바꿀 수 있습니다. 편집기에서 여러 주석을 드래그로 함께 선택해 편집할 수 있습니다.
+- 새 앱 아이콘을 적용하고, 포인트 색으로 바이올렛과 레드 중 하나를 고를 수 있습니다.
 - 이미지 내보내기에 형식·크기 프리셋과 꾸미기를 추가했습니다. 출처 URL 포함은 기본적으로 꺼져 있습니다.
 - 녹화의 여러 구간을 잘라 MP4·GIF로 내보낼 수 있습니다. 저장 진행률·예상 남은 시간·취소와 타임라인 자동 맞춤을 지원합니다.
 
@@ -103,7 +104,8 @@ MyCapture supports global shortcuts, a tray menu, Korean and English interfaces,
 
 - Find captures with field search and filter chips. Edit tags for multiple captures at once.
 - Drag in PNG, JPEG and MP4 files, skipping duplicates. Arrange images in a PDF or compare two images.
-- Reopen text annotations to edit them, and toggle bold text and background plates.
+- Reopen text annotations to edit them, and toggle bold text and background plates. Drag to select several annotations and edit them together.
+- A new app icon, and a choice of violet or red as the accent color.
 - Export images with format and size presets, margins, rounded corners, backgrounds and shadows. Source URL metadata is off by default.
 - Remove multiple recording segments and export MP4 or GIF. Library saving shows progress, estimated time remaining and cancel. Timeline layers snap to nearby boundaries.
 
