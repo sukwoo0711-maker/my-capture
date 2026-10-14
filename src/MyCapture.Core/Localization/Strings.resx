@@ -4168,4 +4168,103 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>사용법 동영상을 불러오지 못했습니다. 아래 단계에서 사용 방법을 확인합니다.</value></data>
+  <data name="ContactSheet.Action" xml:space="preserve">
+    <value>PDF로 묶기</value>
+  </data>
+  <data name="ContactSheet.Save" xml:space="preserve">
+    <value>PDF 저장</value>
+  </data>
+  <data name="ContactSheet.PageSize" xml:space="preserve">
+    <value>용지 크기</value>
+  </data>
+  <data name="ContactSheet.A4Portrait" xml:space="preserve">
+    <value>A4 세로</value>
+  </data>
+  <data name="ContactSheet.A4Landscape" xml:space="preserve">
+    <value>A4 가로</value>
+  </data>
+  <data name="ContactSheet.LetterPortrait" xml:space="preserve">
+    <value>Letter 세로</value>
+  </data>
+  <data name="ContactSheet.Layout" xml:space="preserve">
+    <value>배치</value>
+  </data>
+  <data name="ContactSheet.OneByOne" xml:space="preserve">
+    <value>1×1</value>
+  </data>
+  <data name="ContactSheet.OneByTwo" xml:space="preserve">
+    <value>1×2</value>
+  </data>
+  <data name="ContactSheet.TwoByTwo" xml:space="preserve">
+    <value>2×2</value>
+  </data>
+  <data name="ContactSheet.TwoByThree" xml:space="preserve">
+    <value>2×3</value>
+  </data>
+  <data name="ContactSheet.ThreeByFour" xml:space="preserve">
+    <value>3×4</value>
+  </data>
+  <data name="ContactSheet.Caption" xml:space="preserve">
+    <value>캡션</value>
+  </data>
+  <data name="ContactSheet.Title" xml:space="preserve">
+    <value>제목</value>
+  </data>
+  <data name="ContactSheet.CaptureTime" xml:space="preserve">
+    <value>촬영 시각</value>
+  </data>
+  <data name="ContactSheet.TitleAndCaptureTime" xml:space="preserve">
+    <value>제목과 촬영 시각</value>
+  </data>
+  <data name="ContactSheet.None" xml:space="preserve">
+    <value>없음</value>
+  </data>
+  <data name="ContactSheet.Source" xml:space="preserve">
+    <value>출처 표시</value>
+  </data>
+  <data name="ContactSheet.SkippedVideos" xml:space="preserve">
+    <value>동영상 {0}개 제외</value>
+  </data>
+  <data name="ContactSheet.Preview" xml:space="preserve">
+    <value>1페이지 미리보기</value>
+  </data>
+  <data name="ContactSheet.PageCount" xml:space="preserve">
+    <value>이미지 {0}개 · {1}페이지</value>
+  </data>
+  <data name="ContactSheet.Limit" xml:space="preserve">
+    <value>최대 500개 항목과 100페이지까지 저장할 수 있습니다. 선택 항목을 줄이거나 페이지당 이미지 수를 늘리십시오.</value>
+  </data>
+  <data name="ContactSheet.Preparing" xml:space="preserve">
+    <value>미리보기 준비 중</value>
+  </data>
+  <data name="ContactSheet.PreviewFailed" xml:space="preserve">
+    <value>미리보기를 만들지 못했습니다. 이미지 파일을 확인하거나 배치 옵션을 다시 선택하십시오.</value>
+  </data>
+  <data name="ContactSheet.Saving" xml:space="preserve">
+    <value>PDF 저장 중</value>
+  </data>
+  <data name="ContactSheet.Progress" xml:space="preserve">
+    <value>PDF 저장 중 · {0}/{1}</value>
+  </data>
+  <data name="ContactSheet.Saved" xml:space="preserve">
+    <value>PDF 저장됨</value>
+  </data>
+  <data name="ContactSheet.Cancelled" xml:space="preserve">
+    <value>PDF 저장 취소됨</value>
+  </data>
+  <data name="ContactSheet.Failed" xml:space="preserve">
+    <value>PDF를 저장하지 못했습니다. 이미지 파일과 저장 위치를 확인하십시오.</value>
+  </data>
+  <data name="ContactSheet.Filter" xml:space="preserve">
+    <value>PDF 문서 (*.pdf)|*.pdf</value>
+  </data>
+  <data name="ContactSheet.Exists" xml:space="preserve">
+    <value>같은 이름의 파일이 있습니다. 다른 이름을 선택하십시오.</value>
+  </data>
+  <data name="ContactSheet.StageRetained" xml:space="preserve">
+    <value>임시 파일을 휴지통으로 이동하지 못했습니다. 파일 위치: {0}</value>
+  </data>
+  <data name="ContactSheet.NoImages" xml:space="preserve">
+    <value>PDF에 포함할 이미지를 선택하십시오. 동영상은 제외됩니다.</value>
+  </data>
 </root>

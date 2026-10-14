@@ -4168,4 +4168,103 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>The tutorial video could not be loaded. Follow the steps below to use this feature.</value></data>
+  <data name="ContactSheet.Action" xml:space="preserve">
+    <value>Create PDF</value>
+  </data>
+  <data name="ContactSheet.Save" xml:space="preserve">
+    <value>Save PDF</value>
+  </data>
+  <data name="ContactSheet.PageSize" xml:space="preserve">
+    <value>Page size</value>
+  </data>
+  <data name="ContactSheet.A4Portrait" xml:space="preserve">
+    <value>A4 portrait</value>
+  </data>
+  <data name="ContactSheet.A4Landscape" xml:space="preserve">
+    <value>A4 landscape</value>
+  </data>
+  <data name="ContactSheet.LetterPortrait" xml:space="preserve">
+    <value>Letter portrait</value>
+  </data>
+  <data name="ContactSheet.Layout" xml:space="preserve">
+    <value>Layout</value>
+  </data>
+  <data name="ContactSheet.OneByOne" xml:space="preserve">
+    <value>1×1</value>
+  </data>
+  <data name="ContactSheet.OneByTwo" xml:space="preserve">
+    <value>1×2</value>
+  </data>
+  <data name="ContactSheet.TwoByTwo" xml:space="preserve">
+    <value>2×2</value>
+  </data>
+  <data name="ContactSheet.TwoByThree" xml:space="preserve">
+    <value>2×3</value>
+  </data>
+  <data name="ContactSheet.ThreeByFour" xml:space="preserve">
+    <value>3×4</value>
+  </data>
+  <data name="ContactSheet.Caption" xml:space="preserve">
+    <value>Caption</value>
+  </data>
+  <data name="ContactSheet.Title" xml:space="preserve">
+    <value>Title</value>
+  </data>
+  <data name="ContactSheet.CaptureTime" xml:space="preserve">
+    <value>Capture time</value>
+  </data>
+  <data name="ContactSheet.TitleAndCaptureTime" xml:space="preserve">
+    <value>Title and capture time</value>
+  </data>
+  <data name="ContactSheet.None" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="ContactSheet.Source" xml:space="preserve">
+    <value>Show source</value>
+  </data>
+  <data name="ContactSheet.SkippedVideos" xml:space="preserve">
+    <value>{0} {0:plural:video|videos} skipped</value>
+  </data>
+  <data name="ContactSheet.Preview" xml:space="preserve">
+    <value>Page 1 preview</value>
+  </data>
+  <data name="ContactSheet.PageCount" xml:space="preserve">
+    <value>{0} {0:plural:image|images} · {1} {1:plural:page|pages}</value>
+  </data>
+  <data name="ContactSheet.Limit" xml:space="preserve">
+    <value>Select up to 500 items and a layout with at most 100 pages. Reduce the selection or increase the images per page.</value>
+  </data>
+  <data name="ContactSheet.Preparing" xml:space="preserve">
+    <value>Preparing preview</value>
+  </data>
+  <data name="ContactSheet.PreviewFailed" xml:space="preserve">
+    <value>Could not create the preview. Check the image files or select a layout again.</value>
+  </data>
+  <data name="ContactSheet.Saving" xml:space="preserve">
+    <value>Saving PDF</value>
+  </data>
+  <data name="ContactSheet.Progress" xml:space="preserve">
+    <value>Saving PDF · {0}/{1}</value>
+  </data>
+  <data name="ContactSheet.Saved" xml:space="preserve">
+    <value>PDF saved</value>
+  </data>
+  <data name="ContactSheet.Cancelled" xml:space="preserve">
+    <value>PDF save cancelled</value>
+  </data>
+  <data name="ContactSheet.Failed" xml:space="preserve">
+    <value>Could not save the PDF. Check the image files and destination.</value>
+  </data>
+  <data name="ContactSheet.Filter" xml:space="preserve">
+    <value>PDF document (*.pdf)|*.pdf</value>
+  </data>
+  <data name="ContactSheet.Exists" xml:space="preserve">
+    <value>A file with this name already exists. Choose another name.</value>
+  </data>
+  <data name="ContactSheet.StageRetained" xml:space="preserve">
+    <value>Could not move the temporary file to the Recycle Bin. File location: {0}</value>
+  </data>
+  <data name="ContactSheet.NoImages" xml:space="preserve">
+    <value>Select images for the PDF. Videos are skipped.</value>
+  </data>
 </root>
