@@ -508,33 +508,74 @@ internal static class HotfixUxSelfTest
                     owned.Add(obstruction); obstruction.Show(); Pump(100); obstruction.Activate();
                     Check($"{obstruction.GetType().Name}: excluded only from fallback owners", !ThemedDialog.IsSuitableOwner(obstruction));
                     bool above = false, dismissed = false;
+                    Exception? failure = null;
+                    var existingDialogs = Application.Current.Windows.OfType<ThemedDialog>().ToHashSet();
+                    var elapsed = Stopwatch.StartNew();
+                    TimeSpan limit = TimeSpan.FromSeconds(5);
                     var dismiss = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-                    dismiss.Tick += (_, _) =>
+                    var timeout = new DispatcherTimer(DispatcherPriority.Send) { Interval = limit };
+                    ThemedDialog[] TestDialogs() => Application.Current.Windows.OfType<ThemedDialog>()
+                        .Where(dialog => !existingDialogs.Contains(dialog)).ToArray();
+                    void CloseTestDialogs()
+                    {
+                        foreach (ThemedDialog dialog in TestDialogs())
+                        {
+                            try { dialog.Close(); }
+                            catch (Exception error) { failure ??= error; }
+                        }
+                    }
+                    void DismissDialog(bool timedOut)
                     {
                         dismiss.Stop();
-                        ThemedDialog dialog = Application.Current.Windows.OfType<ThemedDialog>().Single(window => window.IsVisible);
-                        above = dialog.IsActive && GetForegroundWindow() == new WindowInteropHelper(dialog).Handle
-                            && (explicitOwner ? ReferenceEquals(dialog.Owner, obstruction) : dialog.Owner is null && dialog.Topmost)
-                            && IsAbove(new WindowInteropHelper(dialog).Handle, new WindowInteropHelper(obstruction).Handle);
-                        Render(dialog, Path.Combine(output, $"dialog-above-{obstruction.GetType().Name}-{explicitOwner}.png"), 96);
-                        if (escape)
+                        if (timedOut) timeout.Stop();
+                        try
                         {
-                            var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(dialog), Environment.TickCount, Key.Escape)
-                                { RoutedEvent = Keyboard.KeyDownEvent, Source = dialog };
-                            InputManager.Current.ProcessInput(key);
+                            if (timedOut || elapsed.Elapsed >= limit)
+                                throw new TimeoutException($"Dialog verification exceeded {limit.TotalSeconds:0} seconds.");
+                            ThemedDialog dialog = TestDialogs().Single(window => window.IsVisible);
+                            above = dialog.IsActive && GetForegroundWindow() == new WindowInteropHelper(dialog).Handle
+                                && (explicitOwner ? ReferenceEquals(dialog.Owner, obstruction) : dialog.Owner is null && dialog.Topmost)
+                                && IsAbove(new WindowInteropHelper(dialog).Handle, new WindowInteropHelper(obstruction).Handle);
+                            Render(dialog, Path.Combine(output, $"dialog-above-{obstruction.GetType().Name}-{explicitOwner}.png"), 96);
+                            if (escape)
+                            {
+                                var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(dialog), Environment.TickCount, Key.Escape)
+                                    { RoutedEvent = Keyboard.KeyDownEvent, Source = dialog };
+                                InputManager.Current.ProcessInput(key);
+                            }
+                            else
+                            {
+                                Button button = SelectStandardCloseAction(dialog);
+                                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                            }
+                            // Only the input above can satisfy dismissal; cleanup never does.
+                            dismissed = !dialog.IsVisible;
                         }
-                        else
+                        catch (Exception error) { failure ??= error; }
+                        finally { CloseTestDialogs(); }
+                    }
+                    dismiss.Tick += (_, _) => DismissDialog(timedOut: false);
+                    timeout.Tick += (_, _) => DismissDialog(timedOut: true);
+                    try
+                    {
+                        dismiss.Start();
+                        timeout.Start();
+                        if (explicitOwner) ThemedDialog.Error(obstruction, "MyCapture QA", changed);
+                        else ThemedDialog.ShowUnhandled(changed, showFallback: (_, _) =>
                         {
-                            var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
-                            Button button = panel.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().Single();
-                            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                        }
-                        dismissed = !dialog.IsVisible;
-                        if (!dismissed) dialog.Close();
-                    };
-                    dismiss.Start();
-                    if (explicitOwner) ThemedDialog.Error(obstruction, "MyCapture QA", changed);
-                    else ThemedDialog.ShowUnhandled(changed);
+                            failure ??= new InvalidOperationException("The topmost dialog unexpectedly reached the native MessageBox fallback.");
+                        });
+                    }
+                    finally
+                    {
+                        dismiss.Stop();
+                        timeout.Stop();
+                        CloseTestDialogs();
+                    }
+                    if (elapsed.Elapsed >= limit)
+                        failure ??= new TimeoutException($"Dialog verification exceeded {limit.TotalSeconds:0} seconds.");
+                    if (failure is not null)
+                        throw new InvalidOperationException($"{obstruction.GetType().Name}: dialog verification failed; explicitOwner={explicitOwner}", failure);
                     Check($"{obstruction.GetType().Name}: dialog remains above visible topmost UI; explicitOwner={explicitOwner}", above);
                     Check($"{obstruction.GetType().Name}: dialog dismissed by {(escape ? "Esc" : "button")}", dismissed);
                     obstruction.Close();
@@ -572,6 +613,15 @@ internal static class HotfixUxSelfTest
             }
         }
         return result;
+    }
+
+    internal static Button SelectStandardCloseAction(ThemedDialog dialog)
+    {
+        var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
+        Button button = panel.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().Single(action => action.IsCancel);
+        if (!button.IsDefault || !button.IsVisible || !button.IsEnabled || !Equals(button.Content, UiText.Get("Dialog.Close")))
+            throw new InvalidOperationException("The dialog's sole cancel action must be the default, visible, enabled Close button.");
+        return button;
     }
 
     private static QuickAccessWindow Card(BitmapSource image, bool excludeFromCapture = true) => new(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"), excludeFromCapture);
