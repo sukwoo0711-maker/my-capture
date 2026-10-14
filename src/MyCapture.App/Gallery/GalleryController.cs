@@ -117,12 +117,9 @@ public sealed class GalleryController
     {
         string? folder = record.FolderId is { } id && query.Tokens.Any(token => token.Field == CaptureSearchField.Folder)
             ? _queue.GetFolderDisplayPath(id) : null;
+        string fileName = _queue.GetExportFileName(record);
         fields = CaptureMatchField.None;
-        if (collectFields ? query.TryMatch(record, out fields, folder) : query.IsMatch(record, folder)) return true;
-        if (!query.AllowsFileNameFallback
-            || !_queue.GetExportFileName(record).Contains(query.Text.Trim(), StringComparison.CurrentCultureIgnoreCase)) return false;
-        fields = CaptureMatchField.ExportFileName;
-        return true;
+        return collectFields ? query.TryMatch(record, out fields, folder, fileName) : query.IsMatch(record, folder, fileName);
     }
 
     /// <summary>

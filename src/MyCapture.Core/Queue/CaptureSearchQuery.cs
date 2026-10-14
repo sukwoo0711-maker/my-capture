@@ -62,24 +62,21 @@ public sealed class CaptureSearchQuery
         return Text.Remove(token.Start, token.Length).Trim();
     }
 
-    public bool IsMatch(CaptureRecord record, string? folderPath = null) =>
-        Match(record, folderPath, collectFields: false, out _);
+    public bool IsMatch(CaptureRecord record, string? folderPath = null, string? exportFileName = null) =>
+        Match(record, folderPath, exportFileName, collectFields: false, out _);
 
-    public bool TryMatch(CaptureRecord record, out CaptureMatchField fields, string? folderPath = null) =>
-        Match(record, folderPath, collectFields: true, out fields);
+    public bool TryMatch(CaptureRecord record, out CaptureMatchField fields, string? folderPath = null,
+        string? exportFileName = null) =>
+        Match(record, folderPath, exportFileName, collectFields: true, out fields);
 
-    // The gallery historically also finds the complete plain query in the generated export name.
-    public bool AllowsFileNameFallback => _tokens.Length > 0
-        && _tokens.All(token => token.Field == CaptureSearchField.Any && !token.IsNegated)
-        && !Text.Contains('"');
-
-    private bool Match(CaptureRecord record, string? folderPath, bool collectFields, out CaptureMatchField fields)
+    private bool Match(CaptureRecord record, string? folderPath, string? exportFileName, bool collectFields,
+        out CaptureMatchField fields)
     {
         ArgumentNullException.ThrowIfNull(record);
         fields = CaptureMatchField.None;
         foreach (CaptureSearchToken token in _tokens)
         {
-            CaptureMatchField matched = MatchToken(record, token, folderPath, collectFields && !token.IsNegated);
+            CaptureMatchField matched = MatchToken(record, token, folderPath, exportFileName, collectFields && !token.IsNegated);
             if (token.IsNegated ? matched != CaptureMatchField.None : matched == CaptureMatchField.None)
             {
                 fields = CaptureMatchField.None;
@@ -91,7 +88,7 @@ public sealed class CaptureSearchQuery
     }
 
     private static CaptureMatchField MatchToken(CaptureRecord record, CaptureSearchToken token,
-        string? folderPath, bool collectFields)
+        string? folderPath, string? exportFileName, bool collectFields)
     {
         string value = token.Value;
         if (value.Length == 0) return CaptureMatchField.None;
@@ -141,6 +138,8 @@ public sealed class CaptureSearchQuery
         if (!collectFields && fields != CaptureMatchField.None) return fields;
         if ((any || token.Field == CaptureSearchField.Text) && Contains(record.OcrText, value))
             fields |= CaptureMatchField.OcrText;
+        if (any && Contains(exportFileName, value))
+            fields |= CaptureMatchField.ExportFileName;
         return fields;
     }
 

@@ -98,6 +98,43 @@ public sealed class CaptureSearchQueryTests
         Assert.True(CaptureSearchQuery.Parse("종류:동영상").IsMatch(record));
     }
 
+    [Theory]
+    [InlineData("invoice type:image", true, CaptureMatchField.ExportFileName | CaptureMatchField.MediaType)]
+    [InlineData("\"monthly invoice.png\"", true, CaptureMatchField.ExportFileName)]
+    [InlineData("monthly report", true, CaptureMatchField.ExportFileName | CaptureMatchField.OcrText)]
+    [InlineData("monthly missing", false, CaptureMatchField.None)]
+    [InlineData("monthly -invoice", false, CaptureMatchField.None)]
+    [InlineData("-invoice", false, CaptureMatchField.None)]
+    [InlineData("-missing", true, CaptureMatchField.None)]
+    [InlineData("app:invoice", false, CaptureMatchField.None)]
+    [InlineData("title:invoice", false, CaptureMatchField.None)]
+    [InlineData("tag:invoice", false, CaptureMatchField.None)]
+    [InlineData("text:invoice", false, CaptureMatchField.None)]
+    [InlineData("url:invoice", false, CaptureMatchField.None)]
+    [InlineData("folder:invoice", false, CaptureMatchField.None)]
+    [InlineData("-title:invoice", true, CaptureMatchField.None)]
+    public void ExportFilenameParticipatesOnlyInAnyTokens(string text, bool expected, CaptureMatchField expectedFields)
+    {
+        var record = new CaptureRecord { OcrText = "report" };
+        CaptureSearchQuery query = CaptureSearchQuery.Parse(text);
+        const string fileName = "Monthly Invoice.png";
+        Assert.Equal(expected, query.IsMatch(record, exportFileName: fileName));
+        Assert.Equal(expected, query.TryMatch(record, out CaptureMatchField fields, exportFileName: fileName));
+        Assert.Equal(expectedFields, fields);
+    }
+
+    [Fact]
+    public void ExportFilenameAttributionUnionsWithMetadataAndRemainsOptional()
+    {
+        var record = new CaptureRecord { Title = "invoice" };
+        CaptureSearchQuery query = CaptureSearchQuery.Parse("invoice");
+        Assert.True(query.TryMatch(record, out CaptureMatchField fields, exportFileName: "Invoice.png"));
+        Assert.Equal(CaptureMatchField.Title | CaptureMatchField.ExportFileName, fields);
+        Assert.True(query.TryMatch(record, out fields));
+        Assert.Equal(CaptureMatchField.Title, fields);
+        Assert.False(CaptureSearchQuery.Parse("monthly").IsMatch(record));
+    }
+
     [Fact]
     public void AttributionContainsOnlyPositiveMatchingFieldsAndFailureClearsIt()
     {
