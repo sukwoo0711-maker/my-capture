@@ -48,7 +48,7 @@ internal static class TimelineVisuals
     });
 
     internal static void DrawMarker(FrameworkElement owner, DrawingContext dc, double x, double height,
-        double left, double right, Brush line, Brush background, Brush foreground, string? label)
+        double left, double right, Brush line, Brush background, Brush foreground, string? label, double labelTop = 1)
     {
         dc.DrawLine(new Pen(line, 1), new Point(x, 0), new Point(x, height));
         if (label is null || right <= left + 12) return;
@@ -60,7 +60,7 @@ internal static class TimelineVisuals
         };
         double width = text.Width + 10;
         double chipX = Math.Clamp(x + 5, left, Math.Max(left, right - width));
-        dc.DrawRoundedRectangle(background, new Pen(line, 1), new Rect(chipX, 1, width, text.Height + 4), 3, 3);
-        dc.DrawText(text, new Point(chipX + 5, 3));
+        dc.DrawRoundedRectangle(background, new Pen(line, 1), new Rect(chipX, labelTop, width, text.Height + 4), 3, 3);
+        dc.DrawText(text, new Point(chipX + 5, labelTop + 2));
     }
 }

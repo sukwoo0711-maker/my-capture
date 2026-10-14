@@ -25,8 +25,9 @@ public static class VideoLayerSnapping
         double start, end;
         if (drag == VideoLayerDrag.Move)
         {
-            start = Math.Clamp(startMs + deltaMs, 0, durationMs - (endMs - startMs));
-            end = start + endMs - startMs;
+            double length = endMs - startMs;
+            start = Math.Clamp(startMs + deltaMs, 0, durationMs - length);
+            end = Math.Min(durationMs, start + length);
         }
         else
         {

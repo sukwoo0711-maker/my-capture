@@ -71,6 +71,27 @@ public sealed class VideoLayerSnappingTests
     }
 
     [Fact]
+    public void FractionalFrameMoveToClipEndRemainsValidForSubsequentGestures()
+    {
+        const double duration = 1000;
+        double frame = duration / 30;
+        var viewport = new TimelineViewport(duration, 30);
+        var moved = VideoLayerSnapping.Apply(7 * frame, 10 * frame, duration, duration,
+            VideoLayerDrag.Move, viewport, 1000, [], disabled: true);
+        Assert.Equal(duration, moved.EndMs);
+        Assert.Equal(3 * frame, moved.EndMs - moved.StartMs, precision: 10);
+        Assert.Null(moved.Snap);
+
+        foreach (VideoLayerDrag drag in Enum.GetValues<VideoLayerDrag>())
+        {
+            var next = VideoLayerSnapping.Apply(moved.StartMs, moved.EndMs, -frame, duration,
+                drag, viewport, 1000, [], disabled: true);
+            Assert.InRange(next.StartMs, 0, next.EndMs);
+            Assert.InRange(next.EndMs, next.StartMs, duration);
+        }
+    }
+
+    [Fact]
     public void MovingAtClipBoundsRejectsSnapsThatWouldChangeDuration()
     {
         var result = VideoLayerSnapping.Apply(1000, 2000, -5000, 10000, VideoLayerDrag.Move,

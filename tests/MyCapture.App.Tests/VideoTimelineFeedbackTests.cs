@@ -1,4 +1,7 @@
+using System.IO;
+using System.Reflection;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -7,6 +10,7 @@ using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Recording;
 using Xunit;
+using static MyCapture.App.Tests.VideoEditorUxTrimTests;
 
 namespace MyCapture.App.Tests;
 
@@ -105,6 +109,93 @@ public sealed class VideoTimelineFeedbackTests
     });
 
     [Fact]
+    public void LayerHoverChipStaysInsideTheScrolledViewport() => StaTestHost.Run(() =>
+    {
+        string root = CreateFixtureDirectory();
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10000, show: true);
+            var scroll = Field<ScrollViewer>(editor, "_layerTracksScroll");
+            var layers = Assert.IsType<VideoLayerTimeline>(scroll.Content);
+            layers.SetLayers(Enumerable.Range(0, 8)
+                .Select(_ => new TimedTextOverlay { StartMs = 1000, EndMs = 9000 }).ToArray(), []);
+            scroll.Visibility = Visibility.Visible;
+            editor.UpdateLayout();
+            Assert.True(scroll.ExtentHeight > scroll.ViewportHeight);
+            scroll.ScrollToVerticalOffset(96);
+            scroll.UpdateLayout();
+            Assert.Equal(96, scroll.VerticalOffset);
+            layers.HoverForTest((VideoLayerTimeline.LabelWidth + layers.ActualWidth) / 2);
+            Assert.NotEmpty(layers.HoverText);
+
+            AssertChipVisible();
+            // Scrolling again must move the chip even without another pointer move.
+            scroll.ScrollToVerticalOffset(160);
+            scroll.UpdateLayout();
+            Assert.Equal(160, scroll.VerticalOffset);
+            AssertChipVisible();
+
+            void AssertChipVisible()
+            {
+                layers.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                DrawingGroup drawing = VisualTreeHelper.GetDrawing(layers)!;
+                var chip = (RectangleGeometry)drawing.Children.OfType<GeometryDrawing>()
+                    .Last(item => item.Geometry is RectangleGeometry { RadiusX: 3 }).Geometry;
+                Assert.InRange(chip.Bounds.Top, scroll.VerticalOffset, scroll.VerticalOffset + scroll.ViewportHeight);
+                Assert.InRange(chip.Bounds.Bottom, scroll.VerticalOffset, scroll.VerticalOffset + scroll.ViewportHeight);
+            }
+        }
+        finally
+        {
+            editor?.Close();
+        }
+    });
+
+    [Fact]
+    public void NestedBusyStateDuringDraftRetirementPreservesFinalizedSaveProgress() => StaTestHost.Run(() =>
+    {
+        using var scope = UiText.UseLanguage("en-US");
+        string root = CreateFixtureDirectory();
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10000);
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            MethodInfo busy = typeof(VideoEditorWindow).GetMethod("SetOperationRunning", flags)!;
+            var progress = Field<MediaExportProgressRow>(editor, "_saveProgress");
+            var bar = progress.Children.OfType<ProgressBar>().Single();
+            string operation = UiText.Get("VideoEditorUx_LibrarySaving");
+            busy.Invoke(editor, [true]);
+            progress.Start(operation);
+            progress.Report(new VideoFrameRenderProgress(100, 100, 0), TimeSpan.FromSeconds(2));
+            progress.FinalizeProgress();
+
+            // Exercise both nested busy calls in the real retirement path.
+            var retirement = (Task<bool>)typeof(VideoEditorWindow)
+                .GetMethod("RetireDraftBeforeCloseAsync", flags)!.Invoke(editor, null)!;
+            Assert.True(retirement.GetAwaiter().GetResult());
+            Assert.Equal(100, progress.Value);
+            Assert.Equal(UiText.Format("MediaExport_Percent", 100), progress.PercentText);
+            Assert.Empty(progress.RemainingText);
+            Assert.Equal(operation, AutomationProperties.GetName(bar));
+            Assert.True(bar.IsIndeterminate);
+            Assert.Equal(Visibility.Visible, progress.Visibility);
+
+            busy.Invoke(editor, [false]);
+            Assert.Equal(Visibility.Collapsed, progress.Visibility);
+            busy.Invoke(editor, [true]);
+            Assert.Equal(0, progress.Value);
+            Assert.Equal(UiText.Get("VideoEdit_ImageLayerPreparing"), AutomationProperties.GetName(bar));
+            busy.Invoke(editor, [false]);
+        }
+        finally
+        {
+            editor?.Close();
+        }
+    });
+
+    [Fact]
     public void ResourceReplacementRefreshesFrozenTimelineDrawings() => StaTestHost.Run(() =>
     {
         using var timeline = new TwoLineTimeline();
@@ -144,6 +235,10 @@ public sealed class VideoTimelineFeedbackTests
         bitmap.CopyPixels(new Int32Rect((int)point.X, (int)point.Y, 1, 1), pixel, 4, 0);
         return Color.FromArgb(pixel[3], pixel[2], pixel[1], pixel[0]);
     }
+
+    // Preserve fixtures in the worktree; the shared cleanup helper permanently deletes them.
+    private static string CreateFixtureDirectory() => Directory.CreateDirectory(
+        Path.Combine(AppContext.BaseDirectory, "video-feedback-fixtures", Guid.NewGuid().ToString("N"))).FullName;
 
     private static void Arrange(FrameworkElement element, double width)
     {

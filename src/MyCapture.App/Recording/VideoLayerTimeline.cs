@@ -57,6 +57,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     private double _dragSpanMs;
     private double? _hoverMs;
     private bool _hoverLocal;
+    private double _markerLabelTop = 1;
     private VideoSnapCandidate? _snapGuide;
 
     internal event EventHandler<double?>? HoverChanged;
@@ -83,6 +84,12 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     }
 
     internal void HoverForTest(double x) => UpdateHover(x);
+
+    internal void SetVerticalOffset(double offset)
+    {
+        _markerLabelTop = offset + 1;
+        InvalidateVisual();
+    }
 
     private void UpdateHover(double x)
     {
@@ -366,7 +373,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         {
             string? label = _snapGuide is { } snap ? TimelineVisuals.SnapLabel(snap.Kind) : _hoverLocal ? HoverText : null;
             TimelineVisuals.DrawMarker(this, dc, LabelWidth + _viewport.MsToPx(marker.Value, timelineWidth), height,
-                LabelWidth, width, _textSecondary, _background, _textSecondary, label);
+                LabelWidth, width, _textSecondary, _background, _textSecondary, label, _markerLabelTop);
         }
     }
 

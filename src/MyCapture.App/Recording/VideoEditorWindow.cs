@@ -1123,6 +1123,7 @@ internal sealed partial class VideoEditorWindow : Window
         };
         AutomationProperties.SetName(layerScroll, UiText.Get("Text_D9378793F9FE"));
         _layerTracksScroll = layerScroll;
+        layerScroll.ScrollChanged += (_, _) => _layerTimeline.SetVerticalOffset(layerScroll.VerticalOffset);
         // The rows reserve a label gutter and may acquire a vertical scrollbar. Give both
         // time strips exactly that same horizontal time area, even when the detail is folded.
         _layerTimeline.SizeChanged += (_, _) => AlignTimelineTracks();
@@ -2637,14 +2638,15 @@ internal sealed partial class VideoEditorWindow : Window
     }
     private void SetOperationRunning(bool running)
     {
+        bool starting = running && !_operationRunning;
         if (running) { _resumeAfterScrub = false; PausePlayback(); }
         _operationRunning = running;
         SetEditControlsEnabled(!running && _mediaReady);
         _overlayList.IsEnabled = !running && _mediaReady;
         _layerTimeline.IsEnabled = !running && _mediaReady;
         _layerCanvas.IsEnabled = !running && _mediaReady;
-        if (running) _saveProgress.Start(UiText.Get("VideoEdit_ImageLayerPreparing"), indeterminate: true);
-        else _saveProgress.Stop();
+        if (starting) _saveProgress.Start(UiText.Get("VideoEdit_ImageLayerPreparing"), indeterminate: true);
+        else if (!running) _saveProgress.Stop();
     }
 
     internal static bool DocumentsEquivalent(VideoEditDocument left, VideoEditDocument right)
