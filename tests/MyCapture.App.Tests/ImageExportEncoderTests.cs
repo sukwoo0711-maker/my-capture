@@ -161,7 +161,7 @@ public sealed class ImageExportEncoderTests
     });
 
     [Fact]
-    public async Task Dialog_OriginalExportKeepsTheSourcePageUrl() => await StaThreadTask.RunAsync(() =>
+    public async Task Dialog_OriginalExportExcludesTheSourcePageUrlByDefault() => await StaThreadTask.RunAsync(() =>
     {
         const string origin = "https://example.com/docs/page";
         Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
@@ -177,7 +177,7 @@ public sealed class ImageExportEncoderTests
 
             byte[]? exported = dialog.PreparedExportBytesForTest;
             Assert.NotNull(exported);
-            Assert.Equal(origin, PngSourceUrlMetadata.TryReadSourceUrl(exported));
+            Assert.Equal(string.Empty, PngSourceUrlMetadata.TryReadSourceUrl(exported));
         }
         finally { dialog.Close(); }
         return true;

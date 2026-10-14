@@ -186,6 +186,60 @@ public sealed class GalleryImportTests
         Assert.Single(reloaded.Records);
     }
 
+    [Theory]
+    [InlineData(".png", false)]
+    [InlineData(".png", true)]
+    [InlineData(".jpeg", false)]
+    [InlineData(".jpeg", true)]
+    public async Task TaggedSearchResultsExportImportedImagesWithoutChangingOriginals(string extension, bool includeUrl)
+    {
+        string root = NewRoot();
+        string source = Path.Combine(root, "report" + extension);
+        const string url = "https://example.com/report";
+        await StaThreadTask.RunAsync(() =>
+        {
+            var image = BitmapSource.Create(1600, 800, 96, 96, PixelFormats.Bgra32, null,
+                new byte[1600 * 800 * 4], 1600 * 4);
+            if (extension == ".png") ImageCodec.SavePng(image, source, url);
+            else ImageCodec.SaveJpeg(image, source, 90);
+            return true;
+        });
+        byte[] original = File.ReadAllBytes(source);
+        var queue = new CaptureQueue(AppPaths.CreateForRoot(Path.Combine(root, "library")),
+            new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+        queue.Load();
+        var importer = new CaptureImportService(queue, GalleryImportService.PrepareAsync);
+        Assert.Equal(1, (await importer.ImportAsync([source])).Imported);
+        CaptureRecord record = Assert.Single(queue.Records);
+        await queue.UpdateTagsAsync([record.Id], [new("work", true)]);
+        var model = new GalleryViewModel(new GalleryController(queue, NullLogger<GalleryController>.Instance),
+            _ => string.Empty, 320);
+        model.SetThumbnailLoadingEnabled(false);
+        model.ShowTag("work");
+        model.SearchQuery = "title:report tag:work -tag:draft";
+        GalleryItemViewModel tile = Assert.Single(model.Groups.SelectMany(group => group.Items));
+        var exporter = new GalleryFolderExportService(queue, Path.Combine(root, "staging"));
+        GalleryFolderExportEntry entry = Assert.Single(exporter.BuildCapturePlan([tile.Record]).Entries);
+        byte[] libraryImage = File.ReadAllBytes(entry.Source);
+        string target = Path.Combine(root, "export.png");
+        GalleryImageExport.Copy(entry.Source, target,
+            new ImageExportOptions { LongEdge = 800, IncludeSourceUrl = includeUrl }, CancellationToken.None);
+        await StaThreadTask.RunAsync(() =>
+        {
+            BitmapSource exported = Assert.IsAssignableFrom<BitmapSource>(ImageCodec.TryLoad(target));
+            Assert.Equal((800, 400), (exported.PixelWidth, exported.PixelHeight));
+            return true;
+        });
+        Assert.Equal(includeUrl && extension == ".png" ? url : string.Empty,
+            PngSourceUrlMetadata.TryReadSourceUrl(target));
+        Assert.Equal(original, File.ReadAllBytes(source));
+        Assert.Equal(original, File.ReadAllBytes(queue.GetFilePath(record, CaptureImportService.OriginalFileName(record))));
+        Assert.Equal(libraryImage, File.ReadAllBytes(entry.Source));
+        Assert.Equal("work", record.Tags);
+        Assert.Equal(1, (await importer.ImportAsync([source])).Duplicates);
+        Assert.Equal(record.Id, Assert.Single(queue.Records).Id);
+    }
+
     private static string NewRoot()
     {
         DirectoryInfo? root = new(AppContext.BaseDirectory);

@@ -9,10 +9,9 @@ namespace MyCapture.Platform.Imaging;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The queue record already stores the source page URL, but a record only exists inside
-/// MyCapture. A tEXt chunk keeps the link attached to the bytes when a capture leaves the
-/// app — file save, drag out, clipboard, or a shared file — so the origin can still be
-/// recovered later.
+/// Library PNGs retain this chunk. File exports can remove it from their own copy with
+/// <see cref="StripSourceUrl"/>; clipboard and ordinary drag handoffs retain their existing
+/// source-link behavior.
 /// </para>
 /// <para>
 /// The PNG spec restricts tEXt keywords and text to Latin-1, so callers pass a value that
@@ -58,6 +57,36 @@ public static class PngSourceUrlMetadata
         return result;
     }
 
+    /// <summary>Removes every SourceURL tEXt chunk, including those after IDAT. Other chunks
+    /// and their CRCs are copied verbatim. A malformed PNG fails closed instead of leaking a URL.</summary>
+    public static byte[] StripSourceUrl(byte[] png)
+    {
+        ArgumentNullException.ThrowIfNull(png);
+        if (IhdrEnd(png) < 0) throw new InvalidDataException("Invalid PNG header.");
+        using var output = new MemoryStream(png.Length);
+        output.Write(PngSignature);
+        int offset = PngSignature.Length;
+        bool removed = false;
+        while ((long)offset + 12 <= png.Length)
+        {
+            long length = ReadUInt32BigEndian(png, offset);
+            long end = offset + length + 12;
+            if (end > png.Length) throw new InvalidDataException("Truncated PNG chunk.");
+            bool source = png.AsSpan(offset + 4, 4).SequenceEqual("tEXt"u8)
+                && length >= 10 && png.AsSpan(offset + 8, 10).SequenceEqual("SourceURL\0"u8);
+            if (source) removed = true;
+            else output.Write(png, offset, (int)end - offset);
+            bool last = png.AsSpan(offset + 4, 4).SequenceEqual("IEND"u8);
+            offset = (int)end;
+            if (last)
+            {
+                if (length != 0 || offset != png.Length) throw new InvalidDataException("Invalid PNG ending.");
+                return removed ? output.ToArray() : png;
+            }
+        }
+        throw new InvalidDataException("Missing PNG ending.");
+    }
+
     /// <summary>Reads the source page URL from PNG bytes, or an empty string when absent.</summary>
     public static string TryReadSourceUrl(byte[] png)
     {
@@ -91,10 +120,8 @@ public static class PngSourceUrlMetadata
                     return value;
                 }
             }
-            else if (string.Equals(type, "IDAT", StringComparison.Ordinal)
-                     || string.Equals(type, "IEND", StringComparison.Ordinal))
+            else if (string.Equals(type, "IEND", StringComparison.Ordinal))
             {
-                // tEXt must precede the image data; stop instead of walking the whole file.
                 return string.Empty;
             }
 

@@ -354,6 +354,8 @@ internal sealed partial class GalleryWindow
             return;
         }
         if (plan.RootNames.Count == 0 || plan.Entries.Any(entry => !EnsureRecordReady(entry.Record.Id))) return;
+        var options = MyCapture.App.Editing.ImageExportOptionsPanel.ShowCopyOptions(this, _commitService.LastExportOptions);
+        if (options is null) return;
         string destination;
         if (zip)
         {
@@ -384,8 +386,9 @@ internal sealed partial class GalleryWindow
                 if (ReferenceEquals(_archiveCancellation, cancellation))
                     LibraryActionStatus.Text = UiText.Format("Folder410.ExportProgress", done, plan.Entries.Count);
             });
-            if (zip) await GalleryFolderExportService.ExportZipAsync(prepared, destination, progress, cancellation.Token);
-            else await GalleryFolderExportService.ExportDirectoryAsync(prepared, destination, progress, cancellation.Token);
+            if (zip) await GalleryFolderExportService.ExportZipAsync(prepared, destination, progress, cancellation.Token, options);
+            else await GalleryFolderExportService.ExportDirectoryAsync(prepared, destination, progress, cancellation.Token, options);
+            _commitService.RememberExportOptions(options);
             LibraryActionStatus.Text = UiText.Format("Folder410.ExportDone", plan.Entries.Count)
                 + (zip ? " · " + Path.GetFileName(destination) : string.Empty);
         }

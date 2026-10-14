@@ -86,14 +86,15 @@ public sealed class LibraryWorkspaceTests : IDisposable
     [Fact]
     public async Task Archive_ContainsOnlyMediaWithGenericUniqueNames()
     {
-        string image = Source("private-title.png", [1, 2, 3]);
+        byte[] png = ExportPngFixture.Create();
+        string image = Source("private-title.png", png);
         string video = Source("private-title.mp4", [4, 5, 6]);
         string destination = Path.Combine(_root, "share.zip");
         await GalleryArchiveExporter.ExportNewAsync([image, video], destination);
         using ZipArchive zip = ZipFile.OpenRead(destination);
         Assert.Equal(new[] { "MyCapture-001.png", "MyCapture-002.mp4" }, zip.Entries.Select(e => e.FullName));
         using var content = new MemoryStream(); await zip.Entries[0].Open().CopyToAsync(content);
-        Assert.Equal(new byte[] { 1, 2, 3 }, content.ToArray());
+        Assert.Equal(png, content.ToArray());
         Assert.True(File.Exists(image)); Assert.True(File.Exists(video));
         Assert.Empty(Directory.GetFiles(_root, "*.partial"));
     }
@@ -110,7 +111,7 @@ public sealed class LibraryWorkspaceTests : IDisposable
     [Fact]
     public async Task Archive_NeverOverwritesExistingDestination()
     {
-        string source = Source("capture.png", [1]);
+        string source = Source("capture.png", ExportPngFixture.Create());
         string destination = Source("existing.zip", [9, 8, 7]);
         await Assert.ThrowsAsync<IOException>(() => GalleryArchiveExporter.ExportNewAsync([source], destination));
         Assert.Equal(new byte[] { 9, 8, 7 }, File.ReadAllBytes(destination));
@@ -120,7 +121,7 @@ public sealed class LibraryWorkspaceTests : IDisposable
     [Fact]
     public async Task Archive_PublicationRacePreservesOtherWritersFile()
     {
-        string source = Source("capture.png", [1]);
+        string source = Source("capture.png", ExportPngFixture.Create());
         string destination = Path.Combine(_root, "raced.zip");
         await Assert.ThrowsAsync<IOException>(() => GalleryArchiveExporter.ExportNewAsync([source], destination,
             new InlineProgress(_ => File.WriteAllBytes(destination, [9]))));
@@ -131,7 +132,7 @@ public sealed class LibraryWorkspaceTests : IDisposable
     [Fact]
     public async Task Archive_CancellationAfterFirstItemPublishesNothing()
     {
-        string first = Source("first.png", [1]); string second = Source("second.mp4", [2]);
+        string first = Source("first.png", ExportPngFixture.Create()); string second = Source("second.mp4", [2]);
         using var cancellation = new CancellationTokenSource();
         string destination = Path.Combine(_root, "cancelled.zip");
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => GalleryArchiveExporter.ExportNewAsync([first, second], destination,

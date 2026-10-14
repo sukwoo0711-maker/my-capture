@@ -9,6 +9,8 @@ using MyCapture.App.Gallery;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Storage;
+using MyCapture.Core.Settings;
+using System.Windows.Media;
 using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.Editing;
@@ -38,6 +40,8 @@ internal sealed class ImageReductionExportDialog : Window
     private readonly Button _save;
     private readonly Button _drag;
     private readonly string? _sourcePageUrl;
+    private readonly ImageExportOptionsPanel _options;
+    private readonly Action<ImageExportOptions>? _remember;
     private Task<byte[]>? _original;
     private ImageExportResult? _result;
     private OwnedImageExportStage? _stage;
@@ -48,18 +52,23 @@ internal sealed class ImageReductionExportDialog : Window
     private bool _closed;
     private Point? _dragStart;
 
-    internal ImageReductionExportDialog(BitmapSource image, string suggestedPngPath, string? sourcePageUrl = null)
+    internal ImageReductionExportDialog(BitmapSource image, string suggestedPngPath, string? sourcePageUrl = null,
+        ImageExportOptions? options = null, Action<ImageExportOptions>? remember = null)
     {
         _image = image.IsFrozen ? image : image.Clone();
         if (!_image.IsFrozen) _image.Freeze();
         _suggestedPath = suggestedPngPath;
         _sourcePageUrl = sourcePageUrl;
+        options ??= new();
+        _remember = remember;
+        _options = new ImageExportOptionsPanel(options, full: true);
+        _target.Value = options.ReductionPercent;
         StandardWindowTheme.Apply(this);
         Title = UiText.Get("ExportReduction_Title");
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         Width = 560;
-        Height = 620;
+        Height = 820;
         MinWidth = 460;
         MinHeight = 400;
         MaxHeight = Math.Max(400, SystemParameters.WorkArea.Height - 24);
@@ -74,6 +83,7 @@ internal sealed class ImageReductionExportDialog : Window
         root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         panel.Children.Add(MyCapture.App.Themes.KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18) },
             UiText.Get("ExportReduction_Description")));
+        panel.Children.Add(_options);
         panel.Children.Add(_targetText);
         panel.Children.Add(_target);
         // One line for the calculation, so the preview below never jumps while it runs.
@@ -100,7 +110,7 @@ internal sealed class ImageReductionExportDialog : Window
             button.MinWidth = MediaExportVisuals.DialogActionMinWidth;
         }
         AutomationProperties.SetName(_target, UiText.Get("ExportReduction_TargetLabel"));
-        _target.ValueChanged += (_, _) =>
+        void Changed()
         {
             UpdateTargetLabel();
             // The shown result belongs to the previous target now: it stays for comparison,
@@ -117,7 +127,10 @@ internal sealed class ImageReductionExportDialog : Window
                 _pendingRecalculation = null;
                 _ = UpdatePreviewAsync();
             });
-        };
+        }
+        _target.ValueChanged += (_, _) => Changed();
+        _options.Changed += Changed;
+        _options.PresetSelected += preset => _target.Value = preset.ReductionPercent;
         _save.Click += async (_, _) => await SaveAsync();
         _drag.PreviewMouseLeftButtonDown += (_, e) => _dragStart = e.GetPosition(_drag);
         _drag.PreviewMouseLeftButtonUp += (_, _) => _dragStart = null;
@@ -144,7 +157,7 @@ internal sealed class ImageReductionExportDialog : Window
     internal Func<TimeSpan, Action, IDisposable> ScheduleRecalculation { get; set; } = ScheduleOnDispatcher;
 
     /// <summary>The size encoder; tests replace it to control when a calculation finishes.</summary>
-    internal Func<BitmapSource, byte[], int, CancellationToken, ImageExportResult> Encoder { get; set; } = ImageExportEncoder.Encode;
+    internal Func<BitmapSource, byte[], int, CancellationToken, ImageExportResult>? Encoder { get; set; }
 
     private static IDisposable ScheduleOnDispatcher(TimeSpan delay, Action action)
     {
@@ -187,9 +200,10 @@ internal sealed class ImageReductionExportDialog : Window
 
     private const double StaleOpacity = 0.55;
 
-    internal static bool Show(Window? owner, BitmapSource frozenImage, string suggestedPngPath, string? sourcePageUrl = null)
+    internal static bool Show(Window? owner, BitmapSource frozenImage, string suggestedPngPath, string? sourcePageUrl = null,
+        ImageExportOptions? options = null, Action<ImageExportOptions>? remember = null)
     {
-        var dialog = new ImageReductionExportDialog(frozenImage, suggestedPngPath, sourcePageUrl);
+        var dialog = new ImageReductionExportDialog(frozenImage, suggestedPngPath, sourcePageUrl, options, remember);
         if (owner is not null && owner.IsVisible) dialog.Owner = owner;
         return dialog.ShowDialog() == true;
     }
@@ -201,6 +215,7 @@ internal sealed class ImageReductionExportDialog : Window
     }
 
     internal bool CanExport => _save.IsEnabled && _drag.IsEnabled;
+    internal ImageExportOptionsPanel OptionsForTest => _options;
 
     /// <summary>Bytes the save button would write. Tests use this to see the prepared PNG.</summary>
     internal byte[]? PreparedExportBytesForTest => _result?.Bytes;
@@ -232,7 +247,9 @@ internal sealed class ImageReductionExportDialog : Window
         var cancellation = new CancellationTokenSource();
         _previewCancellation = cancellation;
         int target = (int)_target.Value;
-        Func<BitmapSource, byte[], int, CancellationToken, ImageExportResult> encode = Encoder;
+        var encode = Encoder;
+        ImageExportOptions options = _options.Read(target);
+        Color accent = (TryFindResource("Accent.Default") as SolidColorBrush)?.Color ?? Colors.SteelBlue;
         bool Current() => !_closed && generation == _generation && !cancellation.IsCancellationRequested;
         try
         {
@@ -240,25 +257,28 @@ internal sealed class ImageReductionExportDialog : Window
             _original ??= Task.Run(() => ImageCodec.EncodePng(_image, _sourcePageUrl));
             byte[] original = await _original;
             cancellation.Token.ThrowIfCancellationRequested();
-            ImageExportResult result = await Task.Run(() => encode(_image, original, target, cancellation.Token));
+            ImageExportResult result = await Task.Run(() => encode is null
+                ? ImageExportEncoder.Encode(_image, original, options, accent, _sourcePageUrl, cancellation.Token)
+                : encode(_image, original, target, cancellation.Token));
             cancellation.Token.ThrowIfCancellationRequested();
-            (OwnedImageExportStage staged, BitmapSource preview) = await Task.Run(() =>
+            BitmapSource preview = await Task.Run(() =>
             {
-                BitmapSource imagePreview = CreatePreview(result, _image.PixelWidth, _image.PixelHeight);
+                BitmapSource imagePreview = CreatePreview(result, result.PixelWidth > 0 ? result.PixelWidth : _image.PixelWidth,
+                    result.PixelHeight > 0 ? result.PixelHeight : _image.PixelHeight);
                 cancellation.Token.ThrowIfCancellationRequested();
-                return (OwnedImageExportStage.Create(result), imagePreview);
+                return imagePreview;
             });
             // A newer target, or a closed dialog, owns the screen now: drop this result.
             if (!Current())
             {
-                staged.Dispose();
                 return;
             }
             DeleteUnconsumedStage();
-            _stage = staged;
             _result = result;
             _imagePreview.Source = preview;
             _resultSizes = UiText.Format("ExportReduction_Result", FormatFileSize(original.LongLength), FormatFileSize(result.Bytes.LongLength), result.ActualReductionPercent.ToString("F1"), result.Extension);
+            _resultSizes += Environment.NewLine + UiText.Format("ExportOptions.Dimensions",
+                result.PixelWidth > 0 ? result.PixelWidth : _image.PixelWidth, result.PixelHeight > 0 ? result.PixelHeight : _image.PixelHeight);
             _status.Text = _resultSizes
                 + Environment.NewLine + (result.PreservedTransparency ? UiText.Get("ExportReduction_Transparent")
                     : !result.TargetReached ? UiText.Get("ExportReduction_Unmet") : UiText.Get("ExportReduction_Ready"));
@@ -303,7 +323,7 @@ internal sealed class ImageReductionExportDialog : Window
     {
         ImageExportResult? result = _result;
         if (result is null) return;
-        _save.IsEnabled = _drag.IsEnabled = _target.IsEnabled = false;
+        _save.IsEnabled = _drag.IsEnabled = _target.IsEnabled = _options.IsEnabled = false;
         try
         {
             bool saved = await ImageExportTransaction.RunAsync(async () =>
@@ -314,7 +334,7 @@ internal sealed class ImageReductionExportDialog : Window
                     FileName = Path.GetFileNameWithoutExtension(_suggestedPath) + result.Extension,
                     InitialDirectory = Path.GetDirectoryName(_suggestedPath),
                     DefaultExt = result.Extension,
-                    Filter = result.Extension == ".jpg" ? "JPEG (*.jpg)|*.jpg" : "PNG (*.png)|*.png",
+                    Filter = UiText.Get(result.Extension == ".jpg" ? "ExportOptions.JpegFilter" : "Text_4DCACB688866"),
                     AddExtension = true, OverwritePrompt = true,
                 };
                 dialog.FileOk += (_, e) =>
@@ -328,6 +348,7 @@ internal sealed class ImageReductionExportDialog : Window
                 if (dialog.ShowDialog(this) != true) return false;
                 if (_closed) return false;
                 await Task.Run(() => AtomicFile.WriteExportBytes(dialog.FileName, result.Bytes));
+                _remember?.Invoke(_options.Read((int)_target.Value));
                 return true;
             });
             if (saved && !_closed) DialogResult = true;
@@ -338,19 +359,26 @@ internal sealed class ImageReductionExportDialog : Window
         }
         finally
         {
-            if (!_closed) _save.IsEnabled = _drag.IsEnabled = _target.IsEnabled = true;
+            if (!_closed) _save.IsEnabled = _drag.IsEnabled = _target.IsEnabled = _options.IsEnabled = true;
         }
     }
 
     private void OnDragMove(object sender, MouseEventArgs e)
     {
-        if (_dragStart is not Point start || e.LeftButton != MouseButtonState.Pressed || _stage is null) return;
+        if (_dragStart is not Point start || e.LeftButton != MouseButtonState.Pressed || _result is null) return;
         Point current = e.GetPosition(_drag);
         if (Math.Abs(current.X - start.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(current.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         _dragStart = null;
-        OwnedImageExportStage stage = _stage;
+        OwnedImageExportStage stage;
+        try { stage = _stage ?? OwnedImageExportStage.Create(_result); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _status.Text = UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
+            return;
+        }
         ImageExportResult? result = _result;
+        ImageExportOptions exportedOptions = _options.Read((int)_target.Value);
         // OLE pumps dispatcher messages. Hold ownership locally so a close/target change
         // cannot dispose the file while the shell is reading it or null the post-drop handle.
         _stage = null;
@@ -363,6 +391,7 @@ internal sealed class ImageReductionExportDialog : Window
                 // Explorer may finish reading after DoDragDrop returns. Retain successful
                 // staging files for the normal two-day shell handoff window.
                 stage.RetainForShell();
+                _remember?.Invoke(exportedOptions);
                 copied = true;
                 if (!_closed) DialogResult = true;
             }

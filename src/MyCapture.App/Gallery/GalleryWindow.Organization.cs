@@ -32,6 +32,8 @@ internal sealed partial class GalleryWindow
         if (_archiveCancellation is not null) return;
         CaptureRecord[] records = _viewModel.SelectedTiles.Select(tile => tile.Record).ToArray();
         if (records.Length == 0) return;
+        var options = MyCapture.App.Editing.ImageExportOptionsPanel.ShowCopyOptions(this, _commitService.LastExportOptions);
+        if (options is null) return;
         var dialog = new SaveFileDialog
         {
             Title = UiText.Get("Library.Archive.Title"), Filter = "ZIP (*.zip)|*.zip",
@@ -54,7 +56,8 @@ internal sealed partial class GalleryWindow
                 if (ReferenceEquals(_archiveCancellation, cancellation))
                     LibraryActionStatus.Text = UiText.Format("Library.Archive.Progress", done, records.Length);
             });
-            await GalleryFolderExportService.ExportZipAsync(prepared, dialog.FileName, progress, cancellation.Token);
+            await GalleryFolderExportService.ExportZipAsync(prepared, dialog.FileName, progress, cancellation.Token, options);
+            _commitService.RememberExportOptions(options);
             LibraryActionStatus.Text = UiText.Format("Library.Archive.Done", records.Length);
         }
         catch (OperationCanceledException)

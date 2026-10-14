@@ -60,6 +60,15 @@ internal sealed class CaptureCommitService
     internal Func<string, string?>? SaveAsPrompt { get; set; }
 
     internal Func<BitmapSource, string, bool>? ReducedExportPrompt { get; set; }
+    internal Action? PersistExportSettings { get; set; }
+    internal ImageExportOptions LastExportOptions => _settings().Export.LastImageExport;
+    internal void RememberExportOptions(ImageExportOptions options)
+    {
+        _settings().Export.LastImageExport = options;
+        try { PersistExportSettings?.Invoke(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { _log.LogWarning(ex, "Could not persist the last export options"); }
+    }
 
     /// <summary>
     /// Returns whether the record is inside the staged finalisation window. Gallery callers use
@@ -254,7 +263,7 @@ internal sealed class CaptureCommitService
             ? ReducedExportPrompt(flattened, suggested)
             : ImageReductionExportDialog.Show(System.Windows.Application.Current?.Windows
                 .OfType<System.Windows.Window>().FirstOrDefault(window => window.IsActive), flattened, suggested,
-                record?.SourcePageUrl);
+                record?.SourcePageUrl, LastExportOptions, RememberExportOptions);
     }
 
     internal static BitmapSource Flatten(
@@ -328,7 +337,13 @@ internal sealed class CaptureCommitService
     {
         try
         {
-            long bytes = await Task.Run(() => ImageCodec.SavePngExport(flattened, path, sourcePageUrl));
+            ImageExportOptions options = LastExportOptions;
+            long bytes = await Task.Run(() =>
+            {
+                byte[] bytes = ImageExportEncoder.EncodePngCopy(flattened, options, sourcePageUrl);
+                AtomicFile.WriteExportBytes(path, bytes);
+                return bytes.LongLength;
+            });
             _log.LogInformation("Saved {Bytes} bytes to {Path}", bytes, path);
             return true;
         }
@@ -370,6 +385,10 @@ internal sealed class CaptureCommitService
             return SaveAsPrompt(suggested);
         }
 
+        ImageExportOptions? options = ImageExportOptionsPanel.ShowCopyOptions(
+            System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>().FirstOrDefault(window => window.IsActive), LastExportOptions);
+        if (options is null) return null;
+
         var dialog = new SaveFileDialog
         {
             Title = UiText.Get("Text_57950AFF46BC"),
@@ -397,7 +416,9 @@ internal sealed class CaptureCommitService
                 System.Windows.MessageBoxImage.Information);
         };
 
-        return dialog.ShowDialog() == true ? dialog.FileName : null;
+        if (dialog.ShowDialog() != true) return null;
+        RememberExportOptions(options);
+        return dialog.FileName;
     }
 
     private static bool HasPngExtension(string path)

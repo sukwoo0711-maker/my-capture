@@ -1137,7 +1137,7 @@ internal sealed partial class GalleryWindow : Window
             }
             _ = ImageReductionExportDialog.Show(this, image,
                 Path.Combine(_paths.QuickSaveRoot, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
-                record.SourcePageUrl);
+                record.SourcePageUrl, _commitService.LastExportOptions, _commitService.RememberExportOptions);
         }
         catch (Exception ex)
         {

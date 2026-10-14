@@ -67,6 +67,10 @@ internal static class GalleryImportService
                 cancellationToken.ThrowIfCancellationRequested();
                 if (jpeg)
                     ImageCodec.SavePng(bitmap, Path.Combine(directory, CaptureFileNames.Original));
+                // Gallery exports consume rendered.png even before the first edit. Keep the
+                // imported original intact and seed the rendered copy from the normalized PNG.
+                File.Copy(Path.Combine(directory, CaptureFileNames.Original),
+                    Path.Combine(directory, CaptureFileNames.Rendered));
                 thumbnail = ImageCodec.CreateThumbnail(bitmap, 320);
                 // Force the encoding while the decoder's input stream is still open.
                 ImageCodec.SaveJpeg(thumbnail, Path.Combine(directory, CaptureFileNames.Thumbnail), ImageCodec.ThumbnailJpegQuality);
