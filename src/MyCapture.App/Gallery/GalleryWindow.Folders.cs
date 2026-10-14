@@ -276,21 +276,39 @@ internal sealed partial class GalleryWindow
 
     internal void RevealCreatedFolder(Guid id)
     {
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(async () =>
         {
-            RevealFolderNode(FolderTree, id);
+            if (!await RevealFolderNodeAsync(id)) return;
             if (_viewModel.FindFolderCard(id) is { } card) FocusFolderCard(card);
         }));
     }
 
-    private static bool RevealFolderNode(ItemsControl parent, Guid id)
+    private async Task<bool> RevealFolderNodeAsync(Guid id)
     {
-        parent.UpdateLayout();
-        foreach (GalleryFolderNode node in parent.Items.OfType<GalleryFolderNode>())
+        ItemsControl parent = FolderTree;
+        foreach (CaptureFolder folder in _queue.GetFolderPath(id))
         {
-            if (parent.ItemContainerGenerator.ContainerFromItem(node) is not TreeViewItem item) continue;
-            if (node.FolderId == id) { item.BringIntoView(); item.Focus(); return true; }
-            if (node.IsExpanded && RevealFolderNode(item, id)) return true;
+            if (!IsVisible || _viewModel.RevealedFolderId != id) return false;
+            GalleryFolderNode? node = parent.Items.OfType<GalleryFolderNode>()
+                .FirstOrDefault(candidate => candidate.FolderId == folder.Id);
+            if (node is null) return false;
+            parent.UpdateLayout();
+            // Realize only this ancestor path, including nodes outside the recycled viewport.
+            if (FindVisualChild<ItemsPresenter>(parent) is { } presenter
+                && VisualTreeHelper.GetChildrenCount(presenter) > 0
+                && VisualTreeHelper.GetChild(presenter, 0) is VirtualizingPanel panel)
+                panel.BringIndexIntoViewPublic(parent.Items.IndexOf(node));
+            await Dispatcher.InvokeAsync(parent.UpdateLayout, DispatcherPriority.Loaded);
+            if (!IsVisible || _viewModel.RevealedFolderId != id) return false;
+            if (parent.ItemContainerGenerator.ContainerFromItem(node) is not TreeViewItem item) return false;
+            if (node.FolderId == id)
+            {
+                item.BringIntoView();
+                item.Focus();
+                return true;
+            }
+            item.IsExpanded = true;
+            parent = item;
         }
         return false;
     }

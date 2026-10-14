@@ -72,6 +72,46 @@ public sealed class GalleryNavigationTests
         Assert.True(vm.IsVideosView);
     }
 
+    [Theory]
+    [InlineData(GalleryFilter.Images, null)]
+    [InlineData(GalleryFilter.Videos, null)]
+    [InlineData(GalleryFilter.All, "work")]
+    public async Task ParentPreservesDistinctMediaAndTagLocationsInHistory(GalleryFilter filter, string? tag)
+    {
+        var (queue, vm) = Create();
+        CaptureFolder folder = await queue.CreateFolderAsync("Folder");
+        if (tag is not null) vm.ShowTag(tag);
+        else vm.ShowView(filter);
+        vm.NavigateTo(CaptureFolderScope.ForFolder(folder.Id));
+
+        Assert.True(vm.NavigateParent());
+        Assert.True(vm.IsAllItemsView);
+        Assert.True(vm.NavigateBack());
+        Assert.Equal(CaptureFolderScope.All, vm.SelectedScope);
+        Assert.Equal(filter, vm.Filter);
+        Assert.Equal(tag, vm.SelectedTag);
+        Assert.True(vm.NavigateForward());
+        Assert.True(vm.IsAllItemsView);
+        Assert.True(vm.NavigateForward());
+        Assert.Equal(folder.Id, vm.SelectedScope.FolderId);
+    }
+
+    [Fact]
+    public async Task ParentConsumesHistoryEntryWhenTheWholeLocationMatches()
+    {
+        var (queue, vm) = Create();
+        CaptureFolder folder = await queue.CreateFolderAsync("Folder");
+        vm.ShowView(GalleryFilter.Images);
+        vm.ShowView(GalleryFilter.All);
+        vm.NavigateTo(CaptureFolderScope.ForFolder(folder.Id));
+        Assert.True(vm.NavigateParent());
+        Assert.True(vm.NavigateBack());
+        Assert.True(vm.IsImagesView);
+        Assert.True(vm.NavigateBack());
+        Assert.True(vm.IsAllItemsView);
+        Assert.False(vm.NavigateBack());
+    }
+
     [Fact]
     public void DateParentReturnsToLibraryAndForwardRestoresDate()
     {

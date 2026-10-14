@@ -73,10 +73,11 @@ public sealed partial class GalleryViewModel
         CaptureFolderScope parent = _scope.FolderId is { } id
             && _controller.Queue.FindFolder(id)?.ParentId is { } parentId
             ? CaptureFolderScope.ForFolder(parentId) : CaptureFolderScope.All;
+        var destination = new NavigationLocation(parent, GalleryFilter.All, null);
         _forwardHistory.Push(CurrentLocation);
-        if (_backHistory.TryPeek(out NavigationLocation? previous) && previous.Scope == parent)
+        if (_backHistory.TryPeek(out NavigationLocation? previous) && previous == destination)
             _backHistory.Pop();
-        ChangeLocation(new(parent, GalleryFilter.All, null), remember: false);
+        ChangeLocation(destination, remember: false);
         return true;
     }
 

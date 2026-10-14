@@ -33,13 +33,7 @@ public sealed partial class SettingsThemePreviewTests
     public Task GalleryCompact_MinimumWindowFitsFullCardWithFolderToolbarAndSelection() =>
         RunIsolated(nameof(GalleryCompact_MinimumWindowFitsFullCardWithFolderToolbarAndSelection), () =>
         {
-            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-                application.Resources.MergedDictionaries.Add(new ResourceDictionary
-                { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
-            application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
-            application.Resources["PinLabel"] = new PinLabelConverter();
-            application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+            var application = CreateGalleryTestApplication();
             try
             {
                 // English is the longest copy for the folder option, sort and selection actions.
@@ -52,7 +46,28 @@ public sealed partial class SettingsThemePreviewTests
             finally { application.Shutdown(); }
         });
 
-    private static void VerifyCompactGallery(string language)
+    [Fact]
+    public Task GalleryNavigation_CreationRevealsVirtualizedFolderAndAncestor() =>
+        RunIsolated(nameof(GalleryNavigation_CreationRevealsVirtualizedFolderAndAncestor), () =>
+        {
+            var application = CreateGalleryTestApplication();
+            try { VerifyCompactGallery("en-US", virtualizedRevealOnly: true); }
+            finally { application.Shutdown(); }
+        });
+
+    private static Application CreateGalleryTestApplication()
+    {
+        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+            application.Resources.MergedDictionaries.Add(new ResourceDictionary
+            { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+        application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+        application.Resources["PinLabel"] = new PinLabelConverter();
+        application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+        return application;
+    }
+
+    private static void VerifyCompactGallery(string language, bool virtualizedRevealOnly = false)
     {
         ThemeService.Apply(AppTheme.Midnight);
         string root = TestRecycleBin.CreateTempSubdirectory("mc-gallery-compact-").FullName;
@@ -106,6 +121,11 @@ public sealed partial class SettingsThemePreviewTests
             FluidMotion.SetWindowEntrance(window, false);
             window.Show();
             SettleGalleryLayout(window);
+            if (virtualizedRevealOnly)
+            {
+                VerifyVirtualizedFolderReveal(window, queue, vm);
+                return;
+            }
             var client = (FrameworkElement)window.Content;
             var banner = (FrameworkElement)window.FindName("OcrCoverageBanner");
             Assert.False(banner.IsVisible, language + ": the complete-coverage fixture must not show the OCR banner");
@@ -290,6 +310,52 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.CloseForExit();
             ThemeService.Apply(AppTheme.Midnight);
+        }
+    }
+
+    private static void VerifyVirtualizedFolderReveal(GalleryWindow window, CaptureQueue queue, GalleryViewModel vm)
+    {
+        for (int index = 0; index < 100; index++)
+            queue.CreateFolderAsync($"Folder {index:000}").GetAwaiter().GetResult();
+        CaptureFolder parent = queue.CreateFolderAsync("ZZZ parent").GetAwaiter().GetResult();
+        for (int index = 0; index < 80; index++)
+            queue.CreateFolderAsync($"Child {index:000}", parent.Id).GetAwaiter().GetResult();
+        vm.ShowView(GalleryFilter.Images);
+        vm.SearchQuery = "needle";
+        var tree = (TreeView)window.FindName("FolderTree");
+        SettleGalleryLayout(window);
+        var scroll = Descendants(tree).OfType<ScrollViewer>().First();
+        Assert.True(VirtualizingPanel.GetIsVirtualizing(tree));
+        Assert.True(scroll.ScrollableHeight > 0);
+
+        foreach (CaptureFolderScope creationScope in new[] { CaptureFolderScope.All, CaptureFolderScope.ForFolder(parent.Id) })
+        {
+            scroll.ScrollToTop();
+            SettleGalleryLayout(window);
+            Guid? destination = vm.NewCaptureFolderId;
+            Task<CaptureFolder> creation = window.Dispatcher.Invoke(() => vm.CreateFolderAsync("ZZZ new folder", creationScope));
+            PumpLibraryUntil(window, () => creation.IsCompleted, "virtualized folder created");
+            CaptureFolder created = creation.GetAwaiter().GetResult();
+            scroll.ScrollToTop();
+            SettleGalleryLayout(window);
+            GalleryFolderNode root = vm.FolderRoots.Single(node => node.FolderId == (created.ParentId ?? created.Id));
+            Assert.Null(tree.ItemContainerGenerator.ContainerFromItem(root));
+            Assert.DoesNotContain(vm.Rows, row => row is GalleryFolderRow);
+
+            window.RevealCreatedFolder(created.Id);
+            PumpLibraryUntil(window, () => Keyboard.FocusedElement is TreeViewItem item
+                && item.DataContext is GalleryFolderNode node && node.FolderId == created.Id, "virtualized folder focused");
+            SettleGalleryLayout(window);
+            var selected = Assert.IsType<TreeViewItem>(Keyboard.FocusedElement);
+            Assert.Equal(created.Id, Assert.IsType<GalleryFolderNode>(tree.SelectedItem).FolderId);
+            Assert.True(selected.IsSelected);
+            var header = Assert.IsAssignableFrom<FrameworkElement>(selected.Template.FindName("PART_Header", selected));
+            var viewport = Descendants(scroll).OfType<ScrollContentPresenter>().First();
+            Point top = header.TranslatePoint(new Point(), viewport);
+            Assert.InRange(top.Y, -0.5, viewport.ActualHeight - header.ActualHeight + 0.5);
+            Assert.True(vm.IsImagesView);
+            Assert.Equal("needle", vm.SearchQuery);
+            Assert.Equal(destination, vm.NewCaptureFolderId);
         }
     }
 
