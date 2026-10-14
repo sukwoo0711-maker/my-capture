@@ -59,14 +59,26 @@ public sealed class ColorCopyFeedbackTests
         Assert.True(chip.ActualWidth > 0);
     });
 
-    [Fact]
-    public void ConfirmationRemainsAfterTheSelectorAndUsesTheShellCountdown() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConfirmationRemainsAfterTheSelectorAndUsesTheShellCountdown(bool recordingActive) => StaTestHost.Run(() =>
     {
-        using var presenter = new ThemedShellPresenter(() => false);
+        using var presenter = new ThemedShellPresenter(() => recordingActive, () => false);
+        presenter.ShowNotification("test", "test", MyCapture.Platform.Shell.TrayBalloonKind.Information);
+        Assert.Equal(!recordingActive, presenter.NotificationForTest.Open);
         presenter.ShowColorCopy(new ColorCopyFeedback("#604020", 96, 64, 32));
         Assert.Equal((true, FeedbackKind.Confirmation, (TimeSpan?)FeedbackTiming.Confirmation), presenter.NotificationForTest);
         Assert.False(presenter.NotificationWindowForTest!.ShowActivated);
         presenter.AdvanceNotificationForTest(FeedbackTiming.Confirmation);
+        Assert.False(presenter.NotificationForTest.Open);
+    });
+
+    [Fact]
+    public void ColorConfirmationHonorsItsOwnSuppressionWhileAnotherCaptureIsActive() => StaTestHost.Run(() =>
+    {
+        using var presenter = new ThemedShellPresenter(() => false, () => true);
+        presenter.ShowColorCopy(new ColorCopyFeedback("#604020", 96, 64, 32));
         Assert.False(presenter.NotificationForTest.Open);
     });
 }

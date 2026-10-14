@@ -12,6 +12,86 @@ namespace MyCapture.App.Tests;
 public sealed class ColorPickOverlayTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PendingCopyBlocksCaptureUntilDispatcherHandlesFailureThenAllowsRetry(bool fullScreen) => StaTestHost.Run(() =>
+    {
+        var pending = new TaskCompletionSource<bool>();
+        PointD pointer = new(120, 180);
+        var view = new CaptureOverlayView(Frame(), showMagnifier: false)
+        {
+            ReadCursor = () => pointer,
+            CopyColorText = _ => pending.Task,
+        };
+        int confirmed = 0;
+        view.SelectionConfirmed += (_, _) => confirmed++;
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(null);
+            view.InitializePointer();
+            view.SimulatePointerDown();
+            pointer = new PointD(300, 280);
+            view.SimulatePointerMove();
+            Task<string?> copy = view.CopyColorAtPointerAsync();
+            view.SimulatePointerUp();
+            Pump();
+            Assert.Equal(0, confirmed);
+
+            // Finish on a worker thread without pumping the UI: Complete is still queued.
+            Task.Run(() => pending.SetResult(false)).GetAwaiter().GetResult();
+            Assert.False(copy.IsCompleted);
+            view.RaiseEvent(KeyArgs(Key.Enter));
+            Assert.False(view.CaptureFullScreen());
+            Assert.Null(view.CopyColorAtPointerAsync().Result);
+            Assert.Equal(0, confirmed);
+            PumpUntil(() => copy.IsCompleted);
+            Assert.Null(copy.Result);
+            Assert.Equal(UiText.Get("ColorPick_CopyFailed"), view.ToastMessageForTest);
+
+            if (fullScreen) Assert.True(view.CaptureFullScreen());
+            else view.RaiseEvent(KeyArgs(Key.Enter));
+            Assert.Equal(1, confirmed);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+            view.ReleaseResources();
+        }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", "클릭 또는 C: 색상 복사 후 캡처 종료")]
+    [InlineData("en-US", "Click or C: Copy color and end capture")]
+    public void ColorModeKeepsCopyAndEndHintOnlyWithoutModeBar(string language, string expected) => StaTestHost.Run(() =>
+    {
+        using var scope = UiText.UseLanguage(language);
+        var view = CaptureCueEvidenceTests.EvidenceView(CaptureCueEvidenceTests.Desktop(),
+            MyCapture.Core.Themes.AppTheme.Glass, "color-mode");
+        try
+        {
+            view.ShowShortcutHints = false;
+            CaptureCueEvidenceTests.Render(view);
+            Assert.True(view.ShowModeBar);
+            Assert.Empty(view.StatusTextsForTest);
+            Assert.Single(view.ChromeBoundsForTest);
+
+            view.ShowModeBar = false;
+            CaptureCueEvidenceTests.Render(view);
+            Assert.Equal(expected, Assert.Single(view.StatusTextsForTest));
+            System.Windows.Rect hint = Assert.Single(view.ChromeBoundsForTest);
+            Assert.True(hint.Width > 0 && hint.Height > 0);
+            Assert.True(hint.Right <= view.ActualWidth);
+
+            view.ShowModeBar = true;
+            CaptureCueEvidenceTests.Render(view);
+            Assert.Empty(view.StatusTextsForTest);
+            Assert.Single(view.ChromeBoundsForTest);
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Theory]
     [InlineData(ColorFormat.Hex, "#604020")]
     [InlineData(ColorFormat.Rgb, "rgb(96, 64, 32)")]
     [InlineData(ColorFormat.Hsl, "hsl(30, 50%, 25%)")]
@@ -132,6 +212,10 @@ public sealed class ColorPickOverlayTests
         try
         {
             Assert.Equal(expected, UiText.Get("ColorPick_HelpLabel"));
+            FeatureTutorial tutorial = Assert.Single(TutorialCatalog.All, item => item.Id == "color-copy");
+            Assert.Equal("C", tutorial.FixedKeys!());
+            Assert.Equal(expected, UiText.Get(tutorial.TitleKey));
+            Assert.Equal(expected, UiText.Get(Assert.Single(tutorial.HelpActions)));
             var button = view.ModeBarForTest!.ColorButton;
             string tooltip = UiText.Get("CaptureGuide2_Color") + "\n" + UiText.Get("CaptureGuide2_ColorHelp") + " (C)";
             Assert.Equal(tooltip, button.ToolTip);

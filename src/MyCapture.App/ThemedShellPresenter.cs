@@ -18,7 +18,7 @@ namespace MyCapture.App;
 /// <c>Shadow.Card</c>) and appear at the bottom right of the monitor the pointer is on, so they
 /// show up where the user is working rather than on the primary monitor.
 /// </remarks>
-internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : IDisposable
+internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func<bool>? suppressColorCopy = null) : IDisposable
 {
     /// <summary>The transparent band around a notification card that its shadow draws into.</summary>
     internal const double ShadowMargin = 12;
@@ -75,7 +75,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
     internal void ShowColorCopy(ColorCopyFeedback feedback)
     {
         Dismiss();
-        if (suppressNotification()) return;
+        if ((suppressColorCopy ?? suppressNotification)()) return;
         Window window = CreateNotificationWindow(CreateColorCopyContent(feedback),
             UiText.Get("Tools_ColorPicker"), new Thickness(20));
         window.SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(window);

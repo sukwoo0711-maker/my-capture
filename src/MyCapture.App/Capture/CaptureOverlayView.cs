@@ -862,7 +862,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     /// <summary>The record switch or a ⋯ command: the selector ends without a capture and the owner runs it.</summary>
     private void OnBarActionRequested(CaptureSelectorRequest request)
     {
-        if (_ended || !OffersOtherActions) return;
+        if (_ended || _copyingColor || !OffersOtherActions) return;
         DismissStartGuide();
         _ended = true;
         EndPointerInteraction();
@@ -895,7 +895,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     /// </summary>
     internal bool CaptureFullScreen()
     {
-        if (_ended) return false;
+        if (_ended || _copyingColor) return false;
         RectD monitor = GuideArea.Bounds.ClampTo(FrameBounds).ToPixelBounds();
         if (monitor.Width < MinimumSelectionPixels || monitor.Height < MinimumSelectionPixels) return false;
         _selection = monitor;
@@ -1851,7 +1851,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (releaseCapture) Mouse.Capture(null);
         QueueFeedback();
 
-        if (_selection.HasValue)
+        if (_selection.HasValue && !_copyingColor)
         {
             _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(ConfirmSelection));
         }
@@ -2024,7 +2024,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     private void ConfirmSelection(bool wholeMonitor)
     {
-        if (_ended || _selection is not RectD selection)
+        if (_ended || _copyingColor || _selection is not RectD selection)
         {
             return;
         }
@@ -2071,13 +2071,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             copied = false;
         }
-        finally
-        {
-            _copyingColor = false;
-        }
-
         void Complete()
         {
+            // Keep capture confirmation blocked until the dispatcher handles the result.
+            _copyingColor = false;
             if (_released || _ended) return;
             if (!copied)
             {
