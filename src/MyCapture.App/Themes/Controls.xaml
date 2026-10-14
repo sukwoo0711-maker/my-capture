@@ -1,7 +1,7 @@
 <!--
   MyCapture shared control styles.
 
-  Direction (Focus Portal, with Windows-native glass palettes):
+  Direction (M06 mark, with Windows-native glass palettes):
     * Quiet graphite hierarchy with one iris action/focus accent. Glass themes keep
       the same keys and let DWM Mica show through translucent Surface brushes.
     * Accent fills pair with Text.OnAccent from the chosen palette, including checks and glyphs.
@@ -1296,10 +1296,17 @@
     <Style x:Key="Icon.Glyph.Danger" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.Danger}" />
     <Style x:Key="Icon.Glyph.Filled" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.Filled}" />
 
-    <!-- The embedded multi-resolution ICO is used consistently in window chrome and
-         top-level product headers. It remains decorative beside the visible product name. -->
+    <!-- M06 vector masters (docs/design/brand); window chrome uses the multi-resolution ICO. -->
+    <DrawingImage x:Key="Brand.Mark"><DrawingImage.Drawing><DrawingGroup><GeometryDrawing Brush="Transparent" Geometry="M0 0 H256 V256 H0 Z"/>
+<GeometryDrawing Geometry="F1 M76 12 H172 C218 12 236 30 236 76 V172 C236 218 218 236 172 236 H76 C30 236 12 218 12 172 V76 C12 30 30 12 76 12 Z"><GeometryDrawing.Brush><LinearGradientBrush MappingMode="Absolute" StartPoint="28,12" EndPoint="218,244"><GradientStop Color="#5B6571" Offset="0"/><GradientStop Color="#222933" Offset="1"/></LinearGradientBrush></GeometryDrawing.Brush></GeometryDrawing>
+<GeometryDrawing Geometry="F0 M138 174 L162 174 L162 192 L138 192 L138 174 Z M174 138 L192 138 L192 162 L174 162 L174 138 Z M56 138 L74 138 L74 172 C74 173.33 74.67 174 76 174 L110 174 L110 192 L56 192 L56 138 Z M138 56 L192 56 L192 110 L174 110 L174 76 C174 74.67 173.33 74 172 74 L138 74 L138 56 Z M56 56 L110 56 L110 74 L76 74 C74.67 74 74 74.67 74 76 L74 110 L56 110 L56 56 Z" Brush="#FFF8F4"/>
+<GeometryDrawing Geometry="F1 M160.13 160.13 L182.53 178.46 L191.36 169.64 C193.17 167.83 194.98 167.83 196.79 169.64 C197.69 170.54 197.92 172.58 197.47 175.74 L196.11 183.89 L204.26 192.04 L209.01 187.28 C211.72 184.57 214.44 184.57 217.15 187.28 L221.23 191.36 C223.94 194.07 223.94 196.79 221.23 199.5 L199.5 221.23 C196.79 223.94 194.07 223.94 191.36 221.23 L187.28 217.15 C184.57 214.44 184.57 211.72 187.28 209.01 L192.04 204.26 L183.89 196.11 L175.74 197.47 C172.58 197.92 170.54 197.69 169.64 196.79 C167.83 194.98 167.83 193.17 169.64 191.36 L178.46 182.53 L160.13 160.13 Z"><GeometryDrawing.Brush><LinearGradientBrush MappingMode="Absolute" StartPoint="170,161" EndPoint="223,226"><GradientStop Color="#F35B4D" Offset="0"/><GradientStop Color="#BB252D" Offset="1"/></LinearGradientBrush></GeometryDrawing.Brush></GeometryDrawing>
+<GeometryDrawing Geometry="F1 M211.89 188.47 C212.91 188.36 213.99 188.64 215.12 189.32 L192.72 211.72 C190.91 213.53 190.45 215.34 191.36 217.15 L189.32 215.12 C187.51 213.31 187.28 211.72 188.64 210.36 L209.01 190 C209.91 189.09 210.87 188.59 211.89 188.47 Z" Brush="#F87667"/>
+</DrawingGroup></DrawingImage.Drawing></DrawingImage>
+
+    <DrawingImage x:Key="Brand.Mark16"><DrawingImage.Drawing><DrawingGroup><GeometryDrawing Brush="Transparent" Geometry="M0 0 H16 V16 H0 Z"/><GeometryDrawing Brush="#38424D" Geometry="F1 M5 1 H11 Q15 1 15 5 V11 Q15 15 11 15 H5 Q1 15 1 11 V5 Q1 1 5 1 Z"/><GeometryDrawing Brush="#FFF8F4" Geometry="F0 M3 9 L5 9 L5 11 L7 11 L7 13 L3 13 L3 9 Z M9 3 L13 3 L13 7 L11 7 L11 5 L9 5 L9 3 Z M3 3 L7 3 L7 5 L5 5 L5 7 L3 7 L3 3 Z"/><GeometryDrawing Brush="#E0453C" Geometry="F1 M8.66 8.66 L10.32 9.4 L10.99 8.73 C11.16 8.57 11.34 8.58 11.53 8.77 L11.53 10.32 L11.88 10.68 L12.44 10.11 C12.77 9.78 13.1 9.78 13.43 10.11 L13.86 10.54 C14.19 10.87 14.19 11.2 13.86 11.53 L11.53 13.86 C11.2 14.19 10.87 14.19 10.54 13.86 L10.11 13.43 C9.78 13.1 9.78 12.77 10.11 12.44 L10.68 11.88 L10.32 11.53 L8.77 11.53 C8.58 11.34 8.57 11.16 8.73 10.99 L9.4 10.32 L8.66 8.66 Z"/></DrawingGroup></DrawingImage.Drawing></DrawingImage>
     <Style x:Key="Brand.AppIcon" TargetType="Image">
-        <Setter Property="Source" Value="/MyCapture;component/Assets/app.ico" />
+        <Setter Property="Source" Value="{StaticResource Brand.Mark}" />
         <Setter Property="Width" Value="40" />
         <Setter Property="Height" Value="40" />
         <Setter Property="Stretch" Value="Uniform" />

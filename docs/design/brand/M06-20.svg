@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" role="img" aria-labelledby="title">
+<title id="title">M06 dedicated 20 px</title>
+<!-- Native intermediate: integer 2px brackets; pin coordinates halfway between 16 and 24. -->
+<path fill="#38424D" fill-rule="nonzero" d="M6 1 H14 Q19 1 19 6 V14 Q19 19 14 19 H6 Q1 19 1 14 V6 Q1 1 6 1 Z"/>
+<path fill="#FFF8F4" fill-rule="evenodd" d="M4 11 H6 V14 H9 V16 H4 Z M11 4 H16 V9 H14 V6 H11 Z M4 4 H9 V6 H6 V9 H4 Z"/>
+<path fill="#E0453C" fill-rule="nonzero" d="M10.89 10.89 L13.28 12.155 L14.105 11.335 C14.31 11.135 14.525 11.145 14.76 11.38 L14.76 13.28 L15.19 13.72 L15.88 13.025 C16.285 12.62 16.69 12.62 17.095 13.025 L17.615 13.545 C18.02 13.95 18.02 14.355 17.615 14.76 L14.76 17.615 C14.355 18.02 13.95 18.02 13.545 17.615 L13.025 17.095 C12.62 16.69 12.62 16.285 13.025 15.88 L13.72 15.19 L13.28 14.76 L11.38 14.76 C11.145 14.525 11.135 14.31 11.335 14.105 L12.155 13.28 L10.89 10.89 Z"/>
+</svg>

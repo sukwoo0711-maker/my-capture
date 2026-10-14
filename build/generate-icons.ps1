@@ -1,4 +1,4 @@
-﻿# Generates multi-resolution .ico files for MyCapture.
+# Generates multi-resolution .ico files for MyCapture.
 #
 # Each size is drawn independently so 16x16 tray icons stay crisp rather than
 # being downscaled from one large bitmap.
@@ -7,7 +7,7 @@
 # AND mask) for the widest compatibility; 128/256 are written as PNG because a
 # 256x256 DIB entry alone is 256KB.
 #
-# Usage:  powershell -NoProfile -ExecutionPolicy Bypass -File build\generate-icons.ps1
+# Usage:  powershell -NoProfile -File build\generate-icons.ps1
 #
 # Store mode (MSIX logo assets for the Microsoft Store package):
 #   powershell -NoProfile -File build\generate-icons.ps1 -StoreAssetsDir <dir> [-StoreListingIconPath <file.png>]
@@ -43,150 +43,118 @@ if (-not $StoreMode) {
 $dibSizes = @(16, 20, 24, 32, 40, 48, 64)
 $pngSizes = @(128, 256)
 
-# Iris palette. Tray state colours are deliberately far apart in hue;
-# the tooltip/status text still carries the state so colour is never the only cue.
-$AccentFocus   = [System.Drawing.Color]::FromArgb(255, 124, 108, 255)
-$AccentAmber   = [System.Drawing.Color]::FromArgb(255, 245, 185, 66)
-$AccentEmerald = [System.Drawing.Color]::FromArgb(255, 69, 214, 162)
-$AccentCoral   = [System.Drawing.Color]::FromArgb(255, 255, 107, 116)
-$GraphitePlate = [System.Drawing.Color]::FromArgb(255, 11, 15, 23)
-$PortalWhite   = [System.Drawing.Color]::FromArgb(255, 246, 248, 252)
+# M06: graphite #5B6571 -> #222933, warm white #FFF8F4,
+# pin red #F35B4D -> #BB252D with #F87667 head highlight from 48px.
+# Dedicated small drawings use flat #38424D / #E0453C and integer brackets.
+# State signs replace only the pin: green circle, blue hourglass, amber warning.
+Add-Type -AssemblyName PresentationCore, WindowsBase
+$brandRoot = Join-Path $PSScriptRoot '../docs/design/brand'
+$brandDrawings = @{}
 
-function New-RoundedPath {
-    param([float]$X, [float]$Y, [float]$W, [float]$H, [float]$R)
-    $p = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $d = $R * 2
-    if ($d -le 0) {
-        $p.AddRectangle((New-Object System.Drawing.RectangleF($X, $Y, $W, $H)))
-        return $p
+function Get-BrandDrawing {
+    param([int]$Size)
+    $name = if ($Size -eq 16) { 'M06-16.svg' } elseif ($Size -eq 20) { 'M06-20.svg' } elseif ($Size -eq 24) { 'M06-24.svg' } elseif ($Size -lt 48) { 'M06-flat.svg' } else { 'M06.svg' }
+    if ($brandDrawings.ContainsKey($name)) { return $brandDrawings[$name] }
+
+    # These approved masters contain only filled paths and absolute linear gradients.
+    # WPF parses the original path data directly, preserving curves and fill rules.
+    [xml]$svg = [IO.File]::ReadAllText((Join-Path $brandRoot $name))
+    $brushes = @{}
+    foreach ($gradient in $svg.svg.defs.linearGradient) {
+        if ($null -eq $gradient) { continue }
+        $brush = [System.Windows.Media.LinearGradientBrush]::new()
+        $brush.MappingMode = [System.Windows.Media.BrushMappingMode]::Absolute
+        $brush.StartPoint = [System.Windows.Point]::new([double]$gradient.x1, [double]$gradient.y1)
+        $brush.EndPoint = [System.Windows.Point]::new([double]$gradient.x2, [double]$gradient.y2)
+        foreach ($stop in $gradient.stop) {
+            $brush.GradientStops.Add([System.Windows.Media.GradientStop]::new(
+                [System.Windows.Media.ColorConverter]::ConvertFromString($stop.'stop-color'), [double]$stop.offset))
+        }
+        $brush.Freeze()
+        $brushes[$gradient.id] = $brush
     }
-    $p.AddArc($X, $Y, $d, $d, 180, 90)
-    $p.AddArc($X + $W - $d, $Y, $d, $d, 270, 90)
-    $p.AddArc($X + $W - $d, $Y + $H - $d, $d, $d, 0, 90)
-    $p.AddArc($X, $Y + $H - $d, $d, $d, 90, 90)
-    $p.CloseFigure()
-    return $p
+    $paths = @()
+    foreach ($path in $svg.svg.path) {
+        $rule = if ($path.'fill-rule' -eq 'evenodd') { 'F0' } else { 'F1' }
+        $geometry = [System.Windows.Media.Geometry]::Parse("$rule $($path.d)")
+        $geometry.Freeze()
+        $brush = if ($path.fill.StartsWith('url(#')) {
+            $brushes[$path.fill.Substring(5, $path.fill.Length - 6)]
+        } else { [System.Windows.Media.BrushConverter]::new().ConvertFromString($path.fill) }
+        $paths += @{ Geometry = $geometry; Brush = $brush }
+    }
+    $drawing = @{ Canvas = [double]$svg.svg.width; Paths = $paths }
+    $brandDrawings[$name] = $drawing
+    return $drawing
 }
 
 function Draw-Icon {
     param(
         [int]$Size,
-        [System.Drawing.Color]$Accent,
-
-        # 'Plate' draws the two-pane brand mark on a dark rounded square. Used for the
-        # application icon, where the host surface (Explorer, installer, Alt-Tab)
-        # is unpredictable but always reasonably large.
-        #
-        # 'Glyph' draws the two panes over a dark halo. Used for tray icons: at
-        # 16px a dark plate collapses into an indistinct blob on a dark taskbar,
-        # whereas a haloed glyph stays readable on both light and dark themes.
-        [ValidateSet('Plate', 'Glyph')]
-        [string]$Mode = 'Plate'
+        [ValidateSet('Idle', 'Capturing', 'Busy', 'Error')]
+        [string]$State = 'Idle'
     )
 
-    $bmp = New-Object System.Drawing.Bitmap($Size, $Size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $g.Clear([System.Drawing.Color]::Transparent)
-
-    $s = [float]$Size
-
-    if ($Mode -eq 'Plate') {
-        $pad = [Math]::Max(0.5, $s * 0.03)
-        $plateSize = $s - ($pad * 2)
-        $plate = New-RoundedPath -X $pad -Y $pad -W $plateSize -H $plateSize -R ($s * 0.22)
-        $bg = New-Object System.Drawing.SolidBrush($GraphitePlate)
-        $g.FillPath($bg, $plate)
-        $bg.Dispose()
-        $sheen = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-            ([System.Drawing.PointF]::new([float]$pad, [float]$pad)),
-            ([System.Drawing.PointF]::new([float]$pad, [float]($pad + ($plateSize * 0.55)))),
-            [System.Drawing.Color]::FromArgb(48, 255, 255, 255),
-            [System.Drawing.Color]::FromArgb(0, 255, 255, 255))
-        $g.FillPath($sheen, $plate)
-        $sheen.Dispose()
-        $edge = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(64, 246, 248, 252), [Math]::Max(1.0, $s * 0.018))
-        $g.DrawPath($edge, $plate)
-        $edge.Dispose()
-        $plate.Dispose()
-
-        $margin = [Math]::Round($s * 0.17)
-        $thickness = [Math]::Max(1.5, [Math]::Round($s * 0.072))
+    $drawing = Get-BrandDrawing -Size $Size
+    $visual = [System.Windows.Media.DrawingVisual]::new()
+    $dc = $visual.RenderOpen()
+    try {
+        $scale = $Size / $drawing.Canvas
+        $dc.PushTransform([System.Windows.Media.ScaleTransform]::new($scale, $scale))
+        $count = if ($State -eq 'Idle') { $drawing.Paths.Count } else { 2 }
+        for ($i = 0; $i -lt $count; $i++) {
+            $path = $drawing.Paths[$i]
+            $dc.DrawGeometry($path.Brush, $null, $path.Geometry)
+        }
+        $dc.Pop()
+        if ($State -ne 'Idle') {
+            # Fixed 16-unit signs remain distinct without colour. No badge covers the frame.
+            $dc.PushTransform([System.Windows.Media.ScaleTransform]::new($Size / 16.0, $Size / 16.0))
+            $ink = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#222933')
+            switch ($State) {
+                'Capturing' {
+                    $fill = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#69D5A2')
+                    $centre = if ($Size -lt 32) { 11.75 } else { 12 }
+                    $radius = if ($Size -lt 32) { 2.25 } else { 1.8 }
+                    $dc.DrawEllipse($fill, $null, [System.Windows.Point]::new($centre, $centre), $radius, $radius)
+                }
+                'Busy' {
+                    $fill = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#75BFFF')
+                    $sign = if ($Size -lt 32) { 'M9.5 9 H13.5 V10 L12.25 11.5 L13.5 13 V14 H9.5 V13 L10.75 11.5 L9.5 10 Z' } else { 'M10.5 10.5 H13.5 V11.1 L12.6 12 L13.5 12.9 V13.5 H10.5 V12.9 L11.4 12 L10.5 11.1 Z' }
+                    $dc.DrawGeometry($fill, $null, [System.Windows.Media.Geometry]::Parse($sign))
+                }
+                'Error' {
+                    $fill = [System.Windows.Media.BrushConverter]::new().ConvertFromString('#F5C451')
+                    $sign = if ($Size -lt 32) { 'M11.5 8.5 L14 14 H9 Z' } else { 'M12 10.5 L13.75 13.5 H10.25 Z' }
+                    $dc.DrawGeometry($fill, $null, [System.Windows.Media.Geometry]::Parse($sign))
+                    if ($Size -lt 32) {
+                        $dc.DrawRectangle($ink, $null, [System.Windows.Rect]::new(11, 10, 1, 2))
+                        $dc.DrawRectangle($ink, $null, [System.Windows.Rect]::new(11, 13, 1, 0.75))
+                    } else {
+                        $dc.DrawRectangle($ink, $null, [System.Windows.Rect]::new(11.75, 11.5, 0.5, 0.9))
+                        $dc.DrawRectangle($ink, $null, [System.Windows.Rect]::new(11.75, 12.75, 0.5, 0.4))
+                    }
+                }
+            }
+            $dc.Pop()
+        }
     }
-    else {
-        # No plate to sit inside, so the portal can use nearly the whole canvas and
-        # a heavier stroke compensates for the missing backdrop.
-        $margin = [Math]::Max(1.0, [Math]::Round($s * 0.08))
-        $thickness = [Math]::Max(2.0, [Math]::Round($s * 0.10))
+    finally { $dc.Close() }
+
+    # Rasterize each target size directly. Only the Store canvas composition uses a bitmap.
+    $target = [System.Windows.Media.Imaging.RenderTargetBitmap]::new($Size, $Size, 96, 96, [System.Windows.Media.PixelFormats]::Pbgra32)
+    $target.Render($visual)
+    $encoder = [System.Windows.Media.Imaging.PngBitmapEncoder]::new()
+    $encoder.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($target))
+    $stream = [IO.MemoryStream]::new()
+    try {
+        $encoder.Save($stream)
+        $stream.Position = 0
+        $decoded = [System.Drawing.Bitmap]::new($stream)
+        try { return $decoded.Clone([System.Drawing.Rectangle]::new(0, 0, $Size, $Size), [System.Drawing.Imaging.PixelFormat]::Format32bppArgb) }
+        finally { $decoded.Dispose() }
     }
-
-    if ($Mode -eq 'Glyph') {
-        # Refined glyph: a filled translucent shutter pane with a hairline aperture dot,
-        # plus a lighter rear pane. Fills survive dark/light taskbars better than the
-        # previous two raw strokes and read as "capture" at a glance.
-        $span = $s - ($margin * 2)
-        $paneSize = $span * 0.66
-        $offset = $span * 0.24
-        $radius = [Math]::Max(1.2, $s * 0.10)
-
-
-        # Front pane: accent-filled shutter with a small notch (aperture), the "live" pane.
-        $frontPath = New-RoundedPath -X $margin -Y ($margin + $offset * 0.4) -W $paneSize -H $paneSize -R $radius
-        $frontFill = New-Object System.Drawing.SolidBrush($Accent)
-        $g.FillPath($frontFill, $frontPath)
-        $frontFill.Dispose()
-
-        # Aperture: a centered dark dot on the shutter, the classic camera record mark.
-        $aperture = [Math]::Max(1.4, $s * 0.16)
-        $aperturePath = New-RoundedPath `
-            -X ($margin + ($paneSize - $aperture) / 2) `
-            -Y ($margin + $offset * 0.4 + ($paneSize - $aperture) / 2) `
-            -W $aperture -H $aperture -R ($aperture / 2)
-        $apertureBrush = New-Object System.Drawing.SolidBrush($GraphitePlate)
-        $g.FillPath($apertureBrush, $aperturePath)
-        $apertureBrush.Dispose()
-
-
-        
-        $frontPath.Dispose()
-        
-        $g.Dispose()
-        return $bmp
-    }
-
-    # Focus Portal: a captured source pane moves forward into a floating pane.
-    # Both rectangles are kept complete at small sizes; that silhouette survives
-    # Windows tray resampling much better than four disconnected crop corners.
-    $span = $s - ($margin * 2)
-    $paneSize = $span * 0.64
-    $offset = $span * 0.26
-    $radius = [Math]::Max(1.0, $s * 0.085)
-    $frontPath = New-RoundedPath -X $margin -Y $margin -W $paneSize -H $paneSize -R $radius
-    $rearPath = New-RoundedPath -X ($margin + $offset) -Y ($margin + $offset) -W $paneSize -H $paneSize -R $radius
-
-    if ($Mode -eq 'Glyph') {
-        $haloWidth = $thickness + [Math]::Max(1.5, $s * 0.055)
-        $haloColor = [System.Drawing.Color]::FromArgb(190, 8, 12, 18)
-
-        $halo = New-Object System.Drawing.Pen($haloColor, $haloWidth)
-        $halo.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-        $g.DrawPath($halo, $rearPath)
-        $g.DrawPath($halo, $frontPath)
-        $halo.Dispose()
-    }
-
-    $rearPen = New-Object System.Drawing.Pen($Accent, $thickness)
-
-    $frontColor = if ($Mode -eq 'Plate') { $PortalWhite } else { $Accent }
-    $frontPen = New-Object System.Drawing.Pen($frontColor, $thickness)
-    $frontPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-    $g.DrawPath($frontPen, $frontPath)
-    $frontPen.Dispose()
-    
-    $frontPath.Dispose()
-
-    $g.Dispose()
-    return $bmp
+    finally { $stream.Dispose() }
 }
 
 function Get-DibBytes {
@@ -258,21 +226,20 @@ function Get-PngBytes {
 function Save-Ico {
     param(
         [string]$Path,
-        [System.Drawing.Color]$Accent,
-        [ValidateSet('Plate', 'Glyph')]
-        [string]$Mode = 'Plate'
+        [ValidateSet('Idle', 'Capturing', 'Busy', 'Error')]
+        [string]$State = 'Idle'
     )
 
     $entries = @()
 
     foreach ($size in $dibSizes) {
-        $bmp = Draw-Icon -Size $size -Accent $Accent -Mode $Mode
+        $bmp = Draw-Icon -Size $size -State $State
         $entries += , @{ Size = $size; Bytes = [byte[]](Get-DibBytes -Bitmap $bmp) }
         $bmp.Dispose()
     }
 
     foreach ($size in $pngSizes) {
-        $bmp = Draw-Icon -Size $size -Accent $Accent -Mode $Mode
+        $bmp = Draw-Icon -Size $size -State $State
         $entries += , @{ Size = $size; Bytes = [byte[]](Get-PngBytes -Bitmap $bmp) }
         $bmp.Dispose()
     }
@@ -309,7 +276,7 @@ function Save-Ico {
     }
 
     Write-Host ("  {0,-22} {1,9:N0} bytes  {2,-5} {3} sizes" -f `
-        [System.IO.Path]::GetFileName($Path), (Get-Item $Path).Length, $Mode, $entries.Count)
+        [System.IO.Path]::GetFileName($Path), (Get-Item $Path).Length, $State, $entries.Count)
 }
 
 function Resolve-OutputPath {
@@ -338,7 +305,7 @@ function Save-Png {
     $canvas = $null
     $g = $null
     try {
-        $icon = Draw-Icon -Size $Size -Accent $AccentFocus -Mode Plate
+        $icon = Draw-Icon -Size $Size
         $target = $icon
         $detail = ''
 
@@ -438,11 +405,11 @@ if ($StoreMode) {
 else {
     Write-Host "Generating icons into $OutDir"
 
-    Save-Ico -Path (Join-Path $OutDir 'app.ico')            -Accent $AccentFocus   -Mode Plate
-    Save-Ico -Path (Join-Path $OutDir 'tray-idle.ico')      -Accent $AccentFocus   -Mode Glyph
-    Save-Ico -Path (Join-Path $OutDir 'tray-capturing.ico') -Accent $AccentAmber   -Mode Glyph
-    Save-Ico -Path (Join-Path $OutDir 'tray-busy.ico')      -Accent $AccentEmerald -Mode Glyph
-    Save-Ico -Path (Join-Path $OutDir 'tray-error.ico')     -Accent $AccentCoral   -Mode Glyph
+    Save-Ico -Path (Join-Path $OutDir 'app.ico')            -State Idle
+    Save-Ico -Path (Join-Path $OutDir 'tray-idle.ico')      -State Idle
+    Save-Ico -Path (Join-Path $OutDir 'tray-capturing.ico') -State Capturing
+    Save-Ico -Path (Join-Path $OutDir 'tray-busy.ico')      -State Busy
+    Save-Ico -Path (Join-Path $OutDir 'tray-error.ico')     -State Error
 }
 
 Write-Host "Done."
