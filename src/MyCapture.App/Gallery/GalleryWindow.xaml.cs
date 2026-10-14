@@ -125,6 +125,7 @@ internal sealed partial class GalleryWindow : Window
         KeyDown += OnLibraryKeyDown;
         InitializeActionStatus();
         InitializeRecovery();
+        InitializeLibraryExtras();
         InitializeEmptyLibrary();
         IsVisibleChanged += (_, _) =>
         {
@@ -320,19 +321,12 @@ internal sealed partial class GalleryWindow : Window
 
         _ocrIndexingRunning = true;
         _ocrIndexingCts = new System.Threading.CancellationTokenSource();
-        OcrIndexButton.Content = UiText.Get("Text_92CDEF3C5BC0");
-        OcrCoverageBanner.Visibility = Visibility.Visible;
-
-        var progress = new System.Progress<MyCapture.App.Ocr.OcrIndexingProgress>(p =>
-        {
-            OcrCoverageHeadline.Text = UiText.Format("Text_C51C3FDBF019", p.Processed, p.Total);
-            OcrCoverageDetail.Text = UiText.Format("Text_AAED78A6EA00", p.Indexed);
-        });
+        OcrCoverageBanner.Visibility = Visibility.Collapsed;
 
         MyCapture.App.Ocr.OcrIndexingOutcome outcome;
         try
         {
-            outcome = await _ocrIndexing.IndexMissingAsync(progress, _ocrIndexingCts.Token);
+            outcome = await _ocrIndexing.IndexMissingAsync(cancellationToken: _ocrIndexingCts.Token);
         }
         catch (System.Exception ex)
         {
@@ -783,14 +777,17 @@ internal sealed partial class GalleryWindow : Window
 
     // ---- Actions -------------------------------------------------------------------
 
-    private void TogglePin(GalleryItemViewModel tile)
+    private async void TogglePin(GalleryItemViewModel tile)
     {
         if (!EnsureRecordReady(tile.Id))
         {
             return;
         }
 
-        bool? pinned = _controller.TogglePin(tile.Id);
+        bool? pinned;
+        try { pinned = await _queue.ToggleLibraryPinAsync(tile.Id); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or AggregateException)
+        { ShowActionStatus(UiText.Get("Library.Organize.Failed")); return; }
         if (pinned is null)
         {
             return;

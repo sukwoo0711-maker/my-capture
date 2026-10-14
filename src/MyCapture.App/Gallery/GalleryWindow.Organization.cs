@@ -43,9 +43,10 @@ internal sealed partial class GalleryWindow
         if (dialog.ShowDialog(this) != true) return;
         using var cancellation = new CancellationTokenSource();
         _archiveCancellation = cancellation;
+        using var activity = _queue.Activities.Start(LibraryActivityKind.ZipExport, cancellation.Cancel);
         ArchiveExportButton.IsEnabled = false;
-        ArchiveCancelButton.Visibility = Visibility.Visible;
-        LibraryActionStatus.Text = UiText.Get("Library.Archive.Preparing");
+        ArchiveCancelButton.Visibility = Visibility.Collapsed;
+        ShowActionStatus(string.Empty);
         try
         {
             var exporter = new GalleryFolderExportService(_queue);
@@ -54,7 +55,7 @@ internal sealed partial class GalleryWindow
             {
                 // Ignore dispatcher callbacks queued by a completed or cancelled export.
                 if (ReferenceEquals(_archiveCancellation, cancellation))
-                    LibraryActionStatus.Text = UiText.Format("Library.Archive.Progress", done, records.Length);
+                    activity.Report(done, records.Length);
             });
             await GalleryFolderExportService.ExportZipAsync(prepared, dialog.FileName, progress, cancellation.Token, options);
             _commitService.RememberExportOptions(options);

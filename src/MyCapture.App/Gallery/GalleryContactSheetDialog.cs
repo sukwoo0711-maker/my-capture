@@ -7,6 +7,7 @@ using System.Windows.Media;
 using Microsoft.Win32;
 using MyCapture.App.Themes;
 using MyCapture.Core.Export;
+using MyCapture.Core.Queue;
 
 namespace MyCapture.App.Gallery;
 
@@ -29,11 +30,14 @@ internal sealed class GalleryContactSheetDialog : Window
     private CancellationTokenSource? _exportCancellation;
     private Task _pendingPreview = Task.CompletedTask;
     private bool _closed;
+    private readonly LibraryActivityTracker? _activities;
     private int _generation;
 
-    internal GalleryContactSheetDialog(IReadOnlyList<GalleryContactSheetItem> items, int skippedVideos, Func<bool> isCurrent)
+    internal GalleryContactSheetDialog(IReadOnlyList<GalleryContactSheetItem> items, int skippedVideos, Func<bool> isCurrent,
+        LibraryActivityTracker? activities = null)
     {
         _items = items;
+        _activities = activities;
         _isCurrent = isCurrent;
         StandardWindowTheme.Apply(this);
         Title = UiText.Get("ContactSheet.Action");
@@ -168,6 +172,7 @@ internal sealed class GalleryContactSheetDialog : Window
         ContactSheetOptions options = Options;
         using var cancellation = new CancellationTokenSource();
         _exportCancellation = cancellation;
+        using var activity = _activities?.Start(LibraryActivityKind.Pdf, cancellation.Cancel, _items.Count);
         _settings.IsEnabled = _save.IsEnabled = false;
         _progress.Maximum = _items.Count;
         _progress.Value = 0;
@@ -182,6 +187,7 @@ internal sealed class GalleryContactSheetDialog : Window
             var progress = new Progress<int>(done =>
             {
                 if (!acceptingProgress || !ReferenceEquals(_exportCancellation, cancellation)) return;
+                activity?.Report(done, _items.Count);
                 _progress.Value = done;
                 _status.Text = UiText.Format("ContactSheet.Progress", done, _items.Count);
             });

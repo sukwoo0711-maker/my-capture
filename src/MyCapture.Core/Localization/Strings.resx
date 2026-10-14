@@ -4392,4 +4392,79 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoMulticut_PreviewSeekFailed" xml:space="preserve">
     <value>미리보기 탐색을 완료하지 못했습니다. 재생을 다시 시작하십시오.</value>
   </data>
+  <data name="Library.SavedSearch.Title" xml:space="preserve">
+    <value>저장된 검색</value>
+  </data>
+  <data name="Library.SavedSearch.Save" xml:space="preserve">
+    <value>검색 저장</value>
+  </data>
+  <data name="Library.SavedSearch.Name" xml:space="preserve">
+    <value>검색 이름</value>
+  </data>
+  <data name="Library.SavedSearch.Rename" xml:space="preserve">
+    <value>이름 변경</value>
+  </data>
+  <data name="Library.SavedSearch.Delete" xml:space="preserve">
+    <value>삭제</value>
+  </data>
+  <data name="Library.SavedSearch.Saved" xml:space="preserve">
+    <value>검색 저장됨</value>
+  </data>
+  <data name="Library.SavedSearch.Deleted" xml:space="preserve">
+    <value>저장된 검색 삭제됨</value>
+  </data>
+  <data name="Library.SavedSearch.Invalid" xml:space="preserve">
+    <value>중복되지 않는 이름을 80자 이내로 입력하십시오.</value>
+  </data>
+  <data name="Library.SavedSearch.Failed" xml:space="preserve">
+    <value>검색을 저장하지 못했습니다. 다시 시도하십시오.</value>
+  </data>
+  <data name="Library.Undo.Changed" xml:space="preserve">
+    <value>변경 저장됨</value>
+  </data>
+  <data name="Library.Undo.Move" xml:space="preserve">
+    <value>폴더 이동 실행 취소됨</value>
+  </data>
+  <data name="Library.Undo.Tags" xml:space="preserve">
+    <value>태그 변경 실행 취소됨</value>
+  </data>
+  <data name="Library.Undo.Pin" xml:space="preserve">
+    <value>보관 변경 실행 취소됨</value>
+  </data>
+  <data name="Library.Undo.Title" xml:space="preserve">
+    <value>제목 변경 실행 취소됨</value>
+  </data>
+  <data name="Library.Undo.Unavailable" xml:space="preserve">
+    <value>항목이 변경되어 실행 취소를 완료하지 못했습니다.</value>
+  </data>
+  <data name="Library.Undo.Failed" xml:space="preserve">
+    <value>실행 취소를 저장하지 못했습니다. 다시 시도하십시오.</value>
+  </data>
+  <data name="Library.Activity.Title" xml:space="preserve">
+    <value>진행 중인 작업</value>
+  </data>
+  <data name="Library.Activity.Count" xml:space="preserve">
+    <value>작업 {0}개</value>
+  </data>
+  <data name="Library.Activity.Progress" xml:space="preserve">
+    <value>{0} · {1}/{2}</value>
+  </data>
+  <data name="Library.Activity.Cancelling" xml:space="preserve">
+    <value>취소 중</value>
+  </data>
+  <data name="Library.Activity.Import" xml:space="preserve">
+    <value>가져오는 중</value>
+  </data>
+  <data name="Library.Activity.ZipExport" xml:space="preserve">
+    <value>ZIP 내보내는 중</value>
+  </data>
+  <data name="Library.Activity.FolderExport" xml:space="preserve">
+    <value>폴더 내보내는 중</value>
+  </data>
+  <data name="Library.Activity.Pdf" xml:space="preserve">
+    <value>PDF 내보내는 중</value>
+  </data>
+  <data name="Library.Activity.Ocr" xml:space="preserve">
+    <value>텍스트 색인 중</value>
+  </data>
 </root>

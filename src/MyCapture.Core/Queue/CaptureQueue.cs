@@ -20,6 +20,9 @@ internal sealed class CaptureIndexFile
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CaptureFolderState? FolderState { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? SavedSearches { get; set; }
 }
 
 /// <summary>
@@ -214,11 +217,13 @@ public sealed partial class CaptureQueue
 
         List<CaptureRecord> records;
         CaptureFolderState? loadedFolderState = null;
+        RestoreSavedSearches(null);
 
         if (text is not null && TryParseIndex(text, out CaptureIndexFile? index) && index is not null)
         {
             records = index.Records;
             loadedFolderState = index.FolderState;
+            RestoreSavedSearches(index.SavedSearches);
             HashSet<Guid> indexedIds = records.Select(record => record.Id).ToHashSet();
             // A v1 build did not understand video records and could rewrite index.json without
             // them. On the first v2 load, merge every durable meta sidecar once; later v2 loads

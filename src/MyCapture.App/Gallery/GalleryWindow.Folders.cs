@@ -376,8 +376,9 @@ internal sealed partial class GalleryWindow
         }
         using var cancellation = new CancellationTokenSource();
         _archiveCancellation = cancellation;
-        ArchiveExportButton.IsEnabled = false; ArchiveCancelButton.Visibility = Visibility.Visible;
-        LibraryActionStatus.Text = UiText.Get("Folder410.ExportPreparing");
+        using var activity = _queue.Activities.Start(zip ? LibraryActivityKind.ZipExport : LibraryActivityKind.FolderExport, cancellation.Cancel);
+        ArchiveExportButton.IsEnabled = false; ArchiveCancelButton.Visibility = Visibility.Collapsed;
+        ShowActionStatus(string.Empty);
         try
         {
             if (zip) destination = UniqueArchivePath(destination);
@@ -385,7 +386,7 @@ internal sealed partial class GalleryWindow
             var progress = new Progress<int>(done =>
             {
                 if (ReferenceEquals(_archiveCancellation, cancellation))
-                    LibraryActionStatus.Text = UiText.Format("Folder410.ExportProgress", done, plan.Entries.Count);
+                    activity.Report(done, plan.Entries.Count);
             });
             if (zip) await GalleryFolderExportService.ExportZipAsync(prepared, destination, progress, cancellation.Token, options);
             else await GalleryFolderExportService.ExportDirectoryAsync(prepared, destination, progress, cancellation.Token, options);
