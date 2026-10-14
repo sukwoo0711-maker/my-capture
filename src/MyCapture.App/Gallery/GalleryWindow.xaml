@@ -1215,6 +1215,11 @@
             <Setter Property="Padding" Value="12,6" />
             <Setter Property="Margin" Value="0,0,6,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding DataContext.HasSelection, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                    <Setter Property="Padding" Value="10,6" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
         <Style x:Key="LibraryUx.CommandGhost" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
             <Setter Property="Padding" Value="10,6" />
@@ -1451,15 +1456,18 @@
                              AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
                              TextChanged="OnSearchTextChanged" />
                     <TextBlock Grid.Column="1" IsHitTestVisible="False"
-                               Text="{Binding SearchPlaceholder}"
                                Foreground="{DynamicResource Text.Muted}"
                                Margin="10,0"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="{Binding SearchPlaceholder}" />
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                        <Setter Property="Text" Value="{loc:Text Text_4B8D541EBE6D}" />
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
                                         <Setter Property="Visibility" Value="Visible" />
                                     </DataTrigger>
@@ -1515,6 +1523,8 @@
                 <Border Style="{StaticResource LibraryUx.CommandSeparator}" />
                 <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" />
+                <Button x:Name="ContactSheetButton" Content="{loc:Text ContactSheet.Action}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Click="OnContactSheetClick" />
                 <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnMoveCapturesClick" ToolTip="{loc:Text LibraryUx_MoveHint}" />
                 <Button Content="{loc:Text Library.Tags.Edit}" Style="{StaticResource LibraryUx.CommandButton}"
@@ -1537,6 +1547,7 @@
                     <ContextMenu>
                         <MenuItem x:Name="ImportMenu" Header="{loc:Text Library.Import.Command}" Click="OnImportClick" />
                         <MenuItem x:Name="RestoreDeletedMenu" Header="{loc:Text LibraryRecovery_Recent}" />
+                        <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick" />
                         <MenuItem x:Name="OpenLibraryFolderMenu" Header="{loc:Text LibraryFolder_OpenLibrary}" Click="OnOpenLibraryFolderClick" />
                         <Separator />
                         <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
