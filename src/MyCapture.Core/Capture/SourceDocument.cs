@@ -84,6 +84,18 @@ public static class SourceDocument
         { return false; }
     }
 
+    /// <summary>Builds an Explorer launch plan; the caller checks whether the source is a file or folder.</summary>
+    public static ProcessStartInfo? CreateOpenFolderStartInfo(string path, string explorerPath, bool selectFile)
+    {
+        string normalized = CaptureSourceText.NormalizeLocalPath(path);
+        if (normalized.Length == 0 || normalized.Contains('"')) return null;
+        var start = new ProcessStartInfo(explorerPath) { UseShellExecute = false };
+        // Explorer parses commas itself, so quote the validated path even when it has no spaces.
+        if (selectFile) start.Arguments = "/select,\"" + normalized + "\"";
+        else start.ArgumentList.Add(normalized);
+        return start;
+    }
+
     /// <summary>Builds a launch plan for an existing source file; the caller checks its existence before opening.</summary>
     public static ProcessStartInfo? CreateOpenStartInfo(string path, string textEditorPath, Func<string, bool>? exists = null)
     {

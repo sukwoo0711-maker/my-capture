@@ -110,6 +110,48 @@ public sealed class SourceDocumentTests
     }
 
     [Theory]
+    [InlineData(@"C:\Work\Budget,Q4.xlsx", "/select,\"C:\\Work\\Budget,Q4.xlsx\"")]
+    [InlineData(@"C:\Work files\Budget Q4.xlsx", "/select,\"C:\\Work files\\Budget Q4.xlsx\"")]
+    [InlineData(@"\\server\share\Budget.xlsx", "/select,\"\\\\server\\share\\Budget.xlsx\"")]
+    [InlineData(@"C:\자료\예산.xlsx", "/select,\"C:\\자료\\예산.xlsx\"")]
+    [InlineData(@"\\server\공유 자료\예산, 4분기.xlsx", "/select,\"\\\\server\\공유 자료\\예산, 4분기.xlsx\"")]
+    public void FolderLaunchPlanQuotesTheSelectedFileForExplorer(string path, string arguments)
+    {
+        const string explorer = @"C:\Windows\explorer.exe";
+        var start = SourceDocument.CreateOpenFolderStartInfo(path, explorer, selectFile: true);
+        Assert.NotNull(start);
+        Assert.Equal(explorer, start.FileName);
+        Assert.False(start.UseShellExecute);
+        Assert.Equal(arguments, start.Arguments);
+        Assert.Empty(start.ArgumentList);
+    }
+
+    [Fact]
+    public void FolderLaunchPlanKeepsFolderOpeningWithoutSelection()
+    {
+        const string path = @"C:\자료, Work files";
+        const string explorer = @"C:\Windows\explorer.exe";
+        var start = SourceDocument.CreateOpenFolderStartInfo(path, explorer, selectFile: false);
+        Assert.NotNull(start);
+        Assert.Equal(explorer, start.FileName);
+        Assert.False(start.UseShellExecute);
+        Assert.Equal(path, Assert.Single(start.ArgumentList));
+        Assert.Empty(start.Arguments);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("relative.xlsx")]
+    [InlineData("/select,C:\\Work\\Budget.xlsx")]
+    [InlineData("C:\\Work\\Budget\",Q4.xlsx")]
+    [InlineData("file:///C:/Work/Budget.xlsx")]
+    public void FolderLaunchPlanRejectsInvalidPaths(string path)
+    {
+        Assert.Null(SourceDocument.CreateOpenFolderStartInfo(path, @"C:\Windows\explorer.exe", selectFile: true));
+        Assert.Null(SourceDocument.CreateOpenFolderStartInfo(path, @"C:\Windows\explorer.exe", selectFile: false));
+    }
+
+    [Theory]
     [InlineData("cleanup.cmd")]
     [InlineData("cleanup.bat")]
     [InlineData("cleanup.CMD")]
