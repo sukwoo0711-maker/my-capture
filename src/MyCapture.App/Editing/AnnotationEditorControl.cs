@@ -3061,7 +3061,10 @@ internal sealed partial class AnnotationEditorControl : Grid
             if (shapeApplies)
             {
                 ShapeAnnotation? shape = selected as ShapeAnnotation;
-                _strokeStyleComboBox.SelectedIndex = (int)(shape?.StrokeStyle ?? _controller.StrokeStyle);
+                AnnotationStrokeStyle[] styles = _controller.SelectedItems.OfType<ShapeAnnotation>()
+                    .Select(item => item.StrokeStyle).Distinct().Take(2).ToArray();
+                _strokeStyleComboBox.SelectedIndex = styles.Length > 1 ? -1
+                    : (int)(styles.Length == 1 ? styles[0] : _controller.StrokeStyle);
                 _fillTransparencySlider.Value = shape?.FillTransparency ?? _controller.FillTransparency;
             }
 

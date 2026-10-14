@@ -38,6 +38,7 @@ internal sealed class AnnotationEditorController
     private PointD _gestureStart;
     private RectD _transformBefore;
     private ResizeHandle _resizeHandle = ResizeHandle.None;
+    private bool _resizeStarted;
     private TextLayout _textLayoutBefore;
     private AnnotationItem? _draftItem;
     private List<PointD>? _draftPoints;
@@ -518,6 +519,10 @@ internal sealed class AnnotationEditorController
                 RaiseVisual();
                 break;
             case Gesture.Resize:
+                // Handles extend beyond the bounds; a stationary click must not snap the
+                // annotation to the press point, including a same-position move event.
+                if (!_resizeStarted && point == _gestureStart) break;
+                _resizeStarted = true;
                 if (_selected is TextAnnotation text)
                 {
                     ResizeText(text, point);
@@ -621,6 +626,7 @@ internal sealed class AnnotationEditorController
         _moveOffset = default;
         MarqueeBounds = null;
         _resizeHandle = ResizeHandle.None;
+        _resizeStarted = false;
         _draftItem = null;
         _draftPoints = null;
     }

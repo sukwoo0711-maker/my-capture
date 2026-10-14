@@ -308,6 +308,63 @@ public sealed class AnnotationEditorControllerTests
         Assert.Equal(140, rect.Rect.Height, 3);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ResizeHandle_ClickOutsideBoundsPreservesGeometryAndHistory(bool text, bool moveEvent)
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out UndoStack undo);
+        AnnotationItem item = text
+            ? new TextAnnotation { Rect = new RectD(100, 100, 40, 40), Text = "Caption", FontSize = 20 }
+            : new RectangleAnnotation { Rect = new RectD(100, 100, 40, 40) };
+        doc.Add(item);
+        c.Tool = EditorTool.Select;
+        c.SetSelected(item);
+        c.NudgeSelected(1, 0);
+        Assert.True(c.PerformUndo());
+        string before = doc.ToJson();
+        var handle = new PointD(98, 98);
+        Assert.Equal(ResizeHandle.TopLeft, c.HandleAt(handle, 6));
+
+        c.PointerDown(handle);
+        if (moveEvent) c.PointerMove(handle);
+        c.PointerUp(handle);
+
+        Assert.Equal(before, doc.ToJson());
+        Assert.Equal(0, undo.UndoCount);
+        Assert.Equal(1, undo.RedoCount);
+        Assert.Same(item, c.Selected);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ResizeHandle_DragUsesReleasePositionAndResetsForNextClick(bool moveEvent)
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out UndoStack undo);
+        var rect = new RectangleAnnotation { Rect = new RectD(100, 100, 40, 40) };
+        doc.Add(rect);
+        c.Tool = EditorTool.Select;
+        c.SetSelected(rect);
+
+        c.PointerDown(new PointD(98, 98));
+        if (moveEvent) c.PointerMove(new PointD(90, 90));
+        c.PointerUp(new PointD(80, 80));
+
+        Assert.Equal(new RectD(80, 80, 60, 60), rect.Rect);
+        Assert.Equal(1, undo.UndoCount);
+        c.PointerDown(new PointD(78, 78));
+        c.PointerUp(new PointD(78, 78));
+        Assert.Equal(new RectD(80, 80, 60, 60), rect.Rect);
+        Assert.Equal(1, undo.UndoCount);
+        Assert.True(c.PerformUndo());
+        Assert.Equal(new RectD(100, 100, 40, 40), rect.Rect);
+        Assert.True(c.PerformRedo());
+        Assert.Equal(new RectD(80, 80, 60, 60), rect.Rect);
+    }
+
     [Fact]
     public void PenStroke_DoesNotSupportResize()
     {
