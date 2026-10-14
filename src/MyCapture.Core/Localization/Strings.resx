@@ -4168,4 +4168,15 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>사용법 동영상을 불러오지 못했습니다. 아래 단계에서 사용 방법을 확인합니다.</value></data>
+  <data name="Library.Import.Command" xml:space="preserve"><value>가져오기…</value></data>
+  <data name="Library.Import.Filter" xml:space="preserve"><value>이미지 및 동영상 (*.png;*.jpg;*.jpeg;*.mp4)|*.png;*.jpg;*.jpeg;*.mp4</value></data>
+  <data name="Library.Import.DropTitle" xml:space="preserve"><value>놓으면 라이브러리로 가져옵니다</value></data>
+  <data name="Library.Import.DropDetail" xml:space="preserve"><value>PNG · JPEG · MP4 · 같은 파일은 건너뜁니다</value></data>
+  <data name="Library.Import.Preparing" xml:space="preserve"><value>가져오기 준비 중</value></data>
+  <data name="Library.Import.Progress" xml:space="preserve"><value>가져오는 중 · {0}/{1}</value></data>
+  <data name="Library.Import.Summary" xml:space="preserve"><value>{0}개 가져옴 · 중복 {1}개 건너뜀 · 실패 {2}개</value></data>
+  <data name="Library.Import.Cancelled" xml:space="preserve"><value>가져오기 취소됨</value></data>
+  <data name="Library.Import.TooLarge" xml:space="preserve"><value>2 GiB를 초과하는 파일은 가져올 수 없습니다.</value></data>
+  <data name="Library.Import.Failed" xml:space="preserve"><value>파일을 가져오지 못했습니다.</value></data>
+  <data name="Library.Import.Source" xml:space="preserve"><value>가져온 파일</value></data>
 </root>

@@ -13,7 +13,7 @@ namespace MyCapture.Core.Queue;
 /// </summary>
 internal sealed class CaptureIndexFile
 {
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     public List<CaptureRecord> Records { get; set; } = [];
 
@@ -914,7 +914,7 @@ public sealed partial class CaptureQueue
         {
             index = JsonSerializer.Deserialize<CaptureIndexFile>(text, SerializerOptions);
             if (index is null
-                || index.SchemaVersion is not (1 or 2)
+                || index.SchemaVersion is not (1 or 2 or 3)
                 || index.Records is null)
             {
                 index = null;
@@ -929,7 +929,16 @@ public sealed partial class CaptureQueue
                     index = null;
                     return false;
                 }
+
+                // v1/v2 had no import fields. Keep their null defaults and compute hashes only
+                // on the first size-matched import comparison; never scan originals at startup.
+                if (index.SchemaVersion < 3)
+                {
+                    record.OriginalContentHash = null;
+                    record.ImportedFileName = null;
+                }
             }
+
 
             return true;
         }

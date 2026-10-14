@@ -122,7 +122,7 @@ internal sealed partial class GalleryWindow : Window
         IsVisibleChanged += (_, _) =>
         {
             _visibilityGeneration++;
-            if (!IsVisible) ResetDragGesture();
+            if (!IsVisible) { ResetDragGesture(); _importCancellation?.Cancel(); }
             else _hiddenForCapture = false;
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             _viewModel.SetLibraryOpen(IsVisible || _hiddenForCapture);

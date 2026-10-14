@@ -165,9 +165,11 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     /// Whether the details panel shows a source section. Videos have no capture-time source; their
     /// stored window title is the generic recording label, not a window.
     /// </summary>
-    public bool HasSource => IsImage && (HasSourceApp || HasSourceWindowTitle || HasSourcePageUrl || HasSourceDocumentPath);
+    public bool HasSource => Record.ImportedFileName is not null
+        || IsImage && (HasSourceApp || HasSourceWindowTitle || HasSourcePageUrl || HasSourceDocumentPath);
 
-    public string SourceAppName => IsImage ? Record.SourceDetails.AppName : string.Empty;
+    public string SourceAppName => Record.ImportedFileName is not null ? UiText.Get("Library.Import.Source")
+        : IsImage ? Record.SourceDetails.AppName : string.Empty;
 
     public bool HasSourceApp => SourceAppName.Length > 0;
 
@@ -179,7 +181,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public string SourceAppAutomationName => HasSourceApp ? UiText.Format("Library.Source.AppAccessible", SourceAppName) : string.Empty;
 
-    public string SourceWindowTitle => IsImage ? (Record.SourceWindowTitle ?? string.Empty).Trim() : string.Empty;
+    public string SourceWindowTitle => Record.ImportedFileName
+        ?? (IsImage ? (Record.SourceWindowTitle ?? string.Empty).Trim() : string.Empty);
 
     public bool HasSourceWindowTitle => SourceWindowTitle.Length > 0;
 

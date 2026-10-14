@@ -911,6 +911,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
     }
 
     private static bool IsPayloadName(string name) => name is CaptureFileNames.Original or CaptureFileNames.Rendered
+        or CaptureFileNames.ImportedJpeg
         or CaptureFileNames.Thumbnail or CaptureFileNames.Meta or CaptureFileNames.Layers
         or CaptureFileNames.VideoSource or CaptureFileNames.VideoRendered or CaptureFileNames.VideoEdits
         || CaptureFileNames.IsSafeAssetFileName(name);
