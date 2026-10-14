@@ -8,7 +8,7 @@ MyCapture 개선 작업을 이어 가는 오케스트레이터가 읽고 고치�
 |---|---|
 | 현재 오케스트레이터 | **Claude** (Claude Code, Opus 5.5), 2026-10-13부터 |
 | 이전 | Claude(10-11 ~ 10-12) → Codex `gpt-6-astra`(10-12 ~ 10-13) → Claude |
-| 작업 브랜치 | 작업마다 main에서 분기해 PR로 병합. 현재 `release/4.2.0`(작업 공간 `C:GitRepositoriesmy-capture-release-420`) |
+| 작업 브랜치 | 작업마다 main에서 분기해 PR로 병합. 현재 `release/4.2.0`(작업 공간 `C:\GitRepositories\my-capture-release-420`) |
 | 통합 작업 공간 | `C:\GitRepositories\my-capture-codex` |
 | 백업 | `backup/pre-gif-rewrite-2026-10-13` (GIF 이력 제거 직전 상태) |
 | 원격 main | d48e6b7 = 4.1.3 소스 (PR #78). 저장소는 공개 |
