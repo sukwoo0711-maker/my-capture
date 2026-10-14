@@ -43,7 +43,8 @@ public sealed class BrandIconContractTests
             Assert.Equal(0xFFFFF8F4u, Pixel(dib, 4, 6));
             Assert.Equal(0xFFFFF8F4u, Pixel(dib, 12, 3));
             Assert.Equal(0xFFFFF8F4u, Pixel(dib, 3, 12));
-            Assert.Equal(0xFF38424Du, Pixel(dib, 7, 7));
+            // The enlarged L2 needle now reaches (7,7); sample the adjacent open centre.
+            Assert.Equal(0xFF38424Du, Pixel(dib, 7, 6));
             Assert.Equal(0xFF38424Du, Pixel(dib, 1, 7));
             Assert.Equal(0u, Pixel(dib, 0, 0));
         }
