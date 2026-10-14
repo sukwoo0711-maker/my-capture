@@ -75,9 +75,13 @@ internal sealed partial class VideoEditorWindow : Window
     private TextBlock _identityDetails = null!;
     private FrameworkElement _identityText = null!;
     private readonly List<TextBlock> _toolLabels = [];
+    private StackPanel _editingTools = null!;
+    private StackPanel _outputTools = null!;
     private Button _trimToolButton = null!;
     private Button _addTextToolButton = null!;
     private Button _restoreSegmentButton = null!;
+    private Button _splitToolButton = null!;
+    private Action? _refitCommandBar;
     private VideoCutTimeline _cutTimeline = VideoCutTimeline.Create(0, 1);
     private readonly PreviewCutPlayback _cutPlayback = new();
     private bool _cutSeekInFlight;
@@ -651,6 +655,7 @@ internal sealed partial class VideoEditorWindow : Window
             }
         };
         _fitCommandBarForTest = available => FitCommandBar(header, available);
+        _refitCommandBar = () => FitCommandBar(header, upper.ActualWidth);
 
         Grid timeline = BuildTimeline();
         var timelineScroll = new ScrollViewer
@@ -794,14 +799,17 @@ internal sealed partial class VideoEditorWindow : Window
         // 3. Editing tools: trim, add text, and edit the playhead frame as an image (the
         // still-image editor returns it as a layer).
         var editing = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        _editingTools = editing;
         _trimToolButton = ToolButton("Icon.Trim", UiText.Get("VideoEditorUx_Trim"), UiText.Get("VideoEditorUx_TrimHelp"), SelectTrimHandle, "Trim");
         _addTextToolButton = ToolButton("Icon.Text", UiText.Get("VideoEditorUx_AddText"), UiText.Get("VideoEditorUx_AddTextHelp"), AddTextOverlay, "AddText");
         Button frameEdit = ToolButton("Icon.Image", UiText.Get("VideoEditorUx_FrameImageEdit"), UiText.Get("Text_A79A9F93D479"), EditCurrentFrame, "FrameEdit");
         editing.Children.Add(_trimToolButton);
-        editing.Children.Add(ToolButton("Icon.Trim", UiText.Get("VideoMulticut_Split"),
-            UiText.Get("VideoMulticut_SplitHelp"), SplitHere, "Split"));
+        _splitToolButton = ToolButton("Icon.Trim", UiText.Get("VideoMulticut_Split"),
+            UiText.Get("VideoMulticut_SplitHelp"), SplitHere, "Split");
+        editing.Children.Add(_splitToolButton);
         _restoreSegmentButton = ToolButton("Icon.Undo", UiText.Get("VideoMulticut_Restore"),
             UiText.Get("VideoMulticut_RestoreHelp"), RestoreSelectedSegment);
+        _restoreSegmentButton.Visibility = Visibility.Collapsed;
         editing.Children.Add(_restoreSegmentButton);
         editing.Children.Add(_addTextToolButton);
         editing.Children.Add(frameEdit);
@@ -813,6 +821,7 @@ internal sealed partial class VideoEditorWindow : Window
         // 4. Output, at the right edge: export a new file, then the finishing action. Saving
         // into the library is the emphasised last button, like Done in the image editor.
         var output = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        _outputTools = output;
         // Each button says what it does to the library and to the original; the shared hint
         // left people unsure which one keeps the recording intact.
         Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("MediaExport_SaveEdits"), primary: true);
@@ -1000,6 +1009,10 @@ internal sealed partial class VideoEditorWindow : Window
         {
             label.Visibility = level >= 3 ? Visibility.Collapsed : Visibility.Visible;
         }
+        foreach (FrameworkElement tool in _editingTools.Children)
+            tool.Margin = new Thickness(0, 0, level >= 3 ? 2 : 6, 0);
+        foreach (Button output in _outputTools.Children)
+            output.Padding = new Thickness(level >= 3 ? 8 : 12, 5, level >= 3 ? 8 : 12, 5);
 
         _trimToolButton.Visibility = level >= 4 ? Visibility.Collapsed : Visibility.Visible;
         _addTextToolButton.Visibility = level >= 4 ? Visibility.Collapsed : Visibility.Visible;
@@ -1870,8 +1883,14 @@ internal sealed partial class VideoEditorWindow : Window
     private void UpdateCutActionStates()
     {
         if (_restoreSegmentButton is null) return;
-        _restoreSegmentButton.IsEnabled = _mediaReady && !_operationRunning
-            && _timeline.SelectedSegment is { } selected && _cutTimeline.RemovedRanges.Contains(selected);
+        bool restoreSelected = _timeline.SelectedSegment is { } selected && _cutTimeline.RemovedRanges.Contains(selected);
+        _restoreSegmentButton.IsEnabled = _mediaReady && !_operationRunning && restoreSelected;
+        Visibility restoreVisibility = restoreSelected ? Visibility.Visible : Visibility.Collapsed;
+        if (_restoreSegmentButton.Visibility == restoreVisibility) return;
+        // The selected removed segment offers restoration in the split command's slot.
+        _restoreSegmentButton.Visibility = restoreVisibility;
+        _splitToolButton.Visibility = restoreSelected ? Visibility.Collapsed : Visibility.Visible;
+        _refitCommandBar?.Invoke();
     }
 
     private void SynchronizeCuts()

@@ -7,7 +7,6 @@ using MyCapture.Core.Queue;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Imaging;
 using MyCapture.Platform.Recording;
-using MyCapture.Platform.Shell;
 using Microsoft.Extensions.Logging;
 
 namespace MyCapture.App.Gallery;
@@ -20,10 +19,11 @@ internal static class GalleryImportService
         {
             try
             {
-                if (Directory.Exists(directory)) new WindowsRecycleBin().RecycleDirectory(directory);
+                // Only the unpublished managed copy reaches this callback; the source is untouched.
+                if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
-            { log.LogWarning(ex, "Incomplete import remains in its managed directory because recycling failed"); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { log.LogWarning(ex, "Incomplete import remains in its managed directory because cleanup failed"); }
         }));
 
     internal static async Task PrepareAsync(CaptureRecord record, string directory, CancellationToken cancellationToken)

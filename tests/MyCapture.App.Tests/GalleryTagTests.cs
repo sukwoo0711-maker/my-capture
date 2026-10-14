@@ -18,61 +18,66 @@ namespace MyCapture.App.Tests;
 
 public sealed class GalleryTagTests
 {
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void OpenCapture_ClearsExcludingTagAndSelectsUncachedCapture(bool inFolder)
+    [Fact]
+    public async Task OpenCapture_ClearsExcludingTagAndSelectsUncachedCapture()
     {
-        StaTestHost.Run(() =>
+        await SettingsThemePreviewTests.RunIsolated(nameof(OpenCapture_ClearsExcludingTagAndSelectsUncachedCapture), () =>
         {
-            if (Application.Current is null)
-            {
-                var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-                application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
-                application.Resources["PinLabel"] = new PinLabelConverter();
-                application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
-            }
-            var paths = AppPaths.CreateForRoot(Path.Combine(AppContext.BaseDirectory,
-                "tag-test-fixtures", Guid.NewGuid().ToString("N")));
-            var settings = new AppSettings();
-            var queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
-            Guid? folderId = inFolder ? queue.CreateFolderAsync("Folder").GetAwaiter().GetResult().Id : null;
-            queue.Add(Record("work", "existing"));
-            var controller = new GalleryController(queue, NullLogger<GalleryController>.Instance);
-            var model = new GalleryViewModel(controller, _ => "missing.jpg", 320);
-            model.ShowTag("work");
-            var target = Record("", "new capture", folderId);
-            queue.Add(target);
-            model.Refresh();
-            Assert.Null(model.FindTile(target.Id));
-
-            var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue,
-                NullLogger<CapturePersistenceService>.Instance);
-            var commit = new CaptureCommitService(persistence, () => settings, () => paths,
-                NullLogger<CaptureCommitService>.Instance, (_, _) => Task.FromResult(true));
-            var ocr = new NoOcr();
-            using var presenter = new OcrResultPresenter(ocr, Dispatcher.CurrentDispatcher, _ => { }, NullLogger.Instance);
-            var indexing = new OcrIndexingService(controller, ocr, queue.GetDirectory, () => settings.Ocr,
-                NullLogger<OcrIndexingService>.Instance, Dispatcher.CurrentDispatcher);
-            var window = new GalleryWindow(model, controller,
-                new GalleryReeditLoader(queue, NullLogger<GalleryReeditLoader>.Instance), commit, queue,
-                new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance), paths,
-                NullLoggerFactory.Instance, presenter, () => settings.Ocr, indexing, new NoPrivacy(), NullLogger.Instance)
-            {
-                WindowStartupLocation = WindowStartupLocation.Manual,
-                ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000,
-            };
+            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+            application.Resources["PinLabel"] = new PinLabelConverter();
+            application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
             try
             {
-                window.OpenCapture(target.Id, edit: false);
-                Assert.Null(model.SelectedTag);
-                Assert.Equal(folderId is { } id ? CaptureFolderScope.ForFolder(id) : CaptureFolderScope.All, model.SelectedScope);
-                Assert.Equal(target.Id, model.Selection.SingleSelectedId);
-                Assert.Equal(target.Id, model.SingleSelectedTile!.Id);
-                Assert.NotNull(model.FindTile(target.Id));
+                VerifyOpenCapture(inFolder: false);
+                VerifyOpenCapture(inFolder: true);
             }
-            finally { window.CloseForExit(); }
-        });
+            finally { application.Shutdown(); }
+        }, typeof(GalleryTagTests));
+    }
+
+    private static void VerifyOpenCapture(bool inFolder)
+    {
+        var paths = AppPaths.CreateForRoot(Path.Combine(AppContext.BaseDirectory,
+            "tag-test-fixtures", Guid.NewGuid().ToString("N")));
+        var settings = new AppSettings();
+        var queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
+        Guid? folderId = inFolder ? queue.CreateFolderAsync("Folder").GetAwaiter().GetResult().Id : null;
+        queue.Add(Record("work", "existing"));
+        var controller = new GalleryController(queue, NullLogger<GalleryController>.Instance);
+        var model = new GalleryViewModel(controller, _ => "missing.jpg", 320);
+        model.ShowTag("work");
+        var target = Record("", "new capture", folderId);
+        queue.Add(target);
+        model.Refresh();
+        Assert.Null(model.FindTile(target.Id));
+
+        var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue,
+            NullLogger<CapturePersistenceService>.Instance);
+        var commit = new CaptureCommitService(persistence, () => settings, () => paths,
+            NullLogger<CaptureCommitService>.Instance, (_, _) => Task.FromResult(true));
+        var ocr = new NoOcr();
+        using var presenter = new OcrResultPresenter(ocr, Dispatcher.CurrentDispatcher, _ => { }, NullLogger.Instance);
+        var indexing = new OcrIndexingService(controller, ocr, queue.GetDirectory, () => settings.Ocr,
+            NullLogger<OcrIndexingService>.Instance, Dispatcher.CurrentDispatcher);
+        var window = new GalleryWindow(model, controller,
+            new GalleryReeditLoader(queue, NullLogger<GalleryReeditLoader>.Instance), commit, queue,
+            new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance), paths,
+            NullLoggerFactory.Instance, presenter, () => settings.Ocr, indexing, new NoPrivacy(), NullLogger.Instance)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000,
+        };
+        try
+        {
+            window.OpenCapture(target.Id, edit: false);
+            Assert.Null(model.SelectedTag);
+            Assert.Equal(folderId is { } id ? CaptureFolderScope.ForFolder(id) : CaptureFolderScope.All, model.SelectedScope);
+            Assert.Equal(target.Id, model.Selection.SingleSelectedId);
+            Assert.Equal(target.Id, model.SingleSelectedTile!.Id);
+            Assert.NotNull(model.FindTile(target.Id));
+        }
+        finally { window.CloseForExit(); }
     }
 
     [Fact]

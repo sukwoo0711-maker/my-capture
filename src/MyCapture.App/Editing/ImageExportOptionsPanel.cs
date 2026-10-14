@@ -27,8 +27,9 @@ internal sealed class ImageExportOptionsPanel : StackPanel
         if (full)
         {
             var presets = new ComboBox();
-            foreach (string key in new[] { "Last", "Original", "Messenger", "Document" })
-                presets.Items.Add(UiText.Get("ExportOptions.Preset." + key));
+            foreach (string label in new[] { UiText.Get("ExportOptions.Preset.Last"), UiText.Get("ExportOptions.Preset.Original"),
+                UiText.Get("ExportOptions.Preset.Messenger"), UiText.Get("ExportOptions.Preset.Document") })
+                presets.Items.Add(label);
             AddControl("ExportOptions.Preset", presets);
             presets.SelectedIndex = 0;
             presets.SelectionChanged += (_, _) =>
@@ -38,7 +39,8 @@ internal sealed class ImageExportOptionsPanel : StackPanel
                 Apply(selected);
                 PresetSelected?.Invoke(selected);
             };
-            foreach (string key in new[] { "Automatic", "Png", "Jpeg" }) _format.Items.Add(UiText.Get("ExportOptions.Format." + key));
+            foreach (string label in new[] { UiText.Get("ExportOptions.Format.Automatic"), UiText.Get("ExportOptions.Format.Png"),
+                UiText.Get("ExportOptions.Format.Jpeg") }) _format.Items.Add(label);
             AddControl("ExportOptions.Format", _format);
         }
         foreach (int edge in Edges) _edge.Items.Add(edge == 0 ? UiText.Get("ExportOptions.OriginalSize") : UiText.Format("ExportOptions.Pixels", edge));
@@ -50,8 +52,10 @@ internal sealed class ImageExportOptionsPanel : StackPanel
             var styling = new StackPanel();
             var expander = new Expander { Header = UiText.Get("ExportOptions.Style"), Content = styling, Margin = new Thickness(0, 8, 0, 8) };
             Children.Add(expander);
-            foreach (string key in new[] { "Transparent", "White", "LightGray", "DarkGray", "Accent" })
-                _background.Items.Add(UiText.Get("ExportOptions.Background." + key));
+            foreach (string label in new[] { UiText.Get("ExportOptions.Background.Transparent"), UiText.Get("ExportOptions.Background.White"),
+                UiText.Get("ExportOptions.Background.LightGray"), UiText.Get("ExportOptions.Background.DarkGray"),
+                UiText.Get("ExportOptions.Background.Accent") })
+                _background.Items.Add(label);
             AddControl("ExportOptions.Background", _background, styling);
             AddControl("ExportOptions.Margin", _margin, styling); styling.Children.Add(_marginValue);
             AddControl("ExportOptions.Radius", _radius, styling); styling.Children.Add(_radiusValue);

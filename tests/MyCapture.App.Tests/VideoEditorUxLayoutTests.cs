@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
@@ -71,11 +72,12 @@ public sealed class VideoEditorUxLayoutTests
                 return button.TranslatePoint(new Point(), bar).X;
             }
 
-            // Undo/redo, then trim · add text · frame image, then export · save (emphasised) at the right.
+            // Undo/redo, then trim · split · add text · frame image, then export · save at the right.
             double[] order =
             [
                 X(UiText.Get("Text_CE706412FA75")), X(UiText.Get("Text_078C44D5A66E")),
-                X(UiText.Get("VideoEditorUx_Trim")), X(UiText.Get("VideoEditorUx_AddText")), X(UiText.Get("VideoEditorUx_FrameImageEdit")),
+                X(UiText.Get("VideoEditorUx_Trim")), X(UiText.Get("VideoMulticut_Split")),
+                X(UiText.Get("VideoEditorUx_AddText")), X(UiText.Get("VideoEditorUx_FrameImageEdit")),
                 X(UiText.Get("MediaExport_ExportFormats")), X(UiText.Get("MediaExport_SaveEdits")),
             ];
             Assert.Equal(order.Order().ToArray(), order);
@@ -86,7 +88,8 @@ public sealed class VideoEditorUxLayoutTests
             Assert.Same(exportFile.FindResource("Button.Secondary"), exportFile.Style);
             foreach (var (name, gesture) in new[]
             {
-                ("VideoEditorUx_Trim", "X"), ("VideoEditorUx_AddText", "Ctrl+T"), ("VideoEditorUx_FrameImageEdit", "E"),
+                ("VideoEditorUx_Trim", "X"), ("VideoMulticut_Split", "Ctrl+K"),
+                ("VideoEditorUx_AddText", "Ctrl+T"), ("VideoEditorUx_FrameImageEdit", "E"),
             })
             {
                 Button tool = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(name));
@@ -96,6 +99,65 @@ public sealed class VideoEditorUxLayoutTests
             }
 
             Assert.Equal(0, editor.CommandBarLevelForTest);
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void RemovedSegmentOffersRestoreInTheSplitSlotWithoutHidingOtherTools(string language) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        string root = OwnedTestDirectory.Create("mc-video-ux-cut-tools-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true, 760, 555);
+            var layout = (Grid)editor.Content;
+            Grid bar = Assert.Single(Descendants(layout).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
+            Button split = Field<Button>(editor, "_splitToolButton");
+            Button restore = Field<Button>(editor, "_restoreSegmentButton");
+            Assert.True(split.IsVisible);
+            Assert.False(restore.IsVisible);
+            foreach (double position in new[] { 2000d, 4000d })
+            {
+                editor.TimelineForTest.SetPlayhead(position);
+                Assert.True(editor.HandleShortcut(Key.K, ModifierKeys.Control));
+            }
+            editor.TimelineForTest.SelectSegmentAt(3000);
+            Assert.True(editor.HandleShortcut(Key.Delete, ModifierKeys.None));
+            editor.TimelineForTest.SelectSegmentAt(3000);
+            editor.UpdateLayout();
+            Assert.False(split.IsVisible);
+            Assert.True(restore.IsVisible);
+            Assert.True(restore.IsEnabled);
+            AssertToolsFit();
+
+            restore.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            editor.UpdateLayout();
+            Assert.Empty(Field<VideoEditDocument>(editor, "_editDocument").RemovedRanges);
+            Assert.True(split.IsVisible);
+            Assert.False(restore.IsVisible);
+            AssertToolsFit();
+
+            void AssertToolsFit()
+            {
+                Assert.InRange(editor.CommandBarLevelForTest, 0, 3);
+                Assert.True(Field<Button>(editor, "_trimToolButton").IsVisible);
+                Assert.True(Field<Button>(editor, "_addTextToolButton").IsVisible);
+                foreach (Button button in Descendants(bar).OfType<Button>().Where(button => button.IsVisible))
+                {
+                    AssertInside(button, layout, layout.ActualHeight);
+                    foreach (TextBlock text in Descendants(button).OfType<TextBlock>().Where(text => text.IsVisible))
+                        Assert.True(text.ActualWidth + 0.5 >= text.DesiredSize.Width - text.Margin.Left - text.Margin.Right,
+                            $"{language}: clipped '{text.Text}'");
+                }
+            }
         }
         finally
         {

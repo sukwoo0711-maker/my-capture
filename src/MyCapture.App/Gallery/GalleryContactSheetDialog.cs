@@ -7,7 +7,6 @@ using System.Windows.Media;
 using Microsoft.Win32;
 using MyCapture.App.Themes;
 using MyCapture.Core.Export;
-using MyCapture.Platform.Shell;
 
 namespace MyCapture.App.Gallery;
 
@@ -208,7 +207,7 @@ internal sealed class GalleryContactSheetDialog : Window
             acceptingProgress = false;
             if (created)
             {
-                try { await Task.Run(() => new WindowsRecycleBin().RecycleFile(stage)); }
+                try { await Task.Run(() => File.Delete(stage)); }
                 catch (Exception ex) when (IsExportError(ex))
                 { _status.Text = UiText.Format("ContactSheet.StageRetained", stage); }
             }

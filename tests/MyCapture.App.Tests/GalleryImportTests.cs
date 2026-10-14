@@ -89,6 +89,32 @@ public sealed class GalleryImportTests
     }
 
     [Fact]
+    public async Task ProductImportCleanupRemovesOnlyTheUnpublishedCopy()
+    {
+        string root = NewRoot();
+        string source = Path.Combine(root, "broken.png");
+        byte[] bytes = [1, 2, 3, 4];
+        File.WriteAllBytes(source, bytes);
+        AppPaths paths = AppPaths.CreateForRoot(Path.Combine(root, "library"));
+        var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+        queue.Load();
+        var existing = new CaptureRecord();
+        existing.RelativeDirectory = CaptureQueue.BuildRelativeDirectory(existing.Id, existing.CreatedAt);
+        string existingFile = Path.Combine(queue.GetDirectory(existing), "keep.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(existingFile)!);
+        File.WriteAllText(existingFile, "existing capture");
+        queue.Add(existing);
+
+        CaptureImportResult result = await GalleryImportService.Create(queue, NullLogger.Instance).ImportAsync([source]);
+
+        Assert.Equal(1, result.Failed);
+        Assert.Equal(existing.Id, Assert.Single(queue.Records).Id);
+        Assert.Equal(bytes, File.ReadAllBytes(source));
+        Assert.Equal("existing capture", File.ReadAllText(existingFile));
+        Assert.Empty(Directory.EnumerateFiles(paths.CapturesRoot, CaptureFileNames.Original, SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task CorruptImageDoesNotPublishAndRequestsOnlyManagedCopyCleanup()
     {
         string root = NewRoot();

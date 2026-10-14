@@ -28,7 +28,7 @@ public sealed partial class SettingsThemePreviewTests
     public Task ThemeSelectionPreviewsAndAllDismissalPathsRestoreSavedPalette() =>
         RunIsolated(nameof(ThemeSelectionPreviewsAndAllDismissalPathsRestoreSavedPalette), VerifyPreviewLifecycle);
 
-    private static async Task RunIsolated(string testName, Action verify)
+    internal static async Task RunIsolated(string testName, Action verify, Type? testClass = null)
     {
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
@@ -52,7 +52,8 @@ public sealed partial class SettingsThemePreviewTests
             return;
         }
 
-        // SettingsWindow's real BAML uses Application resources. Run it in a fresh test
+        Application? original = Application.Current;
+        // Real window BAML uses Application resources. Run it in a fresh test
         // process so neither its Application singleton nor its brushes/dispatcher leak
         // into the other multi-STA WPF tests in this assembly.
         string runtimeRoot = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory()).Parent!.Parent!.Parent!.FullName;
@@ -67,7 +68,7 @@ public sealed partial class SettingsThemePreviewTests
         };
         start.ArgumentList.Add("vstest");
         start.ArgumentList.Add(typeof(SettingsThemePreviewTests).Assembly.Location);
-        start.ArgumentList.Add("--TestCaseFilter:FullyQualifiedName=" + typeof(SettingsThemePreviewTests).FullName
+        start.ArgumentList.Add("--TestCaseFilter:FullyQualifiedName=" + (testClass ?? typeof(SettingsThemePreviewTests)).FullName
             + "." + testName);
         start.ArgumentList.Add("--Logger:console;verbosity=normal");
         start.Environment[ChildFlag] = "1";
@@ -96,6 +97,7 @@ public sealed partial class SettingsThemePreviewTests
             // VSTest may exit successfully when a filter matches no cases. Require proof
             // that this child's complete WPF assertion body actually finished, too.
             Assert.Equal("PASS", File.ReadAllText(Path.Combine(receiptRoot, "completed.txt")));
+            Assert.Same(original, Application.Current);
         }
         finally
         {
