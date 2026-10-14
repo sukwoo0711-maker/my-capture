@@ -75,6 +75,9 @@
              even though menu items are outside the visual tree. -->
         <ContextMenu x:Key="Gallery.TileContextMenu" x:Shared="False"
                      DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="{loc:Text Gallery.Compare}"
+                      Command="{x:Static gallery:GalleryWindow.CompareCommand}"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
@@ -1503,6 +1506,8 @@
                 <Border Style="{StaticResource LibraryUx.CommandSeparator}" />
                 <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" />
+                <Button Content="{loc:Text Gallery.Compare}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Command="{x:Static gallery:GalleryWindow.CompareCommand}" />
                 <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnMoveCapturesClick" ToolTip="{loc:Text LibraryUx_MoveHint}" />
                 <Button x:Name="DeleteSelectedButton" Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource LibraryUx.CommandButton}"
