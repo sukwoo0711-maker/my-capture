@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -103,7 +104,7 @@ internal sealed partial class VideoEditorWindow : Window
     private Button _addTextButton = null!;
     private Button _editTextButton = null!;
     private Button _deleteTextButton = null!;
-    private Button _cancelOperationButton = null!;
+    private readonly MediaExportProgressRow _saveProgress = new();
     private readonly List<Control> _editControls = [];
     private Grid _controlRows = null!;
     private DispatcherTimer? _loadProgressTimer;
@@ -238,6 +239,11 @@ internal sealed partial class VideoEditorWindow : Window
         _timeline = new TwoLineTimeline();
         _timeline.SetDetailVisible(false);
         _layerTimeline = new VideoLayerTimeline();
+        _timeline.ViewportUpdated += (_, _) => SyncLayerViewport();
+        _timeline.HoverChanged += (_, time) => _layerTimeline.SetHover(time);
+        _layerTimeline.HoverChanged += (_, time) => _timeline.SetHover(time);
+        _layerTimeline.SnapChanged += (_, snap) => _timeline.SetSnapGuide(snap);
+        _timeline.TrimChanged += (_, _) => _layerTimeline.SetKeptRange(_timeline.InMs, _timeline.OutMs);
         _layerTimeline.LayerSelected += (_, _) =>
         {
             if (_mediaReady && !_operationRunning)
@@ -1070,6 +1076,24 @@ internal sealed partial class VideoEditorWindow : Window
 
     private TrimBarPanel? _trimBar;
 
+    private TimelineViewport? _fullLayerViewport;
+
+    private void SyncLayerViewport()
+    {
+        if (_fullLayerViewport is null || _fullLayerViewport.DurationMs != _timeline.DurationMs)
+            _fullLayerViewport = new TimelineViewport(_timeline.DurationMs, _recording.Fps);
+        _layerTimeline.SetViewport(_timeline.DetailVisible ? _timeline.Viewport : _fullLayerViewport);
+        _layerTimeline.SetKeptRange(_timeline.InMs, _timeline.OutMs);
+    }
+
+    private void AlignTimelineTracks()
+    {
+        if (_layerTracksScroll is null || _layerTimeline.ActualWidth <= 0) return;
+        double right = Math.Max(0, _layerTracksScroll.ActualWidth - _layerTimeline.ActualWidth);
+        _timeline.Margin = new Thickness(VideoLayerTimeline.LabelWidth - TwoLineTimeline.TrackInset, 0,
+            right - TwoLineTimeline.TrackInset, 0);
+    }
+
     /// <summary>Whether the trim bar currently puts the typed range on a second row.</summary>
     internal bool TrimBarHasTwoRowsForTest => _trimBar?.IsTwoRows == true;
 
@@ -1099,6 +1123,13 @@ internal sealed partial class VideoEditorWindow : Window
         };
         AutomationProperties.SetName(layerScroll, UiText.Get("Text_D9378793F9FE"));
         _layerTracksScroll = layerScroll;
+        layerScroll.ScrollChanged += (_, _) => _layerTimeline.SetVerticalOffset(layerScroll.VerticalOffset);
+        // The rows reserve a label gutter and may acquire a vertical scrollbar. Give both
+        // time strips exactly that same horizontal time area, even when the detail is folded.
+        _layerTimeline.SizeChanged += (_, _) => AlignTimelineTracks();
+        layerScroll.SizeChanged += (_, _) => AlignTimelineTracks();
+        _timeline.Margin = new Thickness(VideoLayerTimeline.LabelWidth - TwoLineTimeline.TrackInset, 0,
+            -TwoLineTimeline.TrackInset, 0);
         Grid.SetRow(layerScroll, 2);
         timeline.Children.Add(layerScroll);
 
@@ -1264,25 +1295,10 @@ internal sealed partial class VideoEditorWindow : Window
         Grid.SetRow(row, 0);
         controls.Children.Add(row);
 
-        _cancelOperationButton = new Button
-        {
-            Content = UiText.Get("Text_5FAE4DA04904"),
-            Margin = new Thickness(8, 0, 0, 0),
-            MinWidth = 84,
-            VerticalAlignment = VerticalAlignment.Center,
-            Style = TryStyle("Button.Danger"),
-            Visibility = Visibility.Collapsed,
-        };
-        AutomationProperties.SetName(_cancelOperationButton, UiText.Get("Text_79B3DB1CD566"));
-        AutomationProperties.SetHelpText(_cancelOperationButton, UiText.Get("Text_3DEFBAD62044"));
-        ShortcutPresentation.Attach(_cancelOperationButton, ShortcutScope.Video, "Cancel");
-        _cancelOperationButton.Click += (_, _) => _operationCts?.Cancel();
-        _cancelOperationButton.HorizontalAlignment = HorizontalAlignment.Center;
-
-        var hidden = new StackPanel { Orientation = Orientation.Horizontal };
-        hidden.Children.Add(_cancelOperationButton);
-        Grid.SetRow(hidden, 1);
-        controls.Children.Add(hidden);
+        ShortcutPresentation.Attach(_saveProgress.CancelButton, ShortcutScope.Video, "Cancel");
+        _saveProgress.CancelButton.Click += (_, _) => _operationCts?.Cancel();
+        Grid.SetRow(_saveProgress, 1);
+        controls.Children.Add(_saveProgress);
 
         _controlRows = controls;
         return controls;
@@ -1388,6 +1404,7 @@ internal sealed partial class VideoEditorWindow : Window
         _timeline.Initialize(_durationMs, _recording.Fps);
         _timeline.SetFilmstripSource(_recording.OutputPath, _recording.Width, _recording.Height, _loggerFactory);
         _layerTimeline.Initialize(_durationMs);
+        SyncLayerViewport();
         _editDocument = _editDocument.NormalizeFor(
             _recording.Width,
             _recording.Height,
@@ -2509,12 +2526,14 @@ internal sealed partial class VideoEditorWindow : Window
         _operationCts = operation;
         CancellationToken cancellationToken = operation.Token;
         SetOperationRunning(true);
+        _saveProgress.Start(UiText.Get("VideoEditorUx_LibrarySaving"));
+        _statusLabel.Text = UiText.Get("VideoEditorUx_LibrarySaving");
+        var stopwatch = Stopwatch.StartNew();
+        bool finalizing = false;
         var progress = new Progress<VideoFrameRenderProgress>(value =>
         {
-            int percent = value.TotalFrames <= 0
-                ? 0
-                : (int)Math.Round(value.CompletedFrames * 100.0 / value.TotalFrames);
-            _statusLabel.Text = UiText.Format("Text_6421F1340C28", percent, value.CompletedFrames, value.TotalFrames);
+            if (finalizing || !_operationRunning || !ReferenceEquals(_operationCts, operation) || operation.IsCancellationRequested) return;
+            _saveProgress.Report(value, stopwatch.Elapsed);
         });
 
         try
@@ -2536,6 +2555,8 @@ internal sealed partial class VideoEditorWindow : Window
                     cancellationToken),
                 "MyCapture video compositor");
 
+            finalizing = true;
+            _saveProgress.FinalizeProgress();
             if (VideoCommitHandler is not null)
             {
                 // The encode reached 100%, but validation, thumbnail and the staged file
@@ -2617,14 +2638,15 @@ internal sealed partial class VideoEditorWindow : Window
     }
     private void SetOperationRunning(bool running)
     {
+        bool starting = running && !_operationRunning;
         if (running) { _resumeAfterScrub = false; PausePlayback(); }
         _operationRunning = running;
         SetEditControlsEnabled(!running && _mediaReady);
         _overlayList.IsEnabled = !running && _mediaReady;
         _layerTimeline.IsEnabled = !running && _mediaReady;
         _layerCanvas.IsEnabled = !running && _mediaReady;
-        _cancelOperationButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
-        _cancelOperationButton.IsEnabled = running;
+        if (starting) _saveProgress.Start(UiText.Get("VideoEdit_ImageLayerPreparing"), indeterminate: true);
+        else if (!running) _saveProgress.Stop();
     }
 
     internal static bool DocumentsEquivalent(VideoEditDocument left, VideoEditDocument right)

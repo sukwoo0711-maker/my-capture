@@ -60,11 +60,7 @@ internal sealed class VideoExportDialog : Window
     private readonly StackPanel _mp4 = new();
     private readonly StackPanel _gif = new();
     private readonly StackPanel _settings = new();
-    private readonly Grid _progressRow = new() { Margin = new Thickness(0, 12, 0, 0), Visibility = Visibility.Collapsed };
-    private readonly ProgressBar _progressBar = new() { Minimum = 0, Maximum = 100, Height = 6, BorderThickness = new Thickness(0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock _percent = new() { Margin = new Thickness(12, 0, 0, 0), MinWidth = 40, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock _remaining = new() { Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly Button _cancelExport;
+    private readonly MediaExportProgressRow _progressRow = new();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _openFolder;
     private readonly Button _export;
@@ -187,23 +183,6 @@ internal sealed class VideoExportDialog : Window
         AutomationProperties.SetName(_preview, UiText.Get("MediaExport_SourcePreview"));
         _settings.Children.Add(_preview);
 
-        _progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        _progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _progressBar.SetResourceReference(ForegroundProperty, "Accent.Default");
-        _progressBar.SetResourceReference(BackgroundProperty, "Surface.Sunken");
-        AutomationProperties.SetName(_progressBar, UiText.Get("MediaExport_Exporting"));
-        _progressRow.Children.Add(_progressBar);
-        Grid.SetColumn(_percent, 1);
-        _progressRow.Children.Add(_percent);
-        _remaining.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        Grid.SetColumn(_remaining, 2);
-        _progressRow.Children.Add(_remaining);
-        _cancelExport = MediaExportVisuals.Button(this, UiText.Get("MediaExport_Cancel"));
-        _cancelExport.Margin = new Thickness(12, 0, 0, 0);
-        Grid.SetColumn(_cancelExport, 3);
-        _progressRow.Children.Add(_cancelExport);
         Grid.SetRow(_progressRow, 1);
         root.Children.Add(_progressRow);
 
@@ -244,7 +223,7 @@ internal sealed class VideoExportDialog : Window
         UpdateSamplePositionLabel();
         _applyAdvice.Click += (_, _) => ApplyRecommendation();
         _export.Click += async (_, _) => await ExportAsync();
-        _cancelExport.Click += (_, _) => CancelExport();
+        _progressRow.CancelButton.Click += (_, _) => CancelExport();
         _openFolder.Click += (_, _) => OpenFolder();
         _close.Click += (_, _) => Close();
         PreviewKeyDown += (_, e) =>
@@ -897,18 +876,11 @@ internal sealed class VideoExportDialog : Window
         if (_closed || !_working || !ReferenceEquals(_cancellation, cancellation)) return;
         int total = Math.Max(1, progress.TotalFrames);
         int completed = Math.Clamp(progress.CompletedFrames, 0, total);
-        double fraction = (double)completed / total;
-        _progressBar.Value = fraction * 100;
-        _percent.Text = UiText.Format("MediaExport_Percent", (int)(fraction * 100));
+        _progressRow.Report(progress, stopwatch.Elapsed);
         _status.Text = UiText.Format("MediaExport_Progress", UiText.Get("MediaExport_Exporting"), completed, total);
-        // A few frames settle the per-frame pace before the remaining time is worth showing.
-        double elapsed = stopwatch.Elapsed.TotalSeconds;
-        _remaining.Text = completed >= 5 && completed < total && elapsed >= 0.4
-            ? UiText.Format("MediaExport_Remaining", Math.Max(1, Math.Ceiling(elapsed / completed * (total - completed))))
-            : string.Empty;
     }
 
-    internal string RemainingText => _remaining.Text;
+    internal string RemainingText => _progressRow.RemainingText;
 
     private void OpenFolder()
     {
@@ -928,12 +900,10 @@ internal sealed class VideoExportDialog : Window
         _working = working;
         _settings.IsEnabled = !working;
         _export.IsEnabled = !working;
-        _progressRow.Visibility = working ? Visibility.Visible : Visibility.Collapsed;
+        if (!working) _progressRow.Stop();
         if (working)
         {
-            _progressBar.Value = 0;
-            _percent.Text = UiText.Format("MediaExport_Percent", 0);
-            _remaining.Text = string.Empty;
+            _progressRow.Start(UiText.Get("MediaExport_Exporting"));
             _status.Text = UiText.Get("MediaExport_Exporting");
             _openFolder.Visibility = Visibility.Collapsed;
             _savedPath = null;
