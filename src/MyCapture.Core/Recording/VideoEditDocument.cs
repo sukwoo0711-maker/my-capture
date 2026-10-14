@@ -145,6 +145,46 @@ public sealed class VideoEditDocument
         SchemaVersion >= 4 ? RemovedRanges : null,
         SchemaVersion >= 4 ? SplitPoints : null);
 
+    /// <summary>Applies changes in the trimmed view without replacing hidden source edits.</summary>
+    public void ApplyTimelineEdit(VideoCutTimeline next)
+    {
+        VideoCutTimeline before = CreateTimeline();
+        if (next.StartMs != before.StartMs || next.EndMs != before.EndMs)
+        {
+            throw new ArgumentException("The edit must use the current outer trim.", nameof(next));
+        }
+
+        List<VideoTimeRange> ranges = [.. RemovedRanges];
+        foreach (VideoTimeRange restored in before.RemovedRanges.Except(next.RemovedRanges))
+        {
+            List<VideoTimeRange> remaining = [];
+            foreach (VideoTimeRange range in ranges)
+            {
+                if (range.EndMs <= restored.StartMs || range.StartMs >= restored.EndMs)
+                {
+                    remaining.Add(range);
+                    continue;
+                }
+
+                if (range.StartMs < restored.StartMs) remaining.Add(new(range.StartMs, restored.StartMs));
+                if (range.EndMs > restored.EndMs) remaining.Add(new(restored.EndMs, range.EndMs));
+            }
+            ranges = remaining;
+        }
+
+        ranges.AddRange(next.RemovedRanges.Except(before.RemovedRanges));
+        VideoCutTimeline source = VideoCutTimeline.Create(0, SourceDurationMs, ranges);
+        RemovedRanges = source.RemovedRanges.ToList();
+        SplitPoints = NormalizeSourceSplitPoints(
+            SplitPoints.Except(before.SplitPoints.Except(next.SplitPoints)).Concat(next.SplitPoints), SourceDurationMs);
+    }
+
+    // A marker can become too close to a cut/trim edge to draw a valid segment and become
+    // usable again after restoration. Keep it in the document while the view filters it.
+    private static List<double> NormalizeSourceSplitPoints(IEnumerable<double>? points, double durationMs) =>
+        (points ?? []).Where(point => double.IsFinite(point) && point > 0 && point < durationMs)
+            .Distinct().Order().ToList();
+
     public static VideoEditDocument CreateFor(
         int width,
         int height,
@@ -192,10 +232,12 @@ public sealed class VideoEditDocument
 
         if (SchemaVersion >= 4)
         {
+            // Edits belong to the source, just like layers. Only CreateTimeline clips them
+            // to the active trim; draft snapshots must retain edits that are currently hidden.
             VideoCutTimeline timeline = VideoCutTimeline.Create(
-                normalized.TrimInMs, normalized.TrimOutMs, RemovedRanges, SplitPoints);
+                0, duration, RemovedRanges);
             normalized.RemovedRanges = timeline.RemovedRanges.ToList();
-            normalized.SplitPoints = timeline.SplitPoints.ToList();
+            normalized.SplitPoints = NormalizeSourceSplitPoints(SplitPoints, duration);
         }
 
         var ids = new HashSet<Guid>();

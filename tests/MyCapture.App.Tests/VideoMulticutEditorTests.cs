@@ -112,6 +112,47 @@ public sealed class VideoMulticutEditorTests
         finally { editor.Close(); }
     });
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NarrowOuterTrimThenSplitOrDraftRecoveryKeepsHiddenCuts(bool split) => StaTestHost.Run(() =>
+    {
+        VideoEditorWindow editor = CreateEditor();
+        try
+        {
+            Split(editor, 2000);
+            Split(editor, 4000);
+            editor.TimelineForTest.SelectSegmentAt(3000);
+            editor.HandleShortcut(Key.Delete, ModifierKeys.None);
+            editor.TimelineForTest.SetTrimRange(5000, 10000);
+            if (split) Split(editor, 7000);
+
+            VideoEditDocument snapshot = (VideoEditDocument)Invoke(editor, "BuildCurrentDocument")!;
+            VideoEditDocument recovered = JsonSerializer.Deserialize<VideoEditDocument>(JsonSerializer.Serialize(snapshot))!
+                .NormalizeFor(640, 360, 10000);
+            VideoTimeRange recoveredCut = Assert.Single(recovered.RemovedRanges);
+            Assert.Equal(2000, recoveredCut.StartMs, 6);
+            Assert.Equal(4000, recoveredCut.EndMs, 6);
+            Assert.Equal(2000, recovered.SplitPoints[0], 6);
+            Assert.Equal(4000, recovered.SplitPoints[1], 6);
+            if (split) Assert.Equal(7000, recovered.SplitPoints[2], 6);
+
+            editor.TimelineForTest.SetTrimRange(0, 10000);
+            Assert.Equal(recoveredCut, Assert.Single(Document(editor).CreateTimeline().RemovedRanges));
+            Assert.Equal(8000, Document(editor).OutputDurationMs, 6);
+            recovered.TrimInMs = 0;
+            Assert.True(VideoEditorWindow.DocumentsEquivalent(Document(editor), recovered));
+            if (split)
+            {
+                editor.HandleShortcut(Key.Z, ModifierKeys.Control); // Widening the trim.
+                editor.HandleShortcut(Key.Z, ModifierKeys.Control); // The added split.
+                Assert.Equal(2, Document(editor).SplitPoints.Count);
+                Assert.Single(Document(editor).RemovedRanges);
+            }
+        }
+        finally { editor.Close(); }
+    });
+
     [Fact]
     public void OuterTrimCannotSilentlyRestoreAnEntirelyRemovedRange() => StaTestHost.Run(() =>
     {

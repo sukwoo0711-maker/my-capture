@@ -95,6 +95,7 @@ internal sealed partial class VideoEditorWindow : Window
     private readonly TextBlock _trimPreviewBadgeText;
     private readonly MediaElementPreviewEngine _previewEngine;
     private readonly PreviewSeekCoordinator _previewSeeks;
+    private readonly Action _playMedia;
     private readonly TwoLineTimeline _timeline;
     private readonly VideoLayerTimeline _layerTimeline;
     private readonly TextBlock _positionLabel;
@@ -168,7 +169,9 @@ internal sealed partial class VideoEditorWindow : Window
         RecordingResult recording,
         AppPaths paths,
         ILoggerFactory loggerFactory,
-        VideoEditDocument? editDocument = null)
+        VideoEditDocument? editDocument = null,
+        IVideoPreviewEngine? previewEngine = null,
+        Action? playMedia = null)
     {
         _recording = recording ?? throw new ArgumentNullException(nameof(recording));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
@@ -237,7 +240,8 @@ internal sealed partial class VideoEditorWindow : Window
         _layerCanvas.LayerActivated += (_, _) => EditSelectedOverlay();
         _layerCanvas.SelectionViewBoundsChanged += (_, _) => PlacePositionChip();
         _previewEngine = new MediaElementPreviewEngine(_media);
-        _previewSeeks = new PreviewSeekCoordinator(_previewEngine, recording.Fps);
+        _previewSeeks = new PreviewSeekCoordinator(previewEngine ?? _previewEngine, recording.Fps);
+        _playMedia = playMedia ?? _media.Play;
         _previewSeeks.PreviewPresented += OnPreviewPresented;
         _previewSeeks.SeekFailed += OnPreviewSeekFailed;
 
@@ -1546,7 +1550,7 @@ internal sealed partial class VideoEditorWindow : Window
             {
                 if (version != _playRequestVersion || !_playRequested || !IsLoaded) { return; }
                 _playRequested = false;
-                _media.Play();
+                _playMedia();
                 _isPlaying = true;
                 _playbackTimer.Start();
                 UpdatePlayButton();
@@ -1696,7 +1700,7 @@ internal sealed partial class VideoEditorWindow : Window
         if (_cutSeekInFlight || decision.Action == PreviewCutAction.Wait) return;
         if (decision.Action == PreviewCutAction.Seek)
         {
-            SkipRemovedRange(decision.SourceTimeMs);
+            _ = SkipRemovedRange(decision.SourceTimeMs);
             return;
         }
         if (decision.Action == PreviewCutAction.Stop)
@@ -1736,7 +1740,7 @@ internal sealed partial class VideoEditorWindow : Window
         UpdateStatusForMode();
     }
 
-    private async void SkipRemovedRange(double targetMs)
+    private async Task SkipRemovedRange(double targetMs)
     {
         _cutSeekInFlight = true;
         long version = _playRequestVersion;
@@ -1746,7 +1750,7 @@ internal sealed partial class VideoEditorWindow : Window
             // subsequent ticks observe the actual landing before publishing new overlays.
             await _previewSeeks.RequestExactAsync(targetMs);
             if (version != _playRequestVersion || !_isPlaying || _closing) return;
-            _media.Play();
+            _playMedia();
         }
         catch (OperationCanceledException)
         {
@@ -1883,8 +1887,7 @@ internal sealed partial class VideoEditorWindow : Window
     {
         PausePlayback();
         RememberEdit();
-        _editDocument.RemovedRanges = [.. next.RemovedRanges];
-        _editDocument.SplitPoints = [.. next.SplitPoints];
+        _editDocument.ApplyTimelineEdit(next);
         SynchronizeCuts();
         RefreshTrimSummary();
         UpdatePositionLabel(CurrentMs());

@@ -1,11 +1,174 @@
+using System.IO;
+using System.Security.Cryptography;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
 using MyCapture.Core.Recording;
+using MyCapture.Platform.Recording;
 using Xunit;
 
 namespace MyCapture.App.Tests;
 
 public sealed class VideoMulticutRenderTests
 {
+    [Fact]
+    public void Mp4AndGifExports_DecodeOnlyKeptFramesAndPreserveLayerTimingAcrossCuts() => StaTestHost.Run(() =>
+    {
+        const int width = 160, height = 96, fps = 10;
+        // Keep generated media in the test output directory for diagnosis, without binary fixtures.
+        string root = Path.Combine(AppContext.BaseDirectory, "multicut-fixtures", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string source = Path.Combine(root, "source.mp4");
+        byte[] sourceLevels = [20, 40, 60, 0, 0, 100, 120, 140, 0, 0, 180, 200];
+        byte[] expectedLevels = [20, 40, 60, 100, 120, 140, 180, 200];
+        var options = new VideoEncoderOptions(source, width, height, fps,
+            VideoEncoderOptions.DeriveBitrate(width, height, fps));
+        using (var encoder = new MediaFoundationVideoEncoder(options, NullLogger.Instance))
+        {
+            for (int index = 0; index < sourceLevels.Length; index++)
+            {
+                byte[] pixels = new byte[width * height * 4];
+                for (int offset = 0; offset < pixels.Length; offset += 4)
+                {
+                    byte level = sourceLevels[index];
+                    pixels[offset] = level;
+                    pixels[offset + 1] = level;
+                    pixels[offset + 2] = level == 0 ? (byte)240 : level;
+                    pixels[offset + 3] = 255;
+                }
+
+                encoder.WriteFrame(new EncoderFrame(pixels, width, height, width * 4, index * 100.0));
+            }
+
+            encoder.Complete();
+        }
+
+        byte[] originalHash = SHA256.HashData(File.ReadAllBytes(source));
+        using (var reader = new MediaFoundationVideoFrameReader(source))
+        {
+            // Verify the fixture really contains distinguishable footage in both removed ranges.
+            foreach (double sourceTime in new double[] { 300, 400, 800, 900 })
+            {
+                DecodedVideoFrame frame = reader.ReadFrameAt(sourceTime);
+                AssertPatch(frame.Pixels, frame.Stride, 112, 64, 0, 0, 240);
+            }
+        }
+
+        var recording = new RecordingResult(source, 1_200, fps, sourceLevels.Length, width, height);
+        VideoEditDocument document = VideoEditDocument.CreateFor(width, height, recording.DurationMs);
+        document.RemovedRanges = [new(300, 500), new(800, 1_000)];
+        document.FrameEditLayers =
+        [
+            new()
+            {
+                StartMs = 200,
+                EndMs = 700,
+                OverlayPngBase64 = CreateSeamLayer(width, height),
+            },
+        ];
+
+        string mp4 = Path.Combine(root, "export.mp4");
+        int mp4Frames = TrimReencoder.Reencode(source, mp4, document.TrimInMs, document.TrimOutMs,
+            recording, exportOptions => new MediaFoundationVideoEncoder(exportOptions, NullLogger.Instance),
+            NullLogger.Instance, document.TextOverlays, document.FrameEditLayers,
+            removedRanges: document.RemovedRanges);
+
+        Assert.Equal(expectedLevels.Length, mp4Frames);
+        Assert.InRange(MediaFoundationVideoFrameReader.ReadContainerDurationMs(mp4), 799.8, 800.2);
+        using (var reader = new MediaFoundationVideoFrameReader(mp4))
+        {
+            for (int index = 0; index < expectedLevels.Length; index++)
+            {
+                // Exact boundaries and the end of each displayed interval must agree, including seams.
+                foreach (double outputTime in new[] { index * 100.0, index * 100.0 + 99 })
+                {
+                    DecodedVideoFrame frame = reader.ReadFrameAt(outputTime);
+                    AssertExportedFrame(frame.Pixels, frame.Stride, expectedLevels[index], index is >= 2 and <= 4);
+                }
+            }
+        }
+
+        string gif = Path.Combine(root, "export.gif");
+        int gifFrames = AnimatedGifExporter.Export(recording, document, gif);
+        GifSampleFrames decoded = GifSampleDecoder.Decode(gif);
+        Assert.Equal(expectedLevels.Length, gifFrames);
+        Assert.Equal(expectedLevels.Length, decoded.Frames.Count);
+        Assert.Equal((width, height), (decoded.PixelWidth, decoded.PixelHeight));
+        Assert.Equal(80, decoded.DelaysCentiseconds.Sum());
+        Assert.Equal(800, decoded.Timeline.TotalMs);
+        for (int index = 0; index < expectedLevels.Length; index++)
+        {
+            foreach (double outputTime in new[] { index * 100.0, index * 100.0 + 99 })
+            {
+                BitmapSource frame = decoded.Frames[decoded.Timeline.IndexAt(outputTime)];
+                BitmapSource bgra = frame.Format == PixelFormats.Bgra32
+                    ? frame
+                    : new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
+                byte[] pixels = new byte[width * height * 4];
+                bgra.CopyPixels(pixels, width * 4, 0);
+                AssertExportedFrame(pixels, width * 4, expectedLevels[index], index is >= 2 and <= 4);
+            }
+        }
+
+        Assert.Equal(originalHash, SHA256.HashData(File.ReadAllBytes(source)));
+        Assert.Equal((200d, 700d), (document.FrameEditLayers[0].StartMs, document.FrameEditLayers[0].EndMs));
+    });
+
+    private static string CreateSeamLayer(int width, int height)
+    {
+        byte[] pixels = new byte[width * height * 4];
+        for (int y = 16; y < 48; y++)
+        {
+            for (int x = 16; x < 64; x++)
+            {
+                int offset = (y * width + x) * 4;
+                pixels[offset + 1] = 240;
+                pixels[offset + 3] = 255;
+            }
+        }
+
+        BitmapSource bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32,
+            null, pixels, width * 4);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return Convert.ToBase64String(stream.ToArray());
+    }
+
+    private static void AssertExportedFrame(byte[] pixels, int stride, byte level, bool layerActive)
+    {
+        AssertPatch(pixels, stride, 112, 64, level, level, level);
+        if (layerActive)
+        {
+            AssertPatch(pixels, stride, 32, 24, 0, 240, 0);
+        }
+        else
+        {
+            AssertPatch(pixels, stride, 32, 24, level, level, level);
+        }
+    }
+
+    private static void AssertPatch(byte[] pixels, int stride, int x, int y, byte b, byte g, byte r)
+    {
+        byte[] expected = [b, g, r];
+        for (int channel = 0; channel < expected.Length; channel++)
+        {
+            double sum = 0;
+            for (int row = y; row < y + 8; row++)
+            {
+                for (int column = x; column < x + 8; column++)
+                {
+                    sum += pixels[row * stride + column * 4 + channel];
+                }
+            }
+
+            // Two lossy H.264 passes and GIF quantization may shift colour by a few levels.
+            Assert.InRange(sum / 64, expected[channel] - 12, expected[channel] + 12);
+        }
+    }
+
     [Fact]
     public void Mp4Schedule_MapsOutputFramesAcrossCutsWithoutMovingLayerTimes()
     {
