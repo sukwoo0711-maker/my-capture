@@ -24,6 +24,8 @@ internal sealed class ImageExportOptionsPanel : StackPanel
 
     internal ImageExportOptionsPanel(ImageExportOptions initial, bool full)
     {
+        _marginValue.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        _radiusValue.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         if (full)
         {
             var presets = new ComboBox();
@@ -51,6 +53,7 @@ internal sealed class ImageExportOptionsPanel : StackPanel
         {
             var styling = new StackPanel();
             var expander = new Expander { Header = UiText.Get("ExportOptions.Style"), Content = styling, Margin = new Thickness(0, 8, 0, 8) };
+            expander.SetResourceReference(StyleProperty, "Expander.Options");
             Children.Add(expander);
             foreach (string label in new[] { UiText.Get("ExportOptions.Background.Transparent"), UiText.Get("ExportOptions.Background.White"),
                 UiText.Get("ExportOptions.Background.LightGray"), UiText.Get("ExportOptions.Background.DarkGray"),
@@ -98,7 +101,9 @@ internal sealed class ImageExportOptionsPanel : StackPanel
     private void AddControl(string key, FrameworkElement control, Panel? parent = null)
     {
         parent ??= this;
-        parent.Children.Add(new Label { Content = UiText.Get(key), Target = control, Padding = new Thickness(0, 6, 0, 3) });
+        var label = new Label { Content = UiText.Get(key), Target = control, Padding = new Thickness(0, 6, 0, 3) };
+        label.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
+        parent.Children.Add(label);
         AutomationProperties.SetName(control, UiText.Get(key));
         parent.Children.Add(control);
     }

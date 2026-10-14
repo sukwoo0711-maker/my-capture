@@ -49,6 +49,8 @@ internal sealed class GalleryContactSheetDialog : Window
         _cancel = ThemedDialog.CreateActionButton(UiText.Get("Library.Action.Cancel"), primary: false);
         _cancel.IsCancel = true;
         var footer = new StackPanel();
+        _progress.SetResourceReference(Control.ForegroundProperty, "Accent.Default");
+        _progress.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");
         footer.Children.Add(_progress);
         footer.Children.Add(_status);
         footer.Children.Add(ThemedDialog.CreateActionRow(_save, _cancel));
@@ -100,6 +102,7 @@ internal sealed class GalleryContactSheetDialog : Window
     private void AddChoice(string labelKey, ComboBox choice, string[] keys, int selected)
     {
         var label = new Label { Content = UiText.Get(labelKey), Target = choice, Padding = new Thickness(0, 10, 0, 5) };
+        label.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
         _settings.Children.Add(label);
         foreach (string key in keys) choice.Items.Add(UiText.Get(key));
         choice.SelectedIndex = selected;

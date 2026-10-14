@@ -38,7 +38,9 @@ internal sealed class GalleryBatchTagsDialog : Window
 
         var content = new DockPanel { Margin = new Thickness(24) };
         var actions = new StackPanel();
-        actions.Children.Add(new Label { Content = UiText.Get("Library.Tags.New"), Target = NewTagInput, Padding = new Thickness(0, 8, 0, 6) });
+        var newTagLabel = new Label { Content = UiText.Get("Library.Tags.New"), Target = NewTagInput, Padding = new Thickness(0, 8, 0, 6) };
+        newTagLabel.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
+        actions.Children.Add(newTagLabel);
         AutomationProperties.SetName(NewTagInput, UiText.Get("Library.Tags.New"));
         actions.Children.Add(NewTagInput);
         AutomationProperties.SetLiveSetting(_error, AutomationLiveSetting.Polite);
@@ -77,6 +79,7 @@ internal sealed class GalleryBatchTagsDialog : Window
     {
         var row = new TagCheckBox { Content = name, IsThreeState = true, IsChecked = state,
             Margin = new Thickness(0, 4, 0, 4), MinHeight = 28 };
+        row.SetResourceReference(StyleProperty, typeof(CheckBox));
         AutomationProperties.SetName(row, name);
         void RecordIntent(object sender, RoutedEventArgs e)
         {

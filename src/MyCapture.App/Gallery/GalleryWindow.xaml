@@ -1831,7 +1831,8 @@
                                    Style="{DynamicResource Text.Title}" TextWrapping="Wrap" TextAlignment="Center" />
                         <TextBlock Text="{loc:Text Library.Import.DropDetail}" Margin="0,8,0,0"
                                    Style="{DynamicResource Text.MutedBlock}" TextWrapping="Wrap" TextAlignment="Center" />
-                        <ProgressBar x:Name="ImportProgress" Visibility="Collapsed" Height="6" Margin="0,16,0,0" />
+                        <ProgressBar x:Name="ImportProgress" Visibility="Collapsed" Height="6" Margin="0,16,0,0"
+                                     Foreground="{DynamicResource Accent.Default}" Background="{DynamicResource Surface.Sunken}" />
                         <Button x:Name="ImportCancelButton" Content="{loc:Text Library.Action.Cancel}"
                                 Visibility="Collapsed" Click="OnCancelImportClick" Margin="0,16,0,0"
                                 Style="{StaticResource Button.Secondary}" />
